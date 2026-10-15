@@ -63,5 +63,7 @@ Usuários temporários (Comercial, Financeiro, Superadmin) criados e apagados po
 
 - Recontar, só leitura, em produção (por SSH, `sql` read-only) as duas consultas da 3.7 do plano do
   backlog (vínculos com valores aplicados e BVs em % existentes).
-- No último commit antes do merge, gravar `CORTE_ALERTA_BV` com `datetime.now(UTC)` do Python.
+- No último commit antes do merge, gravar `CORTE_ALERTA_BV` como **literal naive em UTC**, por
+  exemplo `datetime(2026, 10, 15, 0, 30)`, com a hora tirada de `datetime.now(UTC)` no Python. O
+  cenário 58 do verify confere o valor do commit (naive, e 1218/1236/1268 sem alerta).
 - Depois do push: sondar `GET /api/formularios/comum/schema` (JSON) e conferir o código no container.

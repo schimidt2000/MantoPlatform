@@ -44,6 +44,10 @@ Desmarcado de volta a nao_pago, o BV volta a seguir as regras (régua, venda) no
 3. `amount_brl` de BV `pago`/`no_banco` nunca muda por conta automática nem pelo editor.
 4. Os caminhos automáticos (criação, vínculo) não tocam evento que já tem **qualquer** linha.
 5. Depois de qualquer escrita, a coleção `event.acrescimos` em memória é a do banco (flush + expire).
+6. Nenhum BV com valor vazio, zero ou negativo; nenhum `id` duas vezes na mesma gravação (converge).
+7. Quem lê a venda para gravar BV trava o evento antes; a ordem das travas é evento → acréscimos.
+8. A troca de quem recebe ou do PIX num BV `pago`/`no_banco` deixa `AuditLog` (`event_bv`, PIX
+   mascarado) — o valor congela, o destinatário não, mas não se reescreve sem rastro.
 
 ## `orcamento_history` (`OrcamentoHistory`) — chave nova opcional no JSON
 

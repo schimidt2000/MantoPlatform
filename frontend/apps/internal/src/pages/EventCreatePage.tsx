@@ -527,6 +527,15 @@ export function EventCreatePage() {
             if (primeiro) {
               setFocus(primeiro);
               document.getElementById(primeiro)?.scrollIntoView({ behavior: "smooth", block: "center" });
+            } else if (error.fields.bv_recipient || error.fields.bv_pix) {
+              // Os campos do BV ficam fora do react-hook-form e podem só montar agora (prefill
+              // falhou): o foco vai depois do render.
+              const alvo = error.fields.bv_recipient ? "bv_recipient" : "bv_pix";
+              requestAnimationFrame(() => {
+                const campo = document.getElementById(alvo);
+                campo?.focus();
+                campo?.scrollIntoView({ behavior: "smooth", block: "center" });
+              });
             }
             return;
           }
@@ -806,17 +815,19 @@ export function EventCreatePage() {
 
             <ValoresBlock sellers={opts.sellers} />
 
-            {prefill.data?.acrescimos_do_orcamento && (
+            {(prefill.data?.acrescimos_do_orcamento || bvErros.bv_recipient || bvErros.bv_pix) && (
               <BvDoOrcamentoBlock
-                acrescimos={prefill.data.acrescimos_do_orcamento}
+                acrescimos={prefill.data?.acrescimos_do_orcamento}
                 duracao={duracao}
-                duracaoCustom={prefill.data.duracao_custom}
+                duracaoCustom={prefill.data?.duracao_custom}
                 totalDaDuracao={
-                  ["1", "2", "3", "4"].includes(duracao)
-                    ? (prefill.data[`total_${duracao}h` as "total_1h"] ?? null)
-                    : prefill.data.duracao_custom === Number(duracao) && prefill.data.total_custom
-                      ? prefill.data.total_custom
-                      : null
+                  !prefill.data
+                    ? null
+                    : ["1", "2", "3", "4"].includes(duracao)
+                      ? (prefill.data[`total_${duracao}h` as "total_1h"] ?? null)
+                      : prefill.data.duracao_custom === Number(duracao) && prefill.data.total_custom
+                        ? prefill.data.total_custom
+                        : null
                 }
                 venda={watch("sale_value")}
                 cortesia={watch("is_cortesia_permuta")}

@@ -516,6 +516,9 @@ fora.
 | 94 | **P3** | guarda 1:1 orçamento↔evento sem trava (305, premissa 27; vem da 273) | dois "Criar evento" do mesmo orçamento no mesmo segundo criam dois eventos (e dois BVs) | trava por `FOR UPDATE` na linha do orçamento |
 | 95 | **P3** | cancelar e recriar do mesmo orçamento (305) | o BV do cancelado continua na Planilha (a consulta não filtra cancelado) e o novo evento ganha o seu: dois BVs listados | o filtro de cancelado é da 1b |
 | 96 | **P4** | `specs/273-orcamento-para-evento/verify_273.py` (achado na 305) | 8/15 na `main` desde a 301: espera 404 onde a 301 responde 409 `orcamento_de_outro`, e os cenários 7–15 caem em cascata; o `verify_305` (cenário 27) o compara com essa linha de base | atualizar o verify à regra da 301 |
+| 97 | **P4** | edição completa sem "sair sem salvar" (converge da 305) | `EventEditPage` tem sete links para o detalhe do evento (reembolsos, comprovantes, contratos, observações, o "Lançar o BV" do alerta, "‹ Evento", "Cancelar") que saem sem confirmação e descartam o digitado; nenhuma tela da SPA usa `useBlocker` | `useBlocker` do react-router com `formState.isDirty` + os estados locais, na página inteira |
+| 98 | **P4** | acessibilidade do editor de acréscimos (converge da 305) | rótulos sem `htmlFor` (Tipo, Valor, Quem recebe, PIX — vem da main), erro sem `aria-describedby`, e o alerta do BV com `role="alert"` duas vezes na aba Comercial (Venda e Acréscimos) | ids por linha + `aria-describedby`; o alerta estático como `role="status"` |
+| 99 | **P4** | alerta do BV sem valor em evento acima de 4h (converge da 305) | sem duração identificada (evento de 5h+ que não é a duração extra do orçamento), o alerta vem sem valor e o "Lançar o BV" abre em reais vazio — a pessoa calcula à mão | passar as horas da agenda ao `plano_dos_acrescimos` quando passam de 4h (a régua linear já existe) |
 
 ## 11. Ordem sugerida de ataque
 

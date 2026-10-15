@@ -754,12 +754,18 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `PATCH /api/events/<id>/orcamento` aceita os mesmos dois campos (400 depois da autoria da 301) e o
 > `relatorio_orcamento` ganha `acrescimos_criados`, `bv_total`, `acrescimos_ignorados`.
 > `PUT /api/events/<id>/acrescimos`: item com `id?` (herança só da mesma linha), `descricao`
-> ausente = mantém, `value` aceita texto pt-BR; recusa a lista inteira com **400** e `fields`
-> `items.<i>.<campo>` (BV sem quem recebe/PIX, valor ilegível, BV pago removido ou retipado), sem
-> apagar nada; sincroniza a comissão. O detalhe ganha `acrescimos[].descricao`/`bv_pix`,
-> `venda.orcamento.bv` e `venda.bv_do_orcamento_pendente` (`{valor, percentual, duracao}`; só para
-> evento criado/ligado depois de `CORTE_ALERTA_BV`). `PATCH …/comercial` devolve `aviso_bv`; a edição
-> completa põe os avisos do BV em `warnings`.
+> ausente = mantém, `value` número (a tela nova manda número) ou texto pt-BR; recusa a lista inteira
+> com **400** e `fields` `items.<i>.<campo>` (BV sem quem recebe/PIX; valor ilegível ou ambíguo —
+> "1.500" sem vírgula, "1,309.52", ≥ 10¹⁰; BV sem valor, zero ou negativo; o mesmo `id` duas vezes
+> → `items.<i>.id`; BV pago removido ou retipado), sem apagar nada; sincroniza a comissão; a troca
+> de quem recebe ou do PIX num BV pago vai ao `AuditLog` (`entity_type="event_bv"`, PIX mascarado).
+> O detalhe ganha `acrescimos[].descricao`/`bv_pix`, `venda.orcamento.bv` e
+> `venda.bv_do_orcamento_pendente` (`{valor, percentual, duracao}`; só para evento criado/ligado
+> depois de `CORTE_ALERTA_BV` — com a constante vazia, nenhum). `PATCH …/comercial` devolve
+> `aviso_bv`; a edição completa põe os avisos do BV em `warnings`; o `relatorio_orcamento` do vínculo
+> ganha `bv_acompanhou` (a B10 quando o "Vincular e aplicar" põe a venda num evento que já tinha BV).
+> `POST /api/financeiro/pagamentos/set-status` com `item_type="bv"` aceita `valor_esperado` (o
+> valor que a Planilha mostrou; opcional): diferente do gravado, ao marcar pago ou no banco → **409**.
 >
 > **Hotfix 215b — taxa e vendedor da comissão.** `PATCH /api/events/<id>/comercial` e
 > `PATCH /api/events/<id>` recusam com **403** (`fields.commission_rate` / `fields.seller_id`) a

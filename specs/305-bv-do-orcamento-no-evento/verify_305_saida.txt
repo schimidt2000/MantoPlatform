@@ -4,7 +4,6 @@
   OK     3. BV fixo em 1h e 4h
   OK     4. duração extra (6h)
   OK     5. personalizado → vazio
-         (64 pares conferidos com tolerância de R$ 0,01)
   OK     6. paridade com a memória do espelho (±0,01)
   OK     7. valores_brl no snapshot; total intacto
   OK     8. prefill com os 4 valores
@@ -26,12 +25,6 @@
   OK     24. orçamento sem acréscimos: igual a hoje
   OK     25. comissão paga intacta
   OK     26. DRE: o CPV sobe o BV
-         verify_273.py: 8/15 OK
-         verify_267b.py: 8/8 OK
-         verify_301.py: 13/13 OK
-         verify_215b.py: 9/9 OK
-         verify_267c.py: 10/10 OK
-         verify_267.py: 9/9 OK
   OK     27. regressão (--regressao)
   OK     31. DEVE FALHAR: PIX obrigatório (criação, vínculo, editor)
   OK     32. DEVE FALHAR: autoria da 301
@@ -58,5 +51,16 @@
   OK     55. comissão na hora (conexão separada)
   OK     56. alerta em reais (como o 2407)
   OK     57. DEVE FALHAR: BV pago não sai, não muda de tipo nem de valor
+  OK     58. corte do commit e corte vazio: o passado não acende
+  OK     59. nota diferente entre orçamento e evento: o mesmo BV
+  OK     60. DEVE FALHAR: BV sem valor não some
+  OK     61. DEVE FALHAR: '1.500' e números enormes recusados
+  OK     62. DEVE FALHAR: id repetido não duplica BV pago
+  OK     63. DEVE FALHAR: BV negativo
+  OK     64. vincular e aplicar roda a B10
+  OK     65. Jinja: BV redigitado com a venda fica como digitado
+  OK     66. corridas: B10 e editor contra a venda que muda
+  OK     67. DEVE FALHAR: marcar pago confere o valor mostrado
+  OK     68. rastro da troca de PIX no BV pago
   OK     50. limpeza
-53/53 OK · chamadas ao Google: 14
+64/64 OK · chamadas ao Google: 16

@@ -299,8 +299,9 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ### 305 — O BV do orçamento chega ao evento no valor certo, com quem recebe e o PIX   (305-bv-do-orcamento-no-evento · 2026-10-14 · sem migration)
 
 > **Branch, não publicada.** Antes do merge: gravar `CORTE_ALERTA_BV`
-> (`app/calendar/orcamento_evento_ops.py`) com o momento do deploy — sem ele (`None`) o alerta
-> acenderia também nos eventos do passado, contra a 3a-Q4 = A.
+> (`app/calendar/orcamento_evento_ops.py`) com o momento do deploy, como literal naive em UTC. Sem
+> ele (`None`) nenhum evento acende pelo detalhe (a falha fecha desde o converge) — o alerta só
+> funcionaria no vínculo novo.
 
 **Motivação.** Item 3a do backlog de setembro (apelido "099b"; plano em
 `docs/backlog/3a-bv-do-orcamento-no-evento-099b.md`, nove rodadas de respostas do dono). O Novo
@@ -328,9 +329,24 @@ descartada em silêncio depois do delete. (3) **Herança pela chave** (recebedor
 nascer "pago" e trocava o status entre duas linhas da mesma pessoa; agora é pelo `id`. (4) O
 `verify_273` está 8/15 na `main` desde a 301 (docs/05 #96).
 
-**Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py`: 53/53 com a regressão (267,
-267b, 301, 215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52.
-Tela conferida no `manto_local`.
+**Converge (14/10, revisão adversarial em quatro lentes, 29 de 37 achados confirmados).** O que
+mudou: (1) `CORTE_ALERTA_BV = None` acendia o alerta em todo o passado (1218, 1236, 1268 — BVs que o
+dono disse já pagos): agora a falha fecha. (2) A criação e o alerta proporcionavam pela venda BRUTA
+— a cliente que desiste da nota tinha o BV cortado em 16%; agora pelo líquido, como a B10. (3) BV
+com valor apagado ou zero sumia em silêncio; "1.500" virava R$ 1,50; BV negativo subia a comissão;
+o mesmo `id` duas vezes criava um segundo BV "pago" — todos 400 na linha. (4) O "Vincular e aplicar"
+punha a venda sem a B10 (o BV em % ficava sobre a venda velha). (5) Corridas: duas mudanças de
+venda proporcionavam o BV duas vezes, e o editor calculava o % com a venda de antes — o evento é
+travado antes de ler a venda; marcar pago confere o valor que a Planilha mostrou (409). (6) O gêmeo
+Jinja reproporcionava o BV redigitado junto com a venda. (7) Trocar o PIX de um BV pago deixa rastro
+no `AuditLog`. Na tela: o valor em R$ do editor é `MoneyInput` (número; o texto livre também
+quebrava o backend antigo na janela de deploy), "Lançar o BV" abre em reais, a linha que vira BV não
+reinterpreta como % o valor já digitado, erros velhos somem, o cache é atualizado pelo PUT.
+
+**Verificação.** `specs/305-bv-do-orcamento-no-evento/verify_305.py`: 64/64 com a regressão (267,
+267b, 301, 215b, 267c; 273 na linha de base), duas mutações declaradas; primeira rodada 14/52; os 11
+cenários do converge (58–68) vermelhos antes (`verify_305_converge_primeira_falha.txt`). Tela
+conferida no `manto_local` (editor: R$ por `MoneyInput`, erro na linha, Cancelar limpa).
 
 ### 298b — Idade do aniversariante e assessoria do WhatsForm chegam ao cadastro   (298b-sinonimos-do-formulario · 2026-10-14 · sem migration)
 

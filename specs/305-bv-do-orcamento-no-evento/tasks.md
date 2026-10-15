@@ -111,7 +111,14 @@ vermelho pelos motivos certos; cada história fecha com os seus cenários verdes
 - [X] T038 Tela aberta (quickstart §4) no Browser pane com usuários temporários, backend sem Google
 - [X] T039 Docs: `docs/01` (contratos), `docs/02` (Novo evento, aba Comercial, alerta), `docs/03` (entrada + índice), `docs/04` (corrigir "só o Jinja escreve acréscimos"; invariantes do BV), `docs/05` (riscar o que toca acréscimos; cinco dívidas novas + "cancelar e recriar lista dois BVs até a 1b")
 - [X] T040 `ruff check` nos tocados, `ruff format` nos novos, `npm run build`
-- [ ] T041 Antes do merge: recontagem só leitura em produção (3.7) e `CORTE_ALERTA_BV` com o momento do deploy no último commit
+- [ ] T041 Antes do merge: recontagem só leitura em produção (3.7) e `CORTE_ALERTA_BV` com o momento do deploy no último commit (literal naive em UTC; o cenário 58 confere)
+
+## Phase 11: Converge (14/10) — revisão adversarial, 29 de 37 achados confirmados
+
+- [X] T042 Cenários 58–68 no `verify_305.py`, rodados vermelhos antes (`verify_305_converge_primeira_falha.txt`); `--so=` para iterar
+- [X] T043 Backend: corte vazio fecha; proporção pelo líquido (`plano_dos_acrescimos(nota=)`); `_valor_digitado` recusa o ambíguo e ≥ 10¹⁰; BV vazio/zero/negativo e `id` repetido → 400; `travar_evento` em `estado_da_venda` e `substituir_acrescimos`; B10 no "Vincular e aplicar"; Jinja não reproporciona o BV redigitado; `AuditLog` da troca de PIX no BV pago; `set-status` com `valor_esperado` (409) em `app/calendar/{orcamento_evento_ops,comercial_ops,routes}.py`, `app/api/{agenda_write,financeiro_write}.py`
+- [X] T044 Frontend: R$ por `MoneyInput` e % convertido (número no PUT); "Lançar o BV" em reais; a linha que vira BV não reinterpreta valor digitado; `salvar.reset()` ao abrir/cancelar/remover; `?lancar=bv` com o editor aberto só acrescenta; `setQueryData` no PUT; invalidação financeira na criação e na edição; Cancelar do painel Orçamento limpa quem recebe/PIX; campos do BV no Novo evento quando o 400 os pede; `valor_esperado` na Planilha
+- [X] T045 Regressão: verify_305 64/64 com `--regressao`; locais 249/251 ajustados ao "[] não apaga BV pago" (18/18, 19/19); typecheck das três SPAs; tela conferida; docs 01/03/04/05 e research/contracts/data-model/quickstart
 
 ## Dependências
 

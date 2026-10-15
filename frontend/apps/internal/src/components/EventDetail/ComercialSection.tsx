@@ -791,8 +791,14 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
               variant="ghost"
               size="sm"
               onClick={() => {
+                // Quem recebe e o PIX são deste orçamento: no próximo escolhido, o BV iria para a
+                // pessoa errada (e o erro velho deixaria os campos vermelhos).
                 setEscolhido(null);
                 setTrocando(false);
+                setDuracao("");
+                setBvRecipient("");
+                setBvPix("");
+                salvar.reset();
               }}
             >
               Cancelar

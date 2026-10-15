@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
-import { formatBRL } from "@manto/money";
+import { formatBRL, MoneyInput } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
 import { useSetAcrescimos, type AcrescimoInput } from "../../lib/eventOps";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
@@ -37,12 +37,29 @@ function retratoDosBvs(acrescimos: EventoDetalhe["acrescimos"]): string {
 }
 
 /**
+ * O % digitado ("10,5") como número; texto que não é número segue como está, para o servidor
+ * recusar NA LINHA (nunca vira outro número calado). Vazio fica vazio.
+ */
+function percentualDigitado(v: number | string | null | undefined): number | string {
+  if (typeof v === "number") return v;
+  const texto = (v ?? "").replace(/\s/g, "");
+  if (texto === "") return "";
+  const n = Number(texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto);
+  return Number.isFinite(n) ? n : texto;
+}
+
+function semValor(v: number | string | null | undefined): boolean {
+  return v == null || v === "" || v === 0;
+}
+
+/**
  * Acréscimos do evento, editáveis (features 099/100; editor na 253; BV da 305).
  *
  * O BV é dinheiro que sai para outra pessoa: a tela mostra quem recebe e o status, e o servidor
  * preserva o PIX e o pagamento pela IDENTIDADE da linha (o `id` que veio do GET) — salvar sem mexer
- * não apaga o PIX nem "despaga" ninguém. BV pago não muda de valor nem sai por aqui. O valor aceita
- * vírgula ("1.309,52"); quem converte é o servidor, que também recusa valor ilegível na linha.
+ * não apaga o PIX nem "despaga" ninguém. BV pago não muda de valor nem sai por aqui. O valor em R$ é
+ * `MoneyInput` e vai como NÚMERO: texto livre fazia "1.500" virar R$ 1,50 no servidor, e o backend
+ * antigo (janela de deploy) descartava "130,95" com a linha inteira. O % vai como número também.
  */
 function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
   const acrescimos = data.acrescimos ?? [];
@@ -61,7 +78,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
         id: a.id,
         tipo: a.tipo,
         is_percent: a.is_percent,
-        value: a.value == null ? "" : String(a.value).replace(".", ","),
+        value: a.is_percent ? (a.value == null ? "" : String(a.value).replace(".", ",")) : (a.value ?? 0),
         bv_recipient: a.bv_recipient ?? "",
         bv_pix: a.bv_pix ?? "",
       };
@@ -71,30 +88,48 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
     });
   }
 
+  /**
+   * A linha do "Lançar o BV": SEMPRE em reais, com o valor que o servidor propôs. Sem valor (duração
+   * não identificada) vai vazia, para digitar — em % a régua do evento põe os outros acréscimos na
+   * base e daria outro BV (no 2407, 4× o do orçamento); e o BV fixo do orçamento abria como %.
+   */
+  function linhaDoBvPendente(): Linha {
+    return {
+      key: `n${Date.now()}`,
+      tipo: TIPO_BV,
+      is_percent: false,
+      value: pendente?.valor ?? 0,
+      bv_recipient: "",
+      bv_pix: "",
+    };
+  }
+
   function abrir(comBv = false) {
+    salvar.reset();
     const base = linhasGravadas();
-    if (comBv && pendente) {
-      const emReais = pendente.valor != null;
-      base.push({
-        key: `n${Date.now()}`,
-        tipo: TIPO_BV,
-        is_percent: !emReais,
-        value: emReais ? String(pendente.valor).replace(".", ",") : String(pendente.percentual ?? ""),
-        bv_recipient: "",
-        bv_pix: "",
-      });
-    }
+    if (comBv && pendente) base.push(linhaDoBvPendente());
     setLinhas(base);
     setRetrato(retratoDosBvs(acrescimos));
     setEditando(true);
   }
 
   // "Lançar o BV" vindo de outra tela (`?lancar=bv`): o painel já está montado, então o pedido é
-  // lido aqui (e apagado da URL, para recarregar a página não reabrir o editor).
+  // lido aqui (e apagado da URL, para recarregar a página não reabrir o editor). Com o editor JÁ
+  // aberto, só acrescenta a linha (se ainda não houver um BV novo): reabrir perderia o digitado.
   const pedeLancar = searchParams.get("lancar") === "bv";
   useEffect(() => {
     if (!pedeLancar || !canEdit) return;
-    abrir(true);
+    if (editando) {
+      if (pendente) {
+        setLinhas((atual) =>
+          atual.some((l) => l.id == null && l.tipo.trim().toUpperCase() === TIPO_BV)
+            ? atual
+            : [...atual, linhaDoBvPendente()],
+        );
+      }
+    } else {
+      abrir(true);
+    }
     const proximo = new URLSearchParams(searchParams);
     proximo.delete("lancar");
     setSearchParams(proximo, { replace: true });
@@ -106,10 +141,28 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
       atual.map((l) => {
         if (l.key !== key) return l;
         const nova = { ...l, [campo]: valor };
-        // Linha NOVA que vira BV nasce em % (o BV lançado à mão costuma ser "10%"); a que já
-        // existe abre como está.
-        if (campo === "tipo" && l.id == null && String(valor).trim().toUpperCase() === TIPO_BV && l.tipo.trim().toUpperCase() !== TIPO_BV) {
+        // Linha NOVA que vira BV nasce em % (o BV lançado à mão costuma ser "10%"), mas só se ainda
+        // não tem valor: com "300" digitado, virar % gravaria 300% (R$ 1.500 numa venda de 2.000).
+        if (
+          campo === "tipo" &&
+          l.id == null &&
+          semValor(l.value) &&
+          String(valor).trim().toUpperCase() === TIPO_BV &&
+          l.tipo.trim().toUpperCase() !== TIPO_BV
+        ) {
           nova.is_percent = true;
+          nova.value = "";
+        }
+        // Trocar a unidade leva o número junto: o R$ é número (MoneyInput); o % é texto.
+        if (campo === "is_percent" && Boolean(valor) !== Boolean(l.is_percent)) {
+          const numero = percentualDigitado(l.value);
+          nova.value = valor
+            ? typeof numero === "number" && numero !== 0
+              ? String(numero).replace(".", ",")
+              : ""
+            : typeof numero === "number"
+              ? numero
+              : 0;
         }
         return nova;
       }),
@@ -150,15 +203,25 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                   </div>
                   <div className="w-36">
                     <label className={LABEL}>{l.is_percent ? "Percentual" : "Valor (R$)"}</label>
-                    <input
-                      className={INPUT_CLASS}
-                      inputMode="decimal"
-                      value={String(l.value ?? "")}
-                      disabled={pago}
-                      aria-invalid={Boolean(erroDaLinha(i, "value"))}
-                      onChange={(e) => alterar(l.key, "value", e.target.value)}
-                      placeholder={l.is_percent ? "10" : "150,00"}
-                    />
+                    {l.is_percent ? (
+                      <input
+                        className={INPUT_CLASS}
+                        inputMode="decimal"
+                        value={String(l.value ?? "")}
+                        disabled={pago}
+                        aria-invalid={Boolean(erroDaLinha(i, "value"))}
+                        onChange={(e) => alterar(l.key, "value", e.target.value)}
+                        placeholder="10"
+                      />
+                    ) : (
+                      <MoneyInput
+                        className={INPUT_CLASS}
+                        value={typeof l.value === "number" ? l.value : 0}
+                        disabled={pago}
+                        aria-invalid={Boolean(erroDaLinha(i, "value"))}
+                        onValueChange={(n) => alterar(l.key, "value", n)}
+                      />
+                    )}
                   </div>
                   <label className="mb-2 flex cursor-pointer items-center gap-1.5 text-sm">
                     <input
@@ -174,7 +237,11 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                     size="sm"
                     className="mb-1"
                     disabled={pago}
-                    onClick={() => setLinhas((a) => a.filter((x) => x.key !== l.key))}
+                    onClick={() => {
+                      // Os erros do 400 são pelo índice da lista enviada: remover desloca as linhas.
+                      salvar.reset();
+                      setLinhas((a) => a.filter((x) => x.key !== l.key));
+                    }}
                     aria-label={`Remover acréscimo ${l.tipo || "sem tipo"}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -229,7 +296,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
             onClick={() =>
               setLinhas((a) => [
                 ...a,
-                { key: `n${Date.now()}`, tipo: "", value: "", is_percent: false, bv_recipient: "", bv_pix: "" },
+                { key: `n${Date.now()}`, tipo: "", value: 0, is_percent: false, bv_recipient: "", bv_pix: "" },
               ])
             }
           >
@@ -260,14 +327,23 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
               disabled={vendaMudouOBv}
               onClick={() =>
                 salvar.mutate(
-                  linhas.map(({ key: _key, ...resto }) => resto),
+                  linhas.map(({ key: _key, ...resto }) => ({
+                    ...resto,
+                    value: resto.is_percent ? percentualDigitado(resto.value) : resto.value,
+                  })),
                   { onSuccess: () => setEditando(false) },
                 )
               }
             >
               Salvar
             </Button>
-            <Button variant="outline" onClick={() => setEditando(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                salvar.reset();
+                setEditando(false);
+              }}
+            >
               Cancelar
             </Button>
           </div>

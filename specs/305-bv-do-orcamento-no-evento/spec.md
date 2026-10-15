@@ -410,6 +410,17 @@ corte antes de criar eventos. Numeração do plano (28, 29, 30 e 41 saíram com 
 | 55 | Comissão logo após PUT e após B10, lida por conexão separada sem abrir a Planilha | coleção atualizada (flush+expire) | não |
 | 56 | "Lançar o BV" em orçamento com outro acréscimo (como o 2407) | o alerta traz o valor do orçamento em R$, não o % | não |
 | 57 | BV pago fora da lista, retipado ou com outro valor | 400 sem apagar; valor congelado | **sim** |
+| 58 | Converge: a constante do commit (naive) e a vazia | 1218/1236/1268 sem alerta nem linha; sem corte, nada acende pelo GET | não |
+| 59 | Converge: nota diferente entre orçamento e evento (criação nos dois sentidos e alerta) | o mesmo BV de R$ 100,00 (proporção pelo líquido) | não |
+| 60 | Converge: BV a pagar com valor apagado, "0", 0 ou nulo | 400 em `items.0.value`, nada apagado; linha sem tipo ignorada | **sim** |
+| 61 | Converge: "1.500", "R$ 1.200", "1,309.52", 130952000000, 1e30; id infinito | 400 na linha (nunca R$ 1,50 nem 500); "1.500,00" e 1500 gravam R$ 1.500,00 | **sim** |
+| 62 | Converge: o `id` de um BV pago duas vezes no PUT | 400 em `items.1.id`, nada muda | **sim** |
+| 63 | Converge: BV negativo em R$ e em % | 400, comissão intacta; "Outro" negativo segue aceito | **sim** |
+| 64 | Converge: "a definir" e volta pelo "Vincular e aplicar" | % recalculado sobre a venda nova; R$ fica, com "confira o BV" na frase | não |
+| 65 | Converge: Jinja com o BV redigitado junto com a venda; e reenviado sem mexer | redigitado fica como digitado; reenviado acompanha | não |
+| 66 | Converge: corridas (duas mudanças de venda; editor × venda), com outra transação travando o evento | BV 150 (não 180); % sobre a venda nova | não |
+| 67 | Converge: marcar pago com `valor_esperado` diferente / igual / ausente | 409 sem gravar / 200 / 200 | **sim** |
+| 68 | Converge: trocar o PIX de um BV pago | um `AuditLog` com o PIX mascarado; sem troca, nenhum | não |
 | 50 | limpeza | registros e usuários descartáveis apagados (`roles.clear()` antes) | — |
 
 Conferência de tela (desktop; app interno): Novo evento de orçamento com BV (quadro por duração, aviso

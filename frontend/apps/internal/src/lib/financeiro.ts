@@ -390,6 +390,8 @@ export interface SetPaymentStatusInput {
   status: PaymentStatus;
   /** Hotfix 267c: obrigatório para o Superadmin desfazer um pagamento de comissão. */
   motivo?: string;
+  /** Feature 305: o valor do BV que a Planilha mostrou — mudou desde então (a venda mudou), 409. */
+  valor_esperado?: number;
 }
 
 /** Marca o status de um item de pagamento (feature 160). */
@@ -402,6 +404,10 @@ export function useSetPaymentStatus() {
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
+      invalidarFinanceiro(queryClient);
+    },
+    // O 409 do BV que mudou pede a Planilha nova: recarrega para mostrar o valor de agora.
+    onError: () => {
       invalidarFinanceiro(queryClient);
     },
   });

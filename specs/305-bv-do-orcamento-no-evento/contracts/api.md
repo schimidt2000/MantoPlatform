@@ -51,6 +51,10 @@ e a frase: "… BV de R$ 147,50 para <quem recebe> — entra na Planilha de 08/2
 sobre a venda menos o BV." / "O BV do orçamento não entra sozinho: lance-o em Acréscimos, com quem
 recebe e o PIX, e confira se o valor de venda é o total com o BV." (só se o vínculo é depois do corte).
 
+Converge (14/10): quando os valores entram num evento que já tinha acréscimos (a B3 não grava), a B10
+roda — `"bv_acompanhou": "O BV acompanhou a venda: de R$ 100,00 para R$ 136,36. …"` ou "Confira o BV:
+o valor de venda voltou, e o BV em reais ficou como estava." — e entra na frase.
+
 ## `PUT /api/events/<id>/acrescimos` — Comercial, Financeiro, Superadmin
 
 Item ganha `id?: number` (o recebido no GET) e `descricao?: string` (**ausente** = mantém; `""` =
@@ -64,6 +68,12 @@ apaga). `value` aceita número ou texto pt-BR ("1.309,52"). Ordem: 404 → 403 �
 ```
 
 Índice = posição **na requisição**. Linha BV nova em % com a venda sem valor → 400 na linha.
+
+Converge (14/10), também 400 na linha: texto ambíguo ("1.500" sem vírgula, "1,309.52") ou ≥ 10¹⁰ →
+`items.<i>.value` "Valor inválido."; BV sem valor ou zero → "Informe o valor do BV (ou remova a
+linha)."; BV negativo → "O BV não pode ser negativo."; o mesmo `id` duas vezes → `items.<i>.id`. A
+troca de quem recebe ou do PIX num BV pago grava `AuditLog` (`edit`, `event_bv`, id do evento, PIX
+mascarado). A tela nova manda `value` como número.
 
 ## `GET /api/events/<id>` — bloco `acrescimos` e `venda` só para `show_comercial`
 
@@ -80,7 +90,12 @@ Confira o BV e o valor total com BV." ou "Confira o BV: o valor de venda voltou.
 
 Os avisos da B10 e o do alerta aceso entram em `warnings` (já existe).
 
-## Planilha e comissão — sem mudança de contrato
+## Planilha e comissão
 
 O BV novo aparece pelas consultas de hoje (`_build_bv_items`, `financeiro_read.py:706-715`) com
 recebedor, PIX e `missing_data: false`; marcar pago segue Financeiro/Superadmin (Comercial 403).
+
+Converge (14/10): `POST /api/financeiro/pagamentos/set-status` com `item_type: "bv"` aceita
+`valor_esperado?: number` (o `amount` que a Planilha mostrou). A linha é lida com `FOR UPDATE`; ao
+marcar `pago` ou `no_banco` com `valor_esperado` diferente do gravado → **409** "O BV mudou para R$ X
+desde que a Planilha abriu: recarregue e confira antes de marcar." Sem o campo (bundle antigo), como antes.

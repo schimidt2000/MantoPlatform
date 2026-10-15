@@ -220,6 +220,9 @@ export function useCreateEvent() {
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       // Evento novo entra em Cobranças ou em "Sem valor" (feature 299).
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 305: o BV do orçamento nasce na criação, com a comissão sobre a venda menos ele.
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
       // Evento criado a partir de formulário (feature 298): ele sai da Home e o aviso some.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },
@@ -242,6 +245,9 @@ export function useUpdateEvent(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       // Valor, data e título mudam as listas comerciais da Home (feature 299).
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 305: a venda nova leva o BV a pagar junto (B10) e a comissão é sincronizada.
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
       // Pré-contrato ligado na edição (feature 298): some da Home e da fila de Formulários.
       if (body.form_response_id) invalidarDestinoDeFormulario(queryClient, body.form_response_id);
     },

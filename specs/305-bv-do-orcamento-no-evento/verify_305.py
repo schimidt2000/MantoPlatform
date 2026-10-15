@@ -511,6 +511,9 @@ def limpar() -> None:
     db.session.execute(
         text("DELETE FROM orcamento_history WHERE client_name LIKE :p"), {"p": f"{PREFIX}%"}
     )
+    db.session.execute(
+        text("DELETE FROM audit_logs WHERE entity_name LIKE :p"), {"p": f"%{PREFIX}%"}
+    )
     db.session.commit()
     for u in User.query.filter(User.email.like(f"{PREFIX}%")).all():
         u.roles.clear()
@@ -1753,6 +1756,280 @@ def cen_56_alerta_em_reais() -> None:
     _garante(p and p.get("valor") is not None and q(p["valor"]) == Decimal("435.00"), f"{p}")
 
 
+# ── 58–68 · achados do converge (14/10) ─────────────────────────────────────────────────────────
+def cen_58_corte_vazio() -> None:
+    from app.calendar import orcamento_evento_ops as oeo
+
+    original = estado.get("corte_original")
+    _garante(original is None or original.tzinfo is None, f"CORTE_ALERTA_BV com fuso: {original!r}")
+    try:
+        # (a) A constante DO COMMIT (não a do monkeypatch): os três eventos do passado com orçamento
+        # com BV e venda digitada não acendem nem ganham linha (T030; 3a-Q4 = A).
+        _corte(original)
+        with app.app_context():
+            for eid in (1218, 1236, 1268):
+                ev = db.session.get(CalendarEvent, eid)
+                if ev is None:
+                    continue
+                _garante(oeo.bv_do_orcamento_pendente(ev) is None, f"evento {eid} acendeu o alerta")
+                _garante(not _bvs(eid), f"evento {eid} ganhou linha BV")
+        # (b) Sem corte gravado, nada acende pelo GET — a falha fecha (só o vínculo novo avisa).
+        _corte(None)
+        oid = _orc_2031("c58")
+        eid = _evento_google("c58", venda=1622.50)
+        _cliente("com").patch(f"/api/events/{eid}/orcamento", json={"orcamento_history_id": oid})
+        _garante(_pendente("com", eid) is None, "corte vazio acendeu o alerta")
+    finally:
+        _corte(datetime(2000, 1, 1))
+
+
+def cen_59_nota_diferente() -> None:
+    # Orçamento COM nota (1h 1.309,52, BV 100) e evento SEM nota a 1.100,00: o mesmo preço líquido.
+    oid = _orc_d2("c59a")
+    r, eid = _criar(
+        "com",
+        _corpo_criacao(
+            f"{PREFIX}c59a", oid, venda=1100, duracao="1", fim="16:00", bv_recipient=QUEM, bv_pix=PIX
+        ),
+    )
+    _garante(eid, f"POST → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("100.00")], f"sem nota: {_bvs(eid)}")
+    # Orçamento SEM nota (1h 1.100, BV 100) e evento COM nota a 1.309,52.
+    oid_b = _orc_2031("c59b")
+    r, eid_b = _criar(
+        "com",
+        _corpo_criacao(
+            f"{PREFIX}c59b", oid_b, venda=1309.52, duracao="1", fim="16:00", with_invoice=True,
+            bv_recipient=QUEM, bv_pix=PIX,
+        ),
+    )
+    _garante(eid_b, f"POST → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante([q(b["amount_brl"]) for b in _bvs(eid_b)] == [Decimal("100.00")], f"com nota: {_bvs(eid_b)}")
+    # O alerta propõe pela mesma régua.
+    oid_c = _orc_d2("c59c")
+    eid_c = _evento_google("c59c", venda=1100, horas=1)
+    _cliente("com").patch(f"/api/events/{eid_c}/orcamento", json={"orcamento_history_id": oid_c})
+    p = _pendente("com", eid_c)
+    _garante(p and p.get("valor") is not None and q(p["valor"]) == Decimal("100.00"), f"alerta: {p}")
+
+
+def cen_60_bv_sem_valor() -> None:
+    eid = _evento_com_bv_reais("c60", nota=False)
+    antes = _linhas(eid)
+    for vazio in ("", "0", 0, None):
+        itens = _como_carregou(eid)
+        itens[0]["value"] = vazio
+        r = _put("com", eid, itens)
+        _garante(
+            r.status_code == 400
+            and "items.0.value" in (_erro(r).get("fields") or {})
+            and _linhas(eid) == antes,
+            f"valor {vazio!r}: {r.status_code} {_linhas(eid)}",
+        )
+    r = _put("com", eid, _como_carregou(eid) + [{"tipo": "", "value": ""}])
+    _garante(r.status_code == 200 and len(_bvs(eid)) == 1, f"linha em branco: {r.status_code}")
+
+
+def cen_61_milhar_e_extremos() -> None:
+    eid = _evento_google("c61", venda=2000)
+    for ambiguo in ("1.500", "R$ 1.200", "1,309.52"):
+        r = _put("com", eid, [_bv_item(ambiguo)])
+        _garante(
+            r.status_code == 400 and "items.0.value" in (_erro(r).get("fields") or {}) and not _linhas(eid),
+            f"{ambiguo!r}: {r.status_code} {_linhas(eid)}",
+        )
+    for enorme in ("130952000000", 1e30):
+        r = _put("com", eid, [{"tipo": "Outro", "is_percent": False, "value": enorme}])
+        _garante(
+            r.status_code == 400 and "items.0.value" in (_erro(r).get("fields") or {}),
+            f"{enorme!r}: {r.status_code}",
+        )
+    r = _put("com", eid, [{"id": float("inf"), "tipo": "Outro", "is_percent": False, "value": 10}])
+    _garante(r.status_code in (200, 400), f"id infinito: {r.status_code}")
+    r = _put("com", eid, [_bv_item("1.500,00"), _bv_item(1500, quem=f"{PREFIX}Num")])
+    _garante(
+        r.status_code == 200 and [q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("1500.00")] * 2,
+        f"1.500,00 e 1500: {r.status_code} {_bvs(eid)}",
+    )
+
+
+def cen_62_id_repetido() -> None:
+    eid = _evento_com_bv_reais("c62", nota=False, valor=100)
+    _set_status_bv(eid, "pago")
+    antes = _linhas(eid)
+    itens = _como_carregou(eid)
+    copia = dict(itens[0], value=5000, bv_recipient=f"{PREFIX}Outra", bv_pix="outra@exemplo.test")
+    r = _put("com", eid, itens + [copia])
+    _garante(
+        r.status_code == 400 and "items.1.id" in (_erro(r).get("fields") or {}) and _linhas(eid) == antes,
+        f"id repetido: {r.status_code} {_erro(r)} {_linhas(eid)}",
+    )
+
+
+def cen_63_bv_negativo() -> None:
+    eid = _evento_google("c63", venda=2000)
+    comissao_antes = _comissao(eid)
+    for item in (_bv_item("-100"), _bv_item(-10, pct=True)):
+        r = _put("com", eid, [item])
+        _garante(
+            r.status_code == 400 and "items.0.value" in (_erro(r).get("fields") or {}) and not _linhas(eid),
+            f"{item['value']!r}: {r.status_code} {_linhas(eid)}",
+        )
+    _garante(_comissao(eid) == comissao_antes, "a comissão mudou")
+    r = _put("com", eid, [{"tipo": "Outro", "is_percent": False, "value": "-50"}])
+    _garante(r.status_code == 200, f"desconto que não é BV: {r.status_code}")
+
+
+def cen_64_vincular_roda_a_b10() -> None:
+    # BV em % a pagar; a venda vai a "a definir" e volta pelo "Vincular e aplicar".
+    eid = _evento_google("c64a", venda=1100)
+    _put("com", eid, [_bv_item(10, pct=True)])
+    _cliente("com").patch(
+        f"/api/events/{eid}/comercial", json=_corpo_comercial(eid, sale_value=None, sale_value_gross=None)
+    )
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("100.00")], f"a definir: {_bvs(eid)}")
+    r = _cliente("com").patch(
+        f"/api/events/{eid}/orcamento",
+        json={"orcamento_history_id": _orc_sem("c64a"), "aplicar_valores_duracao": 2},
+    )
+    _garante(r.status_code == 200, f"vínculo → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    esperado = q(q(Decimal("1500") / Decimal("1.1")) * 10 / 100)
+    _garante(q(_evento(eid)["venda"]) == Decimal("1500.00"), f"venda {_evento(eid)}")
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [esperado], f"% na volta pelo vínculo: {_bvs(eid)}")
+    _garante(q(_comissao(eid)[0]) == _comissao_esperada(1500, esperado), f"comissão {_comissao(eid)}")
+    # BV em reais: fica, e a frase do vínculo manda conferir.
+    e2 = _evento_com_bv_reais("c64b", venda=2000, nota=False)
+    _cliente("com").patch(
+        f"/api/events/{e2}/comercial", json=_corpo_comercial(e2, sale_value=None, sale_value_gross=None)
+    )
+    r = _cliente("com").patch(
+        f"/api/events/{e2}/orcamento",
+        json={"orcamento_history_id": _orc_sem("c64b"), "aplicar_valores_duracao": 2},
+    )
+    frase = ((r.get_json() or {}).get("relatorio_orcamento") or {}).get("frase") or ""
+    _garante([q(b["amount_brl"]) for b in _bvs(e2)] == [Decimal("200.00")], f"R$: {_bvs(e2)}")
+    _garante("BV em reais ficou" in frase, f"frase sem o aviso: {frase!r}")
+
+
+def _post_jinja(eid: int, venda: str, valor_bv: str) -> None:
+    form = {
+        "action": "update_comercial",
+        "sale_value": venda,
+        "sale_value_gross": venda,
+        "acrescimo_tipo[]": ["BV"],
+        "acrescimo_descricao[]": [""],
+        "acrescimo_value[]": [valor_bv],
+        "acrescimo_is_percent[]": ["0"],
+        "acrescimo_bv_recipient[]": [QUEM],
+        "acrescimo_bv_pix[]": [PIX],
+    }
+    r = _cliente("com").post(f"/events/{eid}", data=form)
+    _garante(r.status_code in (200, 302), f"Jinja → {r.status_code}")
+
+
+def cen_65_jinja_bv_redigitado() -> None:
+    # Redigitado junto com a venda: fica como digitado (não é proporcionado de novo).
+    eid = _evento_com_bv_reais("c65a", venda=1000, nota=False, valor=100)
+    _post_jinja(eid, "2.000,00", "150,00")
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("150.00")], f"redigitado: {_bvs(eid)}")
+    # Reenviado sem mexer: acompanha a venda.
+    e2 = _evento_com_bv_reais("c65b", venda=1000, nota=False, valor=100)
+    _post_jinja(e2, "2.000,00", "100,00")
+    _garante([q(b["amount_brl"]) for b in _bvs(e2)] == [Decimal("200.00")], f"sem mexer: {_bvs(e2)}")
+
+
+def _segurar_evento(eid: int, sql_dentro: list[str], acao: Callable[[], None]) -> None:
+    """Outra transação trava a linha do evento (`FOR UPDATE`), escreve e só comita depois que a
+    `acao` (numa thread) já está esperando — a corrida de duas gravações, sem sorte."""
+    import time
+
+    erro: list[BaseException] = []
+
+    def alvo() -> None:
+        try:
+            acao()
+        except BaseException as exc:  # noqa: BLE001
+            erro.append(exc)
+
+    with _externo.connect() as conn:
+        tx = conn.begin()
+        conn.execute(text("SELECT id FROM calendar_events WHERE id = :i FOR UPDATE"), {"i": eid})
+        for sql in sql_dentro:
+            conn.execute(text(sql), {"i": eid})
+        t = threading.Thread(target=alvo)
+        t.start()
+        time.sleep(2)
+        tx.commit()
+    t.join(30)
+    if erro:
+        raise erro[0]
+
+
+def cen_66_corridas() -> None:
+    # (a) Duas mudanças de venda: a outra (1.000 → 1.200, BV 120) comita enquanto esta (→ 1.500) espera.
+    eid = _evento_com_bv_reais("c66a", venda=1000, nota=False, valor=100)
+    corpo = _corpo_comercial(eid, sale_value=1500, sale_value_gross=1500)
+    _segurar_evento(
+        eid,
+        [
+            "UPDATE calendar_events SET sale_value = 1200, sale_value_gross = 1200 WHERE id = :i",
+            "UPDATE event_acrescimos SET amount_brl = 120, value = 120 WHERE event_id = :i AND is_bv",
+        ],
+        lambda: _cliente("com").patch(f"/api/events/{eid}/comercial", json=corpo),
+    )
+    _garante([q(b["amount_brl"]) for b in _bvs(eid)] == [Decimal("150.00")], f"B10 dobrada: {_bvs(eid)}")
+    # (b) O editor (BV 10%) contra a venda que muda ao mesmo tempo: a régua usa a venda nova.
+    e2 = _evento_google("c66b", venda=1000)
+    _segurar_evento(
+        e2,
+        ["UPDATE calendar_events SET sale_value = 2000, sale_value_gross = 2000 WHERE id = :i"],
+        lambda: _put("com", e2, [_bv_item(10, pct=True)]),
+    )
+    esperado = q(q(Decimal("2000") / Decimal("1.1")) * 10 / 100)
+    _garante([q(b["amount_brl"]) for b in _bvs(e2)] == [esperado], f"régua com venda velha: {_bvs(e2)}")
+
+
+def cen_67_marcar_pago_confere_o_valor() -> None:
+    eid = _evento_com_bv_reais("c67", nota=False, valor=200)
+    bv = _bvs(eid)[0]
+    c = _cliente("fin")
+    corpo = {"item_type": "bv", "item_id": bv["id"], "status": "pago", "valor_esperado": 150}
+    r = c.post("/api/financeiro/pagamentos/set-status", json=corpo)
+    _garante(
+        r.status_code == 409 and _bvs(eid)[0]["bv_payment_status"] == "nao_pago",
+        f"valor diferente: {r.status_code} {_bvs(eid)}",
+    )
+    r = c.post("/api/financeiro/pagamentos/set-status", json=dict(corpo, valor_esperado=200))
+    _garante(r.status_code == 200 and _bvs(eid)[0]["bv_payment_status"] == "pago", f"igual: {r.status_code}")
+    r = c.post(
+        "/api/financeiro/pagamentos/set-status",
+        json={"item_type": "bv", "item_id": bv["id"], "status": "nao_pago"},
+    )
+    _garante(r.status_code == 200, f"sem valor_esperado (bundle antigo): {r.status_code}")
+
+
+def cen_68_rastro_do_bv_pago() -> None:
+    eid = _evento_com_bv_reais("c68", nota=False, valor=200)
+    _set_status_bv(eid, "pago")
+    itens = _como_carregou(eid)
+    itens[0]["bv_pix"] = "novo-pix-9876@exemplo.test"
+    _garante(_put("com", eid, itens).status_code == 200, "PUT")
+    rows = _no_banco(
+        "SELECT detail FROM audit_logs WHERE entity_type = 'event_bv' AND entity_id = :i "
+        "AND detail LIKE 'BV pago%'", i=eid
+    )
+    _garante(len(rows) == 1, f"rastro: {rows}")
+    detalhe = rows[0][0] or ""
+    _garante("PIX" in detalhe and "novo-pix-9876@exemplo.test" not in detalhe and PIX not in detalhe,
+             f"rastro sem máscara: {detalhe!r}")
+    # Sem troca, sem rastro.
+    _put("com", eid, _como_carregou(eid))
+    _garante(len(_no_banco(
+        "SELECT id FROM audit_logs WHERE entity_type = 'event_bv' AND entity_id = :i "
+        "AND detail LIKE 'BV pago%'", i=eid
+    )) == 1, "rastro sem troca")
+
+
 def cen_50_limpeza() -> None:
     with app.app_context():
         limpar()
@@ -1819,15 +2096,33 @@ CENARIOS = [
     ("55. comissão na hora (conexão separada)", cen_55_comissao_na_hora),
     ("56. alerta em reais (como o 2407)", cen_56_alerta_em_reais),
     ("57. DEVE FALHAR: BV pago não sai, não muda de tipo nem de valor", cen_57_bv_pago_nao_sai),
+    ("58. corte do commit e corte vazio: o passado não acende", cen_58_corte_vazio),
+    ("59. nota diferente entre orçamento e evento: o mesmo BV", cen_59_nota_diferente),
+    ("60. DEVE FALHAR: BV sem valor não some", cen_60_bv_sem_valor),
+    ("61. DEVE FALHAR: '1.500' e números enormes recusados", cen_61_milhar_e_extremos),
+    ("62. DEVE FALHAR: id repetido não duplica BV pago", cen_62_id_repetido),
+    ("63. DEVE FALHAR: BV negativo", cen_63_bv_negativo),
+    ("64. vincular e aplicar roda a B10", cen_64_vincular_roda_a_b10),
+    ("65. Jinja: BV redigitado com a venda fica como digitado", cen_65_jinja_bv_redigitado),
+    ("66. corridas: B10 e editor contra a venda que muda", cen_66_corridas),
+    ("67. DEVE FALHAR: marcar pago confere o valor mostrado", cen_67_marcar_pago_confere_o_valor),
+    ("68. rastro da troca de PIX no BV pago", cen_68_rastro_do_bv_pago),
 ]
 
 
 def main() -> int:
     print("Feature 305 — o BV do orçamento chega ao evento")
+    from app.calendar import orcamento_evento_ops
+
+    # A constante como está no commit, antes do monkeypatch (cenário 58).
+    estado["corte_original"] = orcamento_evento_ops.CORTE_ALERTA_BV
     preparar()
     try:
+        # `--so=58,59` roda só esses (iteração rápida; o portão é a rodada inteira).
+        so = next((a.split("=", 1)[1].split(",") for a in sys.argv if a.startswith("--so=")), None)
         for nome, fn in CENARIOS:
-            cenario(nome, fn)
+            if so is None or nome.split(".", 1)[0] in so:
+                cenario(nome, fn)
     finally:
         cenario("50. limpeza", cen_50_limpeza)
     ok = sum(1 for _, passou, _ in resultados if passou)

@@ -67,6 +67,13 @@ em `:368`, `:435` e passa a ser usado em `quote_ops.py:364`, mesmo valor). Quem 
 `Decimal(str(NF_DIVISOR))` — nunca `Decimal(NF_DIVISOR)` (0,8399999…) e nunca uma segunda constante.
 Importar de `pricing_ops` em `quote_ops` não cria ciclo (conferido).
 
+**Converge (14/10): a proporção é entre LÍQUIDOS em todo lugar.** A criação e o alerta chamavam
+`bv_que_acompanha(cheio, venda, total)` com a venda bruta e o total bruto — a cliente que desistia da
+nota (venda 16% menor pelo mesmo preço) tinha o BV cortado em 16%, e a nota que entrava o subia 19%,
+enquanto a B10 já comparava líquidos. `plano_dos_acrescimos` recebe `nota` (a do evento; `None` = a do
+orçamento, no vínculo) e compara `venda × 0,84 se nota do evento` com `total × 0,84 se nota do
+orçamento`; com as duas iguais, o 0,84 se cancela e nada muda.
+
 ## R4 — Onde o BV nasce, e a lista do navegador (B3, B4) — [D: Q2, PIX] + [R]
 
 **Decisão.** `gravar_acrescimos_do_orcamento(event, entry, duracao, *, recebedor, pix, duracao_origem)`
@@ -128,6 +135,12 @@ Pagamentos."; o texto de topo diz o mesmo, para o bundle antigo (que só mostra 
   vírgula antes do envio.
 - **Tipo.** `is_bv` exige `"BV"` exato depois do `strip`; "bv" minúsculo escapava da Planilha, da
   comissão e da B8. O tipo é normalizado (`strip().upper() == "BV"` grava `"BV"`).
+- **Converge (14/10).** O texto ambíguo é recusado na linha, nunca reinterpretado: "1.500" sem
+  vírgula (o milhar que o placeholder "150,00" convida; `Decimal` lia 1,50), "1,309.52" (lia 1,31) e
+  número ≥ 10¹⁰ (estourava o `Numeric(12,2)` com 500). BV sem valor, zero ou negativo também é
+  recusado — apagar o valor e salvar tirava o BV da Planilha; o negativo subia a comissão. Linha que
+  não é BV com valor vazio ou zero segue ignorada (a linha em branco do Jinja). E a tela manda
+  número: o R$ é `MoneyInput` e o % é convertido no navegador (a F2 abaixo).
 
 ## R7 — O editor de Acréscimos (B6) — [D: Q5, Q7, 3b-Q7, P-20] + [R]
 
@@ -138,7 +151,12 @@ sem id nasce sempre `nao_pago`.** As heurísticas do plano (chave recebedor+PIX,
 tipo+valor) ficam **só** para o bundle antigo, que não manda id — e mesmo nele nunca promovem uma
 linha nova a "pago" se houver mais de uma candidata. Motivo: pela chave, um BV novo para quem já
 recebeu um BV pago no evento nasceria "pago" (a Comercial criaria dinheiro pago sem poder marcar
-pago), e dois BVs da mesma pessoa se fundiam.
+pago), e dois BVs da mesma pessoa se fundiam. **Converge (14/10):** o mesmo `id` duas vezes na lista
+é recusado (`items.<i>.id`) — as duas linhas herdavam o "pago" da antiga, e uma requisição montada à
+mão criava um segundo BV pago, para outra pessoa, sem passar pela Planilha. E a troca de quem recebe
+ou do PIX num BV pago ou no banco vai ao `AuditLog` (PIX mascarado nos 4 últimos caracteres) — o
+registro de quem recebeu se reescrevia sem rastro. O evento é travado antes de ler a venda
+(`travar_evento`): o % não é calculado com a venda de antes de uma gravação concorrente.
 
 **Régua do BV em % (FR-016).** `L` = venda × 0,84 com nota, senão a venda; `B = q((L − Σ BV em R$) ÷
 (1 + Σ % de BV/100))`; BV = `q(B × %/100)`. O % é arredondado a 2 casas **antes** da conta (o banco
@@ -193,7 +211,9 @@ chamada (o verify a troca por monkeypatch). Presente se `event.created_at ≥ co
 `#123`); "Reaplicou" não conta. Na frase do vínculo, que é montada antes do próprio log
 (`set_event_orcamento:423-424`), passa-se `novo_vinculo`. A consulta ao log só roda quando as outras
 condições já valem e o evento é anterior ao corte. O valor da constante é o momento do deploy, gravado
-no último commit antes do merge (Python `datetime.now(UTC)`, nunca o Git Bash).
+no último commit antes do merge como literal naive (hora tirada de `datetime.now(UTC)` no Python,
+nunca o Git Bash). **Converge (14/10):** com a constante vazia, só o vínculo novo acende — a falha
+fecha (antes, `None` acendia todo o passado); um valor com fuso é normalizado para UTC naive.
 
 **TZ do manto_local.** O servidor está em America/Sao_Paulo e o app não fixa o TZ da sessão: o
 `EventLog` do verify sai em hora de parede de SP, 3h antes do relógio UTC do `created_at`. O cenário
@@ -224,6 +244,14 @@ antes do sync de `:1205-1207`; passa a devolver o aviso), `_gravar_venda_da_edic
 (capturar **antes** de `:841`; rodar **depois** de `substituir_acrescimos` (`:883`), que reposta as
 linhas a cada envio; `flash` com o aviso). O "Vincular e aplicar" sobre evento que já tinha linha BV
 acrescenta "confira o BV" à frase. A 215b (`_erro_de_taxa_ou_vendedor`) continua antes.
+
+**Converge (14/10).** (1) O "Vincular e aplicar" que põe a venda num evento que já tinha acréscimos
+(a B3 não grava) roda a B10 — o BV em % ficava sobre a venda velha, contra a FR-022; o aviso vai a
+`relatorio.bv_acompanhou`. (2) O "antes" é lido com o evento travado (`estado_da_venda` →
+`travar_evento`): duas mudanças de venda partiam do mesmo "antes" e o BV era proporcionado duas vezes.
+(3) No Jinja, o BV a pagar que o envio MEXEU (comparado com o gravado antes de `substituir_acrescimos`)
+fica como digitado, com o aviso "confira o BV" — reproporcioná-lo dobrava o combinado novo.
+(4) Marcar pago na Planilha trava a linha e confere `valor_esperado` (409 se a B10 mudou o valor).
 
 **A volta não é exata.** `200 → 180 → 200` volta ao ponto só com números redondos; a cadeia de
 proporções acumula centavos. O cenário 49 usa os números redondos do plano e um caso não redondo com

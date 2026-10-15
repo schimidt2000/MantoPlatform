@@ -255,7 +255,12 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
   recebe e PIX (criação antes do Google, vínculo, editor). O BV **a pagar** acompanha a venda que
   muda depois (`acompanhar_bv_da_venda`: reais pelo líquido, % pela régua); `pago` e `no_banco`
   nunca mudam de valor e não saem pelo editor. O editor herda status, PIX e descrição só da linha
-  de mesmo `id`. A lista `acrescimos` do corpo da criação é sempre ignorada.
+  de mesmo `id` (o mesmo `id` duas vezes é recusado). A lista `acrescimos` do corpo da criação é
+  sempre ignorada. A proporção (criação, alerta, B10) é sempre entre valores **líquidos** (× 0,84 de
+  quem tem nota): o mesmo preço com e sem nota dá o mesmo BV. Nenhum BV sem valor, zero ou negativo.
+  Quem lê a venda para gravar BV trava o evento antes (`orcamento_evento_ops.travar_evento`, chamado
+  por `estado_da_venda` e `substituir_acrescimos`); a ordem é sempre evento → acréscimos. O "Vincular
+  e aplicar" que põe a venda num evento que já tinha BV roda a B10 como a aba Comercial.
 - ~~`flash()` aparece dentro de `_delete_event`~~ — **desatualizado** (conferido na 303): desde a
   224 `_delete_event` devolve o aviso de falha do Google em vez de chamar `flash`, e não depende de
   request context; a limpeza do sync passou para `sumico_ops` e chama `_delete_event` sem

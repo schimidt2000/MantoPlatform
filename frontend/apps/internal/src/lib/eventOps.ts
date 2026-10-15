@@ -317,7 +317,11 @@ export function useSetAcrescimos(eventId: number) {
         method: "PUT",
         body: JSON.stringify({ items }),
       }),
-    onSuccess: () => {
+    onSuccess: (atualizado) => {
+      // Feature 305: o PUT devolve o detalhe novo — gravado já, o editor fecha mostrando os ids
+      // novos (o PUT recria as linhas) e sem o alerta "Lançar o BV"; esperar o refetch abria uma
+      // janela em que reabrir dava o falso "a venda mudou" e travava o Salvar.
+      queryClient.setQueryData(["event", eventId], atualizado);
       invalidarComercial(queryClient, eventId);
       // Feature 305: salvar os acréscimos mexe no BV da Planilha e na comissão na mesma requisição.
       void queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });

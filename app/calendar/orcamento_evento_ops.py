@@ -30,7 +30,7 @@ import json
 import logging
 import math
 import unicodedata
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -45,8 +45,10 @@ DURACOES_TABELA = (1, 2, 3, 4)
 #: Feature 305 — o alerta "BV do orçamento pendente" só vale para evento criado ou ligado a orçamento
 #: DEPOIS deste momento (o dono, 3a-Q4 = A: "não mexer no passado"). `datetime` NAIVE em UTC, como
 #: `calendar_events.created_at` e `event_logs.created_at` em produção. Gravado no último commit antes
-#: do merge com o momento do deploy (Python `datetime.now(UTC)`, nunca o Git Bash). Lido na hora da
-#: chamada — o verify o troca por monkeypatch.
+#: do merge como LITERAL naive, por exemplo `datetime(2026, 10, 15, 22, 0)`, com a hora tirada de
+#: `datetime.now(UTC)` no Python (nunca o Git Bash). `None` = nenhum evento antigo acende (a falha
+#: fecha: o alerta do passado convidaria a pagar de novo um BV pago por fora). Lido na hora da
+#: chamada — o verify o troca por monkeypatch e confere o valor do commit (cenário 58).
 CORTE_ALERTA_BV: datetime | None = None
 
 
@@ -325,9 +327,15 @@ def plano_dos_acrescimos(
     cortesia: bool,
     duracao: int | None,
     duracao_origem: str = "",
+    nota: bool | None = None,
 ) -> dict:
     """O que a B3 vai gravar — e por que não, quando não vai. Pura; a B8 pergunta a esta mesma
     função (`bv_vai_nascer`), para a recusa do PIX nunca divergir da gravação.
+
+    A proporção é entre valores LÍQUIDOS (× 0,84 de quem tem nota), a régua da B10: a cliente que
+    desiste da nota paga 16% menos pelo MESMO preço, e o BV fica. Sem isso a criação cortava o BV em
+    16% (e a nota que entrava o subia 19%), e o mesmo evento dava BV diferente conforme o caminho.
+    ``nota`` é a do evento; ``None`` = a do orçamento (o vínculo, que grava a nota do orçamento).
 
     Returns:
         ``{"linhas": [...], "total": Decimal | None, "duracao": int | None, "duracao_origem": str,
@@ -359,8 +367,13 @@ def plano_dos_acrescimos(
     from app.orcamento.quote_ops import bv_que_acompanha
 
     plano["total"] = res["total"]
+    nota_orcamento = bool(snapshot_do_orcamento(entry).get("nota_fiscal"))
+    nota_evento = nota_orcamento if nota is None else bool(nota)
+    venda_d = _dec(venda) or Decimal("0")
+    venda_liquida = venda_d * divisor_da_nota() if nota_evento else venda_d
+    total_liquido = res["total"] * divisor_da_nota() if nota_orcamento else res["total"]
     for linha in res["linhas"]:
-        valor = bv_que_acompanha(linha["amount_brl"], venda, res["total"])
+        valor = bv_que_acompanha(linha["amount_brl"], venda_liquida, total_liquido)
         if valor > 0:
             plano["linhas"].append({**linha, "cheio": linha["amount_brl"], "amount_brl": valor})
     plano["tem_bv"] = any(linha["is_bv"] for linha in plano["linhas"])
@@ -369,9 +382,11 @@ def plano_dos_acrescimos(
     return plano
 
 
-def bv_vai_nascer(entry: OrcamentoHistory | None, *, venda: Any, cortesia: bool, duracao: int | None) -> bool:
+def bv_vai_nascer(
+    entry: OrcamentoHistory | None, *, venda: Any, cortesia: bool, duracao: int | None, nota: bool | None = None
+) -> bool:
     """A pergunta da B8: a gravação vai criar BV? (as mesmas guardas da B3, pela mesma função)."""
-    return plano_dos_acrescimos(entry, venda=venda, cortesia=cortesia, duracao=duracao)["tem_bv"]
+    return plano_dos_acrescimos(entry, venda=venda, cortesia=cortesia, duracao=duracao, nota=nota)["tem_bv"]
 
 
 def bv_nasce_no_vinculo(event: Any, entry: OrcamentoHistory | None, duracao: int | None) -> bool:
@@ -448,7 +463,7 @@ def gravar_acrescimos_do_orcamento(
         return resultado
     plano = plano_dos_acrescimos(
         entry, venda=event.sale_value, cortesia=bool(getattr(event, "is_cortesia_permuta", False)),
-        duracao=duracao, duracao_origem=duracao_origem,
+        duracao=duracao, duracao_origem=duracao_origem, nota=bool(event.with_invoice),
     )
     resultado.update(duracao=plano["duracao"], duracao_origem=plano["duracao_origem"])
     if plano["motivo"]:
@@ -506,10 +521,18 @@ def frase_do_bv(resultado: dict, entry: OrcamentoHistory, *, venda: Any, recebed
 
 
 def _ligado_depois_do_corte(event: Any, *, novo_vinculo: bool = False) -> bool:
-    """O evento foi criado, ou ligado ao orçamento ATUAL, depois do corte (3a-Q4 = A)."""
-    corte = CORTE_ALERTA_BV
-    if corte is None or novo_vinculo:
+    """O evento foi criado, ou ligado ao orçamento ATUAL, depois do corte (3a-Q4 = A).
+
+    Sem corte gravado, só o vínculo novo conta: o passado nunca acende por esquecimento.
+    """
+    if novo_vinculo:
         return True
+    corte = CORTE_ALERTA_BV
+    if corte is None:
+        return False
+    if corte.tzinfo is not None:
+        # Gravado com fuso por engano: `created_at` é naive em UTC, e comparar os dois levanta.
+        corte = corte.astimezone(UTC).replace(tzinfo=None)
     if event.created_at is not None and event.created_at >= corte:
         return True
     # O "(" fecha o número: sem ele, "#12" casaria "#123". "Reaplicou" não conta.
@@ -555,7 +578,9 @@ def bv_do_orcamento_pendente(event: Any, *, novo_vinculo: bool = False) -> dict 
         entry, bruto=event.sale_value_gross or event.sale_value,
         horas_agenda=_duracao_do_evento(event) if event.start_at else None,
     )
-    plano = plano_dos_acrescimos(entry, venda=event.sale_value, cortesia=False, duracao=duracao)
+    plano = plano_dos_acrescimos(
+        entry, venda=event.sale_value, cortesia=False, duracao=duracao, nota=bool(event.with_invoice)
+    )
     bv_plano = [linha for linha in plano["linhas"] if linha["is_bv"]]
     return {
         "valor": float(bv_plano[0]["amount_brl"]) if bv_plano else None,
@@ -741,22 +766,25 @@ def _frase_relatorio(rel: dict) -> str:
         partes.append(rel["bv_pendente_frase"])
     if rel.get("bv_confira"):
         partes.append(rel["bv_confira"])
+    if rel.get("bv_acompanhou"):
+        partes.append(rel["bv_acompanhou"])
     return ", ".join(partes) if partes else "nada a aplicar (já estava tudo lá)"
 
 
 # ── valores ───────────────────────────────────────────────────────────────────────────────────
 
-def _travar_evento(event: Any) -> None:
-    """Relê a linha do evento com `SELECT … FOR UPDATE` (feature 305): duas aplicações simultâneas
-    no mesmo evento não passam juntas pela guarda "sem venda" — sem isto a venda seria de uma e o
-    BV da outra. O mesmo molde de `sumico_ops._bloquear_e_revalidar`, sem `joinedload`."""
+def travar_evento(event: Any) -> None:
+    """Relê a linha do evento com `SELECT … FOR UPDATE` (feature 305). Quem lê a venda para gravar o
+    BV trava antes: duas aplicações no mesmo evento não passam juntas pela guarda "sem venda" (a
+    venda seria de uma e o BV da outra); duas mudanças de venda não proporcionam o BV duas vezes a
+    partir do mesmo "antes"; o editor não calcula o % com a venda de antes de outra gravação. A
+    ordem é sempre evento → acréscimos (sem ciclo). O molde de `sumico_ops._bloquear_e_revalidar`."""
     if getattr(event, "id", None) is None:
         return
-    # O que o vínculo já escreveu no evento (orçamento, fora de SP) vai ao banco antes; o refresh
-    # abaixo só relê os campos da venda.
+    # O que já foi escrito no evento vai ao banco antes; o refresh abaixo só relê a venda.
     db.session.flush()
     db.session.query(CalendarEvent.id).filter(CalendarEvent.id == event.id).with_for_update().one_or_none()
-    db.session.refresh(event, ["sale_value", "is_cortesia_permuta", "cancelled_at"])
+    db.session.refresh(event, ["sale_value", "with_invoice", "is_cortesia_permuta", "cancelled_at"])
 
 
 def aplicar_valores_do_orcamento(
@@ -776,12 +804,15 @@ def aplicar_valores_do_orcamento(
     junto pela B3 da feature 305 (em reais, com quem recebe e o PIX), como na criação.
 
     Returns:
-        O resultado da B3 (``criados``, ``bv_total``, ``motivo``…) quando aplicou; ``None`` quando não.
+        O resultado da B3 (``criados``, ``bv_total``, ``motivo``…, mais ``venda_antes``) quando
+        aplicou; ``None`` quando não.
     """
+    from app.calendar.comercial_ops import estado_da_venda
     from app.calendar.event_ops import resolver_data_da_venda, sem_valor_de_venda
     from app.calendar.routes import _build_orcamento_prefill
 
-    _travar_evento(event)
+    # Trava e relê; o "antes" vai para a B10, que o chamador roda quando a B3 não grava.
+    antes = estado_da_venda(event)
     # Feature 299: o valor simbólico (o R$ 0,01 de "segurar a data") conta como "sem venda" — é
     # pelo orçamento que a comercial põe o valor de verdade.
     if not sem_valor_de_venda(event.sale_value) or getattr(event, "is_cortesia_permuta", False):
@@ -805,7 +836,9 @@ def aplicar_valores_do_orcamento(
     # Acréscimos tipados (BV etc.) nascem junto, pela MESMA B3 da criação — senão dois eventos
     # vendidos pelo mesmo orçamento teriam BV diferente conforme o caminho. Antes do sync da
     # comissão, que o chamador faz em seguida: a base já sai sem o BV.
-    return gravar_acrescimos_do_orcamento(event, entry, duracao, recebedor=bv_recipient, pix=bv_pix)
+    resultado = gravar_acrescimos_do_orcamento(event, entry, duracao, recebedor=bv_recipient, pix=bv_pix)
+    resultado["venda_antes"] = antes
+    return resultado
 
 
 def _relatar_bv(
@@ -958,6 +991,14 @@ def set_event_orcamento(
         )
         if resultado_bv is not None:
             relatorio["valores"] = aplicar_valores_duracao
+            if resultado_bv["criados"] == 0:
+                # A venda voltou de "a definir" e o evento já tinha BV: a B10 recalcula o % e avisa do
+                # em reais, como na aba Comercial (FR-022) — antes do sync, que já vê o BV certo.
+                from app.calendar.comercial_ops import acompanhar_bv_da_venda
+
+                aviso = acompanhar_bv_da_venda(event, resultado_bv["venda_antes"], actor_name=actor_name, tz=tz)
+                if aviso:
+                    relatorio["bv_acompanhou"] = aviso
             if sincronizar_comissao is not None:
                 db.session.flush()
                 sincronizar_comissao(event)

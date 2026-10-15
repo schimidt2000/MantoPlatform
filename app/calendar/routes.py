@@ -884,14 +884,23 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
             }
             for _i in range(len(_acr_tipos))
         ]
+    # Feature 305: o BV a pagar como a tela o mostrava — se o envio mexeu nele, a B10 lá embaixo não
+    # o proporciona de novo (o redigitado junto com a venda nova é o combinado novo).
+    _bvs_antes = comercial_ops.bvs_a_pagar_digitados(event) if _acrescimos is not None else None
     try:
-        comercial_ops.substituir_acrescimos(event, _acrescimos)
+        _trocas_bv_pago = comercial_ops.substituir_acrescimos(event, _acrescimos)
     except comercial_ops.AcrescimosRecusados as exc:
         # Feature 305: a recusa (BV sem quem recebe ou sem PIX, valor ilegível, BV pago removido)
         # desfaz o salvamento INTEIRO da aba — venda e clientes digitados também não ficam.
         db.session.rollback()
         flash("Acréscimos não salvos: " + " ".join(dict.fromkeys(exc.erros.values())), "error")
         return
+    if _trocas_bv_pago:
+        from app.utils import audit
+
+        for _troca in _trocas_bv_pago:
+            audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(_troca))
+    _bv_redigitado = _bvs_antes is not None and comercial_ops.bvs_a_pagar_digitados(event) != _bvs_antes
 
     # ── Notas fiscais (feature 069): coleção de notas por evento (valor + data + arquivo) ──
     # Linhas do form: nf_key[] ("id_<n>" p/ existente, "new_*" p/ nova), nf_amount[], nf_date[];
@@ -964,10 +973,18 @@ def _handle_update_comercial(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         created_at=datetime.now(tz=tz_sp),
     ))
     # Feature 305 (B10): depois dos acréscimos (recriados acima), o BV a pagar acompanha a venda.
-    # O núcleo pula evento cancelado e satélite (este formulário não recusa nenhum dos dois).
-    _aviso_bv = comercial_ops.acompanhar_bv_da_venda(event, _venda_antes, actor_name=current_user.name, tz=tz_sp)
-    if _aviso_bv:
-        flash(_aviso_bv, "warning")
+    # O núcleo pula evento cancelado e satélite (este formulário não recusa nenhum dos dois). O BV
+    # que o envio mexeu fica como digitado.
+    if _bv_redigitado:
+        _venda_agora = (event.sale_value, bool(event.with_invoice), bool(event.is_cortesia_permuta))
+        if _venda_agora != _venda_antes:
+            flash("O BV foi salvo como digitado (a venda também mudou): confira o BV.", "warning")
+    else:
+        _aviso_bv = comercial_ops.acompanhar_bv_da_venda(
+            event, _venda_antes, actor_name=current_user.name, tz=tz_sp
+        )
+        if _aviso_bv:
+            flash(_aviso_bv, "warning")
     from app.financeiro.routes import _sync_commission_payment
     _sync_commission_payment(event)
     db.session.commit()
@@ -4067,6 +4084,7 @@ def create_event():
             venda=data.get("sale_value"),
             cortesia=bool(data.get("is_cortesia_permuta")),
             duracao=_parse_duracao(data.get("duracao")) or 1,
+            nota=bool(data.get("with_invoice")),
         ):
             return _render_error([
                 "Este evento tem BV no orçamento: crie pela tela nova, que pede quem recebe e o PIX do BV."

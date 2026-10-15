@@ -12,11 +12,12 @@ plataforma React — é o item 2 dos pré-requisitos da fase 6 em `docs/PLANO_RE
 ## Três regras que não podem se perder na tradução
 
 1. **Lista ausente ≠ lista vazia.** `None` significa "esta seção não foi enviada, não mexa";
-   `[]` significa "apague tudo". No formulário isso era `if _acr_tipos:` — sem essa distinção,
-   salvar qualquer outra parte da aba Comercial apagaria todos os acréscimos do evento.
-2. **BV já pago continua pago.** O status de pagamento é preservado pela chave
-   `(recebedor, pix)`, porque a gravação apaga e recria as linhas. Sem isso, salvar a aba
-   "despaga" alguém que já recebeu.
+   `[]` significa "apague tudo" — menos o BV pago ou no banco, que não sai por aqui (feature 305).
+   No formulário isso era `if _acr_tipos:` — sem essa distinção, salvar qualquer outra parte da
+   aba Comercial apagaria todos os acréscimos do evento.
+2. **BV já pago continua pago.** O status de pagamento é herdado da linha de mesmo ``id``
+   (feature 305; a chave `(recebedor, pix)` só vale para o bundle antigo), porque a gravação apaga
+   e recria as linhas. Sem isso, salvar a aba "despaga" alguém que já recebeu.
 3. **Acréscimo percentual é congelado em reais** (`amount_brl`) no momento do save, sobre a venda
    daquele instante. Mudar a venda depois não reescreve acréscimo antigo.
 
@@ -25,6 +26,7 @@ O upload do arquivo da nota fica na camada de rota: aqui só chega o caminho já
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
@@ -81,22 +83,38 @@ def _q(valor: Decimal) -> Decimal:
     return valor.quantize(_CENTAVO, rounding=ROUND_HALF_UP)
 
 
+#: "1.500" sem vírgula: o milhar à brasileira, que `Decimal` lê como 1,50 (feature 305).
+_MILHAR_SEM_CENTAVOS = re.compile(r"^-?\d{1,3}(\.\d{3})+$")
+#: Teto das colunas `Numeric(12,2)`: acima disso o flush estoura com 500 em vez do 400 na linha.
+_TETO_DO_VALOR = Decimal("1e10")
+
+
 def _valor_digitado(valor: Any) -> Decimal | None:
     """O número do editor: número do JSON, ou texto à brasileira ("1.309,52", "100,00", "10,5") ou com
     ponto decimal ("150.00", vindo do bundle antigo). Antes, "100,00" virava `None` e a linha era
-    DESCARTADA em silêncio depois do delete — um BV digitado com vírgula sumia (feature 305)."""
+    DESCARTADA em silêncio depois do delete — um BV digitado com vírgula sumia (feature 305).
+
+    O texto ambíguo é recusado (`None` → "Valor inválido." na linha), nunca reinterpretado: "1.500"
+    (que a tela convida, com o placeholder "150,00") virava R$ 1,50 a pagar, e "1,309.52" virava 1,31.
+    """
     if isinstance(valor, bool):
         return None
     if isinstance(valor, (int, float, Decimal)):
         d = _to_decimal(valor)
     elif isinstance(valor, str):
         texto = valor.replace("R$", "").replace(" ", "").replace(" ", "").strip()
+        if "," in texto and "." in texto and texto.rfind(".") > texto.rfind(","):
+            return None
         if "," in texto:
             texto = texto.replace(".", "").replace(",", ".")
+        elif _MILHAR_SEM_CENTAVOS.match(texto):
+            return None
         d = _to_decimal(texto)
     else:
         return None
-    return d if d is not None and d.is_finite() else None
+    if d is None or not d.is_finite() or abs(d) >= _TETO_DO_VALOR:
+        return None
+    return d
 
 
 def valor_do_bv_percentual(
@@ -131,8 +149,9 @@ def _sem_venda(event: Any) -> bool:
     return bool(getattr(event, "is_cortesia_permuta", False)) or sem_valor_de_venda(event.sale_value)
 
 
-def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
-    """Regrava os acréscimos do evento. `None` não mexe em nada; `[]` apaga todos. Sem commit.
+def substituir_acrescimos(event: Any, itens: list[dict] | None) -> list[dict]:
+    """Regrava os acréscimos do evento. `None` não mexe em nada; `[]` apaga todos (menos o BV pago
+    ou no banco, que dá `AcrescimosRecusados`). Sem commit.
 
     Feature 305 — o editor deixa de estragar o BV:
 
@@ -147,24 +166,35 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
       valor, o existente mantém o valor e um novo é recusado.
     - **BV em reais** como digitado (3a-Q7 = B).
     - **Quem recebe e PIX obrigatórios** em todo BV (B8); a lista inteira é recusada ANTES de apagar.
-    - Valor à brasileira aceito; valor ilegível recusado (nunca descartado em silêncio); "bv" é BV.
-    - As linhas antigas são lidas com ``FOR UPDATE`` (um "marcar pago" concorrente falha alto em vez
-      de sumir) e, no fim, a coleção ``event.acrescimos`` é recarregada: o sync da comissão, que vem
-      logo depois, lia a coleção VELHA (com o BV apagado) — também no gêmeo Jinja de antes.
+    - Valor à brasileira aceito; valor ilegível ou ambíguo recusado (nunca descartado em silêncio);
+      "bv" é BV. BV sem valor, zero ou negativo é recusado na linha — apagar o valor e salvar
+      tirava o BV da Planilha e subia a comissão com 200; o negativo virava repasse negativo.
+    - O mesmo ``id`` duas vezes na lista é recusado: as duas linhas herdariam o "pago" da antiga.
+    - O evento é travado e relido antes (`travar_evento`): a régua do % usa a venda de agora, não
+      a de antes de uma mudança de venda concorrente. As linhas antigas são lidas com ``FOR UPDATE``
+      (um "marcar pago" concorrente falha alto em vez de sumir) e, no fim, a coleção
+      ``event.acrescimos`` é recarregada: o sync da comissão, que vem logo depois, lia a coleção
+      VELHA (com o BV apagado) — também no gêmeo Jinja de antes.
 
     Args:
         event: O `CalendarEvent` dono dos acréscimos.
         itens: Cada item aceita ``id``, ``tipo``, ``descricao``, ``is_percent``, ``value``,
-            ``bv_recipient`` e ``bv_pix``. Item sem `tipo` ou com valor zero/vazio é ignorado —
-            é como o editor antigo tratava linha em branco deixada pelo usuário.
+            ``bv_recipient`` e ``bv_pix``. Item sem `tipo` é ignorado (a linha em branco deixada
+            pelo usuário); o que não é BV com valor zero ou vazio também, como no editor antigo.
+
+    Returns:
+        As trocas de quem recebe ou de PIX em BV pago ou no banco (``valor``, ``status``,
+        ``quem_antes``, ``quem_depois``, ``pix_antes``, ``pix_depois``) — quem chama grava o
+        rastro (`frase_da_troca_no_bv_pago`). O valor congela; quem recebe e o PIX, não (FR-017a).
 
     Raises:
         AcrescimosRecusados: alguma linha não pode ser gravada; nada foi apagado.
     """
     if itens is None:
-        return
-    from app.calendar.orcamento_evento_ops import erros_do_bv
+        return []
+    from app.calendar.orcamento_evento_ops import erros_do_bv, travar_evento
 
+    travar_evento(event)
     antigas = (
         EventAcrescimo.query.filter_by(event_id=event.id).order_by(EventAcrescimo.id).with_for_update().all()
     )
@@ -175,6 +205,7 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
     erros: dict[str, str] = {}
     linhas: list[dict] = []
     descricoes_livres = [a for a in antigas]
+    ids_usados: set[int] = set()
 
     for indice, item in enumerate(itens):
         if not isinstance(item, dict):
@@ -186,20 +217,30 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
             continue
         if tipo.upper() == ACRESCIMO_TIPO_BV:
             tipo = ACRESCIMO_TIPO_BV
+        eh_bv = tipo == ACRESCIMO_TIPO_BV
         valor = _valor_digitado(bruto)
-        if valor is None:
-            if bruto in (None, ""):
-                continue
+        vazio = bruto is None or (isinstance(bruto, str) and not bruto.strip())
+        if valor is None and not vazio:
             erros[f"items.{indice}.value"] = "Valor inválido."
             continue
-        if valor == 0:
+        if valor is None or valor == 0:
+            if eh_bv:
+                erros[f"items.{indice}.value"] = "Informe o valor do BV (ou remova a linha)."
+            continue
+        if valor < 0 and eh_bv:
+            erros[f"items.{indice}.value"] = "O BV não pode ser negativo."
             continue
         antiga = None
         if usa_id:
             try:
                 antiga = por_id.get(int(item.get("id"))) if item.get("id") is not None else None
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 antiga = None
+            if antiga is not None:
+                if antiga.id in ids_usados:
+                    erros[f"items.{indice}.id"] = "Esta linha aparece duas vezes na lista: recarregue a página."
+                    continue
+                ids_usados.add(antiga.id)
         linhas.append({"indice": indice, "item": item, "tipo": tipo[:40], "valor": valor,
                        "is_percent": bool(item.get("is_percent")), "is_bv": tipo == ACRESCIMO_TIPO_BV,
                        "antiga": antiga})
@@ -258,6 +299,7 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
 
     venda = _to_decimal(event.sale_value) or Decimal("0")
     novas: list[dict] = []
+    trocas: list[dict] = []
     for linha in linhas:
         item, antiga, indice = linha["item"], linha["antiga"], linha["indice"]
         if "descricao" in item:
@@ -282,6 +324,14 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
                 registro["bv_payment_status"] = antiga.bv_payment_status or "nao_pago"
             if registro["bv_payment_status"] in _BV_CONGELADO and antiga is not None:
                 registro.update(is_percent=antiga.is_percent, value=antiga.value, amount_brl=antiga.amount_brl)
+                if (recebedor or None) != antiga.bv_recipient or (pix or None) != antiga.bv_pix:
+                    # O dinheiro já saiu para alguém: quem recebe e o PIX seguem editáveis, mas a
+                    # troca deixa rastro — senão o registro de quem recebeu se reescreve calado.
+                    trocas.append({
+                        "valor": antiga.amount_brl, "status": antiga.bv_payment_status,
+                        "quem_antes": antiga.bv_recipient, "quem_depois": recebedor or None,
+                        "pix_antes": antiga.bv_pix, "pix_depois": pix or None,
+                    })
             elif linha["is_percent"]:
                 percentual = _q(linha["valor"])
                 if sem_venda or cancelado:
@@ -320,11 +370,52 @@ def substituir_acrescimos(event: Any, itens: list[dict] | None) -> None:
         db.session.add(EventAcrescimo(event_id=event.id, **registro))
     db.session.flush()
     db.session.expire(event, ["acrescimos"])
+    return trocas
+
+
+def _pix_mascarado(pix: Any) -> str:
+    """Os 4 últimos caracteres do PIX: o rastro diz que mudou sem virar outro lugar de dado de pagamento."""
+    texto = (pix or "").strip() if isinstance(pix, str) else ""
+    if not texto:
+        return "—"
+    return "…" + texto[-4:] if len(texto) > 4 else "…"
+
+
+def frase_da_troca_no_bv_pago(troca: dict) -> str:
+    """O `AuditLog` da troca de quem recebe ou do PIX num BV pago ou no banco (sem o PIX inteiro)."""
+    from app.calendar.orcamento_evento_ops import _fmt_reais
+
+    situacao = "no banco" if troca["status"] == "no_banco" else "pago"
+    partes = []
+    if troca["quem_antes"] != troca["quem_depois"]:
+        partes.append(f"quem recebe {troca['quem_antes'] or '—'} → {troca['quem_depois'] or '—'}")
+    if troca["pix_antes"] != troca["pix_depois"]:
+        partes.append(f"PIX {_pix_mascarado(troca['pix_antes'])} → {_pix_mascarado(troca['pix_depois'])}")
+    return f"BV pago ({situacao}) de {_fmt_reais(troca['valor'] or 0)}: " + "; ".join(partes)
 
 
 def estado_da_venda(event: Any) -> tuple[Any, bool, bool]:
-    """(venda, nota, cortesia) ANTES de uma escrita — o "antes" de `acompanhar_bv_da_venda`."""
+    """(venda, nota, cortesia) ANTES de uma escrita — o "antes" de `acompanhar_bv_da_venda`.
+
+    Trava e relê o evento antes (`travar_evento`): lido sem trava, duas mudanças de venda ao mesmo
+    tempo partiam do mesmo "antes" e o BV era proporcionado duas vezes (1.000 → 1.200 e → 1.500
+    davam BV 180 em vez de 150). Chamado ANTES de qualquer escrita na venda.
+    """
+    from app.calendar.orcamento_evento_ops import travar_evento
+
+    travar_evento(event)
     return event.sale_value, bool(event.with_invoice), bool(getattr(event, "is_cortesia_permuta", False))
+
+
+def bvs_a_pagar_digitados(event: Any) -> list[tuple]:
+    """O que a tela mostra de cada BV a pagar (quem recebe, PIX, unidade, número), para o gêmeo Jinja
+    saber se o formulário MEXEU no BV ou só o reenviou."""
+    linhas = EventAcrescimo.query.filter_by(event_id=event.id, is_bv=True).all()
+    return sorted(
+        (a.bv_recipient or "", a.bv_pix or "", bool(a.is_percent), _q(_to_decimal(a.value) or Decimal("0")))
+        for a in linhas
+        if (a.bv_payment_status or "nao_pago") not in _BV_CONGELADO
+    )
 
 
 def _liquido(venda: Decimal, nota: bool) -> Decimal:

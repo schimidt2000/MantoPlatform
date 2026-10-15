@@ -39,8 +39,13 @@ export function bvVaiNascerNaTela(props: Pick<BvDoOrcamentoBlockProps, "acrescim
  */
 export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
   const { acrescimos, duracao, duracaoCustom } = props;
-  if (!acrescimos) return null;
-  const bv = acrescimos.linhas.find((l) => l.is_bv);
+  // O servidor pediu quem recebe e o PIX (400) mas a tela não sabe do BV — o prefill falhou ou veio
+  // do backend antigo: os dois campos aparecem assim mesmo, senão não haveria onde digitar.
+  const pedidosPeloErro = Boolean(props.erros.bv_recipient || props.erros.bv_pix);
+  const bv = acrescimos?.linhas.find((l) => l.is_bv);
+  if (!acrescimos || (!bv && !acrescimos.personalizado)) {
+    return pedidosPeloErro ? <div className="rounded-md border border-line p-3">{camposDoBv(props)}</div> : null;
+  }
   if (acrescimos.personalizado) {
     return (
       <p className="rounded-md border border-line p-3 text-sm text-muted">
@@ -82,37 +87,44 @@ export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
           pedir que o BV seja lançado em Acréscimos.
         </p>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div>
-            <label className={LABEL} htmlFor="bv_recipient">
-              Quem recebe o BV *
-            </label>
-            <input
-              id="bv_recipient"
-              className={props.erros.bv_recipient ? FIELD_ERRO : FIELD}
-              maxLength={200}
-              value={props.recebedor}
-              aria-invalid={Boolean(props.erros.bv_recipient)}
-              onChange={(e) => props.onRecebedor(e.target.value)}
-            />
-            {props.erros.bv_recipient && <p className="mt-1 text-xs text-red">{props.erros.bv_recipient}</p>}
-          </div>
-          <div>
-            <label className={LABEL} htmlFor="bv_pix">
-              PIX de quem recebe *
-            </label>
-            <input
-              id="bv_pix"
-              className={props.erros.bv_pix ? FIELD_ERRO : FIELD}
-              maxLength={140}
-              value={props.pix}
-              aria-invalid={Boolean(props.erros.bv_pix)}
-              onChange={(e) => props.onPix(e.target.value)}
-            />
-            {props.erros.bv_pix && <p className="mt-1 text-xs text-red">{props.erros.bv_pix}</p>}
-          </div>
-        </div>
+        camposDoBv(props)
       )}
+    </div>
+  );
+}
+
+/** Quem recebe e o PIX — obrigatórios em todo BV (B8). */
+function camposDoBv(props: BvDoOrcamentoBlockProps) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div>
+        <label className={LABEL} htmlFor="bv_recipient">
+          Quem recebe o BV *
+        </label>
+        <input
+          id="bv_recipient"
+          className={props.erros.bv_recipient ? FIELD_ERRO : FIELD}
+          maxLength={200}
+          value={props.recebedor}
+          aria-invalid={Boolean(props.erros.bv_recipient)}
+          onChange={(e) => props.onRecebedor(e.target.value)}
+        />
+        {props.erros.bv_recipient && <p className="mt-1 text-xs text-red">{props.erros.bv_recipient}</p>}
+      </div>
+      <div>
+        <label className={LABEL} htmlFor="bv_pix">
+          PIX de quem recebe *
+        </label>
+        <input
+          id="bv_pix"
+          className={props.erros.bv_pix ? FIELD_ERRO : FIELD}
+          maxLength={140}
+          value={props.pix}
+          aria-invalid={Boolean(props.erros.bv_pix)}
+          onChange={(e) => props.onPix(e.target.value)}
+        />
+        {props.erros.bv_pix && <p className="mt-1 text-xs text-red">{props.erros.bv_pix}</p>}
+      </div>
     </div>
   );
 }

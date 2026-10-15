@@ -895,6 +895,7 @@ def _recusa_do_bv_da_criacao(data: dict) -> Any:
         venda=data.get("sale_value"),
         cortesia=bool(data.get("is_cortesia_permuta")),
         duracao=duracao,
+        nota=bool(data.get("with_invoice")),
     )
     if not vai_nascer:
         return None
@@ -1588,7 +1589,8 @@ def api_set_acrescimos(event_id: int) -> Any:
     """Substitui os acréscimos do evento (features 099/100). Corpo: `{"items": [...]}`.
 
     `PUT` porque o corpo é a lista inteira, não um delta — mesma escolha de
-    `PUT /events/<id>/clients`. Mandar `{"items": []}` apaga todos.
+    `PUT /events/<id>/clients`. Mandar `{"items": []}` apaga todos, menos o BV pago ou no banco:
+    com um deles, 400 e nada é apagado (feature 305).
 
     Cada item aceita `id` (o recebido no GET), `tipo`, `descricao` (ausente = mantém; `""` =
     apaga), `is_percent`, `value` (número ou texto à brasileira), `bv_recipient` e `bv_pix`. As
@@ -1596,7 +1598,8 @@ def api_set_acrescimos(event_id: int) -> Any:
     identidade, BV pago congelado, régua do % da D2, BV em reais como digitado, quem recebe e PIX
     obrigatórios. Uma linha recusada recusa a lista inteira: 400 com `fields` por índice da
     requisição (`items.<i>.<campo>`), sem apagar nada. A comissão a pagar é sincronizada na mesma
-    requisição (antes só o gêmeo Jinja sincronizava — e com a coleção velha).
+    requisição (antes só o gêmeo Jinja sincronizava — e com a coleção velha). A troca de quem
+    recebe ou do PIX num BV pago deixa rastro no `AuditLog` (PIX mascarado).
 
     RBAC `_can_manage_sale()`: acréscimo mexe na base da comissão e o BV é repasse a terceiro —
     mesmo gate da nota fiscal, não o de editar evento.
@@ -1622,10 +1625,15 @@ def api_set_acrescimos(event_id: int) -> Any:
     from app.financeiro.routes import _sync_commission_payment
 
     try:
-        comercial_ops.substituir_acrescimos(event, itens)
+        trocas = comercial_ops.substituir_acrescimos(event, itens)
     except comercial_ops.AcrescimosRecusados as exc:
         db.session.rollback()
         return json_error("Corrija os acréscimos destacados.", 400, fields=exc.erros)
+    if trocas:
+        from app.utils import audit
+
+        for troca in trocas:
+            audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(troca))
     _sync_commission_payment(event)
     db.session.commit()
     return _event_detail_json(event)
