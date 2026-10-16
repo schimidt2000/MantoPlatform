@@ -283,7 +283,7 @@ O regime `satelite` sempre aponta o principal (`group_leader_id`). Pago e devolv
 
 **Decisão.**
 
-`reconciliar_comissao_do_cancelado(event, alvos: dict[int, Decimal], *, motivo, hoje=None, simular=False)` fica perto de `_comissao_existente` (`comissoes_ops.py:886`) e serve também ao principal **vivo** no corte.
+`reconciliar_comissao_do_cancelado(event, alvos: dict[int, Decimal], *, motivo, motivos: dict[int, str] | None = None, hoje=None, simular=False)` (`motivos` troca o motivo por beneficiário: a troca de vendedor da R20 leva dois motivos numa chamada só; motivo fora de `MOTIVOS_AJUSTE_COMISSAO` levanta `ValueError`) fica perto de `_comissao_existente` (`comissoes_ops.py:886`) e serve também ao principal **vivo** no corte.
 
 **Beneficiários e alvo:**
 - `alvos` = congelado → comissão do retido. Todo outro `seller_id` com linha viva do evento → **0**.
@@ -309,7 +309,7 @@ O regime `satelite` sempre aponta o principal (`group_leader_id`). Pago e devolv
 - Candidatos, em ordem:
   1. M−1, só se `hoje.day ≤ DIA_DO_REPASSE` **e** B tem ali uma linha que abre ciclo;
   2. senão M, se não está liquidado;
-  3. senão M+1… (no máximo 24 ciclos, com fallback no corrente).
+  3. senão M+1… (no máximo 24 ciclos; sem achar, o 25º, que é futuro: nunca reabre um liquidado).
 - "Liquidado" = B tem linha no ciclo e nenhuma abre ciclo.
 - A data devolvida é `hoje` presa ao intervalo do ciclo. Esse é o único arranjo em que a Planilha (`coalesce`) e Comissões (`sale_date`) mostram o mesmo sem tocar `_month_scoped_query`.
 - `excluir_event_id` tira as linhas do próprio evento. Assim, o autoflush das linhas recém-ajustadas não muda a resposta entre prévia e execução.
@@ -619,13 +619,13 @@ São os únicos dois escritores de `bv_payment_status` além da criação (`orca
    - `devolucao_total`: negativo; no `venda`/`legado`, **acima do pago** do grupo (é 400, não 409);
    - `devolucao_nome`, `devolucao_pix`: faltando quando nasce complemento sem nome ou PIX a herdar, ou acima de 200/120 caracteres;
    - `imposto_retido`: no `dia`, no `legado` ou sem nota (R10), e quando negativo.
-7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo das devoluções pagas ou no banco.
+7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo do piso de cada regime (os limites logo abaixo; no `venda` em grupo, também as aprovadas dos dias `dia`; no `dia`, também a devolução mínima do corte, P-52).
 8. **409 `acima_do_teto`**, com o extra `teto`: **só no `dia`**, acima do pago do grupo menos as devoluções aprovadas dos outros dias.
 9. Grava; deadlock vira 409 `tente_de_novo`.
 
 **Limites**:
 - `venda`/`legado`: piso = devoluções pagas ou no banco de todos os dias + as aprovadas dos dias `dia`; teto = pago do grupo (acima dele, 400 do passo 6);
-- `dia`: piso = devoluções **daquele dia** pagas ou no banco; teto = pago do grupo − devoluções aprovadas dos **outros** dias, vivos e cancelados (acima dele, 409 do passo 8).
+- `dia`: piso = o maior entre as devoluções **daquele dia** pagas ou no banco e a devolução mínima do corte, recalculada com a venda nova congelada na linha `dia` (P-52); teto = pago do grupo − devoluções aprovadas dos **outros** dias, vivos e cancelados (acima dele, 409 do passo 8).
 
 **Como grava**:
 1. **Gravação** pelo helper único `_aplicar_novo_total(dono, …)`:
@@ -810,7 +810,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
 
 ## R16: passagem da venda do 1º dia. [1b-Q5 = B, Q13, Q15 = A, Q18 = A, P-6, P-29, FR-058…FR-060] + [R]
 
-**Decisão.** `group_ops.passar_venda(antigo, novo, *, actor_name, agora)` roda **sem commit**, dentro do ato, sob T1, antes de cancelar o antigo 1º dia como `dia`.
+**Decisão.** `group_ops.passar_venda(antigo, novo, *, actor_name, agora)` roda **sem commit**, dentro do ato, sob T1, depois de congelar a linha `dia` do antigo e **antes da devolução** e de `cancelled_at` (ordem única do plan §Travas): assim a `TABELAS_DA_PASSAGEM` não leva ao novo principal a devolução que o próprio ato cria, e a linha `dia` já existe para receber `sale_handed_over`.
 
 - **Quem recebe**: o dia vivo mais cedo, sem o antigo (por `start_at`, e no empate por id). `novo_principal_id` diferente dele → 409 `grupo_mudou`.
 - **Validação antes de mover**: cachê pago e devolução pendente no antigo, venda nova, Parte/Nada, multas. Recusa não move nada; erro no meio desfaz tudo.
@@ -962,7 +962,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
   | (e) multa | `POST …/multas` (novo) | R18 |
   | (g) acréscimos | `PUT …/acrescimos` (`:1588`); Jinja pelo mesmo `_handle_update_comercial` | R20 |
   | (h) reembolsos | `:1823`, `:1859` (`_can_edit_event`); `:1899` (Superadmin) | regra única |
-  | orçamento | `api_set_event_orcamento` (`:1338`), três verbos | 409 **para todos** no núcleo `set_event_orcamento` (`orcamento_evento_ops.py:935`), antes de aplicar a venda |
+  | orçamento | `api_set_event_orcamento` (`:1338`), três verbos | 409 **para todos** os que passam em `_can_manage_sale`, na view, logo depois do 409 satélite (`:1365-1370`) e antes do 404 do alvo, da autoria da 301 e da B8; `set_event_orcamento` (`orcamento_evento_ops.py:935`) recusa de novo depois de `travar_evento`, como cinto, antes de aplicar a venda |
   | grupo | `api_agrupar_eventos` (`:2365`), `api_desagrupar_evento` (`:2431`), **`api_remover_satelite`** (`DELETE …/grupo/satelites/<sat>`, `:2455`) | 409 `cancelado` vindo do núcleo (R15) |
   | Planilha | `POST /api/financeiro/pagamentos/set-status` (`financeiro_write.py`) | 409 `bv_nao_esta_a_pagar` e 409 `valor_mudou` ("o BV/a devolução mudou") (R9, R11) |
 
@@ -1040,6 +1040,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
   | BV novo (sem id), não pago | nasce o acréscimo, faz `flush`, e nasce **também** a linha congelada (`original_amount = amount_brl`, `paid_at_cancellation=False`); recebedor e PIX obrigatórios; BV novo em % → 400 `items.<i>.value` com "lance em reais" (ramo `cancelado` de `:351-358`) |
   | BV não pago ausente, ou que deixou de ser BV | apaga o acréscimo **e** a linha congelada na mesma transação, sem órfã por `SET NULL`; `EventLog` e `audit` com o cheio |
   | BV não pago editado | regrava cheio, recebedor e PIX no acréscimo **e** no congelado |
+  | Acréscimo que não é BV | ausente do corpo é apagado; editado é regravado no lugar; novo sem id nasce. Nenhum mexe no congelado nem na cheia (FR-049 (g)); `audit` em cada um |
   | BV pago ou no banco | valor ou unidade diferente → **mantém o gravado**, como no vivo (`comercial_ops.py:337-338`), sem recusa; tipo diferente → 400 (`:288-289`); ausente → 400 `items` (`:290-294`, leitura 6); recebedor e PIX trocam com rastro (`trocas`, `:339-348`), só no acréscimo |
   | bundle antigo sem nenhum `id` e com acréscimos gravados | 400 "recarregue a página" (não há como casar) |
 
@@ -1139,7 +1140,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
   - `client_ops.get_client_detail` (`:132-159`): total = Σ vivos + Σ retido, com resumos **só se** houver cancelado (o PATCH e o DELETE também a chamam, `clientes_write.py:75`, `:101`).
   - `list_clients` (`:111-129`) e `client_metrics` (`:183-225`) filtram o cancelado.
 - **Performance da Home**: `compute_performance` (`dashboard_service.py:290-293`) com `cancelled_at IS NULL`. **`/vendas/` Jinja** (`routes.py:1454`): o mesmo filtro.
-- **Status de pagamento do evento** ganha "cancelado" (`vendas_ops.py:32-38`, `:44-66`). As chaves TS entram **no mesmo commit** nas duas páginas que usam `Record<…>` (`FinanceiroDashboardPage.tsx:60-74`; `VendasPipelinePage.tsx:39-45`).
+- **Status de pagamento do evento** ganha "cancelado" (`vendas_ops.py:32-38`, `:44-66`), mostrado em `paineis.cancelamentos.itens[].status` da DRE; as uniões TS `SalePaymentStatus` (`lib/vendas.ts:9`) e `EventoStatus` (`lib/financeiro.ts:94`) ganham o membro. As chaves TS entram **no mesmo commit** nas duas páginas que usam `Record<…>` (`FinanceiroDashboardPage.tsx:60-74`; `VendasPipelinePage.tsx:39-45`).
 - **Cobrança da Home** (FR-061).
   - `VendaResumo` (`cobranca_ops.py:98-195`) ganha **`devolvido` à parte**, e `recebido` continua **bruto**.
   - `saldo`, `quitada`, `sinal_pendente` e `_primeira_parcela_descoberta` (`:265-275`) passam a usar recebido − devolvido.
@@ -1169,7 +1170,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
 - **`cancel_ops._remover_do_google(alvos)`** roda **depois** do commit, sobre `(event_id, google_event_id)` guardados em variáveis simples **antes** do commit. Depois do commit, os objetos expiram, e os ensaios apagados disparariam `ObjectDeletedError`.
   - **Trava** lida a cada chamada: `current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True)`, no molde de `sumico_ops._exigir_ambiente_liberado` (`:707-714`). Chave ausente = travado.
   - **Travada**: zero chamadas e `aviso`.
-  - **Pula** o marcado (já não está no Google), o id `virtual-local-…` (`virtuais_ops.GOOGLE_ID_LOCAL_PREFIX`, `:545`) e o evento sem id.
+  - **Pula** o marcado (já não está no Google), lido **antes** do `desmarcar` do ato: a lista de alvos se monta logo depois de T1, porque o `desmarcar` zera `google_missing_since` e deixa o `google_event_id`; no "todos", vale para cada dia marcado. Pula também o id `virtual-local-…` (`virtuais_ops.GOOGLE_ID_LOCAL_PREFIX`, `:545`) e o evento sem id.
   - **404/410** contam como "já não estava" (`service._status_http`, `:243`).
   - **Falha** vira `aviso` sem o texto cru do erro, no padrão de `_MENSAGENS_DEVOLVER` (`sumico_ops.py:652`), e nunca desfaz o cancelamento.
   - Chama `service.delete_event` (`:495-501`) **pelo atributo do módulo**, para o dublê do verify interceptar.

@@ -2,7 +2,7 @@
 
 **Uma migration, aditiva.** São três `create_table`. Não entra coluna em tabela existente, nem backfill, nem script no Shell do Render.
 
-Cabeça conferida no HEAD `657adb8`, onde `app/` e `migrations/` são iguais a `d855d1a`:
+Cabeça conferida no HEAD `657adb8`, onde `app/` e `migrations/` são iguais a `d855d1a`, e reconferida em `6356b80` (a 307 não trouxe migration):
 - `a7c3e91f4d28` (`a7c3e91f4d28_evento_sumiu_do_google.py`) é a única cabeça;
 - nenhum arquivo versionado de `migrations/versions/` tem `down_revision = "a7c3e91f4d28"`;
 - `alembic_version` do `manto_local` = `a7c3e91f4d28`;
@@ -175,16 +175,24 @@ MODO_TUDO, MODO_PARTE, MODO_NADA = "tudo", "parte", "nada"
 ALCANCE_TODOS, ALCANCE_SO_ESTE_DIA = "todos", "so_este_dia"
 # Dia do repasse. Os literais 5 de financeiro_read.py:720 e financeiro/routes.py:1072 ganham comentário.
 DIA_DO_REPASSE = 5
-# Prefixo da nota da linha de comissão -> código do motivo da 1e (FR-033).
+# Prefixos da nota da linha de comissão (FR-033): uma constante por motivo, e o dict -> código da 1e.
+MOTIVO_AJUSTE_RETIDO = "Cancelamento: comissão do retido"
+MOTIVO_AJUSTE_TROCA_DEVOLVE = "Cancelamento: vendedor trocado — devolve o já recebido"
+MOTIVO_AJUSTE_TROCA_RETIDO = "Cancelamento: vendedor trocado — comissão do retido"
+MOTIVO_AJUSTE_TAXA = "Cancelamento: taxa corrigida"
+MOTIVO_AJUSTE_CORRECAO_VENDA = "Cancelamento: correção da venda"
+MOTIVO_AJUSTE_CORTE_DE_DIA = "Corte de dia: venda diminuiu"
+MOTIVO_AJUSTE_EXCLUSAO = "Exclusão do evento"
+MOTIVO_AJUSTE_TROCA_DE_TIPO = "Troca de tipo"   # só declarado; a 2b usa
 MOTIVOS_AJUSTE_COMISSAO = {
-    "Cancelamento: comissão do retido": "cancelamento",
-    "Cancelamento: vendedor trocado — devolve o já recebido": "troca_de_vendedor",
-    "Cancelamento: vendedor trocado — comissão do retido": "troca_de_vendedor",
-    "Cancelamento: taxa corrigida": "correcao",
-    "Cancelamento: correção da venda": "correcao",
-    "Corte de dia: venda diminuiu": "corte_de_dia",
-    "Exclusão do evento": "exclusao",
-    "Troca de tipo": "troca_de_tipo",   # só declarado; a 2b usa
+    MOTIVO_AJUSTE_RETIDO: "cancelamento",
+    MOTIVO_AJUSTE_TROCA_DEVOLVE: "troca_de_vendedor",
+    MOTIVO_AJUSTE_TROCA_RETIDO: "troca_de_vendedor",
+    MOTIVO_AJUSTE_TAXA: "correcao",
+    MOTIVO_AJUSTE_CORRECAO_VENDA: "correcao",
+    MOTIVO_AJUSTE_CORTE_DE_DIA: "corte_de_dia",
+    MOTIVO_AJUSTE_EXCLUSAO: "exclusao",
+    MOTIVO_AJUSTE_TROCA_DE_TIPO: "troca_de_tipo",
 }
 # P-29: marca a comissão própria do novo principal na passagem; molde de _com_marca_do_ciclo
 # (comissoes_ops.py:842-848). _comissao_existente e a reconciliação ignoram a linha marcada.
@@ -263,7 +271,11 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({...})  # todos acima; o verify confe
 | `cancel_ops.ao_cancelar(event, *, alcance, novo_principal)` | Ponto de extensão da 2a, sem efeito nesta entrega. Roda **em todo cancelamento**, na transação: avulso e cada dia do "todos" → `(ALCANCE_TODOS, None)`; corte de um dia que não é o principal → `(ALCANCE_SO_ESTE_DIA, None)`; antigo 1º dia, **depois** de `passar_venda` → `(ALCANCE_SO_ESTE_DIA, novo_principal)`. Os dois primeiros casos são decisão do plan (FR-062, §11) | 2a |
 | `cancel_ops.pode_editar_venda_do_cancelado(user)` | A regra única: papel **real** SUPERADMIN, a régua de `_can_delete()` (`agenda_write.py:111-115`) | 1c |
 | `cancel_ops.EventoCanceladoError` | Irmã de `EventoMarcadoError`; a exclusão a levanta | — |
-| `cancel_ops.CancelValidationError(message, field=None, status=400, codigo=None, **extras)` | Recusa do núcleo; a view a traduz em `json_error` | — |
+| `cancel_ops.CancelValidationError(message, *, fields=None, field=None, status=400, codigo=None, **extras)` | Recusa do núcleo. `fields` leva todos os campos recusados de uma vez; `field=` é atalho para `{field: message}`; `extras` nunca leva `fields`. A view a traduz numa linha só: `json_error(exc.message, exc.status, fields=exc.fields, codigo=exc.codigo, **exc.extras)` | — |
+| `cancel_ops.recusar_se_cancelado(event, user)` | A regra única das portas (a)–(h): `travar_evento`, relê `cancelled_at` e levanta `CancelValidationError(status=409, codigo=CODIGO_EVENTO_CANCELADO)` para quem não é Superadmin real | 1c |
+| `cancel_ops.gravar_comprovante_no_grupo(event, acao, …)` | O núcleo das três portas de comprovante: T1, releitura, recusa, gravação, `reaplicar_por_dinheiro`; a view só traduz e remove o arquivo novo | — |
+| `cancel_ops.marcar_status_da_devolucao(exp_id, status, *, valor_esperado, actor_name)` | A função única da devolução nas duas Planilhas, no molde de `marcar_status_do_bv` (o Jinja passa `valor_esperado=None`) | — |
+| `cancel_ops.limites_da_devolucao(event)` | Piso e teto do "Alterar devolução" por regime (§7.2), expostos em `ResumoCancelado.limites_devolucao` só com `can_edit_venda_cancelado` | — |
 | `cancel_ops.travar_grupo(event)` / `cancel_ops.ids_do_grupo(principal_ids)` | T1, e a consulta de ids que ela trava (fora do ato, a mesma consulta sem trava) | — |
 | `cancel_ops.cache_pago_do_evento(event)` | A régua do cachê pago (FR-063), com T6 no ato | 2a |
 | `cancel_ops.filtro_devolucao()`, `devolucoes_por_evento(ids)` | A devolução por categoria, evento e aprovação; o lote | — |
@@ -302,8 +314,10 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({...})  # todos acima; o verify confe
 
 ```text
 vivo ─────────────────────────────── POST …/cancelar (Superadmin) ──────────────────────────▶ cancelado
-  │  T1..T6 → valida → (marcado: desmarcar(motivo=MOTIVO_CANCELADO) ANTES de cancelled_at) → flush
-  │  → congela (linha + bvs + elenco) → devolução → flush → (corte: venda nova + acompanhar_bv uma vez)
+  │  T1..T6 → valida → alvos do Google (antes do desmarcar) → (marcado: desmarcar(motivo=MOTIVO_CANCELADO)
+  │  ANTES de cancelled_at) → flush → congela (linha + bvs + elenco) → (passagem: marca a comissão própria
+  │  do novo → passar_venda → expire) → devolução → flush → (corte e passagem: venda nova + acompanhar_bv
+  │  uma vez no principal que fica)
   │  → alvo → reconciliar → cancelled_at/by/reason, limpa pedido de exclusão → ao_cancelar
   │  → ensaios (banco), sinos e multas → EventLog (UTC) → commit
   │  → depois do commit: Google (show e ensaios), e-mail ao elenco
@@ -331,14 +345,15 @@ alterar_devolucao(devolucao_total):
            absorve: a aberta do principal; depois, as abertas dos dias `satelite`, por id
            teto = pago do grupo  (acima → 400, não 409)
    dia:    devolucao_total = o total daquele dia
-           piso = Σ devoluções do dia pagas ou no banco
+           piso = máx(Σ devoluções do dia pagas ou no banco, devolução mínima do corte com a venda nova
+                  congelada na linha `dia`)  (P-52)
            teto = pago do grupo − Σ devoluções aprovadas dos outros dias, vivos e cancelados  (acima → 409)
    aberta (nao_pago) do dono existe → absorve a diferença e fica uma só; se zerar, é excluída (audit via gastos_ops._log)
    sem aberta e total > piso        → nasce complemento (nao_pago, data de hoje, Planilha do mês dele)
    tocar uma devolução aberta       → regrava disbursement_type="cliente" e completa nome/PIX vazios (FR-020)
    depois de gravar: venda → reaplicar_cancelado(evento); dia com principal vivo → nada se refaz (clarify 15/10);
                      dia com principal cancelado inteiro → reaplicar_cancelado(principal) (D28; §5, §11)
-pendente ligada ao evento → recusa o ato (409); depois do ato, aprovar/rejeitar → 409 (travada)
+pendente ligada a qualquer dia do grupo → recusa o ato (409, extra `dias`); depois do ato, aprovar/rejeitar → 409 (travada)
 modo corrente (derivado): devolvido == 0 → nada · devolvido >= pago → tudo · entre → parte
 ```
 
@@ -437,7 +452,9 @@ O gasto da multa nasce direto no ORM, no molde de `_registrar_devolucao`. Não p
     - T5 devoluções do grupo `ORDER BY id FOR UPDATE`;
     - T6 escalações com talento, só no ato.
 
-    O "Alterar devolução" segue a mesma ordem: T1 → T2 → T4 → T5.
+    O "Alterar devolução" segue a mesma ordem: T1 → T2 → T4 → T5. A correção comercial do cancelado pelo
+    Superadmin (aba Comercial) também: T1 → T2 → T4 (linhas do evento e dos beneficiários antigo e novo)
+    antes de gravar e reconciliar.
 
     `liquidar_periodo` e `pay_seller_month` ganham `order_by(CommissionPayment.id)` (`comissoes_ops.py:249-258`, `:631-638`). O desfazer da 267c trava os eventos das linhas antes delas.
 11. **Hora.** `created_at`/`updated_at` usam o horário de São Paulo sem fuso. `EventLog` do ato e da passagem sai sem `created_at` (default UTC).

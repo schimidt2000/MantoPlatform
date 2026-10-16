@@ -163,7 +163,7 @@
 |---|---|
 | I. Reutilizar antes de criar | **PASSA**. Reusa:<ul><li>proporção: `bv_que_acompanha` (`orcamento/quote_ops.py:58-85`; BV e comissão do retido usam a mesma, com teto);</li><li>da 305: `estado_da_venda`/`acompanhar_bv_da_venda` (`comercial_ops.py:438`, `:492`); `travar_evento` (`orcamento_evento_ops.py:788-799`); a validação de `substituir_acrescimos`, extraída em vez de copiada; `erros_do_bv` (`:406-417`);</li><li>comparações da 215b: `_mesma_taxa`/`_mesmo_vendedor` (`event_ops.py:1105-1123`);</li><li>da 303: `desmarcar`, `_exigir_ambiente_liberado` (`sumico_ops.py:707-714`);</li><li>notificações e e-mail: `resolver_destinatarios`, `emitir`, `send_removal_email` (`email_service.py:384-413`);</li><li>comissão e cobrança: o corpo de `_event_commission` como `_base_da_comissao`, `ciclo_de_pagamento_expr` (`comissoes_ops.py:188`), `_com_marca_do_ciclo` como molde (`:842-848`), `principal_da_venda` (`cobranca_ops.py:224-228`), `e_vaga_de_presenca` (`casting_ops.py:39-58`);</li><li>tela: `MoneyInput`, `ConfirmDialog`.</li></ul>Uma régua por regra: comissão cheia, cachê pago, devolução, "linha que abre ciclo", dia do repasse, dias vivos |
 | II. Padrões de código | **PASSA**. Type hints e docstrings pt-BR com o porquê. `cancelar_evento` é fatiado em passos de cerca de 30 linhas, e `_montar_acrescimos` (extraído de `comercial_ops.py:216-404`, cerca de 190 linhas) em cinco passos de cerca de 30, o limite da constituição (`.specify/memory/constitution.md:43`); a lista dos cinco está na História 4 e é a mesma da R20. Se algum passo passar disso, entra uma linha no Rastreamento de complexidade com o porquê. Constantes em `app/constants.py`: regimes, modos, alcances, os 18 códigos 409 (`CODIGO_EVENTO_CANCELADO`, `CODIGO_VALOR_MUDOU` e os demais `CODIGO_*`, espelhados na união TS `CodigoRecusaCancelamento`, em `lib/eventOps.ts`), `MOTIVOS_AJUSTE_COMISSAO` com o código da 1e, `DIA_DO_REPASSE`, `NOTA_COMISSAO_PROPRIA_DO_DIA`. No modelo, `SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`; em `group_ops`, `CAMPOS_DA_PASSAGEM`/`TABELAS_DA_PASSAGEM`. Nomes: tabela única do data-model §6. `except Exception as exc:  # noqa: BLE001` com `logger.warning` na remoção do Google. TS estrito, sem `any`. `ruff check` nos tocados e `ruff format` só nos três scripts novos e em `dre_ops.py` |
-| III. Camadas / API First | **PASSA**. Regras de negócio em `*_ops.py` puros, com exceções próprias (`CancelValidationError(status, field, codigo, **extras)`, `EventoCanceladoError`, `GastoLockedError`). `agenda_write`, `gastos_write`, `financeiro_*` e `admin_config_read` só validam RBAC, chamam e serializam. Nenhum módulo novo em `app/api/` (os dois endpoints moram em `agenda_write.py`), então `app/api/__init__.py` não muda. Nenhuma rota pública, então `BACKEND_PREFIXES` não muda. `dre_ops.py` importa de `financeiro/routes.py` por import tardio (ver complexidade) |
+| III. Camadas / API First | **PASSA**. Regras de negócio em `*_ops.py` puros, com exceções próprias (`CancelValidationError(message, *, fields=None, field=None, status=400, codigo=None, **extras)`, `EventoCanceladoError`, `GastoLockedError`). `agenda_write`, `gastos_write`, `financeiro_*` e `admin_config_read` só validam RBAC, chamam e serializam: as travas, a releitura e a recusa moram no núcleo (`cancel_ops.recusar_se_cancelado`, `gravar_comprovante_no_grupo`, `marcar_status_do_bv`, `marcar_status_da_devolucao`, `comercial_ops.alterar_acrescimos_do_cancelado`), e a view só traduz a exceção e remove o arquivo novo do comprovante recusado (analyze de 16/10, A5). Nenhum módulo novo em `app/api/` (os dois endpoints moram em `agenda_write.py`), então `app/api/__init__.py` não muda. Nenhuma rota pública, então `BACKEND_PREFIXES` não muda. `dre_ops.py` importa de `financeiro/routes.py` por import tardio (ver complexidade) |
 | IV. Não quebrar o que funciona | **PASSA**.<ul><li>Mudança aditiva: tabelas novas e campos opcionais.</li><li>Regressões `main` × branch exatas:<ul><li>a casca `_event_commission` em todos os eventos (1);</li><li>itens de BV (17);</li><li>DRE e Tendência de todos os meses (23);</li><li>comissões de todos os grupos (41);</li><li>cobranças da Home sem devolução.</li></ul></li><li>`_event_commission` vira casca de `_base_da_comissao` (o corpo de hoje, intocado), e as suas **8 chamadas** ficam iguais em número: `financeiro/routes.py:231`, `:434`, `:1463`; `financeiro_read.py:402`; `vendas_ops.py:290`, `:339`; `comissoes_ops.py:403` (`comissao_exibida_do_evento`) e `:937` (`_sync`). O portão do beneficiário (cortesia, sem vendedor) fica só em `comissao_cheia_do_evento`.</li><li>Verifies antigos de novo, e matriz bundle × backend (seção Fases).</li></ul> |
 | V. UI/UX com feedback | **PASSA**. Todo botão com loading. Erro no campo, por `fields`: `devolucao_*`, `bv_pix_<id>`, `multa_<id>`, `venda_nova`, `alcance`. Os 409 viram frase em pt-BR, inclusive em `FinanceiroSection`, que hoje mostra texto fixo (`:379-381`) ou nada (`:158`, `:195`). Diálogo nunca limpa o que foi digitado em erro. Ações destrutivas passam por `ConfirmDialog` |
 | VI. Esteira (Nível 1) | **PASSA**. Migration, 2 endpoints novos, 3 domínios. Ordem: specify → clarify (15/10) → **plan** → checklist → tasks → analyze (confere contra o **código**, não só cruza documentos) → implement → converge |
@@ -252,7 +252,7 @@ specs/306-dinheiro-do-cancelamento/
 | `components/EventDetail/ColecoesComerciaisPanel.tsx` | `AcrescimosPanel.canEdit` (`:67`) pela flag no cancelado; o BV pago já é só leitura (`:191`, `:263-268`) |
 | `components/EventDetail/ResumoSection.tsx` | "Recebimento — em aberto" (`:391-411`, `:399`) → devolução e retido |
 | `components/EventDetail/FinanceiroSection.tsx` | `PagamentosPanel` (`:307-386`) com `can_edit_pagamentos !== false` e `add.error.message` (`:379-381`); erro em editar e excluir (`:129-207`); `NotasFiscaisPanel` (`:388-480`) e `ReembolsosPanel` (`:534-660`) pela flag no cancelado |
-| `components/Pagamentos/PagamentoItemViews.tsx` | `commission_lines` no detalhe dos dois itens; valor negativo (`:245`). `valor_esperado: item.amount` (`:112-116`), hoje só no `bv`, passa a ir também no `expense` (ponto 5 da Living Spec) |
+| `components/Pagamentos/PagamentoItemViews.tsx` | `commission_lines` nas duas caras, `PagamentoRow` (`:186-282`, valor em `:245`) e `PagamentoCard` (`:285-382`, valor em `:356`), nos itens `commission` aberto e `:pago`, num disclosure "ver linhas" abaixo do valor; valor negativo nas duas. `valor_esperado: item.amount` (`:112-116`), hoje só no `bv`, passa a ir também no `expense` (ponto 5 da Living Spec) |
 | `components/notificacoes/NotificacaoItem.tsx` | Ícones dos dois kinds (`:7-13`) |
 | `pages/ComissoesPage.tsx` | `formatDate` (`:40-43`) fatia a string; filtro "No banco" (`:243-245`); quarto card (`:378-396`); colunas tipo e ciclo (`:164-170`, `:252-259`, `:435-441`) |
 | `pages/GastosExtrasPage.tsx` | `GastoFormValues` (`:124-130`), `formFromExpense` (`:150-160`), `DesembolsoFields` (`:164-242`), campos (`:219-228`), `buildPayload` (`:313-316`), modal (`:369-396`), `GastoRow` (`:483-590`, rótulo `:528`, ações `:552-570`) |
@@ -286,10 +286,10 @@ specs/306-dinheiro-do-cancelamento/
 - `docs/01`:
   - §4.3: os dois endpoints novos; a linha de `_can_delete()` ganha o `PATCH …/devolucao`; **uma linha para cada porta alterada**, com o papel e o 409 (as cerca de 30 do RBAC da spec, mais `PATCH /api/events/<id>`, `DELETE …/grupo/satelites/<sat>` e `POST /api/financeiro/pagamentos/set-status`);
   - contratos, catálogo de notificações, categoria, tabela de modelos, códigos 409;
-  - correção de `:770-771`.
-- `docs/02`: diálogo, tela do cancelado, Gastos, Comissões, Planilha, DRE, marcado; correções de `:464-465` e `:1500-1501`.
+  - correção de `:813-815` (o `POST …/cancelar` de evento marcado deixa de dar 409 `sumiu_do_google`; o `DELETE` continua recusando).
+- `docs/02`: diálogo, tela do cancelado, Gastos, Comissões, Planilha, DRE, marcado; correções de `:472-473` e `:481` (banner do marcado: cancelar deixa de ser "próxima entrega" e de ficar desabilitado) e de `:1503-1504` (estornos em qualquer mês → só o órfão).
 - `docs/03`: entrada no topo e linha no índice; a 224g passa a fechada.
-- `docs/04`: os invariantes da lista da spec; correções de `:314`, `:316-318`, `:320`, `:359`.
+- `docs/04`: os invariantes da lista da spec; correções de `:139-143`, `:246-247`, `:314`, `:315`, `:317-319`, `:321` e `:360` (a lista da spec, "Docs").
 - `docs/05`: as dívidas da lista da spec, mais as deste plano (seção Polimento), riscando o que quita.
 - Fora de `docs/`: `DEVELOPMENT.md:110-115` e `:151`, `CLAUDE.md` §4, `config.py:145-162` e `group_ops.py:1-32`.
 
@@ -344,14 +344,15 @@ Pago e devolvido de um ato somam os ids que T1 consulta (`cancel_ops.ids_do_grup
 
 | Operação | Ordem |
 |---|---|
-| Cancelar (todas as variantes) | T1 → T2 → T3 → T4 → T5 → T6 → validar → `desmarcar` → `flush` → congelar → devolução → `flush` → no corte: `estado_da_venda`, venda nova e **uma** chamada a `acompanhar_bv_da_venda` → alvo → reconciliar → `cancelled_at` → `ao_cancelar` → ensaios (banco), sinos e multas → `EventLog` → commit → Google (show e ensaios) e e-mail fora da trava, com os ids guardados antes do commit. É a ordem única do ato: a H2 constrói sem ensaios, sinos e multas, e a H6 os põe neste lugar |
+| Cancelar (todas as variantes) | T1 → T2 → T3 → T4 → T5 → T6 → validar → lista dos alvos do Google (dias não marcados e os ensaios, montada **antes** do `desmarcar`) → `desmarcar` → `flush` → congelar → **na passagem**: marcar a comissão própria do novo pelo `event_id` de antes → `passar_venda` (com `sale_handed_over` e `group_leader_id` = novo) → `expire` → devolução (ligada ao dia da URL) → `flush` → no corte e na passagem: `estado_da_venda`, venda nova e **uma** chamada a `acompanhar_bv_da_venda` no principal que fica (o novo, na passagem) → alvo → reconciliar → `cancelled_at` → `ao_cancelar` → ensaios (banco), sinos e multas → `EventLog` → commit → Google (show e ensaios) e e-mail fora da trava, com os ids guardados antes do commit. É a ordem única do ato: a H2 constrói sem ensaios, sinos e multas, a H5 põe a passagem no lugar dela (antes da devolução, para a `TABELAS_DA_PASSAGEM` não levar a devolução do ato ao novo principal) e a H6 põe ensaios, sinos e multas |
 | Alterar devolução | 400 só se `devolucao_total` faltar ou não for número → T1 → T2 → T4 → T5 → decidir → gravar → reconciliar → commit. T4 e reconciliar só no `venda`, ou no `dia` com o principal cancelado inteiro (os beneficiários se conhecem depois de T2). A prévia não trava |
 | Multas | T1 → T2 (elenco) → INSERT do gasto. Sem T3 e sem T4 (Q10 = A) |
-| Acréscimos do cancelado | T1 → T2 → T3 → gravar → `flush`/`expire` → T4 → reconciliar |
+| Acréscimos do cancelado | T1 → T2 → T3 → gravar → `flush`/`expire` → T4 → reconciliar, tudo dentro de `comercial_ops.alterar_acrescimos_do_cancelado` |
+| Correção comercial do cancelado (venda, taxa, cortesia, vendedor; aba Comercial) | T1 → T2 → T4 (linhas do evento e dos beneficiários antigo e novo; `primeiro_repasse_aberto(…, travar=True)`) → gravar → despachante → `reaplicar_cancelado` → commit (analyze de 16/10, A3) |
 | Reembolsos, parcelas e notas | `travar_evento` (o próprio evento) → relê `is_cancelled` → recusa → o de hoje. No vivo, o caminho de hoje |
-| Comprovantes | T1 (também no vivo: o comprovante mexe no pago do grupo) → recusa → gravar → `flush`. Com principal `venda` cancelado: → T4 → reconciliar. No POST, 409 depois de gravar → rollback e o arquivo novo removido |
+| Comprovantes | T1 (também no vivo: o comprovante mexe no pago do grupo) → recusa → gravar → `flush`. Com principal `venda` cancelado: → T4 → `reaplicar_por_dinheiro`. Tudo em `cancel_ops.gravar_comprovante_no_grupo`; a view só traduz e remove o arquivo novo. No POST, 409 depois de gravar → rollback e o arquivo novo removido |
 | BV na Planilha (API e Jinja) | `travar_evento(principal)` → a linha do acréscimo → T2 em leitura |
-| Devolução na Planilha (API e Jinja) | `travar_evento(evento da devolução)` → o gasto `FOR UPDATE populate_existing` → `valor_esperado` (só na API) → status |
+| Devolução na Planilha (API e Jinja) | `cancel_ops.marcar_status_da_devolucao`: `travar_evento(evento da devolução)` → o gasto `FOR UPDATE populate_existing` → `valor_esperado` (só na API) → status |
 
 **Fora da 306, para nada cruzar essa ordem** (a lista única; a R24 a repete e o resto do plan a cita):
 1. `order_by(CommissionPayment.id)` em `liquidar_periodo` (`comissoes_ops.py:249-257`) e em `pay_seller_month` (`:631-638`). É uma linha em cada, sem mudar comportamento.
@@ -377,7 +378,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 ### 0. Setup
 
 - `.specify/feature.json` → `specs/306-dinheiro-do-cancelamento`.
-- `scripts\db\refresh-local-db.ps1`, a recontagem por `sql_ro.py` (números do Contexto técnico) e `contagem_2026-10-15.txt` na pasta.
+- A recontagem por `sql_ro.py` (números do Contexto técnico), gravada em `contagem_2026-10-16.txt`; o `contagem_pre_deploy.py` nasce na Fundação e roda pela primeira vez na primeira rodada. O refresh do espelho só com o outro chat parado (o `manto_local` é compartilhado).
 - **Descartáveis do verify**:
   - usuários: SUPERADMIN, COMERCIAL, FINANCEIRO, CASTING, FIGURINO, ENSAIO, MARKETING e ARTISTA_3D;
   - um vendedor;
@@ -387,7 +388,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 
 **Constrói**
 1. **Verify antes do núcleo.**
-   - `verify_306.py` com os **59 cenários** (os 57 da spec mais 37b e 38c) e as variantes deste plano: 2/8 prévia = execução, 9/10-desfazer, 16/17-`paid_amount`, 16b cheia 0, 38-comprovante, 39 devolução do dia depois do principal cancelado, 44 dois sinos.
+   - `verify_306.py` com os **59 cenários** (os 57 da spec mais 37b e 38c) e as variantes deste plano: 2/8 prévia = execução, 9/10-desfazer, 16/17-`paid_amount`, 16b cheia 0, 38-comprovante, 39 devolução do dia depois do principal cancelado, 44 dois sinos; e as do checklist de 16/10: 5-grupo, 16-vivo, 18-inverso, 37-devolução e o piso do corte no 4.
    - **Opções** (definidas no quickstart §1, Living Spec do checklist): sem argumentos, o portão (`59/59 OK`, variantes dentro do seu cenário); `--so=2,2b,8` (só os listados; a limpeza, 27, roda sempre); `--nucleo` (Fundação e História 1 antes da API); `--regressao` (os verifies antigos do quickstart §5 em subprocesso, contra a base da primeira rodada); `--semear-tela` / `--limpar-tela` (dados da conferência de tela, no molde da 303).
    - **Chão herdado do `verify_303`**: trava de e-mail; guarda `calendar_auto_sync_at`, que sai com exit 2; dublê de `app.calendar.service.delete_event` em todo cancelamento; `_esperar_threads`.
    - **Instrumentos**:
@@ -444,14 +445,14 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
    - `tipo_da_linha(cp)`;
    - `ciclo_de_pagamento_da_linha(cp)`, espelho de `:212-216`, com o 3º degrau em **UTC** como o `date()` do SQL. O verify compara Python e SQL em todas as linhas do espelho.
 9. **Exceções e regra**:
-   - `CancelValidationError(message, field=None, status=400, codigo=None, **extras)` (`:39-44`); `EventoMarcadoError` continua subclasse;
+   - `CancelValidationError(message, *, fields=None, field=None, status=400, codigo=None, **extras)` (`:39-44`): `fields` é o mapa de todos os campos recusados de uma vez (contratos §1, §3, §4); `field=` é atalho para `{field: message}`; `extras` nunca leva `fields`. `EventoMarcadoError` continua subclasse;
    - `EventoCanceladoError`;
    - `pode_editar_venda_do_cancelado(user)`.
 
 **Ao fim da fase**
 - **Verde**: 1, 23, 26 e 27 (limpeza); a parte de regressão do 41 (comissões dos grupos e cobranças da Home sem devolução, `main` × branch); em modo núcleo, a variante "cheia 0" do 16b.
 - **Vermelho esperado**: todos os outros, pelas funções e rotas que faltam.
-- **Pode estar verde antes do núcleo** sem ser defeito: as partes do 6 e do 28 que já valem hoje (403 do COMERCIAL no cancelar e 401 sem sessão nas rotas que existem). O "já cancelado" do 5 **não**: no HEAD, `api_cancelar_evento` responde 400 (`agenda_write.py:609-610`), e o cenário espera 409.
+- **Pode estar verde antes do núcleo** sem ser defeito: o 1, o 23, o 26, o 27 e a regressão do 41 (`main` × branch com a branch ainda igual à `main`); as partes do 6 e do 28 que já valem hoje (403 do COMERCIAL no cancelar e 401 sem sessão nas rotas que existem). O "já cancelado" do 5 **não**: no HEAD, `api_cancelar_evento` responde 400 (`agenda_write.py:609-610`), e o cenário espera 409.
 
   Todo outro verde é defeito do verify.
 
@@ -473,7 +474,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
     - nos dias 1 a `DIA_DO_REPASSE`, o mês anterior se ali houver linha que abre ciclo; senão o corrente;
     - teto de 24 ciclos;
     - `excluir_event_id` deixa a prévia igual à execução, apesar do autoflush.
-  - `reconciliar_comissao_do_cancelado(event, alvos, *, motivo, hoje=None, simular=False)`:
+  - `reconciliar_comissao_do_cancelado(event, alvos, *, motivo, motivos=None, hoje=None, simular=False)`: `motivo` vale para todos, e `motivos[seller_id]` o troca por beneficiário (a troca de vendedor leva dois motivos numa chamada só, FR-033); motivo fora de `MOTIVOS_AJUSTE_COMISSAO` levanta `ValueError`;
     - invariante por beneficiário; `falta = alvo − liquidadas`;
     - a linha `a_pagar` mais antiga recebe a falta;
     - linha nova ligada à paga (`original_id`);
@@ -530,7 +531,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 - **Coleção velha**: `event.commission_payments` (relação em `models.py:981-986`, backref em `:984`) depois de reconciliar. Expirar antes do resumo e de `comissao_exibida_do_evento` (`:369-403`).
 - **Bundle antigo**: ignora `commission_lines`. A linha `no_banco` imprime `status_label` vindo do servidor, mas o filtro não tem a opção; hoje são zero linhas. `total_month` muda: os três cards antigos deixam de fechar na janela do deploy.
 - **Bundle novo com backend antigo**: `kpis.total_no_banco` ausente; o 4º card tolera `undefined`.
-- **Cache**: `staleTime: 30_000` (`packages/api-client/src/queryClient.ts:39`); as mutações fora do `financeiro.ts` passam a chamar `invalidarFinanceiro`.
+- **Cache**: `staleTime: 30_000` (`packages/api-client/src/queryClient.ts:39`); as mutações fora do `financeiro.ts` passam a chamar `invalidarFinanceiro`, e cada mutação nova invalida exatamente a linha dela no contracts §22.
 
 ### 3. História 2: cancelar e devolver (P1)
 
@@ -595,7 +596,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
   - Virtual: só o motivo. Marcado: aviso.
 - **`lib/eventOps.ts`**:
   - tipos opcionais e a união `CodigoRecusaCancelamento`;
-  - `usePreviaCancelamento`: chave `["evento-previa-cancelamento", id, valor]`, `keepPreviousData`, ≥ 400 ms, decimal com ponto;
+  - `usePreviaCancelamento`: chave `["evento-previa-cancelamento", id, valor, venda_nova, alcance]` (os dois últimos opcionais desde já, porque a H5 os usa), `keepPreviousData`, ≥ 400 ms, decimal com ponto;
   - `useCancelarEvento.onSuccess` invalida `invalidarSumidosGoogle`, `invalidarNotificacoes`, `financeiro-*`, `vendas-dashboard`, `gastos-extras`, `cancelamentos` e `["event"]`;
   - `useDeleteEvent` + `invalidarSumidosGoogle`;
   - `useAlterarDevolucao`.
@@ -606,9 +607,9 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 
 **Ao fim da fase**
 - **Verde**:
-  - pela API: 2 e 8 com a variante prévia = execução (`hoje` no dia 2 e no dia 10); 2b (sem a parte do aviso), 3, 4 (sem o corte e a multa), 5, 6, 7, 9–11;
+  - pela API: 2 e 8 com a variante prévia = execução (`hoje` no dia 2 e no dia 10); 2b (sem a parte do aviso), 3, 4 (sem o corte e a multa), 5 (sem o 5-grupo), 6, 7, 9–11;
   - 12 e 32 **sem a DRE**;
-  - 15, 16, 17 (sem o satélite), 18, 19, 25, 28, 30, 31, 34, 36, com as variantes 9/10-desfazer e 16/17-`paid_amount` pela API;
+  - 15, 16 (+ 16-vivo), 17 (sem o satélite), 18 (+ 18-inverso), 19 (com o FINANCEIRO), 25 (com as flags do vivo), 28, 30, 31, 34, 36, com as variantes 9/10-desfazer e 16/17-`paid_amount` pela API;
   - as partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d.
 - **Vermelho esperado**:
   - DRE (20–22, 24 e as partes da DRE do 12 e do 32);
@@ -684,12 +685,13 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 **Constrói**
 - **`update_event_comercial`** (`event_ops.py:1169-1240`):
   - relê `is_cancelled` depois de `estado_da_venda` (`:1204`) e recusa com 409 `estado_mudou` se o estado mudou;
+  - no ramo do Superadmin no cancelado, toma T1 → T2 → T4 (linhas do evento e dos beneficiários antigo e novo, `primeiro_repasse_aberto(…, travar=True)`) antes de gravar, como na linha "Correção comercial do cancelado" da seção Travas;
   - o gancho (`:1230-1231`, antes do commit de `:1240`) vira despachante: cancelado → `reaplicar_cancelado`, vivo → `_sync`. Isso mantém "a mesma transação".
 - **`reaplicar_cancelado`**, estendido (FR-049, FR-050, FR-051):
   - venda e cortesia: `comissao_cheia_do_evento(…, taxa=congelada, bv_total=Σ original_amount das linhas vivas, custo=commission_cost)`; cortesia/permuta dá cheia 0 pelo portão do beneficiário;
   - taxa por `_mesma_taxa`; vendedor por `_mesmo_vendedor`;
   - troca de vendedor por beneficiário: o antigo com alvo 0 (devolve no primeiro repasse aberto **dele**), o novo com o alvo inteiro, e o congelado regravado;
-  - motivos "taxa corrigida" e "correção da venda", para mais e para menos;
+  - motivos "taxa corrigida" e "correção da venda", para mais e para menos; na troca de vendedor, numa chamada só da reconciliação, "vendedor trocado — devolve o já recebido" para o antigo e "vendedor trocado — comissão do retido" para o novo (FR-033), sempre pelas constantes `MOTIVO_AJUSTE_*`;
   - `updated_at`/`updated_by_id`; `EventLog` UTC.
 - **Acréscimos** (decisão (d)):
   - **extração** de `_montar_acrescimos` (`comercial_ops.py:216-404`) em cinco passos de cerca de 30 linhas (o limite da constituição, `.specify/memory/constitution.md:43`), cada um com docstring do porquê. A lista é a mesma da R20: (1) ler os itens (`id` repetido, tipo, valor); (2) casar o bundle antigo sem `id`; (3) recusar BV pago removido ou trocado de tipo; (4) a régua do BV (somas em reais e em %); (5) montar o registro: BV (recebedor e PIX por `erros_do_bv`; o BV pago com valor e unidade da linha gravada; BV em % no cancelado), `valor_visto` e as `trocas` de recebedor e PIX. Se algum passo passar de ~30 linhas sem partir uma regra da 305 ao meio, entra uma linha no Rastreamento de complexidade com o porquê; o candidato é o (5), hoje o bloco maior (`:314-402`, cerca de 90 linhas). O vivo segue com o `delete`/`add` de `:407-411`; `verify_305` de novo **antes** de usar no cancelado;
@@ -733,6 +735,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
   - `expire` de `satellites`, `group_leader` e das coleções movidas.
 - **`cancel_ops`, o laço**:
   - `alcance`, `novo_principal_id`, `grupo_mudou`, `so_este_dia` sem outro dia vivo (`sem_outro_dia_vivo`);
+  - a devolução pendente de qualquer dia do grupo recusa com `dias` (FR-012); a comissão própria de outro dia fica fora da conta (P-51);
   - regime `satelite` em cada dia; `desmarcar` por dia;
   - `ao_cancelar` em cada dia (`("todos", None)`); no corte de dia que não é o principal, `("so_este_dia", None)`; na passagem, **depois** dela: `("so_este_dia", novo)`;
   - sai a recusa do líder; `resumo_impacto.grupo{…, proximo_principal}`.
@@ -752,9 +755,9 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 
 **Ao fim da fase**
 - **Verde**:
-  - 29, 35, 37, **37b**, 38 (+ variante 38-comprovante), **38c**, 39 (+ variante: depois de cancelar o resto, "Alterar devolução" do dia refaz retido e comissão do principal), 41;
+  - a variante 5-grupo; 29, 35, 37 (+ 37-devolução), **37b**, 38 (+ variante 38-comprovante), **38c**, 39 (+ variante: depois de cancelar o resto, "Alterar devolução" do dia refaz retido e comissão do principal), 41;
   - 42 (sem aviso e ensaio), 42b (sem a multa), 42c, 42d (sem o cachê pago);
-  - as partes de satélite do 4, 16b, 17 e 21;
+  - as partes de satélite e de corte do 4 (com o piso da devolução do corte), do 16b, do 17 e do 21;
   - do 40, desagrupar e agrupar.
 - **Vermelho esperado**: H6.
 
@@ -786,7 +789,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
   - `evento.cancelado_escala`: CASTING sem SUPERADMIN, um por dia com escalados, link `?aba=producao`, `dedupe_key = evento.cancelado_escala:<id do evento da URL>:<dia_id>`;
   - `urgent` por `ANTECEDENCIA_URGENTE_DIAS` (= 7, `:85`) **só** no `evento.cancelado_escala`; o `evento.cancelado` não o tem (a FR-067 não o pede);
   - os dois por `resolver_destinatarios` (ativos com acesso; **não** a consulta de `notify_ensaio_team`) e na transação.
-- **E-mail**: `send_removal_email` por `send_async`, depois do commit, uma vez por pessoa (título e data do principal e do 1º dia vivo), fora quem recusou e a vaga de presença. `assign_role` deixa de mandar no cancelado.
+- **E-mail**: em `cancelar_evento`, depois do commit e com os ids guardados antes, um `send_async(send_removal_email, …)` por `talent_id` das linhas de `event_cancellation_elenco` do ato, com o evento do dia mais cedo em que ele estava escalado entre os dias alcançados e o `character_name` dessa vaga (R17; no corte, o dia cortado), fora quem recusou e a vaga de presença. `assign_role` deixa de mandar no cancelado.
 - **Elenco e multa**:
   - `event_cancellation_elenco` gravada no ato, **uma linha por escalação** (vaga × dia);
   - `lancar_multas_do_cancelado` grava o gasto pelo ORM, como `_registrar_devolucao` (aprovado, `fornecedor`, `SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`, `Talent.pix_key` de `models.py:169`, PIX vazio permitido), **nunca** por `create_expense`, que nasce pendente e manda e-mail;
@@ -816,7 +819,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 ### 8. Polimento
 
 - **Portões**:
-  - `npm run typecheck`, `ruff check` nos tocados (portão: nenhum erro novo; os arquivos de `app/` que a 306 toca já têm 14 na base, quickstart §6), `npm run build`;
+  - `npm run typecheck`, `ruff check` nos tocados, `npm run build`. O `ruff check` sai limpo do que se corrige no lugar: os 4 F841, o UP017 e os 2 I001 de import dentro de função (`calendar/routes.py:419`, `:1646`, `:2131`, `:2527`, `:2861`, `:4217`, `:4267`). Ficam os estruturais (os I001 do bloco de import no topo de `calendar/routes.py` e `financeiro/routes.py` e os E402 de `models.py`), registrados no Rastreamento de complexidade (portão: nenhum erro além desses três grupos);
   - verify 59/59 sem argumentos, com as variantes;
   - `retrato_main_branch.py` idêntico;
   - verifies antigos (quickstart §5);
@@ -995,5 +998,6 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
 | `dre_ops.py` importa helpers de `financeiro/routes.py` por import tardio (núcleo → routes) | Uma conta só para a API e o Jinja | Mover `_compute_drg`/helpers está proibido pela PARADA |
 | Comissão cheia em duas camadas (`_base_da_comissao` + `comissao_cheia_do_evento`) ao lado da casca `_event_commission` | A FR-027 zera cortesia e evento sem vendedor, mas a casca não pode mudar número (cenários 1 e 23): hoje o evento sem vendedor tem comissão na DRE | Pôr o portão na casca mudaria a DRE de hoje; deixar a cheia sem portão congelaria comissão em cortesia com valor (FR-049) |
 | Mudanças fora da 306 por concorrência: os oito ajustes da seção Travas ("Fora da 306", a lista única) | Sem elas, a ordem evento → linhas da 306 fecha deadlock (40P01 = 500) ou deixa o resync regravar a linha do retido (cenário 30) | Travar só o evento no resync seguraria até 72 eventos no GET; tratar só o 40P01 como 409 não evita a perda de dado |
+| `ruff check` com erros estruturais que ficam nos três arquivos legados tocados (os I001 do bloco de import no topo de `app/calendar/routes.py` e `app/financeiro/routes.py`; os E402 de `app/models.py`) | A constituição pede o tocado limpo, mas limpar esses três exige reordenar o bloco de import do arquivo inteiro (os E402 de `models.py` vêm de import depois de código, de propósito, para quebrar ciclo) | Reordenar os imports é refatoração lateral que a constituição proíbe e mexe em arquivo vivo sem ganho; os erros corrigíveis no lugar (F841, UP017, I001 de função) saem na 306 |
 | `_sync_commission_payment` ganha a regra do ajuste vivo (FR-057) | O desfazer da 267c no principal vivo depois do corte daria desconto em dobro (Σ 50 ≠ 75) | Recusar o desfazer contraria a 1e-Q5 = A; reconciliar dentro do desfazer faria o financeiro importar o núcleo do cancelamento |
 | Coluna `paid_amount` em tabela nova (além do "BV cheio" da spec) | Sem ela o pago depois do ato seria reescrito por correção, e o `valor_esperado` da 305 daria 409 eterno | Regravar `amount_brl` quebra `_event_bv_total`, `original_amount`, o editor da 305 e o desfazer; coluna em `event_acrescimos` é vetada pela spec |

@@ -90,7 +90,7 @@ export interface ResumoCancelado {
           cheio: number; conta: number | null;   // bv_da_planilha (null = some da Planilha)
           estado: EstadoPagamento; pago_no_ato: boolean }[];
   // ── só com flags.can_edit_venda_cancelado ──
-  limites_devolucao?: { piso: number; teto: number } | null;   // para o "Alterar devolução" (data-model §7.2)
+  limites_devolucao?: { piso: number; teto: number } | null;   // para o "Alterar devolução" (data-model §7.2); produzido por cancel_ops.limites_da_devolucao, só com can_edit_venda_cancelado
   elenco?: { elenco_id: number; talent_id: number; artista: string; vaga: string;   // uma por escalação (vaga × dia)
              dia: { id: number; data: string | null }; cache_referencia: number | null;
              na_vaga: boolean; talent_pix_informado: boolean;
@@ -192,6 +192,7 @@ export interface ImpactoExclusao {
   // … as de hoje (lib/eventOps.ts:102-115)
   regime?: "venda" | "satelite" | "dia" | "virtual";   // o que o ato daria (no principal: o do "todos"). Ausente = backend antigo → diálogo trava o envio
   sumiu_do_google?: boolean;
+  pago?: number;                    // pago do GRUPO (ids_do_grupo); total_recebido continua o do próprio evento. O diálogo lê este em "A cliente pagou R$ X" e no "pago zero"
   ja_devolvido?: number;            // Σ devoluções aprovadas do grupo
   max_devolucao?: number;           // pago − já devolvido (no dia: o teto do corte)
   com_nota?: boolean;
@@ -273,7 +274,7 @@ export interface AlterarDevolucaoInput {
    - `devolucao_total`: negativo; no `venda`/`legado`, acima do pago do grupo (aqui o teto é 400, como no RBAC da spec);
    - `devolucao_nome`, `devolucao_pix`: faltando quando nasce complemento sem nome/PIX a herdar, ou acima de 200/120 caracteres;
    - `imposto_retido`: no `dia`, no `legado`, sem nota (o `with_invoice` congelado) ou negativo.
-7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo do piso do `data-model.md` §7.2 (no `venda`, as devoluções pagas ou no banco de todos os dias mais as aprovadas dos dias cortados, `dia`; no `dia`, as do dia pagas ou no banco). No `venda`, a aberta do principal absorve primeiro e depois as abertas dos dias `satelite`, por id.
+7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo do piso do `data-model.md` §7.2 (no `venda`, as devoluções pagas ou no banco de todos os dias mais as aprovadas dos dias cortados, `dia`; no `dia`, o maior entre as do dia pagas ou no banco e a devolução mínima do corte com a venda nova congelada, P-52). No `venda`, a aberta do principal absorve primeiro e depois as abertas dos dias `satelite`, por id.
 8. **409 `acima_do_teto`**, com o extra `teto`: **só no `dia`**, quando passa do pago do grupo menos as devoluções aprovadas dos outros dias.
 9. Grava (`data-model.md` §7.2), com `audit` por devolução, `EventLog` (UTC) e `updated_at/by`. Deadlock vira 409 `tente_de_novo`.
    - **`venda`**: regrava o imposto se vier; `reaplicar_cancelado` (comissão; BV ao vivo).
@@ -349,6 +350,7 @@ No cancelado:
 8. Grava.
 
 **No cancelado (Superadmin)**:
+- **Travas**: T1 → T2 → T4 (linhas do evento e dos beneficiários antigo e novo, `primeiro_repasse_aberto(…, travar=True)`) antes de gravar, como o "Alterar devolução" (data-model §8.10).
 - `update_event_comercial` (`event_ops.py:1169`) relê `cancelled_at` depois de `estado_da_venda` (`:1204`). Se o estado mudou entre a view e a trava, responde **409 `estado_mudou`** ("O evento mudou enquanto você editava: recarregue.").
 - O gancho `sincronizar_comissao` vira um despachante: cancelado → `reaplicar_cancelado(event, motivo=…)`; vivo → `_sync_commission_payment`. É a mesma transação, porque o gancho roda antes do commit interno (`:1230-1231`, `:1240`).
 
@@ -549,7 +551,7 @@ export interface GastoExtra { /* … */ locked?: boolean; event_cancelled?: bool
 // UpdateGastoInput.disbursement_type aceita "cliente"; CreateGastoInput nunca.
 ```
 
-A lista de categorias (`gastos_read.py:72`) passa a trazer "Multa de cancelamento" (`SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`). Ela é aceita também na criação manual: é texto, sem trava, e só a multa do cancelamento marca a linha do elenco.
+A lista de categorias (`gastos_read.py:70`, lida de `SpecialExpense.CATEGORIES`, sem edição neste arquivo) passa a trazer "Multa de cancelamento" (`SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`). Ela é aceita também na criação manual: é texto, sem trava, e só a multa do cancelamento marca a linha do elenco.
 
 ---
 
@@ -639,6 +641,7 @@ FinanceiroPaineis += cancelamentos?: { quantidade: number; pago: number; devolvi
   retido: number; comissao_retido: number; bv_retido: number; imposto: number; efeito_resultado: number;
   itens: { event_id: number; titulo: string; cancelado_em: string; retido: number }[] };
 // lib/vendas.ts   VendasKpis += retido_cancelamentos?: number; n_cancelados?: number; comissao_retido?: number;
+// lib/vendas.ts   SalePaymentStatus += "cancelado" (:9-14);  lib/financeiro.ts   EventoStatus += "cancelado" (:94)
 // lib/adminConfig.ts DesempenhoItem += retido?: number; cancelados?: number; AdminDesempenho.totals += retido?: number;
 ```
 
@@ -664,7 +667,7 @@ A tela mostra a linha do retido por `n_cancelados > 0`, nunca pelo valor. Com ch
 |---|---|
 | `event_detail` POST (`calendar/routes.py:1636-1671`; tabela `_EVENT_ACTIONS` `:1608-1633`) | Para `update_comercial`, `update_sale`, `add_payment`, `edit_payment`, `delete_payment`, `add_reembolso`, `collect_reembolso` e `delete_reembolso`: depois de `travar_evento(event)` e de reler, se o evento está cancelado → `flash` "Evento cancelado: os dados de venda se corrigem pela tela nova, só pelo Superadmin." e redirect, **para todo papel, inclusive o Superadmin**, antes de qualquer handler. O Jinja não tem `reaplicar_cancelado`. Confirma a P-27, e a recusa vem antes de `estado_da_venda` (`:837`). **Living Spec**: a recusa de `update_sale` e dos três de reembolso para todos vai além da FR-047 |
 | `group_events` / `ungroup_event` (`_handle_group_events` `:1536`, `_handle_ungroup_event` `:1580`) | A recusa vem do núcleo (`validar_agrupamento`, `desagrupar`) → `flash` |
-| `delete_calendar_event` (`:4450-4479`) | Captura `EventoCanceladoError` de `_delete_event_flow` → `flash` |
+| `delete_calendar_event` (`:4472-4499`) | Captura `EventoCanceladoError` de `_delete_event_flow` → `flash` |
 | Financeiro `set_payment_status` (`financeiro/routes.py:1109`) | **BV** (`:1190-1197`) → `marcar_status_do_bv(valor_esperado=None)`, com `flash` em `bv_nao_esta_a_pagar`. **Gasto** (`:1182-1189`) → quando é devolução de cancelado, `travar_evento` do evento antes de mudar o estado (o formulário Jinja não manda `valor_esperado`). **Comissão** (`:1139-1146`) → `liquidar_item_de_comissao`, com trava ordenada |
 | `set_commission_status` (`financeiro/routes.py:1561-1582`) | **Guarda de uma linha** (P12): `cp.event` cancelado → `flash` "Comissão de evento cancelado: o valor se acerta pelo cancelamento e o pagamento pela Planilha de Pagamentos." e redirect, sem mudar nada. Vem depois da recusa da 267c (linha paga) e vale para qualquer status pedido. Não vai ao `docs/05` |
 | `pagamentos()` (`:1020-1103`) | Herda `_build_bv_items` (BV por `bv_da_planilha`) e `_build_commission_items` (linhas por item), que são compartilhados |

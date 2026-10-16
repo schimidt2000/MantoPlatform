@@ -90,7 +90,10 @@ igual.
   - 16e: taxa de hoje;
   - 42c: data antiga;
   - 45c: lista lida da escala de hoje; remoção sem a condição;
-  - 2/8: "simular escreve".
+  - 2/8: "simular escreve";
+  - 23: somar o retido sem a condição da quantidade de cancelados (liga a partir da História 3);
+  - 38c: sincronização sem a regra nova (b) dá Σ 50;
+  - 44: `dedupe_key` pelo principal cala o 2º sino.
 
 **Primeira rodada, antes do núcleo.** Roda com o verify, o `retrato_main_branch.py` e o `contagem_pre_deploy.py`
 escritos e nenhuma linha de núcleo:
@@ -101,7 +104,7 @@ escritos e nenhuma linha de núcleo:
 ```
 
 - **Podem estar verdes, sem defeito**:
-  - o 1, o 23 e o 26, que comparam a branch ainda igual à `main` ou só leem;
+  - o 1, o 23, o 26 e a regressão do 41, que comparam a branch ainda igual à `main` ou só leem;
   - o 27;
   - dentro do 6 e do 28, as afirmações que já valem hoje: 403 do COMERCIAL no cancelar e 401 sem sessão
     nas rotas que existem.
@@ -129,7 +132,7 @@ escritos e nenhuma linha de núcleo:
 |---|---|---|
 | B0 | Fundação | 1, 23, 26 e 27; a parte de regressão do 41 (comissões dos grupos e cobranças da Home sem devolução), verde desde aqui; com `--nucleo`, a variante 16b cheia 0 |
 | B1 | História 1 | 13, 14 e 14b. Com `--nucleo`: 7–11, 12 (sem a DRE), 17 e 30; as variantes 9/10-desfazer e 16/17-`paid_amount`; e, no 8, `simular=True` × `simular=False`. O `verify_305` tem de estar verde (§5) |
-| B2 | História 2 | Pela API: 2 e 8, com a variante 2/8 prévia = execução; 5 (sem a variante 5-grupo), 16-vivo, 18 com o 18-inverso, 19 com o FINANCEIRO, 25 com as flags do vivo; 2b (sem o aviso), 3, 4 (sem o corte e a multa), 5, 6, 7 e 9–11; 12 e 32 sem a DRE; 15, 16, 17 (sem o satélite), 18, 19, 25, 28, 30, 31, 34 e 36. As variantes 9/10-desfazer e 16/17-`paid_amount` pela API. As partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d |
+| B2 | História 2 | Pela API: 2 e 8 (+ prévia = execução), 2b (sem o aviso), 3, 4 (sem o corte e a multa), 5 (sem o 5-grupo), 6, 7, 9–11; 12 e 32 sem a DRE; 15, 16 (+ 16-vivo), 17 (sem o satélite), 18 (+ 18-inverso), 19 (com o FINANCEIRO), 25 (com as flags do vivo), 28, 30, 31, 34 e 36. As variantes 9/10-desfazer e 16/17-`paid_amount` pela API. As partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d |
 | B3 | História 3 | 20, 22 e 24; a parte da DRE do 12 e do 32; o 21 menos o satélite (a parte virtual fecha aqui; a multa é semeada por ORM, com `SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`). O 23 segue verde |
 | B4 | História 4 | 16b (sem o satélite, e com a variante 16b cheia 0 pela API), 16c, 16d e 16e. O `verify_305` tem de estar verde antes (§5) |
 | B5 | História 5 | a variante 5-grupo; 29, 35, 37 (+ 37-devolução), 37b, 38 (+ 38-comprovante), 38c, 39 (+ a variante 39 devolução do dia depois do principal cancelado) e 41. 42 (sem aviso e ensaio), 42b (sem a multa), 42c e 42d (sem o cachê pago). A parte de satélite e de corte do 4 (inclusive o piso da devolução do corte), do 16b, do 17 e do 21. Do 40, desagrupar e agrupar |
@@ -151,11 +154,12 @@ O script só lê:
 A saída traz quantidades, R$ e ids, nunca nome, e-mail ou PIX, porque vai versionada para a pasta da
 feature.
 
-**Espelho**: no Setup, em `contagem_2026-10-15.txt`; no Polimento, de novo, com a data do dia.
+**Espelho**: no Setup, a recontagem é por `sql_ro.py` (`contagem_2026-10-16.txt`, T002); o script roda pela primeira vez na
+primeira rodada (T011) e de novo no Polimento, sempre com a data do dia (`Get-Date -Format yyyy-MM-dd`).
 
 ```powershell
 & $py specs\306-dinheiro-do-cancelamento\contagem_pre_deploy.py |
-  Out-File -Encoding utf8 specs\306-dinheiro-do-cancelamento\contagem_2026-10-15.txt
+  Out-File -Encoding utf8 "specs\306-dinheiro-do-cancelamento\contagem_$(Get-Date -Format yyyy-MM-dd).txt"
 ```
 
 Referência: Contexto técnico do plano, com o espelho de 15/10 e o dump de 30/09.
@@ -228,6 +232,10 @@ ele, que sai dos gastos (FR-042); e, só na Tendência, o mês do evento, que de
 - Em divergência, a saída é 1 e mostra o mês e a linha.
 
 **Como compara**
+- Pelos valores das chaves que a `main` devolve. Chave que só existe na branch não entra na comparação e é
+  listada à parte (Comissões: `tipo`, `ciclo`, `original_id`, `evento_cancelado`, `motivo`, `total_no_banco`;
+  Planilha: `commission_lines`; DRE: `retido_cancelamentos`, `n_cancelados`, `paineis.cancelamentos`; vendas e
+  desempenho: `retido*`, `n_cancelados`, `comissao_retido`, `cancelados`). O cenário 20 confere a presença delas.
 - Os dois lados vêm do harness do §1 (`git archive` da base).
 - O relógio é fixo: troca `datetime` em `app.financeiro.routes`, em `app.api.financeiro_read` e, na branch,
   em `app.financeiro.dre_ops`.
@@ -285,20 +293,24 @@ $env:MARKETING_AGENT_TOKEN = (Get-Content C:\Users\schim\Desktop\Manto_Platform\
 
 | Verify | O que muda com a 306 | Fase em que pode quebrar primeiro |
 |---|---|---|
-| `verify_303` | **Reescrito**: o `c12_nao_cancela` (`:2339`) passa a cancelar o marcado. A exclusão continua recusada, com o `MSG_MARCADO` (`:167`) novo | História 2 |
-| `verify_267` | **Reescrito** em `:278-289`: lê o bloco `cancelamento` de um `legado`, em vez de `kpi["commission"]` de um cancelado gravado à mão | História 2 |
+| `verify_303` | **Reescrito**: o `c12_nao_cancela` (`:2339`) passa a cancelar o marcado. A exclusão continua recusada, com o `MSG_MARCADO` (`:167`) novo | História 1 (a trava da exclusão, T028); reescrito na 2 |
+| `verify_267` | **Reescrito** em `:278-289`: lê o bloco `cancelamento` de um `legado`, em vez de `kpi["commission"]` de um cancelado gravado à mão | História 1 (o `_sync` no cancelado, T022); reescrito na 2 |
 | `verify_267b`, `verify_267c` | Extração da comissão, item da Planilha (`S:C`, `S:C:pago`) e desfazer, que agora trava os eventos antes | História 1 |
 | `verify_299` | Ciclo da comissão | História 1 |
 | `verify_215b` | A regra do cancelado roda antes da taxa e do vendedor | História 2 |
-| `verify_305` | `marcar_status_do_bv` substitui o ramo BV da 305 (`app/api/financeiro_write.py:163-194`), e o 409 do BV com `valor_esperado` divergente ganha o código `valor_mudou`; `valor_esperado` também no `expense`; `_montar_acrescimos` fatiado não muda o vivo. Roda ao fechar a História 1 e de novo logo depois da extração, antes de ela ser usada no cancelado | História 1 (`marcar_status_do_bv`), e de novo na História 4 (a extração) |
+| `verify_305` | `marcar_status_do_bv` substitui o ramo BV da 305 (`app/api/financeiro_write.py:163-194`), e o 409 do BV com `valor_esperado` divergente ganha o código `valor_mudou`; `valor_esperado` também no `expense`; `_montar_acrescimos` fatiado não muda o vivo. Roda ao fechar a História 1 e de novo logo depois da extração, antes de ela ser usada no cancelado | História 1 (`marcar_status_do_bv`), História 2 (as portas de acréscimos e orçamento e o `valor_esperado` no `expense`) e de novo na História 4 (a extração) |
 | `verify_205` | Pipeline e Loja Virtual | História 2 |
-| `verify_266`, `verify_258`, `verify_256` | Rodar de novo | Polimento |
+| `verify_266`, `verify_258` | A ficha e as métricas da cliente; o formulário | História 3 |
+| `verify_256` | Os Gastos Extras de Marketing (categorias) | História 2 |
 | `verify_273` (base 8/15), `verify_301` | O 409 novo em `set_event_orcamento`, antes de aplicar a venda e antes da autoria da 301 | História 2 |
 | `verify_272` | `DESTINATARIOS_POR_KIND` ganha dois kinds | História 6 |
 | `verify_238` | `assign_role` ganha a condição do e-mail de remoção | História 6 |
 | `verify_271` | `GET /api/dashboard`: Performance (História 3) e cobrança da Home (História 5) | História 3 |
 | `verify_307` | Arquivos em comum com a 307 (`orcamento_evento_ops.py`, `orcamento/quote_ops.py`, `calendar/routes.py`) | História 2 |
 
+- **Em todo fechamento de fase** (T019, T032, T059, T069, T075, T085, T093) roda o `verify_306.py --regressao`
+  inteiro, contra a base gravada na primeira rodada (com as reescritas do `verify_303` e do `verify_267` a partir
+  da História 2): a coluna "Fase" acima diz onde cada um pode quebrar primeiro, não onde ele começa a rodar.
 - O `verify_305` roda sem `--regressao`. A regressão dele repete 267b, 215b, 267c e 267, e traz o 273 com
   base conhecida de 8/15; o 273 entra aqui por conta própria, comparado com essa base.
 - Os verifies de `scripts/db/` não rodam: o `verify_151_excluir_sync.py`, por exemplo, falaria com o Google
@@ -416,7 +428,8 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
    - o erro aparece no campo, sem apagar o que foi digitado;
    - depois de confirmar, o resultado do item 8 bate com a prévia.
 2. (H5) Principal de grupo: a lista dos dias vivos e "Cancelar todos os dias", sem o aviso antigo de líder.
-3. (H5) Dia que não é o principal: "Novo valor da venda" é obrigatório.
+3. (H5) Dia que não é o principal: "Novo valor da venda" é obrigatório; o diálogo não oferece "Tudo" nem o bloco
+   de imposto, e mostra a devolução mínima que a prévia devolve.
 4. (H6) Show com cachê pago: a recusa diz qual dia, não tem botão de cancelar e aponta Gastos Extras.
 5. (H6) Show com escalados: o bloco "Multa ao elenco" tem uma linha por escalação (artista, vaga e dia), o
    cachê de referência, "faltavam N dias" e o aviso de talento sem PIX. Campo vazio = sem multa.
@@ -478,12 +491,14 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
     - no detalhe dos itens de comissão, as linhas (`commission_lines`), inclusive as de valor negativo.
 18. (H5) Painel "Grupo comercial" com um dia cancelado:
     - sem "Agrupar mais um" nem "Desfazer" no dia cancelado;
+    - o principal vivo não oferece "Remover" para o dia cancelado;
     - o KPI do principal sem o custo dele.
 19. (H3) DRE nova (`/financeiro`) e antiga do mês corrente, iguais ao centavo:
     - a linha "Retido de cancelamentos" traz a soma dos retidos do mês;
     - o resultado é o de antes + retido − imposto − BV do retido − comissão do retido. No evento-exemplo
       com nota e imposto 64, isso dá +278 (+342 sem nota), nunca −600;
-    - o mês do evento fica sem nada.
+    - o mês do evento fica sem nada;
+    - a linha dos impostos tem o aviso "+ imposto informado de N cancelamento(s)" nas duas telas.
 20. (H3) O retido no vendedor congelado: a sublinha "de N cancelamentos" no Dashboard Comercial (`/vendas`)
     e o retido e os cancelados em `/admin/desempenho`.
 21. (H2) `/events/cancelamentos` (Superadmin):
