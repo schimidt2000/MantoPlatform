@@ -18,7 +18,9 @@ da 303 (D34).
 - **Texto de partida**: as Histórias 3 (parte do dinheiro), 4 e 7 de
   `specs/303-sync-nao-apaga-venda/entregas-2-e-3-rascunho.md`, com as correções do plano (L3424-3432).
 - **224g**: esta entrega a absorve (L122-131).
-- **Base de código**: `main` em `d855d1a`, já com 303, 215b, 267c e 305.
+- **Base de código**: `main` em `6356b80`, já com 303, 215b, 267c, 305 e 307 (rebase de 16/10). A spec nasceu sobre
+  `d855d1a`; a 307 não trouxe migration nem mexeu em código que a 306 altera, só deslocou linhas, e as citações
+  `arquivo:linha` destes artefatos foram reconferidas contra `6356b80`.
 - **Citações `arquivo:linha` do plano**: são de `f6ad283` (01/10). Depois disso, `comissoes_ops.py`,
   `agenda_write.py`, `comercial_ops.py`, `event_ops.py` e `financeiro/routes.py` mudaram, então o
   `/speckit-plan` reconfere cada citação contra o HEAD.
@@ -470,12 +472,33 @@ a 6a reusam (constantes, funções e listas) estão na tabela única do `data-mo
 18. **Verificação e docs** — 59 cenários (entram 37b e 38c); 12 e 32 fecham sem a DRE na História 2 e com ela na
     3; a multa do 21 é semeada por ORM; `docs/00` §4 e §6 e uma linha em `docs/01` §4.3 por porta alterada.
 
+### Session 2026-10-16 (`/speckit-checklist`) — o que os checklists de dinheiro e de regressão acrescentaram
+
+Nenhuma decisão do dono foi reaberta. São escolhas técnicas ou derivações, cada uma no requisito que muda; o
+registro item a item está em `checklists/dinheiro.md` e `checklists/regressao.md`.
+
+1. **Base** — rebase sobre `6356b80` (307 em produção); citações reconferidas; `verify_307` na lista.
+2. **Devolução travada pela edição** (FR-019) — o `PATCH` recusa o gasto que passaria a ser devolução de cancelado.
+3. **BV pago com outro valor no editor do cancelado** (FR-052) — mantém o gravado, como no vivo; sem 409 novo.
+4. **Grupo** — a pendente de qualquer dia recusa o ato (FR-012); a comissão própria de outro dia fica fora da
+   conta também no "todos" e no corte (FR-030, P-51, derivada da 1b-Q3 = A); o alvo dos outros beneficiários é 0
+   (FR-030, derivado da Q16 = A).
+5. **Corte** — piso da devolução para a cliente não ficar com mais pago que a venda nova; o cheio cai na proporção e
+   o desconto em reais cai com ele (FR-056).
+6. **"Alterar devolução" no grupo** — o piso soma os dias cortados; as devoluções abertas dos `satelite` absorvem
+   depois da do principal (FR-017).
+7. **Travas no vivo** — comprovante trava o grupo também no vivo; reembolsos, parcelas e notas, só o evento (FR-053).
+8. **Contas** — arredondamento e tolerância de R$ 0,01 (FR-028); a referência do imposto (FR-009); o teto de 24
+   ciclos (FR-031); as chaves do Dashboard Comercial (FR-046).
+9. **Regressão** — seis regressões `main` × branch com cenário (SC-002, `retrato_main_branch.py`); o recorte do
+   SC-008; mudanças intencionais e rollback listados por inteiro; mais seis verifies antigos.
+
 ## Cenários e Verificação *(obrigatório)*
 
 É uma entrega só (D34, L163-166). O `tasks.md` fecha as Histórias **nesta ordem**, cada uma com os cenários dela
 verdes antes de abrir a seguinte, para um corte por limite de uso não deixar dinheiro pela metade (L3517-3520):
 
-1. **Fundação**: migration, modelos e constantes; `verify_306.py`, `dre_retrato.py` e `contagem_pre_deploy.py`
+1. **Fundação**: migration, modelos e constantes; `verify_306.py`, `retrato_main_branch.py` e `contagem_pre_deploy.py`
    nascem vermelhos; comissão cheia em duas camadas, com a regra de hoje da comissão do evento vivo intocada;
    resumo do cancelado e `cancelados_do_periodo` (L3446-3449);
    cenários 1, 23 e 26.
@@ -638,7 +661,8 @@ comissão cheia de R$ 90. A cliente pagou R$ 1.000 e recebeu R$ 600 de volta, se
    A prévia não grava nada, e o que ela mostra é o que o ato grava logo depois, nos dias 1 a 5 e depois do dia 5.
 8. **Dado** um cancelado com a devolução de 600 aberta (sem BV, comissão de 20 a pagar), **Quando** o Superadmin
    altera para 800, **Então** a comissão vira 10. Nos outros casos:
-   - com a comissão já paga, 800 → 500 gera ajuste de +15;
+   - com a comissão de 100 já paga (e o ajuste de −90 a pagar), 800 → 500: o ajuste vai de −90 para −75 **no
+     lugar** (Σ 25); se o −90 já estiver liquidado, nasce +15 no primeiro repasse aberto;
    - diminuir uma devolução já paga → 409;
    - duas alterações simultâneas de "Nada" para 300 → um complemento só.
 
@@ -785,7 +809,7 @@ evento sem vendedor); o satélite cancelado do 16b fecha na História 5.
    - o acréscimo mantém a mesma identidade;
    - a Planilha do mês do evento mostra o PIX novo;
    - mudar o transporte não mexe no congelado;
-   - mandar o BV pago com outro valor → 409;
+   - mandar o BV pago com outro valor → o valor pago fica, como no evento vivo (FR-052);
    - deixar o BV pago fora do corpo → 400 `items`, nada gravado e o pago intacto;
    - um acréscimo novo nasce;
    - o reembolso grava sem mexer no retido;
@@ -850,8 +874,9 @@ fica comum depois da 3b. É a costura natural se o dono quiser dividir a entrega
 4. **Dado** "Cancelar só este dia" **no principal**, **Quando** confirmado, **Então**:
    - a venda inteira passa ao dia vivo mais cedo, e o diálogo diz qual antes de confirmar;
    - cada linha mantém id, valor, datas, estado e beneficiário, e só o vínculo muda;
-   - as somas de comprovantes, acréscimos, comissões e devolução, e DRE, Planilha, Comissões, Dashboard Comercial
-     e cobrança ficam **iguais** antes e depois;
+   - as somas de comprovantes, acréscimos, comissões e devolução ficam **iguais** antes e depois, em qualquer mês;
+   - com o novo 1º dia no **mesmo mês**, DRE, Planilha, Comissões, Dashboard Comercial e cobrança também ficam
+     iguais; noutro mês, vale o aceite 5;
    - o antigo 1º dia cancela como `dia`.
 5. **Dado** o novo 1º dia noutro mês (31/10 → 01/11), **Então**:
    - receita, imposto, BV, cachês e comissão vão à DRE de novembro, e o BV à Planilha de novembro;
@@ -1078,7 +1103,12 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   Planilha do mês do cancelamento (L767-769, L1973).
 - **FR-009**: Evento com nota DEVE exigir o imposto sobre o retido, em reais, de zero para cima, num campo vazio
   com "16% do retido" ao lado só como referência (D32). Sem nota, o bloco não aparece, e um imposto enviado sem nota
-  dá 400 `fields.imposto_retido`. O imposto pode ser alterado depois (FR-017) (L691-692, L1547).
+  dá 400 `fields.imposto_retido`, como no corte de um dia, que não tem retido. O imposto pode ser alterado depois
+  (FR-017) (L691-692, L1547).
+  - **A referência** (Living Spec do checklist): "16%" é o valor de hoje, não um literal. O rótulo mostra a
+    alíquota que o servidor manda (`imposto_aliquota`, a de Configurações; vazia, vale 16), e a referência
+    (`imposto_referencia`) é alíquota × retido, ao centavo com `ROUND_HALF_UP`. É só sugestão: a DRE lança o valor
+    digitado.
 - **FR-010**: No regime `venda`, todo BV **não pago** cuja proporção do retido dá mais que zero DEVE ter recebedor
   e PIX, vindos do acréscimo ou do diálogo.
   - Faltando, a resposta é 400 `bv_pix_<acrescimo_id>` e nada é gravado.
@@ -1102,7 +1132,10 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   data do repasse e BV do retido) DEVE ser o que o ato grava logo depois, também nos dias 1 a 5, quando o ajuste
   pode cair no ciclo anterior. A prova é a variante "prévia = execução" do 2 e do 8.
 - **FR-012**: O sistema DEVE recusar com 409, sem gravar nada:
-  - devolução "Devolução a cliente" **pendente** ligada ao evento ("aprove ou rejeite antes de cancelar");
+  - devolução "Devolução a cliente" **pendente** ligada ao evento ("aprove ou rejeite antes de cancelar"). Num
+    grupo, vale a pendente ligada a **qualquer dia** do grupo, no "Cancelar todos os dias" e no corte, porque o
+    teto da devolução lê o "já devolvido" do grupo e a pendente aprovada depois o mudaria; a frase diz qual dia
+    (extra `dias`, como no `cache_pago`) (Living Spec do checklist);
   - evento já cancelado;
   - "Tudo" diferente do que o servidor calcula, devolvendo `max_devolucao`;
   - cancelamento simultâneo (o registro único estoura).
@@ -1148,6 +1181,14 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **FR-017**: O Superadmin DEVE poder **alterar a devolução** do cancelado, informando o **novo total devolvido**
   e, se quiser, nome, PIX, observação e imposto (D28, D36; L788-799, L1515).
   - **Limites**: o piso são as devoluções pagas ou no banco; o teto é o pago.
+  - **No `venda` em grupo** (Living Spec do checklist; data-model §7.2): o novo total é o devolvido do **grupo**.
+    - O piso soma as devoluções pagas ou no banco de todos os dias **e** as devoluções aprovadas dos dias
+      cortados antes (regime `dia`), que contam como fixas, porque só o "Alterar devolução" daquele dia as muda.
+    - A devolução aberta do principal absorve a diferença primeiro. Depois dela, as abertas dos dias que
+      cancelaram junto (regime `satelite`, lançadas antes do ato), em ordem de id: sem isso, uma devolução lançada
+      antes num satélite ficaria sem caminho de correção, porque o satélite não tem "Alterar devolução" próprio e
+      Gastos Extras a trava.
+    - O teto é o pago do grupo.
   - **Como a diferença entra**: a devolução aberta absorve a diferença e fica uma só; se zerar, é excluída com
     auditoria. Sem devolução aberta e acima do piso, nasce um complemento à cliente, na Planilha do mês em que
     nasce. Vale também para o cancelado com "Nada".
@@ -1189,6 +1230,12 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   - **Travados**: valor, data, categoria, vínculo e exclusão, recusados com 409, `fields` e o evento. A recusa
     vale quando o campo chega **diferente** do gravado, não só quando chega.
   - **Livres**: nome, PIX e descrição.
+  - **Caminho inverso pela edição** (Living Spec do checklist): o `PATCH` recusa com o mesmo 409
+    `devolucao_travada` o gasto que **passaria a ser** devolução de cancelado: um gasto ligado a evento cancelado
+    que troca a categoria para "Devolução a cliente" (inclusive uma multa, que é livre), e uma devolução de evento
+    vivo religada a um cancelado pelo `event_id`. É a mesma regra que o criar e o vincular já seguem: o
+    predicado vale para o gasto gravado **e** para o gasto como ficaria, e os dois eventos travam em ordem de id.
+    Sem isso, o devolvido mudaria sem refazer o retido e passaria do teto (SC-006).
   - Aprovar e rejeitar devolução de cancelado também são recusados.
   - O estado de pagamento (pago, no banco, desfazer) continua pela Planilha, fora da trava. Na Planilha nova,
     marcar pago ou no banco confere o valor que a tela mostrou (FR-040).
@@ -1295,6 +1342,10 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **FR-028**: A comissão do retido DEVE ser mín(cheia, arredondada(cheia × retido ÷ venda)). Vale 0 quando venda,
   retido ou cheia são menores ou iguais a zero. Pago maior que a venda dá a cheia (D14, D25, Q2; L775-777,
   L1969).
+  - **Arredondamento e tolerância** (Living Spec do checklist): "arredondada" é ao centavo, com `ROUND_HALF_UP`,
+    na comissão e no BV do retido (FR-039), pela mesma conta de proporção da 305. Ela herda a tolerância de
+    R$ 0,01: retido a até um centavo da venda vale o cheio, porque um centavo de diferença não é desconto. É a
+    borda que decide o número quando o cliente pagou a venda inteira com um centavo de arredondamento.
 - **FR-029**: A taxa usada no ato DEVE ficar congelada (L884-898, L903-906, L1179-1180).
   - **Qual taxa**: a do evento, se houver; senão a configurada na data de venda (1e-Q2). Até a 1e subir, é a
     padrão do dia do ato (hoje 2,5%). No EducaManto, a do dia, até o repensar da 1e-Q1 (L3113-3117,
@@ -1306,6 +1357,13 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **FR-030**: A reconciliação DEVE manter, **por beneficiário**, Σ (a pagar + no banco + pago) = alvo. Ela é
   idempotente e trabalha com todas as linhas ainda ligadas ao evento (L907-918, L1942).
   - Linha paga ou no banco nunca é reescrita.
+  - **O alvo de cada beneficiário**: a comissão do retido para o beneficiário congelado e 0 para todo outro
+    beneficiário com linha viva ligada ao próprio evento. É o caso do vendedor trocado no evento vivo antes do ato,
+    que devolve o que recebeu no primeiro repasse aberto dele (derivado da Q16 = A, a mesma regra da troca de
+    vendedor no cancelado; no espelho, zero casos fora do 287, que é o da linha abaixo).
+  - **Só as linhas do evento**: num grupo, a comissão própria de outro dia (a linha com o `event_id` do satélite,
+    molde do 287) fica fora da conta no "Cancelar todos os dias", no corte e na passagem (P-29, P-51): não é
+    reconciliada, cancelada nem ajustada.
   - falta = alvo − liquidadas.
   - Falta = 0: toda linha a pagar vira cancelada, e nunca fica linha a pagar de R$ 0,00.
   - Falta ≠ 0: a linha a pagar mais antiga recebe a falta, e as outras são canceladas.
@@ -1315,7 +1373,9 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
     nada nasce.
 - **FR-031**: Linha nova DEVE cair no **primeiro repasse aberto** do beneficiário (D14; L960-969).
   - **Qual ciclo**: o do mês anterior, só nos dias 1 a 5 e só se o beneficiário ainda tem ali uma linha que abre
-    ciclo; senão o mês corrente; senão o seguinte.
+    ciclo; senão o mês corrente; senão o seguinte. Um ciclo está **liquidado** quando o beneficiário tem linha
+    nele e nenhuma abre ciclo; a busca avança no máximo 24 ciclos e, sem achar, usa o ciclo corrente (Living Spec
+    do checklist; R5).
   - **Datas da linha**: a data da venda e a de liberação são a de hoje, presa ao intervalo desse ciclo, para que
     Planilha e Comissões mostrem o mesmo.
   - **"Linha que abre ciclo"**: um predicado único — a pagar, valor diferente de zero e ligada a evento (ou sem
@@ -1461,7 +1521,9 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **FR-046**: O retido DEVE contar como venda do **vendedor congelado** no mês do cancelamento (D33; L1072-1078,
   L1634-1635):
   - **Dashboard Comercial**: entra no total vendido e na comissão prevista, com a sublinha "inclui R$ X retidos
-    de N cancelamento(s)".
+    de N cancelamento(s)". O retido entra no total vendido do **vendedor** congelado; a comissão do retido entra na
+    comissão prevista do **beneficiário** congelado, que no EducaManto não é o vendedor (Living Spec do checklist;
+    R22).
   - **Top Vendedores** das duas DREs.
   - **`/admin/desempenho`**: retido e cancelados por vendedor; o cancelado sai do mês do evento.
   - **Só venda viva**: ticket médio, eventos fechados e desconto concedido.
@@ -1548,7 +1610,11 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   - item sem `id` nasce;
   - item ausente e não pago sai; BV pago (ou no banco) ausente do corpo → 400 `items`, como no evento vivo (305,
     `comercial_ops.py:283-293`; leitura 6), e nada é gravado;
-  - BV pago que chega diferente → 409 (FR-040, "BV pago nunca reescrito");
+  - BV pago (ou no banco) que chega com outro valor ou unidade **mantém o gravado**, como no evento vivo (305,
+    `comercial_ops.py:337-338`): o corpo não o reescreve (FR-040, "BV pago nunca reescrito") e não há recusa. Só o
+    tipo diferente dá 400, também como no vivo. *(Living Spec do checklist: a redação anterior pedia um 409 sem
+    `codigo`, e o mesmo corpo teria dois contratos, o do vivo e o do cancelado, o que a leitura 6 evitou no BV
+    ausente.)*;
   - nunca apagar e recriar: isso trocaria a identidade que o congelado guarda e perderia o estado do BV pago;
   - o PIX do BV só vai a quem passa na regra da FR-047;
   - na tela, o BV já pago é só leitura;
@@ -1557,6 +1623,13 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
 - **FR-053**: Reembolsos (lançar, marcar cobrado, excluir), cronograma de parcelas, notas fiscais e o resto da
   venda (d) DEVEM ser aceitos no cancelado pela regra da FR-047, sem mexer no congelado. A "nota a emitir" do
   retido se resolve pelas rotas de notas (L1131-1137, L1155-1157).
+  - **Travas no evento vivo** (Living Spec do checklist): o comprovante mexe no pago do grupo, que o ato lê sob
+    a trava do grupo, então as três portas de comprovante travam o grupo **também no evento vivo**, antes de saber se
+    está cancelado. Reembolsos, parcelas e notas não mexem no dinheiro do retido: travam só o próprio evento, como
+    a 305 faz, e releem se ele está cancelado. No vivo, depois da trava, tudo segue como hoje, com as mesmas
+    respostas e a mesma ordem de recusas; as únicas respostas novas aparecem sob concorrência (409 `tente_de_novo`
+    num deadlock com o ato e, no comprovante, 409 `grupo_mudou` se o grupo mudou enquanto esperava). O cenário 16
+    confere a porta viva.
 
 **Venda de vários dias**
 
@@ -1581,12 +1654,22 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
     - o motivo;
     - o **novo valor da venda**: obrigatório, maior que zero e não acima da venda atual. O rótulo diz que é o
       total que a cliente paga depois do corte, ou seja, os dias que ficam mais o que a Manto retém do dia;
-    - a devolução, só em Parte ou Nada, com teto = pago do grupo − já devolvido.
+    - a devolução, só em Parte ou Nada, com teto = pago do grupo − já devolvido;
+    - **e com piso** (Living Spec do checklist): o corte não pode deixar a cliente com mais pago do que a venda
+      nova. A devolução DEVE ser pelo menos (pago do grupo − já devolvido − venda nova), descontado o que ela já
+      tinha pago a mais antes do corte (pago do grupo − já devolvido − venda atual, se positivo). Abaixo disso,
+      400 `fields.devolucao_valor` na Parte, ou `fields.devolucao_modo` no "Nada": "A cliente pagou R$ X: devolva
+      pelo menos R$ Y ou aumente o novo valor da venda." Exemplo: venda de 3.000 quitada e venda nova de 2.000 →
+      devolução mínima de 1.000. Sem isso, os 1.000 ficariam fora do retido, da venda e da devolução, e a cobrança
+      da Home mostraria −1.000.
   - **A devolução**: nasce ligada ao **dia**. Fica fora dos gastos extras da DRE e dentro do "já devolvido" do
     grupo. Corrige-se pelo "Alterar devolução" do dia cancelado (FR-017, clarify de 15/10 = A).
   - **O principal**:
     - continua vivo, com a venda nova e histórico, na DRE do mês do evento;
-    - o valor cheio cai na mesma proporção, então o selo de % e o "desconto concedido" não mudam;
+    - o valor cheio cai na mesma proporção (cheio novo = cheio × venda nova ÷ venda antiga, ao centavo com
+      `ROUND_HALF_UP`). O que não muda é o **percentual** do desconto (o selo de %); o desconto concedido em
+      **reais** cai na mesma proporção (300 → 200 no cenário 38), e o corte nunca aumenta o desconto (Living Spec do
+      checklist: a redação anterior dizia que o "desconto concedido" não mudava);
     - o BV **não pago** acompanha na mesma proporção, **uma vez só** (não passa também pelo acompanhamento
       automático da 305);
     - o BV pago fica.
@@ -1826,7 +1909,7 @@ TypeScript. São 18:
 | `grupo_mudou` | `POST …/cancelar` (o dia indicado ou a composição do grupo mudou) e os comprovantes do grupo |
 | `sem_outro_dia_vivo` | `POST …/cancelar` com `"so_este_dia"` num principal sem outro dia vivo |
 | `cache_pago` | `POST …/cancelar`, com `dias` |
-| `devolucao_pendente` | `POST …/cancelar` |
+| `devolucao_pendente` | `POST …/cancelar`, com `dias` no grupo (a pendente de qualquer dia) |
 | `max_devolucao_mudou` | `POST …/cancelar` com "Tudo" divergente, com `max_devolucao` |
 | `tente_de_novo` | deadlock residual nos endpoints desta entrega |
 | `nao_cancelado` | `PATCH …/devolucao` e `POST …/multas` em evento vivo |
@@ -1836,7 +1919,7 @@ TypeScript. São 18:
 | `pago_abaixo_do_devolvido` | editar ou excluir comprovante, com `pago` e `devolvido` |
 | `bv_nao_esta_a_pagar` | `POST /api/financeiro/pagamentos/set-status` no BV |
 | `devolucao_travada` | as seis portas de Gastos Extras, com `fields` e `event_id` |
-| `estado_mudou` | `PATCH …/comercial`, quando o evento muda de estado entre a leitura e a trava |
+| `estado_mudou` | `PATCH …/comercial` e `PUT …/acrescimos` do evento vivo, quando ele vira cancelado entre a leitura e a trava |
 | `valor_mudou` | `POST /api/financeiro/pagamentos/set-status`, BV ou devolução de cancelado com `valor_esperado` divergente (o 409 da 305 ganha o código) |
 
 O 409 de valor divergente ao marcar BV ou devolução na Planilha segue o formato da 305: a frase traz o valor atual,
@@ -1851,7 +1934,11 @@ agora com `codigo: "valor_mudou"`.
   - **400** em `fields.motivo`, `devolucao_modo`, `devolucao_valor`, `devolucao_nome`, `devolucao_pix`,
     `imposto_retido` (também quando enviado sem nota), `venda_nova`, `alcance`, `multa_<role_id>` (negativa ou
     inválida, ou vaga fora dos dias alcançados; vazia ou 0 é ignorada) e `bv_pix_<acrescimo_id>`, todos de uma vez.
-  - **409** (depois de travar o grupo; a ordem está em `contracts/api.md` §1): `ja_cancelado`; `ensaio`;
+  - **Ordem** (a de `contracts/api.md` §1): 401 → 404 → 403 → trava do grupo → 409 `ja_cancelado` → 409 `ensaio` →
+    400 `alcance` → 409 `sem_outro_dia_vivo` → 409 `grupo_mudou` → 409 `cache_pago` → 409 `devolucao_pendente` →
+    400 nos campos, todos de uma vez → 409 `max_devolucao_mudou`. Os 400 de campo vêm **depois** da trava, porque
+    dependem do pago, do regime e da nota relidos nela.
+  - **409** (depois de travar o grupo): `ja_cancelado`; `ensaio`;
     `sem_outro_dia_vivo` (`"so_este_dia"` num principal sem outro dia vivo; L1983, cenário 42d); `grupo_mudou`;
     `cache_pago` (com `dias`); `devolucao_pendente`; `max_devolucao_mudou` ("Tudo" divergente, com
     `max_devolucao`). O registro único que estoura na concorrência vira `ja_cancelado`, e o deadlock,
@@ -1879,7 +1966,7 @@ agora com `codigo: "valor_mudou"`.
   - **Corpo e resposta**: `{devolucao_total, nome?, pix?, observacao?, imposto_retido?}` → `{ok, resumo}`.
   - **Ordem**: 401 → 404 → 403 → 400 só se `devolucao_total` faltar ou não for número → trava → 409
     `nao_cancelado` → 409 `regime_sem_retido` (`satelite`, `virtual`) → 400 nos campos → 409 `abaixo_do_piso` (com
-    `piso`: as devoluções pagas ou no banco) → só no dia cortado (`dia`), 409 `acima_do_teto` (com `teto`: o pago
+    `piso`: as devoluções pagas ou no banco e, no `venda` em grupo, as dos dias cortados, FR-017) → só no dia cortado (`dia`), 409 `acima_do_teto` (com `teto`: o pago
     do grupo menos as outras devoluções).
   - **400**: `devolucao_total` (negativo; no `venda` e no `legado`, acima do pago), `devolucao_nome`,
     `devolucao_pix` e `imposto_retido` (no `legado`, no `dia` ou sem nota, leitura 9).
@@ -1889,6 +1976,8 @@ agora com `codigo: "valor_mudou"`.
 - **`POST /api/events/<id>/multas`** (**novo**).
   - **Papéis**: SUPERADMIN pela regra única. 404 vem antes do 403; demais, 403; sem sessão, 401.
   - **Corpo e resposta**: `{multas: [{elenco_id, valor}]}` → `{ok, resumo, gastos: [id]}`.
+  - **Ordem** (a de `contracts/api.md` §4): 401 → 404 → 403 → trava do grupo e do elenco → 409 `nao_cancelado` →
+    400.
   - **409** `nao_cancelado`: evento vivo. **400**: `fields.multa_<elenco_id>` para valor negativo ou inválido,
     artista fora da lista do ato, linha de outro evento ou multa já lançada na linha; valor vazio ou 0 é ignorado.
     Se, ignorados os vazios e zeros, não sobrar nenhuma multa, 400 `fields.multas` ("Informe a multa de ao menos
@@ -1931,7 +2020,8 @@ agora com `codigo: "valor_mudou"`.
   - **409 novos**: `pago_abaixo_do_devolvido` (editar ou excluir que deixa o pago do grupo abaixo do devolvido, com
     `pago` e `devolvido`), `grupo_mudou` e `tente_de_novo`. Um 409 que nasce no `POST` depois de salvar o arquivo
     desfaz tudo e remove o arquivo novo. A resposta continua o detalhe, com `event.cancelamento`.
-- **`PATCH /api/events/<id>/orcamento`**: gate sem mudança; 409 para todos em cancelado.
+- **`PATCH /api/events/<id>/orcamento`**: gate sem mudança (`_can_manage_sale()`: Comercial, Financeiro e Superadmin;
+  Casting e Figurino → 403); em cancelado, 409 `cancelado` para todos os que passam no gate.
 - **`DELETE /api/events/<id>`**: gate sem mudança; 409 em cancelado. A rota Jinja recusa com aviso.
 - **`GET /api/events/<id>`**.
   - **Gate**: sem mudança.
@@ -1974,7 +2064,9 @@ agora com `codigo: "valor_mudou"`.
     `retido?`; Top Vendedores com o retido.
 - **`GET /api/vendas/pipeline`**.
   - **Gate**: sem mudança.
-  - **Contrato**: `kpis.retido_cancelamentos?`, e o retido entra em `total_vendido` e `comissao_prevista`.
+  - **Contrato**: `kpis.retido_cancelamentos?`, `kpis.n_cancelados?` e `kpis.comissao_retido?` (as duas últimas
+    fecham as sublinhas), e o retido entra em `total_vendido` e `comissao_prevista`. O nome `n_cancelados` é o mesmo
+    da DRE.
 - **`GET /api/admin/desempenho`**.
   - **Gate**: sem mudança.
   - **Contrato**: filtra o cancelado; entram `vendas[].retido?`, `cancelados?` e `totals.retido?`.
@@ -2044,8 +2136,8 @@ Eventos SHOW só com vaga existente com `talent_id IS NULL`; nunca `EventRole` i
 | 2 | Superadmin cancela evento vivo com "Parte" de 600 sobre 1.000 pagos; variante prévia = execução, com `hoje` no dia 2 e no dia 10: `GET …/impacto-exclusao?devolucao=600` antes e o `POST` depois | cancelado; devolução aprovada a pagar de 600 (categoria, `cliente`, nome, PIX); `event_cancellations` com venda, cheia 90 e modo `parte`; retido 400; `EventLog` com modo, devolvido, retido, BV, imposto e hora certa (±5 min); na variante, `retido`, `comissao_retido`, `ajuste`, `ciclo`, `repasse_em` e `bv_retido` da prévia iguais ao gravado, e o GET não grava nada (retrato pela conexão separada; a mutação "simular escreve" acusa) | não | 2 | L1933; plan (Living Spec 14) |
 | 2b | O mesmo em evento marcado pela 303 (`google_missing_since` preenchido) | Google chamado zero vezes; a marca sai com motivo `cancelado`; sem `aviso` do Google; elenco e equipe de Ensaio avisados como em todo cancelamento | não | 2 (aviso: 6) | L1934 |
 | 3 | "Tudo" (envia `max_devolucao`), "Nada", e "Tudo" divergente (outra devolução aprovada antes) | Tudo preenche o total; Nada não gera gasto e retido = pago; divergente → 409 com `max_devolucao` | **sim** (o divergente) | 2 | L1935 |
-| 4 | Sem `modo`; valor acima do pago; Parte sem nome ou PIX; nota sem imposto; imposto enviado sem nota; `?devolucao=` inválido; corte de um dia sem `venda_nova`, com zero, acima da venda ou com "tudo"; multa negativa ou com `role_id` de outro evento; BV a pagar com proporção > 0 sem PIX e sem `bvs` (variante: com `bvs`) | 400 com o campo certo (`bv_pix_<id>` no BV) e nada gravado; na variante, cancela, o PIX vai ao acréscimo e a Planilha do mês do evento mostra o BV proporcional com ele | **sim** (menos a variante) | 2 (corte: 5; multa: 6) | L1936 |
-| 5 | Devolução pendente ligada; evento já cancelado; clique duplo | 409 nos três; uma linha só em `event_cancellations` | **sim** | 2 | L1937 |
+| 4 | Sem `modo`; valor acima do pago; Parte sem nome ou PIX; nota sem imposto; imposto enviado sem nota; `?devolucao=` inválido; corte de um dia sem `venda_nova`, com zero, acima da venda, com "tudo", com imposto, ou com devolução abaixo do mínimo (venda 3.000 quitada, venda nova 2.000, "Nada" e Parte de 500); multa negativa ou com `role_id` de outro evento; BV a pagar com proporção > 0 sem PIX e sem `bvs` (variante: com `bvs`) | 400 com o campo certo (`bv_pix_<id>` no BV) e nada gravado; na variante, cancela, o PIX vai ao acréscimo e a Planilha do mês do evento mostra o BV proporcional com ele | **sim** (menos a variante) | 2 (corte: 5; multa: 6) | L1936 |
+| 5 | Devolução pendente ligada; evento já cancelado; clique duplo; variante 5-grupo (roda com a História 5): pendente ligada a um satélite, no "Cancelar todos os dias" e no corte de outro dia | 409 nos três; uma linha só em `event_cancellations`; na variante, 409 `devolucao_pendente` com `dias` = o satélite, nos dois, sem gravar nada | **sim** | 2 (variante: 5) | L1937; checklist CHK033 |
 | 6 | COMERCIAL real (não "Ver como") tenta cancelar, alterar a devolução e ler a prévia; FINANCEIRO tenta alterar; FIGURINO tenta | 403 em todos. A leitura de `/events/cancelamentos` pelo FINANCEIRO sai daqui e vai à 1c (leitura 1 desta spec) | **sim** | 2 | L1938 |
 | 7 | Comissão a pagar de 100; cancela com 400 retidos (variante com BV: cheia 90) | a linha vira 20 (18) no lugar, mesmo evento e mesma data; nunca acima da cheia | não | 1 (fecha com a 2) | L1939 |
 | 8 | Comissão paga de 100, mesmo cancelamento; `hoje` = dia 2 (com e sem `a_pagar` em M−1) e dia 10; variante prévia = execução nos mesmos `hoje`: a prévia antes e o `POST` depois | paga intacta; −80 com `sale_date = payable_from` = primeiro repasse aberto; liquidado não reabre; no dia 2 com `a_pagar` em M−1, cai em M−1; na variante, o `ajuste` (−80), o `ciclo` e o `repasse_em` da prévia são os do −80 gravado, e o GET não grava nada | não | 1 (2) | L1940; plan (Living Spec 14) |
@@ -2056,21 +2148,21 @@ Eventos SHOW só com vaga existente com `talent_id IS NULL`; nunca `EventRole` i
 | 13 | Planilha × Comissões por identidade de linhas (vendedor descartável), mês da venda e mês do ajuste | mesmas linhas e mesmo desconto; `total_month == total_paid + total_no_banco + total_pending` | não | 1 | L1945 |
 | 14 | Desconto que zera o repasse; ajuste em ciclo com estorno órfão `a_pagar` | o item de soma zero continua; o órfão não abre ciclo | não | 1 | L1946 |
 | 14b | Exclusão de evento vazio com comissão paga e com comissão no banco (semeado), `hoje` nos dias 2 e 10 | estorno órfão no primeiro repasse aberto, não na data da venda; no banco igual; Planilha do ciclo da venda não reabre; mutação contra a `main` | não | 1 | L1947 |
-| 15 | Alterar devolução: 600 → 800 com comissão 20 a pagar; com a paga, 800 → 500; diminuir devolução paga; "Nada" → 300 em duas chamadas simultâneas | comissão 20 → 10; ajuste +15; recalcula na hora; diminuir paga → 409; um complemento só | **sim** (os dois últimos) | 2 | L1948 |
-| 16 | D36: Superadmin acrescenta comprovante de 200; CASTING acrescenta comprovante e tenta o `PATCH …/devolucao`; pago abaixo do devolvido; variante 16/17-`paid_amount`: o BV do retido (40) marcado pago na Planilha antes do comprovante de 200 e depois desfeito; marcar com valor esperado divergente; marcar BV que não está a pagar | retido 600, comissão 27 e BV de 40 para 60 na Planilha, sem ajuste manual; CASTING recebe 409 no comprovante e 403 no `PATCH`; abaixo do devolvido → 409 `pago_abaixo_do_devolvido`; na variante, o BV pago fica em 40 depois do comprovante (não vira 60, sem acerto ao parceiro) e, desfeito, volta a 60; divergente → 409 com o valor atual; não a pagar → 409 `bv_nao_esta_a_pagar` | **sim** (os dois últimos; na variante, os dois 409) | 2 | L1949; plan (leitura 10, decisão (a)) |
+| 15 | Alterar devolução: 600 → 800 com comissão 20 a pagar; com a paga, 800 → 500; diminuir devolução paga; "Nada" → 300 em duas chamadas simultâneas | comissão 20 → 10; com a paga, o ajuste a pagar vai de −90 a −75 no lugar (Σ 25; nasce +15 só se o −90 estiver liquidado); recalcula na hora; diminuir paga → 409; um complemento só | **sim** (os dois últimos) | 2 | L1948 |
+| 16 | D36: Superadmin acrescenta comprovante de 200; CASTING acrescenta comprovante e tenta o `PATCH …/devolucao`; variante 16-vivo: COMERCIAL acrescenta comprovante, reembolso e parcela num evento vivo avulso e num dia vivo de grupo; pago abaixo do devolvido; variante 16/17-`paid_amount`: o BV do retido (40) marcado pago na Planilha antes do comprovante de 200 e depois desfeito; marcar com valor esperado divergente; marcar BV que não está a pagar | retido 600, comissão 27 e BV de 40 para 60 na Planilha, sem ajuste manual; CASTING recebe 409 no comprovante e 403 no `PATCH`; abaixo do devolvido → 409 `pago_abaixo_do_devolvido`; na variante, o BV pago fica em 40 depois do comprovante (não vira 60, sem acerto ao parceiro) e, desfeito, volta a 60; divergente → 409 com o valor atual; não a pagar → 409 `bv_nao_esta_a_pagar`; no 16-vivo, as respostas e a comissão sincronizada iguais às da `main` | **sim** (os dois últimos; na variante, os dois 409) | 2 | L1949; plan (leitura 10, decisão (a)); checklist regressão CHK010 |
 | 16b | Superadmin corrige dados de venda: venda 2.000 → 2.400 com a comissão paga cheia; taxa 2,5 → 3,0 em cancelado semeado sem taxa própria (variantes: 3,0 → 2,0 e, quando a 1e existir, data de venda em outra taxa); cortesia/permuta; nota fiscal e parcela; satélite cancelado; COMERCIAL no `PATCH …/comercial`; FINANCEIRO lançando nota; variante "cheia 0": cancelar uma cortesia/permuta com valor e um evento sem vendedor | venda e cheia recongeladas; comissão e BV do retido pela proporção; paga intacta e diferença no primeiro repasse aberto; taxa: `commission_rate` 3,0 e diferença para mais com "taxa corrigida" (descendo, desconto); cortesia: cheia 0 e desconto do pago; nota e parcela gravadas e congelado intacto; satélite → 409; COMERCIAL e FINANCEIRO → 409 `cancelado`; na variante, cheia congelada 0 e nenhuma linha de comissão nasce, e a comissão desses eventos vivos, antes do ato, é a de hoje | **sim** (as três últimas) | 4 (satélite: 5; a variante também em modo núcleo na Fundação) | L1950; plan (Living Spec 16) |
 | 16c | Troca de vendedor (retido 400, comissão 18, taxa congelada 5%): (i) cheia 90 paga a A, com −72 a pagar, troca para B; (ii) só a pagar; (iii) B sem comissão; (iv) EducaManto com responsável; (v) COMERCIAL | (i) paga de 90 intacta, −72 vira −90, B ganha +18 no repasse dele, congelado com B, retido sai de A e vai a B no Dashboard e em `/admin/desempenho`; (ii) a de A cancelada e a de B com 18; (iii) ninguém recebe; (iv) só o recorte comercial (variante da 2b no verify dela); (v) 409 `cancelado`; auditoria das linhas de A e B e varredura sem ajuste sem evento ou motivo; mutações: um beneficiário só, nota sem prefixo | **sim** (o v) | 4 | L1951 |
-| 16d | Acréscimos e reembolsos: BV não pago 200 → 300; PIX e recebedor corrigidos; transporte mudado; BV pago com outro valor; BV pago ausente do corpo; acréscimo novo sem id; reembolso lançado e cobrado; COMERCIAL no `PUT …/acrescimos` | BV cheio 300; BV do retido 60; cheia sobre 2.000 − 300 com a taxa congelada; mesmo id antes e depois (mutação por apagar e recriar acusa); PIX novo na Planilha do mês do evento; transporte sem mexer no congelado; BV pago → 409; BV pago ausente → 400 `items`, nada gravado e o pago intacto; o novo nasce; reembolso gravado com retido intacto; COMERCIAL → 409 `cancelado` | **sim** (o pago, o ausente e o COMERCIAL) | 4 | L1952 |
+| 16d | Acréscimos e reembolsos: BV não pago 200 → 300; PIX e recebedor corrigidos; transporte mudado; BV pago com outro valor; BV pago ausente do corpo; acréscimo novo sem id; reembolso lançado e cobrado; COMERCIAL no `PUT …/acrescimos` | BV cheio 300; BV do retido 60; cheia sobre 2.000 − 300 com a taxa congelada; mesmo id antes e depois (mutação por apagar e recriar acusa); PIX novo na Planilha do mês do evento; transporte sem mexer no congelado; BV pago com outro valor → 200 com o valor pago intacto (como no vivo); BV pago ausente → 400 `items`, nada gravado e o pago intacto; o novo nasce; reembolso gravado com retido intacto; COMERCIAL → 409 `cancelado` | **sim** (o ausente e o COMERCIAL) | 4 | L1952 |
 | 16e | Taxa congelada: cancela com a padrão 2,5%; a padrão vai a 3%; corrige venda, troca vendedor, acrescenta comprovante, abre Comissões e Planilha; corrige a taxa do cancelado para 3% à mão | 2,5 no ato e em toda recongelação; a padrão não mexe; só a correção à mão leva a 3 (e refaz a paga para mais); mutação lendo a taxa de hoje salta na primeira correção; configuração volta a 2,5 no `finally` | não | 4 | L1953 |
 | 17 | BV 200 com "Nada" (retido 1.000), "Tudo" (retido 0) e já pago antes; satélite cancelado com BV pago e com BV não pago; variante 16/17-`paid_amount`: o BV pago antes do ato, com "Nada", desfeito na Planilha depois | Planilha (API e Jinja) no mês do evento: 100 / nada / 200 pago intacto / pago do satélite intacto / não pago do satélite fora; regressão `main` × branch dos itens de BV dos meses sem cancelado; na variante, desfeito o pago, a Planilha mostra o proporcional (100) | não | 1 (2; satélite: 5) | L1954; plan (decisão (a)) |
-| 18 | Gastos Extras: "Salvar" sem mexer; corrigir PIX; mudar valor, data, categoria, vínculo ou excluir; aprovar ou rejeitar devolução de cancelado; `POST` tipo `cliente`; `PATCH` fornecedor → cliente; devolução de evento vivo editada | destinatário, nome e PIX mantidos, sem "aprovado com edição"; PIX trocado; travados → 409 com `event_id`; criar ou converter → 400; evento vivo editável | **sim** (os recusados) | 2 | L1955 |
-| 19 | *(reescrito por esta spec, 1c-Q11 = C)* `PATCH …/orcamento` em cancelado, pelo Superadmin e pela COMERCIAL; `DELETE` em cancelado, pelo Superadmin e pela COMERCIAL; `PUT …/acrescimos` pela COMERCIAL e pelo FINANCEIRO | `PATCH …/orcamento` → 409 nos dois; `DELETE` pelo Superadmin → 409 (COMERCIAL → 403, gate de hoje, `agenda_write.py:549-550`); `PUT …/acrescimos` → 409 `cancelado` nos dois; nada muda (o `PUT` do Superadmin é o 16d) | **sim** | 2 | L1956 (superado: "409 nos três"; também L846) |
-| 20 | DRE do mês do cancelamento, API e tela antiga (`template_rendered`); mutação contra a `main` (`git archive`, mesmo banco, relógio fixo) | retido 400; custo +40; comissões +18; gastos extras sem os 600; +342 em Realizado e Total, 0 no Projetado; API = Jinja ao centavo; `main` dá −600 | não | 3 | L1957 |
+| 18 | Gastos Extras: "Salvar" sem mexer; corrigir PIX; mudar valor, data, categoria, vínculo ou excluir; aprovar ou rejeitar devolução de cancelado; `POST` tipo `cliente`; `PATCH` fornecedor → cliente; devolução de evento vivo editada; variante 18-inverso: `PATCH` de um gasto comum e de uma multa ligados ao cancelado trocando a categoria para devolução, e de uma devolução de evento vivo trocando o `event_id` para o cancelado | destinatário, nome e PIX mantidos, sem "aprovado com edição"; PIX trocado; travados → 409 com `event_id`; criar ou converter → 400; evento vivo editável; no inverso, 409 `devolucao_travada` (`fields.category`, `fields.event_id`) e o retido intacto | **sim** (os recusados) | 2 | L1955 |
+| 19 | *(reescrito por esta spec, 1c-Q11 = C)* `PATCH …/orcamento` em cancelado, pelo Superadmin, pela COMERCIAL e pelo FINANCEIRO; `DELETE` em cancelado, pelo Superadmin e pela COMERCIAL; `PUT …/acrescimos` pela COMERCIAL e pelo FINANCEIRO | `PATCH …/orcamento` → 409 nos três; `DELETE` pelo Superadmin → 409 (COMERCIAL → 403, gate de hoje, `agenda_write.py:549-550`); `PUT …/acrescimos` → 409 `cancelado` nos dois; nada muda (o `PUT` do Superadmin é o 16d) | **sim** | 2 | L1956 (superado: "409 nos três"; também L846) |
+| 20 | DRE do mês do cancelamento, API e tela antiga (`template_rendered`); mutação contra a `main` (`git archive`, mesmo banco, relógio fixo) | retido 400; custo +40; comissões +18; gastos extras sem os 600; +342 em Realizado e Total, 0 no Projetado; API = Jinja ao centavo; `main` dá −600; num mês **sem** cancelado, `paineis.cancelamentos.quantidade == 0` e `retido_cancelamentos` e `n_cancelados` presentes nas três DREs (FR-045) | não | 3 | L1957; checklist CHK029 |
 | 21 | Mês do evento; Tendência; com nota (imposto 64); devolução alterada para 800; multa ligada ao cancelado (semeada por ORM, com a categoria "Multa de cancelamento" criada na Fundação); devolução ligada a evento vivo; satélite e virtual cancelados; "Tudo" com BV 200 pago | mês do evento sem nada; Tendência sem os 2.000 e com +400; +64 / +278; retido 200; multa e devolução viva seguem em gastos extras; satélite e virtual sem retido; retido 0, comissão 0, custo +200 | não | 3 (satélite: 5) | L1958 |
 | 22 | Ticket médio, "a receber", Receita por Tipo, Fator R, break-even, Recebimentos Previstos, nota a emitir e Top Vendedores, nas duas telas | ticket e "a receber" iguais; barra 400; Fator R e break-even com o retido; parcela fora; nota com selo; vendedor +400 nas duas | não | 3 | L1959 |
-| 23 | Regressão: DRE e Tendência de todos os meses do espelho sem cancelamento, `main` × branch (`dre_retrato.py`) | idênticas ao centavo, antes de qualquer cancelamento do verify | não | Fundação (verde em todas) | L1960 |
-| 24 | Dashboard Comercial, `/admin/desempenho`, ficha da cliente e Performance da Home, no mês do cancelamento e no do evento | +400 e comissão 18 no mês do cancelamento, nada no do evento; cliente com total 400; Performance sem cargo nem cachê do cancelado | não | 3 | L1961 |
-| 25 | Payload do evento cancelado: `cancelamento` só com `show_comercial`, PIX só com `show_financeiro`, `kpi` ausente, `can_edit_pagamentos` | 1.000 / 600 / 400 / 18 / 40; CASTING sem o bloco | não | 2 | L1962 |
+| 23 | Regressão `main` × branch dos meses sem cancelamento (`retrato_main_branch.py`): DRE (API e Jinja), Tendência e painéis da DRE; Dashboard Comercial; `/admin/desempenho`; ficha de toda cliente com evento; Performance da Home; Comissões (KPIs, `by_seller`, `month_status`); itens de comissão e de BV da Planilha | idênticos ao centavo, antes de qualquer cancelamento do verify, com as mudanças de propósito listadas à parte (SC-002); mutação: somar o retido sem a condição da quantidade de cancelados acusa a diferença | não | Fundação (verde em todas) | L1960; checklist regressão CHK020, CHK021 |
+| 24 | Dashboard Comercial, `/admin/desempenho`, ficha da cliente e Performance da Home, no mês do cancelamento e no do evento | +400 e comissão 18 no mês do cancelamento, nada no do evento; cliente com total 400; Performance sem cargo nem cachê do cancelado; status de pagamento "cancelado"; `/vendas/` Jinja sem o cancelado; "Com evento" e "Recorrentes" da cliente sem ele (FR-046) | não | 3 | L1961; checklist CHK029 |
+| 25 | Payload do evento cancelado: `cancelamento` só com `show_comercial`, PIX só com `show_financeiro`, `kpi` ausente, `can_edit_pagamentos`; no evento **vivo**, `venda.pode_mudar_taxa` e `venda.pode_trocar_vendedor` para Superadmin e COMERCIAL | 1.000 / 600 / 400 / 18 / 40; CASTING sem o bloco; no vivo, as duas flags iguais às da `main` (a 215b intacta) | não | 2 | L1962; checklist regressão CHK009 |
 | 26 | `contagem_pre_deploy.py` em modo leitura; retrato de todas as linhas de comissão do espelho antes e depois do verify inteiro (descontados os semeados) e de abrir Comissões e Planilha | a contagem não escreve nem lista pago a menos ou a mais; nenhuma linha nasce, muda ou é cancelada fora dos eventos do verify (270, 294, 311, 405, 62, 69, 203 e estornos 151 e 211 como estão) | não | Fundação (verde em todas) | L1963 |
 | 27 | Limpeza | descartáveis apagados na ordem abaixo; nenhuma chamada de rede escapou do dublê | — | todas | L1964 |
 | 28 | Sem sessão em `POST …/cancelar`, `PATCH …/devolucao`, `GET …/impacto-exclusao?devolucao=` e `GET /events/cancelamentos`; evento inexistente no `PATCH`; FINANCEIRO cancela e acrescenta comprovante em cancelado; MARKETING, ENSAIO e ARTISTA_3D leem `/events/cancelamentos`; Superadmin "vendo como Comercial" | 401 nos quatro; 404 antes do 403; FINANCEIRO 403 no cancelar e 409 no comprovante; 403 nos três; no "Ver como", `flags.can_delete` e `can_edit_pagamentos` falsas e a API aceita pelo papel real (comportamento de hoje, registrado) | **sim** | 2 | L1965 |
@@ -2082,13 +2174,13 @@ Eventos SHOW só com vaga existente com `talent_id IS NULL`; nunca `EventRole` i
 | 34 | Excluir o usuário que é vendedor congelado de um cancelamento e não é vendedor de evento nenhum | bloqueio "cancelamentos", não 500 | **sim** | 2 | L1971 |
 | 35 | Marcado pela 303 que é principal de grupo; satélite marcado | principal: impacto com `acao: "cancelar"`, leva todos os dias e a marca sai de cada um; satélite: só aquele dia, com `venda_nova`, e a marca sai | não | 5 | L1972 |
 | 36 | Devolução na Planilha: mês em que aparece; complemento de "Alterar devolução"; marcar pago, no banco e desfazer | mês do cancelamento; complemento no mês em que nasce; a trava de Gastos Extras não alcança o status de pagamento | não | 2 | L1973 |
-| 37 | Grupo semeado (principal com venda 3.000 e 2 dias; comprovantes de 1.000 no principal e 500 num dia; comissão 75 a pagar): "Cancelar todos os dias" com Parte 900 | 3 dias numa transação, sem desagrupar; pago 1.500; retido 600; comissão 15 no lugar; um `EventLog` por dia; linhas `venda` e `satelite` com o principal; 3 remoções no dublê depois do commit; dia já cancelado intocado | não | 5 | L1974 |
+| 37 | Grupo semeado (principal com venda 3.000 e 2 dias; comprovantes de 1.000 no principal e 500 num dia; comissão 75 a pagar): "Cancelar todos os dias" com Parte 900 | 3 dias numa transação, sem desagrupar; pago 1.500; retido 600; comissão 15 no lugar; um `EventLog` por dia; linhas `venda` e `satelite` com o principal; 3 remoções no dublê depois do commit; dia já cancelado intocado; uma comissão própria paga semeada num satélite (molde do 287) fica paga e fora da conta (P-51); variante 37-devolução: uma devolução de 200 lançada antes num satélite e, depois do ato, o ato com Parte 900 (total devolvido 1.100) e o "Alterar devolução" do principal de 1.100 para 100 → a do principal (900) é excluída e a do satélite cai a 100, com auditoria nas duas (FR-017) | não | 5 | L1974 |
 | 37b | O grupo do 37, já cancelado inteiro: o Superadmin acrescenta um comprovante de 200 num dia `satelite` | pago do grupo 1.700; retido do principal 600 → 800 e comissão do retido 15 → 20 no lugar, na mesma transação e sem ajuste manual; a linha `satelite` continua sem dinheiro próprio; `EventLog` no dia e no principal; a resposta é o detalhe do dia | não | 5 | plan (Living Spec 4; decisão (c)) |
 | 38 | Grupo vivo: "Cancelar só este dia" num satélite, `venda_nova` 2.000, Parte 300; comissão do principal a pagar e, na variante, paga; *(clarify 15/10 = A)* depois, "Alterar devolução" do dia cancelado: 300 → 30 e, à parte, acima do teto do grupo; variante 38-comprovante: o Superadmin acrescenta um comprovante no dia cortado e, num grupo semeado para isso, corrige um comprovante do dia deixando o pago do grupo abaixo do devolvido | linha `dia` 3.000 → 2.000; principal vivo com 2.000 e `EventLog`; a pagar vira 50; paga: 75 intacta e −25 no primeiro repasse aberto com `original_id`; devolução de 300 ligada ao dia, fora dos gastos extras da DRE e dentro do "já devolvido"; DRE do mês do evento com 2.000; BV não pago na proporção; cheio 3.300 → 2.200 (selo de 10% igual, desconto 300 → 200); dia no grupo; Home com 800 a receber; alterada para 30: devolução do dia 30, "já devolvido" e cobrança da Home refeitos, comissão do principal e linha `dia` intactas, com auditoria; acima do teto → 409 `acima_do_teto`; na variante 38-comprovante, nada se refaz (comissão do principal e linha `dia` intactas; a cobrança da Home relê o pago) e o abaixo do devolvido → 409 `pago_abaixo_do_devolvido`, sem gravar nada | **sim** (o acima do teto; na variante, o abaixo do devolvido) | 5 | L1975; plan (Living Spec 4) |
 | 38c | Grupo vivo semeado (venda 4.000 a 2,5%, comissão de 100 do principal **paga**): "Cancelar só este dia" num satélite, `venda_nova` 3.000, "Nada"; depois, o Superadmin desfaz o "pago" da base pela Planilha (267c); depois, abrir Comissões e a Planilha (resync) | depois do corte: 100 paga + −25 a pagar (Σ 75); depois do desfazer: 100 a pagar + −25 a pagar (Σ 75); depois do resync: base 75 no lugar e o −25 cancelado (Σ 75), nunca 75 − 25 = 50; com a base ainda paga, o resync não mexe; a mutação sem a regra nova da sincronização dá Σ 50 | não | 5 (a regra da sincronização nasce na 1) | plan (Living Spec 2; decisão (b)) |
 | 39 | Depois do 38: gravar a aba Comercial do principal; abrir Comissões e Planilha; cancelar o resto do grupo; variante: depois de cancelar o resto, "Alterar devolução" do dia cortado | o −25 não é sobrescrito; o cancelamento do resto soma os 300 no "já devolvido" e o teto do "Tudo" os desconta; na variante, o "já devolvido" muda pela diferença, e o retido e a comissão do retido do principal se refazem na mesma transação (D28), com o ajuste da paga no primeiro repasse aberto | não | 5 | L1976; plan (Living Spec 6, derivado da D28) |
 | 40 | Soltar o dia cancelado (API e Jinja); agrupar com ele; dia com cachê pago no "Cancelar todos os dias"; ENSAIO pela API de cancelar | 409 nos quatro: desagrupar; agrupamento; `cache_pago` dizendo qual dia, sem gravar nada em dia nenhum; `ensaio` | **sim** | 6 (os dois primeiros passam com a 5) | L1977 |
-| 41 | Custo do grupo com dia cancelado: KPI do principal; custo de EducaManto principal com satélite cancelado; data do grupo na cobrança da Home | o cachê do dia cancelado sai do custo e da base EducaManto; o comprovante do dia segue na cobrança; regressão `main` × branch das comissões de todos os grupos do espelho | não | 5 | L1978 |
+| 41 | Custo do grupo com dia cancelado: KPI do principal; custo de EducaManto principal com satélite cancelado; data do grupo na cobrança da Home | o cachê do dia cancelado sai do custo e da base EducaManto; o comprovante do dia segue na cobrança; regressão `main` × branch das comissões de todos os grupos do espelho e das cobranças da Home de toda venda sem devolução (`cobranca_ops`, pelas chamadas de hoje) | não | 5 | L1978; checklist regressão CHK014 |
 | 42 | Passar a venda, soma antes = soma depois (grupo no mesmo mês: principal com 3.000 e cheio 3.300, comprovantes de 1.000 e 500, parcela, nota a emitir, contrato, BV 200 a pagar com recebedor e PIX, transporte 100, comissão 75 paga e −25 a pagar, devolução 100, formulário, cliente, orçamento e nome do grupo; outro dia vivo com comprovante de 200; um dia já cancelado). "Cancelar só este dia" no principal, venda nova 3.000, "Nada" | toda linha igual (id, valor, datas, estado, beneficiário), salvo o `event_id`, que vai ao dia vivo mais cedo; Σ por tipo igual (comprovantes 1.700, acréscimos 300 com o BV no mesmo estado, comissão 75 paga e −25 nas mesmas datas, devolução 100); campos no novo principal e zerados no antigo, com retrato no histórico dos dois; dias apontando ao novo; antigo 1º dia como `dia` (3.000 → 3.000), elenco avisado e ensaio apagado; DRE, Planilha, Comissões, Dashboard e cobrança iguais; mutação por apagar e recriar acusa ids novos e BV pago perdido | não | 5 (aviso e ensaio: 6) | L1979 |
 | 42b | O mesmo grupo, venda nova 2.400 e Parte 300; variante com a comissão só a pagar | passagem como no 42 e corte como no 38 contra o novo principal; BV a pagar 200 → 160; cheio 3.300 → 2.640 sem aumentar o desconto; devolução de 300 ligada ao antigo 1º dia, fora dos gastos da DRE e dentro do "já devolvido"; multa por escalação do antigo 1º dia | não | 5 (multa: 6) | L1980 |
 | 42c | Novo 1º dia noutro mês (31/10 → 01/11), EducaManto com comissão a pagar; satélite que vira principal com comissão própria paga de antes (molde do 287); coluna de dia de orçamento da 3b, se existir | Q15 = A: receita, imposto, BV, cachês e comissão na DRE de novembro, BV na Planilha de novembro, outubro sem nada nas duas DREs; data de venda e ciclo da comissão comum iguais; Q18 = A: EducaManto a pagar com liberação em 01/11 depois do resync (mutação: guardando a data antiga, fica em 31/10); comissão própria fora da conta; coluna de dia intocada | não | 5 | L1981 |
@@ -2149,11 +2241,11 @@ para reusar: o `subprocess` do `verify_303` é só a prova da trava de ambiente.
 - `git archive` da `main` numa pasta temporária, não `worktree`, com a base em `git merge-base`.
 - Os dois lados rodam em subprocesso.
 - A comparação é exata: Decimal com quantize 0,01 e percentual a 0,1.
-- `dre_retrato.py` não importa nada que só exista na branch.
-- É exigido nos cenários 1, 14b, 17, 20, 23 e 41, e também na regressão das cobranças da Home sem devolução.
+- `retrato_main_branch.py` não importa nada que só exista na branch.
+- É exigido nos cenários 1, 14b, 17, 20, 23 e 41 (este com a regressão das cobranças da Home sem devolução).
 
 **Scripts**:
-- `specs/306-…/dre_retrato.py`: compara as duas DREs, `main` × branch, com relógio fixo.
+- `specs/306-…/retrato_main_branch.py`: compara, `main` × branch e com relógio fixo, as telas do cenário 23 nos meses sem cancelamento.
 - `specs/306-…/contagem_pre_deploy.py`: só leitura, roda por SSH, no molde do da 303. O que conta está em
   Premissas, "Deploy".
 - Saíram `listar_estornos_orfaos.py` e `listar_comissao_paga_a_menos.py` (1b-Q3, Q7).
@@ -2173,9 +2265,16 @@ para reusar: o `subprocess` do `verify_303` é só a prova da trava de ambiente.
 | `verify_299.py` | ciclo da comissão | rodar de novo |
 | `verify_205.py` | pipeline | rodar de novo |
 | `verify_267c.py` | item da Planilha partido em aberto × pago, e o desfazer, que passa a travar os eventos antes das linhas | rodar de novo |
-| `verify_305.py` | conferência do valor esperado do BV e o editor de acréscimos, cuja montagem esta entrega extrai e fatia | rodar de novo, antes de usar a montagem no cancelado |
+| `verify_305.py` | conferência do valor esperado do BV e o editor de acréscimos, cuja montagem esta entrega extrai e fatia | rodar ao fechar a História 1 (o ramo BV passa por `marcar_status_do_bv`) e de novo na História 4, logo depois da extração e antes de usar a montagem no cancelado |
 | `verify_215b.py`, `verify_266.py`, `verify_258.py` e `verify_256.py` | portas e arquivos em comum (lista do `/speckit-plan`) | rodar de novo |
+| `verify_273.py` e `verify_301.py` | o 409 novo em `set_event_orcamento` vem antes de aplicar a venda e antes da autoria da 301 (contratos §12); o 273 tem base conhecida de 8/15 | rodar de novo, comparando com a base |
+| `verify_272.py` | o catálogo `DESTINATARIOS_POR_KIND` ganha dois kinds (os sinos do cancelamento) | rodar de novo |
+| `verify_238.py` | `assign_role` ganha a condição do e-mail de remoção (FR-069) | rodar de novo |
+| `verify_271.py` | a `GET /api/dashboard`, onde mudam a Performance e a cobrança da Home | rodar de novo |
+| `verify_307.py` | a 307 mexeu em `orcamento_evento_ops.py`, `orcamento/quote_ops.py` e `calendar/routes.py`, que a 306 também altera | rodar de novo |
 | não versionados de `scripts/db/` | envelhecem | registrar como dívida |
+
+A fase em que cada um pode quebrar primeiro está no quickstart §5.
 
 **Cenários daqui que outras entregas rodam de novo**:
 - a **1e**: 9, 38 e 42b (sem acerto em dobro no corte);
@@ -2223,13 +2322,21 @@ para reusar: o `subprocess` do `verify_303` é só a prova da trava de ambiente.
   de comissões, sem os R$ 600 em gastos extras. O resultado é **+R$ 342** (+R$ 278 com imposto de 64) em
   Realizado e Total, igual ao centavo na tela nova e na antiga. O mês do evento não mostra nada dele. Na `main`,
   o mesmo caso dá −600.
-- **SC-002**: Cinco regressões ficam idênticas ao centavo entre `main` e branch:
-  - DRE e Tendência de **todos** os meses sem cancelamento;
-  - itens de BV da Planilha;
-  - comissões de todos os grupos;
+- **SC-002**: Seis regressões ficam idênticas ao centavo entre `main` e branch, cada uma com o seu cenário:
+  - DRE e Tendência de **todos** os meses sem cancelamento, com os painéis da DRE (Top Vendedores, Receita por
+    Tipo, Recebimentos Previstos, NF a emitir e indicadores), o Dashboard Comercial, o `/admin/desempenho`, a
+    ficha de toda cliente com evento e a Performance da Home (cenário 23);
+  - Comissões (KPIs, `by_seller`, `month_status`) e os itens de comissão e de BV da Planilha dos meses sem
+    cancelamento (cenário 23; os de BV também no 17);
+  - comissões de todos os grupos (cenário 41);
   - a comissão do evento vivo (a regra de hoje, intocada sob a comissão cheia), em todos os eventos do espelho
     (cenário 1, L1932);
-  - as cobranças da Home sem devolução (L1836).
+  - as cobranças da Home de toda venda sem devolução (cenário 41, L1836).
+
+  Ficam fora da comparação, listadas à parte porque mudam de propósito: o ticket médio do Jinja (FR-043), o
+  `sale_count` de Comissões, o item aberto de comissão de soma zero com linha de valor (R6) e o mês com cancelado
+  `legado` (hoje nenhum). *(Living Spec do checklist: eram cinco regressões, sem as telas comerciais, Comissões
+  nem cenário para a cobrança da Home.)*
 - **SC-003**: A comissão de todo cancelado é cheia × retido ÷ venda, nunca acima da cheia. Depois de reabrir
   Comissões e Planilha, a soma das linhas vivas continua batendo com o alvo em 100% dos cancelados.
 - **SC-004**: Nenhuma comissão ou BV já pago (ou no banco) é reescrito por cancelamento, correção ou troca de
@@ -2245,7 +2352,11 @@ para reusar: o `subprocess` do `verify_303` é só a prova da trava de ambiente.
     ao Google; o marcado com cachê pago continua só com "Devolver ao Google" (L1469-1471, L2222, cenário 33);
   - 100% dos eventos com cachê pago são recusados, sem nada gravado.
 - **SC-008**: Na passagem da venda do 1º dia, o retrato de toda linha pendurada no evento fica idêntico antes e
-  depois, salvo o vínculo. DRE, Planilha, Comissões, Dashboard Comercial e cobrança da Home também ficam iguais.
+  depois, salvo o vínculo, e a soma por tipo fica igual em qualquer mês. Com o novo 1º dia no mesmo mês, DRE,
+  Planilha, Comissões, Dashboard Comercial e cobrança da Home também ficam iguais (cenário 42). Noutro mês, a
+  receita, o BV da Planilha e a comissão EducaManto a pagar mudam de mês, como manda a FR-060 (Q15 = A, Q18 = A), e
+  a soma dos dois meses fica igual (cenário 42c). *(Living Spec do checklist: a redação anterior prometia as telas
+  iguais sem esse recorte.)*
 - **SC-009**: Em todo cancelamento:
   - cada escalado que não recusou, fora a vaga de presença do técnico de som, recebe **um** e-mail, e quem recusou
     não recebe nenhum (L1433-1434, L2817-2818);
@@ -2579,8 +2690,12 @@ Cada premissa diz de onde vem:
 - P-49 Leituras 2, 3, 5, 6, 8, 9, 10 e 11 da Session 2026-10-15 (leitura desta spec).
 - P-50 A troca de vendedor no EducaManto muda só o recorte comercial; a comissão cheia e o beneficiário (o
   responsável) ficam (premissa do plano, L1178-1179, conferida "fiel" em L5025-5026; era a leitura 7).
+- P-51 A comissão própria de um dia do grupo fica fora da conta também no "Cancelar todos os dias" e no corte, como
+  na passagem (P-29). No espelho é uma linha só: a do 287, satélite do 288, R$ 137,50 paga. Fica paga e fora da
+  reconciliação do principal. É derivada da 1b-Q3 = A ("a comissão própria não vira desconto"), que a R16 já cita
+  como decisão que amarra a passagem; o checklist de 16/10 só a escreveu para o "todos" e o corte.
 
-**Dependências** (todas conferidas na `main` em `d855d1a`)
+**Dependências** (conferidas na `main` em `d855d1a` e reconferidas em `6356b80`, com a 307)
 
 - **303, em produção**:
   - *Reusa*: `situacao`, `desmarcar` (com o motivo novo "cancelado"), o banner, o dublê do Google, a guarda de
@@ -2599,9 +2714,15 @@ Cada premissa diz de onde vem:
     lado da Planilha (L3181-3182); o bloqueio que relê do núcleo continua obrigatório (FR-013);
   - `commission_lines`, o tipo, o ciclo e o predicado entram sobre o item da Planilha já partido em aberto × pago;
   - o 42c garante que a comissão própria do satélite (287 × 288) não vira desconto nem pagamento em dobro
-    (L3179-3195).
+    (L3179-3195);
+  - *ficam iguais*: o lote "pago" age só nas linhas abertas do item; o desfazer é só do Superadmin, com motivo.
+    O item aberto de soma zero com linha de valor, que passa a aparecer (FR-031), entra no lote como qualquer
+    item: "pago" liquida as linhas abertas dele, e nada sai do caixa, porque a soma é zero.
 - **305, em produção desde 15/10**:
   - a conta única de proporção do BV;
+  - o acompanhamento automático do BV (a B10 da 305: a venda que muda leva o BV junto, uma vez por gravação)
+    segue igual no vivo, nos três escritores (`update_event_comercial`, a edição completa e o Jinja comercial);
+    só ganha a releitura de "cancelado" depois da trava de cada um;
   - o acompanhamento automático do BV não roda em cancelado e não pode escalar o corte duas vezes;
   - o `PUT …/acrescimos` já casa por `id`;
   - marcar o BV pago na Planilha confere o valor esperado, que passa a ser o proporcional;
@@ -2609,6 +2730,9 @@ Cada premissa diz de onde vem:
   - a contagem "BV não pago sem recebedor ou PIX" é refeita;
   - o risco "dois BVs ao recriar do mesmo orçamento" fecha aqui (`specs/305-…/research.md` R3, R7, R9, R11;
     L3263-3290).
+- **307, em produção desde 16/10**: a faixa de 24 e 25/12 na tabela de preços mexeu em `orcamento_evento_ops.py`,
+  `orcamento/quote_ops.py` e `calendar/routes.py` só deslocando linhas que a 306 cita; a 306 não muda nada dela, e
+  o `verify_307` roda de novo (§Verifies antigos).
 - **1c, depois (não pode subir antes; L2952)**:
   - lê `paineis.cancelamentos`, `resumo` e os cancelados do período;
   - esta spec fixa os nomes que a 1c reusa: `pode_editar_venda_do_cancelado`, `can_edit_venda_cancelado`,
@@ -2655,7 +2779,14 @@ Cada premissa diz de onde vem:
 8. **Rollback assimétrico** depois do primeiro cancelamento real. Defeito se corrige para a frente, com `306b`
    (L3609-3621). O que não volta:
    - o código antigo zera a comissão do retido;
-   - o `downgrade` apaga o congelamento;
+   - o código antigo toma o ajuste do corte de dia (a linha a pagar com `original_id`, ligada ao principal vivo)
+     pela comissão do evento e a regrava com a cheia;
+   - o código antigo volta a listar pelo cheio o BV não pago do cancelado, e a Planilha da 305 deixa marcá-lo pago
+     por esse valor;
+   - o código antigo volta a deixar excluir o cancelado vazio, inclusive pelo sync, e a exclusão leva o
+     congelamento junto (CASCADE de `event_cancellations.event_id`);
+   - o `downgrade` apaga o congelamento, e sem ele nada se refaz: por isso fica proibido com linha em
+     `event_cancellations`;
    - ensaios apagados e e-mails enviados;
    - a venda que passou de dia.
 9. O descartável do teste pós-deploy fica para sempre na página de Cancelamentos (L3663-3669).

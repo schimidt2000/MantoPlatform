@@ -26,7 +26,7 @@ export type CodigoRecusaCancelamento =
                  "codigo": "cancelado" } }
 ```
 
-**Trava**: toda porta de dinheiro do cancelado trava depois do 404 e do 403 (T1, `travar_grupo`) e decide pelo estado relido. A ordem das travas está no `data-model.md` §8.10. Deadlock (`40P01`) nos endpoints da 306 vira rollback e `409 {codigo: "tente_de_novo"}`, "Outra gravação estava em curso neste evento: tente de novo."
+**Trava**: as portas de comprovante (§9) travam o grupo (T1, `travar_grupo`) depois do 404 e do 403, **também no evento vivo**, e decidem pelo estado relido; reembolsos, parcelas e notas (§10, §11) travam só o próprio evento (`travar_evento`, como a 305) e releem `is_cancelled`. No vivo, depois da trava, as respostas e a ordem das recusas são as de hoje; só sob concorrência aparecem `tente_de_novo` e, no comprovante, `grupo_mudou` (Living Spec do checklist; cenário 16-vivo). A ordem das travas está no `data-model.md` §8.10. Deadlock (`40P01`) nos endpoints da 306 vira rollback e `409 {codigo: "tente_de_novo"}`, "Outra gravação estava em curso neste evento: tente de novo."
 
 **Valores**:
 - dinheiro no corpo é número (ou texto decimal com ponto), arredondado ao centavo HALF_UP;
@@ -145,10 +145,10 @@ O que sai do corpo: `bv_negociado`. O corpo antigo `{motivo, devolucao:{valor,�
 
    A tela refaz o impacto.
 8. **409 `cache_pago`**, com o extra `dias: [{id, titulo, data}]` no grupo. Mensagem: "Este evento tem cachê pago ao elenco e não pode ser cancelado. Para devolver dinheiro à cliente, lance uma Devolução em Gastos Extras." Vale para qualquer dia alcançado.
-9. **409 `devolucao_pendente`**: "Há uma devolução à cliente pendente ligada a este evento: aprove ou rejeite antes de cancelar."
+9. **409 `devolucao_pendente`**: "Há uma devolução à cliente pendente ligada a este evento: aprove ou rejeite antes de cancelar." Num grupo, conta a pendente de **qualquer dia** do grupo (no "todos" e no corte, sob a T5), com o extra `dias` dizendo qual, como no `cache_pago`.
 10. **400 com todos os `fields` de uma vez** ("Corrija os campos destacados."):
     - `motivo`, `devolucao_modo` (ausente; ou "tudo" no corte; ou diferente de "nada" com pago zero);
-    - `devolucao_valor` (parte ≤ 0, acima do máximo, acima do teto no corte; tudo sem `valor`);
+    - `devolucao_valor` (parte ≤ 0, acima do máximo, acima do teto no corte, **abaixo do mínimo do corte**; tudo sem `valor`). O mínimo do corte é (pago do grupo − já devolvido − venda nova) − máx(0, pago do grupo − já devolvido − venda atual), se positivo: "A cliente pagou R$ X: devolva pelo menos R$ Y ou aumente o novo valor da venda." No "nada" com mínimo > 0, o campo é `devolucao_modo`, com a mesma frase;
     - `devolucao_nome`, `devolucao_pix`;
     - `imposto_retido`: faltando com nota; negativo; **enviado sem nota** (é recusado, não ignorado); enviado no corte;
     - `venda_nova` (faltando no corte; ≤ 0; acima da venda atual; enviada fora do corte);
@@ -233,7 +233,8 @@ export interface EfeitoCancelamento {
   ajuste: number | null;            // a linha (±) no primeiro repasse aberto; null = só a a_pagar muda
   ciclo: string | null;             // AAAA-MM
   repasse_em: string | null;        // AAAA-MM-05
-  imposto_referencia: number | null;// aliquota × retido, só com nota
+  devolucao_minima?: number;        // só no corte: o mínimo da FR-056 para a venda nova enviada (0 quando não há excedente)
+  imposto_referencia: number | null;// aliquota × retido ao centavo (ROUND_HALF_UP), só com nota; o rótulo da tela mostra imposto_aliquota, nunca o literal 16
 }
 ```
 
@@ -272,7 +273,7 @@ export interface AlterarDevolucaoInput {
    - `devolucao_total`: negativo; no `venda`/`legado`, acima do pago do grupo (aqui o teto é 400, como no RBAC da spec);
    - `devolucao_nome`, `devolucao_pix`: faltando quando nasce complemento sem nome/PIX a herdar, ou acima de 200/120 caracteres;
    - `imposto_retido`: no `dia`, no `legado`, sem nota (o `with_invoice` congelado) ou negativo.
-7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo do piso do `data-model.md` §7.2 (no `venda`, as devoluções do principal pagas ou no banco mais as aprovadas dos outros dias; no `dia`, as do dia pagas ou no banco).
+7. **409 `abaixo_do_piso`**, com o extra `piso`: abaixo do piso do `data-model.md` §7.2 (no `venda`, as devoluções pagas ou no banco de todos os dias mais as aprovadas dos dias cortados, `dia`; no `dia`, as do dia pagas ou no banco). No `venda`, a aberta do principal absorve primeiro e depois as abertas dos dias `satelite`, por id.
 8. **409 `acima_do_teto`**, com o extra `teto`: **só no `dia`**, quando passa do pago do grupo menos as devoluções aprovadas dos outros dias.
 9. Grava (`data-model.md` §7.2), com `audit` por devolução, `EventLog` (UTC) e `updated_at/by`. Deadlock vira 409 `tente_de_novo`.
    - **`venda`**: regrava o imposto se vier; `reaplicar_cancelado` (comissão; BV ao vivo).
@@ -391,7 +392,7 @@ O 409 vale quando o evento está cancelado e chega `sale_value`, `sale_value_gro
    - **400 `items`** quando o evento tem acréscimos e nenhum item traz `id` (página anterior à 305): "Recarregue a página antes de salvar";
    - **400 `items.<i>.<campo>`** pela montagem da 305 extraída de `:216-404` (`_montar_acrescimos`, fatiada em cinco funções de ~30 linhas, a mesma lista do plan H4 e da R20): `id` repetido, valor, `valor_visto` contra o `amount_brl` cheio, `erros_do_bv`;
    - BV **novo** em % → **400** `items.<i>.value` "No evento cancelado, lance o BV em reais";
-   - **409 `fields.items.<i>.value`** no BV pago ou no banco com valor ou unidade diferente;
+   - BV pago ou no banco com valor ou unidade diferente: **mantém o gravado**, como no vivo (`comercial_ops.py:337-338`), sem recusa;
    - **400** se o tipo do BV pago mudar, como na 305.
 7. Grava no lugar pelo `id` (`alterar_acrescimos_do_cancelado`; `data-model.md` §7.4), sem o `delete`/`add` de `:407-413`. Depois `expire(event, ["acrescimos"])`, T4 e `reaplicar_cancelado(motivo="Cancelamento: correção da venda")`.
 
@@ -400,7 +401,8 @@ O 409 vale quando o evento está cancelado e chega `sale_value`, `sale_value_gro
 - No BV não pago, regravam o acréscimo **e** a linha congelada.
 
 **Fora do ramo**
-- **Vivo**: inalterado. O `_sync_commission_payment` de `:1637` vira no-op no cancelado, pela guarda.
+- **Vivo**: inalterado e **sem T1**: a decisão vivo × cancelado lê o evento sem trava, e a 305 já trava o evento dentro de `substituir_acrescimos`. Só o ramo do cancelado toma T1 → T2 → T3. O `_sync_commission_payment` de `:1637` vira no-op no cancelado, pela guarda.
+- **Corrida**: se `substituir_acrescimos` reler o evento já cancelado depois do `travar_evento` e devolver `[]`, a view faz rollback e responde **409 `estado_mudou`** ("O evento mudou enquanto você editava: recarregue."), nunca 200 sem ter gravado.
 - `substituir_acrescimos` devolve `[]` sem gravar quando relê o evento cancelado depois de `travar_evento` (`comercial_ops.py:208`, `:218`). É cinto, porque a view já decidiu.
 
 **Resposta**: o detalhe com `event.cancelamento`.
@@ -443,7 +445,7 @@ Erro na tela: `PagamentosPanel` e `PagamentoItem` passam a mostrar `error.messag
 | `POST /api/reimbursements/<id>/collect` (`:1859`) | `_can_edit_event()` | Idem. O 409 vem antes do 400 "já cobrado" |
 | `DELETE /api/reimbursements/<id>` (`:1899`) | `_is_superadmin()` | Sem mudança (os demais seguem com 403) |
 
-Nada muda no congelado, e a resposta é a de hoje (o detalhe).
+Trava: `travar_evento` do próprio evento depois do 403, e então relê `is_cancelled` (no vivo, o caminho de hoje). Nada muda no congelado, e a resposta é a de hoje (o detalhe).
 
 ---
 
@@ -451,15 +453,17 @@ Nada muda no congelado, e a resposta é a de hoje (o detalhe).
 
 `PUT /api/events/<id>/parcelas` (`:1644`), `POST/PATCH/DELETE /api/events/<id>/invoices[/<id>]` (`:1489`, `:1524`, `:1562`).
 
-Ordem: 401 → 404 → 403 (`_can_manage_sale`: Casting e Figurino) → 409 satélite (onde já existe) → **409 `cancelado`** para quem não é Superadmin real → o de hoje. Sem mexer no congelado.
+Ordem: 401 → 404 → 403 (`_can_manage_sale`: Casting e Figurino) → 409 satélite (onde já existe) → `travar_evento` do próprio evento e releitura de `is_cancelled` → **409 `cancelado`** para quem não é Superadmin real → o de hoje. Sem mexer no congelado. No vivo, depois da trava, o caminho de hoje.
 
 ---
 
 ## 12. `PATCH /api/events/<id>/orcamento` — alterado
 
-Ordem: 401 → 404 → 403 → 409 satélite → **409 `cancelado` para todos os papéis**, inclusive o Superadmin: "O orçamento de um evento cancelado não se aplica nem se troca." Depois vêm a autoria da 301 e a B8.
+Gate de hoje: `_can_manage_sale()` (Comercial, Financeiro e Superadmin passam; Casting e Figurino → 403).
 
-Cinto: `set_event_orcamento` (`orcamento_evento_ops.py:923`) relê depois da trava e recusa antes de aplicar a venda, nos três verbos.
+Ordem: 401 → 404 → 403 → 409 satélite → **409 `cancelado` para todos os papéis que passam no gate**, inclusive o Superadmin e o Financeiro: "O orçamento de um evento cancelado não se aplica nem se troca." Depois vêm a autoria da 301 e a B8.
+
+Cinto: `set_event_orcamento` (`orcamento_evento_ops.py:935`) relê depois da trava e recusa antes de aplicar a venda, nos três verbos.
 
 ---
 
@@ -467,9 +471,9 @@ Cinto: `set_event_orcamento` (`orcamento_evento_ops.py:923`) relê depois da tra
 
 Ordem: 401 → 404 → 403 → **409 `cancelado`** **antes** da condição de `:555`: "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, recrie o evento." Depois, o de hoje: `sumiu_do_google`, "use o cancelamento", líder.
 
-Núcleo: `_delete_event_flow` (`calendar/routes.py:4326`):
+Núcleo: `_delete_event_flow` (`calendar/routes.py:4348`):
 - trava o evento e relê;
-- levanta `EventoCanceladoError` (irmã de `EventoMarcadoError`) antes da checagem do líder (`:4350`);
+- levanta `EventoCanceladoError` (irmã de `EventoMarcadoError`) antes da checagem do líder (`:4372`);
 - `_apagar_vazio` do sync (`sumico_ops.py:341-356`) trava, relê `cancelled_at` e pula.
 
 Estorno da exclusão (FR-036):
@@ -510,7 +514,7 @@ As seis portas mantêm o gate de hoje. A ordem **não** é a mesma nas seis; est
 | `POST /api/gastos` (`gastos_write.py:47`) | 401 → **sem gate de papel e sem 404**: o comprovante é salvo (`:53-57`), `event_id` inexistente vira `None` (`:72`) → 400 (`create_expense`) | 401 → 400 (validação; `disbursement_type: "cliente"` → `fields.disbursement_type`) → trava `travar_evento` quando a categoria normalizada é devolução e há evento → **409 `devolucao_travada`** (`fields.event_id`) se o evento está cancelado. O comprovante já salvo fica no disco, como no 400 de hoje |
 | `POST …/aprovar` (`:80`) | 401 → 403 → 404 → 409 de estado ("já não está pendente") | 401 → 403 → 404 → trava → **409 `devolucao_travada`** (`fields.status`) → 409 de estado |
 | `POST …/rejeitar` (`:97`) | 401 → 403 → 404 → 409 de estado | 401 → 403 → 404 → trava → **409 `devolucao_travada`** (`fields.status`) → 409 de estado |
-| `PATCH /api/gastos/<id>` (`:115`) | 401 → 403 → 404 → 409 de estado (rejeitado sem `aprovar`, **antes** da validação, `gastos_ops.py:402-405`) → 400 (`:407`) | 401 → 403 → 404 → 409 de estado de hoje → 400 (validação; `cliente` só se já era) → trava → **409 `devolucao_travada`** (campo diferente do gravado; `aprovar: true` também) → grava. A trava vem antes das atribuições (`:420-428`) |
+| `PATCH /api/gastos/<id>` (`:115`) | 401 → 403 → 404 → 409 de estado (rejeitado sem `aprovar`, **antes** da validação, `gastos_ops.py:402-405`) → 400 (`:407`) | 401 → 403 → 404 → 409 de estado de hoje → 400 (validação; `cliente` só se já era) → trava (com `event_id` trocado, os dois eventos por id) → **409 `devolucao_travada`** (campo diferente do gravado; `aprovar: true` também; e o caminho inverso: o gasto que **passaria a ser** devolução de cancelado, pela categoria → `fields.category`, ou pelo `event_id` → `fields.event_id`) → grava. A trava vem antes das atribuições (`:420-428`) |
 | `DELETE /api/gastos/<id>` (`:151`) | 401 → **404 (`:158-160`) antes do 403 (`:161-165`)** → 204, sem `try` | 401 → 404 → 403 → trava → **409 `devolucao_travada`** (`fields.id`) → 204 |
 | `POST …/vincular-evento` (`:170`) | 401 → 403 → 404 → 400 (`event_id` inválido) | 401 → 403 → 404 → 400 → trava (os dois eventos, por id) → **409 `devolucao_travada`** (`fields.event_id`) |
 
@@ -556,6 +560,7 @@ Gate sem mudança (`_require_financeiro`, `financeiro_write.py:48-51`). Ordem: 4
 **`item_type: "bv"`**: as duas portas chamam `cancel_ops.marcar_status_do_bv(acr_id, status, valor_esperado, actor_name)` (decisão (a)). As portas são a API (`:163-194`) e o Jinja (`financeiro/routes.py:1190-1197`, sem `valor_esperado`).
 
 Passos:
+0. `valor_esperado` presente e não numérico → **400** "Valor esperado inválido.", como hoje (`financeiro_write.py:170-175`), antes de travar.
 1. Lê o acréscimo sem trava.
 2. `travar_evento(acr.event)`.
 3. Relê o acréscimo com `FOR UPDATE populate_existing`.
@@ -620,7 +625,7 @@ export interface CommissionKpis { /* … */ total_no_banco?: number; }   // tota
 | Rota | Chaves novas (todas opcionais no TS) |
 |---|---|
 | `GET /api/financeiro/dashboard` | `dre.{realizado,projetado,total}.retido_cancelamentos` e `.n_cancelados`, sempre enviados. `paineis.cancelamentos?` sempre: `{quantidade, pago, devolvido, devolucao_a_pagar, retido, comissao_retido, bv_retido, imposto, efeito_resultado, itens: [{event_id, titulo, cancelado_em, retido}]}`. `receita_por_tipo["Retido de cancelamentos"]` (`dre_ops.ROTULO_RETIDO`). `monthly_trend[].retido?`. `top_sellers[].retido?`. `notas_fiscais[].cancelado?` e `retido?` |
-| `GET /api/vendas/pipeline` | `kpis.retido_cancelamentos?`, `kpis.n_cancelamentos?`, `kpis.comissao_retido?` (as duas últimas fecham a sublinha "de N cancelamento(s)" e a da comissão prevista). O retido entra em `total_vendido` e em `comissao_prevista` |
+| `GET /api/vendas/pipeline` | `kpis.retido_cancelamentos?`, `kpis.n_cancelados?`, `kpis.comissao_retido?` (as duas últimas fecham a sublinha "de N cancelamento(s)" e a da comissão prevista; `n_cancelados` é o nome da DRE). O retido entra em `total_vendido` do vendedor congelado e a comissão do retido em `comissao_prevista` do beneficiário congelado |
 | `GET /api/admin/desempenho` | Filtra o cancelado do mês do evento. `vendas[].retido?`, `vendas[].cancelados?`, `totals.retido?` (por **nome**, mapeado do vendedor congelado) |
 | `GET /api/clientes/<id>`, `/api/clientes/`, `/api/clientes/metricas` | Sem chave nova: `total_sales` inclui o retido; contagens e "Com evento"/"Recorrentes" sem cancelado |
 | `GET /api/dashboard` | Performance ignora o cancelado. A cobrança da Home desconta as devoluções dos dias do recebido (FR-061) |
@@ -633,7 +638,7 @@ NotaFiscalPendente += cancelado?: boolean; retido?: number;
 FinanceiroPaineis += cancelamentos?: { quantidade: number; pago: number; devolvido: number; devolucao_a_pagar: number;
   retido: number; comissao_retido: number; bv_retido: number; imposto: number; efeito_resultado: number;
   itens: { event_id: number; titulo: string; cancelado_em: string; retido: number }[] };
-// lib/vendas.ts   VendasKpis += retido_cancelamentos?: number; n_cancelamentos?: number; comissao_retido?: number;
+// lib/vendas.ts   VendasKpis += retido_cancelamentos?: number; n_cancelados?: number; comissao_retido?: number;
 // lib/adminConfig.ts DesempenhoItem += retido?: number; cancelados?: number; AdminDesempenho.totals += retido?: number;
 ```
 

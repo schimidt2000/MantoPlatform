@@ -225,7 +225,7 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({...})  # todos acima; o verify confe
 | `grupo_mudou` | §1; §9 (POST depois de gravar o arquivo) | — | Refaz o impacto |
 | `sem_outro_dia_vivo` | §1 | — | Trata como `grupo_mudou` |
 | `cache_pago` | §1 | `dias` | Explica e não oferece cancelar |
-| `devolucao_pendente` | §1 | — | Mostra a frase |
+| `devolucao_pendente` | §1 | `dias` (num grupo, o dia da pendente) | Mostra a frase |
 | `max_devolucao_mudou` | §1 | `max_devolucao` | Refaz o "Tudo" com o máximo novo |
 | `tente_de_novo` | Todo endpoint da 306 (deadlock `40P01`) | — | Mostra a frase; quem clicou repete |
 | `nao_cancelado` | §3, §4 | — | Recarrega o evento |
@@ -326,8 +326,9 @@ nao_pago ⇄ no_banco ⇄ pago            Planilha (Financeiro/Superadmin). O es
 valor/data/categoria/vínculo/exclusão  só `cancel_ops.alterar_devolucao` (travado nas seis portas de Gastos Extras)
 alterar_devolucao(devolucao_total):
    venda:  devolucao_total = o novo total devolvido do GRUPO
-           piso = Σ devoluções do principal pagas ou no banco + Σ devoluções aprovadas dos outros dias (fixas:
-                  só o "Alterar devolução" do dia as muda)
+           piso = Σ devoluções pagas ou no banco de todos os dias + Σ devoluções aprovadas dos dias `dia`
+                  (fixas: só o "Alterar devolução" do dia as muda)
+           absorve: a aberta do principal; depois, as abertas dos dias `satelite`, por id
            teto = pago do grupo  (acima → 400, não 409)
    dia:    devolucao_total = o total daquele dia
            piso = Σ devoluções do dia pagas ou no banco
@@ -387,7 +388,7 @@ BV novo no PUT do cancelado → nasce acréscimo nao_pago + linha congelada (ori
 |---|---|
 | Evento vivo | `amount_brl` |
 | `venda`, linha congelada, pago ou no banco | `paid_amount`; se nulo, `amount_brl` (só na janela do deploy) |
-| `venda`, linha congelada, não pago | `bv_do_retido(original_amount, retido, venda)` = `min(cheio, bv_que_acompanha(cheio, retido, venda))` (`orcamento/quote_ops.py:55`). Dá `None` quando o resultado é 0: some da Planilha |
+| `venda`, linha congelada, não pago | `bv_do_retido(original_amount, retido, venda)` = `min(cheio, bv_que_acompanha(cheio, retido, venda))` (`orcamento/quote_ops.py:58`). Dá `None` quando o resultado é 0: some da Planilha |
 | Sem linha congelada (`legado`, `satelite`, `dia`, `virtual`) | `amount_brl` se pago ou no banco; senão `None` |
 
 ### 7.5 Multa ao elenco
@@ -529,6 +530,9 @@ def downgrade() -> None:
 - **Aditiva**: o código anterior lê e grava no banco migrado.
 - **Rollback: reverter o merge, sem `downgrade`, é limpo até o primeiro cancelamento real.** Depois dele:
   - o código antigo zera a comissão do retido na primeira abertura de Comissões ou da Planilha (`should_have`, `comissoes_ops.py:930-932`, `:945-948`);
+  - o código antigo toma o ajuste do corte de dia (`a_pagar` com `original_id`, ligado ao principal vivo) pela comissão do evento e o regrava com a cheia (`_comissao_existente`, R6);
+  - o código antigo lista pelo cheio o BV não pago do cancelado (`_build_bv_items`), e a Planilha da 305 deixa marcá-lo pago por esse valor;
+  - o código antigo deixa excluir o cancelado vazio, inclusive pelo sync, e o CASCADE leva o congelamento junto;
   - o `downgrade` apaga o congelamento sem volta;
   - ensaios apagados, e-mails enviados e a venda passada de dia não voltam.
 
@@ -536,7 +540,7 @@ def downgrade() -> None:
 
 **Antes do push:**
 - reproduzir o build num venv 3.11 (`manto_deploy_dependencias_soltas`);
-- rodar `flask db upgrade` e depois `flask db downgrade -1` + `upgrade` num banco descartável restaurado do dump;
+- a ida e volta da migration (`upgrade`, `downgrade a7c3e91f4d28`, `upgrade`) no `manto_local`, com as três tabelas vazias depois da limpeza do verify. O lugar único do roteiro é o quickstart §4; o §7 o repete no venv 3.11. Banco descartável do dump não é preciso: a migration só cria tabelas;
 - conferir `create_app()` com os mappers configurados.
 
 O ensaio de migração destrutiva não se aplica.

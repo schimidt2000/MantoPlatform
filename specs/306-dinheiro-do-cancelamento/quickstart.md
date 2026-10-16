@@ -1,25 +1,3 @@
-Escrevi o quickstart.md da 306 em C:/Users/schim/AppData/Local/Temp/claude/C--Users-schim/ec36791a-234f-4357-8c4a-daed5abe0c31/scratchpad/p306_quickstart.md (529 linhas). Nada foi gravado no repositório.
-
-O que é decisão desta escrita (levar ao tasks.md):
-1. **Seções numeradas para bater com o que o plan cita**: §2 é a contagem (espelho e produção), §5 os verifies antigos e §8 a tela aberta com os 21 itens da spec. Os itens do §8 levam a fase em que ficam disponíveis (H1–H6).
-2. **Opções do verify_306.py, todas definidas aqui**:
-   - sem argumentos: é o portão, `59/59 OK`; as variantes rodam dentro do seu cenário;
-   - `--so=2,2b,8`: roda só os cenários listados; a limpeza (27) roda sempre;
-   - `--nucleo` (nome novo): o modo núcleo que o plan descreve para a Fundação e a História 1 (7–11, 12, 17, 30, as variantes 9/10-desfazer e 16/17-`paid_amount`, o simular × execução do 8 e a variante cheia 0 do 16b);
-   - `--regressao`: roda os 11 verifies antigos do §5 em subprocesso, como a 305 fazia. A base deles fica na primeira rodada, gravada em `verify_306_primeira_falha.txt`;
-   - `--semear-tela` / `--limpar-tela` (nomes novos, no molde da 303): semeiam e limpam os dados da conferência de tela.
-3. **Contagem em produção**: vai por SSH com o script em gzip + base64 dentro do próprio comando. O ssh do Render não repassa stdin e a linha de comando do Windows tem limite de uns 32 mil caracteres. A saída vai para `contagem_AAAA-MM-DD_producao.txt` (o sufixo evita colidir com a do espelho no mesmo dia) e traz só quantidades, R$ e ids, porque fica versionada.
-4. **Base do ruff medida no HEAD**: os arquivos de `app/` que o plan toca já têm 14 erros (8 em `app/calendar/routes.py`, 5 em `app/models.py`, 1 em `app/financeiro/routes.py`). O portão é "nenhum erro novo".
-5. **Rodar a partir do worktree**:
-   - as entradas `manto-backend-sem-google` e `manto-internal` do launch.json do usuário servem o código da main;
-   - as do `.claude/launch.json` do repositório usam `.venv` e `scripts\db` relativos, que o worktree não tem;
-   - por isso o quickstart sobe o `run-local-sem-google.py` com o .venv do principal e `PYTHONPATH` no worktree, faz `npm ci` no worktree e abre o Browser pane por URL.
-6. **DRE antiga**: no local, abre em `http://localhost:5000/financeiro/` com o cookie do app interno, nunca pela raiz `/`, que redireciona à produção. Em produção, só pelo domínio direto do backend (`manto-backend.onrender.com/financeiro/`), com login próprio.
-7. **Sonda depois do push**: além do schema do `/api/`, um `PATCH /api/events/1/devolucao` sem sessão responde 401 no backend novo e 404 no antigo.
-8. **Rollback**: o plan diz "tabelas vazias", mas depois do cancelamento do evento descartável elas não estão. Ajustei para: reverter o merge sem `downgrade` é limpo até o primeiro cancelamento real.
-
-=== CONTEÚDO (idêntico ao arquivo) ===
-
 # Quickstart — validar a Feature 306
 
 **Spec**: [spec.md](./spec.md) · **Plano**: [plan.md](./plan.md) · **Modelo**: [data-model.md](./data-model.md)
@@ -111,7 +89,7 @@ igual.
   - 45c: lista lida da escala de hoje; remoção sem a condição;
   - 2/8: "simular escreve".
 
-**Primeira rodada, antes do núcleo.** Roda com o verify, o `dre_retrato.py` e o `contagem_pre_deploy.py`
+**Primeira rodada, antes do núcleo.** Roda com o verify, o `retrato_main_branch.py` e o `contagem_pre_deploy.py`
 escritos e nenhuma linha de núcleo:
 
 ```powershell
@@ -146,7 +124,7 @@ escritos e nenhuma linha de núcleo:
 
 | Bloco | Fase | Verde ao fim da fase |
 |---|---|---|
-| B0 | Fundação | 1, 23, 26 e 27; com `--nucleo`, a variante 16b cheia 0 |
+| B0 | Fundação | 1, 23, 26 e 27; a parte de regressão do 41 (comissões dos grupos e cobranças da Home sem devolução), verde desde aqui; com `--nucleo`, a variante 16b cheia 0 |
 | B1 | História 1 | 13, 14 e 14b. Com `--nucleo`: 7–11, 12 (sem a DRE), 17 e 30; as variantes 9/10-desfazer e 16/17-`paid_amount`; e, no 8, `simular=True` × `simular=False`. O `verify_305` tem de estar verde (§5) |
 | B2 | História 2 | Pela API: 2 e 8, com a variante 2/8 prévia = execução; 2b (sem o aviso), 3, 4 (sem o corte e a multa), 5, 6, 7 e 9–11; 12 e 32 sem a DRE; 15, 16, 17 (sem o satélite), 18, 19, 25, 28, 30, 31, 34 e 36. As variantes 9/10-desfazer e 16/17-`paid_amount` pela API. As partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d |
 | B3 | História 3 | 20, 22 e 24; a parte da DRE do 12 e do 32; o 21 menos o satélite (a parte virtual fecha aqui; a multa é semeada por ORM, com `SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`). O 23 segue verde |
@@ -220,14 +198,28 @@ Nas duas rodadas, a saída conta:
   talentos sem PIX;
 - usuários ativos FINANCEIRO e ENSAIO.
 
-## 3. DRE `main` × branch (`dre_retrato.py`)
+## 3. Telas `main` × branch (`retrato_main_branch.py`)
 
 ```powershell
-& $py specs\306-dinheiro-do-cancelamento\dre_retrato.py
+& $py specs\306-dinheiro-do-cancelamento\retrato_main_branch.py
 ```
 
-**Esperado**: em todos os meses do espelho sem cancelamento, a DRE (API e Jinja) e a Tendência saem
-idênticas ao centavo entre `main` e branch.
+**Esperado**: em todos os meses do espelho sem cancelamento, saem idênticos ao centavo entre `main` e
+branch (SC-002, cenário 23):
+- a DRE (API e Jinja), a Tendência e os painéis da DRE (`GET /api/financeiro/dashboard`);
+- o Dashboard Comercial (`GET /api/vendas/pipeline`) e o `/admin/desempenho`;
+- a ficha de toda cliente com evento (`GET /api/clientes/<id>`), a lista e as métricas (`GET /api/clientes/`,
+  `GET /api/clientes/metricas`);
+- a Performance e as cobranças da Home (`GET /api/dashboard`);
+- Comissões (`GET /api/financeiro/comissoes`: KPIs, `by_seller`, `month_status`) e os itens de comissão e de
+  BV da Planilha (`GET /api/financeiro/pagamentos`). Os dois gravam no GET (resync): a `main` aquece os meses
+  antes, e a rodada da branch não pode escrever linha nenhuma (o cenário 26 confere pelo retrato de linhas).
+
+Ficam fora, listados à parte porque mudam de propósito: o ticket médio do Jinja (FR-043), o `sale_count`, o
+item aberto de comissão de soma zero com linha de valor (R6) e, para cada cancelado `legado` (hoje nenhum no
+espelho), três meses: o do `cancelled_at`, onde o retido entra; o do `expense_date` de cada devolução ligada a
+ele, que sai dos gastos (FR-042); e, só na Tendência, o mês do evento, que deixa de contar a venda e o cachê
+(FR-043). No resto da DRE o mês do evento continua comparado, porque ela já exclui o cancelado.
 - Mês com cancelado `legado` (hoje não há nenhum) sai da comparação e é listado à parte, porque ali a
   diferença é a esperada.
 - Em divergência, a saída é 1 e mostra o mês e a linha.
@@ -258,7 +250,9 @@ idênticas ao centavo entre `main` e branch.
 - O `downgrade` derruba elenco → bvs → cancelamentos.
 - `create_app()` sobe com os mappers configurados. Um `AmbiguousForeignKeysError` aparece aqui, e não no
   `startCommand`.
-- A ida e volta roda com as três tabelas vazias, depois da limpeza do verify.
+- A ida e volta roda com as três tabelas vazias, depois da limpeza do verify. Este é o lugar único do roteiro
+  (o data-model §10 e o plan apontam para cá; o §7 o repete no venv 3.11). Banco descartável do dump não é
+  preciso: a migration só cria tabelas.
 
 ## 5. Verifies antigos (regressão)
 
@@ -278,6 +272,12 @@ $env:MARKETING_AGENT_TOKEN = (Get-Content C:\Users\schim\Desktop\Manto_Platform\
 & $py specs\266-costuras-funil\verify_266.py
 & $py specs\258-cliente-manual\verify_258.py
 & $py specs\256-auditor-marketing\verify_256.py
+& $py specs\273-orcamento-para-evento\verify_273.py
+& $py specs\301-orcamentos-visiveis-comercial\verify_301.py
+& $py specs\272-notificacoes-internas\verify_272.py
+& $py specs\238-teto-autorizado\verify_238.py
+& $py specs\271-hotfix-corrida-lancamentos\verify_271.py
+& $py specs\307-natal-papai-noel-calculadora\verify_307.py
 ```
 
 | Verify | O que muda com a 306 | Fase em que pode quebrar primeiro |
@@ -290,9 +290,14 @@ $env:MARKETING_AGENT_TOKEN = (Get-Content C:\Users\schim\Desktop\Manto_Platform\
 | `verify_305` | `marcar_status_do_bv` substitui o ramo BV da 305 (`app/api/financeiro_write.py:163-194`), e o 409 do BV com `valor_esperado` divergente ganha o código `valor_mudou`; `valor_esperado` também no `expense`; `_montar_acrescimos` fatiado não muda o vivo. Roda ao fechar a História 1 e de novo logo depois da extração, antes de ela ser usada no cancelado | História 1 (`marcar_status_do_bv`), e de novo na História 4 (a extração) |
 | `verify_205` | Pipeline e Loja Virtual | História 2 |
 | `verify_266`, `verify_258`, `verify_256` | Rodar de novo | Polimento |
+| `verify_273` (base 8/15), `verify_301` | O 409 novo em `set_event_orcamento`, antes de aplicar a venda e antes da autoria da 301 | História 2 |
+| `verify_272` | `DESTINATARIOS_POR_KIND` ganha dois kinds | História 6 |
+| `verify_238` | `assign_role` ganha a condição do e-mail de remoção | História 6 |
+| `verify_271` | `GET /api/dashboard`: Performance (História 3) e cobrança da Home (História 5) | História 3 |
+| `verify_307` | Arquivos em comum com a 307 (`orcamento_evento_ops.py`, `orcamento/quote_ops.py`, `calendar/routes.py`) | História 2 |
 
 - O `verify_305` roda sem `--regressao`. A regressão dele repete 267b, 215b, 267c e 267, e traz o 273 com
-  base conhecida de 8/15.
+  base conhecida de 8/15; o 273 entra aqui por conta própria, comparado com essa base.
 - Os verifies de `scripts/db/` não rodam: o `verify_151_excluir_sync.py`, por exemplo, falaria com o Google
   real. Eles envelhecem e vão ao `docs/05` como dívida.
 
@@ -306,11 +311,11 @@ npm run build           # antes do merge
 cd ..
 $ruff = 'C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\ruff.exe'
 & $ruff check @(git diff --name-only --diff-filter=d main -- '*.py') @(git ls-files --others --exclude-standard -- '*.py')
-& $ruff format specs\306-dinheiro-do-cancelamento\verify_306.py specs\306-dinheiro-do-cancelamento\dre_retrato.py `
+& $ruff format specs\306-dinheiro-do-cancelamento\verify_306.py specs\306-dinheiro-do-cancelamento\retrato_main_branch.py `
   specs\306-dinheiro-do-cancelamento\contagem_pre_deploy.py app\financeiro\dre_ops.py
 ```
 
-- O portão do `ruff check` é **nenhum erro novo**. Em `d855d1a`, os arquivos de `app/` que a 306 toca já
+- O portão do `ruff check` é **nenhum erro novo**. Em `d855d1a` (e de novo em `6356b80`, com a 307), os arquivos de `app/` que a 306 toca já
   somam 14 erros: 8 em `app/calendar/routes.py`, 5 em `app/models.py` e 1 em `app/financeiro/routes.py`.
   Eles não se limpam de passagem; compare com a mesma lista na `main`.
 - `ruff format` só roda nos três scripts novos e no `dre_ops.py`.
@@ -485,7 +490,8 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
 ## 9. Antes do merge e deploy
 
 **Antes do merge**
-1. A branch está rebaseada sobre a `main`, que já tem 303, 215b, 267c e 305.
+1. A branch está rebaseada sobre a `main`, que já tem 303, 215b, 267c, 305 e 307 (`6356b80`), com as citações
+   `arquivo:linha` reconferidas se a `main` andar de novo.
 2. Tudo verde:
    - o §1 sem argumentos e com `--regressao`, mais o §3 idêntico, o §5 e o §6;
    - o §8, os 21 itens;
@@ -501,7 +507,13 @@ precisa saber, antes do push:
 - as linhas `no_banco`, que passam a aparecer em Comissões;
 - os marcados pela 303, que serão os primeiros cancelados;
 - os BVs não pagos sem PIX, que o diálogo vai pedir;
-- os grupos com o principal fora do 1º dia.
+- os grupos com o principal fora do 1º dia;
+- os itens abertos de comissão de soma zero com linha de valor, que hoje somem da Planilha e passam a
+  aparecer também em mês sem cancelamento (R6);
+- os cancelados `legado` sem dinheiro, que hoje se excluem (inclusive pelo sync) e passam a dar 409 na
+  exclusão (R7);
+- a Tendência do mês do evento de cada `legado`, que deixa de contar a venda e o cachê (FR-043);
+- as vendas vivas com devolução lançada à mão, cuja cobrança na Home passa a descontá-la (risco aceito 16).
 
 **Deploy**
 - Só quando o dono pedir ("push", "sobe"). O push é o merge na `main` mais `git push origin main`, numa
@@ -544,8 +556,15 @@ precisa saber, antes do push:
 **Rollback**
 - Enquanto nenhum cancelamento real aconteceu, reverter o merge (`git revert -m 1 <merge>` + push) é limpo.
   A migration é aditiva: as tabelas ficam, o código antigo as ignora, e não se roda `downgrade`.
+- O descartável não tem venda, comissão nem BV: o código antigo não tem o que estragar nele.
 - Depois do primeiro cancelamento real, só se corrige para a frente (`306b`). Nunca `downgrade` com linha
-  em `event_cancellations`: o código antigo zeraria a comissão do retido.
+  em `event_cancellations`: ele apaga o congelamento, e nada mais se refaz. Sobre os dados novos, o código
+  antigo:
+  - zeraria a comissão do retido;
+  - tomaria o ajuste do corte de dia (`a_pagar` com `original_id`, ligado ao principal vivo) pela comissão do
+    evento e o regravaria com a cheia;
+  - listaria pelo cheio o BV não pago do cancelado, e a Planilha da 305 deixaria marcá-lo pago por esse valor;
+  - deixaria excluir o cancelado vazio, inclusive pelo sync, e o CASCADE levaria o congelamento junto.
 - Não voltam: ensaios apagados, e-mails enviados e venda passada de dia.
 - Antes de um segundo deploy às cegas, peça ao dono o log do painel.
 
