@@ -6,7 +6,8 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-15** · **307-natal-papai-noel-calculadora** (em branch): card
+> Última atualização: **2026-10-16** · **307-natal-papai-noel-calculadora** (em produção desde
+> 16/10 ~01:25): card
 > "Datas especiais" em `/orcamento/configuracoes`; dica, aviso dourado e "Recalculando…" na
 > calculadora; nota no resultado — A.7. Antes: **2026-09-30** · **303-sync-nao-apaga-venda**: faixa fixa "N eventos sumiram
 > do Google Agenda" no `AppShell`; selo "Sumiu do Google" na agenda; banner, quadro e diálogo

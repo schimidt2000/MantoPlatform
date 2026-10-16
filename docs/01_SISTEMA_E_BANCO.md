@@ -7,8 +7,8 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-15** · Em branch: **307-natal-papai-noel-calculadora** (sem
-> migration — head continua `a7c3e91f4d28`; bloco `datas_especiais` no `pricing_config`, §2.10;
+> Última atualização: **2026-10-16** · **307-natal-papai-noel-calculadora** (EM PRODUÇÃO desde
+> 16/10/2026 ~01:25; sem migration — head continua `a7c3e91f4d28`; bloco `datas_especiais` no `pricing_config`, §2.10;
 > `data_especial` no quote de `/orcamento/calcular` e validação do bloco em `/orcamento/settings`,
 > §3.13; gate de `orcamento_write` na tabela, §4.3). Antes: **2026-10-14/15** · **305-bv-do-orcamento-no-evento**
 > (sem migration; em produção desde 15/10 ~02:49). Antes: **2026-09-30** · Em branch: **303-sync-nao-apaga-venda** (migration

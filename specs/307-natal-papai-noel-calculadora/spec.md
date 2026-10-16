@@ -3,8 +3,8 @@
 # Feature 307 — Papai Noel em data especial: a tabela de preços tem os valores de 24 e 25/12 e a calculadora os aplica pela data do evento
 
 **Branch**: `307-natal-papai-noel-calculadora` (da `main`) · **Created**: 2026-10-15 · **Status**:
-Implementada em 15/10/2026 — `verify_307.py --regressao` 18/18, typecheck limpo, telas conferidas;
-aguardando o "push" do dono ·
+**Em produção desde 16/10/2026 ~01:25** (merge `merge: 307 — …`) — implementada em 15/10,
+`verify_307.py --regressao` 18/18 antes e depois do converge, typecheck limpo, telas conferidas ·
 **Migration**: nenhuma (tudo mora no JSON `pricing_config` de `site_settings` e no snapshot do
 orçamento, que já guarda a data do evento) · **Nível**: 1 (feature) — regra de negócio nova em dois
 domínios (`app/orcamento/` e o teto de cachê em `app/calendar/`), tela de configuração alterada,

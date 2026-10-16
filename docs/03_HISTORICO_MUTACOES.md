@@ -4,10 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-15** · Estado do repositório: em branch
-> **307-natal-papai-noel-calculadora** (sem migration; implementada em 15/10, `verify_307.py
-> --regressao` 18/18, telas conferidas; **não publicada** — a tabela de preços ganha a faixa de 24 e
-> 25/12 e a calculadora a aplica pela data do evento, com o teto das vagas junto) — antes dela
+> Última atualização: **2026-10-16** · Estado do repositório: pós-feature
+> **307-natal-papai-noel-calculadora** (sem migration; **EM PRODUÇÃO desde 16/10/2026 ~01:25** pelo
+> merge `merge: 307 — …` — a tabela de preços ganha a faixa de 24 e 25/12 e a calculadora a aplica
+> pela data do evento, com o teto das vagas junto; `verify_307.py --regressao` 18/18) — antes dela
 > pós-feature **305-bv-do-orcamento-no-evento** (sem migration; **EM PRODUÇÃO desde 15/10/2026
 > ~02:49** pelo merge `d855d1a` — o BV do orçamento chega ao evento no valor certo, com quem recebe
 > e o PIX) — antes dela pós-deploy de 14/10 ~19:28 (merge `f1fbd46`), que
@@ -129,7 +129,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **307-natal-papai-noel-calculadora** | *(em branch, implementada em 15/10 — aguardando o "push")* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
+| **307-natal-papai-noel-calculadora** | *(EM PRODUÇÃO 16/10 ~01:25)* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
 | **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:49)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
 | **267c-hotfix-trava-do-lote** | *(EM PRODUÇÃO 14/10 ~19:28, merge `0feb425`)* "A gente paga, marca como pago, ele muda e depois ele volta para o banco o valor total, sendo que parte já foi paga." O seletor do item de comissão da Planilha regravava **todas** as linhas do ciclo, inclusive as pagas; o "Não pago" de um item misto devolvia o pago a "a pagar" e a ressincronização o recalculava pela venda de hoje. Agora o lote só mexe no que não foi pago (com trava de linha), o pago sai num item à parte ("— pago"), e desfazer pagamento é só do Superadmin, com motivo no histórico do evento — nas quatro portas e na tela antiga | 2026-10-14 | `—` | (aqui) | — |
@@ -304,6 +304,14 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ## Registro
 
 ### 307 — Papai Noel em data especial: a tabela de preços tem os valores de 24 e 25/12 e a calculadora os aplica pela data do evento   (307-natal-papai-noel-calculadora · 2026-10-15 · sem migration)
+
+> **EM PRODUÇÃO desde 16/10/2026 ~01:25** (merge `merge: 307 — …` sobre a `main` `d855d1a`; cinco
+> commits: `1a1c1af` tabela/cálculo, `1a56925` teto, `5e8defb` telas, `c17b072` docs, `3163934`
+> converge). Pós-deploy a fazer pelo dono: conferir `/orcamento/configuracoes` em produção (Papai
+> Noel 712 / Ajudante do Noel 423 / bloco de Natal — se a produção tiver editado o Noel desde
+> 30/09, o guarda da migração não troca e o valor se ajusta na tela), um orçamento de 20/12 e um
+> de 24/12, e avisar a equipe: parar de somar o acréscimo "Outro" nos orçamentos de Noel e usar o
+> item "Ajudante do Noel" (não ator cara limpa).
 
 **Motivação.** O Natal é a maior receita do ano e, até 2025, a Visita Mágica do Papai Noel era
 vendida por uma tabela fora do sistema (Noel R$ 2.500 / Noel + 1 ajudante R$ 3.600 até 23/12;
