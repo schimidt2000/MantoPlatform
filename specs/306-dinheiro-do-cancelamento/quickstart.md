@@ -78,7 +78,10 @@ igual.
   - 16b cheia 0 (cortesia com valor e evento sem vendedor);
   - 38-comprovante;
   - 39 devolução do dia depois do principal cancelado;
-  - 44 dois sinos.
+  - 44 dois sinos;
+  - do checklist de 16/10: 5-grupo (pendente num satélite), 16-vivo (comprovante, reembolso e parcela em
+    evento vivo), 18-inverso (gasto que passaria a ser devolução de cancelado), 37-devolução (a aberta do
+    satélite absorve depois da do principal); e, dentro do 4, o piso da devolução do corte.
 - **Mutações**: rodam dentro do cenário, no molde de `_deve_quebrar` do `verify_305`. Com a regra errada
   ligada, o cenário tem de quebrar.
   - 14b e 20, contra a `main` (no 20, a `main` dá −600);
@@ -126,10 +129,10 @@ escritos e nenhuma linha de núcleo:
 |---|---|---|
 | B0 | Fundação | 1, 23, 26 e 27; a parte de regressão do 41 (comissões dos grupos e cobranças da Home sem devolução), verde desde aqui; com `--nucleo`, a variante 16b cheia 0 |
 | B1 | História 1 | 13, 14 e 14b. Com `--nucleo`: 7–11, 12 (sem a DRE), 17 e 30; as variantes 9/10-desfazer e 16/17-`paid_amount`; e, no 8, `simular=True` × `simular=False`. O `verify_305` tem de estar verde (§5) |
-| B2 | História 2 | Pela API: 2 e 8, com a variante 2/8 prévia = execução; 2b (sem o aviso), 3, 4 (sem o corte e a multa), 5, 6, 7 e 9–11; 12 e 32 sem a DRE; 15, 16, 17 (sem o satélite), 18, 19, 25, 28, 30, 31, 34 e 36. As variantes 9/10-desfazer e 16/17-`paid_amount` pela API. As partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d |
+| B2 | História 2 | Pela API: 2 e 8, com a variante 2/8 prévia = execução; 5 (sem a variante 5-grupo), 16-vivo, 18 com o 18-inverso, 19 com o FINANCEIRO, 25 com as flags do vivo; 2b (sem o aviso), 3, 4 (sem o corte e a multa), 5, 6, 7 e 9–11; 12 e 32 sem a DRE; 15, 16, 17 (sem o satélite), 18, 19, 25, 28, 30, 31, 34 e 36. As variantes 9/10-desfazer e 16/17-`paid_amount` pela API. As partes "COMERCIAL/FINANCEIRO → 409" do 16b, do 16c(v) e do 16d |
 | B3 | História 3 | 20, 22 e 24; a parte da DRE do 12 e do 32; o 21 menos o satélite (a parte virtual fecha aqui; a multa é semeada por ORM, com `SpecialExpense.CATEGORY_MULTA_CANCELAMENTO`). O 23 segue verde |
 | B4 | História 4 | 16b (sem o satélite, e com a variante 16b cheia 0 pela API), 16c, 16d e 16e. O `verify_305` tem de estar verde antes (§5) |
-| B5 | História 5 | 29, 35, 37, 37b, 38 (+ 38-comprovante), 38c, 39 (+ a variante 39 devolução do dia depois do principal cancelado) e 41. 42 (sem aviso e ensaio), 42b (sem a multa), 42c e 42d (sem o cachê pago). A parte de satélite do 4, do 16b, do 17 e do 21. Do 40, desagrupar e agrupar |
+| B5 | História 5 | a variante 5-grupo; 29, 35, 37 (+ 37-devolução), 37b, 38 (+ 38-comprovante), 38c, 39 (+ a variante 39 devolução do dia depois do principal cancelado) e 41. 42 (sem aviso e ensaio), 42b (sem a multa), 42c e 42d (sem o cachê pago). A parte de satélite e de corte do 4 (inclusive o piso da devolução do corte), do 16b, do 17 e do 21. Do 40, desagrupar e agrupar |
 | B6 | História 6 | 33, 40, 42e, 43, 44 (+ 44 dois sinos), 45, 45b e 45c; o que faltava do 2b, do 4, do 42, do 42b e do 42d. A rodada chega a `59/59 OK` |
 | B9 | limpeza | 27 (roda sempre) |
 

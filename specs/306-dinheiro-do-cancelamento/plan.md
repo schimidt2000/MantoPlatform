@@ -276,7 +276,7 @@ specs/306-dinheiro-do-cancelamento/
 - **Reescritos**:
   - `specs/303-…/verify_303.py`: `c12_nao_cancela` (`:2339`) e `MSG_MARCADO` (`:167`);
   - `specs/267-…/verify_267.py` (`:278-289`): lê o bloco `cancelamento` de um `legado`.
-- **Rodados de novo**: `verify_267b`, `267c`, `299`, `205`, `215b`, `305`, `266`, `258`, `256`.
+- **Rodados de novo**: `verify_267b`, `267c`, `299`, `205`, `215b`, `305`, `266`, `258`, `256`, e também `273`, `301`, `272`, `238`, `271` e `307` (quickstart §5).
 
 ### Docs
 
@@ -449,7 +449,7 @@ O `tasks.md` fecha as fases **nesta ordem**, cada uma com os seus cenários verd
    - `pode_editar_venda_do_cancelado(user)`.
 
 **Ao fim da fase**
-- **Verde**: 1, 23, 26 e 27 (limpeza); em modo núcleo, a variante "cheia 0" do 16b.
+- **Verde**: 1, 23, 26 e 27 (limpeza); a parte de regressão do 41 (comissões dos grupos e cobranças da Home sem devolução, `main` × branch); em modo núcleo, a variante "cheia 0" do 16b.
 - **Vermelho esperado**: todos os outros, pelas funções e rotas que faltam.
 - **Pode estar verde antes do núcleo** sem ser defeito: as partes do 6 e do 28 que já valem hoje (403 do COMERCIAL no cancelar e 401 sem sessão nas rotas que existem). O "já cancelado" do 5 **não**: no HEAD, `api_cancelar_evento` responde 400 (`agenda_write.py:609-610`), e o cenário espera 409.
 
