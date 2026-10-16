@@ -225,6 +225,12 @@ export function OrcamentoResultadoPage() {
           {quote.nota_fiscal && (
             <p className="mt-3 text-sm text-muted">🧾 Valores com Nota Fiscal inclusa.</p>
           )}
+          {/* Feature 307: o orçamento caiu numa faixa de data especial (ex.: 24 e 25/12). */}
+          {quote.data_especial && (
+            <p className="mt-3 text-sm text-muted">
+              🎄 Valores da data especial: {quote.data_especial.rotulo}.
+            </p>
+          )}
         </CardContent>
       </Card>
 

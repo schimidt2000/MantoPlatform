@@ -638,6 +638,16 @@ def _chave_cache(duracao: int) -> str:
     return "cache_custom" if duracao > 4 else f"cache_{duracao}h"
 
 
+def data_do_evento(event: Any) -> str | None:
+    """A data do evento como ``"AAAA-MM-DD"`` de parede, ou ``None`` sem `start_at` (feature 307).
+
+    Fonte única para o teto das vagas: a faixa de data especial segue o dia em que o artista
+    trabalha — na criação e no vínculo 273 —, que pode não ser a data do orçamento. Sem fuso: o
+    `start_at` já é hora de São Paulo.
+    """
+    return event.start_at.date().isoformat() if getattr(event, "start_at", None) else None
+
+
 def _cap_e_nota(item: dict, chave: str) -> tuple[Any, Any]:
     cap = item.get(chave)
     notas = item.get("cap_notes")
@@ -662,7 +672,9 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
     snap = snapshot_do_orcamento(entry)
     duracao = _duracao_do_evento(event)
     chave = _chave_cache(duracao)
-    itens = _compute_performer_caches(snap, horas_extra=duracao if duracao > 4 else None)
+    itens = _compute_performer_caches(
+        snap, horas_extra=duracao if duracao > 4 else None, data_evento=data_do_evento(event)
+    )
     papeis = list(event.roles)
     relatorio = {
         "personagens_casados": 0, "nao_casados": [], "maquiagem_marcada": 0,

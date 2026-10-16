@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ApiRequestError } from "@manto/api-client";
 import {
   Button,
   Card,
@@ -13,6 +14,8 @@ import {
   TableRow,
 } from "@manto/ui";
 import { MoneyInput } from "@manto/money";
+import { DatasEspeciaisCard } from "../components/orcamento/DatasEspeciaisCard";
+import { DUR_LABELS, INPUT_PRECOS, PriceTable } from "../components/orcamento/PriceTable";
 import {
   useAddEspecial,
   useOrcamentoSettings,
@@ -22,45 +25,7 @@ import {
 } from "../lib/orcamento";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
-const INPUT = "h-9 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
-const DUR_LABELS = ["1h", "2h", "3h", "4h"];
-
-function PriceTable({
-  rows,
-}: {
-  rows: { label: string; values: number[]; onChange: (values: number[]) => void }[];
-}) {
-  return (
-    <Table>
-      <thead>
-        <TableRow head>
-          <TableCell as="th">Item</TableCell>
-          {DUR_LABELS.map((d) => (
-            <TableCell as="th" align="right" key={d}>
-              {d}
-            </TableCell>
-          ))}
-        </TableRow>
-      </thead>
-      <tbody>
-        {rows.map((row) => (
-          <TableRow key={row.label}>
-            <TableCell className="font-medium text-ink">{row.label}</TableCell>
-            {DUR_LABELS.map((d, i) => (
-              <TableCell key={d} align="right">
-                <MoneyInput
-                  className={`${INPUT} text-right`}
-                  value={row.values[i] ?? 0}
-                  onValueChange={(v) => row.onChange(row.values.map((x, idx) => (idx === i ? v : x)))}
-                />
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </tbody>
-    </Table>
-  );
-}
+const INPUT = INPUT_PRECOS;
 
 export function OrcamentoConfigPrecosPage() {
   const query = useOrcamentoSettings();
@@ -71,6 +36,9 @@ export function OrcamentoConfigPrecosPage() {
   const [settings, setSettings] = useState<PricingSettings | null>(null);
   const [novoEspecialNome, setNovoEspecialNome] = useState("");
   const [novoAcrescimo, setNovoAcrescimo] = useState("");
+  // Feature 307: os `fields` do 400 do servidor (`datas_especiais.<faixa>.<campo>`) vão ao card.
+  const errosDeSalvar: Record<string, string> =
+    save.error instanceof ApiRequestError && save.error.fields ? save.error.fields : {};
 
   useEffect(() => {
     if (query.data && !settings) setSettings(query.data.settings);
@@ -238,7 +206,15 @@ export function OrcamentoConfigPrecosPage() {
                       if (!window.confirm(`Remover "${nome}" da tabela de preços?`)) return;
                       removeEspecial.mutate(nome);
                       const { [nome]: _removed, ...rest } = settings.especiais;
-                      setSettings({ ...settings, especiais: rest });
+                      // Feature 307: a sobrescrita do especial sai das faixas junto — senão o
+                      // próximo "Salvar" mandaria um nome órfão e levaria 400.
+                      const faixas = Object.fromEntries(
+                        Object.entries(settings.datas_especiais ?? {}).map(([k, f]) => {
+                          const { [nome]: _semUso, ...cache } = f.cache;
+                          return [k, { ...f, cache }];
+                        }),
+                      );
+                      setSettings({ ...settings, especiais: rest, datas_especiais: faixas });
                     }}
                   >
                     Remover
@@ -483,13 +459,42 @@ export function OrcamentoConfigPrecosPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Feature 307: faixas de data especial (24 e 25/12) — a calculadora resolve pela data. */}
+      {Object.entries(settings.datas_especiais ?? {}).map(([chave, faixa]) => (
+        <DatasEspeciaisCard
+          key={chave}
+          chave={chave}
+          faixa={faixa}
+          especiais={Object.keys(settings.especiais)}
+          erros={errosDeSalvar}
+          onChange={(nova) =>
+            setSettings({
+              ...settings,
+              datas_especiais: { ...settings.datas_especiais, [chave]: nova },
+            })
+          }
+        />
+      ))}
       </div>
 
       <Button loading={save.isPending} onClick={handleSave}>
         Salvar configurações
       </Button>
       {save.isSuccess && <p className="text-sm text-green">Configurações salvas com sucesso!</p>}
-      {save.isError && <p className="text-sm text-red">Não foi possível salvar as configurações.</p>}
+      {save.isError && (
+        <div className="space-y-1" role="alert">
+          <p className="text-sm text-red">Não foi possível salvar as configurações.</p>
+          {/* Os erros das datas especiais aparecem no próprio card (campo destacado); aqui só o resto. */}
+          {Object.entries(errosDeSalvar)
+            .filter(([campo]) => !campo.startsWith("datas_especiais"))
+            .map(([campo, msg]) => (
+              <p key={campo} className="text-xs text-red">
+                {campo}: {msg}
+              </p>
+            ))}
+        </div>
+      )}
     </div>
   );
 }

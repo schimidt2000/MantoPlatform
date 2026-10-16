@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ApiRequestError } from "@manto/api-client";
 import {
   Badge,
@@ -29,10 +30,12 @@ import {
   useOrcamentoOpcoes,
   usePersonagensNoDia,
   useSalvarOrcamento,
+  diaParaTela,
   type Acrescimo,
   type CalcularOrcamentoInput,
   type CalcularOrcamentoResult,
   type Performer,
+  type Quote,
 } from "../lib/orcamento";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
@@ -107,6 +110,59 @@ function AgendaNoDiaAlert({ date }: { date: string }) {
   );
 }
 
+/** "3,34×", ou "3,34–3×" quando o markup varia por duração. */
+function markupLegivel(markup: number[]): string {
+  const min = Math.min(...markup);
+  const max = Math.max(...markup);
+  const f = (v: number) => v.toLocaleString("pt-BR");
+  return min === max ? `${f(min)}×` : `${f(max)}–${f(min)}×`;
+}
+
+/** Lista em pt-BR: "24/12 e 25/12", "24/12, 25/12 e 26/12". */
+function listaEmPortugues(itens: string[]): string {
+  if (itens.length <= 1) return itens.join("");
+  return `${itens.slice(0, -1).join(", ")} e ${itens[itens.length - 1]}`;
+}
+
+/**
+ * Feature 307: aviso "a tabela especial está valendo". A fonte é o próprio resultado do servidor
+ * (`quote.data_especial`) — o React não recalcula a faixa. Mesmo padrão visual do alerta da agenda.
+ * No personalizado o valor digitado vence, e o aviso diz isso em vez de prometer o markup.
+ */
+function DataEspecialAlert({
+  faixa,
+  personalizado,
+}: {
+  faixa: NonNullable<Quote["data_especial"]>;
+  personalizado: boolean;
+}) {
+  const reduzir = useReducedMotion();
+  const natal = faixa.chave === "natal";
+  return (
+    <motion.div
+      initial={reduzir ? false : { opacity: 0, y: -4 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduzir ? undefined : { opacity: 0, y: -4 }}
+      transition={{ duration: 0.2 }}
+      className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm"
+      role="status"
+    >
+      <p className="mb-1 font-semibold text-gold-ink">
+        {natal ? "🎄 " : ""}Data especial — {faixa.rotulo}
+        {personalizado ? "" : `: markup ${markupLegivel(faixa.markup)} e cachês próprios`}
+      </p>
+      <p className="text-ink">
+        {personalizado
+          ? `Orçamento personalizado: o valor digitado vence — confira se cobre a tabela de ${faixa.rotulo}.`
+          : "Vale para qualquer orçamento nesta data — o preço já é o da tabela especial."}
+        {natal && !personalizado
+          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não some o acréscimo "Outro".'
+          : ""}
+      </p>
+    </motion.div>
+  );
+}
+
 export function OrcamentoCalculadoraPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -144,6 +200,12 @@ export function OrcamentoCalculadoraPage() {
   const [result, setResult] = useState<CalcularOrcamentoResult | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  // Feature 307: do payload mudar até a resposta chegar, `result` é de outra conta — durante os
+  // 400 ms do debounce `calcular.isPending` ainda é false, e "Gerar Orçamento" salvaria o preço
+  // da data anterior (o /salvar grava o que o navegador manda, sem recalcular). `seq` descarta a
+  // resposta de um cálculo antigo que chegue depois de o payload ter mudado de novo.
+  const [calcPendente, setCalcPendente] = useState(false);
+  const seq = useRef(0);
   const [memoriaOpen, setMemoriaOpen] = useState(false);
   const [distanciaMsg, setDistanciaMsg] = useState<{ text: string; error: boolean } | null>(null);
 
@@ -300,17 +362,38 @@ export function OrcamentoCalculadoraPage() {
     if (!opcoes.data) return;
     setFieldErrors({});
     setSaved(false);
+    setCalcPendente(true);
+    const meu = ++seq.current;
     const timer = setTimeout(() => {
       calcular.mutate(payload, {
-        onSuccess: (data) => setResult(data),
+        onSuccess: (data) => {
+          if (meu === seq.current) setResult(data);
+        },
         onError: (err) => {
-          if (err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
+          if (meu === seq.current && err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
+        },
+        onSettled: () => {
+          if (meu === seq.current) setCalcPendente(false);
         },
       });
     }, CALC_DEBOUNCE_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [payload, opcoes.data]);
+
+  // Feature 307: a faixa de data especial vem do servidor, no resultado — fonte única. Enquanto o
+  // recálculo não voltou (ou falhou), o `result` é de outra data: o aviso some para não mentir.
+  const faixaAtiva =
+    calcPendente || calcular.isPending || calcular.isError ? null : (result?.quote.data_especial ?? null);
+  const diasEspeciais = useMemo(
+    () =>
+      listaEmPortugues(
+        Object.values(opcoes.data?.settings.datas_especiais ?? {})
+          .flatMap((f) => f.dias)
+          .map(diaParaTela),
+      ),
+    [opcoes.data],
+  );
 
   // "Gerar Orçamento" salva no histórico e ABRE o orçamento gerado — a tela onde se copia a
   // mensagem, baixa o PDF e envia por e-mail. Salvar sem levar para lá deixava o comercial sem
@@ -400,6 +483,12 @@ export function OrcamentoCalculadoraPage() {
                   <div>
                     <label className={LABEL}>Data</label>
                     <Input type="date" value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
+                    {/* A data é opcional e o preço de Natal depende dela: sem data, preço comum. */}
+                    {!eventDate && diasEspeciais && (
+                      <p className="mt-1 text-xs text-muted">
+                        Em {diasEspeciais} a tabela especial entra pela data.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className={LABEL}>Horário</label>
@@ -408,6 +497,15 @@ export function OrcamentoCalculadoraPage() {
                 </div>
 
                 {eventDate && <AgendaNoDiaAlert date={eventDate} />}
+                <AnimatePresence initial={false}>
+                  {faixaAtiva && (
+                    <DataEspecialAlert
+                      key={faixaAtiva.chave}
+                      faixa={faixaAtiva}
+                      personalizado={!!result?.quote.personalizado}
+                    />
+                  )}
+                </AnimatePresence>
 
                 {deslocamento !== "sp" && (
                   // Mesmo motivo do alerta acima: `amber` cru não troca de tema.
@@ -690,12 +788,22 @@ export function OrcamentoCalculadoraPage() {
                         </div>
                       ))}
                   </div>
+                  {/* Feature 307: o resultado diz quando caiu numa faixa de data especial. */}
+                  {result.quote.data_especial && (
+                    <p className="text-sm text-muted">
+                      🎄 Valores da data especial: {result.quote.data_especial.rotulo}.
+                    </p>
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
                       Ver memória de cálculo
                     </Button>
-                    <Button loading={salvar.isPending} onClick={handleSalvar} disabled={saved}>
-                      {saved ? "Orçamento salvo" : "Gerar Orçamento"}
+                    <Button
+                      loading={salvar.isPending}
+                      onClick={handleSalvar}
+                      disabled={saved || calcPendente || calcular.isPending || calcular.isError}
+                    >
+                      {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar Orçamento"}
                     </Button>
                   </div>
                 </CardContent>

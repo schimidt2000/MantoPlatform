@@ -2832,9 +2832,16 @@ def _montar_cap_note(
     return f"{descricao}: {conta} = {_fmt_valor_nota(total)}"
 
 
-def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) -> list[dict]:
+def _compute_performer_caches(
+    snapshot: dict, horas_extra: int | None = None, data_evento: str | None = None
+) -> list[dict]:
     """Retorna lista de {label, cache_1h..cache_4h, cap_notes, needs_makeup, is_singer} para
     cada performer + coordenadores + técnico + maquiador do snapshot.
+
+    Feature 307: a faixa de data especial (24 e 25/12 na tabela de preços) entra no teto pela data —
+    ``data_evento`` (o dia em que o artista trabalha: criação e vínculo 273) ou, sem ela, a data do
+    orçamento (prefill). Noel/Ajudante/Coordenador levam o cachê da faixa; os demais sobem ao piso.
+    Sem isso o casting ficaria preso ao cachê normal (600) enquanto a venda já cobra o Natal.
 
     Inclui o acréscimo de "show customizado" (+R$50/artista) nos cachês de personagem quando
     aplicável — antes só entrava no total do orçamento, não no cachê individual (feature 172).
@@ -2852,7 +2859,7 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
     entender de onde saiu o teto, em vez de ver só um número que ninguém sabe explicar.
     """
     from app.orcamento.pricing import (
-        get_ator_prices, get_cantor_prices, get_especial_prices,
+        cache_na_faixa, get_ator_prices, get_cantor_prices, get_especial_prices,
         get_coordenador_prices, get_tecnico_prices, calcular_maquiador,
         compute_show_pricing,
     )
@@ -2863,6 +2870,9 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
     has_show, sosia_custom_add_per_artist = compute_show_pricing(
         performers, snapshot.get("show_sosia_tipo", "predefinido")
     )
+    cfg_precos = _orc_cfg.load()
+    faixa = _orc_cfg.faixa_especial(data_evento or snapshot.get("event_date") or "", cfg_precos)
+    sufixo_faixa = f" · {faixa['rotulo']}" if faixa is not None else ""
 
     # Adicional noturno (+R$50 por performer/coord se horário >= 19h)
     event_time_str = (snapshot.get("event_time") or "").strip()
@@ -2878,7 +2888,7 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
     if snapshot.get("fora_sp"):
         km_ida = float(snapshot.get("km_ida") or 0)
         if km_ida > 0:
-            afsp_divisor = float(_orc_cfg.load().get("transporte", {}).get("afsp_divisor", 3.0))
+            afsp_divisor = float(cfg_precos.get("transporte", {}).get("afsp_divisor", 3.0))
             transport_add = round(km_ida * 2 / afsp_divisor, 2)
 
     extra = int(horas_extra) if horas_extra and int(horas_extra) > 4 else None
@@ -2930,7 +2940,7 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
                 marcas.append("com maquiagem")
         elif ptype == "especial":
             personagem = p.get("personagem", "")
-            prices = get_especial_prices(personagem, show, cantor_flag)
+            prices = get_especial_prices(personagem, show, cantor_flag, faixa=faixa)
             base_prices = prices
             label  = nome or personagem
             if cantor_flag:
@@ -2945,6 +2955,13 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
             base_prices = prices
             label  = nome or "Profissional"
             descricao = "Profissional"
+        # Feature 307: a MESMA regra da venda (fonte única em pricing.cache_na_faixa) — sobrescrita
+        # fica, o resto sobe ao piso — aplicada em `prices` e na base da régua >4h.
+        prices, marca_faixa = cache_na_faixa(p, prices, faixa)
+        base_prices, _ = cache_na_faixa(p, base_prices, faixa)
+        descricao = f"{descricao}{sufixo_faixa}"
+        if marca_faixa:
+            marcas.append(marca_faixa)
         if marcas:
             descricao = f"{descricao} ({', '.join(marcas)})"
 
@@ -2995,9 +3012,9 @@ def _compute_performer_caches(snapshot: dict, horas_extra: int | None = None) ->
         result.append(item)
 
     # Coordenadores
-    coord_prices = get_coordenador_prices(has_show, coordenador_qty)
+    coord_prices = get_coordenador_prices(has_show, coordenador_qty, faixa=faixa)
     per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(4)]
-    coord_desc = "Coordenador (show)" if has_show else "Coordenador"
+    coord_desc = ("Coordenador (show)" if has_show else "Coordenador") + sufixo_faixa
     coord_adicionais = [("noturno", float(noturno_add)), ("fora-SP", float(transport_add))]
     for _ in range(coordenador_qty):
         item = {
@@ -3789,8 +3806,13 @@ def _create_event_core(
         entry = OrcamentoHistory.query.get(orc_id)
         if entry is not None:
             snap = json.loads(entry.form_snapshot or "{}")
+            # Feature 307: o teto segue a data do EVENTO que nasce (não a do orçamento) — a mesma
+            # fonte que o vínculo 273 usa.
+            from app.calendar.orcamento_evento_ops import data_do_evento
+
             orc_caches = _compute_performer_caches(
-                snap, horas_extra=duracao if duracao > 4 else None
+                snap, horas_extra=duracao if duracao > 4 else None,
+                data_evento=data_do_evento(event),
             )
             # Feature 273: a caixinha "evento fora de São Paulo" do orçamento vale mais que o
             # endereço — e traz a quilometragem que dá base ao carrinho de transporte.

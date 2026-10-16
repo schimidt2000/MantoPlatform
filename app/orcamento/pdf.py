@@ -30,6 +30,7 @@ _TOP_Y = 572   # y do início do conteúdo (embaixo do logo)
 # Mapeamento de fontes (reportlab embeds Helvetica por padrão)
 _FONT_BOLD   = "Helvetica-Bold"
 _FONT_NORMAL = "Helvetica"
+_FONT_ITALIC = "Helvetica-Oblique"  # feature 307: a nota da data especial sai em itálico, como no WhatsApp
 
 
 def _fmt_brl(value: float) -> str:
@@ -187,6 +188,21 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         c.setFillColor(_LIGHT)
         c.drawString(_LEFT, y, deslocamento_txt)
         y -= 12
+
+    # Feature 307: a nota da faixa de data especial (24 e 25/12), a mesma da mensagem. Vem dentro
+    # do quote congelado — o PDF não relê a tabela de preços. `.get`: entradas antigas não têm a
+    # chave. Até 200 caracteres: quebra em linhas na largura útil (um drawString só passaria da margem).
+    nota_especial = ((quote.get("data_especial") or {}).get("nota_mensagem") or "").strip()
+    if nota_especial:
+        from reportlab.lib.utils import simpleSplit
+
+        c.setFont(_FONT_ITALIC, 7.5)
+        c.setFillColor(_LIGHT)
+        # No máximo 3 linhas: a página é única e sem paginação, e o rodapé do fundo não pode subir.
+        for linha in simpleSplit(nota_especial, _FONT_ITALIC, 7.5, _RIGHT - _LEFT)[:3]:
+            c.drawString(_LEFT, y, linha)
+            y -= 10
+        y -= 2
 
     y -= 8
 

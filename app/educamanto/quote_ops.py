@@ -121,6 +121,9 @@ def _totais_contratacao(contratacao: dict, prefixo_erro: str) -> tuple[dict, lis
     payload = dict(contratacao["payload"])
     payload["nota_fiscal"] = False
     payload["fora_sp"] = False
+    # Feature 307: a faixa de data especial (24 e 25/12) é da Visita Mágica, não do musical — sem
+    # isto um EducaManto marcado para a véspera levaria o markup de Natal na contratação Manto.
+    payload.pop("event_date", None)
 
     duracoes = contratacao["duracoes"]
     custom = [d for d in duracoes if d not in _DURACOES_FIXAS]

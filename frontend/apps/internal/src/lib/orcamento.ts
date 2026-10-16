@@ -7,6 +7,34 @@ import { apiFetch, apiFetchBlob } from "@manto/api-client";
 
 export type PriceTable = Record<string, number[]>;
 
+/**
+ * Feature 307 — faixa de data especial da tabela de preços (ex.: 24 e 25/12). Dias em `MM-DD`
+ * (valem todo ano); o markup substitui o normal; `cache` sobrescreve o cachê dos especiais
+ * nomeados; `coordenador` é uma lista só (com e sem show); `piso` eleva os demais performers.
+ */
+export interface FaixaEspecial {
+  rotulo: string;
+  dias: string[];
+  markup: number[];
+  cache: Record<string, number[]>;
+  coordenador: number[];
+  piso: number[];
+  nota_mensagem: string;
+}
+
+/** "MM-DD" (como a tabela guarda) → "DD/MM" (como o time lê) — feature 307. */
+export const diaParaTela = (mmdd: string) => `${mmdd.slice(3, 5)}/${mmdd.slice(0, 2)}`;
+
+/** "DD/MM" digitado → "MM-DD" da tabela; `null` se não for um dia. O servidor valida de novo. */
+export function diaParaApi(texto: string): string | null {
+  const m = /^(\d{2})\/(\d{2})$/.exec(texto.trim());
+  if (!m) return null;
+  const dia = Number(m[1]);
+  const mes = Number(m[2]);
+  if (mes < 1 || mes > 12 || dia < 1 || dia > 31) return null;
+  return `${m[2]}-${m[1]}`;
+}
+
 export interface PricingSettings {
   markup: { receptivo: number[]; show: number[] };
   ator: PriceTable;
@@ -40,6 +68,11 @@ export interface PricingSettings {
     nenhum: number;
   };
   acrescimo_tipos: string[];
+  /**
+   * Feature 307: faixas de data especial, por chave (o servidor garante ao menos `natal`).
+   * Opcional no React: bundle novo pode falar com backend velho durante o deploy — ler com `?? {}`.
+   */
+  datas_especiais?: Record<string, FaixaEspecial>;
 }
 
 export interface OrcamentoOpcoes {
@@ -149,6 +182,11 @@ export interface Quote {
   /** Ausente em orçamentos salvos antes desta feature — trate como "manto". */
   deslocamento_responsavel?: "manto" | "cliente" | null;
   markup_used: number[] | null;
+  /**
+   * Feature 307 — a faixa de data especial aplicada (24 e 25/12): `null` fora dela; ausente em
+   * orçamentos salvos antes da feature. A nota vem junto porque o orçamento congelado não relê a tabela.
+   */
+  data_especial?: { chave: string; rotulo: string; markup: number[]; nota_mensagem: string } | null;
   total_1h: number;
   total_2h: number;
   total_3h: number;
