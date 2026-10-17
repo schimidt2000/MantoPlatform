@@ -88,6 +88,9 @@ export interface DesempenhoItem {
   name: string;
   count: number;
   total?: number;
+  /** Feature 306: o retido de cancelamentos do mês (pelo mês do cancelamento), à parte do total. */
+  retido?: number;
+  cancelados?: number;
 }
 
 export interface AdminDesempenho {
@@ -95,7 +98,7 @@ export interface AdminDesempenho {
   casting: DesempenhoItem[];
   figurino: DesempenhoItem[];
   vendas: DesempenhoItem[];
-  totals: { casting: number; figurino: number; vendas: number; valor: number };
+  totals: { casting: number; figurino: number; vendas: number; valor: number; retido?: number };
 }
 
 export function useAdminDesempenho(month: string) {

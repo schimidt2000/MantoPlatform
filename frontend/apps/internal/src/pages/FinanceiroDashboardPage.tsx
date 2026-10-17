@@ -17,8 +17,9 @@ const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
   { value: "custom", label: "Personalizado" },
 ];
 
-/** Papel de cada linha na cascata da DRE — define recuo, peso e cor (feature 189). */
-type DreRowKind = "base" | "deducao" | "subtotal" | "final";
+/** Papel de cada linha na cascata da DRE — define recuo, peso e cor (feature 189). `detalhe` é
+ * a linha informativa do retido (feature 306), já somada na receita: não entra na conta. */
+type DreRowKind = "base" | "detalhe" | "deducao" | "subtotal" | "final";
 
 interface DreRowSpec {
   key: keyof DreView;
@@ -30,13 +31,28 @@ interface DreRowSpec {
   pct?: keyof DreView;
 }
 
-function dreRows(taxRate: number): DreRowSpec[] {
+function dreRows(taxRate: number, nCancelados: number): DreRowSpec[] {
+  // Feature 306: a linha do retido aparece pela quantidade de cancelados, nunca pelo valor.
+  const retido: DreRowSpec[] =
+    nCancelados > 0
+      ? [
+          {
+            key: "retido_cancelamentos",
+            label: "↳ Retido de cancelamentos",
+            hint: `${nCancelados} cancelamento(s), já na receita`,
+            kind: "detalhe",
+          },
+        ]
+      : [];
   return [
     { key: "receita_bruta", label: "Receita Bruta", kind: "base" },
+    ...retido,
     {
       key: "impostos",
       label: "Impostos Provisionados",
-      hint: `${taxRate}% · eventos com nota`,
+      hint:
+        `${taxRate}% · eventos com nota` +
+        (nCancelados > 0 ? ` + imposto informado de ${nCancelados} cancelamento(s)` : ""),
       kind: "deducao",
     },
     { key: "receita_liquida", label: "Receita Líquida Operacional", kind: "subtotal" },
@@ -63,6 +79,7 @@ const STATUS_LABEL: Record<EventoStatus, string> = {
   pago_total: "Pago total",
   parcial: "Parcial",
   pendente: "Pendente",
+  cancelado: "Cancelado",
 };
 
 const STATUS_CLASS: Record<EventoStatus, string> = {
@@ -71,6 +88,7 @@ const STATUS_CLASS: Record<EventoStatus, string> = {
   pago_total: "bg-green-soft text-green",
   parcial: "bg-gold-soft text-gold",
   pendente: "bg-red-soft text-red",
+  cancelado: "bg-surface-2 text-muted",
 };
 
 /** Formata em BRL sempre com prefixo (Princípio VII) — 0 vira "R$ 0,00", não travessão. */
@@ -148,8 +166,9 @@ function DreTable({ dre, taxRate }: { dre: FinanceiroDashboard["dre"]; taxRate: 
           </tr>
         </thead>
         <tbody>
-          {dreRows(taxRate).map((row) => {
+          {dreRows(taxRate, dre.total.n_cancelados ?? 0).map((row) => {
             const isDeducao = row.kind === "deducao";
+            const isDetalhe = row.kind === "detalhe";
             const isSubtotal = row.kind === "subtotal" || row.kind === "final";
             return (
               <tr
@@ -161,17 +180,19 @@ function DreTable({ dre, taxRate }: { dre: FinanceiroDashboard["dre"]; taxRate: 
                   row.key === "ebitda" ? "border-t-2 border-t-line" : "",
                 ].join(" ")}
               >
-                <td className={`px-3 py-2 text-ink ${isDeducao ? "pl-7" : ""}`}>
+                <td className={`px-3 py-2 ${isDetalhe ? "pl-7 text-muted" : "text-ink"} ${isDeducao ? "pl-7" : ""}`}>
                   {isDeducao && <span className="mr-1 font-bold text-muted">(–)</span>}
                   {isSubtotal && <span className="mr-1 text-muted">=</span>}
                   {row.label}
                   {row.hint && <span className="ml-1 text-[11px] font-normal text-muted">({row.hint})</span>}
                 </td>
                 {(["realizado", "projetado", "total"] as const).map((view) => {
-                  const value = dre[view][row.key] as number;
+                  // `?? 0`: as chaves da 306 faltam no backend antigo.
+                  const value = (dre[view][row.key] as number | undefined) ?? 0;
                   const pct = row.pct ? (dre[view][row.pct] as number) : null;
                   const negative = isDeducao || value < 0;
-                  const tone = view === "projetado" ? "text-muted" : negative ? "text-red" : "text-ink";
+                  const tone =
+                    view === "projetado" || isDetalhe ? "text-muted" : negative ? "text-red" : "text-ink";
                   return (
                     <td
                       key={view}
@@ -411,6 +432,8 @@ export function FinanceiroDashboardPage() {
                     Projetado = contribuição operacional dos {data.dre.projetado.n_eventos} evento(s)
                     futuro(s), sem custo fixo. Custos fixos (pessoal, gastos extras e recorrentes) são
                     atribuídos ao Realizado.
+                    {(data.dre.total.n_cancelados ?? 0) > 0 &&
+                      " O retido de um cancelamento entra no mês do cancelamento, no Realizado; a devolução dele não conta em Gastos Extras (já saiu do retido)."}
                   </p>
                 </CardContent>
               </Card>
@@ -535,6 +558,11 @@ export function FinanceiroDashboardPage() {
                           <span className="text-[11px] tabular-nums text-muted">
                             lucro {brl(s.lucro)}
                           </span>
+                          {(s.retido ?? 0) > 0 && (
+                            <span className="text-[11px] tabular-nums text-muted">
+                              inclui {brl(s.retido)} retidos
+                            </span>
+                          )}
                         </span>
                       </div>
                     ))
@@ -590,6 +618,11 @@ export function FinanceiroDashboardPage() {
                           className="truncate font-semibold text-blue hover:underline"
                         >
                           {nf.event_title}
+                          {nf.cancelado && (
+                            <span className="ml-1.5 rounded-md bg-surface-2 px-1 py-0.5 text-[10px] font-semibold text-muted">
+                              cancelado{nf.retido != null ? ` · retido ${brl(nf.retido)}` : ""}
+                            </span>
+                          )}
                         </Link>
                         <span className="shrink-0 tabular-nums text-ink">
                           {nf.date ? `${formatDate(nf.date)} · ` : ""}
@@ -624,6 +657,9 @@ export function FinanceiroDashboardPage() {
                           <td className="px-3 py-1.5 font-semibold text-ink">{m.label}</td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-ink">
                             {brl(m.receita)}
+                            {(m.retido ?? 0) !== 0 && (
+                              <span className="block text-[10px] text-muted">inclui {brl(m.retido)} retidos</span>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-1.5 text-right tabular-nums text-red">
                             {brl(m.custo)}

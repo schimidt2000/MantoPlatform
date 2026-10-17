@@ -35,13 +35,17 @@ PAYMENT_STATUS_LABELS: dict[str, str] = {
     "pago_total": "Pago total",
     "parcial": "Parcial",
     "pendente": "Pendente",
+    # Feature 306: o cancelado no painel dos cancelamentos da DRE (FR-046).
+    "cancelado": "Cancelado",
 }
 
 # Tipo de evento que nunca é uma venda (ensaio interno).
 NON_SALE_EVENT_TYPE = "ENSAIO"
 
 
-def event_payment_status(sale_value: float, received: float, is_permuta: bool) -> str:
+def event_payment_status(
+    sale_value: float, received: float, is_permuta: bool, *, cancelado: bool = False
+) -> str:
     """Status de recebimento de um evento a partir do valor de venda e do já recebido.
 
     Fonte única da regra que antes vivia inline no dashboard financeiro
@@ -51,10 +55,13 @@ def event_payment_status(sale_value: float, received: float, is_permuta: bool) -
         sale_value: Valor de venda do evento, em R$.
         received: Soma dos ``EventPayment`` do evento, em R$.
         is_permuta: Se o evento é cortesia/permuta (venda tratada como 0).
+        cancelado: O evento foi cancelado (feature 306): o status é "cancelado", antes de tudo.
 
     Returns:
         Uma das chaves de :data:`PAYMENT_STATUS_LABELS`.
     """
+    if cancelado:
+        return "cancelado"
     if is_permuta:
         return "permuta"
     if sale_value <= 0:
@@ -151,10 +158,9 @@ def list_closed_sales(
        ninguém preencheu ``sale_date`` — sem ela, some dinheiro real do relatório.
     3. **Não duplica grupo comercial.** Eventos satélite ficam de fora: o principal carrega o
        valor do grupo inteiro (FR-010/FR-011), então incluí-los contaria a venda duas vezes.
-    4. **Não é venda cancelada.** Evento cancelado (feature 224) sai do funil e do faturamento:
-       o dinheiro está sendo devolvido, e a devolução aparece do outro lado como saída
-       (`SpecialExpense` categoria "Devolução a cliente"). Contá-lo aqui somaria uma receita
-       que a empresa não tem.
+    4. **Não é venda cancelada.** Evento cancelado (feature 224) sai do funil: a venda dele não
+       aconteceu. O que a Manto reteve entra no total vendido pelo mês do cancelamento, para o
+       vendedor congelado (feature 306, `build_kpis(…, cancelados=…)`).
 
     Args:
         start_date: Primeiro dia do período (inclusive).
@@ -250,6 +256,8 @@ def build_kpis(
     sales: list[CalendarEvent],
     settings: Any,
     commission_target_id: int | None,
+    *,
+    cancelados: Any = (),
 ) -> dict[str, float | int]:
     """KPIs comerciais do período.
 
@@ -258,10 +266,14 @@ def build_kpis(
         settings: ``SiteSetting`` (alíquotas e responsável EducaManto).
         commission_target_id: Usuário cuja comissão projetar. ``None`` soma a comissão de todas as
             vendas do escopo (visão de gestor — despesa de comissão da empresa).
+        cancelados: Os cancelados do período no mesmo escopo (`cancel_ops.cancelados_do_periodo`,
+            feature 306): o retido entra no total vendido (D33) e a comissão do retido na
+            comissão prevista do beneficiário congelado. Ticket, eventos e desconto não mudam.
 
     Returns:
         ``total_vendido``, ``ticket_medio``, ``eventos_fechados``, ``comissao_prevista`` e
-        ``desconto_concedido`` (diferença entre o preço de tabela e o valor fechado).
+        ``desconto_concedido`` (diferença entre o preço de tabela e o valor fechado), e — com
+        cancelados — ``retido_cancelamentos``, ``n_cancelados`` e ``comissao_retido``.
     """
     from app.financeiro.routes import _commission_beneficiary, _event_commission
 
@@ -289,13 +301,31 @@ def build_kpis(
                 continue
         comissao += _event_commission(event, settings)
 
-    return {
+    kpis: dict[str, float | int] = {
         "total_vendido": float(total_vendido),
         "ticket_medio": float(ticket_medio),
         "eventos_fechados": len(faturaveis),
         "comissao_prevista": float(comissao),
         "desconto_concedido": float(desconto),
     }
+    cancelados = list(cancelados)
+    if cancelados:
+        retido = sum((r.retido for r in cancelados), Decimal("0"))
+        comissao_retido = sum(
+            (
+                r.comissao_retido
+                for r in cancelados
+                if commission_target_id is None
+                or (r.beneficiario is not None and r.beneficiario.id == commission_target_id)
+            ),
+            Decimal("0"),
+        )
+        kpis["total_vendido"] = float(total_vendido + retido)
+        kpis["comissao_prevista"] = float(comissao + comissao_retido)
+        kpis["retido_cancelamentos"] = float(retido)
+        kpis["n_cancelados"] = len(cancelados)
+        kpis["comissao_retido"] = float(comissao_retido)
+    return kpis
 
 
 def serialize_sale(

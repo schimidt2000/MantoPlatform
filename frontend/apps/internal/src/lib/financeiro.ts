@@ -22,6 +22,10 @@ export interface DreView {
   n_eventos: number;
   n_normais: number;
   n_permutas: number;
+  /** Feature 306: o retido dos cancelados do período (já somado na receita bruta). */
+  retido_cancelamentos?: number;
+  /** Feature 306: a linha do retido aparece por esta contagem, nunca pelo valor. */
+  n_cancelados?: number;
 }
 
 export interface FinanceiroKpis {
@@ -48,6 +52,8 @@ export interface TopSeller {
   user_name: string;
   receita: number;
   lucro: number;
+  /** Feature 306: quanto da receita é retido de cancelamentos (já somado). */
+  retido?: number;
 }
 
 export interface MonthlyTrendItem {
@@ -57,6 +63,22 @@ export interface MonthlyTrendItem {
   lucro: number;
   margem: number;
   n_eventos: number;
+  /** Feature 306: o retido do mês (pelo mês do cancelamento), já somado na receita. */
+  retido?: number;
+}
+
+/** O painel dos cancelamentos do período (feature 306, contracts §19). */
+export interface CancelamentosDoPeriodo {
+  quantidade: number;
+  pago: number;
+  devolvido: number;
+  devolucao_a_pagar: number;
+  retido: number;
+  comissao_retido: number;
+  bv_retido: number;
+  imposto: number;
+  efeito_resultado: number;
+  itens: { event_id: number; titulo: string; cancelado_em: string | null; retido: number; status?: EventoStatus }[];
 }
 
 export interface AuditoriaItem {
@@ -89,9 +111,11 @@ export interface FinanceiroPaineis {
   top_sellers: TopSeller[];
   monthly_trend: MonthlyTrendItem[];
   auditoria: AuditoriaItem[];
+  /** Feature 306 — opcional (backend antigo). */
+  cancelamentos?: CancelamentosDoPeriodo;
 }
 
-export type EventoStatus = "permuta" | "sem_valor" | "pago_total" | "parcial" | "pendente";
+export type EventoStatus = "permuta" | "sem_valor" | "pago_total" | "parcial" | "pendente" | "cancelado";
 
 export interface FinanceiroEvento {
   event_id: number;
@@ -122,6 +146,9 @@ export interface NotaFiscalPendente {
   event_id: number;
   event_title: string;
   amount: number;
+  /** Feature 306: a nota de um cancelado (sobre o retido) leva o selo. */
+  cancelado?: boolean;
+  retido?: number;
 }
 
 export interface CustoNotaItem {

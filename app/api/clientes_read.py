@@ -84,10 +84,13 @@ def api_clientes_detail(client_id: int) -> Any:
                     "title": e.title,
                     "start_at": e.start_at.isoformat() if e.start_at else None,
                     "relation": rel_by_event.get(e.id, ""),
+                    # Feature 306: o cancelado fica na lista (histórico), marcado.
+                    "cancelado": e.is_cancelled,
                 }
                 for e in events
             ],
-            "event_count": len(events),
+            # Feature 306: a contagem é dos eventos que aconteceram (o cancelado não conta).
+            "event_count": sum(1 for e in events if not e.is_cancelled),
             "total_sales": float(total_sales),
             # Festas registradas em formulário (inclui as anteriores à agenda de 2026) —
             # o `event` aninhado marca as que também viraram evento no calendário.

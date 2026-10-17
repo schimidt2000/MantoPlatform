@@ -114,8 +114,11 @@ def list_clients(query: str) -> tuple[list[Client], dict[int, int], int]:
     Returns:
         Tupla (clientes ordenados, contagem de eventos por cliente, total geral de clientes).
     """
+    # Feature 306: o evento cancelado não conta como evento da cliente.
     counts = dict(
         db.session.query(EventClient.client_id, func.count(func.distinct(EventClient.event_id)))
+        .join(CalendarEvent, CalendarEvent.id == EventClient.event_id)
+        .filter(CalendarEvent.cancelled_at.is_(None))
         .group_by(EventClient.client_id)
         .all()
     )
@@ -133,6 +136,9 @@ def get_client_detail(
     client_id: int,
 ) -> tuple[Client, list[CalendarEvent], dict[int, str], Decimal]:
     """Ficha do cliente: eventos associados (dedup, mais recente primeiro) e total vendido.
+
+    Feature 306 (D33): o total vendido é a venda dos eventos vivos mais o retido dos cancelados —
+    o cancelado continua na lista (é histórico da cliente), mas a venda dele não aconteceu.
 
     Returns:
         Tupla (cliente, eventos, relação por evento, total vendido). `None` se não existir.
@@ -155,7 +161,14 @@ def get_client_detail(
         seen.add(a.event_id)
         events.append(a.event)
         rel_by_event[a.event_id] = a.relationship_type
-    total_sales = sum((Decimal(e.sale_value) for e in events if e.sale_value), Decimal("0"))
+    total_sales = sum(
+        (Decimal(e.sale_value) for e in events if e.sale_value and not e.is_cancelled), Decimal("0")
+    )
+    cancelados = [e.id for e in events if e.is_cancelled]
+    if cancelados:
+        from app.calendar.cancel_ops import resumos_cancelados
+
+        total_sales += sum((r.retido for r in resumos_cancelados(cancelados).values()), Decimal("0"))
     return client, events, rel_by_event, total_sales
 
 
@@ -213,8 +226,11 @@ def client_metrics() -> dict:
     months = sorted(by_month.values(), key=lambda m: m["month"], reverse=True)
     months = list(reversed(months[:_METRICS_MONTHS]))  # cronológico, do mais antigo ao atual
 
+    # Feature 306: "Com evento" e "Recorrentes" sem o evento cancelado.
     event_counts = (
         db.session.query(EventClient.client_id, func.count(func.distinct(EventClient.event_id)))
+        .join(CalendarEvent, CalendarEvent.id == EventClient.event_id)
+        .filter(CalendarEvent.cancelled_at.is_(None))
         .group_by(EventClient.client_id)
         .all()
     )

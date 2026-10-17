@@ -203,12 +203,19 @@ def _salary_cost(start_date: date, end_date: date, is_full_month: bool) -> Decim
 
 
 def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
-                 gastos_recorrentes: Decimal = Decimal("0")) -> dict:
+                 gastos_recorrentes: Decimal = Decimal("0"), cancelamentos: dict | None = None) -> dict:
     """Cascata da DRE Gerencial para um conjunto de eventos.
 
     Isola permutas/cortesias: o cachê delas não entra no CPV (não distorce a margem),
     entra como Custo de Marketing. Impostos só sobre eventos com nota (with_invoice).
+
+    Feature 306 (FR-041): `cancelamentos` (os totais de `cancel_ops.totais_cancelamentos` do
+    período, pelo mês do cancelamento) soma o retido na receita, o imposto informado nos impostos,
+    o BV que conta no CPV e a comissão do retido nas comissões. A condição é a **quantidade**, não
+    o valor: somar `Decimal("0.00")` muda o expoente e a DRE de um mês sem cancelado deixaria de
+    sair idêntica à de hoje. `retido_cancelamentos` e `n_cancelados` saem sempre.
     """
+    houve = bool(cancelamentos and cancelamentos["quantidade"])
     tax_rate = _get_tax_rate(settings)
     # Satélites não entram como linha própria: seu cachê é somado ao grupo via _group_cost
     # no evento principal (FR-010/FR-011) — evita contar a venda do grupo mais de uma vez.
@@ -216,19 +223,28 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
     permutas = [e for e in events if _is_permuta(e)]
 
     receita_bruta = sum((Decimal(e.sale_value or 0) for e in normais), Decimal("0"))
+    if houve:
+        receita_bruta += cancelamentos["retido"]
     impostos = sum(
         (Decimal(e.sale_value or 0) * tax_rate / Decimal("100") for e in normais if e.with_invoice),
         Decimal("0"),
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if houve:
+        # O imposto do cancelado é o informado no ato (D32), nunca alíquota × retido.
+        impostos += cancelamentos["imposto"]
     receita_liquida = receita_bruta - impostos
 
     # BV é repasse a terceiros: entra como custo (não é lucro da Manto) — feature 099.
     bv_total = sum((_event_bv_total(e) for e in normais), Decimal("0"))
     cpv = Decimal(sum(_group_cost(e) for e in normais)) + bv_total
+    if houve:
+        cpv += cancelamentos["bv_retido"]
     lucro_bruto = receita_liquida - cpv
 
     marketing = Decimal(sum(_event_cost(e) for e in permutas))
     comissoes = sum((_event_commission(e, settings) for e in normais), Decimal("0"))
+    if houve:
+        comissoes += cancelamentos["comissao_retido"]
     pessoal = Decimal(salary_cost)
     ebitda = lucro_bruto - marketing - comissoes - pessoal
 
@@ -254,6 +270,8 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
         "n_eventos": len(events),
         "n_normais": len(normais),
         "n_permutas": len(permutas),
+        "retido_cancelamentos": cancelamentos["retido"] if houve else Decimal("0"),
+        "n_cancelados": cancelamentos["quantidade"] if houve else 0,
     }
 
 
@@ -291,14 +309,15 @@ def dashboard():
 
     # ── Custos do período ─────────────────────────────────────────────────────
     salary_cost = _salary_cost(start_date, end_date, is_full_month)
-    gastos_extras = sum(
-        (Decimal(g.amount) for g in SpecialExpense.query.filter(
-            SpecialExpense.status == "aprovado",
-            SpecialExpense.expense_date >= start_date,
-            SpecialExpense.expense_date <= end_date,
-        ).all()),
-        Decimal("0"),
-    )
+    # Feature 306: a fonte única da API e daqui — sem a devolução do cancelado (já no retido).
+    from app.calendar import cancel_ops
+    from app.financeiro import dre_ops
+
+    gastos_extras = dre_ops.gastos_extras_do_periodo(start_date, end_date)
+    # O dinheiro dos cancelados do período, pelo mês do cancelamento (FR-041). Pelo módulo: a
+    # mutação do cenário 23 troca `totais_cancelamentos`.
+    cancelados = cancel_ops.cancelados_do_periodo(start_date, end_date)
+    cancelamentos = cancel_ops.totais_cancelamentos(cancelados)
 
     # Gastos recorrentes do período (feature 110): competência pelo mês de referência.
     from app.gastos.gastos_ops import ensure_recurring_entries
@@ -313,10 +332,15 @@ def dashboard():
     )
 
     # ── DRE Gerencial: realizado, projetado e total (consolidado do período) ──
-    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    # O cancelado já aconteceu: o retido entra no Realizado e no Total, nunca no Projetado.
+    drg_realizado = _compute_drg(
+        realizados, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
     # Projetado mostra só a contribuição operacional dos eventos futuros (sem custo fixo).
     drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
-    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    drg_total = _compute_drg(
+        events, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
 
     # ── KPIs (sobre o consolidado do período) ─────────────────────────────────
     # Apenas eventos normais (não-permuta) com venda contam para indicadores comerciais.
@@ -324,8 +348,10 @@ def dashboard():
         e for e in events
         if not _is_permuta(e) and not e.is_satellite and e.sale_value and e.sale_value > 0
     ]
+    # Feature 306: pela venda dos eventos com venda, não pela receita da DRE (que tem o retido).
+    receita_dos_eventos = sum((Decimal(e.sale_value or 0) for e in eventos_com_venda), Decimal("0"))
     ticket_medio = (
-        (drg_total["receita_bruta"] / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        (receita_dos_eventos / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if eventos_com_venda else Decimal("0")
     )
     ratio_custo_talento = _pct(drg_total["cpv"], drg_total["receita_liquida"])
@@ -375,6 +401,9 @@ def dashboard():
     receita_por_tipo = defaultdict(int)
     for e in eventos_com_venda:
         receita_por_tipo[e.event_type or "Outros"] += (e.sale_value or 0)
+    # Feature 306: o retido do período como barra própria, antes da ordenação e do máximo.
+    if cancelamentos["quantidade"] and cancelamentos["retido"]:
+        receita_por_tipo[dre_ops.ROTULO_RETIDO] += cancelamentos["retido"]
     receita_por_tipo = dict(sorted(receita_por_tipo.items(), key=lambda x: -x[1]))
     receita_tipo_max = max(receita_por_tipo.values()) if receita_por_tipo else 0
 
@@ -385,6 +414,11 @@ def dashboard():
         if e.seller_id:
             seller_revenue[e.seller_id] += (e.sale_value or 0)
             seller_margin[e.seller_id]  += (e.sale_value or 0) - _group_cost(e)
+    # Feature 306 (D33): o retido conta como venda do vendedor congelado — antes do corte do top 5.
+    for sid, retido in cancel_ops.retido_por_vendedor(cancelados).items():
+        if retido:
+            seller_revenue[sid] += retido
+            seller_margin[sid] += retido
     top_sellers = []
     for sid, rev in sorted(seller_revenue.items(), key=lambda x: -x[1])[:5]:
         u = User.query.get(sid)
@@ -392,27 +426,8 @@ def dashboard():
             top_sellers.append({"user": u, "receita": rev, "lucro": seller_margin[sid]})
 
     # ── Tendência mensal (últimos 6 meses, visão operacional pura) ───────────
-    monthly_trend = []
-    y, m = today.year, today.month
-    for _ in range(6):
-        s_dt, e_dt = _month_range(y, m)
-        evs = CalendarEvent.query.filter(
-            CalendarEvent.start_at >= s_dt,
-            CalendarEvent.start_at < e_dt,
-            CalendarEvent.event_type != "ENSAIO",
-        ).all()
-        normais = [e for e in evs if not _is_permuta(e) and not e.is_satellite]
-        rec = sum(e.sale_value or 0 for e in normais)
-        cst = sum(_group_cost(e) for e in normais)
-        monthly_trend.insert(0, {
-            "label": f"{m:02d}/{str(y)[2:]}",
-            "receita": rec,
-            "custo": cst,
-            "lucro": rec - cst,
-            "margem": _pct(rec - cst, rec),
-            "n_eventos": len(evs),
-        })
-        y, m = _prev_month(y, m)
+    # Feature 306: a fonte única da API e daqui (o cancelado sai; o retido entra no mês dele).
+    monthly_trend = dre_ops.tendencia_mensal(today)
 
     # ── Auditoria: eventos com receita zerada SEM flag de cortesia/permuta ────
     auditoria = [
@@ -470,6 +485,8 @@ def dashboard():
             EventInstallment.due_date >= start_date,
             EventInstallment.due_date <= end_date,
             EventInstallment.received.is_(False),
+            # Feature 306: a parcela de um cancelado não vai ser recebida.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(EventInstallment.due_date.asc())
         .all()
@@ -498,6 +515,9 @@ def dashboard():
             "id": inv.id, "date": inv.issue_date, "event_id": inv.event_id,
             "event_title": inv.event.title if inv.event else "—",
             "amount": inv.amount or 0,
+            # Feature 306: a nota de um cancelado continua a emitir (sobre o retido); o template
+            # põe o selo ao lado do título.
+            "cancelado": bool(inv.event and inv.event.is_cancelled),
         }
         for inv in _nf_pend
     ]
@@ -944,9 +964,11 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     # mostra só o que falta. Antes era um item só, com a soma de tudo e o status "não pago"
     # quando misturado — no espelho, o item de maio dizia R$ 2.133,88 "Não pago" com R$ 1.996,38
     # já pagos, e o "Pago" do lote ia pagar de novo o que já tinha saído.
-    from app.financeiro.comissoes_ops import SUFIXO_ITEM_PAGO
-
-    from app.financeiro.comissoes_ops import ciclo_de_pagamento_da_linha, tipo_da_linha
+    from app.financeiro.comissoes_ops import (
+        SUFIXO_ITEM_PAGO,
+        ciclo_de_pagamento_da_linha,
+        tipo_da_linha,
+    )
 
     def _linhas(grupo: list) -> list[dict]:
         """As linhas do item (feature 306): o ajuste do cancelado e a comissão que ele acerta."""
@@ -1495,7 +1517,10 @@ def pipeline():
     settings = SiteSetting.query.get(1)
     is_financeiro = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
 
-    events_q = CalendarEvent.query.filter(CalendarEvent.event_type != "ENSAIO")
+    # Feature 306: o cancelado sai da lista de vendas (o retido aparece na DRE e no Comercial).
+    events_q = CalendarEvent.query.filter(
+        CalendarEvent.event_type != "ENSAIO", CalendarEvent.cancelled_at.is_(None)
+    )
     # Responsável EducaManto sem os papéis plenos vê APENAS os eventos EducaManto (feature 109).
     if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         events_q = events_q.filter(CalendarEvent.title.ilike(EDUCAMANTO_TITLE_PREFIX + "%"))

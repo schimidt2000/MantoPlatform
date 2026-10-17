@@ -25,6 +25,8 @@ export interface ClientEvent {
   title: string;
   start_at: string | null;
   relation: string;
+  /** Feature 306: o evento cancelado fica na ficha (histórico) e não conta em `event_count`. */
+  cancelado?: boolean;
 }
 
 /** Festa registrada em formulário — inclui as anteriores à agenda de 2026. */
@@ -44,6 +46,7 @@ export interface ClientDetail extends ClientSummary {
   address: string;
   events: ClientEvent[];
   event_count: number;
+  /** Venda dos eventos vivos + o retido dos cancelados (feature 306, D33). */
   total_sales: number;
   form_history: ClientFormHistoryItem[];
 }

@@ -319,8 +319,12 @@ def compute_performance(start_dt: datetime | None, end_dt: datetime | None) -> d
         return empty
 
     exclude_ensaios = not_(CalendarEvent.title.like("🟧 ENSAIO%"))
+    # Feature 306: o evento cancelado não tem escala nem cachê a cumprir.
     perf_filter = and_(
-        CalendarEvent.start_at >= start_dt, CalendarEvent.start_at < end_dt, exclude_ensaios
+        CalendarEvent.start_at >= start_dt,
+        CalendarEvent.start_at < end_dt,
+        exclude_ensaios,
+        CalendarEvent.cancelled_at.is_(None),
     )
     casting_total = EventRole.query.join(CalendarEvent).filter(perf_filter).count()
     casting_done = (

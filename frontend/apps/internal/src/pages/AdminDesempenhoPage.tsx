@@ -97,8 +97,14 @@ export function AdminDesempenhoPage() {
                       <span className="text-ink">
                         {v.name} ({v.count})
                       </span>
-                      <span className="tabular-nums text-ink">
+                      <span className="text-right tabular-nums text-ink">
                         R$ {formatBRL(v.total ?? 0)}
+                        {/* Feature 306: o retido do mês, à parte (o cancelado saiu do total). */}
+                        {(v.cancelados ?? 0) > 0 && (
+                          <span className="block text-xs text-muted">
+                            + R$ {formatBRL(v.retido ?? 0)} retidos de {v.cancelados} cancelamento(s)
+                          </span>
+                        )}
                       </span>
                     </li>
                   ))}
