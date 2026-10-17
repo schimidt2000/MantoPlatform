@@ -22,7 +22,6 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
 from app.models import (
-    EventAcrescimo,
     EventRole,
     RecurringExpenseEntry,
     SalaryAdvance,
@@ -161,37 +160,21 @@ def api_set_payment_status() -> Any:
         return jsonify({"status": status})
 
     if item_type == "bv":
-        # Feature 305: o BV a pagar agora muda de valor no lugar (acompanha a venda). A linha é lida
-        # com trava, e o valor que a Planilha mostrou (`valor_esperado`, opcional para o bundle
-        # antigo) tem de ser o de agora — senão o "pago" congelaria um valor que ninguém pagou.
-        acr = EventAcrescimo.query.filter_by(id=_to_int(item_id)).with_for_update().first()
-        if not acr or not acr.is_bv:
-            return json_error("Item não encontrado", 400)
-        esperado = body.get("valor_esperado")
-        if status in ("pago", "no_banco") and esperado is not None and not isinstance(esperado, bool):
-            try:
-                mudou = Decimal(str(esperado)).quantize(Decimal("0.01")) != Decimal(str(acr.amount_brl or 0))
-            except (ArithmeticError, ValueError):
-                return json_error("Valor esperado inválido.", 400)
-            if mudou:
-                from app.money import format_brl
+        # Feature 306 (R9): a função única das duas Planilhas. Trava o evento e depois o acréscimo,
+        # confere o valor que a Planilha mostrou com o que conta agora (`bv_da_planilha`: no
+        # cancelado, o BV do retido) e guarda o valor pago na linha congelada.
+        from app.calendar.cancel_ops import CancelValidationError, marcar_status_do_bv
 
-                return json_error(
-                    f"O BV mudou para {format_brl(float(acr.amount_brl or 0), prefix=True)} desde que a "
-                    "Planilha abriu: recarregue e confira antes de marcar.",
-                    409,
-                )
-        old = acr.bv_payment_status
-        acr.bv_payment_status = status
-        audit(
-            "payment",
-            "event_bv",
-            acr.id,
-            acr.bv_recipient or "—",
-            f"BV (repasse): {old} → {status} (API)",
-        )
+        try:
+            gravado = marcar_status_do_bv(
+                _to_int(item_id), status, body.get("valor_esperado"), current_user.name
+            )
+        except CancelValidationError as exc:
+            db.session.rollback()
+            codigo = {"codigo": exc.codigo} if exc.codigo else {}
+            return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
         db.session.commit()
-        return jsonify({"status": status})
+        return jsonify({"status": gravado})
 
     role = EventRole.query.get(_to_int(item_id))
     if not role:

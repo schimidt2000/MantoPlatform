@@ -1,6 +1,12 @@
 import { Link } from "react-router-dom";
 import { Button, CopyButton, cn } from "@manto/ui";
-import { useSetPaymentStatus, type PagamentoItem, type PaymentStatus } from "../../lib/financeiro";
+import {
+  rotuloDoCiclo,
+  rotuloDoTipoDaLinha,
+  useSetPaymentStatus,
+  type PagamentoItem,
+  type PaymentStatus,
+} from "../../lib/financeiro";
 import { useCurrentUser } from "../../lib/useAuth";
 import {
   BUCKET_TONE,
@@ -147,6 +153,54 @@ function StatusSelect({
   );
 }
 
+const ROTULO_DA_SITUACAO_DA_LINHA: Record<string, string> = {
+  a_pagar: "a pagar",
+  no_banco: "no banco",
+  pago: "pago",
+  cancelado: "cancelado",
+};
+
+/** As linhas de um item de comissão (feature 306): o ajuste do cancelado aparece ao lado da
+ * comissão que ele acerta, para quem paga entender por que o total é aquele. Recolhido por padrão;
+ * sem o campo (backend antigo) ou sem linhas, nada. */
+function CommissionLines({ item, toque = false }: { item: PagamentoItem; toque?: boolean }) {
+  const linhas = item.type === "commission" ? item.commission_lines : undefined;
+  if (!linhas || linhas.length === 0) return null;
+  return (
+    <details className="mt-1 text-left text-[11px]">
+      {/* No cartão, alvo de toque de 44px (Princípio VIII). */}
+      <summary
+        className={cn(
+          "cursor-pointer select-none py-1 font-semibold text-blue",
+          toque && "flex min-h-11 items-center",
+        )}
+      >
+        ver linhas ({linhas.length})
+      </summary>
+      <ul className="mt-1 space-y-1">
+        {linhas.map((l) => (
+          <li key={l.id} className="flex flex-wrap items-baseline gap-x-1.5 border-t border-line/60 pt-1">
+            <span className="font-semibold text-muted">{rotuloDoTipoDaLinha(l.tipo)}</span>
+            {l.event_id ? (
+              <Link to={`/events/${l.event_id}`} className="min-w-0 break-words text-ink hover:underline">
+                {l.event_title}
+              </Link>
+            ) : (
+              <span className="min-w-0 break-words text-ink">{l.event_title}</span>
+            )}
+            <span className={cn("font-bold tabular-nums", l.amount < 0 ? "text-red" : "text-ink")}>
+              {brl(l.amount)}
+            </span>
+            <span className="text-muted">
+              ciclo {rotuloDoCiclo(l.ciclo)} · {ROTULO_DA_SITUACAO_DA_LINHA[l.status] ?? l.status}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
 /** "adiantado R$ 500,00 (2x)" — só aparece em salário que já teve adiantamento. */
 function AdvanceHint({ item }: { item: PagamentoItem }) {
   if (item.type !== "salary" || (item.advance_amount ?? 0) <= 0) return null;
@@ -241,10 +295,16 @@ export function PagamentoRow({
 
       {/* Valor */}
       <td className="whitespace-nowrap px-3 py-2 text-right">
-        <div className="flex items-center justify-end gap-1 font-bold tabular-nums text-ink">
+        <div
+          className={cn(
+            "flex items-center justify-end gap-1 font-bold tabular-nums",
+            item.amount < 0 ? "text-red" : "text-ink",
+          )}
+        >
           <span>{brl(item.amount)}</span>
           <CopyButton value={rawAmount(item.amount)} label="Copiar valor" />
         </div>
+        <CommissionLines item={item} />
         <AdvanceHint item={item} />
         <AdvancesButton item={item} onOpenAdvances={onOpenAdvances} className="mt-1 h-7 px-2 text-[11px]" />
       </td>
@@ -353,9 +413,14 @@ export function PagamentoCard({
       <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="text-lg font-bold tabular-nums text-ink">{brl(item.amount)}</span>
+            <span
+              className={cn("text-lg font-bold tabular-nums", item.amount < 0 ? "text-red" : "text-ink")}
+            >
+              {brl(item.amount)}
+            </span>
             <CopyButton value={rawAmount(item.amount)} label="Copiar valor" />
           </div>
+          <CommissionLines item={item} toque />
           <AdvanceHint item={item} />
         </div>
         <StatusSelect

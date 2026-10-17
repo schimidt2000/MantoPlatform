@@ -640,6 +640,10 @@ def _serialize_pagamento_item(item: dict) -> dict:
         ]
     if item["type"] == "bv":
         out["missing_data"] = bool(item.get("missing_data"))
+    if item["type"] == "commission" and "commission_lines" in item:
+        out["commission_lines"] = [
+            {**linha, "amount": float(linha["amount"] or 0)} for linha in item["commission_lines"]
+        ]
     return out
 
 

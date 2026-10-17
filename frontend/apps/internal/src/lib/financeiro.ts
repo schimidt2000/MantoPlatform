@@ -191,8 +191,33 @@ export function useFinanceiroDashboard({
   });
 }
 
-export type CommissionStatus = "a_pagar" | "pago" | "cancelado";
+export type CommissionStatus = "a_pagar" | "no_banco" | "pago" | "cancelado";
 export type CommissionMonthStatus = "pendente" | "pago";
+/** O que a linha é (feature 306): a comissão, o ajuste ligado a uma paga ou o estorno órfão. */
+export type CommissionLineTipo = "comissao" | "ajuste" | "estorno";
+
+const ROTULO_DO_TIPO: Record<CommissionLineTipo, string> = {
+  comissao: "Comissão",
+  ajuste: "Ajuste",
+  estorno: "Estorno",
+};
+
+/** "Comissão", "Ajuste" ou "Estorno"; sem o campo (backend antigo), "Comissão". */
+export function rotuloDoTipoDaLinha(tipo: CommissionLineTipo | null | undefined): string {
+  return ROTULO_DO_TIPO[tipo ?? "comissao"] ?? "Comissão";
+}
+
+/** `AAAA-MM` → `MM/AAAA`; sem ciclo, "—". */
+export function rotuloDoCiclo(ciclo: string | null | undefined): string {
+  if (!ciclo) return "—";
+  const [ano, mes] = ciclo.split("-");
+  return ano && mes ? `${mes}/${ano}` : "—";
+}
+
+/** O rótulo da situação do mês de um vendedor — o mesmo na tela e no CSV. */
+export function rotuloDoMesDaComissao(status: CommissionMonthStatus): string {
+  return status === "pago" ? "Pago" : "Pendente";
+}
 
 /** Uma linha de comissão (`CommissionPayment`), feature 158 (payload evoluído na 187). */
 export interface CommissionEntry {
@@ -206,6 +231,15 @@ export interface CommissionEntry {
   status: CommissionStatus;
   status_label: string;
   paid_at: string | null;
+  // Feature 306 — opcionais: o bundle novo convive alguns minutos com o backend antigo.
+  tipo?: CommissionLineTipo;
+  /** A paga que o ajuste acerta. */
+  original_id?: number | null;
+  evento_cancelado?: boolean;
+  /** O ciclo em que a linha entra no repasse, `AAAA-MM`. */
+  ciclo?: string | null;
+  /** O código do motivo do ajuste (`cancelamento`, `correcao`, `exclusao`…). */
+  motivo?: string | null;
 }
 
 export interface CommissionSeller {
@@ -213,11 +247,13 @@ export interface CommissionSeller {
   name: string;
 }
 
-/** Os 3 KPIs do topo da tela de Comissões (feature 187). */
+/** Os KPIs do topo da tela de Comissões (feature 187; o "No banco" é da 306). */
 export interface CommissionKpis {
+  /** Pago + no banco + a pagar. */
   total_month: number;
   total_paid: number;
   total_pending: number;
+  total_no_banco?: number;
 }
 
 /** Uma linha agregada por vendedor — visão "Resumo por Vendedor" (feature 187). */
@@ -297,7 +333,7 @@ export function usePagarMesComissao() {
  * Invalida por prefixo de propósito: as chaves carregam mês/filtros, e o que mudou pode estar
  * em outro recorte (a liquidação alcança comissão de outro mês de venda).
  */
-function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClient>) {
+export function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
   queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
@@ -313,7 +349,7 @@ export function exportComissoesCsv(rows: CommissionMonthSummaryRow[], month: str
       r.seller_name,
       String(r.sale_count),
       r.total_amount.toFixed(2).replace(".", ","),
-      r.month_status === "pago" ? "Pago" : "Pendente",
+      rotuloDoMesDaComissao(r.month_status),
     ]
       .map((cell) => `"${cell.replace(/"/g, '""')}"`)
       .join(";"),
@@ -359,6 +395,20 @@ export interface PagamentoItem {
   advance_amount?: number;
   advances?: SalaryAdvanceItem[];
   missing_data?: boolean;
+  /** As linhas do item de comissão (feature 306): o ajuste aparece ao lado da comissão que acerta. */
+  commission_lines?: CommissionLine[];
+}
+
+/** Uma linha de `CommissionPayment` dentro do item de comissão da Planilha (feature 306). */
+export interface CommissionLine {
+  id: number;
+  tipo: CommissionLineTipo;
+  event_id: number | null;
+  event_title: string;
+  amount: number;
+  /** `AAAA-MM`. */
+  ciclo: string | null;
+  status: CommissionStatus;
 }
 
 export interface PagamentoTotals {

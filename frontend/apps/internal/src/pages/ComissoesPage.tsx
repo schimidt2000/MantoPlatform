@@ -25,6 +25,9 @@ import {
 import { formatBRL } from "@manto/money";
 import {
   exportComissoesCsv,
+  rotuloDoCiclo,
+  rotuloDoMesDaComissao,
+  rotuloDoTipoDaLinha,
   useComissoes,
   usePagarMesComissao,
   type CommissionEntry,
@@ -37,9 +40,39 @@ function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v)}`;
 }
 
+/** `AAAA-MM-DD` → `DD/MM/AAAA` pela própria string (feature 306): `new Date("2026-10-02")` é a
+ * meia-noite UTC, e no fuso de Brasília a data aparecia no dia anterior. */
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("pt-BR");
+  const [ano, mes, dia] = iso.slice(0, 10).split("-");
+  return ano && mes && dia ? `${dia}/${mes}/${ano}` : "—";
+}
+
+/** O tipo da linha (comissão, ajuste, estorno), com o motivo do ajuste no `title`. */
+function TipoDaLinha({ entry }: { entry: CommissionEntry }) {
+  return (
+    <span className="text-xs text-muted" title={entry.motivo ?? undefined}>
+      {rotuloDoTipoDaLinha(entry.tipo)}
+    </span>
+  );
+}
+
+/** O título do evento, com o link e a marca de cancelado. */
+function EventoDaLinha({ entry }: { entry: CommissionEntry }) {
+  return (
+    <>
+      {entry.event_id ? (
+        <Link to={`/events/${entry.event_id}`} className="text-blue hover:underline">
+          {entry.event_title}
+        </Link>
+      ) : (
+        entry.event_title
+      )}
+      {entry.evento_cancelado && (
+        <span className="ml-1.5 rounded-md bg-red-soft px-1.5 py-0.5 text-xs text-red">cancelado</span>
+      )}
+    </>
+  );
 }
 
 function currentMonth(): string {
@@ -58,14 +91,12 @@ function EntryRow({ entry }: { entry: CommissionEntry }) {
     <tr className="border-b border-line last:border-0">
       <td className="whitespace-nowrap px-3 py-2 text-muted">{formatDate(entry.sale_date)}</td>
       <td className="px-3 py-2 text-ink">
-        {entry.event_id ? (
-          <Link to={`/events/${entry.event_id}`} className="text-blue hover:underline">
-            {entry.event_title}
-          </Link>
-        ) : (
-          entry.event_title
-        )}
+        <EventoDaLinha entry={entry} />
       </td>
+      <td className="whitespace-nowrap px-3 py-2">
+        <TipoDaLinha entry={entry} />
+      </td>
+      <td className="whitespace-nowrap px-3 py-2 text-muted">{rotuloDoCiclo(entry.ciclo)}</td>
       <td
         className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
           entry.amount < 0 ? "text-red" : "text-ink"
@@ -146,7 +177,7 @@ function SellerSummaryRow({ row, month }: { row: CommissionMonthSummaryRow; mont
             <div className="text-right">
               <p className="text-sm font-semibold tabular-nums text-ink">{brl(row.total_amount)}</p>
               <MetricBadge tone={isPending ? "gold" : "green"}>
-                {isPending ? "Pendente" : "Pago"}
+                {rotuloDoMesDaComissao(row.month_status)}
               </MetricBadge>
             </div>
           </div>
@@ -160,11 +191,13 @@ function SellerSummaryRow({ row, month }: { row: CommissionMonthSummaryRow; mont
         }
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[560px] border-collapse text-xs">
+          <table className="w-full min-w-[720px] border-collapse text-xs">
             <thead>
               <tr className="border-b border-line text-left uppercase text-muted">
                 <th className="px-3 py-1.5">Data</th>
                 <th className="px-3 py-1.5">Evento</th>
+                <th className="px-3 py-1.5">Tipo</th>
+                <th className="px-3 py-1.5">Ciclo</th>
                 <th className="px-3 py-1.5 text-right">Valor</th>
                 <th className="px-3 py-1.5">Status</th>
                 <th className="px-3 py-1.5">Pago em</th>
@@ -241,6 +274,7 @@ function DetailView({
         >
           <option value="todos">Todos os status</option>
           <option value="a_pagar">A pagar</option>
+          <option value="no_banco">No banco</option>
           <option value="pago">Pago</option>
         </select>
       </div>
@@ -248,12 +282,14 @@ function DetailView({
         <p className="p-6 text-center text-sm text-muted">Nenhuma comissão encontrada.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
+          <table className="w-full min-w-[880px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-line text-left text-xs font-medium uppercase text-muted">
                 <th className="px-3 py-2">Data da venda</th>
                 <th className="px-3 py-2">Vendedor</th>
                 <th className="px-3 py-2">Evento</th>
+                <th className="px-3 py-2">Tipo</th>
+                <th className="px-3 py-2">Ciclo</th>
                 <th className="px-3 py-2 text-right">Valor</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2">Pago em</th>
@@ -265,14 +301,12 @@ function DetailView({
                   <td className="whitespace-nowrap px-3 py-2 text-muted">{formatDate(e.sale_date)}</td>
                   <td className="px-3 py-2 text-ink">{e.seller_name}</td>
                   <td className="px-3 py-2 text-ink">
-                    {e.event_id ? (
-                      <Link to={`/events/${e.event_id}`} className="text-blue hover:underline">
-                        {e.event_title}
-                      </Link>
-                    ) : (
-                      e.event_title
-                    )}
+                    <EventoDaLinha entry={e} />
                   </td>
+                  <td className="whitespace-nowrap px-3 py-2">
+                    <TipoDaLinha entry={e} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2 text-muted">{rotuloDoCiclo(e.ciclo)}</td>
                   <td
                     className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${
                       e.amount < 0 ? "text-red" : "text-ink"
@@ -358,7 +392,8 @@ export function ComissoesPage() {
 
       {query.isLoading && (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
             <Skeleton className="h-20 w-full" />
@@ -375,7 +410,7 @@ export function ComissoesPage() {
 
       {query.data && (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="p-4">
                 <p className="text-xs uppercase text-muted">Total de comissões do mês</p>
@@ -386,6 +421,16 @@ export function ComissoesPage() {
               <CardContent className="p-4">
                 <p className="text-xs uppercase text-muted">Total pago</p>
                 <p className="mt-1 text-xl font-semibold text-green">{brl(query.data.kpis.total_paid)}</p>
+              </CardContent>
+            </Card>
+            {/* Feature 306: o dinheiro já separado para o vendedor. O backend antigo não manda o
+                campo (bundle novo e backend velho convivem no deploy): zero. */}
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-xs uppercase text-muted">No banco</p>
+                <p className="mt-1 text-xl font-semibold text-ink">
+                  {brl(query.data.kpis.total_no_banco ?? 0)}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -431,11 +476,13 @@ export function ComissoesPage() {
                   <p className="p-6 text-center text-sm text-muted">Nenhuma comissão neste mês.</p>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] border-collapse text-sm">
+                    <table className="w-full min-w-[720px] border-collapse text-sm">
                       <thead>
                         <tr className="border-b border-line text-left text-xs font-medium uppercase text-muted">
                           <th className="px-3 py-2">Evento</th>
                           <th className="px-3 py-2">Data da venda</th>
+                          <th className="px-3 py-2">Tipo</th>
+                          <th className="px-3 py-2">Ciclo</th>
                           <th className="px-3 py-2 text-right">Valor</th>
                           <th className="px-3 py-2">Status</th>
                           <th className="px-3 py-2">Pago em</th>
@@ -445,16 +492,16 @@ export function ComissoesPage() {
                         {query.data.entries.map((e) => (
                           <tr key={e.id} className="border-b border-line last:border-0">
                             <td className="px-3 py-2 text-ink">
-                              {e.event_id ? (
-                                <Link to={`/events/${e.event_id}`} className="text-blue hover:underline">
-                                  {e.event_title}
-                                </Link>
-                              ) : (
-                                e.event_title
-                              )}
+                              <EventoDaLinha entry={e} />
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-muted">
                               {formatDate(e.sale_date)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <TipoDaLinha entry={e} />
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-muted">
+                              {rotuloDoCiclo(e.ciclo)}
                             </td>
                             <td
                               className={`whitespace-nowrap px-3 py-2 text-right tabular-nums ${

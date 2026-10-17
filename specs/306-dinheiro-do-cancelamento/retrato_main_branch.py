@@ -293,6 +293,16 @@ def _meses_do_espelho(url: str, hoje: date) -> tuple[list[str], list[str], dict[
             ids=ids,
         ):
             fora.setdefault(f"{quando:%Y-%m}", []).append("devolução de cancelado")
+    # As linhas de comissão que o próprio verify semeou em meses reais (vendedores `__v306_`): a
+    # mutação do 23 roda depois dos cenários B1/B2, e um vendedor só com "no banco" (que a 306 passa
+    # a mostrar em Comissões) faria a base sair diferente sem ser do espelho (rodada de 17/10).
+    for (ciclo,) in _sql(
+        url,
+        "SELECT DISTINCT coalesce(c.payable_from, c.sale_date, date(c.created_at)) FROM commission_payments c "
+        "JOIN users u ON u.id = c.seller_id WHERE u.email LIKE '\\_\\_v306\\_%'",
+    ):
+        if ciclo is not None:
+            fora.setdefault(f"{ciclo:%Y-%m}", []).append("linha de comissão do verify")
     tendencia = sorted({f"{x[2]:%Y-%m}" for x in cancelados} | set(fora))
     return [m for m in meses if m not in fora], tendencia, fora
 

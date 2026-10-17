@@ -4402,6 +4402,10 @@ def _delete_event_flow(
     """
     from app.calendar.cancel_ops import EventoMarcadoError
 
+    # Feature 306 (FR-036): trava o evento e relê antes de decidir. Um cancelamento (ou uma marca
+    # do sync) no meio do caminho mudou o que a decisão leu.
+    db.session.flush()
+    db.session.refresh(event, with_for_update=True)
     if event.is_google_missing:
         raise EventoMarcadoError()
     if event.is_group_leader:  # FR-004: desagrupar antes

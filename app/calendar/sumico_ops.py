@@ -341,6 +341,9 @@ def mesmos_dados(event: CalendarEvent, item: dict) -> bool:
 def _apagar_vazio(event: CalendarEvent, preso: PresoAoEvento, motivo: str, ym: str) -> _Decisao:
     from app.calendar.routes import _delete_event, _log_sync
 
+    # Feature 306 (FR-036): trava o evento e relê antes de apagar (o molde de `_delete_event_flow`).
+    db.session.flush()
+    db.session.refresh(event, with_for_update=True)
     titulo = event.title
     _log_sync(
         "auto_deleted",

@@ -582,6 +582,113 @@ def retido_por_vendedor(resumos: list[ResumoCancelado]) -> dict[int, Decimal]:
     return out
 
 
+def bv_da_planilha(acr, *, resumos: dict[int, ResumoCancelado] | None = None) -> Decimal | None:
+    """O BV que conta na Planilha, no resumo e no custo da DRE (decisão (a), data-model §7.4).
+
+    - Evento vivo: `amount_brl`;
+    - `venda` pago ou no banco: `paid_amount` (o `amount_brl` só na janela do deploy);
+    - `venda` não pago: o proporcional do retido (`bv_do_retido`); `None` quando dá zero;
+    - sem linha congelada (`legado`, `satelite`, `dia`, `virtual`): o `amount_brl` se pago ou no
+      banco; senão `None`.
+
+    `None` = o BV some da Planilha. `resumos` (de `resumos_cancelados`) evita uma consulta por BV
+    quando quem chama monta uma lista.
+    """
+    ev = acr.event
+    if ev is None or not ev.is_cancelled:
+        return _dinheiro(acr.amount_brl)
+    resumo = resumos.get(ev.id) if resumos is not None else None
+    if resumo is None:
+        resumo = resumo_cancelado(ev)
+    if resumo is None:
+        return _dinheiro(acr.amount_brl)
+    for b in resumo.bvs:
+        if b["acrescimo"].id == acr.id:
+            return b["conta"]
+    return _bv_que_conta(None, acr, regime=resumo.regime, retido=resumo.retido, venda=resumo.venda)
+
+
+def marcar_status_do_bv(acrescimo_id: int, status: str, valor_esperado: Any, actor_name: str) -> str:
+    """A função única que muda o status de um BV na Planilha (as duas portas, R9). Não faz commit.
+
+    Ordem: `valor_esperado` não numérico → 400 antes de travar; o evento (`travar_evento`) e depois
+    o acréscimo (`FOR UPDATE populate_existing`), a ordem de `substituir_acrescimos`; relê o
+    congelado; `atual = bv_da_planilha`. Ao marcar pago ou no banco: `atual is None` → 409
+    `bv_nao_esta_a_pagar`; `valor_esperado` diferente de `atual` → 409 `valor_mudou` (a frase da
+    305). `paid_amount` segue o data-model §7.4: nasce no "pago", fica entre pago e no banco, volta
+    a `None` no desfazer (o BV volta ao proporcional, FR-039).
+
+    Returns:
+        O status gravado.
+
+    Raises:
+        CancelValidationError: 400 "Item não encontrado." / "Valor esperado inválido.", 409.
+    """
+    from app.calendar.orcamento_evento_ops import travar_evento
+    from app.constants import CODIGO_BV_NAO_ESTA_A_PAGAR, CODIGO_VALOR_MUDOU
+    from app.models import EventAcrescimo, EventCancellationBv
+    from app.money import format_brl
+    from app.utils import audit
+
+    esperado = None
+    if valor_esperado is not None and not isinstance(valor_esperado, bool):
+        try:
+            esperado = Decimal(str(valor_esperado)).quantize(_CENTAVO)
+        except (ArithmeticError, ValueError) as exc:
+            raise CancelValidationError("Valor esperado inválido.") from exc
+    acr = db.session.get(EventAcrescimo, acrescimo_id) if acrescimo_id is not None else None
+    if acr is None or not acr.is_bv:
+        raise CancelValidationError("Item não encontrado")
+    if acr.event is not None:
+        travar_evento(acr.event)
+    acr = (
+        EventAcrescimo.query.filter(EventAcrescimo.id == acrescimo_id)
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+    linha = (
+        EventCancellationBv.query.filter(EventCancellationBv.acrescimo_id == acr.id)
+        .populate_existing()
+        .one_or_none()
+    )
+    if linha is not None:
+        db.session.refresh(linha.cancelamento)
+    antes = acr.bv_payment_status or "nao_pago"
+    marca_pago = status in ("pago", "no_banco")
+    atual = bv_da_planilha(acr)
+    if marca_pago:
+        if atual is None:
+            raise CancelValidationError(
+                "Este BV não está a pagar: recarregue a Planilha.", status=409, codigo=CODIGO_BV_NAO_ESTA_A_PAGAR
+            )
+        if esperado is not None and esperado != atual:
+            raise CancelValidationError(
+                f"O BV mudou para {format_brl(float(atual), prefix=True)} desde que a Planilha abriu: "
+                "recarregue e confira antes de marcar.",
+                status=409,
+                codigo=CODIGO_VALOR_MUDOU,
+                atual=float(atual),
+            )
+    if linha is not None:
+        if marca_pago and antes not in ("pago", "no_banco"):
+            linha.paid_amount = atual
+        elif not marca_pago:
+            linha.paid_amount = None
+    acr.bv_payment_status = status
+    valor = linha.paid_amount if linha is not None and linha.paid_amount is not None else atual
+    audit(
+        "payment",
+        "event_bv",
+        acr.id,
+        acr.bv_recipient or "—",
+        f"BV (repasse): {antes} → {status}"
+        + (f", {format_brl(float(valor), prefix=True)}" if valor is not None else "")
+        + (f" (por {actor_name})" if actor_name else ""),
+    )
+    return status
+
+
 def pode_excluir(event: CalendarEvent) -> bool:
     """True se o evento pode ser apagado de verdade, sem perder nada que importe.
 
@@ -654,32 +761,48 @@ def resumo_impacto(event: CalendarEvent) -> dict[str, Any]:
 
 
 def aplicar_estorno_comissao(event: CalendarEvent) -> None:
-    """Resolve as comissões de um evento que deixou de valer. Não faz commit.
+    """Resolve as comissões de um evento que vai ser excluído. Não faz commit.
 
-    Extraído de `_delete_event` (`app/calendar/routes.py`) para que exclusão e cancelamento
-    usem a MESMA regra — a lógica não pode viver só no caminho que apaga:
+    Extraído de `_delete_event` (`app/calendar/routes.py`) na feature 224:
 
     - comissão ainda `a_pagar` é cancelada e desvinculada;
-    - comissão já `paga` gera um **estorno negativo** `a_pagar`, que a Planilha de Pagamentos
-      desconta do próximo repasse do vendedor (via `_seller_payable_rows`, que junta estornos
-      pendentes de qualquer mês).
+    - comissão já paga **ou no banco** (feature 306) gera um **estorno órfão** negativo `a_pagar`,
+      ligado a ela (`original_id`), que a Planilha desconta do repasse do vendedor.
+
+    Feature 306 (FR-036): o estorno nasce no **primeiro repasse aberto** do vendedor
+    (`primeiro_repasse_aberto`), com `sale_date = payable_from` = essa data e o motivo "Exclusão do
+    evento". Antes ele copiava as datas da venda e caía num repasse que já tinha saído (o estorno
+    211 nasceu em 17/09 com data de 21/08). As datas são calculadas antes de qualquer mudança: o
+    autoflush de um estorno recém-criado mudaria a conta do seguinte.
     """
-    for cp in list(CommissionPayment.query.filter_by(event_id=event.id).all()):
+    from app.constants import MOTIVO_AJUSTE_EXCLUSAO, now_sp
+    from app.financeiro import comissoes_ops
+
+    hoje = now_sp().date()
+    linhas = CommissionPayment.query.filter_by(event_id=event.id).order_by(CommissionPayment.id).all()
+    datas = {
+        cp.id: comissoes_ops.primeiro_repasse_aberto(cp.seller_id, hoje, excluir_event_id=event.id)
+        for cp in linhas
+        if cp.status in ("pago", "no_banco")
+    }
+    for cp in linhas:
         if cp.status == "a_pagar":
             cp.status = "cancelado"
             cp.event_id = None  # desvincula antes do delete do evento
-        elif cp.status == "pago":
-            db.session.add(CommissionPayment(
-                event_id=None,
-                event_title=cp.event_title,
-                seller_id=cp.seller_id,
-                sale_date=cp.sale_date,
-                payable_from=cp.payable_from,
-                amount=-cp.amount,
-                status="a_pagar",
-                original_id=cp.id,
-                notes="Estorno automático: evento cancelado",
-            ))
+        elif cp.status in ("pago", "no_banco"):
+            db.session.add(
+                CommissionPayment(
+                    event_id=None,
+                    event_title=cp.event_title,
+                    seller_id=cp.seller_id,
+                    sale_date=datas[cp.id],
+                    payable_from=datas[cp.id],
+                    amount=-cp.amount,
+                    status="a_pagar",
+                    original_id=cp.id,
+                    notes=comissoes_ops._nota_do_ajuste(MOTIVO_AJUSTE_EXCLUSAO, "estorno automático"),
+                )
+            )
             cp.event_id = None
 
 

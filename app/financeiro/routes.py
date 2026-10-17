@@ -875,8 +875,19 @@ def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
     """
     if now_dt is None:
         now_dt = datetime.now(TZ_SP).replace(tzinfo=None)
+    # Feature 306: o valor é o `bv_da_planilha` (o BV do retido no cancelado; `None` = some), com
+    # os resumos dos cancelados montados de uma vez.
+    from app.calendar.cancel_ops import bv_da_planilha, resumos_cancelados
+
+    bv_rows = list(bv_rows)
+    resumos = resumos_cancelados(
+        sorted({a.event.id for a in bv_rows if a.event is not None and a.event.is_cancelled})
+    )
     items = []
     for a in bv_rows:
+        valor = bv_da_planilha(a, resumos=resumos)
+        if valor is None:
+            continue
         ev = a.event
         ev_date = ev.start_at.date() if ev and ev.start_at else date.min
         ev_end = (ev.end_at or ev.start_at) if ev else None
@@ -891,7 +902,7 @@ def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
             "copy_label":  copy_label,
             "sublabel":    "BV (repasse)",
             "person_name": a.bv_recipient or "(sem recebedor)",
-            "amount":      a.amount_brl,
+            "amount":      valor,
             "pix_key":     (a.bv_pix or "").strip(),
             "pix_key_type": "",
             "status":      a.bv_payment_status or "nao_pago",
@@ -935,6 +946,23 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     # já pagos, e o "Pago" do lote ia pagar de novo o que já tinha saído.
     from app.financeiro.comissoes_ops import SUFIXO_ITEM_PAGO
 
+    from app.financeiro.comissoes_ops import ciclo_de_pagamento_da_linha, tipo_da_linha
+
+    def _linhas(grupo: list) -> list[dict]:
+        """As linhas do item (feature 306): o ajuste do cancelado e a comissão que ele acerta."""
+        return [
+            {
+                "id": c.id,
+                "tipo": tipo_da_linha(c)[0],
+                "event_id": c.event_id,
+                "event_title": c.event_title,
+                "amount": c.amount,
+                "ciclo": (lambda d: d.strftime("%Y-%m") if d else None)(ciclo_de_pagamento_da_linha(c)),
+                "status": c.status,
+            }
+            for c in sorted(grupo, key=lambda c: c.id)
+        ]
+
     period_tag = f"{period_start.year:04d}-{period_start.month:02d}"
     titulo = f"Comissões {period_start.month:02d}/{period_start.year}"
     items = []
@@ -949,7 +977,9 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
             (pagas, f"{seller_id}:{period_tag}:{SUFIXO_ITEM_PAGO}", " — pago"),
         ):
             total = sum((c.amount for c in grupo), Decimal("0"))
-            if total == 0:
+            # Feature 306: o aberto que soma zero com linhas de valor (−100 do ajuste e +100 de
+            # outra venda) fica: some, e as duas linhas ficariam a pagar sem item que as liquide.
+            if total == 0 and not (grupo is abertas and any(c.amount != 0 for c in grupo)):
                 continue
             if grupo is pagas:
                 status = "pago"
@@ -971,6 +1001,7 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
                 "pix_key_type": seller.pix_key_type if seller else "",
                 "status":      status,
                 "is_future":   due_date > today,
+                "commission_lines": _linhas(grupo),
             })
     return items
 
@@ -1189,13 +1220,18 @@ def set_payment_status():
                   f"Desembolso gasto: {old} → {status} | {exp.description}")
             db.session.commit()
     elif item_type == "bv":
-        acr = EventAcrescimo.query.get(int(item_id))
-        if acr and acr.is_bv:
-            old = acr.bv_payment_status
-            acr.bv_payment_status = status
-            audit("payment", "event_bv", acr.id, acr.bv_recipient or "—",
-                  f"BV (repasse): {old} → {status}")
-            db.session.commit()
+        # Feature 306 (R9): a mesma função da API, sem conferir valor (o Jinja não o manda).
+        from app.calendar.cancel_ops import CancelValidationError, marcar_status_do_bv
+        from app.constants import CODIGO_BV_NAO_ESTA_A_PAGAR
+
+        try:
+            marcar_status_do_bv(int(item_id), status, None, current_user.name)
+        except CancelValidationError as exc:
+            db.session.rollback()
+            if exc.codigo == CODIGO_BV_NAO_ESTA_A_PAGAR:
+                flash(exc.message, "error")
+            return _bad()
+        db.session.commit()
     else:
         role = EventRole.query.get(int(item_id))
         if role:
