@@ -388,7 +388,21 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     });
   }
 
-  if (data.cobranca) {
+  const cancelamento = data.event.cancelamento;
+  if (cancelamento) {
+    // Feature 306: no cancelado, a pendência "em aberto" dá lugar à devolução e ao retido.
+    const aPagar = cancelamento.devolucoes.filter((d) => d.estado !== "pago");
+    lista.push({
+      key: "cobranca",
+      label: "Cancelado",
+      valor:
+        aPagar.length > 0
+          ? `devolução de ${brl(aPagar.reduce((s, d) => s + d.valor, 0))} a pagar · retido ${brl(cancelamento.retido)}`
+          : `retido ${brl(cancelamento.retido)}`,
+      ok: aPagar.length === 0,
+      tab: "comercial",
+    });
+  } else if (data.cobranca) {
     const cobranca = data.cobranca;
     const aberto = cobranca.outstanding ?? 0;
     // Feature 299: a venda sem valor não está "quitada" — falta o valor —, a cortesia não é venda,

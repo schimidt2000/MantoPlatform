@@ -19,6 +19,17 @@ from app.gastos import gastos_ops
 from app.models import CalendarEvent, RecurringExpense, RecurringExpenseEntry, SpecialExpense
 
 
+def _travada(exc: gastos_ops.GastoLockedError) -> Any:
+    """Feature 306: a devolução de cancelado travada — rollback e 409 `devolucao_travada`."""
+    from app import db
+    from app.constants import CODIGO_DEVOLUCAO_TRAVADA
+
+    db.session.rollback()
+    return json_error(
+        exc.message, 409, fields={exc.field: exc.message}, event_id=exc.event_id, codigo=CODIGO_DEVOLUCAO_TRAVADA
+    )
+
+
 def _require_financeiro() -> Any:
     if not gastos_ops.is_financeiro(current_user):
         return json_error("Sem permissão", 403)
@@ -74,6 +85,8 @@ def api_gastos_create() -> Any:
         expense = gastos_ops.create_expense(current_user, data, receipt_path, event_id)
     except gastos_ops.GastoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     return jsonify(_expense_dict(expense)), 201
 
 
@@ -88,7 +101,9 @@ def api_gastos_aprovar(expense_id: int) -> Any:
     if expense is None:
         return json_error("Gasto não encontrado", 404)
     try:
-        gastos_ops.approve_expense(expense, current_user)
+        expense = gastos_ops.approve_expense(expense, current_user)
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     except gastos_ops.GastoStateError as exc:
         return json_error(str(exc), 409)
     return jsonify(_expense_dict(expense))
@@ -106,7 +121,9 @@ def api_gastos_rejeitar(expense_id: int) -> Any:
         return json_error("Gasto não encontrado", 404)
     body = request.get_json(silent=True) or {}
     try:
-        gastos_ops.reject_expense(expense, current_user, body.get("motivo", ""))
+        expense = gastos_ops.reject_expense(expense, current_user, body.get("motivo", ""))
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     except gastos_ops.GastoStateError as exc:
         return json_error(str(exc), 409)
     return jsonify(_expense_dict(expense))
@@ -143,6 +160,8 @@ def api_gastos_editar(expense_id: int) -> Any:
         )
     except gastos_ops.GastoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     except gastos_ops.GastoStateError as exc:
         return json_error(str(exc), 409)
     return jsonify(_expense_dict(expense))
@@ -163,7 +182,10 @@ def api_gastos_delete(expense_id: int) -> Any:
     )
     if not can_delete:
         return json_error("Sem permissão", 403)
-    gastos_ops.delete_expense(expense, current_user)
+    try:
+        gastos_ops.delete_expense(expense, current_user)
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     return "", 204
 
 
@@ -182,6 +204,8 @@ def api_gastos_vincular_evento(expense_id: int) -> Any:
         expense = gastos_ops.link_expense_to_event(expense, body.get("event_id"), current_user)
     except gastos_ops.GastoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except gastos_ops.GastoLockedError as exc:
+        return _travada(exc)
     return jsonify(_expense_dict(expense))
 
 

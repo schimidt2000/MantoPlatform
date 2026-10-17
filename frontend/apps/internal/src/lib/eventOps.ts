@@ -1,6 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiRequestError, apiFetch } from "@manto/api-client";
-import type { EventoDetalhe } from "./agenda";
+import type { EventoDetalhe, ModoDevolucao, RegimeCancelamento, ResumoCancelado } from "./agenda";
+import { invalidarFinanceiro } from "./financeiro";
 import { invalidarNotificacoes } from "./notificacoes";
 import { invalidarSumidosGoogle } from "./sumidosGoogle";
 
@@ -81,18 +83,56 @@ export function useDeleteEvent(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["agenda"] });
       queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 306: o marcado excluído sai da lista de sumidos sem esperar o poll.
+      invalidarSumidosGoogle(queryClient);
     },
   });
 }
 
 // ── Excluir / cancelar / solicitar exclusão (feature 224) ────────────────────
 
-/** Elenco escalado no evento, como o resumo de impacto o descreve. */
+/**
+ * Os 18 `codigo` das recusas do cancelamento e das correções do cancelado (feature 306,
+ * data-model §6.2). O verify confere que esta união e `CODIGOS_RECUSA_DO_CANCELAMENTO` têm os
+ * mesmos membros.
+ */
+export type CodigoRecusaCancelamento =
+  | "cancelado"
+  | "ja_cancelado"
+  | "ensaio"
+  | "grupo_mudou"
+  | "sem_outro_dia_vivo"
+  | "cache_pago"
+  | "devolucao_pendente"
+  | "max_devolucao_mudou"
+  | "tente_de_novo"
+  | "nao_cancelado"
+  | "regime_sem_retido"
+  | "abaixo_do_piso"
+  | "acima_do_teto"
+  | "pago_abaixo_do_devolvido"
+  | "bv_nao_esta_a_pagar"
+  | "valor_mudou"
+  | "devolucao_travada"
+  | "estado_mudou";
+
+/** O `codigo` de uma recusa da API, quando há. */
+export function codigoDaRecusa(error: unknown): string | undefined {
+  return error instanceof ApiRequestError ? (error.details.codigo as string | undefined) : undefined;
+}
+
+/** Uma escalação do evento (vaga × dia), como o resumo de impacto a descreve. */
 export interface ImpactoElenco {
   character_name: string;
   talent_name: string | null;
   cache_value: number;
   payment_status: string;
+  // Feature 306 — opcionais (backend antigo).
+  role_id?: number;
+  day_event_id?: number;
+  talent_pix_informado?: boolean;
+  /** Só com `show_financeiro`. */
+  talent_pix?: string | null;
 }
 
 /**
@@ -111,6 +151,98 @@ export interface ImpactoExclusao {
   gastos_vinculados: { id: number; description: string; amount: number }[];
   tem_contrato: boolean;
   is_group_leader: boolean;
+  // ── Feature 306 — todas opcionais: sem `regime`, o diálogo trava o envio ("O sistema está
+  // atualizando"), porque o backend antigo recusaria o corpo novo. ──
+  /** O que o ato daria (no principal: o do "todos"). */
+  regime?: Exclude<RegimeCancelamento, "legado">;
+  sumiu_do_google?: boolean;
+  /** Pago do GRUPO; `total_recebido` continua o do próprio evento. */
+  pago?: number;
+  /** Devoluções aprovadas do grupo. */
+  ja_devolvido?: number;
+  /** Pago − já devolvido: o que "Tudo" devolve. */
+  max_devolucao?: number;
+  com_nota?: boolean;
+  /** A alíquota de Configurações, só referência do imposto. */
+  imposto_aliquota?: number;
+  bvs?: {
+    acrescimo_id: number;
+    recebedor: string | null;
+    cheio: number;
+    pago: boolean;
+    falta_recebedor: boolean;
+    falta_pix: boolean;
+  }[];
+  comissao?: {
+    beneficiario: { id: number; nome: string } | null;
+    cheia: number;
+    /** Pago + no banco. */
+    paga: number;
+    a_pagar: number;
+  };
+  /** Fuso de SP; negativo = "o evento foi há N dias". */
+  faltam_dias?: number | null;
+  comprovantes_sem_valor?: number;
+  /** Total de cachê pago; > 0 → o diálogo explica e não oferece cancelar. */
+  cache_pago?: number;
+}
+
+/** O efeito da prévia (`GET …/impacto-exclusao?devolucao=`) — a mesma conta da execução. */
+export interface EfeitoCancelamento {
+  devolucao: number;
+  retido: number | null;
+  comissao_cheia: number;
+  comissao_retido: number | null;
+  bv_retido: number;
+  bvs?: { acrescimo_id: number; bv_retido: number }[];
+  ja_liquidada: number;
+  /** A linha (±) no primeiro repasse aberto; `null` = só a comissão a pagar muda. */
+  ajuste: number | null;
+  /** `AAAA-MM`. */
+  ciclo: string | null;
+  /** `AAAA-MM-05`. */
+  repasse_em: string | null;
+  devolucao_minima?: number;
+  imposto_referencia: number | null;
+}
+
+function useDebounced<T>(valor: T, ms: number): T {
+  const [atrasado, setAtrasado] = useState(valor);
+  useEffect(() => {
+    const t = window.setTimeout(() => setAtrasado(valor), ms);
+    return () => window.clearTimeout(t);
+  }, [valor, ms]);
+  return atrasado;
+}
+
+/**
+ * A prévia do cancelamento (feature 306, FR-011): o servidor faz a conta que o ato fará, sem
+ * gravar. Espera 400 ms de digitação parada e mantém o último efeito na tela enquanto busca o
+ * próximo (`keepPreviousData`), para os números não piscarem. O valor vai com ponto decimal.
+ */
+export function usePreviaCancelamento(
+  eventId: number,
+  devolucao: number | null,
+  enabled: boolean,
+  opcoes: { vendaNova?: number | null; alcance?: string | null } = {},
+) {
+  const valor = useDebounced(devolucao, 400);
+  const vendaNova = useDebounced(opcoes.vendaNova ?? null, 400);
+  const alcance = opcoes.alcance ?? null;
+  return useQuery<{ efeito: EfeitoCancelamento }>({
+    queryKey: ["evento-previa-cancelamento", eventId, valor, vendaNova, alcance],
+    queryFn: () => {
+      const params = new URLSearchParams({ devolucao: (valor ?? 0).toFixed(2) });
+      if (vendaNova != null) params.set("venda_nova", vendaNova.toFixed(2));
+      return apiFetch<{ efeito: EfeitoCancelamento }>(
+        `/api/events/${eventId}/impacto-exclusao?${params.toString()}`,
+      );
+    },
+    enabled: enabled && valor != null && Number.isFinite(valor) && valor >= 0,
+    placeholderData: keepPreviousData,
+    staleTime: 0,
+    retry: false,
+  });
 }
 
 /** Resumo de impacto — só carregado quando o diálogo abre (`enabled`). */
@@ -123,34 +255,93 @@ export function useImpactoExclusao(eventId: number, enabled: boolean) {
   });
 }
 
+/** O corpo de `POST …/cancelar` (feature 306, contracts §1). */
 export interface CancelarEventoInput {
   motivo: string;
-  devolucao?: { valor: number; nome: string; pix: string; observacao?: string };
+  /** Obrigatória na venda; ignorada na Loja Virtual. */
+  devolucao?: {
+    modo: ModoDevolucao;
+    /** Parte: o valor; Tudo: o `max_devolucao` que a tela recebeu (só leitura). */
+    valor?: number;
+    nome?: string;
+    pix?: string;
+    observacao?: string;
+  };
+  /** Obrigatório (≥ 0) com nota; enviado sem nota → 400. */
+  imposto_retido?: number;
+  /** Completa o BV a pagar que está sem recebedor ou PIX. */
+  bvs?: { acrescimo_id: number; recebedor: string; pix: string }[];
+}
+
+export interface CancelarEventoResult {
+  ok: true;
+  resumo?: ResumoCancelado | null;
+  /** Google (falha ou trava de ambiente), sem o texto cru do erro. */
+  aviso?: string | null;
+  google_removido?: boolean;
+  gasto_id?: number | null;
+}
+
+/** As chaves que um ato ou uma correção do cancelado muda (contracts §22). */
+function invalidarDoCancelamento(queryClient: ReturnType<typeof useQueryClient>, eventId: number) {
+  queryClient.invalidateQueries({ queryKey: ["event"] });
+  queryClient.invalidateQueries({ queryKey: ["evento-impacto-exclusao", eventId] });
+  queryClient.invalidateQueries({ queryKey: ["agenda"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+  queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+  // Venda cancelada sai de Cobranças e de "Sem valor" (feature 299).
+  queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["vendas-dashboard"] });
+  queryClient.invalidateQueries({ queryKey: ["admin-desempenho"] });
+  queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
+  invalidarFinanceiro(queryClient);
 }
 
 /**
- * Cancela o evento: resolve a comissão (paga vira estorno negativo), registra a devolução como
- * Gasto Extra aprovado e tira o evento do Google Agenda. O registro **não** é apagado.
+ * Cancela o evento (feature 306): congela a venda, devolve à cliente (Tudo, Parte ou Nada), leva a
+ * comissão e o BV ao retido e tira o evento do Google Agenda. O registro **não** é apagado.
  */
 export function useCancelarEvento(eventId: number) {
   const queryClient = useQueryClient();
-  return useMutation<
-    { ok: boolean; gasto_id: number | null; google_removido: boolean; aviso: string | null },
-    Error,
-    CancelarEventoInput
-  >({
+  return useMutation<CancelarEventoResult, ApiRequestError, CancelarEventoInput>({
     mutationFn: (input) =>
-      apiFetch(`/api/events/${eventId}/cancelar`, {
+      apiFetch<CancelarEventoResult>(`/api/events/${eventId}/cancelar`, {
         method: "POST",
         body: JSON.stringify(input),
       }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["agenda"] });
-      queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
-      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
-      // Venda cancelada sai de Cobranças e de "Sem valor" (feature 299).
+      invalidarDoCancelamento(queryClient, eventId);
+      invalidarSumidosGoogle(queryClient);
+      invalidarNotificacoes(queryClient);
+    },
+  });
+}
+
+export interface AlterarDevolucaoInput {
+  /** O NOVO TOTAL devolvido (na venda, do grupo). */
+  devolucao_total: number;
+  nome?: string;
+  pix?: string;
+  observacao?: string;
+  /** Só na venda com nota. */
+  imposto_retido?: number;
+}
+
+/** "Alterar devolução" do cancelado (feature 306, contracts §3). Só o Superadmin. */
+export function useAlterarDevolucao(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<{ ok: true; resumo: ResumoCancelado | null }, ApiRequestError, AlterarDevolucaoInput>({
+    mutationFn: (input) =>
+      apiFetch<{ ok: true; resumo: ResumoCancelado | null }>(`/api/events/${eventId}/devolucao`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
+      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }
@@ -248,12 +439,15 @@ export interface EventoCancelado {
   cancelled_at: string;
   cancelled_by: string | null;
   reason: string | null;
+  /** Mantido por um ciclo; o `resumo` traz todas as devoluções. */
   devolucao: {
     id: number;
     amount: number;
     payee_name: string;
     payment_status: string;
   } | null;
+  /** Feature 306 — opcional (backend antigo). */
+  resumo?: ResumoCancelado | null;
 }
 
 /** Fila do Superadmin: solicitações pendentes + eventos já cancelados. */

@@ -144,6 +144,21 @@ def api_set_payment_status() -> Any:
         return jsonify({"status": status})
 
     if item_type == "expense":
+        # Feature 306: a devolução de um cancelado trava o evento, relê o gasto e confere o valor
+        # que a Planilha mostrou (`valor_esperado`); os outros gastos seguem o caminho de hoje.
+        from app.calendar.cancel_ops import CancelValidationError, marcar_status_da_devolucao
+
+        try:
+            devolucao = marcar_status_da_devolucao(
+                _to_int(item_id), status, valor_esperado=body.get("valor_esperado"), actor_name=current_user.name
+            )
+        except CancelValidationError as exc:
+            db.session.rollback()
+            codigo = {"codigo": exc.codigo} if exc.codigo else {}
+            return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
+        if devolucao is not None:
+            db.session.commit()
+            return jsonify({"status": status})
         exp = SpecialExpense.query.get(_to_int(item_id))
         if not exp:
             return json_error("Item não encontrado", 400)

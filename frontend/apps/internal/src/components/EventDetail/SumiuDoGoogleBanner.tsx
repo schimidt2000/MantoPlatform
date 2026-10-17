@@ -8,6 +8,8 @@ export interface SumiuDoGoogleBannerProps {
   data: EventoDetalhe;
   /** Abre o diálogo "Devolver ao Google Agenda" — o diálogo e a mutação moram no cabeçalho. */
   onDevolver?: () => void;
+  /** Feature 306: abre o "Cancelar evento" (a segunda saída do marcado). */
+  onCancelar?: () => void;
 }
 
 /**
@@ -20,7 +22,7 @@ export interface SumiuDoGoogleBannerProps {
  * em jogo, o botão de devolver e o caminho para quem já recriou o evento à mão. O front não decide
  * por papel, só por flag.
  */
-export function SumiuDoGoogleBanner({ data, onDevolver }: SumiuDoGoogleBannerProps) {
+export function SumiuDoGoogleBanner({ data, onDevolver, onCancelar }: SumiuDoGoogleBannerProps) {
   const marca = data.event.sumiu_do_google;
   if (!marca) return null;
   // `flags` é `Record<string, boolean>`: chave ausente é falso.
@@ -44,13 +46,13 @@ export function SumiuDoGoogleBanner({ data, onDevolver }: SumiuDoGoogleBannerPro
           A decisão é do Superadmin — conte a ele por que o evento saiu do Google Agenda.
         </p>
       )}
-      {superadmin && <ParteDoSuperadmin data={data} onDevolver={onDevolver} />}
+      {superadmin && <ParteDoSuperadmin data={data} onDevolver={onDevolver} onCancelar={onCancelar} />}
     </div>
   );
 }
 
 /** O que só o Superadmin vê: o quadro, o botão, a linha da próxima entrega e os três passos. */
-function ParteDoSuperadmin({ data, onDevolver }: SumiuDoGoogleBannerProps) {
+function ParteDoSuperadmin({ data, onDevolver, onCancelar }: SumiuDoGoogleBannerProps) {
   return (
     <div className="mt-3 space-y-3">
       <div className="rounded-md border border-line bg-panel px-3 py-2">
@@ -59,14 +61,21 @@ function ParteDoSuperadmin({ data, onDevolver }: SumiuDoGoogleBannerProps) {
         </p>
         <QuadroEmJogo data={data} />
       </div>
-      {onDevolver && (
-        <Button size="sm" className="w-full sm:w-auto" onClick={onDevolver}>
-          Devolver ao Google Agenda
-        </Button>
-      )}
+      <div className="flex flex-wrap gap-2">
+        {onDevolver && (
+          <Button size="sm" className="w-full sm:w-auto" onClick={onDevolver}>
+            Devolver ao Google Agenda
+          </Button>
+        )}
+        {onCancelar && (
+          <Button size="sm" variant="outline" className="w-full text-red sm:w-auto" onClick={onCancelar}>
+            Cancelar o evento
+          </Button>
+        )}
+      </div>
       <p className="text-ink">
-        O cancelamento com devolução do dinheiro chega na próxima entrega. Se este evento foi
-        cancelado de verdade, ele fica marcado até lá.
+        Devolva ao Google se o evento continua valendo; se ele foi cancelado de verdade, cancele —
+        a devolução do dinheiro, a comissão e o BV se acertam no próprio cancelamento.
       </p>
       <div className="rounded-md border border-line bg-panel px-3 py-2">
         <AccordionRow

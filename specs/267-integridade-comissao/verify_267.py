@@ -275,15 +275,21 @@ def cen_06_kpi_le_a_comissao_real() -> None:
             f"origem do número não sinalizada: {kpi.get('commission_source')}",
         )
 
-    # Evento cancelado: o backref fica vazio, e sem a guarda o fallback inventaria número.
+    # Evento cancelado: o backref fica vazio, e sem a guarda o fallback inventaria número. Desde a
+    # feature 306 o cancelado não manda `kpi` (contaria a devolução como custo): a comissão dele está
+    # no bloco `cancelamento` — e no cancelado `legado` (sem linha congelada, como este) ela é zero.
     evento.cancelled_at = datetime.now()
     db.session.commit()
     with app.test_client() as c:
         _login(c, estado["superadmin"])
-        kpi = c.get(f"/api/events/{evento.id}").get_json().get("kpi")
+        corpo = c.get(f"/api/events/{evento.id}").get_json()
+        _garante(corpo.get("kpi") is None, f"evento cancelado com `kpi`: {corpo.get('kpi')}")
+        bloco = (corpo.get("event") or {}).get("cancelamento") or {}
+        _garante(bloco.get("regime") == "legado", f"regime do cancelado: {bloco.get('regime')!r}")
+        retido = (bloco.get("comissao") or {}).get("retido")
         _garante(
-            Decimal(str(kpi["commission"])) == Decimal("0"),
-            f"evento cancelado exibindo comissão: {kpi['commission']}",
+            retido is not None and Decimal(str(retido)) == Decimal("0"),
+            f"evento cancelado exibindo comissão: {retido}",
         )
     evento.cancelled_at = None
     db.session.commit()

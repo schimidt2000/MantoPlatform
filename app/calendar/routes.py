@@ -1632,6 +1632,13 @@ _EVENT_ACTIONS = {
     "rename_group":         _handle_rename_group,
 }
 
+# Feature 306 (contracts §21): o Jinja não refaz o cancelado (não tem `reaplicar_cancelado`), então
+# estas ações recusam o evento cancelado para todo papel, o Superadmin inclusive.
+_ACOES_RECUSADAS_NO_CANCELADO = frozenset({
+    "update_comercial", "update_sale", "add_payment", "edit_payment", "delete_payment",
+    "add_reembolso", "collect_reembolso", "delete_reembolso",
+})
+
 
 @calendar_bp.route("/events/<int:event_id>", methods=["GET", "POST"])
 @login_required
@@ -1666,6 +1673,17 @@ def event_detail(event_id: int):
             abort(403)
         handler = _EVENT_ACTIONS.get(action)
         eid = event.id  # capture before commit+thread expire the ORM object
+        if handler and action in _ACOES_RECUSADAS_NO_CANCELADO:
+            from app.calendar.orcamento_evento_ops import travar_evento
+
+            travar_evento(event)
+            if event.is_cancelled:
+                db.session.rollback()
+                flash(
+                    "Evento cancelado: os dados de venda se corrigem pela tela nova, só pelo Superadmin.",
+                    "error",
+                )
+                return redirect(url_for("calendar.event_detail", event_id=eid))
         if handler:
             handler(event, tz_sp)
         return redirect(url_for("calendar.event_detail", event_id=eid))
@@ -4398,7 +4416,8 @@ def _delete_event_flow(
         excluído — `aviso` preenchido só quando o Google recusou a remoção (feature 224).
 
     Raises:
-        EventoMarcadoError: o evento está marcado — a única saída dele é devolver ao Google.
+        EventoMarcadoError: o evento está marcado — devolva ao Google ou cancele.
+        EventoCanceladoError: o evento está cancelado (feature 306, FR-021).
     """
     from app.calendar.cancel_ops import EventoMarcadoError
 
@@ -4406,6 +4425,14 @@ def _delete_event_flow(
     # do sync) no meio do caminho mudou o que a decisão leu.
     db.session.flush()
     db.session.refresh(event, with_for_update=True)
+    # Feature 306 (FR-021): o cancelado não se exclui — antes da checagem do líder.
+    if event.is_cancelled:
+        from app.calendar.cancel_ops import EventoCanceladoError
+
+        raise EventoCanceladoError(
+            "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, "
+            "recrie o evento."
+        )
     if event.is_google_missing:
         raise EventoMarcadoError()
     if event.is_group_leader:  # FR-004: desagrupar antes
@@ -4517,7 +4544,7 @@ def delete_calendar_event(event_id: int):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
     title = event.title  # capturado antes da exclusão
-    from app.calendar.cancel_ops import EventoMarcadoError
+    from app.calendar.cancel_ops import CancelValidationError
 
     try:
         excluido, aviso = _delete_event_flow(
@@ -4525,7 +4552,8 @@ def delete_calendar_event(event_id: int):
             actor_name=current_user.name,
             actor_role=", ".join(r.name for r in current_user.roles),
         )
-    except EventoMarcadoError as exc:  # feature 303: sem isto a recusa viraria 500
+    except CancelValidationError as exc:  # marcado (303) ou cancelado (306): sem isto, 500
+        db.session.rollback()
         flash(exc.message, "error")
         return redirect(url_for("calendar.event_detail", event_id=event_id))
     if not excluido:

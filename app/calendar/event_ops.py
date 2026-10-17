@@ -843,6 +843,23 @@ def resolver_data_da_venda(
     return None
 
 
+def venda_mudaria(event: Any, data: dict) -> bool:
+    """Algum campo de venda do corpo difere do gravado (feature 306, contracts §7)?
+
+    `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` e
+    `with_invoice`, pelas mesmas comparações da 215b e da 299: o cancelado recusa a edição
+    completa que mexeria na venda, e salva o resto.
+    """
+    return not (
+        _mesmo_valor(data.get("sale_value"), event.sale_value)
+        and _mesmo_valor(data.get("sale_value_gross"), event.sale_value_gross)
+        and ("commission_rate" not in data or _mesma_taxa(event.commission_rate, data.get("commission_rate")))
+        and _mesmo_vendedor(event.seller_id, data.get("seller_id"))
+        and bool(data.get("is_cortesia_permuta")) == bool(event.is_cortesia_permuta)
+        and bool(data.get("with_invoice")) == bool(event.with_invoice)
+    )
+
+
 def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz: Any = None) -> str | None:
     """Campos comerciais da edição completa — nunca no outro evento de um grupo (feature 299).
 
@@ -857,6 +874,10 @@ def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz:
     from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
 
     antes = estado_da_venda(event)
+    # Feature 306: relido depois da trava de `estado_da_venda`, como cinto da view (que já recusou
+    # o corpo que mexeria na venda): no cancelado, a venda fica como está.
+    if event.is_cancelled:
+        return None
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia

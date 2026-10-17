@@ -1027,7 +1027,14 @@ def set_event_orcamento(
 
     Raises:
         OrcamentoJaVinculado: outro evento não cancelado já aponta para o orçamento.
+        EventoCanceladoError: o evento foi cancelado (feature 306) — relido depois da trava, como
+            cinto da view, nos três verbos.
     """
+    travar_evento(event)
+    if event.is_cancelled:
+        from app.calendar.cancel_ops import EventoCanceladoError
+
+        raise EventoCanceladoError("O orçamento de um evento cancelado não se aplica nem se troca.")
     if entry is None:
         anterior = event.orcamento_history_id
         event.orcamento_history_id = None

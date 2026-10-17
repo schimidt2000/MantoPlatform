@@ -115,8 +115,9 @@ function StatusSelect({
       return;
     }
     // Feature 305: o BV a pagar acompanha a venda — marcar pago confere o valor que está na tela.
+    // Feature 306: a devolução de um cancelado também (o "Alterar devolução" pode tê-la mudado).
     setStatus.mutate(
-      item.type === "bv"
+      item.type === "bv" || item.type === "expense"
         ? { item_type: item.type, item_id: item.id, status, valor_esperado: item.amount }
         : { item_type: item.type, item_id: item.id, status },
     );

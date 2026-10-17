@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
+import { invalidarFinanceiro } from "./financeiro";
 
 /**
  * Hooks de upload e gestão de anexos do evento (feature 153): nota fiscal, contrato,
@@ -56,6 +57,12 @@ function useEventMutation<TVars>(
       queryClient.setQueryData(["event", eventId], updated);
       // Comprovante muda o recebido do grupo: a linha de Cobranças sai ou muda (feature 299).
       if (mudaCobranca) queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      // Feature 306: no grupo e no cancelado, o comprovante (e o reembolso, a nota, a parcela)
+      // muda também o principal, o retido e a comissão — as telas do financeiro e de vendas.
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+      queryClient.invalidateQueries({ queryKey: ["vendas-dashboard"] });
+      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+      invalidarFinanceiro(queryClient);
     },
   });
 }

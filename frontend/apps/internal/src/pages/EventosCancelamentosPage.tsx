@@ -26,8 +26,9 @@ function data(iso: string | null): string {
   return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
 }
 
-const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" }> = {
+const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" | "blue" }> = {
   pago: { label: "devolvido", tone: "green" },
+  no_banco: { label: "no banco", tone: "blue" },
   nao_pago: { label: "a devolver", tone: "gold" },
 };
 
@@ -162,7 +163,33 @@ export function EventosCancelamentosPage() {
                           </TableCell>
                           <TableCell className="text-muted">{c.reason ?? "—"}</TableCell>
                           <TableCell>
-                            {c.devolucao && situacao ? (
+                            {/* Feature 306 (FR-025): o resumo traz todas as devoluções e o retido; o PIX
+                                só vem para quem vê o financeiro. Sem ele (backend antigo), a primeira. */}
+                            {c.resumo ? (
+                              <>
+                                {c.resumo.devolucoes.length === 0 && (
+                                  <span className="text-muted">nada a devolver</span>
+                                )}
+                                {c.resumo.devolucoes.map((d) => {
+                                  const estado = STATUS_DEVOLUCAO[d.estado] ?? STATUS_DEVOLUCAO.nao_pago;
+                                  return (
+                                    <span key={d.id} className="block">
+                                      <span className="tabular-nums text-ink">{brl(d.valor)}</span>
+                                      <Badge tone={estado.tone} className="ml-2">
+                                        {estado.label}
+                                      </Badge>
+                                      <span className="block text-xs text-muted">
+                                        {d.nome ?? "—"}
+                                        {d.pix ? ` · PIX ${d.pix}` : ""}
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                                <span className="mt-1 block text-xs text-muted">
+                                  pago {brl(c.resumo.pago)} · retido {brl(c.resumo.retido)}
+                                </span>
+                              </>
+                            ) : c.devolucao && situacao ? (
                               <>
                                 <span className="tabular-nums text-ink">
                                   {brl(c.devolucao.amount)}

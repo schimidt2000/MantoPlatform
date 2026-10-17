@@ -26,6 +26,7 @@ import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
+import { ResultadoCancelamento } from "./ResultadoCancelamento";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -1231,7 +1232,9 @@ export function ComercialSection({ data }: ComercialSectionProps) {
       <VendaPanel data={data} />
       <ColecoesComerciaisPanel data={data} />
       <GrupoPanel data={data} />
-      <KpiGrid data={data} />
+      {/* Feature 306: no cancelado, o resultado do cancelamento no lugar do `KpiGrid` (que
+          contaria a devolução como custo e o BV cheio). Sem o bloco (backend antigo), o de antes. */}
+      {data.event.cancelamento ? <ResultadoCancelamento data={data} /> : <KpiGrid data={data} />}
     </>
   );
 }

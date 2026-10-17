@@ -115,6 +115,49 @@ def _can_delete() -> bool:
     return any(r.name.upper() in _CAN_DELETE for r in current_user.roles)
 
 
+def _recusa_do_cancelado(exc: Any) -> Any:
+    """A tradução única da recusa do núcleo da 306 (`CancelValidationError`) em `json_error`."""
+    codigo = {"codigo": exc.codigo} if exc.codigo else {}
+    return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
+
+
+EXCLUIR_CANCELADO = (
+    "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, recrie o evento."
+)
+ORCAMENTO_DO_CANCELADO = "O orçamento de um evento cancelado não se aplica nem se troca."
+
+
+def _recusa_se_cancelado(event: CalendarEvent) -> Any | None:
+    """A regra única das portas (a)–(h) (FR-047): trava, relê e recusa o cancelado para quem não é
+    Superadmin real. `None` = segue o caminho de hoje (no vivo, já sob a trava)."""
+    from app.calendar.cancel_ops import CancelValidationError, recusar_se_cancelado
+
+    try:
+        recusar_se_cancelado(event, current_user)
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    return None
+
+
+def _recusa_do_banco(exc: Exception) -> Any:
+    """Rollback e o 409 do deadlock (`tente_de_novo`) ou do UNIQUE (`ja_cancelado`); senão relança."""
+    from app.calendar.cancel_ops import traduzir_erro_de_banco
+
+    db.session.rollback()
+    recusa = traduzir_erro_de_banco(exc)
+    if recusa is None:
+        raise exc
+    return _recusa_do_cancelado(recusa)
+
+
+def _resumo_do_cancelado(event: CalendarEvent) -> dict | None:
+    """O `ResumoCancelado` com as flags de quem pede — o mesmo do `event.cancelamento` do detalhe."""
+    from app.api.agenda_read import serializar_cancelamento
+
+    return serializar_cancelamento(event, current_user, session.get("impersonate_role"))
+
+
 def _can_request_delete() -> bool:
     """Gate de SOLICITAR a exclusão (`_CAN_REQUEST_DELETE` = Comercial ou Superadmin)."""
     from app.calendar.routes import _CAN_REQUEST_DELETE
@@ -524,9 +567,21 @@ def api_impacto_exclusao(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import resumo_impacto
+    from app.api.agenda_read import _role_flags
+    from app.calendar.cancel_ops import CancelValidationError, previa_cancelamento, resumo_impacto
 
-    return jsonify(resumo_impacto(event))
+    # Feature 306: `?devolucao=` (com `&venda_nova=`) é a prévia do ato — a mesma conta da
+    # execução, sem trava e sem gravar —, e responde só `{efeito}` (contracts §2).
+    if "devolucao" in request.args:
+        try:
+            efeito = previa_cancelamento(
+                event, request.args.get("devolucao"), request.args.get("venda_nova")
+            )
+        except CancelValidationError as exc:
+            return _recusa_do_cancelado(exc)
+        return jsonify({"efeito": efeito})
+    flags = _role_flags(current_user, session.get("impersonate_role"))
+    return jsonify(resumo_impacto(event, show_financeiro=flags["show_financeiro"]))
 
 
 @api_bp.route("/events/<int:event_id>", methods=["DELETE"])
@@ -549,9 +604,13 @@ def api_delete_event(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import EventoMarcadoError, pode_excluir
+    from app.calendar.cancel_ops import EventoCanceladoError, EventoMarcadoError, pode_excluir
     from app.calendar.routes import _delete_event_flow
+    from app.constants import CODIGO_EVENTO_CANCELADO
 
+    # Feature 306 (FR-021): o cancelado não se exclui — antes da condição de "use o cancelamento".
+    if event.is_cancelled:
+        return json_error(EXCLUIR_CANCELADO, 409, codigo=CODIGO_EVENTO_CANCELADO)
     if not event.is_google_missing and not pode_excluir(event):
         return json_error(
             "Este evento tem venda, pagamento, contrato ou elenco escalado — use o "
@@ -565,6 +624,9 @@ def api_delete_event(event_id: int) -> Any:
             actor_name=current_user.name,
             actor_role=", ".join(r.name for r in current_user.roles),
         )
+    except EventoCanceladoError as exc:  # cancelado entre o 403 e a trava do núcleo
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     except EventoMarcadoError as exc:
         return json_error(exc.message, 409, codigo="sumiu_do_google")
     if not deleted:
@@ -577,12 +639,12 @@ def api_delete_event(event_id: int) -> Any:
 @api_bp.route("/events/<int:event_id>/cancelar", methods=["POST"])
 @api_login_required
 def api_cancelar_evento(event_id: int) -> Any:
-    """Cancela o evento, resolve a comissão e registra a devolução (feature 224).
+    """Cancela o evento: congela, devolve, reconcilia a comissão e tira do Google (features 224/306).
 
-    RBAC: só Superadmin. Corpo: `{motivo, devolucao: {valor, nome, pix, observacao}}`. Evento
-    marcado "Sumiu do Google Agenda" é recusado com 409 `codigo: "sumiu_do_google"` (feature 303)
-    — a exceção é subclasse de `CancelValidationError` e por isso é capturada antes dela, senão
-    viraria 400 com `fields.motivo`.
+    RBAC: `_can_delete()` (Superadmin real), depois do 404. O corpo e a ordem das recusas são os
+    do contracts §1; o núcleo (`cancel_ops.cancelar_evento`) trava, valida, grava e commita. Toda
+    recusa sai por uma tradução só, com `fields`, `codigo` e os extras (`max_devolucao`, `dias`).
+    O marcado "Sumiu do Google Agenda" passou a ser cancelado (o ato o desmarca).
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -590,25 +652,62 @@ def api_cancelar_evento(event_id: int) -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import (
-        CancelValidationError,
-        EventoMarcadoError,
-        cancelar_evento,
-    )
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import CancelValidationError, cancelar_evento
 
     body = request.get_json(silent=True) or {}
     try:
-        resultado = cancelar_evento(
-            event,
-            motivo=body.get("motivo") or "",
-            devolucao=body.get("devolucao") or {},
-            actor=current_user,
-        )
-    except EventoMarcadoError as exc:
-        return json_error(exc.message, 409, codigo="sumiu_do_google")
+        resultado = cancelar_evento(event, corpo=body, actor=current_user)
     except CancelValidationError as exc:
-        return json_error(exc.message, 400, fields={"motivo": exc.message})
-    return jsonify({"ok": True, **resultado})
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
+    return jsonify(
+        {
+            "ok": True,
+            "resumo": _resumo_do_cancelado(resultado["event"]),
+            "aviso": resultado["aviso"],
+            "google_removido": resultado["google_removido"],
+            "gasto_id": resultado["gasto_id"],
+        }
+    )
+
+
+@api_bp.route("/events/<int:event_id>/devolucao", methods=["PATCH"])
+@api_login_required
+def api_alterar_devolucao(event_id: int) -> Any:
+    """Altera o total devolvido à cliente de um cancelado (feature 306, FR-017; contracts §3).
+
+    RBAC: `pode_editar_venda_do_cancelado` (Superadmin pelo papel real, a régua de
+    `_can_delete()`), depois do 404. Corpo `{devolucao_total, nome?, pix?, observacao?,
+    imposto_retido?}`. Responde `{ok, resumo}`.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import (
+        CancelValidationError,
+        alterar_devolucao,
+        pode_editar_venda_do_cancelado,
+    )
+
+    if not pode_editar_venda_do_cancelado(current_user):
+        return json_error("Sem permissão", 403)
+    body = request.get_json(silent=True) or {}
+    try:
+        alterar_devolucao(event, corpo=body, actor=current_user)
+        db.session.commit()
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
+    return jsonify({"ok": True, "resumo": _resumo_do_cancelado(event)})
 
 
 @api_bp.route("/events/<int:event_id>/devolver-ao-google", methods=["POST"])
@@ -695,9 +794,11 @@ def api_listar_cancelamentos() -> Any:
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
+    from app.api.agenda_read import _role_flags
     from app.calendar.cancel_ops import listar_cancelamentos
 
-    return jsonify(listar_cancelamentos())
+    flags = _role_flags(current_user, session.get("impersonate_role"))
+    return jsonify(listar_cancelamentos(flags=flags))
 
 
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])
@@ -1091,6 +1192,18 @@ def api_update_event(event_id: int) -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
+    # Feature 306: no cancelado, a edição completa não corrige venda — para todos os papéis (a
+    # correção do Superadmin é pela aba Comercial, que recongela). Os outros campos salvam.
+    from app.calendar.event_ops import venda_mudaria
+    from app.constants import CODIGO_EVENTO_CANCELADO
+
+    if event.is_cancelled and venda_mudaria(event, data):
+        return json_error(
+            "Evento cancelado: corrija os dados de venda pela aba Comercial.",
+            409,
+            codigo=CODIGO_EVENTO_CANCELADO,
+        )
+
     # Hotfix 215b: a edição completa também grava o vendedor (`_gravar_venda_da_edicao`). No
     # satélite a venda não é gravada, então não há o que recusar.
     if not event.is_satellite:
@@ -1227,6 +1340,9 @@ def api_update_event_comercial(event_id: int) -> Any:
             409,
             leader_id=event.group_leader_id,
         )
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     body = request.get_json(silent=True) or {}
     sale_date_raw = body.get("sale_date")
@@ -1368,12 +1484,19 @@ def api_set_event_orcamento(event_id: int) -> Any:
             409,
             leader_id=event.group_leader_id,
         )
+    # Feature 306: para todos os que passam no gate, o Superadmin inclusive — antes do 404 do
+    # alvo, da autoria da 301 e da B8. O núcleo recusa de novo depois de travar, como cinto.
+    if event.is_cancelled:
+        from app.calendar.cancel_ops import EventoCanceladoError
+
+        return _recusa_do_cancelado(EventoCanceladoError(ORCAMENTO_DO_CANCELADO))
 
     body = request.get_json(silent=True) or {}
     raw = body.get("orcamento_history_id")
     if raw is not None and (isinstance(raw, bool) or not isinstance(raw, int)):
         return json_error("orcamento_history_id inválido", 400)
 
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.orcamento_evento_ops import OrcamentoJaVinculado, set_event_orcamento
     from app.financeiro.routes import _sync_commission_payment
     from app.models import OrcamentoHistory
@@ -1453,6 +1576,9 @@ def api_set_event_orcamento(event_id: int) -> Any:
         return json_error(
             "Esse orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
         )
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     db.session.commit()
     resposta = serialize_event_detail(event, current_user, session.get("impersonate_role"))
     resposta["relatorio_orcamento"] = relatorio
@@ -1495,6 +1621,9 @@ def api_add_invoice(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     if not _can_manage_sale():
         return json_error("Sem permissão", 403)
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     amount = _decimal_from_form(request.form.get("amount"))
     issue_date_raw = (request.form.get("issue_date") or "").strip()
@@ -1542,6 +1671,9 @@ def api_update_invoice(event_id: int, invoice_id: int) -> Any:
     nota = EventInvoice.query.filter_by(id=invoice_id, event_id=event_id).first()
     if nota is None:
         return json_error("Nota fiscal não encontrada", 404)
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     from app.calendar import comercial_ops
     from app.calendar.routes import _save_nf_file
@@ -1575,6 +1707,9 @@ def api_delete_invoice(event_id: int, invoice_id: int) -> Any:
     nota = EventInvoice.query.filter_by(id=invoice_id, event_id=event_id).first()
     if nota is None:
         return json_error("Nota fiscal não encontrada", 404)
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     from app.calendar import comercial_ops
 
@@ -1616,12 +1751,20 @@ def api_set_acrescimos(event_id: int) -> Any:
             leader_id=event.group_leader_id,
         )
 
+    # Feature 306: no cancelado, só o Superadmin real corrige (sem trava aqui: no vivo a 305 já
+    # trava o evento dentro de `substituir_acrescimos`).
+    from app.calendar.cancel_ops import EventoCanceladoError, pode_editar_venda_do_cancelado
+
+    if event.is_cancelled and not pode_editar_venda_do_cancelado(current_user):
+        return _recusa_do_cancelado(EventoCanceladoError())
+
     body = request.get_json(silent=True) or {}
     itens = body.get("items")
     if not isinstance(itens, list):
         return json_error("Envie a lista completa em `items`.", 400, fields={"items": "Obrigatório"})
 
     from app.calendar import comercial_ops
+    from app.constants import CODIGO_ESTADO_MUDOU
     from app.financeiro.routes import _sync_commission_payment
 
     try:
@@ -1629,6 +1772,11 @@ def api_set_acrescimos(event_id: int) -> Any:
     except comercial_ops.AcrescimosRecusados as exc:
         db.session.rollback()
         return json_error("Corrija os acréscimos destacados.", 400, fields=exc.erros)
+    if event.is_cancelled:  # cancelado entre a leitura e a trava: nada foi gravado
+        db.session.rollback()
+        return json_error(
+            "O evento mudou enquanto você editava: recarregue.", 409, codigo=CODIGO_ESTADO_MUDOU
+        )
     if trocas:
         from app.utils import audit
 
@@ -1661,6 +1809,10 @@ def api_set_parcelas(event_id: int) -> Any:
             409,
             leader_id=event.group_leader_id,
         )
+
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     body = request.get_json(silent=True) or {}
     itens = body.get("items")
@@ -1757,14 +1909,21 @@ def api_add_payment(event_id: int) -> Any:
     amount = _decimal_from_form(request.form.get("amount"))
     file_storage = request.files.get("file")
 
-    from app.calendar.routes import _add_payment_record
+    from sqlalchemy.exc import DBAPIError
 
-    payment = _add_payment_record(event, amount=amount, file_storage=file_storage)
-    if payment is None:
-        return json_error(
-            "Informe o valor e anexe o comprovante para adicionar o pagamento.", 400,
-            {"amount": "Obrigatório", "file": "Obrigatório"},
+    from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
+
+    # Feature 306 (decisão (c)): o núcleo trava o grupo, recusa o cancelado antes de salvar o
+    # arquivo, grava e refaz o principal cancelado pelo pago do grupo.
+    try:
+        gravar_comprovante_no_grupo(
+            event, "adicionar", actor=current_user, valor=amount, arquivo=file_storage
         )
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
     _log_anexo(event.id, f"Adicionou pagamento recebido de R$ {amount}")
     # `_add_payment_record` só faz `db.session.add` — quem commitava era o dispatcher do Jinja.
     # Sem esta linha o INSERT é desfeito no fim do request e o comprovante some no refresh
@@ -1788,11 +1947,20 @@ def api_edit_payment(payment_id: int) -> Any:
     body = request.get_json(silent=True) or {}
     amount = Decimal(str(body["amount"])) if body.get("amount") is not None else None
 
-    from app.calendar.routes import _edit_payment_amount
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
     valor_anterior = payment.amount or 0
-    if not _edit_payment_amount(payment, amount=amount):
-        return json_error("Informe um valor válido para o comprovante", 400, {"amount": "Obrigatório"})
+    try:
+        gravar_comprovante_no_grupo(
+            event, "editar", actor=current_user, valor=amount, comprovante=payment
+        )
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
     _log_anexo(payment.event_id, f"Corrigiu valor de comprovante: R$ {valor_anterior} → R$ {amount}")
     db.session.commit()
     return _event_detail_json(event)
@@ -1810,10 +1978,18 @@ def api_delete_payment(payment_id: int) -> Any:
         return json_error("Apenas o super admin pode excluir comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
 
-    from app.calendar.routes import _delete_payment_record
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
     _log_anexo(payment.event_id, f"Excluiu comprovante de R$ {payment.amount or 0}")
-    _delete_payment_record(payment)
+    try:
+        gravar_comprovante_no_grupo(event, "excluir", actor=current_user, comprovante=payment)
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
     db.session.commit()
     return _event_detail_json(event)
 
@@ -1828,6 +2004,9 @@ def api_add_reimbursement(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
 
     description = request.form.get("description", "")
     amount = _decimal_from_form(request.form.get("amount"))
@@ -1864,9 +2043,13 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
         return json_error("Reembolso não encontrado", 404)
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
+    event = CalendarEvent.query.get(reimbursement.event_id)
+    # Feature 306: o 409 do cancelado vem antes do 400 de "já cobrado".
+    recusa = _recusa_se_cancelado(event)
+    if recusa is not None:
+        return recusa
     if reimbursement.is_collected:
         return json_error("Esse reembolso já foi marcado como cobrado", 400)
-    event = CalendarEvent.query.get(reimbursement.event_id)
 
     collected_amount = _decimal_from_form(request.form.get("collected_amount"))
     file_storage = request.files.get("file")

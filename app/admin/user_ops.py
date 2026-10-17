@@ -428,6 +428,13 @@ def delete_user(user: User, *, actor_id: int) -> None:
         blockers.append("gastos extras")
     if CalendarEvent.query.filter_by(seller_id=user.id).count():
         blockers.append("vendas de eventos")
+    # Feature 306 (FR-073): o vendedor e o beneficiário congelados de um cancelamento são histórico.
+    from app.models import EventCancellation
+
+    if EventCancellation.query.filter(
+        db.or_(EventCancellation.seller_id == user.id, EventCancellation.commission_seller_id == user.id)
+    ).count():
+        blockers.append("cancelamentos")
     if blockers:
         raise UserDeletionBlockedError(blockers)
 
@@ -437,6 +444,7 @@ def delete_user(user: User, *, actor_id: int) -> None:
     EnsaioMaterial.query.filter_by(user_id=user.id).update({"user_id": None})
     SpecialExpense.query.filter_by(approved_by_id=user.id).update({"approved_by_id": None})
     SpecialExpense.query.filter_by(reimburse_user_id=user.id).update({"reimburse_user_id": None})
+    EventCancellation.query.filter_by(updated_by_id=user.id).update({"updated_by_id": None})
 
     audit("delete", "user", user.id, user.name, f"Usuário excluído: {user.email or user.name}")
     db.session.delete(user)

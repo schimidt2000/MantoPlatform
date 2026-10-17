@@ -204,6 +204,54 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
     }
 
 
+def flags_do_detalhe(event: CalendarEvent, user: Any, impersonate: str | None) -> dict[str, bool]:
+    """As flags do detalhe: as de `_role_flags` mais as duas do cancelado (feature 306, contracts §5).
+
+    - `can_edit_venda_cancelado`: cancelado e Superadmin (segue a impersonação, como `can_group`;
+      o servidor confere o papel real);
+    - `can_edit_pagamentos`: no vivo, `can_edit_event`; no cancelado, `can_edit_venda_cancelado`.
+
+    Ficam fora de `_role_flags` porque ela também serve à agenda, que não tem evento.
+    """
+    flags = _role_flags(user, impersonate)
+    cancelado = event.is_cancelled
+    flags["can_edit_venda_cancelado"] = bool(cancelado and flags["is_superadmin"])
+    flags["can_edit_pagamentos"] = (
+        flags["can_edit_venda_cancelado"] if cancelado else flags["can_edit_event"]
+    )
+    return flags
+
+
+def _cancelamento_do_detalhe(event: CalendarEvent, flags: dict[str, bool]) -> dict[str, Any] | None:
+    """O `ResumoCancelado` (contracts §0) com as flags; `None` no evento vivo."""
+    if not event.is_cancelled:
+        return None
+    from app.calendar.cancel_ops import (
+        limites_da_devolucao,
+        resumo_cancelado,
+        serializar_resumo_cancelado,
+    )
+
+    resumo = resumo_cancelado(event)
+    if resumo is None:
+        return None
+    out = serializar_resumo_cancelado(resumo, flags)
+    if flags.get("can_edit_venda_cancelado"):
+        out["limites_devolucao"] = limites_da_devolucao(event)
+    return out
+
+
+def serializar_cancelamento(event: CalendarEvent, user: Any, impersonate: str | None) -> dict[str, Any] | None:
+    """O mesmo `event.cancelamento` do detalhe, para as respostas das escritas da 306.
+
+    Só com `show_comercial`: o Casting e os demais papéis não recebem o bloco.
+    """
+    flags = flags_do_detalhe(event, user, impersonate)
+    if not flags["show_comercial"]:
+        return None
+    return _cancelamento_do_detalhe(event, flags)
+
+
 def _serialize_logs(event_id: int) -> list[dict[str, Any]]:
     """Histórico do evento, mais recente primeiro, horário em São Paulo (como a view)."""
     tz_sp = ZoneInfo("America/Sao_Paulo")
@@ -541,8 +589,12 @@ def _bv_pendente(event: CalendarEvent) -> dict | None:
         return None
 
 
-def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
-    """Acréscimos tipados do evento (feature 099) — BV marcado para a tela explicar o repasse."""
+def _serialize_acrescimos(event: CalendarEvent, *, mostrar_pix: bool = True) -> list[dict[str, Any]]:
+    """Acréscimos tipados do evento (feature 099) — BV marcado para a tela explicar o repasse.
+
+    Feature 306: no cancelado, o PIX do BV só sai para quem corrige a venda do cancelado
+    (`mostrar_pix`); o editor da 305 trata o PIX vazio como "mantém".
+    """
     return [
         {
             "id": a.id,
@@ -557,7 +609,7 @@ def _serialize_acrescimos(event: CalendarEvent) -> list[dict[str, Any]]:
             # Feature 305 — o editor devolve a origem e o PIX como estão; sem isto, salvar sem mexer
             # apagava os dois. Só sai no bloco `show_comercial` (o chamador já filtra).
             "descricao": a.descricao,
-            "bv_pix": a.bv_pix,
+            "bv_pix": a.bv_pix if mostrar_pix else None,
         }
         for a in event.acrescimos
     ]
@@ -636,6 +688,8 @@ def _group_block(event) -> dict:
                     "id": s.id,
                     "title": s.title,
                     "start_at": s.start_at.isoformat() if s.start_at else None,
+                    # Feature 306: o principal vivo esconde o "Remover" do dia cancelado.
+                    "cancelado": s.is_cancelled,
                 }
                 for s in sorted(event.satellites, key=lambda s: (s.start_at or datetime.max))
             ],
@@ -716,7 +770,8 @@ def serialize_event_detail(
     """
     from app.calendar.routes import parse_characters
 
-    flags = _role_flags(user, impersonate)
+    flags = flags_do_detalhe(event, user, impersonate)
+    cancelado = event.is_cancelled
     is_ensaio = event.event_type == "ENSAIO"
     settings = SiteSetting.query.get(1)
 
@@ -995,8 +1050,10 @@ def serialize_event_detail(
             # Hotfix 215b — o que a tela trava, com a mesma regra que a escrita recusa
             # (`event_ops.taxa_e_vendedor_negados`): taxa só o Superadmin; vendedor já gravado
             # só Financeiro e Superadmin trocam (a Comercial preenche o vazio).
-            "pode_mudar_taxa": flags["is_superadmin"],
-            "pode_trocar_vendedor": flags["show_financeiro"],
+            # Feature 306: no cancelado, só com a correção de venda do cancelado.
+            "pode_mudar_taxa": flags["is_superadmin"] and (not cancelado or flags["can_edit_venda_cancelado"]),
+            "pode_trocar_vendedor": flags["show_financeiro"]
+            and (not cancelado or flags["can_edit_venda_cancelado"]),
             "payment_method": event.payment_method,
             "payment_installments": event.payment_installments,
             "payment_due_date": event.payment_due_date.isoformat() if event.payment_due_date else None,
@@ -1053,7 +1110,12 @@ def serialize_event_detail(
         # Uma leitura da venda para a cobrança e para os comprovantes dos outros eventos do grupo.
         venda_do_evento = cobranca_ops.resumo_da_venda_do_evento(event)
         data["cobranca"] = _compute_cobranca(event, venda_do_evento)
-        data["acrescimos"] = _serialize_acrescimos(event)
+        data["acrescimos"] = _serialize_acrescimos(
+            event, mostrar_pix=not cancelado or flags["can_edit_venda_cancelado"]
+        )
+        # Feature 306: o resumo do cancelado (FR-005), só com `show_comercial`.
+        if cancelado:
+            data["event"]["cancelamento"] = _cancelamento_do_detalhe(event, flags)
         # Parcelas: entravam no cálculo do KPI mas nunca saíam no payload, então a tela não tinha
         # como mostrar (nem editar) o cronograma — só o formulário Jinja sabia dele (feature 253).
         data["parcelas"] = _serialize_installments(event)
@@ -1106,7 +1168,11 @@ def serialize_event_detail(
     if flags["show_financeiro"]:
         from app.calendar.routes import _group_events
 
-        data["kpi"] = _compute_kpi(event)
-        data["gastos"] = _serialize_gastos([ge.id for ge in _group_events(event)])
+        # Feature 306: sem `kpi` no cancelado — ele contaria a devolução como custo e o BV
+        # cheio; a aba Comercial abre pelo `venda` e mostra o resultado do cancelamento.
+        if not cancelado:
+            data["kpi"] = _compute_kpi(event)
+        dias = [event.id] if cancelado else [ge.id for ge in _group_events(event)]
+        data["gastos"] = _serialize_gastos(dias)
 
     return data

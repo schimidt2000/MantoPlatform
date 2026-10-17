@@ -1212,6 +1212,13 @@ def set_payment_status():
                   f"Salário: {old} → {status}")
             db.session.commit()
     elif item_type == "expense":
+        # Feature 306: a devolução de cancelado passa pela função única (trava o evento e relê o
+        # gasto); o Jinja não manda o valor que mostrou, então não há conferência.
+        from app.calendar.cancel_ops import marcar_status_da_devolucao
+
+        if marcar_status_da_devolucao(int(item_id), status, valor_esperado=None, actor_name=current_user.name):
+            db.session.commit()
+            return _done(status)
         exp = SpecialExpense.query.get(int(item_id))
         if exp:
             old = exp.payment_status
@@ -1606,6 +1613,11 @@ def set_commission_status():
             # Hotfix 267c: desfazer pagamento é só do Superadmin, com motivo, pela Planilha nova.
             flash("Comissão já paga não volta por aqui. O Superadmin desfaz pela Planilha de "
                   "Pagamentos, com o motivo.", "error")
+            return redirect(next_url)
+        if cp and cp.event is not None and cp.event.is_cancelled:
+            # Feature 306: a linha do cancelado se acerta pelo cancelamento (reconciliação).
+            flash("Comissão de evento cancelado: o valor se acerta pelo cancelamento e o pagamento "
+                  "pela Planilha de Pagamentos.", "error")
             return redirect(next_url)
         if cp:
             old = cp.status

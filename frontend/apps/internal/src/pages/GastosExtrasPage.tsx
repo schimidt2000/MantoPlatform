@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, DenseCard, FileUpload, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
@@ -121,7 +122,8 @@ interface GastoFormValues {
   amount: number;
   expenseDate: string;
   notes: string;
-  disbursementType: "" | "reembolso" | "fornecedor";
+  /** `cliente` = devolução à cliente (feature 306): só vem do cancelamento, nunca se escolhe aqui. */
+  disbursementType: "" | "reembolso" | "fornecedor" | "cliente";
   reimburseUserId: number | "";
   supplierName: string;
   supplierPix: string;
@@ -152,10 +154,17 @@ function formFromExpense(expense: GastoExtra): GastoFormValues {
     amount: expense.amount,
     expenseDate: expense.expense_date,
     notes: expense.notes,
-    disbursementType: (expense.disbursement_type ?? "") as "" | "reembolso" | "fornecedor",
+    disbursementType: (expense.disbursement_type ?? "") as GastoFormValues["disbursementType"],
     reimburseUserId: "",
-    supplierName: expense.disbursement_type === "fornecedor" ? expense.payee_name : "",
-    supplierPix: expense.disbursement_type === "fornecedor" ? expense.payee_pix : "",
+    // Feature 306: a devolução à cliente carrega e reenvia nome e PIX — antes o "Salvar" os apagava.
+    supplierName:
+      expense.disbursement_type === "fornecedor" || expense.disbursement_type === "cliente"
+        ? expense.payee_name
+        : "",
+    supplierPix:
+      expense.disbursement_type === "fornecedor" || expense.disbursement_type === "cliente"
+        ? expense.payee_pix
+        : "",
     eventDate: expense.expense_date,
     eventId: expense.event_id ?? "",
   };
@@ -171,6 +180,37 @@ function DesembolsoFields({
   fieldErrors: Record<string, string>;
 }) {
   const funcionarios = useGastosFuncionarios();
+
+  // Feature 306: a devolução à cliente não troca de tipo; nome e PIX seguem editáveis.
+  if (values.disbursementType === "cliente") {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-ink">
+          <span className={LABEL}>Como será pago?</span>
+          Devolução à cliente
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={LABEL}>Quem recebe</label>
+            <input
+              className={INPUT}
+              value={values.supplierName}
+              onChange={(e) => onChange({ supplierName: e.target.value })}
+            />
+            {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red">{fieldErrors.supplier_name}</p>}
+          </div>
+          <div>
+            <label className={LABEL}>Chave PIX</label>
+            <input
+              className={INPUT}
+              value={values.supplierPix}
+              onChange={(e) => onChange({ supplierPix: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -244,9 +284,12 @@ function DesembolsoFields({
 function EventoFields({
   values,
   onChange,
+  travado = false,
 }: {
   values: GastoFormValues;
   onChange: (patch: Partial<GastoFormValues>) => void;
+  /** Feature 306: o vínculo da devolução de um cancelado não muda por aqui. */
+  travado?: boolean;
 }) {
   const eventos = useGastosEventos(values.eventDate);
   return (
@@ -257,11 +300,13 @@ function EventoFields({
           type="date"
           className={INPUT}
           value={values.eventDate}
+          disabled={travado}
           onChange={(e) => onChange({ eventDate: e.target.value })}
         />
         <select
           className={INPUT}
           value={values.eventId}
+          disabled={travado}
           onChange={(e) => onChange({ eventId: e.target.value ? Number(e.target.value) : "" })}
         >
           <option value="">Sem evento vinculado</option>
@@ -312,8 +357,14 @@ function GastoFormModal({
     expense_date: values.expenseDate,
     disbursement_type: values.disbursementType,
     reimburse_user_id: values.reimburseUserId === "" ? undefined : values.reimburseUserId,
-    supplier_name: values.disbursementType === "fornecedor" ? values.supplierName : undefined,
-    supplier_pix: values.disbursementType === "fornecedor" ? values.supplierPix : undefined,
+    supplier_name:
+      values.disbursementType === "fornecedor" || values.disbursementType === "cliente"
+        ? values.supplierName
+        : undefined,
+    supplier_pix:
+      values.disbursementType === "fornecedor" || values.disbursementType === "cliente"
+        ? values.supplierPix
+        : undefined,
     event_id: values.eventId === "" ? undefined : values.eventId,
   });
 
@@ -324,7 +375,13 @@ function GastoFormModal({
     }
     setFieldErrors({});
     create.mutate(
-      { ...buildPayload(), notes: values.notes, receipt },
+      {
+        ...buildPayload(),
+        // A devolução à cliente nunca nasce aqui (feature 306): o formulário de criação nem a oferece.
+        disbursement_type: values.disbursementType === "cliente" ? "" : values.disbursementType,
+        notes: values.notes,
+        receipt,
+      },
       {
         onSuccess: onClose,
         onError: (err) => {
@@ -349,14 +406,27 @@ function GastoFormModal({
   };
 
   const busy = create.isPending || update.isPending;
+  const erroDoServidor = (create.error ?? update.error) as Error | null;
   const genericError =
     (create.isError || update.isError) && !Object.keys(fieldErrors).length
-      ? "Não foi possível salvar o gasto."
+      ? erroDoServidor?.message || "Não foi possível salvar o gasto."
       : null;
+  // Feature 306: a devolução de um evento cancelado — valor, data, categoria e vínculo só mudam pelo
+  // "Alterar devolução" na tela do evento; nome, PIX e descrição ficam livres.
+  const travado = mode === "edit" && Boolean(expense?.locked);
 
   return (
     <Modal open={open} onClose={onClose} title={mode === "create" ? "Novo gasto" : "Editar gasto"}>
       <div className="space-y-3">
+        {travado && expense?.event_id && (
+          <p className="rounded-md border border-gold/40 bg-gold-soft p-2 text-sm text-ink" role="note">
+            Devolução de evento cancelado: valor, data, categoria e vínculo mudam só pelo “Alterar devolução”{" "}
+            <Link to={`/events/${expense.event_id}?aba=comercial`} className="text-blue underline">
+              na tela do evento
+            </Link>
+            .
+          </p>
+        )}
         <div>
           <label className={LABEL}>Descrição</label>
           <input
@@ -369,7 +439,12 @@ function GastoFormModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>Categoria</label>
-            <select className={INPUT} value={values.category} onChange={(e) => patch({ category: e.target.value })}>
+            <select
+              className={INPUT}
+              value={values.category}
+              disabled={travado}
+              onChange={(e) => patch({ category: e.target.value })}
+            >
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
@@ -379,7 +454,12 @@ function GastoFormModal({
           </div>
           <div>
             <label className={LABEL}>Valor (R$)</label>
-            <MoneyInput className={INPUT} value={values.amount} onValueChange={(amount) => patch({ amount })} />
+            <MoneyInput
+              className={INPUT}
+              value={values.amount}
+              disabled={travado}
+              onValueChange={(amount) => patch({ amount })}
+            />
             {fieldErrors.amount && <p className="mt-1 text-xs text-red">{fieldErrors.amount}</p>}
           </div>
         </div>
@@ -389,11 +469,12 @@ function GastoFormModal({
             type="date"
             className={INPUT}
             value={values.expenseDate}
+            disabled={travado}
             onChange={(e) => patch({ expenseDate: e.target.value })}
           />
         </div>
         <DesembolsoFields values={values} onChange={patch} fieldErrors={fieldErrors} />
-        <EventoFields values={values} onChange={patch} />
+        <EventoFields values={values} onChange={patch} travado={travado} />
         {mode === "create" && (
           <>
             <div>
@@ -525,7 +606,13 @@ function GastoRow({
             <>
               {expense.payee_name}
               <span className="ml-1 text-xs text-muted">
-                ({expense.disbursement_type === "reembolso" ? "reembolso" : "fornecedor"})
+                (
+                {expense.disbursement_type === "reembolso"
+                  ? "reembolso"
+                  : expense.disbursement_type === "cliente"
+                    ? "devolução à cliente"
+                    : "fornecedor"}
+                )
               </span>
             </>
           ) : (

@@ -316,6 +316,103 @@ export interface EventMensagens {
   reembolso_lines: string[];
 }
 
+// ── Feature 306: o resumo do cancelado (contracts §0) ─────────────────────────────────────
+export type RegimeCancelamento = "venda" | "satelite" | "dia" | "virtual" | "legado";
+export type ModoDevolucao = "tudo" | "parte" | "nada";
+export type EstadoPagamento = "nao_pago" | "no_banco" | "pago";
+
+export interface DevolucaoDoCancelado {
+  /** `SpecialExpense.id`. */
+  id: number;
+  valor: number;
+  nome: string | null;
+  /** Só com `show_financeiro`. */
+  pix?: string | null;
+  estado: EstadoPagamento;
+  /** `expense_date`, `AAAA-MM-DD`. */
+  data: string | null;
+  /** O dia a que está ligada (no grupo). */
+  evento_id: number;
+  observacao: string | null;
+}
+
+export interface EventoCurto {
+  id: number;
+  titulo: string;
+  data: string | null;
+}
+
+export interface LinhaDeComissaoDoCancelado {
+  id: number;
+  seller_id: number;
+  seller_nome: string | null;
+  valor: number;
+  status: "a_pagar" | "no_banco" | "pago" | "cancelado";
+  tipo: "comissao" | "ajuste" | "estorno";
+  /** `AAAA-MM`. */
+  ciclo: string | null;
+  motivo: string | null;
+}
+
+export interface ResumoCancelado {
+  regime: RegimeCancelamento;
+  /** O escolhido no ato; `null` em satélite, virtual e legado. */
+  modo: ModoDevolucao | null;
+  /** O de agora, de pago × devolvido. */
+  modo_corrente: ModoDevolucao;
+  venda: number | null;
+  /** Do grupo inteiro, ao vivo. */
+  pago: number;
+  devolvido: number;
+  devolucoes: DevolucaoDoCancelado[];
+  /** 0 em satélite, dia e virtual. */
+  retido: number;
+  com_nota: boolean;
+  cancelado_em: string | null;
+  principal?: EventoCurto | null;
+  venda_passou_para?: EventoCurto | null;
+  corte?: {
+    venda_antes: number | null;
+    venda_depois: number | null;
+    cheio_antes: number | null;
+    cheio_depois: number | null;
+  } | null;
+  // ── só com show_financeiro ──
+  imposto?: number | null;
+  taxa?: number | null;
+  comissao?: {
+    cheia: number;
+    retido: number;
+    beneficiario: { id: number; nome: string } | null;
+    /** Pago + no banco. */
+    liquidada: number;
+    linhas: LinhaDeComissaoDoCancelado[];
+  } | null;
+  bvs?: {
+    acrescimo_id: number;
+    recebedor: string | null;
+    pix?: string | null;
+    cheio: number;
+    /** O BV que conta (na Planilha); `null` = some. */
+    conta: number | null;
+    estado: EstadoPagamento;
+    pago_no_ato: boolean;
+  }[];
+  // ── só com flags.can_edit_venda_cancelado ──
+  limites_devolucao?: { piso: number; teto: number } | null;
+  elenco?: {
+    elenco_id: number;
+    talent_id: number;
+    artista: string;
+    vaga: string;
+    dia: { id: number; data: string | null };
+    cache_referencia: number | null;
+    na_vaga: boolean;
+    talent_pix_informado: boolean;
+    multa: { gasto_id: number; valor: number } | null;
+  }[];
+}
+
 export interface EventoDetalhe {
   event: {
     id: number;
@@ -336,6 +433,11 @@ export interface EventoDetalhe {
       requested_by: string | null;
       reason: string | null;
     } | null;
+    /**
+     * O resumo do cancelado (feature 306): só no evento cancelado e com `show_comercial`.
+     * Opcional: sem ele (backend antigo), a aba Comercial mostra o `KpiGrid` de antes.
+     */
+    cancelamento?: ResumoCancelado | null;
     /** Situação única (feature 303). Opcional: bundle e backend sobem em ordem não garantida. */
     situacao?: SituacaoEvento | null;
     /**
@@ -367,7 +469,13 @@ export interface EventoDetalhe {
       /** O principal — preenchido só quando este evento é satélite. */
       leader: { id: number; title: string } | null;
       /** Os satélites, por data. Vazio quando este evento não é o principal. */
-      satellites: { id: number; title: string; start_at: string | null }[];
+      satellites: {
+        id: number;
+        title: string;
+        start_at: string | null;
+        /** Feature 306: o dia cancelado não tem "Remover" (opcional: backend antigo). */
+        cancelado?: boolean;
+      }[];
     };
     characters: string[];
     is_ensaio: boolean;
@@ -382,6 +490,11 @@ export interface EventoDetalhe {
     google_html_link: string | null;
     travel: EventTravel;
   };
+  /**
+   * Flags por papel. Desde a 306: `can_edit_venda_cancelado` (cancelado e Superadmin) e
+   * `can_edit_pagamentos` (vivo: `can_edit_event`; cancelado: a anterior). O que já existia se
+   * gata com `!== false` (janela de deploy); o que é só do cancelado, com truthy.
+   */
   flags: Record<string, boolean>;
   /**
    * Feature 303 — só na resposta de `POST /api/events/<id>/devolver-ao-google`, e só o
