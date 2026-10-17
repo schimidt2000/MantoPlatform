@@ -40,7 +40,10 @@ CONSULTAS: list[tuple[str, str]] = [
         "AND coalesce(e.sale_value, 0) = 0 AND NOT EXISTS (SELECT 1 FROM event_payments p "
         "WHERE p.event_id = e.id AND coalesce(p.amount, 0) > 0)",
     ),
-    ("marcados pela 303", "SELECT count(*) FROM calendar_events WHERE google_missing_since IS NOT NULL"),
+    (
+        "marcados pela 303",
+        "SELECT count(*) FROM calendar_events WHERE google_missing_since IS NOT NULL",
+    ),
     (
         "grupos (principais)",
         "SELECT count(DISTINCT group_leader_id) FROM calendar_events WHERE group_leader_id IS NOT NULL",
@@ -140,7 +143,10 @@ CONSULTAS: list[tuple[str, str]] = [
         "SELECT count(*) FROM commission_payments cp JOIN calendar_events e ON e.id = cp.event_id "
         "WHERE cp.status = 'pago' AND e.start_at >= now()",
     ),
-    ("comissões com original_id", "SELECT count(*) FROM commission_payments WHERE original_id IS NOT NULL"),
+    (
+        "comissões com original_id",
+        "SELECT count(*) FROM commission_payments WHERE original_id IS NOT NULL",
+    ),
     (
         "ciclos abertos de soma zero com linha de valor (vendedor:ciclo)",
         "SELECT coalesce(string_agg(chave, ', '), '-') FROM (SELECT seller_id::text || ':' || "
@@ -150,7 +156,10 @@ CONSULTAS: list[tuple[str, str]] = [
         "HAVING sum(amount) = 0 AND bool_or(amount <> 0)) x",
     ),
     # ── gastos e devoluções ──
-    ("gastos aprovados com evento", "SELECT count(*) FROM special_expenses WHERE status = 'aprovado' AND event_id IS NOT NULL"),
+    (
+        "gastos aprovados com evento",
+        "SELECT count(*) FROM special_expenses WHERE status = 'aprovado' AND event_id IS NOT NULL",
+    ),
     (
         "devoluções com tipo nulo",
         f"SELECT count(*) FROM special_expenses WHERE category = '{DEVOLUCAO}' AND disbursement_type IS NULL",
@@ -238,7 +247,11 @@ def main() -> int:
                 cur = conn.cursor()
                 valor = f"(erro: {type(exc).__name__})"
             print(f"{rotulo} | {valor}")
-        for tabela in ("event_cancellations", "event_cancellation_bvs", "event_cancellation_elenco"):
+        for tabela in (
+            "event_cancellations",
+            "event_cancellation_bvs",
+            "event_cancellation_elenco",
+        ):
             try:
                 cur.execute(f"SELECT count(*) FROM {tabela}")
                 print(f"{tabela} | {cur.fetchone()[0]}")

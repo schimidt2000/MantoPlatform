@@ -717,6 +717,7 @@ def api_financeiro_pagamentos() -> Any:
     prev_year, prev_month = (year - 1, 12) if mon == 1 else (year, mon - 1)
     prev_start = date(prev_year, prev_month, 1)
     prev_end = m_start
+    # O 5 é o `DIA_DO_REPASSE` (app/constants.py, feature 306): o repasse do ciclo anterior.
     items += _build_commission_items(prev_start, prev_end, date(year, mon, 5), today)
 
     ensure_recurring_entries(year, mon)

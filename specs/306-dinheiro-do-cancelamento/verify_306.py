@@ -307,7 +307,9 @@ class GoogleFalso:
         # "Depois do commit" (FR-065): pela conexão separada, o show já está cancelado e o ensaio já
         # saiu do banco no instante da remoção.
         with contextlib.suppress(Exception):
-            linha = _no_banco("SELECT cancelled_at FROM calendar_events WHERE google_event_id = :g", g=gid)
+            linha = _no_banco(
+                "SELECT cancelled_at FROM calendar_events WHERE google_event_id = :g", g=gid
+            )
             _commit_antes_do_google.append(not linha or linha[0][0] is not None)
         if gid in self.falhar_delete:
             raise _http(500)
@@ -377,6 +379,8 @@ def _instalar_espiao_de_remocao() -> None:
             continue
         if getattr(mod, "send_removal_email", None) is _send_removal_real:
             mod.send_removal_email = _espiao_remocao
+
+
 _ao_cancelar: list[tuple[int, str, int | None]] = []
 _ao_cancelar_estado: list[dict] = []
 
@@ -390,18 +394,18 @@ def _instalar_espiao_ao_cancelar() -> None:
         return
 
     def espiao(event, *, alcance, novo_principal=None):
-        _ao_cancelar.append(
-            (event.id, alcance, getattr(novo_principal, "id", novo_principal))
-        )
+        _ao_cancelar.append((event.id, alcance, getattr(novo_principal, "id", novo_principal)))
         # O estado no instante da chamada, pela própria sessão: na passagem, o ponto da 2a só
         # pode ser chamado depois de `passar_venda` (a venda e as linhas já no novo principal).
         novo = novo_principal if hasattr(novo_principal, "id") else None
-        _ao_cancelar_estado.append({
-            "evento": event.id,
-            "venda_do_evento": event.sale_value,
-            "venda_do_novo": getattr(novo, "sale_value", None),
-            "linhas_no_evento": CommissionPayment.query.filter_by(event_id=event.id).count(),
-        })
+        _ao_cancelar_estado.append(
+            {
+                "evento": event.id,
+                "venda_do_evento": event.sale_value,
+                "venda_do_novo": getattr(novo, "sale_value", None),
+                "linhas_no_evento": CommissionPayment.query.filter_by(event_id=event.id).count(),
+            }
+        )
         return real(event, alcance=alcance, novo_principal=novo_principal)
 
     espiao._espiao_306 = True
@@ -679,9 +683,7 @@ def _escalar(
 ) -> int:
     """Preenche uma vaga que o SISTEMA criou. Nunca cria `EventRole`."""
     with app.app_context():
-        q_ = EventRole.query.filter(
-            EventRole.event_id == event_id, EventRole.talent_id.is_(None)
-        )
+        q_ = EventRole.query.filter(EventRole.event_id == event_id, EventRole.talent_id.is_(None))
         q_ = (
             q_.filter(EventRole.character_name == vaga)
             if vaga
@@ -996,9 +998,16 @@ def _corpo_cancelar(
 def _cancelar(event_id: int, corpo: dict | None = None, *, apelido: str = "sa"):
     _instalar_espiao_ao_cancelar()
     # o retrato das devoluções antes do POST, de todo dia do grupo, para o `_nada_gravado` de uma recusa
-    lider = _no_banco("SELECT coalesce(group_leader_id, id) FROM calendar_events WHERE id = :i", i=event_id)
+    lider = _no_banco(
+        "SELECT coalesce(group_leader_id, id) FROM calendar_events WHERE id = :i", i=event_id
+    )
     raiz = lider[0][0] if lider else event_id
-    dias = [r[0] for r in _no_banco("SELECT id FROM calendar_events WHERE id = :r OR group_leader_id = :r", r=raiz)]
+    dias = [
+        r[0]
+        for r in _no_banco(
+            "SELECT id FROM calendar_events WHERE id = :r OR group_leader_id = :r", r=raiz
+        )
+    ]
     for dia in {event_id, *dias}:
         _ESTADO_DEVOLUCOES[dia] = [(d["id"], q(d["valor"]), d["status"]) for d in _devolucoes(dia)]
     return _cliente(apelido).post(
@@ -1009,7 +1018,8 @@ def _cancelar(event_id: int, corpo: dict | None = None, *, apelido: str = "sa"):
 def _cancelar_ok(event_id: int, corpo: dict | None = None) -> dict:
     r = _cancelar(event_id, corpo)
     _garante(
-        r.status_code == 200, f"cancelar {event_id} → {r.status_code} {r.get_data(as_text=True)[:400]}"
+        r.status_code == 200,
+        f"cancelar {event_id} → {r.status_code} {r.get_data(as_text=True)[:400]}",
     )
     _esperar_threads()
     return r.get_json()
@@ -1034,9 +1044,7 @@ def _planilha(mes: str) -> list[dict]:
 
 
 def _comissoes(mes: str, vendedor: str = "vend") -> dict:
-    r = _cliente("fin").get(
-        ROTAS["comissoes"].format(m=mes, s=estado["usuarios"][vendedor]["id"])
-    )
+    r = _cliente("fin").get(ROTAS["comissoes"].format(m=mes, s=estado["usuarios"][vendedor]["id"]))
     _garante(r.status_code == 200, f"Comissões {mes} → {r.status_code}")
     return r.get_json()
 
@@ -1048,7 +1056,13 @@ def _dre(inicio: date, fim: date) -> dict:
 
 
 def _exemplo_padrao(
-    rotulo: str, *, bv: bool = True, nota: bool = False, comissao=None, vendedor: str = "vend", venda_em: date | None = None
+    rotulo: str,
+    *,
+    bv: bool = True,
+    nota: bool = False,
+    comissao=None,
+    vendedor: str = "vend",
+    venda_em: date | None = None,
 ) -> dict:
     """Venda 2.000 a 5% e BV 200 (cheia 90), pagos 1.000. `comissao` = estado da linha de 100/90."""
     ev = _evento(rotulo, nota=nota, vendedor=vendedor, venda_em=venda_em)
@@ -1056,7 +1070,9 @@ def _exemplo_padrao(
     _comprovante(ev, 1000)
     linha = None
     if comissao is not None:
-        linha = _linha_comissao(ev, 90 if bv else 100, status=comissao, vendedor=vendedor, venda_em=venda_em)
+        linha = _linha_comissao(
+            ev, 90 if bv else 100, status=comissao, vendedor=vendedor, venda_em=venda_em
+        )
     return {"ev": ev, "bv": acr, "linha": linha}
 
 
@@ -1157,7 +1173,9 @@ def _aquecer_planilha_e_comissoes() -> None:
     depois = {rotulo: _no_banco(sql)[0][0] for rotulo, sql in _CONTAGEM_DO_AQUECIMENTO}
     novos = {k: depois[k] - antes[k] for k in antes if depois[k] != antes[k]}
     estado["aquecimento"] = novos
-    print(f"  (aquecimento de {_mes(meses[0])} a {_mes(meses[-1])}: fica no espelho {novos or 'nada novo'})")
+    print(
+        f"  (aquecimento de {_mes(meses[0])} a {_mes(meses[-1])}: fica no espelho {novos or 'nada novo'})"
+    )
 
 
 def _retrato_comissoes_do_espelho() -> list[tuple]:
@@ -1213,19 +1231,34 @@ def _restaurar_config() -> None:
 def _sobras_do_verify() -> dict:
     """O que sobrou com o prefixo ou o id do Google do verify (cenário 27): tem de ser nada."""
     consultas = {
-        "eventos": ("SELECT count(*) FROM calendar_events WHERE google_event_id LIKE :g OR title LIKE :t", {}),
-        "ensaios": ("SELECT count(*) FROM calendar_events WHERE event_type = 'ENSAIO' AND location LIKE :p", {}),
+        "eventos": (
+            "SELECT count(*) FROM calendar_events WHERE google_event_id LIKE :g OR title LIKE :t",
+            {},
+        ),
+        "ensaios": (
+            "SELECT count(*) FROM calendar_events WHERE event_type = 'ENSAIO' AND location LIKE :p",
+            {},
+        ),
         "usuários": ("SELECT count(*) FROM users WHERE email LIKE :p", {}),
         "talentos": ("SELECT count(*) FROM talents WHERE full_name LIKE :p", {}),
         "comissões": (
             "SELECT count(*) FROM commission_payments cp JOIN users u ON u.id = cp.seller_id WHERE u.email LIKE :p",
             {},
         ),
-        "gastos": ("SELECT count(*) FROM special_expenses WHERE description LIKE :p OR supplier_name LIKE :p", {}),
+        "gastos": (
+            "SELECT count(*) FROM special_expenses WHERE description LIKE :p OR supplier_name LIKE :p",
+            {},
+        ),
         "orçamentos": ("SELECT count(*) FROM orcamento_history WHERE event_location LIKE :p", {}),
         "clientes": ("SELECT count(*) FROM clients WHERE name LIKE :p", {}),
-        "folha nos meses isolados": (f"SELECT count(*) FROM salary_payments WHERE month_ref >= '{FAIXA_ISOLADA_MES}'", {}),
-        "fixos nos meses isolados": (f"SELECT count(*) FROM recurring_expense_entries WHERE month_ref >= '{FAIXA_ISOLADA_MES}'", {}),
+        "folha nos meses isolados": (
+            f"SELECT count(*) FROM salary_payments WHERE month_ref >= '{FAIXA_ISOLADA_MES}'",
+            {},
+        ),
+        "fixos nos meses isolados": (
+            f"SELECT count(*) FROM recurring_expense_entries WHERE month_ref >= '{FAIXA_ISOLADA_MES}'",
+            {},
+        ),
         "formulários": ("SELECT count(*) FROM form_responses WHERE contact_name LIKE :p", {}),
         "notificações": (
             "SELECT count(*) FROM notifications n JOIN users u ON u.id = n.user_id WHERE u.email LIKE :p",
@@ -1270,8 +1303,7 @@ def limpar() -> None:
         ] + list(estado["eventos"].keys())
         ids = sorted(set(ids))
         usuarios = [
-            r[0]
-            for r in _no_banco("SELECT id FROM users WHERE email LIKE :p", p=f"{PREFIX}%")
+            r[0] for r in _no_banco("SELECT id FROM users WHERE email LIKE :p", p=f"{PREFIX}%")
         ]
         talentos = [
             r[0]
@@ -1314,7 +1346,9 @@ def limpar() -> None:
             {"e": alvo, "u": conta},
         )
         db.session.execute(
-            text("UPDATE calendar_events SET orcamento_history_id = NULL, client_id = NULL WHERE id = ANY(:e)"),
+            text(
+                "UPDATE calendar_events SET orcamento_history_id = NULL, client_id = NULL WHERE id = ANY(:e)"
+            ),
             {"e": alvo},
         )
         db.session.execute(text("DELETE FROM event_clients WHERE event_id = ANY(:e)"), {"e": alvo})
@@ -1367,8 +1401,13 @@ def limpar() -> None:
         )
         db.session.execute(text("DELETE FROM clients WHERE name LIKE :p"), {"p": f"{PREFIX}%"})
         # A Planilha aberta nos meses isolados (2047+) gera folha e lançamentos de fixos ali: são do verify.
-        db.session.execute(text("DELETE FROM salary_payments WHERE month_ref >= :m"), {"m": FAIXA_ISOLADA_MES})
-        db.session.execute(text("DELETE FROM recurring_expense_entries WHERE month_ref >= :m"), {"m": FAIXA_ISOLADA_MES})
+        db.session.execute(
+            text("DELETE FROM salary_payments WHERE month_ref >= :m"), {"m": FAIXA_ISOLADA_MES}
+        )
+        db.session.execute(
+            text("DELETE FROM recurring_expense_entries WHERE month_ref >= :m"),
+            {"m": FAIXA_ISOLADA_MES},
+        )
         for u in User.query.filter(User.email.like(f"{PREFIX}%")).all():
             u.roles.clear()
             db.session.delete(u)
@@ -1536,7 +1575,9 @@ def _ato_nucleo(event_id: int, modo: str, valor: float, *, hoje: date | None = N
         ev = db.session.get(CalendarEvent, event_id)
         s = db.session.get(SiteSetting, 1)
         pago = cancel_ops.total_recebido(ev)
-        devolve = pago if modo == "tudo" else (Decimal("0") if modo == "nada" else Decimal(str(valor)))
+        devolve = (
+            pago if modo == "tudo" else (Decimal("0") if modo == "nada" else Decimal(str(valor)))
+        )
         if devolve > 0:
             db.session.add(
                 SpecialExpense(
@@ -1587,7 +1628,9 @@ def _ato_nucleo(event_id: int, modo: str, valor: float, *, hoje: date | None = N
         ev.cancellation_reason = "verify 306 (núcleo)"
         db.session.flush()
         resumo = cancel_ops.resumo_cancelado(ev)
-        alvos = {beneficiario: comissoes_ops.comissao_do_retido(cheia, resumo.retido, canc.sale_value)}
+        alvos = {
+            beneficiario: comissoes_ops.comissao_do_retido(cheia, resumo.retido, canc.sale_value)
+        }
         if beneficiario is None:
             alvos = {}
         comissoes_ops.reconciliar_comissao_do_cancelado(
@@ -1596,7 +1639,9 @@ def _ato_nucleo(event_id: int, modo: str, valor: float, *, hoje: date | None = N
         db.session.commit()
 
 
-def _ato(event_id: int, modo: str = "parte", valor: float = 600, *, hoje: date | None = None) -> None:
+def _ato(
+    event_id: int, modo: str = "parte", valor: float = 600, *, hoje: date | None = None
+) -> None:
     """O cancelamento do jeito da fase: pelo núcleo (`--nucleo`) ou pela API."""
     if OPCOES["nucleo"]:
         _ato_nucleo(event_id, modo, valor, hoje=hoje)
@@ -1655,7 +1700,10 @@ def c26_passado_quieto() -> None:
         timeout=600,
     )
     _garante(r.returncode == 0, f"contagem_pre_deploy.py → {r.returncode}: {r.stderr[-400:]}")
-    _garante("alembic_version" in r.stdout and "event_cancellations" in r.stdout, f"a contagem não terminou: {r.stdout[-300:]}")
+    _garante(
+        "alembic_version" in r.stdout and "event_cancellations" in r.stdout,
+        f"a contagem não terminou: {r.stdout[-300:]}",
+    )
     # Reabre Comissões (todos os vendedores) e a Planilha de M−1 a M+2 antes do retrato "depois": o
     # resync de agora, com todos os cancelados do verify no banco, não pode mexer no espelho.
     _aquecer_planilha_e_comissoes()
@@ -1721,7 +1769,11 @@ def _seed_mes_anterior(*, aberto: bool, vendedor: str = "vend") -> int:
     outro = _evento("8 outro evento do vendedor", vendedor=vendedor)
     m1 = _mes_anterior(_hoje_sp())
     return _linha_comissao(
-        outro, 50, status="a_pagar" if aberto else "pago", vendedor=vendedor, venda_em=date(m1.year, m1.month, 20)
+        outro,
+        50,
+        status="a_pagar" if aberto else "pago",
+        vendedor=vendedor,
+        venda_em=date(m1.year, m1.month, 20),
     )
 
 
@@ -1732,14 +1784,18 @@ def _ajuste_negativo(event_id: int) -> dict:
 
 
 def c8_paga_no_primeiro_repasse_aberto() -> None:
-    for volta, (dia, m1_aberto, ciclo_esperado) in enumerate(((10, None, "M"), (2, True, "M-1"), (2, False, "M"))):
+    for volta, (dia, m1_aberto, ciclo_esperado) in enumerate(
+        ((10, None, "M"), (2, True, "M-1"), (2, False, "M"))
+    ):
         hoje = _dia(dia)
         vendedor = f"vend8_{volta}"
         _vendedor_proprio(vendedor)
         extra = None
         if m1_aberto is not None:
             extra = _seed_mes_anterior(aberto=m1_aberto, vendedor=vendedor)
-        ex = _exemplo_padrao(f"8 dia={dia} m1={m1_aberto}", bv=False, comissao="pago", vendedor=vendedor)
+        ex = _exemplo_padrao(
+            f"8 dia={dia} m1={m1_aberto}", bv=False, comissao="pago", vendedor=vendedor
+        )
         paga = _linhas_comissao(ex["ev"])[0]
         _ato(ex["ev"], hoje=hoje)
         _igual(_linhas_comissao(ex["ev"])[0]["valor"], 100, "8: a paga ficou intacta")
@@ -1767,7 +1823,9 @@ def c8_variante_previa_igual_execucao() -> None:
             antes = _retrato_tabelas([ex["ev"]])
             r = _previa(ex["ev"], 600)
             depois = _retrato_tabelas([ex["ev"]])
-            _garante(r.status_code == 200, f"prévia → {r.status_code} {r.get_data(as_text=True)[:300]}")
+            _garante(
+                r.status_code == 200, f"prévia → {r.status_code} {r.get_data(as_text=True)[:300]}"
+            )
             _garante(antes == depois, "a prévia gravou algo (simular escreve)")
             efeito = r.get_json()["efeito"]
             _cancelar_ok(ex["ev"], _corpo_cancelar("parte", 600))
@@ -1775,9 +1833,14 @@ def c8_variante_previa_igual_execucao() -> None:
         _igual(efeito["retido"], 400, "prévia: retido")
         _igual(efeito["comissao_retido"], 20, "prévia: comissão do retido")
         _igual(efeito["ajuste"], aj["valor"], "prévia: ajuste × gravado")
-        _garante(efeito["ciclo"] == _mes(aj["venda_em"]), f"prévia: ciclo {efeito['ciclo']} × {aj['venda_em']}")
+        _garante(
+            efeito["ciclo"] == _mes(aj["venda_em"]),
+            f"prévia: ciclo {efeito['ciclo']} × {aj['venda_em']}",
+        )
         repasse = _mes_seguinte(aj["venda_em"]).replace(day=5).isoformat()
-        _garante(efeito["repasse_em"] == repasse, f"prévia: repasse {efeito['repasse_em']} × {repasse}")
+        _garante(
+            efeito["repasse_em"] == repasse, f"prévia: repasse {efeito['repasse_em']} × {repasse}"
+        )
     if not OPCOES["nucleo"]:
         # Mutação "simular escreve": a prévia que grava (e commita) tem de ser acusada pelo retrato.
         from app.financeiro import comissoes_ops
@@ -1797,9 +1860,17 @@ def c8_variante_previa_igual_execucao() -> None:
                 antes = _retrato_tabelas([ex["ev"]])
                 r = _previa(ex["ev"], 600)
                 _garante(r.status_code == 200, f"prévia mutação → {r.status_code}")
-                _garante(_retrato_tabelas([ex["ev"]]) == antes, "a prévia gravou algo (simular escreve)")
+                _garante(
+                    _retrato_tabelas([ex["ev"]]) == antes, "a prévia gravou algo (simular escreve)"
+                )
 
-        _sob_mutacao(comissoes_ops, "reconciliar_comissao_do_cancelado", grava, previa_quieta, "simular escreve")
+        _sob_mutacao(
+            comissoes_ops,
+            "reconciliar_comissao_do_cancelado",
+            grava,
+            previa_quieta,
+            "simular escreve",
+        )
 
 
 def _previa_nucleo(event_id: int, hoje: date) -> None:
@@ -1826,14 +1897,20 @@ def _previa_nucleo(event_id: int, hoje: date) -> None:
             f"simular=True mexeu no ORM: novos {list(db.session.new)}, sujos {sujos}, apagados {list(db.session.deleted)}",
         )
         db.session.flush()
-        _garante(db.session.execute(consulta, {"i": event_id}).fetchall() == antes, "simular=True gravou na transação")
+        _garante(
+            db.session.execute(consulta, {"i": event_id}).fetchall() == antes,
+            "simular=True gravou na transação",
+        )
         db.session.rollback()
         ev = db.session.get(CalendarEvent, event_id)
         feito = comissoes_ops.reconciliar_comissao_do_cancelado(
             ev, alvos, motivo=MOTIVO_AJUSTE_RETIDO, hoje=hoje, simular=False
         )
         db.session.commit()
-    _garante(isinstance(plano, list) and plano, f"simular=True não devolveu o plano (lista de linhas): {plano!r}")
+    _garante(
+        isinstance(plano, list) and plano,
+        f"simular=True não devolveu o plano (lista de linhas): {plano!r}",
+    )
     _garante(
         _normalizar_plano(plano) == _normalizar_plano(feito),
         f"plano simulado ≠ executado: {plano} × {feito}",
@@ -1842,7 +1919,8 @@ def _previa_nucleo(event_id: int, hoje: date) -> None:
 
 def _normalizar_plano(plano) -> list:
     return sorted(
-        json.dumps({k: str(v) for k, v in sorted(p.items()) if k != "linha_id"}) for p in plano or []
+        json.dumps({k: str(v) for k, v in sorted(p.items()) if k != "linha_id"})
+        for p in plano or []
     )
 
 
@@ -1852,25 +1930,40 @@ def c9_no_banco_e_desfazer() -> None:
     aj = _ajuste_negativo(ex["ev"])
     _igual(aj["valor"], -80, "9: no banco tratada como paga")
     no_banco = next(x for x in _linhas_comissao(ex["ev"]) if x["id"] == ex["linha"])
-    _garante(no_banco["status"] == "no_banco" and q(no_banco["valor"]) == q(100), f"9: a no banco mudou {no_banco}")
-    _garante(aj["original_id"] == ex["linha"] and aj["venda_em"] == aj["liberacao"], f"9: ajuste {aj}")
-    _garante((aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month), f"9: −80 fora do primeiro repasse aberto {aj}")
+    _garante(
+        no_banco["status"] == "no_banco" and q(no_banco["valor"]) == q(100),
+        f"9: a no banco mudou {no_banco}",
+    )
+    _garante(
+        aj["original_id"] == ex["linha"] and aj["venda_em"] == aj["liberacao"], f"9: ajuste {aj}"
+    )
+    _garante(
+        (aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month),
+        f"9: −80 fora do primeiro repasse aberto {aj}",
+    )
     _desfazer_e_conferir(ex["ev"], alvo=Decimal("20"), alvo_com_mais_100=Decimal("25"))
 
 
 def _desfazer_e_conferir(event_id: int, *, alvo: Decimal, alvo_com_mais_100: Decimal) -> None:
     """Variante 9/10-desfazer: desfazer o pago pela Planilha (267c), abrir as telas e corrigir um
     comprovante — a Σ das linhas vivas é o alvo em cada momento (data-model §7.3)."""
-    liquidada = next(
-        x for x in _linhas_comissao(event_id) if x["status"] in ("pago", "no_banco")
-    )
+    liquidada = next(x for x in _linhas_comissao(event_id) if x["status"] in ("pago", "no_banco"))
     ciclo = liquidada["liberacao"] or liquidada["venda_em"]
-    item = f"{liquidada['seller']}:{_mes(ciclo)}" + (":pago" if liquidada["status"] == "pago" else "")
+    item = f"{liquidada['seller']}:{_mes(ciclo)}" + (
+        ":pago" if liquidada["status"] == "pago" else ""
+    )
     r = _cliente("sa").post(
         ROTAS["planilha_status"],
-        json={"item_type": "commission", "item_id": item, "status": "nao_pago", "motivo": "verify 306"},
+        json={
+            "item_type": "commission",
+            "item_id": item,
+            "status": "nao_pago",
+            "motivo": "verify 306",
+        },
     )
-    _garante(r.status_code == 200, f"desfazer {item} → {r.status_code} {r.get_data(as_text=True)[:300]}")
+    _garante(
+        r.status_code == 200, f"desfazer {item} → {r.status_code} {r.get_data(as_text=True)[:300]}"
+    )
     voltou = next(x for x in _linhas_comissao(event_id) if x["id"] == liquidada["id"])
     _garante(voltou["status"] == "a_pagar", f"desfazer: a linha ficou {voltou['status']}")
     _igual(voltou["valor"], liquidada["valor"], "desfazer: o valor mudou")
@@ -1891,7 +1984,12 @@ def _desfazer_e_conferir(event_id: int, *, alvo: Decimal, alvo_com_mais_100: Dec
     _igual(_soma_vivas(event_id), alvo_com_mais_100, "Σ depois de corrigir o comprovante")
     vivas = _linhas_comissao(event_id)
     _garante(
-        all(x["id"] in antes and (x["venda_em"], x["liberacao"]) == (antes[x["id"]]["venda_em"], antes[x["id"]]["liberacao"]) for x in vivas),
+        all(
+            x["id"] in antes
+            and (x["venda_em"], x["liberacao"])
+            == (antes[x["id"]]["venda_em"], antes[x["id"]]["liberacao"])
+            for x in vivas
+        ),
         f"a correção não absorveu no lugar com a data intacta: {antes} → {vivas}",
     )
 
@@ -1900,8 +1998,13 @@ def c10_tudo_e_sem_linha() -> None:
     a_pagar = _exemplo_padrao("10 tudo a pagar", bv=False, comissao="a_pagar")
     _ato(a_pagar["ev"], "tudo", 1000)
     _garante(not _linhas_comissao(a_pagar["ev"]), "10: a a_pagar não foi cancelada no Tudo")
-    mantida = [x for x in _linhas_comissao(a_pagar["ev"], vivas=False) if x["id"] == a_pagar["linha"]]
-    _garante(mantida and mantida[0]["status"] == "cancelado", f"10: a a_pagar não ficou cancelada (sumiu?): {mantida}")
+    mantida = [
+        x for x in _linhas_comissao(a_pagar["ev"], vivas=False) if x["id"] == a_pagar["linha"]
+    ]
+    _garante(
+        mantida and mantida[0]["status"] == "cancelado",
+        f"10: a a_pagar não ficou cancelada (sumiu?): {mantida}",
+    )
     paga = _exemplo_padrao("10 tudo paga", bv=False, comissao="pago")
     _ato(paga["ev"], "tudo", 1000, hoje=_dia(10))
     _igual(_ajuste_negativo(paga["ev"])["valor"], -100, "10: −100 da paga no Tudo")
@@ -1943,18 +2046,26 @@ def _c11_educamanto() -> None:
     linha = _linha_comissao(ev, 90, vendedor="vend2", liberacao=inicio.date())
     _ato(ev)
     linhas = _linhas_comissao(ev)
-    _garante(len(linhas) == 1 and linhas[0]["id"] == linha, f"11: reduzida no lugar (mesma linha): {linhas}")
+    _garante(
+        len(linhas) == 1 and linhas[0]["id"] == linha,
+        f"11: reduzida no lugar (mesma linha): {linhas}",
+    )
     _igual(linhas[0]["valor"], 18, "11: EducaManto reduzida no lugar")
     _garante(linhas[0]["liberacao"] == inicio.date(), "11: a data de liberação mudou")
     _garante(linhas[0]["seller"] == vend2, "11: beneficiário errado")
-    variante = _evento("11 edu sem linha", titulo="(EDU) V306 11 SEM LINHA", inicio=inicio + timedelta(days=1))
+    variante = _evento(
+        "11 edu sem linha", titulo="(EDU) V306 11 SEM LINHA", inicio=inicio + timedelta(days=1)
+    )
     _bv(variante, 200)
     _comprovante(variante, 1000)
     _ato(variante)
     nova = _linhas_comissao(variante)
     _garante(len(nova) == 1, f"11 variante: {nova}")
     _igual(nova[0]["valor"], 18, "11 variante: valor da linha nova")
-    _garante(nova[0]["seller"] == vend2, f"11 variante: beneficiário {nova[0]['seller']} (esperado o responsável)")
+    _garante(
+        nova[0]["seller"] == vend2,
+        f"11 variante: beneficiário {nova[0]['seller']} (esperado o responsável)",
+    )
     _garante(
         nova[0]["liberacao"] == (inicio + timedelta(days=1)).date(),
         f"11 variante: a linha nova não nasceu com a data do evento ({nova[0]['liberacao']})",
@@ -1963,12 +2074,20 @@ def _c11_educamanto() -> None:
     paga = _evento("11 edu paga", titulo="(EDU) V306 11 PAGA", inicio=inicio + timedelta(days=2))
     _bv(paga, 200)
     _comprovante(paga, 1000)
-    base = _linha_comissao(paga, 90, vendedor="vend2", status="pago", liberacao=(inicio + timedelta(days=2)).date())
+    base = _linha_comissao(
+        paga, 90, vendedor="vend2", status="pago", liberacao=(inicio + timedelta(days=2)).date()
+    )
     _ato(paga, hoje=_dia(10))
     aj = _ajuste_negativo(paga)
     _igual(aj["valor"], -72, "11 paga: ajuste")
-    _garante(aj["original_id"] == base and aj["seller"] == vend2 and aj["venda_em"] == aj["liberacao"], f"11 paga: ajuste {aj}")
-    _garante((aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month), f"11 paga: fora do primeiro repasse aberto {aj}")
+    _garante(
+        aj["original_id"] == base and aj["seller"] == vend2 and aj["venda_em"] == aj["liberacao"],
+        f"11 paga: ajuste {aj}",
+    )
+    _garante(
+        (aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month),
+        f"11 paga: fora do primeiro repasse aberto {aj}",
+    )
 
 
 def c12_reabrir_telas() -> None:
@@ -2006,7 +2125,9 @@ def c13_planilha_igual_comissoes() -> None:
     vend = _vendedor_proprio("vend13")
     m2 = _mes_anterior(_mes_anterior(_hoje_sp()))
     venda_em = date(m2.year, m2.month, 12)
-    ex = _exemplo_padrao("13 identidade", bv=False, comissao="pago", vendedor="vend13", venda_em=venda_em)
+    ex = _exemplo_padrao(
+        "13 identidade", bv=False, comissao="pago", vendedor="vend13", venda_em=venda_em
+    )
     no_banco = _evento("13 no banco", vendedor="vend13", venda_em=venda_em)
     _linha_comissao(no_banco, 50, status="no_banco", vendedor="vend13", venda_em=venda_em)
     _ato(ex["ev"], hoje=_dia(10))
@@ -2016,20 +2137,33 @@ def c13_planilha_igual_comissoes() -> None:
     for ciclo in ciclos:
         dados = _comissoes(ciclo, vendedor="vend13")
         k = dados["kpis"]
-        soma = sum(Decimal(str(k.get(c) or 0)) for c in ("total_paid", "total_no_banco", "total_pending"))
+        soma = sum(
+            Decimal(str(k.get(c) or 0)) for c in ("total_paid", "total_no_banco", "total_pending")
+        )
         _igual(k.get("total_month"), soma, f"13 {ciclo}: total_month = pago + no banco + a pagar")
         ano, mes_ = (int(x) for x in ciclo.split("-"))
         itens = [
-            i for i in _planilha(_mes(_mes_seguinte(date(ano, mes_, 1))))
+            i
+            for i in _planilha(_mes(_mes_seguinte(date(ano, mes_, 1))))
             if i["type"] == "commission" and str(i["id"]).startswith(f"{vend}:{ciclo}")
         ]
-        linhas = sorted((x["id"], q(x["amount"])) for i in itens for x in (i.get("commission_lines") or []))
+        linhas = sorted(
+            (x["id"], q(x["amount"])) for i in itens for x in (i.get("commission_lines") or [])
+        )
         entradas = sorted(
-            (e["id"], q(e.get("amount") or 0)) for e in dados.get("entries", [])
+            (e["id"], q(e.get("amount") or 0))
+            for e in dados.get("entries", [])
             if e.get("status") in ("a_pagar", "no_banco", "pago")
         )
-        _garante(linhas == entradas, f"13 {ciclo}: Planilha {linhas} × Comissões {entradas} (mesmas linhas)")
-        _igual(sum(Decimal(str(i["amount"])) for i in itens), sum(x[1] for x in entradas), f"13 {ciclo}: mesmo desconto")
+        _garante(
+            linhas == entradas,
+            f"13 {ciclo}: Planilha {linhas} × Comissões {entradas} (mesmas linhas)",
+        )
+        _igual(
+            sum(Decimal(str(i["amount"])) for i in itens),
+            sum(x[1] for x in entradas),
+            f"13 {ciclo}: mesmo desconto",
+        )
 
 
 def c14_soma_zero_e_orfao() -> None:
@@ -2041,28 +2175,45 @@ def c14_soma_zero_e_orfao() -> None:
     outro = _evento("14 outro", vendedor="vend14")
     _linha_comissao(outro, 100, vendedor="vend14", venda_em=_dia(10))  # +100 a pagar no mesmo ciclo
     abertos = [
-        i for i in _planilha(_mes(_mes_seguinte(_hoje_sp())))
+        i
+        for i in _planilha(_mes(_mes_seguinte(_hoje_sp())))
         if i["type"] == "commission" and i["id"] == f"{vend}:{_mes(_hoje_sp())}"
     ]
     _garante(abertos, "14: o item aberto de soma zero com linhas de valor sumiu da Planilha")
     _igual(abertos[0]["amount"], 0, "14: soma do item aberto")
-    _garante(len(abertos[0].get("commission_lines") or []) >= 2, f"14: o item não traz as linhas: {abertos[0]}")
+    _garante(
+        len(abertos[0].get("commission_lines") or []) >= 2,
+        f"14: o item não traz as linhas: {abertos[0]}",
+    )
     # Órfão (sem evento, ligado a uma paga) no ciclo M−1: não abre ciclo para o primeiro repasse aberto.
     m1 = _mes_anterior(_hoje_sp())
     antigo = _evento("14 antigo", venda=None, vendedor="vend14")
-    paga = _linha_comissao(antigo, 30, status="pago", vendedor="vend14", venda_em=date(m1.year, m1.month, 15))
-    orfao = _linha_comissao(None, -30, vendedor="vend14", venda_em=date(m1.year, m1.month, 15), original_id=paga)
+    paga = _linha_comissao(
+        antigo, 30, status="pago", vendedor="vend14", venda_em=date(m1.year, m1.month, 15)
+    )
+    orfao = _linha_comissao(
+        None, -30, vendedor="vend14", venda_em=date(m1.year, m1.month, 15), original_id=paga
+    )
     with app.app_context():
         cp = db.session.get(CommissionPayment, orfao)
-        _garante(cp.event_id is None and cp.original_id == paga, f"14: o órfão não tem o formato {cp.event_id} {cp.original_id}")
+        _garante(
+            cp.event_id is None and cp.original_id == paga,
+            f"14: o órfão não tem o formato {cp.event_id} {cp.original_id}",
+        )
         _garante(not comissoes_ops.linha_abre_ciclo(cp), "14: estorno órfão abre ciclo")
         primeiro = comissoes_ops.primeiro_repasse_aberto(vend, _dia(2))
-        _garante((primeiro.year, primeiro.month) == (_hoje_sp().year, _hoje_sp().month), f"14: o órfão abriu o ciclo M−1 ({primeiro})")
+        _garante(
+            (primeiro.year, primeiro.month) == (_hoje_sp().year, _hoje_sp().month),
+            f"14: o órfão abriu o ciclo M−1 ({primeiro})",
+        )
     # um ajuste de verdade no dia 2, com o órfão no M−1: vai ao corrente
     real = _exemplo_padrao("14 ajuste", bv=False, comissao="pago", vendedor="vend14")
     _ato(real["ev"], hoje=_dia(2))
     aj = _ajuste_negativo(real["ev"])
-    _garante((aj["venda_em"].year, aj["venda_em"].month) == (_hoje_sp().year, _hoje_sp().month), f"14: ajuste no ciclo do órfão {aj}")
+    _garante(
+        (aj["venda_em"].year, aj["venda_em"].month) == (_hoje_sp().year, _hoje_sp().month),
+        f"14: ajuste no ciclo do órfão {aj}",
+    )
 
 
 _SONDA_ESTORNO = r"""
@@ -2093,7 +2244,9 @@ def c14b_exclusao_no_primeiro_repasse() -> None:
             apelido = f"vend14b_{dia}_{status}"
             vend = _vendedor_proprio(apelido)
             ev = _evento(f"14b {status} dia={dia}", venda=None, vendedor=apelido)
-            _linha_comissao(ev, 100, status=status, vendedor=apelido, venda_em=date(m2.year, m2.month, 10))
+            _linha_comissao(
+                ev, 100, status=status, vendedor=apelido, venda_em=date(m2.year, m2.month, 10)
+            )
 
             def item_do_ciclo_da_venda(vend: int = vend, m2: date = m2) -> list:
                 return sorted(
@@ -2120,7 +2273,10 @@ def c14b_exclusao_no_primeiro_repasse() -> None:
                     _garante(not main, f"14b mutação: a main estornou o no_banco ({main})")
             with _com_hoje(_dia(dia)):
                 r = _cliente("sa").delete(ROTAS["excluir"].format(id=ev))
-            _garante(r.status_code == 200, f"14b excluir → {r.status_code} {r.get_data(as_text=True)[:300]}")
+            _garante(
+                r.status_code == 200,
+                f"14b excluir → {r.status_code} {r.get_data(as_text=True)[:300]}",
+            )
             estornos = _no_banco(
                 "SELECT sale_date, payable_from, amount FROM commission_payments WHERE "
                 "event_id IS NULL AND original_id IS NOT NULL AND seller_id = :s AND amount < 0 "
@@ -2137,11 +2293,16 @@ def c14b_exclusao_no_primeiro_repasse() -> None:
                 f"14b dia {dia} {status}: estorno no ciclo {venda_em}, esperado o corrente",
             )
             # A Planilha do ciclo da venda (paga no mês seguinte a ele) não muda: o estorno não cai lá.
-            _garante(item_do_ciclo_da_venda() == ciclo_da_venda, f"14b: a Planilha do ciclo da venda mudou {ciclo_da_venda} → {item_do_ciclo_da_venda()}")
+            _garante(
+                item_do_ciclo_da_venda() == ciclo_da_venda,
+                f"14b: a Planilha do ciclo da venda mudou {ciclo_da_venda} → {item_do_ciclo_da_venda()}",
+            )
 
 
 def _bv_planilha(event_id: int, mes: str) -> list[dict]:
-    ids = {r[0] for r in _no_banco("SELECT id FROM event_acrescimos WHERE event_id = :i", i=event_id)}
+    ids = {
+        r[0] for r in _no_banco("SELECT id FROM event_acrescimos WHERE event_id = :i", i=event_id)
+    }
     return [i for i in _planilha(mes) if i["type"] == "bv" and int(i["id"]) in ids]
 
 
@@ -2149,7 +2310,9 @@ def _bv_planilha_jinja(event_id: int, mes: str) -> list[dict]:
     """Os itens de BV da Planilha Jinja (`/financeiro/pagamentos`), pelo `template_rendered`."""
     from flask import template_rendered
 
-    ids = {r[0] for r in _no_banco("SELECT id FROM event_acrescimos WHERE event_id = :i", i=event_id)}
+    ids = {
+        r[0] for r in _no_banco("SELECT id FROM event_acrescimos WHERE event_id = :i", i=event_id)
+    }
     capturado: dict = {}
 
     def gravar(_sender, template, context, **_k):
@@ -2162,7 +2325,9 @@ def _bv_planilha_jinja(event_id: int, mes: str) -> list[dict]:
     finally:
         template_rendered.disconnect(gravar, app)
     _garante(r.status_code == 200, f"Planilha Jinja {mes} → {r.status_code}")
-    return [i for i in capturado.get("items", []) if i.get("type") == "bv" and int(i.get("id")) in ids]
+    return [
+        i for i in capturado.get("items", []) if i.get("type") == "bv" and int(i.get("id")) in ids
+    ]
 
 
 def _mes_evento(event_id: int) -> str:
@@ -2193,9 +2358,14 @@ def c17_bv_na_planilha() -> None:
     _garante(_conta_do_bv(tudo["bv"]) is None, "17 Tudo: bv_da_planilha não deu None")
     if not OPCOES["nucleo"]:
         _garante(not _bv_planilha(tudo["ev"], _mes_evento(tudo["ev"])), "17 Tudo: o BV não sumiu")
-        _garante(not _bv_planilha_jinja(tudo["ev"], _mes_evento(tudo["ev"])), "17 Tudo: o BV não sumiu do Jinja")
+        _garante(
+            not _bv_planilha_jinja(tudo["ev"], _mes_evento(tudo["ev"])),
+            "17 Tudo: o BV não sumiu do Jinja",
+        )
     pago = _exemplo_padrao("17 pago antes")
-    _no_banco_escrever("UPDATE event_acrescimos SET bv_payment_status = 'pago' WHERE id = :i", i=pago["bv"])
+    _no_banco_escrever(
+        "UPDATE event_acrescimos SET bv_payment_status = 'pago' WHERE id = :i", i=pago["bv"]
+    )
     _ato(pago["ev"], "nada", 0)
     _igual(_conta_do_bv(pago["bv"]), 200, "17: BV pago antes fica pelo pago")
     if not OPCOES["nucleo"]:
@@ -2214,10 +2384,17 @@ def c17_bv_na_planilha() -> None:
             ROTAS["planilha_status"],
             json={"item_type": "bv", "item_id": pago["bv"], "status": "nao_pago"},
         )
-        _garante(r.status_code == 200, f"17 desfazer BV → {r.status_code} {r.get_data(as_text=True)[:300]}")
+        _garante(
+            r.status_code == 200,
+            f"17 desfazer BV → {r.status_code} {r.get_data(as_text=True)[:300]}",
+        )
     _igual(_conta_do_bv(pago["bv"]), 100, "17 variante: desfeito, volta ao proporcional")
     _garante(
-        _no_banco("SELECT b.paid_amount FROM event_cancellation_bvs b WHERE b.acrescimo_id = :i", i=pago["bv"])[0][0] is None,
+        _no_banco(
+            "SELECT b.paid_amount FROM event_cancellation_bvs b WHERE b.acrescimo_id = :i",
+            i=pago["bv"],
+        )[0][0]
+        is None,
         "17 variante: paid_amount não voltou a NULL",
     )
 
@@ -2229,8 +2406,14 @@ def c17_satelite() -> None:
     nao_pago = _bv(g["dias"][1], 80)
     _cancelar_ok(g["principal"], _corpo_cancelar("parte", 900, alcance="todos"))
     itens = _bv_planilha(g["dias"][0], _mes_evento(g["dias"][0]))
-    _garante(len(itens) == 1 and q(itens[0]["amount"]) == q(120) and itens[0]["status"] == "pago", f"17 satélite: BV pago {itens}")
-    _garante(not _bv_planilha(g["dias"][1], _mes_evento(g["dias"][1])), "17 satélite: BV não pago ficou na Planilha")
+    _garante(
+        len(itens) == 1 and q(itens[0]["amount"]) == q(120) and itens[0]["status"] == "pago",
+        f"17 satélite: BV pago {itens}",
+    )
+    _garante(
+        not _bv_planilha(g["dias"][1], _mes_evento(g["dias"][1])),
+        "17 satélite: BV não pago ficou na Planilha",
+    )
     _ = (pago, nao_pago)
 
 
@@ -2323,7 +2506,10 @@ def c2_parte_600() -> None:
     _commit_antes_do_google.clear()
     corpo = _cancelar_ok(ex["ev"], _corpo_cancelar("parte", 600))
     _garante(_cancelado_em(ex["ev"]) is not None, "2: não ficou cancelado")
-    _garante(google.deletes(marco) == [gid] and all(_commit_antes_do_google), f"2: remoção do Google depois do commit {google.deletes(marco)}")
+    _garante(
+        google.deletes(marco) == [gid] and all(_commit_antes_do_google),
+        f"2: remoção do Google depois do commit {google.deletes(marco)}",
+    )
     devs = _devolucoes(ex["ev"])
     _garante(len(devs) == 1, f"2: devoluções {devs}")
     d = devs[0]
@@ -2336,22 +2522,35 @@ def c2_parte_600() -> None:
     _igual(c["cheia"], 90, "2: cheia congelada")
     resumo = _resumo_api(ex["ev"])
     _igual(resumo["retido"], 400, "2: retido")
-    _garante(corpo.get("resumo") == resumo, "2: o `resumo` da resposta ≠ `event.cancelamento` do GET")
+    _garante(
+        corpo.get("resumo") == resumo, "2: o `resumo` da resposta ≠ `event.cancelamento` do GET"
+    )
     logs = [m for m, quando in _historico(ex["ev"]) if "cancel" in m.lower()]
     _garante(logs, "2: sem EventLog do cancelamento")
     texto = logs[-1].lower()
     for palavra in ("parte", "600", "400", f"{PREFIX}parceiro".lower()):
         _garante(palavra in texto, f"2: o histórico não diz '{palavra}': {logs[-1]}")
     # o BV do retido (40) como número próprio, não como pedaço do 400
-    _garante(re.search(r"(?<![\d.,])40(?:[.,]00)?(?![\d])", texto), f"2: o histórico não traz o BV do retido 40: {logs[-1]}")
+    _garante(
+        re.search(r"(?<![\d.,])40(?:[.,]00)?(?![\d])", texto),
+        f"2: o histórico não traz o BV do retido 40: {logs[-1]}",
+    )
     quando = [q_ for m, q_ in _historico(ex["ev"]) if "cancel" in m.lower()][-1]
-    _garante(abs((quando - antes_utc).total_seconds()) < 300, f"2: hora do histórico {quando} (UTC)")
-    _garante(_ao_cancelar.count((ex["ev"], "todos", None)) == 1, f"2: ao_cancelar não viu ('todos', None) uma vez: {_ao_cancelar}")
+    _garante(
+        abs((quando - antes_utc).total_seconds()) < 300, f"2: hora do histórico {quando} (UTC)"
+    )
+    _garante(
+        _ao_cancelar.count((ex["ev"], "todos", None)) == 1,
+        f"2: ao_cancelar não viu ('todos', None) uma vez: {_ao_cancelar}",
+    )
     # com nota: o imposto entra no histórico
     nota = _exemplo_padrao("2 nota", nota=True)
     _cancelar_ok(nota["ev"], _corpo_cancelar("parte", 600, imposto_retido=64))
     texto = " ".join(m for m, _ in _historico(nota["ev"]) if "cancel" in m.lower())
-    _garante(re.search(r"(?<![\d.,])64(?:[.,]00)?(?![\d])", texto), f"2: o histórico não traz o imposto: {texto}")
+    _garante(
+        re.search(r"(?<![\d.,])64(?:[.,]00)?(?![\d])", texto),
+        f"2: o histórico não traz o imposto: {texto}",
+    )
 
 
 def c2_variante_previa() -> None:
@@ -2360,18 +2559,24 @@ def c2_variante_previa() -> None:
         with _com_hoje(_dia(dia)):
             antes = _retrato_tabelas([ex["ev"]])
             r = _previa(ex["ev"], 600)
-            _garante(r.status_code == 200, f"2 prévia → {r.status_code} {r.get_data(as_text=True)[:300]}")
+            _garante(
+                r.status_code == 200, f"2 prévia → {r.status_code} {r.get_data(as_text=True)[:300]}"
+            )
             _garante(_retrato_tabelas([ex["ev"]]) == antes, "2: o GET da prévia gravou")
             efeito = r.get_json()["efeito"]
             _cancelar_ok(ex["ev"], _corpo_cancelar("parte", 600))
         resumo = _resumo_api(ex["ev"])
         aj = _ajuste_negativo(ex["ev"])
         _igual(efeito["retido"], resumo["retido"], "2 prévia: retido")
-        _igual(efeito["comissao_retido"], resumo["comissao"]["retido"], "2 prévia: comissão do retido")
+        _igual(
+            efeito["comissao_retido"], resumo["comissao"]["retido"], "2 prévia: comissão do retido"
+        )
         _igual(efeito["ajuste"], aj["valor"], "2 prévia: ajuste")
         _garante(efeito["ciclo"] == _mes(aj["venda_em"]), "2 prévia: ciclo")
         repasse = _mes_seguinte(aj["venda_em"]).replace(day=5).isoformat()
-        _garante(efeito["repasse_em"] == repasse, f"2 prévia: repasse {efeito['repasse_em']} × {repasse}")
+        _garante(
+            efeito["repasse_em"] == repasse, f"2 prévia: repasse {efeito['repasse_em']} × {repasse}"
+        )
         _igual(efeito["bv_retido"], 40, "2 prévia: BV do retido")
 
 
@@ -2396,11 +2601,19 @@ def c2b_marcado() -> None:
     marca = _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=ex["ev"])
     _garante(marca[0][0] is None, "2b: a marca não saiu")
     # motivo `cancelado`: o sino do sumiço fica lido, sem o rastro do reaparecimento
-    lida = _no_banco("SELECT read_at FROM notifications WHERE dedupe_key = :d", d=f"v306-sumiu:{ex['ev']}")
+    lida = _no_banco(
+        "SELECT read_at FROM notifications WHERE dedupe_key = :d", d=f"v306-sumiu:{ex['ev']}"
+    )
     _garante(lida and lida[0][0] is not None, "2b: o sino do sumiço não ficou lido")
-    _garante(not any("Reapareceu" in m for m, _ in _historico(ex["ev"])), "2b: rastro de reaparecimento no histórico")
     _garante(
-        not _no_banco("SELECT 1 FROM audit_logs WHERE action = 'google_reapareceu' AND entity_id = :i", i=ex["ev"]),
+        not any("Reapareceu" in m for m, _ in _historico(ex["ev"])),
+        "2b: rastro de reaparecimento no histórico",
+    )
+    _garante(
+        not _no_banco(
+            "SELECT 1 FROM audit_logs WHERE action = 'google_reapareceu' AND entity_id = :i",
+            i=ex["ev"],
+        ),
         "2b: auditoria google_reapareceu",
     )
 
@@ -2415,13 +2628,21 @@ def c2b_avisos() -> None:
     marco = google.marco()
     _cancelar_ok(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     _esperar_threads()
-    _garante(set(_remocoes_por_talento()) == {estado["t"]}, f"2b: elenco não avisado {_remocoes_por_talento()}")
+    _garante(
+        set(_remocoes_por_talento()) == {estado["t"]},
+        f"2b: elenco não avisado {_remocoes_por_talento()}",
+    )
     _garante(
         estado["usuarios"]["ens"]["id"] in {a[0] for a in _avisos_do_ato("evento.cancelado", show)},
         "2b: a equipe de Ensaio não foi avisada",
     )
-    _garante(estado["eventos"][show] not in google.deletes(marco), "2b: o show marcado foi ao Google")
-    _garante(estado["eventos"][ensaio] in google.deletes(marco), "2b: o ensaio do marcado não saiu do Google")
+    _garante(
+        estado["eventos"][show] not in google.deletes(marco), "2b: o show marcado foi ao Google"
+    )
+    _garante(
+        estado["eventos"][ensaio] in google.deletes(marco),
+        "2b: o ensaio do marcado não saiu do Google",
+    )
 
 
 def c3_tudo_nada_divergente() -> None:
@@ -2438,10 +2659,16 @@ def c3_tudo_nada_divergente() -> None:
     imp = _cliente("sa").get(ROTAS["impacto"].format(id=div["ev"])).get_json()
     avulsa = _devolucao_avulsa(div["ev"], 200)
     r = _cancelar(div["ev"], _corpo_cancelar("tudo", imp.get("max_devolucao", 1000)))
-    _garante(r.status_code == 409 and _codigo(r) == "max_devolucao_mudou", f"3 divergente → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "max_devolucao_mudou",
+        f"3 divergente → {r.status_code} {_erro(r)}",
+    )
     _igual(_erro(r).get("max_devolucao"), 800, "3: max_devolucao recalculado")
     _nada_gravado(div["ev"], "3 divergente")
-    _garante([d["id"] for d in _devolucoes(div["ev"])] == [avulsa], f"3 divergente: devoluções {_devolucoes(div['ev'])}")
+    _garante(
+        [d["id"] for d in _devolucoes(div["ev"])] == [avulsa],
+        f"3 divergente: devoluções {_devolucoes(div['ev'])}",
+    )
 
 
 def _deve_400(event_id: int, corpo: dict, campo: str, rotulo: str) -> None:
@@ -2460,18 +2687,33 @@ def c4_recusas_de_forma() -> None:
     _deve_400(ev, _corpo_cancelar("parte", 1500), "devolucao_valor", "acima do pago")
     _deve_400(ev, _corpo_cancelar("parte", 600, nome=None), "devolucao_nome", "Parte sem nome")
     _deve_400(ev, _corpo_cancelar("parte", 600, pix=None), "devolucao_pix", "Parte sem PIX")
-    _deve_400(ev, _corpo_cancelar("parte", 600, imposto_retido=10), "imposto_retido", "imposto sem nota")
+    _deve_400(
+        ev, _corpo_cancelar("parte", 600, imposto_retido=10), "imposto_retido", "imposto sem nota"
+    )
     com_nota = _exemplo_padrao("4 nota", nota=True)
     _deve_400(com_nota["ev"], _corpo_cancelar("parte", 600), "imposto_retido", "nota sem imposto")
-    _deve_400(com_nota["ev"], _corpo_cancelar("parte", 600, imposto_retido=-1), "imposto_retido", "imposto negativo")
+    _deve_400(
+        com_nota["ev"],
+        _corpo_cancelar("parte", 600, imposto_retido=-1),
+        "imposto_retido",
+        "imposto negativo",
+    )
     r = _cliente("sa").get(ROTAS["impacto"].format(id=ev) + "?devolucao=abc")
-    _garante(r.status_code == 400 and "devolucao" in (_erro(r).get("fields") or {}), f"4 prévia inválida → {r.status_code}")
+    _garante(
+        r.status_code == 400 and "devolucao" in (_erro(r).get("fields") or {}),
+        f"4 prévia inválida → {r.status_code}",
+    )
     sem_pix = _evento("4 bv sem pix")
     acr = _bv(sem_pix, 200, recebedor=None, pix=None)
     _comprovante(sem_pix, 1000)
     _deve_400(sem_pix, _corpo_cancelar("parte", 600), f"bv_pix_{acr}", "BV sem PIX e sem bvs")
     # variante: com `bvs`, cancela, e o PIX vai ao acréscimo e à Planilha
-    _cancelar_ok(sem_pix, _corpo_cancelar("parte", 600, bvs=[{"acrescimo_id": acr, "recebedor": f"{PREFIX}Parceiro", "pix": PIX}]))
+    _cancelar_ok(
+        sem_pix,
+        _corpo_cancelar(
+            "parte", 600, bvs=[{"acrescimo_id": acr, "recebedor": f"{PREFIX}Parceiro", "pix": PIX}]
+        ),
+    )
     linha = _no_banco("SELECT bv_recipient, bv_pix FROM event_acrescimos WHERE id = :i", i=acr)[0]
     _garante(linha[1] == PIX and linha[0], f"4 variante: o PIX não foi ao acréscimo: {linha}")
     itens = _bv_planilha(sem_pix, _mes_evento(sem_pix))
@@ -2489,23 +2731,43 @@ def c4_multas_recusadas() -> None:
         ("multa negativa", {"role_id": papel, "valor": -10}, f"multa_{papel}"),
         ("multa de outro evento", {"role_id": alheio, "valor": 10}, f"multa_{alheio}"),
     ):
-        _deve_400(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "multas": [multa]}, campo, rotulo)
-        _garante(not _multas_do_evento(show) and not _multas_do_evento(outro), f"4 {rotulo}: multa gravada")
+        _deve_400(
+            show,
+            {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "multas": [multa]},
+            campo,
+            rotulo,
+        )
+        _garante(
+            not _multas_do_evento(show) and not _multas_do_evento(outro),
+            f"4 {rotulo}: multa gravada",
+        )
 
 
 def c5_pendente_ja_cancelado_duplo() -> None:
     pend = _exemplo_padrao("5 pendente")
     _devolucao_avulsa(pend["ev"], 100, status="pendente")
     r = _cancelar(pend["ev"])
-    _garante(r.status_code == 409 and _codigo(r) == "devolucao_pendente", f"5 pendente → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "devolucao_pendente",
+        f"5 pendente → {r.status_code} {_erro(r)}",
+    )
     _nada_gravado(pend["ev"], "5 pendente")
     ja = _exemplo_padrao("5 já cancelado")
     _cancelar_ok(ja["ev"])
     devolucoes = [d["id"] for d in _devolucoes(ja["ev"])]
     r = _cancelar(ja["ev"])
-    _garante(r.status_code == 409 and _codigo(r) == "ja_cancelado", f"5 já cancelado → {r.status_code} {_erro(r)}")
-    _garante(_no_banco("SELECT count(*) FROM event_cancellations WHERE event_id = :i", i=ja["ev"])[0][0] == 1, "5: duas linhas congeladas")
-    _garante([d["id"] for d in _devolucoes(ja["ev"])] == devolucoes, "5: o 2º POST mexeu nas devoluções")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "ja_cancelado",
+        f"5 já cancelado → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _no_banco("SELECT count(*) FROM event_cancellations WHERE event_id = :i", i=ja["ev"])[0][0]
+        == 1,
+        "5: duas linhas congeladas",
+    )
+    _garante(
+        [d["id"] for d in _devolucoes(ja["ev"])] == devolucoes, "5: o 2º POST mexeu nas devoluções"
+    )
     duplo = _exemplo_padrao("5 duplo")
     respostas: list = []
 
@@ -2521,8 +2783,12 @@ def c5_pendente_ja_cancelado_duplo() -> None:
     codigos = sorted(r.status_code for r in respostas)
     _garante(codigos == [200, 409], f"5 duplo: {codigos}")
     recusa = next(r for r in respostas if r.status_code == 409)
-    _garante(_codigo(recusa) in ("ja_cancelado", "tente_de_novo"), f"5 duplo: código {_erro(recusa)}")
-    n = _no_banco("SELECT count(*) FROM event_cancellations WHERE event_id = :i", i=duplo["ev"])[0][0]
+    _garante(
+        _codigo(recusa) in ("ja_cancelado", "tente_de_novo"), f"5 duplo: código {_erro(recusa)}"
+    )
+    n = _no_banco("SELECT count(*) FROM event_cancellations WHERE event_id = :i", i=duplo["ev"])[0][
+        0
+    ]
     _garante(n == 1, f"5 duplo: {n} linhas em event_cancellations")
     _garante(len(_devolucoes(duplo["ev"])) == 1, "5 duplo: duas devoluções")
 
@@ -2541,10 +2807,15 @@ def c6_papeis() -> None:
             (r1.status_code, r2.status_code, r3.status_code) == (403, 403, 403),
             f"6 {apelido}: {(r1.status_code, r2.status_code, r3.status_code)}",
         )
-    r = _cliente("fin").patch(ROTAS["devolucao"].format(id=cancelado["ev"]), json={"devolucao_total": 700})
+    r = _cliente("fin").patch(
+        ROTAS["devolucao"].format(id=cancelado["ev"]), json={"devolucao_total": 700}
+    )
     _garante(r.status_code == 403, f"6 FINANCEIRO no PATCH → {r.status_code}")
     _nada_gravado(ex["ev"], "6")
-    _garante([(d["id"], q(d["valor"])) for d in _devolucoes(cancelado["ev"])] == devolucao, "6: a recusa mexeu na devolução do cancelado")
+    _garante(
+        [(d["id"], q(d["valor"])) for d in _devolucoes(cancelado["ev"])] == devolucao,
+        "6: a recusa mexeu na devolução do cancelado",
+    )
 
 
 def c15_alterar_devolucao() -> None:
@@ -2572,26 +2843,49 @@ def c15_alterar_devolucao() -> None:
         i=p["ev"],
         c=CATEGORIA_DEVOLUCAO,
     )
-    antes = ([(d["id"], q(d["valor"]), d["pagamento"]) for d in _devolucoes(p["ev"])], _linhas_comissao(p["ev"]))
+    antes = (
+        [(d["id"], q(d["valor"]), d["pagamento"]) for d in _devolucoes(p["ev"])],
+        _linhas_comissao(p["ev"]),
+    )
     r = _alterar_devolucao(p["ev"], 300)
-    _garante(r.status_code == 409 and _codigo(r) == "abaixo_do_piso", f"15 diminuir paga → {r.status_code} {_erro(r)}")
-    _garante(([(d["id"], q(d["valor"]), d["pagamento"]) for d in _devolucoes(p["ev"])], _linhas_comissao(p["ev"])) == antes, "15: o 409 gravou")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "abaixo_do_piso",
+        f"15 diminuir paga → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        (
+            [(d["id"], q(d["valor"]), d["pagamento"]) for d in _devolucoes(p["ev"])],
+            _linhas_comissao(p["ev"]),
+        )
+        == antes,
+        "15: o 409 gravou",
+    )
     # o −90 já liquidado: 800 → 500 faz nascer +15 ligado à liquidada, no primeiro repasse aberto
     lq = _exemplo_padrao("15 liquidado", bv=False, comissao="pago")
     with _com_hoje(_dia(10)):
         _cancelar_ok(lq["ev"], _corpo_cancelar("parte", 600))
         _alterar_devolucao(lq["ev"], 800)
         menos90 = _ajuste_negativo(lq["ev"])
-        _no_banco_escrever("UPDATE commission_payments SET status = 'pago', paid_at = now() WHERE id = :i", i=menos90["id"])
+        _no_banco_escrever(
+            "UPDATE commission_payments SET status = 'pago', paid_at = now() WHERE id = :i",
+            i=menos90["id"],
+        )
         r = _alterar_devolucao(lq["ev"], 500)
     _garante(r.status_code == 200, f"15 liquidado 800→500 → {r.status_code} {_erro(r)}")
     linhas = _linhas_comissao(lq["ev"])
     m90 = next(x for x in linhas if x["id"] == menos90["id"])
-    _garante(m90["status"] == "pago" and q(m90["valor"]) == q(-90), f"15: o −90 liquidado mudou {m90}")
-    novos = [x for x in linhas if x["id"] not in (lq["linha"], menos90["id"])]
-    _garante(len(novos) == 1 and q(novos[0]["valor"]) == q(15) and novos[0]["original_id"] is not None, f"15: o +15 não nasceu {novos}")
     _garante(
-        novos[0]["venda_em"] == novos[0]["liberacao"] and (novos[0]["venda_em"].year, novos[0]["venda_em"].month) == (_dia(10).year, _dia(10).month),
+        m90["status"] == "pago" and q(m90["valor"]) == q(-90), f"15: o −90 liquidado mudou {m90}"
+    )
+    novos = [x for x in linhas if x["id"] not in (lq["linha"], menos90["id"])]
+    _garante(
+        len(novos) == 1 and q(novos[0]["valor"]) == q(15) and novos[0]["original_id"] is not None,
+        f"15: o +15 não nasceu {novos}",
+    )
+    _garante(
+        novos[0]["venda_em"] == novos[0]["liberacao"]
+        and (novos[0]["venda_em"].year, novos[0]["venda_em"].month)
+        == (_dia(10).year, _dia(10).month),
         f"15: +15 fora do primeiro repasse aberto {novos[0]}",
     )
     # "Nada" → 300 em duas chamadas simultâneas → um complemento só
@@ -2613,7 +2907,10 @@ def c15_alterar_devolucao() -> None:
     for f in fios:
         f.join(timeout=120)
     codigos = sorted(x.status_code for x in respostas)
-    _garante(codigos in ([200, 200], [200, 409]), f"15 simultâneo: {codigos} {[_erro(x) for x in respostas]}")
+    _garante(
+        codigos in ([200, 200], [200, 409]),
+        f"15 simultâneo: {codigos} {[_erro(x) for x in respostas]}",
+    )
     for x in respostas:
         if x.status_code == 409:
             _garante(_codigo(x) == "tente_de_novo", f"15 simultâneo: código {_erro(x)}")
@@ -2632,14 +2929,25 @@ def c16_comprovante_no_cancelado() -> None:
     _igual(_soma_vivas(ex["ev"]), 27, "16: comissão do retido")
     _igual(_bv_planilha(ex["ev"], _mes_evento(ex["ev"]))[0]["amount"], 60, "16: BV do retido")
     r = _post_comprovante("cast", ex["ev"], 50)
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"16 CASTING comprovante → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"16 CASTING comprovante → {r.status_code} {_erro(r)}",
+    )
     r = _alterar_devolucao(ex["ev"], 700, apelido="cast")
     _garante(r.status_code == 403, f"16 CASTING no PATCH → {r.status_code}")
     # pago abaixo do devolvido
-    pagamentos = _no_banco("SELECT id FROM event_payments WHERE event_id = :i ORDER BY id", i=ex["ev"])
+    pagamentos = _no_banco(
+        "SELECT id FROM event_payments WHERE event_id = :i ORDER BY id", i=ex["ev"]
+    )
     r = _cliente("sa").delete(ROTAS["comprovante_um"].format(id=pagamentos[0][0]))
-    _garante(r.status_code == 409 and _codigo(r) == "pago_abaixo_do_devolvido", f"16 abaixo do devolvido → {r.status_code} {_erro(r)}")
-    _garante(len(_no_banco("SELECT id FROM event_payments WHERE event_id = :i", i=ex["ev"])) == 2, "16: excluiu o comprovante")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "pago_abaixo_do_devolvido",
+        f"16 abaixo do devolvido → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        len(_no_banco("SELECT id FROM event_payments WHERE event_id = :i", i=ex["ev"])) == 2,
+        "16: excluiu o comprovante",
+    )
 
 
 def c16_variante_paid_amount() -> None:
@@ -2650,9 +2958,19 @@ def c16_variante_paid_amount() -> None:
         ROTAS["planilha_status"],
         json={"item_type": "bv", "item_id": item["id"], "status": "pago", "valor_esperado": 99},
     )
-    _garante(r.status_code == 409 and _codigo(r) == "valor_mudou", f"16 divergente → {r.status_code} {_erro(r)}")
-    _garante(re.search(r"(?<![\d.,])40(?:,00)?(?![\d])", _erro(r).get("message") or ""), f"16 divergente: sem o valor atual: {_erro(r)}")
-    _garante(_no_banco("SELECT bv_payment_status FROM event_acrescimos WHERE id = :i", i=ex["bv"])[0][0] in (None, "nao_pago"), "16: o divergente gravou")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "valor_mudou",
+        f"16 divergente → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        re.search(r"(?<![\d.,])40(?:,00)?(?![\d])", _erro(r).get("message") or ""),
+        f"16 divergente: sem o valor atual: {_erro(r)}",
+    )
+    _garante(
+        _no_banco("SELECT bv_payment_status FROM event_acrescimos WHERE id = :i", i=ex["bv"])[0][0]
+        in (None, "nao_pago"),
+        "16: o divergente gravou",
+    )
     r = _cliente("fin").post(
         ROTAS["planilha_status"],
         json={"item_type": "bv", "item_id": item["id"], "status": "pago", "valor_esperado": 40},
@@ -2662,16 +2980,32 @@ def c16_variante_paid_amount() -> None:
     itens = _bv_planilha(ex["ev"], _mes_evento(ex["ev"]))
     _garante(len(itens) == 1, f"16 variante: acerto ao parceiro {itens}")
     _igual(itens[0]["amount"], 40, "16 variante: BV pago fica em 40")
-    r = _cliente("fin").post(ROTAS["planilha_status"], json={"item_type": "bv", "item_id": item["id"], "status": "nao_pago"})
+    r = _cliente("fin").post(
+        ROTAS["planilha_status"],
+        json={"item_type": "bv", "item_id": item["id"], "status": "nao_pago"},
+    )
     _garante(r.status_code == 200, f"16 desfazer → {r.status_code}")
-    _igual(_bv_planilha(ex["ev"], _mes_evento(ex["ev"]))[0]["amount"], 60, "16 variante: desfeito volta a 60")
+    _igual(
+        _bv_planilha(ex["ev"], _mes_evento(ex["ev"]))[0]["amount"],
+        60,
+        "16 variante: desfeito volta a 60",
+    )
     tudo = _exemplo_padrao("16 não a pagar")
     _cancelar_ok(tudo["ev"], _corpo_cancelar("tudo", 1000))
     r = _cliente("fin").post(
         ROTAS["planilha_status"], json={"item_type": "bv", "item_id": tudo["bv"], "status": "pago"}
     )
-    _garante(r.status_code == 409 and _codigo(r) == "bv_nao_esta_a_pagar", f"16 não a pagar → {r.status_code} {_erro(r)}")
-    _garante(_no_banco("SELECT bv_payment_status FROM event_acrescimos WHERE id = :i", i=tudo["bv"])[0][0] in (None, "nao_pago"), "16: o não a pagar gravou")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "bv_nao_esta_a_pagar",
+        f"16 não a pagar → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _no_banco("SELECT bv_payment_status FROM event_acrescimos WHERE id = :i", i=tudo["bv"])[0][
+            0
+        ]
+        in (None, "nao_pago"),
+        "16: o não a pagar gravou",
+    )
 
 
 def c16_vivo() -> None:
@@ -2683,19 +3017,32 @@ def c16_vivo() -> None:
     _agrupar(principal["ev"], dia)
     for ev in (avulso["ev"], dia):
         r = _post_comprovante("com", ev, 100)
-        _garante(r.status_code == 201 and not _codigo(r), f"16-vivo comprovante {ev} → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 201 and not _codigo(r),
+            f"16-vivo comprovante {ev} → {r.status_code} {_erro(r)}",
+        )
         r = _cliente("com").post(
             ROTAS["reembolso"].format(id=ev),
             data={"description": f"{PREFIX}reembolso", "amount": "50", "file": _arquivo("nf.pdf")},
             content_type="multipart/form-data",
         )
-        _garante(r.status_code == 201 and not _codigo(r), f"16-vivo reembolso {ev} → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 201 and not _codigo(r),
+            f"16-vivo reembolso {ev} → {r.status_code} {_erro(r)}",
+        )
     for ev, valor in ((avulso["ev"], 500), (principal["ev"], 200)):
         r = _cliente("com").put(
             ROTAS["parcelas"].format(id=ev),
-            json={"items": [{"due_date": (_hoje_sp() + timedelta(days=10)).isoformat(), "amount": valor}]},
+            json={
+                "items": [
+                    {"due_date": (_hoje_sp() + timedelta(days=10)).isoformat(), "amount": valor}
+                ]
+            },
         )
-        _garante(r.status_code == 200 and not _codigo(r), f"16-vivo parcela {ev} → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 200 and not _codigo(r),
+            f"16-vivo parcela {ev} → {r.status_code} {_erro(r)}",
+        )
     # Sem abrir Comissões nem a Planilha (o resync regravaria a linha e esconderia o erro): a linha
     # semeada (2.000 × 5% = 100) fica, e é também a `_event_commission` de hoje.
     with app.app_context():
@@ -2741,14 +3088,21 @@ def c18_gastos_extras() -> None:
         "SELECT disbursement_type, supplier_name, supplier_pix, approved_with_edits FROM special_expenses WHERE id = :i",
         i=dev,
     )[0]
-    _garante(linha[0] == "cliente" and linha[1] and linha[2] == PIX and not linha[3], f"18 Salvar: {linha}")
+    _garante(
+        linha[0] == "cliente" and linha[1] and linha[2] == PIX and not linha[3],
+        f"18 Salvar: {linha}",
+    )
     r = _patch_gasto(dev, supplier_pix="novo-pix@exemplo.test")
     _garante(r.status_code == 200, f"18 corrigir PIX → {r.status_code}")
     _garante(
-        _no_banco("SELECT supplier_pix FROM special_expenses WHERE id = :i", i=dev)[0][0] == "novo-pix@exemplo.test",
+        _no_banco("SELECT supplier_pix FROM special_expenses WHERE id = :i", i=dev)[0][0]
+        == "novo-pix@exemplo.test",
         "18: o PIX não foi trocado",
     )
-    intacta = _no_banco("SELECT amount, expense_date, category, event_id, status FROM special_expenses WHERE id = :i", i=dev)[0]
+    intacta = _no_banco(
+        "SELECT amount, expense_date, category, event_id, status FROM special_expenses WHERE id = :i",
+        i=dev,
+    )[0]
     outro = _evento("18 outro", venda=None)
     for campo, valor in (
         ("amount", 500),
@@ -2758,24 +3112,37 @@ def c18_gastos_extras() -> None:
     ):
         r = _patch_gasto(dev, **{campo: valor})
         _garante(
-            r.status_code == 409 and _codigo(r) == "devolucao_travada" and _erro(r).get("event_id") == ex["ev"],
+            r.status_code == 409
+            and _codigo(r) == "devolucao_travada"
+            and _erro(r).get("event_id") == ex["ev"],
             f"18 mudar {campo} → {r.status_code} {_erro(r)}",
         )
     for rota in ("gasto_aprovar", "gasto_rejeitar"):
         r = _cliente("fin").post(ROTAS[rota].format(id=dev), json={"motivo": "verify"})
         _garante(
-            r.status_code == 409 and _codigo(r) == "devolucao_travada" and _erro(r).get("event_id") == ex["ev"],
+            r.status_code == 409
+            and _codigo(r) == "devolucao_travada"
+            and _erro(r).get("event_id") == ex["ev"],
             f"18 {rota} → {r.status_code} {_erro(r)}",
         )
     r = _cliente("fin").delete(ROTAS["gasto"].format(id=dev))
     _garante(
-        r.status_code == 409 and _codigo(r) == "devolucao_travada" and _erro(r).get("event_id") == ex["ev"],
+        r.status_code == 409
+        and _codigo(r) == "devolucao_travada"
+        and _erro(r).get("event_id") == ex["ev"],
         f"18 excluir → {r.status_code} {_erro(r)}",
     )
     r = _cliente("fin").post(ROTAS["gasto_vincular"].format(id=dev), json={"event_id": outro})
-    _garante(r.status_code == 409 and _codigo(r) == "devolucao_travada", f"18 vincular → {r.status_code} {_erro(r)}")
     _garante(
-        _no_banco("SELECT amount, expense_date, category, event_id, status FROM special_expenses WHERE id = :i", i=dev)[0] == intacta,
+        r.status_code == 409 and _codigo(r) == "devolucao_travada",
+        f"18 vincular → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _no_banco(
+            "SELECT amount, expense_date, category, event_id, status FROM special_expenses WHERE id = :i",
+            i=dev,
+        )[0]
+        == intacta,
         "18: um 409 travado gravou na devolução",
     )
     r = _cliente("fin").post(
@@ -2792,14 +3159,19 @@ def c18_gastos_extras() -> None:
         },
         content_type="multipart/form-data",
     )
-    _garante(r.status_code == 400 and "disbursement_type" in (_erro(r).get("fields") or {}), f"18 POST cliente → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 400 and "disbursement_type" in (_erro(r).get("fields") or {}),
+        f"18 POST cliente → {r.status_code} {_erro(r)}",
+    )
     comum = _gasto_comum(None, 30)
     r = _patch_gasto(comum, disbursement_type="cliente")
     _garante(r.status_code == 400, f"18 PATCH fornecedor → cliente → {r.status_code} {_erro(r)}")
     vivo = _evento("18 vivo", venda=None)
     viva = _devolucao_avulsa(vivo, 80)
     r = _patch_gasto(viva, amount=90)
-    _garante(r.status_code == 200, f"18 devolução de evento vivo editável → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 200, f"18 devolução de evento vivo editável → {r.status_code} {_erro(r)}"
+    )
     # 18-inverso
     retido = _resumo_api(ex["ev"])["retido"]
     comum_ligado = _gasto_comum(ex["ev"], 40)
@@ -2807,12 +3179,16 @@ def c18_gastos_extras() -> None:
     for gid in (comum_ligado, multa):
         r = _patch_gasto(gid, category=CATEGORIA_DEVOLUCAO)
         _garante(
-            r.status_code == 409 and _codigo(r) == "devolucao_travada" and "category" in (_erro(r).get("fields") or {}),
+            r.status_code == 409
+            and _codigo(r) == "devolucao_travada"
+            and "category" in (_erro(r).get("fields") or {}),
             f"18-inverso categoria {gid} → {r.status_code} {_erro(r)}",
         )
     r = _patch_gasto(viva, event_id=ex["ev"])
     _garante(
-        r.status_code == 409 and _codigo(r) == "devolucao_travada" and "event_id" in (_erro(r).get("fields") or {}),
+        r.status_code == 409
+        and _codigo(r) == "devolucao_travada"
+        and "event_id" in (_erro(r).get("fields") or {}),
         f"18-inverso vínculo → {r.status_code} {_erro(r)}",
     )
     _igual(_resumo_api(ex["ev"])["retido"], retido, "18-inverso: o retido mudou")
@@ -2846,15 +3222,26 @@ def c19_orcamento_excluir_acrescimos() -> None:
     antes = _retrato_tabelas([ex["ev"]])
     orc_outro = _orcamento_de("vend2")  # de outro autor: prova que o 409 vem antes da autoria
     for apelido in ("sa", "com", "fin"):
-        r = _cliente(apelido).patch(ROTAS["orcamento"].format(id=ex["ev"]), json={"orcamento_history_id": orc_outro})
-        _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"19 orçamento {apelido} → {r.status_code} {_erro(r)}")
+        r = _cliente(apelido).patch(
+            ROTAS["orcamento"].format(id=ex["ev"]), json={"orcamento_history_id": orc_outro}
+        )
+        _garante(
+            r.status_code == 409 and _codigo(r) == "cancelado",
+            f"19 orçamento {apelido} → {r.status_code} {_erro(r)}",
+        )
     r = _cliente("sa").delete(ROTAS["excluir"].format(id=ex["ev"]))
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"19 DELETE Superadmin → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"19 DELETE Superadmin → {r.status_code} {_erro(r)}",
+    )
     r = _cliente("com").delete(ROTAS["excluir"].format(id=ex["ev"]))
     _garante(r.status_code == 403, f"19 DELETE COMERCIAL → {r.status_code}")
     for apelido in ("com", "fin"):
         r = _cliente(apelido).put(ROTAS["acrescimos"].format(id=ex["ev"]), json={"items": []})
-        _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"19 acréscimos {apelido} → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 409 and _codigo(r) == "cancelado",
+            f"19 acréscimos {apelido} → {r.status_code} {_erro(r)}",
+        )
     _garante(_retrato_tabelas([ex["ev"]]) == antes, "19: algo mudou")
 
 
@@ -2869,15 +3256,26 @@ def c25_payload() -> None:
     _igual(res["comissao"]["retido"], 18, "25: comissão do retido")
     _igual(res["bvs"][0]["conta"], 40, "25: BV do retido")
     _igual(res.get("imposto"), 64, "25: imposto para quem tem show_financeiro")
-    _garante(res["devolucoes"][0].get("pix") == PIX and res["bvs"][0].get("pix") == PIX, f"25: PIX ausente para quem tem show_financeiro {res}")
+    _garante(
+        res["devolucoes"][0].get("pix") == PIX and res["bvs"][0].get("pix") == PIX,
+        f"25: PIX ausente para quem tem show_financeiro {res}",
+    )
     _garante("kpi" not in sa or sa.get("kpi") is None, "25: `kpi` presente no cancelado")
-    _garante(sa["flags"].get("can_edit_pagamentos") is True, "25: can_edit_pagamentos do Superadmin")
+    _garante(
+        sa["flags"].get("can_edit_pagamentos") is True, "25: can_edit_pagamentos do Superadmin"
+    )
     com = _detalhe("com", ex["ev"])
     res_c = com["event"].get("cancelamento")
     _garante(res_c is not None, "25: COMERCIAL sem o bloco (show_comercial)")
-    _garante(not any(d.get("pix") for d in res_c.get("devolucoes", [])), "25: PIX para quem não tem show_financeiro")
+    _garante(
+        not any(d.get("pix") for d in res_c.get("devolucoes", [])),
+        "25: PIX para quem não tem show_financeiro",
+    )
     for chave in ("comissao", "bvs", "imposto", "taxa"):
-        _garante(res_c.get(chave) is None, f"25: `{chave}` para quem não tem show_financeiro: {res_c.get(chave)}")
+        _garante(
+            res_c.get(chave) is None,
+            f"25: `{chave}` para quem não tem show_financeiro: {res_c.get(chave)}",
+        )
     cast = _detalhe("cast", ex["ev"])
     _garante(not cast["event"].get("cancelamento"), "25: CASTING viu o bloco")
     vivo = _exemplo_padrao("25 vivo")
@@ -2885,8 +3283,12 @@ def c25_payload() -> None:
     com_v = _detalhe("com", vivo["ev"]).get("venda") or {}
     _garante(sa_v.get("pode_mudar_taxa") is True, "25 vivo: Superadmin sem pode_mudar_taxa")
     _garante(com_v.get("pode_mudar_taxa") is False, "25 vivo: COMERCIAL com pode_mudar_taxa")
-    _garante(sa_v.get("pode_trocar_vendedor") is True, "25 vivo: Superadmin sem pode_trocar_vendedor")
-    _garante(com_v.get("pode_trocar_vendedor") is False, "25 vivo: COMERCIAL troca vendedor já gravado")
+    _garante(
+        sa_v.get("pode_trocar_vendedor") is True, "25 vivo: Superadmin sem pode_trocar_vendedor"
+    )
+    _garante(
+        com_v.get("pode_trocar_vendedor") is False, "25 vivo: COMERCIAL troca vendedor já gravado"
+    )
 
 
 def c28_rbac() -> None:
@@ -2907,7 +3309,10 @@ def c28_rbac() -> None:
     r = _cliente("fin").post(ROTAS["cancelar"].format(id=ex["ev"]), json=_corpo_cancelar())
     _garante(r.status_code == 403, f"28 FINANCEIRO cancela → {r.status_code}")
     r = _post_comprovante("fin", cancelado["ev"], 10)
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"28 FINANCEIRO comprovante → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"28 FINANCEIRO comprovante → {r.status_code} {_erro(r)}",
+    )
     for apelido in ("mkt", "ens", "a3d"):
         r = _cliente(apelido).get(ROTAS["cancelamentos"])
         _garante(r.status_code == 403, f"28 {apelido} na página → {r.status_code}")
@@ -2915,9 +3320,15 @@ def c28_rbac() -> None:
     c.post(ROTAS["impersonate"], json={"role": RoleName.COMERCIAL})
     corpo = c.get(ROTAS["detalhe"].format(id=cancelado["ev"])).get_json()
     _garante(not corpo["flags"].get("can_delete"), "28 Ver como: can_delete verdadeiro")
-    _garante(not corpo["flags"].get("can_edit_pagamentos"), "28 Ver como: can_edit_pagamentos verdadeiro no cancelado")
+    _garante(
+        not corpo["flags"].get("can_edit_pagamentos"),
+        "28 Ver como: can_edit_pagamentos verdadeiro no cancelado",
+    )
     r = c.post(ROTAS["cancelar"].format(id=ex["ev"]), json=_corpo_cancelar())
-    _garante(r.status_code == 200, f"28 Ver como: a API recusou o papel real → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 200,
+        f"28 Ver como: a API recusou o papel real → {r.status_code} {_erro(r)}",
+    )
 
 
 def c31_google() -> None:
@@ -2925,17 +3336,24 @@ def c31_google() -> None:
     google.falhar_delete.add(estado["eventos"][falha["ev"]])
     corpo = _cancelar_ok(falha["ev"])
     _garante(corpo.get("aviso"), "31: falha do Google sem aviso")
-    _garante("duble" not in (corpo.get("aviso") or "").lower(), "31: o aviso traz o texto cru do erro")
+    _garante(
+        "duble" not in (corpo.get("aviso") or "").lower(), "31: o aviso traz o texto cru do erro"
+    )
     _igual(corpo["resumo"]["retido"], 400, "31: resumo certo apesar da falha")
     travado = _exemplo_padrao("31 trava")
     app.config[TRAVA] = True
     marco = google.marco()
     corpo = _cancelar_ok(travado["ev"])
-    _garante(not google.chamadas[marco:], f"31: com a trava, o Google foi chamado: {google.chamadas[marco:]}")
+    _garante(
+        not google.chamadas[marco:],
+        f"31: com a trava, o Google foi chamado: {google.chamadas[marco:]}",
+    )
     _garante(corpo.get("aviso"), "31: com a trava, sem aviso")
     app.config[TRAVA] = False
     gid = estado["eventos"][falha["ev"]]
-    antes = _no_banco("SELECT title, start_at, end_at, location FROM calendar_events WHERE id = :i", i=falha["ev"])
+    antes = _no_banco(
+        "SELECT title, start_at, end_at, location FROM calendar_events WHERE id = :i", i=falha["ev"]
+    )
     google.itens[gid]["summary"] = "(CORP) V306 31 MUDOU NO GOOGLE"
     google.itens[gid]["location"] = "Outro lugar, 2"
     _remocoes.clear()
@@ -2944,7 +3362,11 @@ def c31_google() -> None:
     _esperar_threads()
     _garante(r.status_code < 500, f"31 Sincronizar → {r.status_code}")
     _garante(
-        _no_banco("SELECT title, start_at, end_at, location FROM calendar_events WHERE id = :i", i=falha["ev"]) == antes,
+        _no_banco(
+            "SELECT title, start_at, end_at, location FROM calendar_events WHERE id = :i",
+            i=falha["ev"],
+        )
+        == antes,
         "31: o Sincronizar regravou o cancelado com o que veio do Google",
     )
     _garante(not _remocoes, "31: o Sincronizar mandou e-mail de remoção do cancelado")
@@ -2968,7 +3390,10 @@ def c32_pago_maior_e_sem_valor() -> None:
     _comprovante(sem_valor, None)
     _comprovante(sem_valor, 500)
     imp = _cliente("sa").get(ROTAS["impacto"].format(id=sem_valor)).get_json()
-    _garante(imp.get("comprovantes_sem_valor") == 1, f"32: comprovantes_sem_valor {imp.get('comprovantes_sem_valor')}")
+    _garante(
+        imp.get("comprovantes_sem_valor") == 1,
+        f"32: comprovantes_sem_valor {imp.get('comprovantes_sem_valor')}",
+    )
     _igual(imp.get("pago"), 500, "32: comprovante sem valor conta zero")
 
 
@@ -2976,10 +3401,20 @@ def c34_excluir_usuario() -> None:
     ex = _exemplo_padrao("34 vendedor", bv=False)
     _cancelar_ok(ex["ev"])
     novo = _usuario("vend34", RoleName.COMERCIAL)
-    _no_banco_escrever("UPDATE event_cancellations SET seller_id = :u WHERE event_id = :e", u=novo["id"], e=ex["ev"])
+    _no_banco_escrever(
+        "UPDATE event_cancellations SET seller_id = :u WHERE event_id = :e",
+        u=novo["id"],
+        e=ex["ev"],
+    )
     r = _cliente("sa").delete(f"/api/admin/users/{novo['id']}")
-    _garante(r.status_code in (400, 409) and "cancelamento" in (_erro(r).get("message") or "").lower(), f"34 → {r.status_code} {_erro(r)}")
-    _garante(_no_banco("SELECT 1 FROM users WHERE id = :i", i=novo["id"]), "34: o vendedor congelado foi apagado")
+    _garante(
+        r.status_code in (400, 409) and "cancelamento" in (_erro(r).get("message") or "").lower(),
+        f"34 → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _no_banco("SELECT 1 FROM users WHERE id = :i", i=novo["id"]),
+        "34: o vendedor congelado foi apagado",
+    )
     benef = _usuario("benef34", RoleName.COMERCIAL)
     _no_banco_escrever(
         "UPDATE event_cancellations SET seller_id = :v, commission_seller_id = :b WHERE event_id = :e",
@@ -2988,8 +3423,14 @@ def c34_excluir_usuario() -> None:
         e=ex["ev"],
     )
     r = _cliente("sa").delete(f"/api/admin/users/{benef['id']}")
-    _garante(r.status_code in (400, 409) and "cancelamento" in (_erro(r).get("message") or "").lower(), f"34 variante → {r.status_code} {_erro(r)}")
-    _garante(_no_banco("SELECT 1 FROM users WHERE id = :i", i=benef["id"]), "34: o beneficiário congelado foi apagado")
+    _garante(
+        r.status_code in (400, 409) and "cancelamento" in (_erro(r).get("message") or "").lower(),
+        f"34 variante → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _no_banco("SELECT 1 FROM users WHERE id = :i", i=benef["id"]),
+        "34: o beneficiário congelado foi apagado",
+    )
 
 
 def c36_devolucao_na_planilha() -> None:
@@ -3003,18 +3444,31 @@ def c36_devolucao_na_planilha() -> None:
     for status in ("no_banco", "pago", "nao_pago"):
         r = _cliente("fin").post(
             ROTAS["planilha_status"],
-            json={"item_type": "expense", "item_id": dev["id"], "status": status, "valor_esperado": 600},
+            json={
+                "item_type": "expense",
+                "item_id": dev["id"],
+                "status": status,
+                "valor_esperado": 600,
+            },
         )
         _garante(r.status_code == 200, f"36 marcar {status} → {r.status_code} {_erro(r)}")
         _garante(
-            _no_banco("SELECT payment_status FROM special_expenses WHERE id = :i", i=dev["id"])[0][0] == status,
+            _no_banco("SELECT payment_status FROM special_expenses WHERE id = :i", i=dev["id"])[0][
+                0
+            ]
+            == status,
             f"36: a trava alcançou o status de pagamento ({status})",
         )
     # paga, a primeira não absorve: o "Alterar devolução" para 900 faz nascer um complemento de 300,
     # no mês em que nasce (o dia 10 do mês seguinte)
     r = _cliente("fin").post(
         ROTAS["planilha_status"],
-        json={"item_type": "expense", "item_id": dev["id"], "status": "pago", "valor_esperado": 600},
+        json={
+            "item_type": "expense",
+            "item_id": dev["id"],
+            "status": "pago",
+            "valor_esperado": 600,
+        },
     )
     _garante(r.status_code == 200, f"36 marcar pago → {r.status_code} {_erro(r)}")
     seguinte = _mes_seguinte(_hoje_sp())
@@ -3024,9 +3478,19 @@ def c36_devolucao_na_planilha() -> None:
     devs = _devolucoes(ex["ev"])
     _garante(sum(Decimal(d["valor"]) for d in devs) == 900, f"36: total {devs}")
     novas = [d for d in devs if d["id"] != dev["id"]]
-    _garante(len(novas) == 1 and q(novas[0]["valor"]) == q(300) and novas[0]["pagamento"] == "nao_pago", f"36: complemento {novas}")
-    _garante(_mes(novas[0]["data"]) == _mes(seguinte), f"36: complemento fora do mês em que nasce ({novas[0]['data']})")
-    itens = [i for i in _planilha(_mes(seguinte)) if i["type"] == "expense" and int(i["id"]) == novas[0]["id"]]
+    _garante(
+        len(novas) == 1 and q(novas[0]["valor"]) == q(300) and novas[0]["pagamento"] == "nao_pago",
+        f"36: complemento {novas}",
+    )
+    _garante(
+        _mes(novas[0]["data"]) == _mes(seguinte),
+        f"36: complemento fora do mês em que nasce ({novas[0]['data']})",
+    )
+    itens = [
+        i
+        for i in _planilha(_mes(seguinte))
+        if i["type"] == "expense" and int(i["id"]) == novas[0]["id"]
+    ]
     _garante(itens, "36: o complemento não aparece na Planilha do mês em que nasce")
 
 
@@ -3052,7 +3516,12 @@ def c32_dre_retido_inteiro() -> None:
     ev = _evento("32 dre")
     _comprovante(ev, 2500)
     _cancelar_ok(ev, _corpo_cancelar("nada", None, nome=None, pix=None))
-    _igual(_delta(antes, _dre(inicio, fim)["dre"]["total"], "receita_bruta"), 2500, "32: DRE com o retido inteiro")
+    _igual(
+        _delta(antes, _dre(inicio, fim)["dre"]["total"], "receita_bruta"),
+        2500,
+        "32: DRE com o retido inteiro",
+    )
+
 
 def _mes_corrente() -> tuple[date, date]:
     h = _hoje_sp()
@@ -3158,7 +3627,15 @@ def _dre_main(inicio: date, fim: date) -> dict:
     )
 
 
-_CHAVES_DRE = ("receita_bruta", "impostos", "cpv", "comissoes", "gastos_extras", "resultado_liquido", "retido_cancelamentos")
+_CHAVES_DRE = (
+    "receita_bruta",
+    "impostos",
+    "cpv",
+    "comissoes",
+    "gastos_extras",
+    "resultado_liquido",
+    "retido_cancelamentos",
+)
 
 
 def c20_dre_do_mes_do_cancelamento() -> None:
@@ -3176,24 +3653,43 @@ def c20_dre_do_mes_do_cancelamento() -> None:
         _igual(_delta(a, d, "comissoes"), 18, f"20 {visao}: comissões")
         _igual(_delta(a, d, "gastos_extras"), 0, f"20 {visao}: gastos extras sem a devolução")
         _igual(_delta(a, d, "resultado_liquido"), 342, f"20 {visao}: resultado")
-        _igual(d.get("retido_cancelamentos"), Decimal(str(a.get("retido_cancelamentos") or 0)) + 400, f"20 {visao}: linha do retido")
-    _igual(_delta(antes["projetado"], depois["projetado"], "resultado_liquido"), 0, "20: Projetado mudou")
+        _igual(
+            d.get("retido_cancelamentos"),
+            Decimal(str(a.get("retido_cancelamentos") or 0)) + 400,
+            f"20 {visao}: linha do retido",
+        )
+    _igual(
+        _delta(antes["projetado"], depois["projetado"], "resultado_liquido"),
+        0,
+        "20: Projetado mudou",
+    )
     jinja = _dre_jinja(inicio, fim)
-    for visao, chave in (("realizado", "drg_realizado"), ("projetado", "drg_projetado"), ("total", "drg_total")):
+    for visao, chave in (
+        ("realizado", "drg_realizado"),
+        ("projetado", "drg_projetado"),
+        ("total", "drg_total"),
+    ):
         for k in _CHAVES_DRE:
             _garante(k in jinja[chave], f"20: o Jinja ({visao}) não tem {k}")
             _igual(jinja[chave][k], depois[visao][k], f"20: API × Jinja ({visao}.{k})")
     depois_main = _dre_main(inicio, fim)
     _igual(
-        Decimal(str(depois_main["total"]["resultado_liquido"])) - Decimal(str(antes_main["total"]["resultado_liquido"])),
+        Decimal(str(depois_main["total"]["resultado_liquido"]))
+        - Decimal(str(antes_main["total"]["resultado_liquido"])),
         -600,
         "20 mutação: a main tem de dar −600",
     )
     # num mês sem cancelado, as chaves estão presentes e o painel vem com quantidade 0
     vazio = _dre(date(2047, 1, 1), date(2047, 1, 31))
     for visao in ("realizado", "projetado", "total"):
-        _garante("retido_cancelamentos" in vazio["dre"][visao] and "n_cancelados" in vazio["dre"][visao], f"20: chaves ausentes em {visao}")
-    _garante((vazio["paineis"].get("cancelamentos") or {}).get("quantidade") == 0, "20: paineis.cancelamentos sem quantidade 0")
+        _garante(
+            "retido_cancelamentos" in vazio["dre"][visao] and "n_cancelados" in vazio["dre"][visao],
+            f"20: chaves ausentes em {visao}",
+        )
+    _garante(
+        (vazio["paineis"].get("cancelamentos") or {}).get("quantidade") == 0,
+        "20: paineis.cancelamentos sem quantidade 0",
+    )
 
 
 def _tendencia(corpo: dict) -> dict:
@@ -3211,7 +3707,9 @@ def c21_mes_do_evento_tendencia_e_variantes() -> None:
     inicio, fim = _mes_corrente()
     # mês do evento: antes do ato a venda viva está lá; depois, nada do evento fica (−2.000, −BV, −comissão)
     ex = _exemplo_padrao("21 nota", nota=True)
-    mes_ev = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=ex["ev"])[0][0].date()
+    mes_ev = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=ex["ev"])[0][
+        0
+    ].date()
     ini_ev = date(mes_ev.year, mes_ev.month, 1)
     fim_ev = _mes_seguinte(ini_ev) - timedelta(days=1)
     antes_ev = _dre(ini_ev, fim_ev)["dre"]["total"]
@@ -3221,9 +3719,17 @@ def c21_mes_do_evento_tendencia_e_variantes() -> None:
     _igual(_delta(antes, depois["dre"]["total"], "impostos"), 64, "21: imposto gravado")
     _igual(_delta(antes, depois["dre"]["total"], "resultado_liquido"), 278, "21: com nota")
     depois_ev = _dre(ini_ev, fim_ev)["dre"]["total"]
-    _igual(_delta(antes_ev, depois_ev, "receita_bruta"), -2000, "21: a venda do cancelado ficou no mês do evento")
+    _igual(
+        _delta(antes_ev, depois_ev, "receita_bruta"),
+        -2000,
+        "21: a venda do cancelado ficou no mês do evento",
+    )
     _igual(_delta(antes_ev, depois_ev, "cpv"), -200, "21: o BV do cancelado ficou no mês do evento")
-    _igual(_delta(antes_ev, depois_ev, "comissoes"), -90, "21: a comissão do cancelado ficou no mês do evento")
+    _igual(
+        _delta(antes_ev, depois_ev, "comissoes"),
+        -90,
+        "21: a comissão do cancelado ficou no mês do evento",
+    )
     # Tendência: sem os 2.000 no mês do evento e com +400 no do cancelamento (aqui, o mesmo mês)
     rotulo = f"{inicio.month:02d}/{str(inicio.year)[2:]}"
     tend = _evento("21 tendência", inicio=_dia_do_mes_corrente())
@@ -3232,8 +3738,16 @@ def c21_mes_do_evento_tendencia_e_variantes() -> None:
     t_antes = _tendencia(_dre(inicio, fim))[rotulo]
     _cancelar_ok(tend, _corpo_cancelar("parte", 600))
     t_depois = _tendencia(_dre(inicio, fim))[rotulo]
-    _igual(Decimal(str(t_depois["receita"])) - Decimal(str(t_antes["receita"])), -1600, "21: Tendência sem os 2.000 e com +400")
-    _igual(Decimal(str(t_depois.get("retido") or 0)) - Decimal(str(t_antes.get("retido") or 0)), 400, "21: Tendência sem o retido")
+    _igual(
+        Decimal(str(t_depois["receita"])) - Decimal(str(t_antes["receita"])),
+        -1600,
+        "21: Tendência sem os 2.000 e com +400",
+    )
+    _igual(
+        Decimal(str(t_depois.get("retido") or 0)) - Decimal(str(t_antes.get("retido") or 0)),
+        400,
+        "21: Tendência sem o retido",
+    )
     # devolução alterada para 800 (sem imposto): retido 200, BV 20, comissão 9, resultado +171 no mesmo mês
     alt = _exemplo_padrao("21 alterar")
     antes = _dre(inicio, fim)["dre"]["total"]
@@ -3252,11 +3766,17 @@ def c21_mes_do_evento_tendencia_e_variantes() -> None:
     _gasto_comum(ex["ev"], 150, categoria=CATEGORIA_MULTA)
     vivo = _evento("21 vivo", venda=None)
     _devolucao_avulsa(vivo, 70)
-    _igual(_delta(antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"), 220, "21: multa e devolução viva nos gastos")
+    _igual(
+        _delta(antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"),
+        220,
+        "21: multa e devolução viva nos gastos",
+    )
     # Tudo com BV 200 pago: retido 0, comissão 0, custo +200
     antes = _dre(inicio, fim)["dre"]["total"]
     tudo = _exemplo_padrao("21 tudo bv pago")
-    _no_banco_escrever("UPDATE event_acrescimos SET bv_payment_status = 'pago' WHERE id = :i", i=tudo["bv"])
+    _no_banco_escrever(
+        "UPDATE event_acrescimos SET bv_payment_status = 'pago' WHERE id = :i", i=tudo["bv"]
+    )
     _cancelar_ok(tudo["ev"], _corpo_cancelar("tudo", 1000))
     d = _dre(inicio, fim)["dre"]["total"]
     _igual(_delta(antes, d, "receita_bruta"), 0, "21 Tudo: retido")
@@ -3267,7 +3787,11 @@ def c21_mes_do_evento_tendencia_e_variantes() -> None:
     virtual = _evento("21 virtual", tipo="VIRTUAL", vendedor=None, taxa=None)
     _comprovante(virtual, 300)
     _cancelar_ok(virtual, {"motivo": "verify 306 virtual"})
-    _igual(_delta(antes, _dre(inicio, fim)["dre"]["total"], "receita_bruta"), 0, "21: virtual sem retido")
+    _igual(
+        _delta(antes, _dre(inicio, fim)["dre"]["total"], "receita_bruta"),
+        0,
+        "21: virtual sem retido",
+    )
 
 
 def c21_satelite() -> None:
@@ -3277,8 +3801,16 @@ def c21_satelite() -> None:
     g = _grupo("21 satélite", dias=2)
     _cancelar_ok(g["principal"], _corpo_cancelar("parte", 900, alcance="todos"))
     d = _dre(inicio, fim)["dre"]["total"]
-    _igual(_delta(antes, d, "receita_bruta"), 600, "21 satélite: retido contado mais de uma vez (ou o satélite trouxe retido)")
-    _igual(Decimal(str(d.get("n_cancelados") or 0)) - Decimal(str(antes.get("n_cancelados") or 0)), 1, "21 satélite: n_cancelados conta o satélite")
+    _igual(
+        _delta(antes, d, "receita_bruta"),
+        600,
+        "21 satélite: retido contado mais de uma vez (ou o satélite trouxe retido)",
+    )
+    _igual(
+        Decimal(str(d.get("n_cancelados") or 0)) - Decimal(str(antes.get("n_cancelados") or 0)),
+        1,
+        "21 satélite: n_cancelados conta o satélite",
+    )
 
 
 def _vendedor_no_top(lista, apelido: str) -> Decimal:
@@ -3297,42 +3829,106 @@ def c22_paineis() -> None:
     antes, antes_j = _dre(inicio, fim), _dre_jinja(inicio, fim)
     ex = _exemplo_padrao("22 painéis", nota=True, comissao="a_pagar", vendedor="vend22")
     with app.app_context():
-        db.session.add(EventInstallment(event_id=ex["ev"], due_date=_dia_do_mes_corrente().date(), amount=Decimal("500"), received=False))
+        db.session.add(
+            EventInstallment(
+                event_id=ex["ev"],
+                due_date=_dia_do_mes_corrente().date(),
+                amount=Decimal("500"),
+                received=False,
+            )
+        )
         db.session.add(EventInvoice(event_id=ex["ev"], amount=Decimal("2000"), status="a_emitir"))
         db.session.commit()
-    _garante([p for p in _dre(inicio, fim)["pendencias"]["recebimentos_previstos"] if p.get("event_id") == ex["ev"]], "22: a parcela do vivo não aparece (controle)")
+    _garante(
+        [
+            p
+            for p in _dre(inicio, fim)["pendencias"]["recebimentos_previstos"]
+            if p.get("event_id") == ex["ev"]
+        ],
+        "22: a parcela do vivo não aparece (controle)",
+    )
     # Nada: retido 1.000 (o pago inteiro), para o vendedor entrar no Top 5 do mês (três reais + os do verify)
     _cancelar_ok(ex["ev"], _corpo_cancelar("nada", None, nome=None, pix=None, imposto_retido=160))
     depois, depois_j = _dre(inicio, fim), _dre_jinja(inicio, fim)
-    _igual(depois["kpis"]["ticket_medio"], antes["kpis"]["ticket_medio"], "22: ticket médio mudou (API)")
+    _igual(
+        depois["kpis"]["ticket_medio"],
+        antes["kpis"]["ticket_medio"],
+        "22: ticket médio mudou (API)",
+    )
     _igual(depois_j["ticket_medio"], antes_j["ticket_medio"], "22: ticket médio mudou (Jinja)")
-    _igual(depois["paineis"]["a_receber_clientes"], antes["paineis"]["a_receber_clientes"], "22: a receber mudou (API)")
-    _igual(depois_j["a_receber_clientes"], antes_j["a_receber_clientes"], "22: a receber mudou (Jinja)")
+    _igual(
+        depois["paineis"]["a_receber_clientes"],
+        antes["paineis"]["a_receber_clientes"],
+        "22: a receber mudou (API)",
+    )
+    _igual(
+        depois_j["a_receber_clientes"], antes_j["a_receber_clientes"], "22: a receber mudou (Jinja)"
+    )
     rotulo = "Retido de cancelamentos"
-    for tela, a, d in (("API", antes["paineis"]["receita_por_tipo"], depois["paineis"]["receita_por_tipo"]), ("Jinja", antes_j["receita_por_tipo"], depois_j["receita_por_tipo"])):
-        _igual(Decimal(str((d or {}).get(rotulo, 0))) - Decimal(str((a or {}).get(rotulo, 0))), 1000, f"22: barra do retido ({tela})")
+    for tela, a, d in (
+        ("API", antes["paineis"]["receita_por_tipo"], depois["paineis"]["receita_por_tipo"]),
+        ("Jinja", antes_j["receita_por_tipo"], depois_j["receita_por_tipo"]),
+    ):
+        _igual(
+            Decimal(str((d or {}).get(rotulo, 0))) - Decimal(str((a or {}).get(rotulo, 0))),
+            1000,
+            f"22: barra do retido ({tela})",
+        )
+
     # Fator R e break-even saem do total da DRE, que já tem o retido na receita: a conta tem de bater
     # com o total de agora (o retido de 1.000 move o Fator R menos que o arredondamento a 0,1).
     def pct(num, den) -> Decimal:
-        return Decimal("0") if not den else (Decimal(str(num)) / Decimal(str(den)) * 100).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP)
+        return (
+            Decimal("0")
+            if not den
+            else (Decimal(str(num)) / Decimal(str(den)) * 100).quantize(
+                Decimal("0.1"), rounding=ROUND_HALF_UP
+            )
+        )
 
     tot = depois["dre"]["total"]
-    _igual(_delta(antes["dre"]["total"], tot, "receita_bruta"), 1000, "22: o retido na receita da DRE")
-    _garante(Decimal(str(depois["kpis"]["fator_r_pct"])) == pct(tot["pessoal"], tot["receita_bruta"]), "22: Fator R sem o retido (API)")
+    _igual(
+        _delta(antes["dre"]["total"], tot, "receita_bruta"), 1000, "22: o retido na receita da DRE"
+    )
     _garante(
-        Decimal(str(depois["kpis"]["breakeven_pct"])) == pct(tot["lucro_bruto"], Decimal(str(tot["pessoal"])) + Decimal(str(tot["comissoes"]))),
+        Decimal(str(depois["kpis"]["fator_r_pct"])) == pct(tot["pessoal"], tot["receita_bruta"]),
+        "22: Fator R sem o retido (API)",
+    )
+    _garante(
+        Decimal(str(depois["kpis"]["breakeven_pct"]))
+        == pct(tot["lucro_bruto"], Decimal(str(tot["pessoal"])) + Decimal(str(tot["comissoes"]))),
         "22: break-even sem o retido (API)",
     )
     for k in ("fator_r_pct", "breakeven_pct"):
         _igual(depois_j[k], depois["kpis"][k], f"22: {k} API × Jinja")
-    previstos = [p for p in depois["pendencias"]["recebimentos_previstos"] if p.get("event_id") == ex["ev"]]
+    previstos = [
+        p for p in depois["pendencias"]["recebimentos_previstos"] if p.get("event_id") == ex["ev"]
+    ]
     _garante(not previstos, "22: a parcela do cancelado aparece nos Recebimentos Previstos (API)")
-    _garante(not [p for p in depois_j["recebimentos_previstos"] if p.get("event_id") == ex["ev"]], "22: a parcela do cancelado nos Recebimentos Previstos (Jinja)")
+    _garante(
+        not [p for p in depois_j["recebimentos_previstos"] if p.get("event_id") == ex["ev"]],
+        "22: a parcela do cancelado nos Recebimentos Previstos (Jinja)",
+    )
     notas = [n for n in depois["pendencias"]["nf_a_emitir"] if n.get("event_id") == ex["ev"]]
-    _garante(notas and notas[0].get("cancelado"), f"22: nota a emitir sem o selo do cancelado: {notas}")
-    _garante([n for n in depois_j["nf_a_emitir"] if n.get("event_id") == ex["ev"]], "22: a nota a emitir sumiu do Jinja")
-    _igual(_vendedor_no_top(depois["paineis"]["top_sellers"], "vend22") - _vendedor_no_top(antes["paineis"]["top_sellers"], "vend22"), 1000, "22: vendedor + retido (API)")
-    _igual(_vendedor_no_top(depois_j["top_sellers"], "vend22") - _vendedor_no_top(antes_j["top_sellers"], "vend22"), 1000, "22: vendedor + retido (Jinja)")
+    _garante(
+        notas and notas[0].get("cancelado"), f"22: nota a emitir sem o selo do cancelado: {notas}"
+    )
+    _garante(
+        [n for n in depois_j["nf_a_emitir"] if n.get("event_id") == ex["ev"]],
+        "22: a nota a emitir sumiu do Jinja",
+    )
+    _igual(
+        _vendedor_no_top(depois["paineis"]["top_sellers"], "vend22")
+        - _vendedor_no_top(antes["paineis"]["top_sellers"], "vend22"),
+        1000,
+        "22: vendedor + retido (API)",
+    )
+    _igual(
+        _vendedor_no_top(depois_j["top_sellers"], "vend22")
+        - _vendedor_no_top(antes_j["top_sellers"], "vend22"),
+        1000,
+        "22: vendedor + retido (Jinja)",
+    )
 
 
 def _retrato_rodado(*extra: str) -> tuple[int, dict, str]:
@@ -3345,7 +3941,11 @@ def _retrato_rodado(*extra: str) -> tuple[int, dict, str]:
         timeout=3600,
     )
     linhas = [x for x in (r.stdout or "").strip().splitlines() if x.strip().startswith("{")]
-    return r.returncode, (json.loads(linhas[-1]) if linhas else {}), (r.stdout or "")[-800:] + (r.stderr or "")[-400:]
+    return (
+        r.returncode,
+        (json.loads(linhas[-1]) if linhas else {}),
+        (r.stdout or "")[-800:] + (r.stderr or "")[-400:],
+    )
 
 
 def c23_mutacao() -> None:
@@ -3356,12 +3956,21 @@ def c23_mutacao() -> None:
     no mesmo estado, tem de sair idêntica antes de a mutação contar.
     """
     codigo, resumo, saida = _retrato_rodado("--sem-resync")
-    _garante(codigo == 0 and resumo.get("diferencas") == 0, f"23 mutação: a base não sai idêntica ({codigo}, {resumo}): {saida}")
+    _garante(
+        codigo == 0 and resumo.get("diferencas") == 0,
+        f"23 mutação: a base não sai idêntica ({codigo}, {resumo}): {saida}",
+    )
     # 1 = diferença acusada; 3 = o gancho da mutação ainda não existe na branch (antes da H3). Saída 1
     # também é a de uma exceção do Python: só vale com o resumo JSON dizendo que houve diferença.
     codigo, resumo, saida = _retrato_rodado("--sem-resync", "--mutacao")
-    _garante(codigo == 1, f"23 mutação: o retrato saiu {codigo}, não acusou o retido somado sem a condição: {saida}")
-    _garante((resumo.get("diferencas") or 0) >= 1, f"23 mutação: saída 1 sem diferença no resumo ({resumo}; {saida})")
+    _garante(
+        codigo == 1,
+        f"23 mutação: o retrato saiu {codigo}, não acusou o retido somado sem a condição: {saida}",
+    )
+    _garante(
+        (resumo.get("diferencas") or 0) >= 1,
+        f"23 mutação: saída 1 sem diferença no resumo ({resumo}; {saida})",
+    )
 
 
 def c24_comercial() -> None:
@@ -3398,20 +4007,38 @@ def c24_comercial() -> None:
     _no_banco_escrever("UPDATE calendar_events SET client_id = :c WHERE id = :i", c=cliente, i=ev)
     with app.app_context():
         db.session.add(EventClient(event_id=ev, client_id=cliente, relationship_type="Contratante"))
-        db.session.add(EventClient(event_id=outro_da_cliente, client_id=cliente, relationship_type="Contratante"))
+        db.session.add(
+            EventClient(
+                event_id=outro_da_cliente, client_id=cliente, relationship_type="Contratante"
+            )
+        )
         db.session.commit()
     metricas_vivo = _cliente("sa").get("/api/clientes/metricas").get_json()
-    _garante(metricas_vivo.get("recurring_clients") == (metricas_antes.get("recurring_clients") or 0) + 1, "24: a cliente com 2 eventos não é recorrente (controle)")
-    vendas_jinja = _cliente("sa").get(ROTAS["vendas_jinja"].format(a=ini_ev.isoformat(), b=fim_ev.isoformat()))
-    _garante(b"V306 24 COMERCIAL" in vendas_jinja.data, "24: /vendas/ não lista o evento vivo (controle)")
+    _garante(
+        metricas_vivo.get("recurring_clients")
+        == (metricas_antes.get("recurring_clients") or 0) + 1,
+        "24: a cliente com 2 eventos não é recorrente (controle)",
+    )
+    vendas_jinja = _cliente("sa").get(
+        ROTAS["vendas_jinja"].format(a=ini_ev.isoformat(), b=fim_ev.isoformat())
+    )
+    _garante(
+        b"V306 24 COMERCIAL" in vendas_jinja.data, "24: /vendas/ não lista o evento vivo (controle)"
+    )
     _cancelar_ok(ev, _corpo_cancelar("parte", 600))
     depois, depois_ev = kpis(inicio, fim), kpis(ini_ev, fim_ev)
-    _igual(d(antes, depois, "total_vendido"), 400, "24: total vendido + retido no mês do cancelamento")
+    _igual(
+        d(antes, depois, "total_vendido"), 400, "24: total vendido + retido no mês do cancelamento"
+    )
     _igual(d(antes, depois, "retido_cancelamentos"), 400, "24: retido_cancelamentos")
     _igual(d(antes, depois, "n_cancelados"), 1, "24: n_cancelados")
     _igual(d(antes, depois, "comissao_retido"), 18, "24: comissão do retido")
     _igual(d(antes, depois, "comissao_prevista"), 18, "24: comissão prevista com a do retido")
-    _igual(d(antes_ev, depois_ev, "total_vendido"), 0, "24: a venda do cancelado ficou no mês dela (Comercial)")
+    _igual(
+        d(antes_ev, depois_ev, "total_vendido"),
+        0,
+        "24: a venda do cancelado ficou no mês dela (Comercial)",
+    )
     des, des_ev = desempenho(_mes(_hoje_sp())), desempenho(_mes(ini_ev))
     _igual(d(des_antes, des, "retido"), 400, f"24: desempenho sem o retido: {des}")
     _igual(d(des_antes, des, "cancelados"), 1, f"24: desempenho sem o cancelado: {des}")
@@ -3426,19 +4053,37 @@ def c24_comercial() -> None:
     )
     painel = _dre(inicio, fim)["paineis"]["cancelamentos"]
     itens = [i for i in painel.get("itens", []) if i.get("id") == ev or i.get("event_id") == ev]
-    _garante(itens and itens[0].get("status") == "cancelado", f"24: status de pagamento 'cancelado': {itens}")
+    _garante(
+        itens and itens[0].get("status") == "cancelado",
+        f"24: status de pagamento 'cancelado': {itens}",
+    )
     r = _cliente("sa").get(ROTAS["vendas_jinja"].format(a=ini_ev.isoformat(), b=fim_ev.isoformat()))
-    _garante(r.status_code == 200 and b"V306 24 COMERCIAL" not in r.data, "24: /vendas/ mostra o cancelado")
+    _garante(
+        r.status_code == 200 and b"V306 24 COMERCIAL" not in r.data,
+        "24: /vendas/ mostra o cancelado",
+    )
     # Performance da Home: sem cargo nem cachê do cancelado
     show = _evento_com_elenco("24 performance", ["A"])
     _escalar(show, estado["t"])
-    dia = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=show)[0][0].date().isoformat()
+    dia = (
+        _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=show)[0][0]
+        .date()
+        .isoformat()
+    )
     url = f"{ROTAS['home']}?perf_range=custom&perf_start={dia}&perf_end={dia}"
     perf_antes = _cliente("sa").get(url).get_json().get("performance") or {}
     _cancelar_ok(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     perf = _cliente("sa").get(url).get_json().get("performance") or {}
-    _garante(Decimal(str(perf.get("casting_total") or 0)) < Decimal(str(perf_antes.get("casting_total") or 0)), f"24: Performance com o cargo do cancelado {perf_antes} → {perf}")
-    _igual(d(perf, perf_antes, "money_total"), 300, f"24: Performance com o cachê do cancelado {perf_antes} → {perf}")
+    _garante(
+        Decimal(str(perf.get("casting_total") or 0))
+        < Decimal(str(perf_antes.get("casting_total") or 0)),
+        f"24: Performance com o cargo do cancelado {perf_antes} → {perf}",
+    )
+    _igual(
+        d(perf, perf_antes, "money_total"),
+        300,
+        f"24: Performance com o cachê do cancelado {perf_antes} → {perf}",
+    )
 
 
 # ── B4 · História 4 ────────────────────────────────────────────────────────────────────────────
@@ -3485,12 +4130,19 @@ def c16b_dados_de_venda() -> None:
     # A diferença da recongelação fica no ajuste a pagar, no primeiro repasse aberto do dia 10 (o
     # mês corrente), com venda e liberação iguais — nunca na data da venda, ciclo já fechado.
     aj = _ajuste_negativo(ex["ev"])
-    _garante(aj["venda_em"] is not None and aj["venda_em"] == aj["liberacao"], f"16b: datas do ajuste {aj}")
+    _garante(
+        aj["venda_em"] is not None and aj["venda_em"] == aj["liberacao"],
+        f"16b: datas do ajuste {aj}",
+    )
     _garante(
         (aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month),
         f"16b: diferença fora do primeiro repasse aberto ({aj['venda_em']})",
     )
-    _igual(_resumo_api(ex["ev"])["bvs"][0]["conta"], q(Decimal("200") * 400 / 2400), "16b: BV do retido")
+    _igual(
+        _resumo_api(ex["ev"])["bvs"][0]["conta"],
+        q(Decimal("200") * 400 / 2400),
+        "16b: BV do retido",
+    )
     # taxa sem própria (padrão 2,5) → 3,0 e → 2,0
     _taxa_padrao(2.5)
     t = _exemplo_padrao("16b taxa", comissao=None)
@@ -3502,11 +4154,17 @@ def c16b_dados_de_venda() -> None:
     _garante(r.status_code == 200, f"16b taxa → {r.status_code} {_erro(r)}")
     _igual(_cancelamento(t["ev"])["taxa"], 3, "16b: taxa congelada 3,0")
     aj = _ajuste_negativo(t["ev"])
-    _garante((aj["nota"] or "").startswith("Cancelamento: taxa corrigida"), f"16b: motivo {aj['nota']}")
+    _garante(
+        (aj["nota"] or "").startswith("Cancelamento: taxa corrigida"), f"16b: motivo {aj['nota']}"
+    )
     _igual(_soma_vivas(t["ev"]), q(Decimal("54") * 400 / 2000), "16b: comissão do retido a 3%")
     with _com_hoje(_dia(10)):
         _patch_comercial(t["ev"], commission_rate=2.0)
-    _igual(_soma_vivas(t["ev"]), q(Decimal("36") * 400 / 2000), "16b: comissão do retido a 2% (desconto)")
+    _igual(
+        _soma_vivas(t["ev"]),
+        q(Decimal("36") * 400 / 2000),
+        "16b: comissão do retido a 2% (desconto)",
+    )
     # cortesia → cheia 0 e desconto do pago
     cort = _exemplo_padrao("16b cortesia", comissao="pago")
     with _com_hoje(_dia(10)):
@@ -3516,7 +4174,10 @@ def c16b_dados_de_venda() -> None:
     _igual(_soma_vivas(cort["ev"]), 0, "16b: desconto do pago na cortesia")
     # nota e parcela pelo Superadmin; congelado intacto
     antes = _cancelamento(ex["ev"])
-    r = _cliente("sa").put(ROTAS["parcelas"].format(id=ex["ev"]), json={"items": [{"due_date": _hoje_sp().isoformat(), "amount": 100}]})
+    r = _cliente("sa").put(
+        ROTAS["parcelas"].format(id=ex["ev"]),
+        json={"items": [{"due_date": _hoje_sp().isoformat(), "amount": 100}]},
+    )
     _garante(r.status_code == 200, f"16b parcela → {r.status_code} {_erro(r)}")
     r = _cliente("sa").post(
         ROTAS["notas"].format(id=ex["ev"]),
@@ -3525,7 +4186,9 @@ def c16b_dados_de_venda() -> None:
     )
     _garante(r.status_code in (200, 201), f"16b nota → {r.status_code} {_erro(r)}")
     _garante(
-        _no_banco("SELECT 1 FROM event_installments WHERE event_id = :i AND amount = 100", i=ex["ev"]),
+        _no_banco(
+            "SELECT 1 FROM event_installments WHERE event_id = :i AND amount = 100", i=ex["ev"]
+        ),
         "16b: a parcela não foi gravada",
     )
     _garante(
@@ -3533,17 +4196,33 @@ def c16b_dados_de_venda() -> None:
         "16b: a nota não foi gravada",
     )
     _garante(_cancelamento(ex["ev"]) == antes, "16b: nota/parcela mexeram no congelado")
-    notas_antes = _no_banco("SELECT count(*) FROM event_invoices WHERE event_id = :i", i=ex["ev"])[0][0]
+    notas_antes = _no_banco("SELECT count(*) FROM event_invoices WHERE event_id = :i", i=ex["ev"])[
+        0
+    ][0]
     r = _patch_comercial(ex["ev"], apelido="com", sale_value=2500)
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"16b COMERCIAL → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"16b COMERCIAL → {r.status_code} {_erro(r)}",
+    )
     r = _cliente("fin").post(
         ROTAS["notas"].format(id=ex["ev"]),
         data={"amount": "10", "issue_date": _hoje_sp().isoformat()},
         content_type="multipart/form-data",
     )
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"16b FINANCEIRO nota → {r.status_code} {_erro(r)}")
-    _igual(_no_banco("SELECT sale_value FROM calendar_events WHERE id = :i", i=ex["ev"])[0][0], 2400, "16b: a recusa mudou a venda")
-    _garante(_no_banco("SELECT count(*) FROM event_invoices WHERE event_id = :i", i=ex["ev"])[0][0] == notas_antes, "16b: a recusa lançou nota")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"16b FINANCEIRO nota → {r.status_code} {_erro(r)}",
+    )
+    _igual(
+        _no_banco("SELECT sale_value FROM calendar_events WHERE id = :i", i=ex["ev"])[0][0],
+        2400,
+        "16b: a recusa mudou a venda",
+    )
+    _garante(
+        _no_banco("SELECT count(*) FROM event_invoices WHERE event_id = :i", i=ex["ev"])[0][0]
+        == notas_antes,
+        "16b: a recusa lançou nota",
+    )
     _garante(_cancelamento(ex["ev"]) == antes, "16b: a recusa mexeu no congelado")
     # variante "cheia 0" pela API: cortesia com valor e evento sem vendedor, cancelados
     for rotulo, kw in (("cortesia", {"cortesia": True}), ("sem vendedor", {"vendedor": None})):
@@ -3552,8 +4231,12 @@ def c16b_dados_de_venda() -> None:
         from app.financeiro import comissoes_ops
 
         with app.app_context():
-            vivo = comissoes_ops._event_commission(db.session.get(CalendarEvent, ev), db.session.get(SiteSetting, 1))
-        _igual(vivo, 100, f"16b cheia 0 ({rotulo}): a comissão do vivo antes do ato não é a de hoje")
+            vivo = comissoes_ops._event_commission(
+                db.session.get(CalendarEvent, ev), db.session.get(SiteSetting, 1)
+            )
+        _igual(
+            vivo, 100, f"16b cheia 0 ({rotulo}): a comissão do vivo antes do ato não é a de hoje"
+        )
         _cancelar_ok(ev, _corpo_cancelar("parte", 600))
         _igual(_cancelamento(ev)["cheia"], 0, f"16b cheia 0 ({rotulo})")
         _garante(not _linhas_comissao(ev), f"16b cheia 0 ({rotulo}): nasceu linha")
@@ -3584,7 +4267,9 @@ def c16c_troca_de_vendedor() -> None:
         depois_a, depois_b = _retido_comercial("vend"), _retido_comercial("vend2")
     _garante(r.status_code == 200, f"16c troca → {r.status_code} {_erro(r)}")
     paga = next(x for x in _linhas_comissao(a["ev"]) if x["id"] == a["linha"])
-    _garante(paga["status"] == "pago" and q(paga["valor"]) == q(90), f"16c: a paga de 90 mudou {paga}")
+    _garante(
+        paga["status"] == "pago" and q(paga["valor"]) == q(90), f"16c: a paga de 90 mudou {paga}"
+    )
     for i, tela in enumerate(("Dashboard Comercial", "/admin/desempenho")):
         _igual(antes_a[i] - depois_a[i], 400, f"16c: o retido não saiu de A no {tela}")
         _igual(depois_b[i] - antes_b[i], 400, f"16c: o retido não foi a B no {tela}")
@@ -3593,15 +4278,35 @@ def c16c_troca_de_vendedor() -> None:
     _igual(sum(Decimal(x["valor"]) for x in da), 0, "16c: A devolve o recebido (90 − 90)")
     _igual(sum(Decimal(x["valor"]) for x in db_), 18, "16c: B recebe a comissão do retido")
     neg = [x for x in da if x["original_id"]]
-    _garante(neg and (neg[0]["nota"] or "").startswith("Cancelamento: vendedor trocado — devolve o já recebido"), f"16c: motivo de A {neg}")
-    _garante(neg[0]["id"] == menos72["id"] and q(neg[0]["valor"]) == q(-90), f"16c: o −72 não virou −90 na mesma linha {menos72} → {neg[0]}")
-    _garante(db_ and (db_[0]["nota"] or "").startswith("Cancelamento: vendedor trocado — comissão do retido"), f"16c: motivo de B {db_}")
     _garante(
-        db_[0]["venda_em"] == db_[0]["liberacao"] and (db_[0]["venda_em"].year, db_[0]["venda_em"].month) == (_dia(10).year, _dia(10).month),
+        neg
+        and (neg[0]["nota"] or "").startswith(
+            "Cancelamento: vendedor trocado — devolve o já recebido"
+        ),
+        f"16c: motivo de A {neg}",
+    )
+    _garante(
+        neg[0]["id"] == menos72["id"] and q(neg[0]["valor"]) == q(-90),
+        f"16c: o −72 não virou −90 na mesma linha {menos72} → {neg[0]}",
+    )
+    _garante(
+        db_
+        and (db_[0]["nota"] or "").startswith(
+            "Cancelamento: vendedor trocado — comissão do retido"
+        ),
+        f"16c: motivo de B {db_}",
+    )
+    _garante(
+        db_[0]["venda_em"] == db_[0]["liberacao"]
+        and (db_[0]["venda_em"].year, db_[0]["venda_em"].month) == (_dia(10).year, _dia(10).month),
         f"16c: +18 de B fora do primeiro repasse aberto {db_[0]}",
     )
     c = _cancelamento(a["ev"])
-    _garante(c["vendedor"] == estado["usuarios"]["vend2"]["id"] and c["beneficiario"] == estado["usuarios"]["vend2"]["id"], f"16c: congelado {c}")
+    _garante(
+        c["vendedor"] == estado["usuarios"]["vend2"]["id"]
+        and c["beneficiario"] == estado["usuarios"]["vend2"]["id"],
+        f"16c: congelado {c}",
+    )
     so = _exemplo_padrao("16c a pagar", comissao="a_pagar")
     _cancelar_ok(so["ev"], _corpo_cancelar("parte", 600))
     _patch_comercial(so["ev"], seller_id=estado["usuarios"]["vend2"]["id"])
@@ -3613,8 +4318,13 @@ def c16c_troca_de_vendedor() -> None:
     _igual(_soma_vivas(sem["ev"]), 0, "16c (iii): ninguém recebe")
     antes_v = (_cancelamento(so["ev"]), _linhas_comissao(so["ev"]))
     r = _patch_comercial(so["ev"], apelido="com", seller_id=estado["usuarios"]["vend"]["id"])
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"16c (v) COMERCIAL → {r.status_code} {_erro(r)}")
-    _garante((_cancelamento(so["ev"]), _linhas_comissao(so["ev"])) == antes_v, "16c (v): a recusa gravou")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"16c (v) COMERCIAL → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        (_cancelamento(so["ev"]), _linhas_comissao(so["ev"])) == antes_v, "16c (v): a recusa gravou"
+    )
     from app.constants import MOTIVOS_AJUSTE_COMISSAO
 
     soltas = _no_banco(
@@ -3624,7 +4334,10 @@ def c16c_troca_de_vendedor() -> None:
         e=[a["ev"], so["ev"], sem["ev"]],
     )
     for lid, eid, nota in soltas:
-        _garante(eid is not None and any((nota or "").startswith(m) for m in MOTIVOS_AJUSTE_COMISSAO), f"16c varredura: ajuste {lid} sem evento ou motivo ({nota})")
+        _garante(
+            eid is not None and any((nota or "").startswith(m) for m in MOTIVOS_AJUSTE_COMISSAO),
+            f"16c varredura: ajuste {lid} sem evento ou motivo ({nota})",
+        )
 
 
 def c16c_corrida() -> None:
@@ -3643,7 +4356,8 @@ def c16c_corrida() -> None:
 
         def injeta(*args, **kw):
             _no_banco_escrever(
-                "UPDATE commission_payments SET status = 'pago', paid_at = now() WHERE id = :i", i=menos72["id"]
+                "UPDATE commission_payments SET status = 'pago', paid_at = now() WHERE id = :i",
+                i=menos72["id"],
             )
             return real(*args, **kw)
 
@@ -3654,7 +4368,10 @@ def c16c_corrida() -> None:
             cancel_ops.travar_grupo = real
     _garante(r.status_code == 200, f"16c corrida → {r.status_code} {_erro(r)}")
     linha = next(x for x in _linhas_comissao(a["ev"]) if x["id"] == menos72["id"])
-    _garante(linha["status"] == "pago" and q(linha["valor"]) == q(-72), f"16c corrida: a linha paga foi reescrita {linha}")
+    _garante(
+        linha["status"] == "pago" and q(linha["valor"]) == q(-72),
+        f"16c corrida: a linha paga foi reescrita {linha}",
+    )
     _igual(_soma_vivas(a["ev"], "vend"), 0, "16c corrida: A não ficou no alvo 0")
     _igual(_soma_vivas(a["ev"], "vend2"), 18, "16c corrida: B sem a comissão do retido")
 
@@ -3669,7 +4386,14 @@ def _itens_atuais(event_id: int) -> list[dict]:
         i=event_id,
     )
     return [
-        {"id": r[0], "tipo": r[1], "is_percent": r[2], "value": float(r[3]), "bv_recipient": r[4], "bv_pix": r[5]}
+        {
+            "id": r[0],
+            "tipo": r[1],
+            "is_percent": r[2],
+            "value": float(r[3]),
+            "bv_recipient": r[4],
+            "bv_pix": r[5],
+        }
         for r in rows
     ]
 
@@ -3684,54 +4408,100 @@ def c16d_acrescimos() -> None:
     itens = _itens_atuais(ex["ev"])
     for i in itens:
         if i["id"] == ex["bv"]:
-            i.update(value=300, bv_pix="pix-novo@exemplo.test", bv_recipient=f"{PREFIX}Parceiro Novo")
+            i.update(
+                value=300, bv_pix="pix-novo@exemplo.test", bv_recipient=f"{PREFIX}Parceiro Novo"
+            )
         if i["id"] == transporte:
             i["value"] = 150
         if i["id"] == pago:
             i["value"] = 999  # BV pago com outro valor: mantém o gravado
     itens = [i for i in itens if i["id"] != comum]
     itens.append({"tipo": "Outro", "is_percent": False, "value": 20})
-    congelado_antes = {k: v for k, v in (_cancelamento(ex["ev"]) or {}).items() if k not in ("cheia",)}
+    congelado_antes = {
+        k: v for k, v in (_cancelamento(ex["ev"]) or {}).items() if k not in ("cheia",)
+    }
     retido_antes = _resumo_api(ex["ev"])["retido"]
-    aud_comum = _no_banco("SELECT count(*) FROM audit_logs WHERE entity_id IN (:i, :c)", i=ex["ev"], c=comum)[0][0]
+    aud_comum = _no_banco(
+        "SELECT count(*) FROM audit_logs WHERE entity_id IN (:i, :c)", i=ex["ev"], c=comum
+    )[0][0]
     r = _put_acrescimos(ex["ev"], itens)
     _garante(r.status_code == 200, f"16d PUT → {r.status_code} {_erro(r)}")
     _garante(
-        _no_banco("SELECT bv_recipient FROM event_acrescimos WHERE id = :i", i=ex["bv"])[0][0] == f"{PREFIX}Parceiro Novo",
+        _no_banco("SELECT bv_recipient FROM event_acrescimos WHERE id = :i", i=ex["bv"])[0][0]
+        == f"{PREFIX}Parceiro Novo",
         "16d: o recebedor corrigido não gravou",
     )
-    _igual(_no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=transporte)[0][0], 150, "16d: transporte mudado")
+    _igual(
+        _no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=transporte)[0][0],
+        150,
+        "16d: transporte mudado",
+    )
     _garante(
-        _no_banco("SELECT 1 FROM event_acrescimos WHERE event_id = :i AND tipo = 'Outro' AND value = 20", i=ex["ev"]),
+        _no_banco(
+            "SELECT 1 FROM event_acrescimos WHERE event_id = :i AND tipo = 'Outro' AND value = 20",
+            i=ex["ev"],
+        ),
         "16d: o acréscimo novo não nasceu",
     )
     _garante(
-        _no_banco("SELECT count(*) FROM audit_logs WHERE entity_id IN (:i, :c)", i=ex["ev"], c=comum)[0][0] > aud_comum,
+        _no_banco(
+            "SELECT count(*) FROM audit_logs WHERE entity_id IN (:i, :c)", i=ex["ev"], c=comum
+        )[0][0]
+        > aud_comum,
         "16d: a remoção do acréscimo comum sem audit",
     )
     congelado = {k: v for k, v in (_cancelamento(ex["ev"]) or {}).items() if k not in ("cheia",)}
-    _garante(congelado == congelado_antes, f"16d: o congelado mudou além da cheia {congelado_antes} → {congelado}")
+    _garante(
+        congelado == congelado_antes,
+        f"16d: o congelado mudou além da cheia {congelado_antes} → {congelado}",
+    )
     _igual(_resumo_api(ex["ev"])["retido"], retido_antes, "16d: o retido mudou")
-    linha_bv = _no_banco("SELECT id, amount_brl, bv_pix FROM event_acrescimos WHERE id = :i", i=ex["bv"])
+    linha_bv = _no_banco(
+        "SELECT id, amount_brl, bv_pix FROM event_acrescimos WHERE id = :i", i=ex["bv"]
+    )
     _garante(linha_bv, "16d: o BV foi apagado e recriado (mesmo id)")
     _igual(linha_bv[0][1], 300, "16d: BV cheio")
-    _igual(_no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=pago)[0][0], 100, "16d: BV pago intacto")
-    _garante(not _no_banco("SELECT 1 FROM event_acrescimos WHERE id = :i", i=comum), "16d: o acréscimo comum não saiu")
+    _igual(
+        _no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=pago)[0][0],
+        100,
+        "16d: BV pago intacto",
+    )
+    _garante(
+        not _no_banco("SELECT 1 FROM event_acrescimos WHERE id = :i", i=comum),
+        "16d: o acréscimo comum não saiu",
+    )
     c = _cancelamento(ex["ev"])
-    _igual(c["cheia"], q((Decimal("2000") - 300 - 100) * 5 / 100), "16d: cheia sobre a venda − BV cheios")
+    _igual(
+        c["cheia"],
+        q((Decimal("2000") - 300 - 100) * 5 / 100),
+        "16d: cheia sobre a venda − BV cheios",
+    )
     _garante(cheia_antes is not None, "16d: sem cheia antes")
     planilha = _bv_planilha(ex["ev"], _mes_evento(ex["ev"]))
     nao_pago = [i for i in planilha if int(i["id"]) == ex["bv"]]
-    _garante(nao_pago and nao_pago[0]["pix_key"] == "pix-novo@exemplo.test", "16d: PIX novo fora da Planilha")
+    _garante(
+        nao_pago and nao_pago[0]["pix_key"] == "pix-novo@exemplo.test",
+        "16d: PIX novo fora da Planilha",
+    )
     _igual(nao_pago[0]["amount"], 60, "16d: BV do retido")
     sem_pago = [i for i in _itens_atuais(ex["ev"]) if i["id"] != pago]
     retrato = _itens_atuais(ex["ev"])
     r = _put_acrescimos(ex["ev"], sem_pago)
-    _garante(r.status_code == 400 and "items" in (_erro(r).get("fields") or {}), f"16d BV pago ausente → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 400 and "items" in (_erro(r).get("fields") or {}),
+        f"16d BV pago ausente → {r.status_code} {_erro(r)}",
+    )
     _garante(_itens_atuais(ex["ev"]) == retrato, "16d: o PUT recusado gravou")
-    _igual(_no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=pago)[0][0], 100, "16d: o BV pago mudou na recusa")
+    _igual(
+        _no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=pago)[0][0],
+        100,
+        "16d: o BV pago mudou na recusa",
+    )
     r = _put_acrescimos(ex["ev"], _itens_atuais(ex["ev"]), apelido="com")
-    _garante(r.status_code == 409 and _codigo(r) == "cancelado", f"16d COMERCIAL → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cancelado",
+        f"16d COMERCIAL → {r.status_code} {_erro(r)}",
+    )
     _garante(_itens_atuais(ex["ev"]) == retrato, "16d: o COMERCIAL gravou")
     # reembolso lançado e cobrado no cancelado: gravado, retido intacto
     retido = _resumo_api(ex["ev"])["retido"]
@@ -3741,7 +4511,9 @@ def c16d_acrescimos() -> None:
         content_type="multipart/form-data",
     )
     _garante(r.status_code == 201, f"16d reembolso → {r.status_code} {_erro(r)}")
-    reembolso = _no_banco("SELECT id FROM event_reimbursements WHERE event_id = :i AND amount = 70", i=ex["ev"])
+    reembolso = _no_banco(
+        "SELECT id FROM event_reimbursements WHERE event_id = :i AND amount = 70", i=ex["ev"]
+    )
     _garante(reembolso, "16d: o reembolso não gravou")
     r = _cliente("sa").post(f"/api/reimbursements/{reembolso[0][0]}/collect")
     _garante(r.status_code in (200, 201), f"16d cobrar o reembolso → {r.status_code} {_erro(r)}")
@@ -3752,20 +4524,32 @@ def c16e_taxa_congelada() -> None:
     _taxa_padrao(2.5)
     try:
         ex = _exemplo_padrao("16e taxa", comissao="pago")
-        _no_banco_escrever("UPDATE calendar_events SET commission_rate = NULL WHERE id = :i", i=ex["ev"])
+        _no_banco_escrever(
+            "UPDATE calendar_events SET commission_rate = NULL WHERE id = :i", i=ex["ev"]
+        )
         with _com_hoje(_dia(10)):
             _cancelar_ok(ex["ev"], _corpo_cancelar("parte", 600))
         _igual(_cancelamento(ex["ev"])["taxa"], 2.5, "16e: taxa congelada no ato")
         _taxa_padrao(3.0)
         with _com_hoje(_dia(10)):
             for rotulo, acao in (
-                ("venda", lambda: _patch_comercial(ex["ev"], sale_value=2200, sale_value_gross=2200)),
-                ("vendedor", lambda: _patch_comercial(ex["ev"], seller_id=estado["usuarios"]["vend2"]["id"])),
+                (
+                    "venda",
+                    lambda: _patch_comercial(ex["ev"], sale_value=2200, sale_value_gross=2200),
+                ),
+                (
+                    "vendedor",
+                    lambda: _patch_comercial(ex["ev"], seller_id=estado["usuarios"]["vend2"]["id"]),
+                ),
                 ("comprovante", lambda: _post_comprovante("sa", ex["ev"], 100)),
             ):
                 r = acao()
                 _garante(r.status_code in (200, 201), f"16e {rotulo} → {r.status_code} {_erro(r)}")
-                _igual(_cancelamento(ex["ev"])["taxa"], 2.5, f"16e: a padrão alcançou o cancelado na correção da {rotulo}")
+                _igual(
+                    _cancelamento(ex["ev"])["taxa"],
+                    2.5,
+                    f"16e: a padrão alcançou o cancelado na correção da {rotulo}",
+                )
             _comissoes(_mes(_hoje_sp()))
             _planilha(_mes(_mes_seguinte(_hoje_sp())))
         _igual(_cancelamento(ex["ev"])["taxa"], 2.5, "16e: a padrão alcançou o cancelado")
@@ -3774,7 +4558,10 @@ def c16e_taxa_congelada() -> None:
             r = _patch_comercial(ex["ev"], commission_rate=3.0)
         _garante(r.status_code == 200, f"16e taxa à mão → {r.status_code} {_erro(r)}")
         _igual(_cancelamento(ex["ev"])["taxa"], 3, "16e: a correção à mão leva a 3")
-        _garante(_soma_vivas(ex["ev"]) > soma_antes, f"16e: a correção para 3% não refez para mais ({soma_antes} → {_soma_vivas(ex['ev'])})")
+        _garante(
+            _soma_vivas(ex["ev"]) > soma_antes,
+            f"16e: a correção para 3% não refez para mais ({soma_antes} → {_soma_vivas(ex['ev'])})",
+        )
     finally:
         _restaurar_config()
 
@@ -3796,7 +4583,13 @@ def _grupo(
     inicio = inicio or _data_isolada(dias=dias + 3)
     principal = _evento(f"{rotulo} principal", venda=venda, taxa=taxa, bruto=bruto, inicio=inicio)
     sats = [
-        _evento(f"{rotulo} dia {i + 2}", venda=None, taxa=None, vendedor=None, inicio=inicio + passo * (i + 1))
+        _evento(
+            f"{rotulo} dia {i + 2}",
+            venda=None,
+            taxa=None,
+            vendedor=None,
+            inicio=inicio + passo * (i + 1),
+        )
         for i in range(dias)
     ]
     _agrupar(principal, *sats)
@@ -3806,7 +4599,9 @@ def _grupo(
         _comprovante(sats[0], pagos[1])
     linha = None
     if comissao:
-        linha = _linha_comissao(principal, q(Decimal(str(venda)) * Decimal(str(taxa)) / 100), status=comissao)
+        linha = _linha_comissao(
+            principal, q(Decimal(str(venda)) * Decimal(str(taxa)) / 100), status=comissao
+        )
     return {"principal": principal, "dias": sats, "linha": linha}
 
 
@@ -3820,15 +4615,28 @@ def c5_grupo_pendente() -> None:
     g = _grupo("5 grupo")
     _devolucao_avulsa(g["dias"][0], 50, status="pendente")
     r = _cancelar(g["principal"], _corpo_cancelar("parte", 600, alcance="todos"))
-    _garante(r.status_code == 409 and _codigo(r) == "devolucao_pendente", f"5-grupo todos → {r.status_code} {_erro(r)}")
-    _garante([d.get("id") for d in _erro(r).get("dias") or []] == [g["dias"][0]], f"5-grupo: `dias` no todos: {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "devolucao_pendente",
+        f"5-grupo todos → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        [d.get("id") for d in _erro(r).get("dias") or []] == [g["dias"][0]],
+        f"5-grupo: `dias` no todos: {_erro(r)}",
+    )
     r = _corte(g["dias"][1], 2000)
-    _garante(r.status_code == 409 and _codigo(r) == "devolucao_pendente", f"5-grupo corte → {r.status_code} {_erro(r)}")
-    _garante([d.get("id") for d in _erro(r).get("dias") or []] == [g["dias"][0]], f"5-grupo: `dias` no corte: {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "devolucao_pendente",
+        f"5-grupo corte → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        [d.get("id") for d in _erro(r).get("dias") or []] == [g["dias"][0]],
+        f"5-grupo: `dias` no corte: {_erro(r)}",
+    )
     for ev in (g["principal"], *g["dias"]):
         _nada_gravado(ev, f"5-grupo {ev}")
     _garante(
-        [d["status"] for d in _devolucoes(g["dias"][0])] == ["pendente"] and not _devolucoes(g["principal"]),
+        [d["status"] for d in _devolucoes(g["dias"][0])] == ["pendente"]
+        and not _devolucoes(g["principal"]),
         "5-grupo: a recusa mexeu nas devoluções",
     )
 
@@ -3849,22 +4657,40 @@ def c4_corte_recusas() -> None:
     corpo["venda_nova"] = 2000
     _deve_400(dia, corpo, "devolucao_modo", "corte com tudo")
     quitado = _grupo("4 corte quitado", pagos=(3000,))
-    _deve_400(quitado["dias"][0], {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 2000}, "devolucao_modo", "Nada abaixo do mínimo")
-    _deve_400(quitado["dias"][0], {**_corpo_cancelar("parte", 500), "venda_nova": 2000}, "devolucao_valor", "Parte abaixo do mínimo")
+    _deve_400(
+        quitado["dias"][0],
+        {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 2000},
+        "devolucao_modo",
+        "Nada abaixo do mínimo",
+    )
+    _deve_400(
+        quitado["dias"][0],
+        {**_corpo_cancelar("parte", 500), "venda_nova": 2000},
+        "devolucao_valor",
+        "Parte abaixo do mínimo",
+    )
     r = _previa(quitado["dias"][0], 1000, venda_nova=2000)
-    _garante(r.status_code == 200 and q(r.get_json()["efeito"].get("devolucao_minima")) == q(1000), f"4: devolucao_minima na prévia {r.get_data(as_text=True)[:300]}")
+    _garante(
+        r.status_code == 200 and q(r.get_json()["efeito"].get("devolucao_minima")) == q(1000),
+        f"4: devolucao_minima na prévia {r.get_data(as_text=True)[:300]}",
+    )
 
 
 def _vendas(*ids: int) -> dict:
     return {
         r[0]: (r[1], r[2])
-        for r in _no_banco("SELECT id, sale_value, group_leader_id FROM calendar_events WHERE id = ANY(:i)", i=list(ids))
+        for r in _no_banco(
+            "SELECT id, sale_value, group_leader_id FROM calendar_events WHERE id = ANY(:i)",
+            i=list(ids),
+        )
     }
 
 
 def _recusa_cancelado(r, rotulo: str) -> None:
     _garante(
-        r.status_code == 409 and _codigo(r) == "cancelado" and "cancelad" in (_erro(r).get("message") or "").lower(),
+        r.status_code == 409
+        and _codigo(r) == "cancelado"
+        and "cancelad" in (_erro(r).get("message") or "").lower(),
         f"{rotulo} → {r.status_code} {_erro(r)}",
     )
 
@@ -3877,23 +4703,41 @@ def c29_agrupar_cancelado() -> None:
     for lider, alvo in ((vivo, a["ev"]), (a["ev"], vivo)):
         r = _cliente("sa").post(
             ROTAS["grupo"].format(id=lider),
-            json={"leader_event_id": lider, "target_event_ids": [alvo], "confirm_clear_financials": True},
+            json={
+                "leader_event_id": lider,
+                "target_event_ids": [alvo],
+                "confirm_clear_financials": True,
+            },
         )
         _recusa_cancelado(r, f"29 agrupar (líder {lider})")
-        _garante(_vendas(a["ev"], vivo) == antes, f"29: o agrupamento recusado mexeu: {_vendas(a['ev'], vivo)}")
+        _garante(
+            _vendas(a["ev"], vivo) == antes,
+            f"29: o agrupamento recusado mexeu: {_vendas(a['ev'], vivo)}",
+        )
         jinja = _cliente("sa").post(
             f"/events/{lider}",
-            data={"action": "group_events", "leader_event_id": str(lider), "target_event_ids": [str(alvo)], "confirm_clear_financials": "1"},
+            data={
+                "action": "group_events",
+                "leader_event_id": str(lider),
+                "target_event_ids": [str(alvo)],
+                "confirm_clear_financials": "1",
+            },
         )
         _garante(jinja.status_code in (200, 302), f"29 Jinja (líder {lider}) → {jinja.status_code}")
-        _garante(_vendas(a["ev"], vivo) == antes, f"29: o Jinja agrupou ou zerou (líder {lider}): {_vendas(a['ev'], vivo)}")
+        _garante(
+            _vendas(a["ev"], vivo) == antes,
+            f"29: o Jinja agrupou ou zerou (líder {lider}): {_vendas(a['ev'], vivo)}",
+        )
     g = _grupo("29 desagrupar")
     _cancelar_ok(g["dias"][0], {**_corpo_cancelar("parte", 100), "venda_nova": 2500})
     r = _cliente("sa").delete(ROTAS["grupo"].format(id=g["dias"][0]))
     _recusa_cancelado(r, "29 desagrupar cancelado")
     r = _cliente("sa").delete(f"/api/events/{g['principal']}/grupo/satelites/{g['dias'][0]}")
     _recusa_cancelado(r, "29 soltar o satélite cancelado pelo principal")
-    _garante(_vendas(g["dias"][0])[g["dias"][0]][1] == g["principal"], "29: o dia cancelado saiu do grupo")
+    _garante(
+        _vendas(g["dias"][0])[g["dias"][0]][1] == g["principal"],
+        "29: o dia cancelado saiu do grupo",
+    )
     r = _cliente("sa").delete(ROTAS["grupo"].format(id=g["dias"][1]))
     _garante(r.status_code == 200, f"29 desagrupar vivo → {r.status_code} {_erro(r)}")
     _garante(_vendas(g["dias"][1])[g["dias"][1]][1] is None, "29: o dia vivo não saiu do grupo")
@@ -3908,21 +4752,33 @@ def c35_marcado_no_grupo() -> None:
     vazio = _evento("35 marcado vazio", venda=None, vendedor=None)
     _marcar_sumido(vazio)
     imp = _cliente("sa").get(ROTAS["impacto"].format(id=vazio)).get_json()
-    _garante(imp.get("acao") == "cancelar", f"35: o marcado vazio ainda sai 'excluir': {imp.get('acao')}")
+    _garante(
+        imp.get("acao") == "cancelar", f"35: o marcado vazio ainda sai 'excluir': {imp.get('acao')}"
+    )
     _cancelar_ok(g["principal"], _corpo_cancelar("parte", 600, alcance="todos"))
     for ev in (g["principal"], *g["dias"]):
         _garante(_cancelado_em(ev) is not None, f"35: dia {ev} não cancelou")
-        _garante(_no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=ev)[0][0] is None, f"35: a marca ficou em {ev}")
+        _garante(
+            _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=ev)[0][0]
+            is None,
+            f"35: a marca ficou em {ev}",
+        )
     s = _grupo("35 satélite marcado")
     _marcar_sumido(s["dias"][0])
     r = _corte(s["dias"][0], 2500, valor=100)
     _garante(r.status_code == 200, f"35 satélite → {r.status_code} {_erro(r)}")
     _garante(_cancelado_em(s["dias"][0]) is not None, "35: o satélite marcado não cancelou")
     _garante(
-        _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=s["dias"][0])[0][0] is None,
+        _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=s["dias"][0])[
+            0
+        ][0]
+        is None,
         "35: a marca ficou no satélite",
     )
-    _garante(_cancelado_em(s["principal"]) is None and _cancelado_em(s["dias"][1]) is None, "35: o corte levou outro dia")
+    _garante(
+        _cancelado_em(s["principal"]) is None and _cancelado_em(s["dias"][1]) is None,
+        "35: o corte levou outro dia",
+    )
 
 
 def c37_cancelar_todos() -> None:
@@ -3942,26 +4798,52 @@ def c37_cancelar_todos() -> None:
         _garante(_cancelado_em(ev) is not None, f"37: {ev} não cancelou")
         _garante(len(_historico(ev)) == logs_antes[ev] + 1, f"37: EventLog do dia {ev}")
     for ev in g["dias"][:2]:
-        _garante(_no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=ev)[0][0] == g["principal"], f"37: desagrupou {ev}")
-    _garante(_cancelado_em(ja) == ja_em and _cancelamento(ja) == ja_linha and len(_historico(ja)) == logs_antes[ja], "37: o dia já cancelado foi tocado")
+        _garante(
+            _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=ev)[0][0]
+            == g["principal"],
+            f"37: desagrupou {ev}",
+        )
+    _garante(
+        _cancelado_em(ja) == ja_em
+        and _cancelamento(ja) == ja_linha
+        and len(_historico(ja)) == logs_antes[ja],
+        "37: o dia já cancelado foi tocado",
+    )
     resumo = _resumo_api(g["principal"])
     _igual(resumo["pago"], 1500, "37: pago do grupo")
     _igual(resumo["retido"], 600, "37: retido")
     vivas = _linhas_comissao(g["principal"])
     _garante(
-        len(vivas) == 1 and vivas[0]["id"] == base["id"] and q(vivas[0]["valor"]) == q(15) and vivas[0]["venda_em"] == base["venda_em"],
+        len(vivas) == 1
+        and vivas[0]["id"] == base["id"]
+        and q(vivas[0]["valor"]) == q(15)
+        and vivas[0]["venda_em"] == base["venda_em"],
         f"37: comissão 15 no lugar (mesma linha e data): {vivas} × {base}",
     )
     _garante(_cancelamento(g["principal"])["regime"] == "venda", "37: principal sem regime venda")
     for ev in g["dias"][:2]:
         c = _cancelamento(ev)
-        _garante(c and c["regime"] == "satelite" and c["principal"] == g["principal"], f"37: dia {ev} {c}")
-    _garante(len(google.deletes(marco)) == 3 and all(_commit_antes_do_google), f"37: remoções no Google {google.deletes(marco)}")
-    _garante(sorted(corpo.get("dias_cancelados") or []) == sorted(vivos), f"37: dias_cancelados {corpo.get('dias_cancelados')}")
+        _garante(
+            c and c["regime"] == "satelite" and c["principal"] == g["principal"],
+            f"37: dia {ev} {c}",
+        )
+    _garante(
+        len(google.deletes(marco)) == 3 and all(_commit_antes_do_google),
+        f"37: remoções no Google {google.deletes(marco)}",
+    )
+    _garante(
+        sorted(corpo.get("dias_cancelados") or []) == sorted(vivos),
+        f"37: dias_cancelados {corpo.get('dias_cancelados')}",
+    )
     for ev in vivos:
-        _garante(_ao_cancelar.count((ev, "todos", None)) == 1, f"37: ao_cancelar não viu {ev} uma vez")
+        _garante(
+            _ao_cancelar.count((ev, "todos", None)) == 1, f"37: ao_cancelar não viu {ev} uma vez"
+        )
     p = next(x for x in _linhas_comissao(g["dias"][0]) if x["id"] == propria)
-    _garante(p["status"] == "pago" and q(p["valor"]) == q(30), f"37: a comissão própria do satélite mudou: {p}")
+    _garante(
+        p["status"] == "pago" and q(p["valor"]) == q(30),
+        f"37: a comissão própria do satélite mudou: {p}",
+    )
     # variante 37-devolução
     v = _grupo("37 devolução", dias=2)
     _devolucao_avulsa(v["dias"][0], 200)
@@ -3972,10 +4854,16 @@ def c37_cancelar_todos() -> None:
     aud_antes = _auditoria_de_gastos(dev_p, dev_s)
     r = _alterar_devolucao(v["principal"], 100)
     _garante(r.status_code == 200, f"37-devolução → {r.status_code} {_erro(r)}")
-    _garante(not _devolucoes(v["principal"]), f"37-devolução: a do principal não foi excluída: {_devolucoes(v['principal'])}")
+    _garante(
+        not _devolucoes(v["principal"]),
+        f"37-devolução: a do principal não foi excluída: {_devolucoes(v['principal'])}",
+    )
     _igual(_devolucoes(v["dias"][0])[0]["valor"], 100, "37-devolução: a do satélite")
     aud = _auditoria_de_gastos(dev_p, dev_s)
-    _garante(aud[dev_p] > aud_antes[dev_p] and aud[dev_s] > aud_antes[dev_s], f"37-devolução: auditoria {aud_antes} → {aud}")
+    _garante(
+        aud[dev_p] > aud_antes[dev_p] and aud[dev_s] > aud_antes[dev_s],
+        f"37-devolução: auditoria {aud_antes} → {aud}",
+    )
 
 
 def _auditoria_de_gastos(*ids: int) -> dict[int, int]:
@@ -3995,12 +4883,18 @@ def c37b_comprovante_no_satelite() -> None:
     logs = (len(_historico(g["dias"][1])), len(_historico(g["principal"])))
     r = _post_comprovante("sa", g["dias"][1], 200)
     _garante(r.status_code == 201, f"37b → {r.status_code} {_erro(r)}")
-    _garante((r.get_json().get("event") or {}).get("id") == g["dias"][1], "37b: a resposta não é o detalhe do dia")
+    _garante(
+        (r.get_json().get("event") or {}).get("id") == g["dias"][1],
+        "37b: a resposta não é o detalhe do dia",
+    )
     resumo = _resumo_api(g["principal"])
     _igual(resumo["pago"], 1700, "37b: pago do grupo")
     _igual(resumo["retido"], 800, "37b: retido")
     vivas = _linhas_comissao(g["principal"])
-    _garante(len(vivas) == 1 and vivas[0]["id"] == base["id"] and q(vivas[0]["valor"]) == q(20), f"37b: comissão 15 → 20 no lugar: {vivas}")
+    _garante(
+        len(vivas) == 1 and vivas[0]["id"] == base["id"] and q(vivas[0]["valor"]) == q(20),
+        f"37b: comissão 15 → 20 no lugar: {vivas}",
+    )
     c = _cancelamento(g["dias"][1])
     _garante(
         c["regime"] == "satelite" and c["venda"] is None and c["cheia"] is None,
@@ -4017,7 +4911,18 @@ def _cobranca(principal: int) -> dict:
 
     with app.app_context():
         r = cobranca_ops.resumo_da_venda_do_evento(db.session.get(CalendarEvent, principal))
-        return {k: getattr(r, k) for k in ("valor", "recebido", "saldo", "quitada", "sinal_pendente", "vencimento", "data_do_grupo")}
+        return {
+            k: getattr(r, k)
+            for k in (
+                "valor",
+                "recebido",
+                "saldo",
+                "quitada",
+                "sinal_pendente",
+                "vencimento",
+                "data_do_grupo",
+            )
+        }
 
 
 def c38_so_este_dia() -> None:
@@ -4026,10 +4931,15 @@ def c38_so_este_dia() -> None:
         g = _grupo(f"38 {variante}", comissao=variante, bruto=3300)
         dia = g["dias"][0]
         inicio, fim = _mes_corrente()
-        mes_ev = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[0][0].date()
+        mes_ev = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[
+            0
+        ][0].date()
         ini_ev = date(mes_ev.year, mes_ev.month, 1)
         fim_ev = _mes_seguinte(ini_ev) - timedelta(days=1)
-        dre_antes, dre_ev_antes = _dre(inicio, fim)["dre"]["total"], _dre(ini_ev, fim_ev)["dre"]["total"]
+        dre_antes, dre_ev_antes = (
+            _dre(inicio, fim)["dre"]["total"],
+            _dre(ini_ev, fim_ev)["dre"]["total"],
+        )
         logs = len(_historico(g["principal"]))
         with _com_hoje(_dia(10)):
             r = _corte(dia, 2000)
@@ -4040,27 +4950,52 @@ def c38_so_este_dia() -> None:
         _igual(c["venda_depois"], 2000, "38: venda depois")
         _igual(c["cheio_antes"], 3300, "38: cheio antes")
         _igual(c["cheio_depois"], 2200, "38: cheio depois")
-        pr = _no_banco("SELECT sale_value, sale_value_gross, cancelled_at, group_leader_id FROM calendar_events WHERE id = :i", i=g["principal"])[0]
+        pr = _no_banco(
+            "SELECT sale_value, sale_value_gross, cancelled_at, group_leader_id FROM calendar_events WHERE id = :i",
+            i=g["principal"],
+        )[0]
         _igual(pr[0], 2000, "38: venda do principal")
         _igual(pr[1], 2200, "38: cheio do principal")
         _igual(Decimal(str(pr[1])) - Decimal(str(pr[0])), 200, "38: desconto 300 → 200")
         _garante(pr[2] is None, "38: o principal cancelou")
         _garante(len(_historico(g["principal"])) > logs, "38: sem EventLog no principal")
-        _garante(_no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=dia)[0][0] == g["principal"], "38: o dia saiu do grupo")
+        _garante(
+            _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=dia)[0][0]
+            == g["principal"],
+            "38: o dia saiu do grupo",
+        )
         if variante == "a_pagar":
             _igual(_soma_vivas(g["principal"]), 50, "38: a pagar vira 50")
         else:
             paga = _linhas_comissao(g["principal"])[0]
-            _garante(paga["status"] == "pago" and q(paga["valor"]) == q(75), f"38: a paga ficou: {paga}")
+            _garante(
+                paga["status"] == "pago" and q(paga["valor"]) == q(75), f"38: a paga ficou: {paga}"
+            )
             aj = _ajuste_negativo(g["principal"])
             _igual(aj["valor"], -25, "38: −25")
-            _garante(aj["original_id"] == paga["id"] and aj["venda_em"] == aj["liberacao"], f"38: ajuste {aj}")
-            _garante((aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month), f"38: −25 fora do primeiro repasse aberto {aj}")
+            _garante(
+                aj["original_id"] == paga["id"] and aj["venda_em"] == aj["liberacao"],
+                f"38: ajuste {aj}",
+            )
+            _garante(
+                (aj["venda_em"].year, aj["venda_em"].month) == (_dia(10).year, _dia(10).month),
+                f"38: −25 fora do primeiro repasse aberto {aj}",
+            )
         _igual(_devolucoes(dia)[0]["valor"], 300, "38: devolução ligada ao dia")
-        _igual(_delta(dre_antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"), 0, "38: a devolução entrou nos gastos extras da DRE")
-        _igual(_delta(dre_ev_antes, _dre(ini_ev, fim_ev)["dre"]["total"], "receita_bruta"), -1000, "38: DRE do mês do evento com 2.000")
+        _igual(
+            _delta(dre_antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"),
+            0,
+            "38: a devolução entrou nos gastos extras da DRE",
+        )
+        _igual(
+            _delta(dre_ev_antes, _dre(ini_ev, fim_ev)["dre"]["total"], "receita_bruta"),
+            -1000,
+            "38: DRE do mês do evento com 2.000",
+        )
         _igual(_cobranca(g["principal"]).get("saldo"), 800, "38: Home com 800 a receber")
-        _garante(_ao_cancelar.count((dia, "so_este_dia", None)) == 1, f"38: ao_cancelar {_ao_cancelar}")
+        _garante(
+            _ao_cancelar.count((dia, "so_este_dia", None)) == 1, f"38: ao_cancelar {_ao_cancelar}"
+        )
         # "Alterar devolução" do dia: 300 → 30; acima do teto → 409
         comissao_antes, linha_dia = _linhas_comissao(g["principal"]), _cancelamento(dia)
         dev = _devolucoes(dia)[0]["id"]
@@ -4068,11 +5003,17 @@ def c38_so_este_dia() -> None:
         r = _alterar_devolucao(dia, 30)
         _garante(r.status_code == 200, f"38 alterar → {r.status_code} {_erro(r)}")
         _igual(_devolucoes(dia)[0]["valor"], 30, "38: devolução do dia")
-        _garante(_linhas_comissao(g["principal"]) == comissao_antes and _cancelamento(dia) == linha_dia, "38: a comissão do principal ou a linha dia mexeu")
+        _garante(
+            _linhas_comissao(g["principal"]) == comissao_antes and _cancelamento(dia) == linha_dia,
+            "38: a comissão do principal ou a linha dia mexeu",
+        )
         _igual(_cobranca(g["principal"]).get("saldo"), 530, "38: cobrança refeita")
         _garante(_auditoria_de_gastos(dev)[dev] > aud, "38: alterar devolução sem auditoria")
         r = _alterar_devolucao(dia, 5000)
-        _garante(r.status_code == 409 and _codigo(r) == "acima_do_teto", f"38 teto → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 409 and _codigo(r) == "acima_do_teto",
+            f"38 teto → {r.status_code} {_erro(r)}",
+        )
         _igual(_devolucoes(dia)[0]["valor"], 30, "38: o 409 do teto gravou")
     # BV não pago na proporção da venda nova (num grupo à parte: com BV a cheia não é a dos 50/−25)
     gbv = _grupo("38 bv", comissao=None, bruto=3300)
@@ -4080,13 +5021,20 @@ def c38_so_este_dia() -> None:
     with _com_hoje(_dia(10)):
         rc = _corte(gbv["dias"][0], 2000)
     _garante(rc.status_code == 200, f"38 bv corte → {rc.status_code} {_erro(rc)}")
-    _igual(_no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=bv)[0][0], q(Decimal("200") * 2000 / 3000), "38: BV não pago na proporção")
+    _igual(
+        _no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=bv)[0][0],
+        q(Decimal("200") * 2000 / 3000),
+        "38: BV não pago na proporção",
+    )
     # piso do dia cortado (P-52): venda 3.000 quitada, venda nova 2.000 → mínimo 1.000
     quitado = _grupo("38 piso", pagos=(3000,), comissao=None)
     r = _corte(quitado["dias"][0], 2000, valor=1000)
     _garante(r.status_code == 200, f"38 piso corte → {r.status_code} {_erro(r)}")
     r = _alterar_devolucao(quitado["dias"][0], 500)
-    _garante(r.status_code == 409 and _codigo(r) == "abaixo_do_piso", f"38 P-52 → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "abaixo_do_piso",
+        f"38 P-52 → {r.status_code} {_erro(r)}",
+    )
     _igual(_devolucoes(quitado["dias"][0])[0]["valor"], 1000, "38: o 409 do piso gravou")
     # variante 38-comprovante: acrescentar no dia cortado não refaz nada; a cobrança relê o pago
     v = _grupo("38 comprovante")
@@ -4095,16 +5043,32 @@ def c38_so_este_dia() -> None:
     saldo = _cobranca(v["principal"]).get("saldo")
     r = _post_comprovante("sa", v["dias"][0], 100)
     _garante(r.status_code == 201, f"38-comprovante → {r.status_code} {_erro(r)}")
-    _garante((_linhas_comissao(v["principal"]), _cancelamento(v["dias"][0])) == antes, "38-comprovante: algo se refez")
-    _igual(Decimal(str(saldo)) - Decimal(str(_cobranca(v["principal"]).get("saldo"))), 100, "38-comprovante: a cobrança não releu o pago")
+    _garante(
+        (_linhas_comissao(v["principal"]), _cancelamento(v["dias"][0])) == antes,
+        "38-comprovante: algo se refez",
+    )
+    _igual(
+        Decimal(str(saldo)) - Decimal(str(_cobranca(v["principal"]).get("saldo"))),
+        100,
+        "38-comprovante: a cobrança não releu o pago",
+    )
     # grupo semeado para o abaixo do devolvido: pago 1.500, devolução do dia 1.200; corrigir 500 → 100
     w = _grupo("38 abaixo do devolvido")
     rc = _corte(w["dias"][0], 2000, valor=1200)
     _garante(rc.status_code == 200, f"38 abaixo do devolvido, corte → {rc.status_code} {_erro(rc)}")
-    pid = _no_banco("SELECT id FROM event_payments WHERE event_id = :i ORDER BY id LIMIT 1", i=w["dias"][0])[0][0]
+    pid = _no_banco(
+        "SELECT id FROM event_payments WHERE event_id = :i ORDER BY id LIMIT 1", i=w["dias"][0]
+    )[0][0]
     r = _cliente("sa").patch(ROTAS["comprovante_um"].format(id=pid), json={"amount": 100})
-    _garante(r.status_code == 409 and _codigo(r) == "pago_abaixo_do_devolvido", f"38-comprovante abaixo → {r.status_code} {_erro(r)}")
-    _igual(_no_banco("SELECT amount FROM event_payments WHERE id = :i", i=pid)[0][0], 500, "38: o 409 gravou o comprovante")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "pago_abaixo_do_devolvido",
+        f"38-comprovante abaixo → {r.status_code} {_erro(r)}",
+    )
+    _igual(
+        _no_banco("SELECT amount FROM event_payments WHERE id = :i", i=pid)[0][0],
+        500,
+        "38: o 409 gravou o comprovante",
+    )
 
 
 def _c38c(rotulo: str) -> None:
@@ -4115,28 +5079,40 @@ def _c38c(rotulo: str) -> None:
     _garante(r.status_code == 200, f"38c corte → {r.status_code} {_erro(r)}")
 
     def composicao() -> list[tuple]:
-        return sorted((x["id"], q(x["valor"]), x["status"]) for x in _linhas_comissao(g["principal"]))
+        return sorted(
+            (x["id"], q(x["valor"]), x["status"]) for x in _linhas_comissao(g["principal"])
+        )
 
     base = g["linha"]
     depois_corte = composicao()
     aj = [x for x in depois_corte if x[0] != base]
     _garante(
-        (base, q(100), "pago") in depois_corte and len(aj) == 1 and aj[0][1:] == (q(-25), "a_pagar"),
+        (base, q(100), "pago") in depois_corte
+        and len(aj) == 1
+        and aj[0][1:] == (q(-25), "a_pagar"),
         f"38c: depois do corte, esperado 100 paga + −25 a pagar: {depois_corte}",
     )
     _comissoes(_mes(_hoje_sp()))
     _planilha(_mes(_mes_seguinte(_hoje_sp())))
-    _garante(composicao() == depois_corte, f"38c: com a base ainda paga, o resync mexeu: {composicao()}")
+    _garante(
+        composicao() == depois_corte, f"38c: com a base ainda paga, o resync mexeu: {composicao()}"
+    )
     ciclo = _linhas_comissao(g["principal"])[0]["venda_em"]
     vend = estado["usuarios"]["vend"]["id"]
     r = _cliente("sa").post(
         ROTAS["planilha_status"],
-        json={"item_type": "commission", "item_id": f"{vend}:{_mes(ciclo)}:pago", "status": "nao_pago", "motivo": "verify 306"},
+        json={
+            "item_type": "commission",
+            "item_id": f"{vend}:{_mes(ciclo)}:pago",
+            "status": "nao_pago",
+            "motivo": "verify 306",
+        },
     )
     _garante(r.status_code == 200, f"38c desfazer → {r.status_code} {_erro(r)}")
     depois_desfazer = composicao()
     _garante(
-        (base, q(100), "a_pagar") in depois_desfazer and (aj[0][0], q(-25), "a_pagar") in depois_desfazer,
+        (base, q(100), "a_pagar") in depois_desfazer
+        and (aj[0][0], q(-25), "a_pagar") in depois_desfazer,
         f"38c: depois do desfazer, esperado 100 a pagar + −25 a pagar: {depois_desfazer}",
     )
     _comissoes(_mes(_hoje_sp()))
@@ -4147,7 +5123,10 @@ def _c38c(rotulo: str) -> None:
         f"38c: depois do resync, esperada a base 75 no lugar (nunca 75 − 25 = 50): {vivas}",
     )
     canceladas = [x for x in _linhas_comissao(g["principal"], vivas=False) if x["id"] == aj[0][0]]
-    _garante(canceladas and canceladas[0]["status"] == "cancelado", f"38c: o −25 não foi cancelado: {canceladas}")
+    _garante(
+        canceladas and canceladas[0]["status"] == "cancelado",
+        f"38c: o −25 não foi cancelado: {canceladas}",
+    )
 
 
 def c38c_desfazer_no_principal_vivo() -> None:
@@ -4157,8 +5136,12 @@ def c38c_desfazer_no_principal_vivo() -> None:
     # A regra nova (b) da sincronização: com ajuste vivo e a base de volta a `a_pagar`, reconcilia
     # com alvo = cheia. O gancho é `comissoes_ops._reconciliar_ajuste_vivo`; sem ele, Σ 50.
     _sob_mutacao(
-        comissoes_ops, "_reconciliar_ajuste_vivo", lambda _o: (lambda *a, **k: None),
-        lambda: _c38c("38c mutação"), "sincronização sem a regra nova (b)", base_ja_rodou=True,
+        comissoes_ops,
+        "_reconciliar_ajuste_vivo",
+        lambda _o: lambda *a, **k: None,
+        lambda: _c38c("38c mutação"),
+        "sincronização sem a regra nova (b)",
+        base_ja_rodou=True,
     )
 
 
@@ -4174,7 +5157,8 @@ def c39_depois_do_38() -> None:
         _planilha(_mes(_mes_seguinte(_hoje_sp())))
     depois = _ajuste_negativo(g["principal"])
     _garante(
-        (depois["id"], q(depois["valor"]), depois["venda_em"], depois["liberacao"]) == (aj["id"], q(aj["valor"]), aj["venda_em"], aj["liberacao"]),
+        (depois["id"], q(depois["valor"]), depois["venda_em"], depois["liberacao"])
+        == (aj["id"], q(aj["valor"]), aj["venda_em"], aj["liberacao"]),
         f"39: o −25 foi sobrescrito: {aj} → {depois}",
     )
     imp = _cliente("sa").get(ROTAS["impacto"].format(id=g["principal"])).get_json()
@@ -4187,17 +5171,25 @@ def c39_depois_do_38() -> None:
     _igual(resumo["retido"], 1000, "39: retido do resto")
     # cheia sobre a venda de 2.000 a 2,5% = 50; comissão do retido = 50 × 1.000 / 2.000 = 25, no −25
     _igual(_soma_vivas(g["principal"]), 25, "39: comissão do retido depois do resto")
-    _garante(_ajuste_negativo(g["principal"])["id"] == aj["id"], "39: o ajuste não absorveu no lugar")
+    _garante(
+        _ajuste_negativo(g["principal"])["id"] == aj["id"], "39: o ajuste não absorveu no lugar"
+    )
     with _com_hoje(_dia(10)):
         r = _alterar_devolucao(g["dias"][0], 100)
     _garante(r.status_code == 200, f"39 variante → {r.status_code} {_erro(r)}")
     resumo = _resumo_api(g["principal"])
     _igual(resumo["devolvido"], 300, "39 variante: já devolvido pela diferença (500 − 200)")
     _igual(resumo["retido"], 1200, "39 variante: retido refeito (D28)")
-    _igual(_soma_vivas(g["principal"]), 30, "39 variante: comissão do retido refeita (50 × 1.200 / 2.000)")
+    _igual(
+        _soma_vivas(g["principal"]),
+        30,
+        "39 variante: comissão do retido refeita (50 × 1.200 / 2.000)",
+    )
     aj2 = _ajuste_negativo(g["principal"])
     _garante(
-        aj2["id"] == aj["id"] and aj2["venda_em"] == aj["venda_em"] and aj2["liberacao"] == aj["liberacao"],
+        aj2["id"] == aj["id"]
+        and aj2["venda_em"] == aj["venda_em"]
+        and aj2["liberacao"] == aj["liberacao"],
         f"39 variante: o ajuste da paga saiu do lugar: {aj} → {aj2}",
     )
 
@@ -4211,7 +5203,8 @@ def c40_soltar_e_cache_pago() -> None:
     jinja = _cliente("sa").post(f"/events/{g['dias'][0]}", data={"action": "ungroup_event"})
     _garante(jinja.status_code in (200, 302), f"40 soltar Jinja → {jinja.status_code}")
     _garante(
-        _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=g["dias"][0])[0][0] == g["principal"],
+        _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=g["dias"][0])[0][0]
+        == g["principal"],
         "40: o Jinja soltou o dia cancelado",
     )
     outro = _evento("40 outro", venda=500)
@@ -4219,28 +5212,51 @@ def c40_soltar_e_cache_pago() -> None:
     _cancelar_ok(solto["ev"])
     r = _cliente("sa").post(
         ROTAS["grupo"].format(id=g["principal"]),
-        json={"leader_event_id": g["principal"], "target_event_ids": [outro, solto["ev"]], "confirm_clear_financials": True},
+        json={
+            "leader_event_id": g["principal"],
+            "target_event_ids": [outro, solto["ev"]],
+            "confirm_clear_financials": True,
+        },
     )
     _recusa_cancelado(r, "40 agrupar com o cancelado")
-    _garante(_no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=solto["ev"])[0][0] is None, "40: o cancelado entrou no grupo")
     _garante(
-        _no_banco("SELECT group_leader_id, sale_value FROM calendar_events WHERE id = :i", i=outro)[0] == (None, Decimal("500.00")),
+        _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=solto["ev"])[0][0]
+        is None,
+        "40: o cancelado entrou no grupo",
+    )
+    _garante(
+        _no_banco("SELECT group_leader_id, sale_value FROM calendar_events WHERE id = :i", i=outro)[
+            0
+        ]
+        == (None, Decimal("500.00")),
         "40: o agrupamento recusado mexeu no outro",
     )
     show = _evento_com_elenco("40 show", ["A", "B"])
     sat = _evento_com_elenco("40 show dia 2", ["C"], inicio=_data_isolada())
-    _no_banco_escrever("UPDATE calendar_events SET sale_value = 2000, seller_id = :v, sale_date = :d WHERE id = :i", v=estado["usuarios"]["vend"]["id"], d=_hoje_sp(), i=show)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET sale_value = 2000, seller_id = :v, sale_date = :d WHERE id = :i",
+        v=estado["usuarios"]["vend"]["id"],
+        d=_hoje_sp(),
+        i=show,
+    )
     _agrupar(show, sat)
     role = _escalar(sat, estado["t"])
     _no_banco_escrever("UPDATE event_roles SET payment_status = 'pago' WHERE id = :i", i=role)
     r = _cancelar(show, _corpo_cancelar("nada", None, nome=None, pix=None, alcance="todos"))
-    _garante(r.status_code == 409 and _codigo(r) == "cache_pago", f"40 cachê pago → {r.status_code} {_erro(r)}")
-    _garante(any(d.get("id") == sat for d in _erro(r).get("dias") or []), "40: a recusa não diz qual dia")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cache_pago",
+        f"40 cachê pago → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        any(d.get("id") == sat for d in _erro(r).get("dias") or []), "40: a recusa não diz qual dia"
+    )
     for ev in (show, sat):
         _nada_gravado(ev, "40")
     ensaio = _evento("40 ensaio", venda=None, tipo="ENSAIO", titulo="🟧 ENSAIO V306 40")
     r = _cancelar(ensaio, {"motivo": "verify"})
-    _garante(r.status_code == 409 and _codigo(r) == "ensaio", f"40 ENSAIO → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "ensaio", f"40 ENSAIO → {r.status_code} {_erro(r)}"
+    )
     _nada_gravado(ensaio, "40 ENSAIO")
 
 
@@ -4248,27 +5264,51 @@ def c41_custo_do_grupo() -> None:
     from app.financeiro import comissoes_ops
 
     g = _grupo("41 custo")
-    inicio_principal = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[0][0]
-    show_dia = _evento_com_elenco("41 dia com elenco", ["X"], inicio=inicio_principal - timedelta(days=1))
+    inicio_principal = _no_banco(
+        "SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"]
+    )[0][0]
+    show_dia = _evento_com_elenco(
+        "41 dia com elenco", ["X"], inicio=inicio_principal - timedelta(days=1)
+    )
     _agrupar(g["principal"], show_dia)
     _escalar(show_dia, estado["t"])
     _comprovante(show_dia, 200)
-    data_grupo = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[0][0].date()
+    data_grupo = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[
+        0
+    ][0].date()
     kpi_antes = _detalhe("sa", g["principal"]).get("kpi") or {}
     cobranca_antes = _cobranca(g["principal"])
-    _garante(cobranca_antes["data_do_grupo"] == inicio_principal.date() - timedelta(days=1), f"41: o dia mais cedo não abre o grupo (controle) {cobranca_antes}")
+    _garante(
+        cobranca_antes["data_do_grupo"] == inicio_principal.date() - timedelta(days=1),
+        f"41: o dia mais cedo não abre o grupo (controle) {cobranca_antes}",
+    )
     rc = _corte(show_dia, 2800, modo="nada", valor=None)
     _garante(rc.status_code == 200, f"41 corte → {rc.status_code} {_erro(rc)}")
     kpi = _detalhe("sa", g["principal"]).get("kpi") or {}
-    _igual(Decimal(str(kpi_antes.get("cost") or 0)) - Decimal(str(kpi.get("cost") or 0)), 300, "41: o cachê do dia cancelado não saiu do custo")
+    _igual(
+        Decimal(str(kpi_antes.get("cost") or 0)) - Decimal(str(kpi.get("cost") or 0)),
+        300,
+        "41: o cachê do dia cancelado não saiu do custo",
+    )
     cobranca = _cobranca(g["principal"])
-    _igual(cobranca["recebido"], cobranca_antes["recebido"], "41: o comprovante do dia cancelado saiu da cobrança")
+    _igual(
+        cobranca["recebido"],
+        cobranca_antes["recebido"],
+        "41: o comprovante do dia cancelado saiu da cobrança",
+    )
     _igual(cobranca["recebido"], 1700, "41: recebido do grupo com o dia cancelado")
-    _garante(cobranca["data_do_grupo"] == data_grupo, f"41: data do grupo na cobrança {cobranca['data_do_grupo']} × {data_grupo}")
+    _garante(
+        cobranca["data_do_grupo"] == data_grupo,
+        f"41: data do grupo na cobrança {cobranca['data_do_grupo']} × {data_grupo}",
+    )
     # EducaManto principal: o cachê do dia cancelado sai da base (5% × 300 = +15)
     _configurar_educamanto()
     e = _grupo("41 edu", comissao=None)
-    _no_banco_escrever("UPDATE calendar_events SET title = :t, commission_rate = NULL WHERE id = :i", t="(EDU) V306 41 PRINCIPAL", i=e["principal"])
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t, commission_rate = NULL WHERE id = :i",
+        t="(EDU) V306 41 PRINCIPAL",
+        i=e["principal"],
+    )
     dia_edu = _evento_com_elenco("41 edu dia", ["X"], inicio=_data_isolada())
     _agrupar(e["principal"], dia_edu)
     _escalar(dia_edu, estado["t"])
@@ -4295,7 +5335,13 @@ def _cliente_descartavel(rotulo: str) -> int:
         return c.id
 
 
-def _grupo_42(rotulo: str, *, comissao_paga: bool = True, bv_pago: bool = False, inicio: datetime | None = None) -> dict:
+def _grupo_42(
+    rotulo: str,
+    *,
+    comissao_paga: bool = True,
+    bv_pago: bool = False,
+    inicio: datetime | None = None,
+) -> dict:
     """O grupo do 42: tudo o que a passagem leva, num grupo de 3 dias com um já cancelado."""
     from app.models import (
         EventClient,
@@ -4317,12 +5363,32 @@ def _grupo_42(rotulo: str, *, comissao_paga: bool = True, bv_pago: bool = False,
     cliente = _cliente_descartavel(f"{rotulo} cliente")
     orcamento = _orcamento_de("vend")
     with app.app_context():
-        db.session.add(EventInstallment(event_id=principal, due_date=inicio.date(), amount=Decimal("1000"), received=False))
+        db.session.add(
+            EventInstallment(
+                event_id=principal, due_date=inicio.date(), amount=Decimal("1000"), received=False
+            )
+        )
         db.session.add(EventInvoice(event_id=principal, amount=Decimal("3000"), status="pendente"))
-        db.session.add(EventContract(event_id=principal, file_path=f"{PREFIX}contrato.pdf", amount=3000))
-        db.session.add(EventReimbursement(event_id=principal, description=f"{PREFIX}reembolso", amount=Decimal("80")))
-        db.session.add(EventClient(event_id=principal, client_id=cliente, relationship_type="Contratante"))
-        db.session.add(FormResponse(form_type="comum", data="{}", contact_name=f"{PREFIX}{rotulo}", event_id=principal, client_id=cliente))
+        db.session.add(
+            EventContract(event_id=principal, file_path=f"{PREFIX}contrato.pdf", amount=3000)
+        )
+        db.session.add(
+            EventReimbursement(
+                event_id=principal, description=f"{PREFIX}reembolso", amount=Decimal("80")
+            )
+        )
+        db.session.add(
+            EventClient(event_id=principal, client_id=cliente, relationship_type="Contratante")
+        )
+        db.session.add(
+            FormResponse(
+                form_type="comum",
+                data="{}",
+                contact_name=f"{PREFIX}{rotulo}",
+                event_id=principal,
+                client_id=cliente,
+            )
+        )
         db.session.commit()
     base = _linha_comissao(principal, 75, status="pago" if comissao_paga else "a_pagar")
     ajuste = _linha_comissao(principal, -25, original_id=base) if comissao_paga else None
@@ -4336,10 +5402,19 @@ def _grupo_42(rotulo: str, *, comissao_paga: bool = True, bv_pago: bool = False,
         c=cliente,
         i=principal,
     )
-    _cancelar_ok(cancelar_antes, {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000})
+    _cancelar_ok(
+        cancelar_antes, {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000}
+    )
     return {
-        "principal": principal, "novo": vivo, "ja_cancelado": cancelar_antes, "bv": bv, "bv_pago": bv_pago_id,
-        "base": base, "ajuste": ajuste, "cliente": cliente, "orcamento": orcamento,
+        "principal": principal,
+        "novo": vivo,
+        "ja_cancelado": cancelar_antes,
+        "bv": bv,
+        "bv_pago": bv_pago_id,
+        "base": base,
+        "ajuste": ajuste,
+        "cliente": cliente,
+        "orcamento": orcamento,
     }
 
 
@@ -4359,7 +5434,10 @@ def _retrato_passagem(ids: list[int]) -> dict:
     out = {}
     for tabela, cols in tabelas.items():
         out[tabela] = sorted(
-            tuple(r) for r in _no_banco(f"SELECT {cols}, event_id FROM {tabela} WHERE event_id = ANY(:ids)", ids=ids)
+            tuple(r)
+            for r in _no_banco(
+                f"SELECT {cols}, event_id FROM {tabela} WHERE event_id = ANY(:ids)", ids=ids
+            )
         )
     out["devolucoes"] = sorted(
         tuple(r)
@@ -4373,23 +5451,41 @@ def _retrato_passagem(ids: list[int]) -> dict:
 
 
 _CAMPOS_VISTOS = (
-    "sale_value", "sale_value_gross", "seller_id", "sale_date", "commission_rate", "orcamento_history_id",
-    "group_name", "invoice_due_date", "group_leader_id",
+    "sale_value",
+    "sale_value_gross",
+    "seller_id",
+    "sale_date",
+    "commission_rate",
+    "orcamento_history_id",
+    "group_name",
+    "invoice_due_date",
+    "group_leader_id",
 )
 
 
 def _campos(event_id: int) -> dict:
-    linha = _no_banco(f"SELECT {', '.join(_CAMPOS_VISTOS)} FROM calendar_events WHERE id = :i", i=event_id)[0]
+    linha = _no_banco(
+        f"SELECT {', '.join(_CAMPOS_VISTOS)} FROM calendar_events WHERE id = :i", i=event_id
+    )[0]
     return dict(zip(_CAMPOS_VISTOS, linha, strict=True))
 
 
 def _telas_da_venda(g: dict) -> dict:
     """DRE do mês do evento, Comissões e Planilha do ciclo, Dashboard e cobrança: o que a passagem não muda."""
-    inicio = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[0][0].date()
-    ini, fim = date(inicio.year, inicio.month, 1), _mes_seguinte(date(inicio.year, inicio.month, 1)) - timedelta(days=1)
+    inicio = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=g["principal"])[0][
+        0
+    ].date()
+    ini, fim = (
+        date(inicio.year, inicio.month, 1),
+        _mes_seguinte(date(inicio.year, inicio.month, 1)) - timedelta(days=1),
+    )
     dre = _dre(ini, fim)["dre"]["total"]
     ini_v, fim_v = _mes_corrente()  # o Comercial recorta pela data da venda, que é hoje
-    kpis = _cliente("fin").get(ROTAS["pipeline"].format(a=ini_v.isoformat(), b=fim_v.isoformat())).get_json()["kpis"]
+    kpis = (
+        _cliente("fin")
+        .get(ROTAS["pipeline"].format(a=ini_v.isoformat(), b=fim_v.isoformat()))
+        .get_json()["kpis"]
+    )
     mes = _mes(_hoje_sp())
     comissoes = _comissoes(mes)
     planilha = sorted(
@@ -4399,7 +5495,10 @@ def _telas_da_venda(g: dict) -> dict:
     )
     cobranca = _cobranca(g["novo"])
     return {
-        "dre": {k: dre.get(k) for k in ("receita_bruta", "cpv", "comissoes", "gastos_extras", "resultado_liquido")},
+        "dre": {
+            k: dre.get(k)
+            for k in ("receita_bruta", "cpv", "comissoes", "gastos_extras", "resultado_liquido")
+        },
         "kpis": {k: kpis.get(k) for k in ("total_vendido", "comissao_prevista")},
         "comissoes": comissoes.get("kpis"),
         "planilha": planilha,
@@ -4417,40 +5516,90 @@ def c42_passagem() -> None:
     logs = (len(_historico(g["principal"])), len(_historico(g["novo"])))
     corpo = _cancelar_ok(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+        },
     )
     depois = _retrato_passagem([g["principal"], g["novo"]])
     for tabela, linhas in antes.items():
-        _garante(sorted(x[:-1] for x in linhas) == sorted(x[:-1] for x in depois[tabela]), f"42: {tabela} mudou além do vínculo")
-        _garante({x[-1] for x in depois[tabela]} <= {g["novo"]}, f"42: {tabela} ainda no antigo: {depois[tabela]}")
+        _garante(
+            sorted(x[:-1] for x in linhas) == sorted(x[:-1] for x in depois[tabela]),
+            f"42: {tabela} mudou além do vínculo",
+        )
+        _garante(
+            {x[-1] for x in depois[tabela]} <= {g["novo"]},
+            f"42: {tabela} ainda no antigo: {depois[tabela]}",
+        )
     soma = {t: sum(Decimal(str(x[1])) for x in depois[t]) for t in ("event_payments", "devolucoes")}
     _igual(soma["event_payments"], 1700, "42: comprovantes 1.700")
     _igual(soma["devolucoes"], 100, "42: devolução 100")
-    _igual(sum(Decimal(str(x[2] or 0)) for x in depois["event_acrescimos"]), 300, "42: acréscimos 300")
+    _igual(
+        sum(Decimal(str(x[2] or 0)) for x in depois["event_acrescimos"]), 300, "42: acréscimos 300"
+    )
     novo = _campos(g["novo"])
-    for k in ("seller_id", "sale_date", "commission_rate", "orcamento_history_id", "group_name", "invoice_due_date"):
-        _garante(novo[k] == campos_antes[k], f"42: {k} não passou ao novo ({campos_antes[k]} → {novo[k]})")
+    for k in (
+        "seller_id",
+        "sale_date",
+        "commission_rate",
+        "orcamento_history_id",
+        "group_name",
+        "invoice_due_date",
+    ):
+        _garante(
+            novo[k] == campos_antes[k],
+            f"42: {k} não passou ao novo ({campos_antes[k]} → {novo[k]})",
+        )
     _igual(novo["sale_value"], 3000, "42: venda no novo")
     _igual(novo["sale_value_gross"], 3300, "42: cheio no novo")
     _garante(novo["group_leader_id"] is None, "42: o novo principal ainda aponta a alguém")
     velho = _campos(g["principal"])
     _garante(
-        all(velho[k] in (None, False) for k in ("sale_value", "sale_value_gross", "seller_id", "orcamento_history_id", "group_name", "invoice_due_date")),
+        all(
+            velho[k] in (None, False)
+            for k in (
+                "sale_value",
+                "sale_value_gross",
+                "seller_id",
+                "orcamento_history_id",
+                "group_name",
+                "invoice_due_date",
+            )
+        ),
         f"42: campos não zerados no antigo: {velho}",
     )
     for dia in (g["principal"], g["ja_cancelado"]):
-        _garante(_campos(dia)["group_leader_id"] == g["novo"], f"42: o dia {dia} não aponta ao novo")
-    _garante(len(_historico(g["principal"])) >= logs[0] + 2 and len(_historico(g["novo"])) > logs[1], "42: sem retrato no histórico dos dois")
-    _garante((corpo.get("venda_passou_para") or {}).get("id") == g["novo"], f"42: venda_passou_para {corpo.get('venda_passou_para')}")
+        _garante(
+            _campos(dia)["group_leader_id"] == g["novo"], f"42: o dia {dia} não aponta ao novo"
+        )
+    _garante(
+        len(_historico(g["principal"])) >= logs[0] + 2 and len(_historico(g["novo"])) > logs[1],
+        "42: sem retrato no histórico dos dois",
+    )
+    _garante(
+        (corpo.get("venda_passou_para") or {}).get("id") == g["novo"],
+        f"42: venda_passou_para {corpo.get('venda_passou_para')}",
+    )
     c = _cancelamento(g["principal"])
     _garante(c["regime"] == "dia" and c["passou"], f"42: antigo 1º dia {c}")
     _igual(c["venda_antes"], 3000, "42: venda antes")
     _igual(c["venda_depois"], 3000, "42: venda depois")
-    _garante(_telas_da_venda(g) == telas_antes, f"42: as telas mudaram: {telas_antes} → {_telas_da_venda(g)}")
-    _garante(_ao_cancelar.count((g["principal"], "so_este_dia", g["novo"])) == 1, f"42: ao_cancelar {_ao_cancelar}")
+    _garante(
+        _telas_da_venda(g) == telas_antes,
+        f"42: as telas mudaram: {telas_antes} → {_telas_da_venda(g)}",
+    )
+    _garante(
+        _ao_cancelar.count((g["principal"], "so_este_dia", g["novo"])) == 1,
+        f"42: ao_cancelar {_ao_cancelar}",
+    )
     momento = [x for x in _ao_cancelar_estado if x["evento"] == g["principal"]]
     _garante(
-        momento and momento[0]["venda_do_evento"] is None and q(momento[0]["venda_do_novo"]) == q(3000) and momento[0]["linhas_no_evento"] == 0,
+        momento
+        and momento[0]["venda_do_evento"] is None
+        and q(momento[0]["venda_do_novo"]) == q(3000)
+        and momento[0]["linhas_no_evento"] == 0,
         f"42: ao_cancelar antes da passagem: {momento}",
     )
 
@@ -4461,16 +5610,29 @@ def c42_aviso_e_ensaio() -> None:
     show = _evento_com_elenco("42 aviso elenco", ["A"], inicio=_data_isolada())
     papel = _escalar(show, estado["t"])
     # o elenco precisa estar no antigo 1º dia: a vaga do show vai a ele
-    _no_banco_escrever("UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["principal"], r=papel)
+    _no_banco_escrever(
+        "UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["principal"], r=papel
+    )
     ensaio = _ensaio(g["principal"], _data_isolada())
     _remocoes.clear()
     _cancelar_ok(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+        },
     )
     _esperar_threads()
-    _garante(set(_remocoes_por_talento()) == {estado["t"]}, f"42 aviso: elenco do antigo 1º dia {_remocoes_por_talento()}")
-    _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ensaio), "42 aviso: o ensaio do antigo 1º dia ficou")
+    _garante(
+        set(_remocoes_por_talento()) == {estado["t"]},
+        f"42 aviso: elenco do antigo 1º dia {_remocoes_por_talento()}",
+    )
+    _garante(
+        not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ensaio),
+        "42 aviso: o ensaio do antigo 1º dia ficou",
+    )
 
 
 def c42b_passagem_com_corte() -> None:
@@ -4482,18 +5644,45 @@ def c42b_passagem_com_corte() -> None:
         with _com_hoje(_dia(10)):
             r = _cancelar(
                 g["principal"],
-                {**_corpo_cancelar("parte", 300), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 2400},
+                {
+                    **_corpo_cancelar("parte", 300),
+                    "alcance": "so_este_dia",
+                    "novo_principal_id": g["novo"],
+                    "venda_nova": 2400,
+                },
             )
         _garante(r.status_code == 200, f"42b → {r.status_code} {_erro(r)}")
-        _garante(((r.get_json() or {}).get("venda_passou_para") or {}).get("id") == g["novo"], "42b: venda_passou_para")
+        _garante(
+            ((r.get_json() or {}).get("venda_passou_para") or {}).get("id") == g["novo"],
+            "42b: venda_passou_para",
+        )
         depois = _retrato_passagem([g["principal"], g["novo"]])
-        for tabela in ("event_payments", "event_installments", "event_invoices", "event_contracts", "event_reimbursements", "event_clients", "form_responses"):
-            _garante(sorted(x[:-1] for x in antes[tabela]) == sorted(x[:-1] for x in depois[tabela]), f"42b: {tabela} mudou além do vínculo")
-            _garante({x[-1] for x in depois[tabela]} <= {g["novo"]}, f"42b: {tabela} ainda no antigo")
-        novo = _no_banco("SELECT sale_value, sale_value_gross FROM calendar_events WHERE id = :i", i=g["novo"])[0]
+        for tabela in (
+            "event_payments",
+            "event_installments",
+            "event_invoices",
+            "event_contracts",
+            "event_reimbursements",
+            "event_clients",
+            "form_responses",
+        ):
+            _garante(
+                sorted(x[:-1] for x in antes[tabela]) == sorted(x[:-1] for x in depois[tabela]),
+                f"42b: {tabela} mudou além do vínculo",
+            )
+            _garante(
+                {x[-1] for x in depois[tabela]} <= {g["novo"]}, f"42b: {tabela} ainda no antigo"
+            )
+        novo = _no_banco(
+            "SELECT sale_value, sale_value_gross FROM calendar_events WHERE id = :i", i=g["novo"]
+        )[0]
         _igual(novo[0], 2400, "42b: venda nova no novo principal")
         _igual(novo[1], 2640, "42b: cheio na proporção (sem aumentar o desconto)")
-        _igual(_no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=g["bv"])[0][0], 160, "42b: BV a pagar acompanhou")
+        _igual(
+            _no_banco("SELECT amount_brl FROM event_acrescimos WHERE id = :i", i=g["bv"])[0][0],
+            160,
+            "42b: BV a pagar acompanhou",
+        )
         c = _cancelamento(g["principal"])
         _garante(c["regime"] == "dia" and c["passou"], f"42b: antigo 1º dia {c}")
         _igual(c["venda_antes"], 3000, "42b: venda antes")
@@ -4501,15 +5690,23 @@ def c42b_passagem_com_corte() -> None:
         _igual(c["cheio_antes"], 3300, "42b: cheio antes")
         _igual(c["cheio_depois"], 2640, "42b: cheio depois")
         dev = [d for d in _devolucoes(g["principal"]) if q(d["valor"]) == q(300)]
-        _garante(dev, f"42b: devolução de 300 ligada ao antigo 1º dia: {_devolucoes(g['principal'])}")
-        _igual(_delta(dre_antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"), 0, "42b: a devolução entrou nos gastos da DRE")
+        _garante(
+            dev, f"42b: devolução de 300 ligada ao antigo 1º dia: {_devolucoes(g['principal'])}"
+        )
+        _igual(
+            _delta(dre_antes, _dre(inicio, fim)["dre"]["total"], "gastos_extras"),
+            0,
+            "42b: a devolução entrou nos gastos da DRE",
+        )
         imp = _cliente("sa").get(ROTAS["impacto"].format(id=g["novo"])).get_json()
         _igual(imp.get("ja_devolvido"), 400, "42b: já devolvido (100 + 300)")
         # corte como no 38, contra o novo principal: cheia (2.400 − BV 160) × 2,5% = 56
         if paga:
             linhas = _linhas_comissao(g["novo"])
             base = next(x for x in linhas if x["id"] == g["base"])
-            _garante(base["status"] == "pago" and q(base["valor"]) == q(75), f"42b: a paga mudou {base}")
+            _garante(
+                base["status"] == "pago" and q(base["valor"]) == q(75), f"42b: a paga mudou {base}"
+            )
             _igual(_soma_vivas(g["novo"]), 56, "42b: Σ = cheia nova (75 paga − 19)")
         else:
             _igual(_soma_vivas(g["novo"]), 56, "42b: a pagar 75 → 56")
@@ -4520,11 +5717,18 @@ def c42b_multa_do_antigo() -> None:
     g = _grupo_42("42b multa", comissao_paga=False)
     show = _evento_com_elenco("42b multa elenco", ["A"], inicio=_data_isolada())
     papel = _escalar(show, estado["t"])
-    _no_banco_escrever("UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["principal"], r=papel)
+    _no_banco_escrever(
+        "UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["principal"], r=papel
+    )
     _cancelar_ok(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"],
-         "venda_nova": 3000, "multas": [{"role_id": papel, "valor": 90}]},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+            "multas": [{"role_id": papel, "valor": 90}],
+        },
     )
     multas = _multas_do_evento(g["principal"])
     _garante(len(multas) == 1 and q(multas[0][1]) == q(90), f"42b: multa do antigo 1º dia {multas}")
@@ -4534,47 +5738,116 @@ def c42c_outro_mes() -> None:
     _configurar_educamanto()
     outubro = datetime(2047, 10, 31, 19)
     g = _grupo("42c", dias=1, inicio=outubro, passo=timedelta(days=1), comissao=None, pagos=(1000,))
-    _no_banco_escrever("UPDATE calendar_events SET title = :t, with_invoice = true WHERE id = :i", t="(EDU) V306 42C PRINCIPAL", i=g["principal"])
-    _no_banco_escrever("UPDATE calendar_events SET title = :t WHERE id = :i", t="(EDU) V306 42C DIA 2", i=g["dias"][0])
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t, with_invoice = true WHERE id = :i",
+        t="(EDU) V306 42C PRINCIPAL",
+        i=g["principal"],
+    )
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t WHERE id = :i",
+        t="(EDU) V306 42C DIA 2",
+        i=g["dias"][0],
+    )
     _bv(g["principal"], 200)
     elenco = _evento_com_elenco("42c elenco", ["A"], inicio=_data_isolada())
     papel = _escalar(elenco, estado["t"])
-    _no_banco_escrever("UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["dias"][0], r=papel)
+    _no_banco_escrever(
+        "UPDATE event_roles SET event_id = :p WHERE id = :r", p=g["dias"][0], r=papel
+    )
     _linha_comissao(g["principal"], 50, vendedor="vend2", liberacao=outubro.date())
     propria = _linha_comissao(g["dias"][0], 40, status="pago")
     # a comissão comum de outro grupo que cruza o mês: data de venda e ciclo ficam
-    h = _grupo("42c comum", dias=1, inicio=datetime(2047, 10, 30, 19), passo=timedelta(days=3), comissao="a_pagar", pagos=(1000,))
+    h = _grupo(
+        "42c comum",
+        dias=1,
+        inicio=datetime(2047, 10, 30, 19),
+        passo=timedelta(days=3),
+        comissao="a_pagar",
+        pagos=(1000,),
+    )
     linha_comum = _linhas_comissao(h["principal"])[0]
     out_antes = _dre(date(2047, 10, 1), date(2047, 10, 31))["dre"]["total"]
     nov_antes = _dre(date(2047, 11, 1), date(2047, 11, 30))["dre"]["total"]
-    _cancelar_ok(g["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["dias"][0], "venda_nova": 3000})
+    _cancelar_ok(
+        g["principal"],
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["dias"][0],
+            "venda_nova": 3000,
+        },
+    )
     _comissoes(_mes(_hoje_sp()))
-    edu = [x for x in _linhas_comissao(g["dias"][0]) if x["seller"] == estado["usuarios"]["vend2"]["id"]]
-    _garante(edu and edu[0]["liberacao"] == date(2047, 11, 1), f"42c: EducaManto não foi a 01/11: {edu}")
-    _cancelar_ok(h["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": h["dias"][0], "venda_nova": 3000})
+    edu = [
+        x
+        for x in _linhas_comissao(g["dias"][0])
+        if x["seller"] == estado["usuarios"]["vend2"]["id"]
+    ]
+    _garante(
+        edu and edu[0]["liberacao"] == date(2047, 11, 1), f"42c: EducaManto não foi a 01/11: {edu}"
+    )
+    _cancelar_ok(
+        h["principal"],
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": h["dias"][0],
+            "venda_nova": 3000,
+        },
+    )
     _comissoes(_mes(_hoje_sp()))
     c2 = next((x for x in _linhas_comissao(h["dias"][0]) if x["id"] == linha_comum["id"]), None)
     _garante(
-        c2 and (c2["venda_em"], c2["liberacao"]) == (linha_comum["venda_em"], linha_comum["liberacao"]),
+        c2
+        and (c2["venda_em"], c2["liberacao"])
+        == (linha_comum["venda_em"], linha_comum["liberacao"]),
         f"42c: data de venda ou ciclo da comissão comum mudou {linha_comum} → {c2}",
     )
     p = next(x for x in _linhas_comissao(g["dias"][0]) if x["id"] == propria)
-    _garante(p["status"] == "pago" and q(p["valor"]) == q(40), "42c: a comissão própria entrou na conta")
-    _garante(not [x for x in _linhas_comissao(g["dias"][0]) if x["original_id"] == propria], "42c: nasceu ajuste contra a comissão própria")
-    _igual(_soma_vivas(g["dias"][0], "vend"), 40, "42c: a comissão própria entrou na conta (Σ do vendedor)")
+    _garante(
+        p["status"] == "pago" and q(p["valor"]) == q(40), "42c: a comissão própria entrou na conta"
+    )
+    _garante(
+        not [x for x in _linhas_comissao(g["dias"][0]) if x["original_id"] == propria],
+        "42c: nasceu ajuste contra a comissão própria",
+    )
+    _igual(
+        _soma_vivas(g["dias"][0], "vend"),
+        40,
+        "42c: a comissão própria entrou na conta (Σ do vendedor)",
+    )
     out = _dre(date(2047, 10, 1), date(2047, 10, 31))["dre"]["total"]
     nov = _dre(date(2047, 11, 1), date(2047, 11, 30))["dre"]["total"]
     for k in ("receita_bruta", "impostos", "cpv", "comissoes"):
         if k not in out:
             continue
-        _garante(Decimal(str(out[k])) - Decimal(str(out_antes[k])) <= 0 and Decimal(str(nov[k])) - Decimal(str(nov_antes[k])) >= 0, f"42c: {k} não foi de outubro a novembro")
+        _garante(
+            Decimal(str(out[k])) - Decimal(str(out_antes[k])) <= 0
+            and Decimal(str(nov[k])) - Decimal(str(nov_antes[k])) >= 0,
+            f"42c: {k} não foi de outubro a novembro",
+        )
     # as duas passagens (g, de 31/10 a 01/11, e h, de 30/10 a 02/11) levam 3.000 cada a novembro
     _igual(_delta(nov_antes, nov, "receita_bruta"), 6000, "42c: receita em novembro")
     _igual(_delta(out_antes, out, "receita_bruta"), -6000, "42c: outubro ainda com a receita")
     bv_nov = [i for i in _planilha("2047-11") if i["type"] == "bv"]
-    _garante(any(int(i["id"]) in {r[0] for r in _no_banco("SELECT id FROM event_acrescimos WHERE event_id = :i", i=g["dias"][0])} for i in bv_nov), "42c: BV fora da Planilha de novembro")
+    _garante(
+        any(
+            int(i["id"])
+            in {
+                r[0]
+                for r in _no_banco(
+                    "SELECT id FROM event_acrescimos WHERE event_id = :i", i=g["dias"][0]
+                )
+            }
+            for i in bv_nov
+        ),
+        "42c: BV fora da Planilha de novembro",
+    )
     jinja_out = _dre_jinja(date(2047, 10, 1), date(2047, 10, 31))
-    _garante(Decimal(str(jinja_out["drg_total"]["receita_bruta"])) == Decimal(str(out["receita_bruta"])), "42c: Jinja de outubro diverge da API")
+    _garante(
+        Decimal(str(jinja_out["drg_total"]["receita_bruta"])) == Decimal(str(out["receita_bruta"])),
+        "42c: Jinja de outubro diverge da API",
+    )
 
 
 def c42d_recusas_da_passagem() -> None:
@@ -4585,30 +5858,66 @@ def c42d_recusas_da_passagem() -> None:
     campos = {x: _campos(x) for x in (g["principal"], g["novo"], g["ja_cancelado"])}
 
     def nada_mudou(rotulo: str) -> None:
-        _garante(_retrato_passagem([g["principal"], g["novo"], g["ja_cancelado"]]) == antes, f"42d {rotulo}: alguma linha mudou de vínculo ou valor")
-        _garante({x: _campos(x) for x in campos} == campos, f"42d {rotulo}: campos do grupo mudaram")
-        _garante(_cancelado_em(g["principal"]) is None and _cancelamento(g["principal"]) is None, f"42d {rotulo}: o antigo cancelou")
+        _garante(
+            _retrato_passagem([g["principal"], g["novo"], g["ja_cancelado"]]) == antes,
+            f"42d {rotulo}: alguma linha mudou de vínculo ou valor",
+        )
+        _garante(
+            {x: _campos(x) for x in campos} == campos, f"42d {rotulo}: campos do grupo mudaram"
+        )
+        _garante(
+            _cancelado_em(g["principal"]) is None and _cancelamento(g["principal"]) is None,
+            f"42d {rotulo}: o antigo cancelou",
+        )
 
-    corpo_ok = {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000}
-    r = _cancelar(g["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000})
-    _garante(r.status_code == 400 and "alcance" in (_erro(r).get("fields") or {}), f"42d alcance → {r.status_code} {_erro(r)}")
+    corpo_ok = {
+        **_corpo_cancelar("nada", None, nome=None, pix=None),
+        "alcance": "so_este_dia",
+        "novo_principal_id": g["novo"],
+        "venda_nova": 3000,
+    }
+    r = _cancelar(
+        g["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000}
+    )
+    _garante(
+        r.status_code == 400 and "alcance" in (_erro(r).get("fields") or {}),
+        f"42d alcance → {r.status_code} {_erro(r)}",
+    )
     nada_mudou("alcance")
     # um dia vivo do grupo que não é o mais cedo
     tarde = _evento("42d dia tarde", venda=None, inicio=_data_isolada(dias=30))
     _agrupar(g["principal"], tarde)
     r = _cancelar(g["principal"], {**corpo_ok, "novo_principal_id": tarde})
-    _garante(r.status_code == 409 and _codigo(r) == "grupo_mudou", f"42d não é o mais cedo → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "grupo_mudou",
+        f"42d não é o mais cedo → {r.status_code} {_erro(r)}",
+    )
     nada_mudou("não é o mais cedo")
     _no_banco_escrever("UPDATE calendar_events SET group_leader_id = NULL WHERE id = :i", i=tarde)
     # principal de grupo sem outro dia vivo
     s = _grupo("42d sozinho", dias=1, pagos=(), comissao=None)
-    _cancelar_ok(s["dias"][0], {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000})
-    r = _cancelar(s["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "venda_nova": 3000})
-    _garante(r.status_code == 409 and _codigo(r) == "sem_outro_dia_vivo", f"42d sem outro dia vivo → {r.status_code} {_erro(r)}")
+    _cancelar_ok(
+        s["dias"][0], {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 3000}
+    )
+    r = _cancelar(
+        s["principal"],
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "venda_nova": 3000,
+        },
+    )
+    _garante(
+        r.status_code == 409 and _codigo(r) == "sem_outro_dia_vivo",
+        f"42d sem outro dia vivo → {r.status_code} {_erro(r)}",
+    )
     _garante(_cancelado_em(s["principal"]) is None, "42d: o principal sem outro dia vivo cancelou")
     pend = _devolucao_avulsa(g["principal"], 10, status="pendente")
     r = _cancelar(g["principal"], corpo_ok)
-    _garante(r.status_code == 409 and _codigo(r) == "devolucao_pendente", f"42d pendente → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "devolucao_pendente",
+        f"42d pendente → {r.status_code} {_erro(r)}",
+    )
     _no_banco_escrever("DELETE FROM special_expenses WHERE id = :i", i=pend)
     nada_mudou("pendente")
     r = _cliente("com").post(ROTAS["cancelar"].format(id=g["principal"]), json=corpo_ok)
@@ -4628,7 +5937,9 @@ def c42d_recusas_da_passagem() -> None:
             r = None  # com TESTING a exceção sobe pelo test client
     finally:
         group_ops.passar_venda = real
-    _garante(r is None or r.status_code >= 500, f"42d exceção injetada → {r.status_code if r else None}")
+    _garante(
+        r is None or r.status_code >= 500, f"42d exceção injetada → {r.status_code if r else None}"
+    )
     nada_mudou("exceção injetada")
     # duas confirmações simultâneas: uma vence, a outra recebe 409
     respostas: list = []
@@ -4643,7 +5954,11 @@ def c42d_recusas_da_passagem() -> None:
         f.join(timeout=120)
     codigos = sorted(x.status_code for x in respostas)
     _garante(codigos == [200, 409], f"42d simultâneas → {codigos} {[_erro(x) for x in respostas]}")
-    _garante(len(_no_banco("SELECT id FROM event_cancellations WHERE event_id = :i", i=g["principal"])) == 1, "42d: dois congelamentos")
+    _garante(
+        len(_no_banco("SELECT id FROM event_cancellations WHERE event_id = :i", i=g["principal"]))
+        == 1,
+        "42d: dois congelamentos",
+    )
 
 
 def c42d_cache_pago() -> None:
@@ -4651,14 +5966,28 @@ def c42d_cache_pago() -> None:
     g = _grupo_42("42d cachê")
     show = _evento_com_elenco("42d cachê elenco", ["A"], inicio=_data_isolada())
     papel = _escalar(show, estado["t"])
-    _no_banco_escrever("UPDATE event_roles SET event_id = :p, payment_status = 'pago' WHERE id = :r", p=g["principal"], r=papel)
+    _no_banco_escrever(
+        "UPDATE event_roles SET event_id = :p, payment_status = 'pago' WHERE id = :r",
+        p=g["principal"],
+        r=papel,
+    )
     antes = _retrato_passagem([g["principal"], g["novo"]])
     r = _cancelar(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+        },
     )
-    _garante(r.status_code == 409 and _codigo(r) == "cache_pago", f"42d cachê pago → {r.status_code} {_erro(r)}")
-    _garante(_retrato_passagem([g["principal"], g["novo"]]) == antes, "42d cachê: alguma linha mudou")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cache_pago",
+        f"42d cachê pago → {r.status_code} {_erro(r)}",
+    )
+    _garante(
+        _retrato_passagem([g["principal"], g["novo"]]) == antes, "42d cachê: alguma linha mudou"
+    )
     _nada_gravado(g["principal"], "42d cachê")
 
 
@@ -4675,26 +6004,46 @@ def _nada_avisado(event_id: int, marco: int, rotulo: str) -> None:
     for kind in ("evento.cancelado", "evento.cancelado_escala"):
         _garante(not _avisos_do_ato(kind, event_id), f"{rotulo}: sino {kind} depois da recusa")
     _garante(not _remocoes, f"{rotulo}: e-mail de remoção depois da recusa")
-    _garante(not google.deletes(marco), f"{rotulo}: remoção no Google depois da recusa {google.deletes(marco)}")
+    _garante(
+        not google.deletes(marco),
+        f"{rotulo}: remoção no Google depois da recusa {google.deletes(marco)}",
+    )
 
 
 def c33_cache_pago() -> None:
-    passado = datetime.combine(_hoje_sp() - timedelta(days=20), datetime.min.time()).replace(hour=19)
+    passado = datetime.combine(_hoje_sp() - timedelta(days=20), datetime.min.time()).replace(
+        hour=19
+    )
     for estado_pag in ("pago", "no_banco"):
         show = _evento_com_elenco(f"33 {estado_pag}", ["A"], inicio=passado)
-        _no_banco_escrever("UPDATE calendar_events SET sale_value = 2000, seller_id = :v WHERE id = :i", v=estado["usuarios"]["vend"]["id"], i=show)
+        _no_banco_escrever(
+            "UPDATE calendar_events SET sale_value = 2000, seller_id = :v WHERE id = :i",
+            v=estado["usuarios"]["vend"]["id"],
+            i=show,
+        )
         role = _escalar(show, estado["t"])
-        _no_banco_escrever("UPDATE event_roles SET payment_status = :s WHERE id = :i", s=estado_pag, i=role)
+        _no_banco_escrever(
+            "UPDATE event_roles SET payment_status = :s WHERE id = :i", s=estado_pag, i=role
+        )
         ensaio = _ensaio(show, _data_isolada())
         imp = _cliente("sa").get(ROTAS["impacto"].format(id=show)).get_json()
         _garante((imp.get("cache_pago") or 0) > 0, f"33: impacto sem cache_pago ({estado_pag})")
         _remocoes.clear()
         marco = google.marco()
         r = _cancelar(show, _corpo_cancelar("nada", None, nome=None, pix=None))
-        _garante(r.status_code == 409 and _codigo(r) == "cache_pago", f"33 {estado_pag} → {r.status_code} {_erro(r)}")
-        _garante(_erro(r).get("message") == FRASE_CACHE_PAGO, f"33: frase do cache_pago {_erro(r).get('message')!r}")
+        _garante(
+            r.status_code == 409 and _codigo(r) == "cache_pago",
+            f"33 {estado_pag} → {r.status_code} {_erro(r)}",
+        )
+        _garante(
+            _erro(r).get("message") == FRASE_CACHE_PAGO,
+            f"33: frase do cache_pago {_erro(r).get('message')!r}",
+        )
         _nada_gravado(show, "33")
-        _garante(_no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ensaio), "33: o ensaio saiu do banco")
+        _garante(
+            _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ensaio),
+            "33: o ensaio saiu do banco",
+        )
         _nada_avisado(show, marco, f"33 {estado_pag}")
     marcado = _evento_com_elenco("33 marcado", ["A"], inicio=passado)
     role = _escalar(marcado, estado["t"])
@@ -4705,10 +6054,14 @@ def c33_cache_pago() -> None:
     _remocoes.clear()
     marco = google.marco()
     r = _cancelar(marcado, _corpo_cancelar("nada", None, nome=None, pix=None))
-    _garante(r.status_code == 409 and _codigo(r) == "cache_pago", f"33 marcado → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "cache_pago",
+        f"33 marcado → {r.status_code} {_erro(r)}",
+    )
     _nada_gravado(marcado, "33 marcado")
     _garante(
-        _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=marcado)[0][0] is not None,
+        _no_banco("SELECT google_missing_since FROM calendar_events WHERE id = :i", i=marcado)[0][0]
+        is not None,
         "33: o marcado perdeu a marca (só lhe resta 'Devolver ao Google')",
     )
     _nada_avisado(marcado, marco, "33 marcado")
@@ -4718,12 +6071,16 @@ def c33_cache_pago() -> None:
     imp = _cliente("sa").get(ROTAS["impacto"].format(id=presenca)).get_json()
     _garante(not imp.get("cache_pago"), "33: a vaga de presença contou como cachê pago")
     r = _cancelar(presenca, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
-    _garante(r.status_code == 200, f"33: a recusa contou a vaga de presença → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 200, f"33: a recusa contou a vaga de presença → {r.status_code} {_erro(r)}"
+    )
 
 
 def _ensaio(show: int, quando: datetime) -> int:
     gid = f"{GID}-ens-{uuid.uuid4().hex[:8]}"
-    google.registrar(_item_google(gid, f"🟧 ENSAIO V306 {show}", quando, quando + timedelta(hours=2)))
+    google.registrar(
+        _item_google(gid, f"🟧 ENSAIO V306 {show}", quando, quando + timedelta(hours=2))
+    )
     with app.app_context():
         e = CalendarEvent(
             title=f"🟧 ENSAIO V306 {show}",
@@ -4749,17 +6106,31 @@ def c43_ensaios() -> None:
         _no_banco("SELECT google_event_id FROM calendar_events WHERE id = :i", i=x)[0][0]: x
         for x in [show, *ensaios]
     }
-    datas = {x: _no_banco("SELECT start_at, location FROM calendar_events WHERE id = :i", i=x)[0] for x in ensaios}
+    datas = {
+        x: _no_banco("SELECT start_at, location FROM calendar_events WHERE id = :i", i=x)[0]
+        for x in ensaios
+    }
     marco = google.marco()
     _commit_antes_do_google.clear()
     corpo = _cancelar_ok(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     for e in ensaios:
-        _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e), f"43: ensaio {e} ficou no banco")
-    _garante(sorted(google.deletes(marco)) == sorted(alvos), f"43: remoções {google.deletes(marco)} × {sorted(alvos)}")
+        _garante(
+            not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e),
+            f"43: ensaio {e} ficou no banco",
+        )
+    _garante(
+        sorted(google.deletes(marco)) == sorted(alvos),
+        f"43: remoções {google.deletes(marco)} × {sorted(alvos)}",
+    )
     # O dublê anota, a cada remoção, se o cancelamento já estava commitado (conexão separada).
-    _garante(_commit_antes_do_google and all(_commit_antes_do_google), f"43: Google antes do commit {_commit_antes_do_google}")
+    _garante(
+        _commit_antes_do_google and all(_commit_antes_do_google),
+        f"43: Google antes do commit {_commit_antes_do_google}",
+    )
     itens = corpo.get("ensaios_cancelados") or []
-    _garante(sorted(i.get("id") for i in itens) == sorted(ensaios), f"43: ensaios_cancelados {itens}")
+    _garante(
+        sorted(i.get("id") for i in itens) == sorted(ensaios), f"43: ensaios_cancelados {itens}"
+    )
     for i in itens:
         quando, local = datas[i["id"]]
         _garante(
@@ -4778,16 +6149,25 @@ def c43_ensaios() -> None:
     app.config[TRAVA] = True
     marco = google.marco()
     corpo = _cancelar_ok(travado, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
-    _garante(not google.deletes(marco) and corpo.get("aviso"), "43: com a trava, chamou o Google ou sem aviso")
+    _garante(
+        not google.deletes(marco) and corpo.get("aviso"),
+        "43: com a trava, chamou o Google ou sem aviso",
+    )
     app.config[TRAVA] = False
     falha = _evento_com_elenco("43 falha", ["A"])
     e1 = _ensaio(falha, _data_isolada())
     e2 = _ensaio(falha, _data_isolada())
     google.falhar_delete.add(estado["eventos"][e2])
     corpo = _cancelar_ok(falha, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
-    _garante(corpo.get("aviso") and _cancelado_em(falha) is not None, "43: a falha desfez o cancelamento ou não avisou")
+    _garante(
+        corpo.get("aviso") and _cancelado_em(falha) is not None,
+        "43: a falha desfez o cancelamento ou não avisou",
+    )
     for e in (e1, e2):
-        _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e), f"43: com a falha, o ensaio {e} ficou no banco")
+        _garante(
+            not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e),
+            f"43: com a falha, o ensaio {e} ficou no banco",
+        )
     # grupo com ensaio em 2 dias: os dois saem no mesmo ato
     d1 = _evento_com_elenco("43 dia 1", ["A"])
     d2 = _evento_com_elenco("43 dia 2", ["A"])
@@ -4795,7 +6175,10 @@ def c43_ensaios() -> None:
     g1, g2 = _ensaio(d1, _data_isolada()), _ensaio(d2, _data_isolada())
     _cancelar_ok(d1, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"})
     for e in (g1, g2):
-        _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e), f"43 grupo: o ensaio {e} ficou")
+        _garante(
+            not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=e),
+            f"43 grupo: o ensaio {e} ficou",
+        )
     # regressão: o botão "Cancelar ensaio" e a troca SHOW → outro seguem apagando pelo mesmo caminho
     vivo = _evento_com_elenco("43 vivo", ["A"])
     ens = _ensaio(vivo, _data_isolada())
@@ -4803,8 +6186,13 @@ def c43_ensaios() -> None:
     marco = google.marco()
     r = _cliente("sa").delete(f"/api/ensaios/{ens}")
     _garante(r.status_code == 200, f"43 Cancelar ensaio → {r.status_code} {_erro(r)}")
-    _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ens), "43: o Cancelar ensaio não apagou")
-    _garante(google.deletes(marco) == [gid], f"43: o Cancelar ensaio no Google {google.deletes(marco)}")
+    _garante(
+        not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ens),
+        "43: o Cancelar ensaio não apagou",
+    )
+    _garante(
+        google.deletes(marco) == [gid], f"43: o Cancelar ensaio no Google {google.deletes(marco)}"
+    )
     _garante(_cancelado_em(vivo) is None, "43: o Cancelar ensaio cancelou o show")
     troca = _evento_com_elenco("43 troca", ["A"])
     ens2 = _ensaio(troca, _data_isolada())
@@ -4815,10 +6203,18 @@ def c43_ensaios() -> None:
         ev = db.session.get(CalendarEvent, troca)
         ev.event_type = "R&I"
         db.session.flush()
-        event_ops.aplicar_troca_de_tipo(ev, "SHOW", "R&I", actor_name="verify 306", tz=ZoneInfo("America/Sao_Paulo"))
+        event_ops.aplicar_troca_de_tipo(
+            ev, "SHOW", "R&I", actor_name="verify 306", tz=ZoneInfo("America/Sao_Paulo")
+        )
         db.session.commit()
-    _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ens2), "43: a troca SHOW → R&I não apagou o ensaio")
-    _garante(google.deletes(marco) == [estado["eventos"][ens2]], f"43: a troca no Google {google.deletes(marco)}")
+    _garante(
+        not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=ens2),
+        "43: a troca SHOW → R&I não apagou o ensaio",
+    )
+    _garante(
+        google.deletes(marco) == [estado["eventos"][ens2]],
+        f"43: a troca no Google {google.deletes(marco)}",
+    )
 
 
 def _avisos(kind: str, event_id: int) -> list:
@@ -4858,7 +6254,9 @@ def _remocoes_por_talento() -> dict[int, list[tuple[int, str]]]:
     out: dict[int, list[tuple[int, str]]] = {}
     for chamada in _remocoes:
         talento, evento, personagem = chamada["args"][:3]
-        out.setdefault(getattr(talento, "id", talento), []).append((getattr(evento, "id", evento), personagem))
+        out.setdefault(getattr(talento, "id", talento), []).append(
+            (getattr(evento, "id", evento), personagem)
+        )
     return out
 
 
@@ -4867,7 +6265,10 @@ def _personagem(role_id: int) -> str:
 
 
 def c44_avisos() -> None:
-    ensaio_users, casting_users = _ativos_do_papel(RoleName.ENSAIO), _ativos_do_papel(RoleName.CASTING)
+    ensaio_users, casting_users = (
+        _ativos_do_papel(RoleName.ENSAIO),
+        _ativos_do_papel(RoleName.CASTING),
+    )
     d1 = _evento_com_elenco("44 dia 1", ["A", "B", "C"], inicio=_dias_a_frente(2))
     d2 = _evento_com_elenco("44 dia 2", ["A"], inicio=_dias_a_frente(3))
     _agrupar(d1, d2)
@@ -4877,21 +6278,38 @@ def c44_avisos() -> None:
     t2_d1 = _escalar(d1, estado["t2"])
     _escalar(d1, estado["t_sem_pix"], convite="rejected")
     _remocoes.clear()
-    corpo = _cancelar_ok(d1, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"})
+    corpo = _cancelar_ok(
+        d1, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"}
+    )
     _esperar_threads()
     avisos = _avisos_do_ato("evento.cancelado", d1)
     por_usuario: dict[int, int] = {}
     for a in avisos:
         por_usuario[a[0]] = por_usuario.get(a[0], 0) + 1
-    _garante(set(por_usuario) == ensaio_users and set(por_usuario.values()) == {1}, f"44: evento.cancelado {por_usuario} × ENSAIO {ensaio_users}")
+    _garante(
+        set(por_usuario) == ensaio_users and set(por_usuario.values()) == {1},
+        f"44: evento.cancelado {por_usuario} × ENSAIO {ensaio_users}",
+    )
     emails = _remocoes_por_talento()
-    _garante(set(emails) == {estado["t"], estado["t2"]}, f"44: e-mails {emails} (uma vez por pessoa; quem recusou fora)")
+    _garante(
+        set(emails) == {estado["t"], estado["t2"]},
+        f"44: e-mails {emails} (uma vez por pessoa; quem recusou fora)",
+    )
     _garante(all(len(v) == 1 for v in emails.values()), f"44: e-mail repetido {emails}")
-    _garante(emails[estado["t"]] == [(d1, _personagem(t_d1))], f"44: e-mail do dia mais cedo {emails[estado['t']]}")
-    _garante(emails[estado["t2"]] == [(d1, _personagem(t2_d1))], f"44: e-mail de t2 {emails[estado['t2']]}")
+    _garante(
+        emails[estado["t"]] == [(d1, _personagem(t_d1))],
+        f"44: e-mail do dia mais cedo {emails[estado['t']]}",
+    )
+    _garante(
+        emails[estado["t2"]] == [(d1, _personagem(t2_d1))],
+        f"44: e-mail de t2 {emails[estado['t2']]}",
+    )
     escala = _avisos_do_ato("evento.cancelado_escala", d1)
     dias_avisados = {(a[0], int(a[3].rsplit(":", 1)[1])) for a in escala}
-    _garante(dias_avisados == {(u, d) for u in casting_users for d in (d1, d2)}, f"44: evento.cancelado_escala {sorted(dias_avisados)}")
+    _garante(
+        dias_avisados == {(u, d) for u in casting_users for d in (d1, d2)},
+        f"44: evento.cancelado_escala {sorted(dias_avisados)}",
+    )
     _garante(all("aba=producao" in (a[2] or "") for a in escala), f"44: link da escala {escala}")
     _garante(all(a[1] == "urgent" for a in escala), "44: a 2 dias o sino não é urgent")
     _garante(
@@ -4910,19 +6328,29 @@ def c44_avisos() -> None:
     _remocoes.clear()
     _cancelar_ok(sem_ensaio, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     _esperar_threads()
-    _garante(not _avisos_do_ato("evento.cancelado", sem_ensaio), "44: sem ensaio avisou a equipe de Ensaio")
+    _garante(
+        not _avisos_do_ato("evento.cancelado", sem_ensaio),
+        "44: sem ensaio avisou a equipe de Ensaio",
+    )
     _garante(set(_remocoes_por_talento()) == {estado["t"]}, "44: sem ensaio não avisou o escalado")
     a60 = _avisos_do_ato("evento.cancelado_escala", sem_ensaio)
-    _garante(a60 and all(a[1] == "info" for a in a60), f"44: a 60 dias o sino não é info (ou não veio): {a60}")
+    _garante(
+        a60 and all(a[1] == "info" for a in a60),
+        f"44: a 60 dias o sino não é info (ou não veio): {a60}",
+    )
     # sem elenco: nenhum sino ao Casting
     vazio = _evento_com_elenco("44 sem elenco", ["A"])
     _cancelar_ok(vazio, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
-    _garante(not _avisos_do_ato("evento.cancelado_escala", vazio), "44: sem elenco, sino ao Casting")
+    _garante(
+        not _avisos_do_ato("evento.cancelado_escala", vazio), "44: sem elenco, sino ao Casting"
+    )
     # corte: só o elenco do dia cortado, com a data dele
     c1 = _evento_com_elenco("44 corte 1", ["A"], inicio=_dias_a_frente(20))
     c2 = _evento_com_elenco("44 corte 2", ["A", "B"], inicio=_dias_a_frente(21))
     _agrupar(c1, c2)
-    _no_banco_escrever("UPDATE calendar_events SET sale_value = 2000, sale_value_gross = 2000 WHERE id = :i", i=c1)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET sale_value = 2000, sale_value_gross = 2000 WHERE id = :i", i=c1
+    )
     _escalar(c1, estado["t"])
     v_c2 = _escalar(c2, estado["t"])
     _escalar(c1, estado["t2"])
@@ -4930,18 +6358,38 @@ def c44_avisos() -> None:
     r = _corte(c2, 1500, modo="nada", valor=None)
     _garante(r.status_code == 200, f"44 corte → {r.status_code} {_erro(r)}")
     _esperar_threads()
-    _garante(_remocoes_por_talento() == {estado["t"]: [(c2, _personagem(v_c2))]}, f"44: no corte, e-mails {_remocoes_por_talento()}")
-    _garante({int(a[3].rsplit(":", 1)[1]) for a in _avisos_do_ato("evento.cancelado_escala", c2)} == {c2}, "44: no corte, sino de outro dia")
+    _garante(
+        _remocoes_por_talento() == {estado["t"]: [(c2, _personagem(v_c2))]},
+        f"44: no corte, e-mails {_remocoes_por_talento()}",
+    )
+    _garante(
+        {int(a[3].rsplit(":", 1)[1]) for a in _avisos_do_ato("evento.cancelado_escala", c2)}
+        == {c2},
+        "44: no corte, sino de outro dia",
+    )
     # passagem: o elenco do antigo 1º dia é avisado
     p1 = _evento_com_elenco("44 passagem 1", ["A"], inicio=_dias_a_frente(30))
     p2 = _evento_com_elenco("44 passagem 2", ["A"], inicio=_dias_a_frente(31))
     _agrupar(p1, p2)
-    _no_banco_escrever("UPDATE calendar_events SET sale_value = 2000, sale_value_gross = 2000 WHERE id = :i", i=p1)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET sale_value = 2000, sale_value_gross = 2000 WHERE id = :i", i=p1
+    )
     v_p1 = _escalar(p1, estado["t2"])
     _remocoes.clear()
-    _cancelar_ok(p1, {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": p2, "venda_nova": 2000})
+    _cancelar_ok(
+        p1,
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": p2,
+            "venda_nova": 2000,
+        },
+    )
     _esperar_threads()
-    _garante(_remocoes_por_talento() == {estado["t2"]: [(p1, _personagem(v_p1))]}, f"44: na passagem, e-mails {_remocoes_por_talento()}")
+    _garante(
+        _remocoes_por_talento() == {estado["t2"]: [(p1, _personagem(v_p1))]},
+        f"44: na passagem, e-mails {_remocoes_por_talento()}",
+    )
     # 409 não avisa
     recusado = _evento_com_elenco("44 recusado", ["A"])
     _escalar(recusado, estado["t"])
@@ -4996,18 +6444,35 @@ def c45_multa_no_ato() -> None:
     _garante(imp.get("faltam_dias") in (59, 60, 61), f"45: faltam_dias {imp.get('faltam_dias')}")
     bloco = imp.get("elenco") or []
     vagas = {e.get("role_id") for e in bloco}
-    _garante({r1, r2} <= vagas and recusou not in vagas, f"45: bloco do elenco {vagas} (quem recusou fica fora)")
-    _garante(not any(k.startswith("multa") and e[k] for e in bloco for k in e), f"45: o bloco sugeriu multa: {bloco}")
+    _garante(
+        {r1, r2} <= vagas and recusou not in vagas,
+        f"45: bloco do elenco {vagas} (quem recusou fica fora)",
+    )
+    _garante(
+        not any(k.startswith("multa") and e[k] for e in bloco for k in e),
+        f"45: o bloco sugeriu multa: {bloco}",
+    )
     antes = _dre(inicio, fim)["dre"]["total"]
-    corpo = _corpo_cancelar("parte", 600, multas=[{"role_id": r1, "valor": 150}, {"role_id": r2, "valor": 0}])
+    corpo = _corpo_cancelar(
+        "parte", 600, multas=[{"role_id": r1, "valor": 150}, {"role_id": r2, "valor": 0}]
+    )
     _cancelar_ok(show, corpo)
     multas = _multas_do_evento(show)
     _garante(len(multas) == 1, f"45: multas {multas}")
     gid, valor, status, pagamento, nome, pix, data, tipo = multas[0]
     _igual(valor, 150, "45: multa")
-    _garante(status == "aprovado" and pagamento == "nao_pago" and tipo == "fornecedor", f"45: gasto {multas[0]}")
-    _garante(nome == _nome_do_talento(estado["t"]) and pix == PIX, f"45: nome e PIX do talento: {nome!r} {pix!r}")
-    _garante(data == _cancelado_em(show).date(), f"45: data da multa {data} × cancelamento {_cancelado_em(show)}")
+    _garante(
+        status == "aprovado" and pagamento == "nao_pago" and tipo == "fornecedor",
+        f"45: gasto {multas[0]}",
+    )
+    _garante(
+        nome == _nome_do_talento(estado["t"]) and pix == PIX,
+        f"45: nome e PIX do talento: {nome!r} {pix!r}",
+    )
+    _garante(
+        data == _cancelado_em(show).date(),
+        f"45: data da multa {data} × cancelamento {_cancelado_em(show)}",
+    )
     resumo = _resumo_api(show)
     _igual(resumo["retido"], 400, "45: retido")
     _igual(resumo["comissao"]["retido"], 18, "45: comissão do retido")
@@ -5015,22 +6480,47 @@ def c45_multa_no_ato() -> None:
     elenco = resumo.get("elenco") or []
     _garante(len(elenco) == 2, f"45: lista do ato com quem recusou ou sem um escalado: {elenco}")
     depois = _dre(inicio, fim)["dre"]["total"]
-    _igual(_delta(antes, depois, "gastos_extras"), 150, "45: DRE do mês do cancelamento, gastos +150")
+    _igual(
+        _delta(antes, depois, "gastos_extras"), 150, "45: DRE do mês do cancelamento, gastos +150"
+    )
     _igual(_delta(antes, depois, "resultado_liquido"), 342 - 150, "45: resultado +342 − 150")
-    item = [i for i in _planilha(_mes(_hoje_sp())) if i["type"] == "expense" and int(i["id"]) == gid]
-    _garante(item and abs(float(item[0]["amount"]) - 150) < 0.005, f"45: multa fora da Planilha do mês: {item}")
+    item = [
+        i for i in _planilha(_mes(_hoje_sp())) if i["type"] == "expense" and int(i["id"]) == gid
+    ]
+    _garante(
+        item and abs(float(item[0]["amount"]) - 150) < 0.005,
+        f"45: multa fora da Planilha do mês: {item}",
+    )
     r = _patch_gasto(gid, "fin", description=f"{PREFIX}multa editada")
-    _garante(r.status_code == 200, f"45: multa não editável em Gastos Extras → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 200,
+        f"45: multa não editável em Gastos Extras → {r.status_code} {_erro(r)}",
+    )
     # a 2 dias, talento sem PIX
     sem = _evento_com_elenco("45 sem pix", ["A"], inicio=_dias_a_frente(2))
     rs = _escalar(sem, estado["t_sem_pix"])
     imp2 = _cliente("sa").get(ROTAS["impacto"].format(id=sem)).get_json()
-    _garante(imp2.get("faltam_dias") in (1, 2, 3), f"45: faltam_dias a 2 dias {imp2.get('faltam_dias')}")
-    _garante(rs in {e.get("role_id") for e in imp2.get("elenco") or []}, "45: o bloco não veio a 2 dias")
-    _cancelar_ok(sem, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "multas": [{"role_id": rs, "valor": 80}]})
+    _garante(
+        imp2.get("faltam_dias") in (1, 2, 3), f"45: faltam_dias a 2 dias {imp2.get('faltam_dias')}"
+    )
+    _garante(
+        rs in {e.get("role_id") for e in imp2.get("elenco") or []}, "45: o bloco não veio a 2 dias"
+    )
+    _cancelar_ok(
+        sem,
+        {
+            "motivo": "verify 306",
+            "devolucao": {"modo": "nada"},
+            "multas": [{"role_id": rs, "valor": 80}],
+        },
+    )
     m2 = _multas_do_evento(sem)
     _garante(len(m2) == 1 and m2[0][5] in (None, ""), f"45: sem PIX ganhou PIX ou não nasceu: {m2}")
-    item = [i for i in _planilha(_mes(_hoje_sp())) if i["type"] == "expense" and int(i["id"]) == m2[0][0]]
+    item = [
+        i
+        for i in _planilha(_mes(_hoje_sp()))
+        if i["type"] == "expense" and int(i["id"]) == m2[0][0]
+    ]
     _garante(item and not item[0].get("pix_key"), f"45: a Planilha não mostra 'sem PIX': {item}")
     # escalado em 2 dias de um grupo: 2 linhas no bloco e 2 gastos
     d1 = _evento_com_elenco("45 dia 1", ["A"], inicio=_dias_a_frente(70))
@@ -5039,7 +6529,10 @@ def c45_multa_no_ato() -> None:
     v1, v2 = _escalar(d1, estado["t"]), _escalar(d2, estado["t"])
     imp3 = _cliente("sa").get(ROTAS["impacto"].format(id=d1)).get_json()
     linhas = [e for e in imp3.get("elenco") or [] if e.get("role_id") in (v1, v2)]
-    _garante(len(linhas) == 2 and {e.get("day_event_id") for e in linhas} == {d1, d2}, f"45: escalado em 2 dias {linhas}")
+    _garante(
+        len(linhas) == 2 and {e.get("day_event_id") for e in linhas} == {d1, d2},
+        f"45: escalado em 2 dias {linhas}",
+    )
     _cancelar_ok(
         d1,
         {
@@ -5050,7 +6543,10 @@ def c45_multa_no_ato() -> None:
         },
     )
     gastos = _multas_do_evento(d1) + _multas_do_evento(d2)
-    _garante(sorted(q(g[1]) for g in gastos) == [q(100), q(120)], f"45: uma multa por escalação: {gastos}")
+    _garante(
+        sorted(q(g[1]) for g in gastos) == [q(100), q(120)],
+        f"45: uma multa por escalação: {gastos}",
+    )
 
 
 def c45b_multa_depois() -> None:
@@ -5065,32 +6561,61 @@ def c45b_multa_depois() -> None:
     eid = elenco[0]["elenco_id"]
     antes_dre = _dre(inicio, fim)["dre"]["total"]
     with _com_hoje(_dia(10)):
-        r = _cliente("sa").post(ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 150}]})
+        r = _cliente("sa").post(
+            ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 150}]}
+        )
     _garante(r.status_code == 200, f"45b → {r.status_code} {_erro(r)}")
     multas = _multas_do_evento(show)
-    _garante(len(multas) == 1 and (r.get_json() or {}).get("gastos") == [multas[0][0]], f"45b: gastos {multas} × {r.get_json()}")
+    _garante(
+        len(multas) == 1 and (r.get_json() or {}).get("gastos") == [multas[0][0]],
+        f"45b: gastos {multas} × {r.get_json()}",
+    )
     gid, valor, status, pagamento, nome, pix, data, tipo = multas[0]
     _igual(valor, 150, "45b: multa")
-    _garante(status == "aprovado" and pagamento == "nao_pago" and tipo == "fornecedor", f"45b: gasto {multas[0]}")
-    _garante(nome == _nome_do_talento(estado["t"]) and pix == PIX, f"45b: nome e PIX {nome!r} {pix!r}")
-    _garante(data == _dia(10), f"45b: data do lançamento {data}, esperado {_dia(10)} (não a do cancelamento)")
+    _garante(
+        status == "aprovado" and pagamento == "nao_pago" and tipo == "fornecedor",
+        f"45b: gasto {multas[0]}",
+    )
+    _garante(
+        nome == _nome_do_talento(estado["t"]) and pix == PIX, f"45b: nome e PIX {nome!r} {pix!r}"
+    )
+    _garante(
+        data == _dia(10),
+        f"45b: data do lançamento {data}, esperado {_dia(10)} (não a do cancelamento)",
+    )
     depois = _resumo_api(show)
     _igual(depois["retido"], resumo["retido"], "45b: retido mudou")
     _igual(depois["comissao"]["retido"], resumo["comissao"]["retido"], "45b: comissão mudou")
     _igual(depois["bvs"][0]["conta"], resumo["bvs"][0]["conta"], "45b: BV mudou")
-    _igual(_delta(antes_dre, _dre(inicio, fim)["dre"]["total"], "gastos_extras"), 150, "45b: DRE do mês do lançamento +150")
+    _igual(
+        _delta(antes_dre, _dre(inicio, fim)["dre"]["total"], "gastos_extras"),
+        150,
+        "45b: DRE do mês do lançamento +150",
+    )
     item = [i for i in _planilha(_mes(_dia(10))) if i["type"] == "expense" and int(i["id"]) == gid]
     _garante(item, "45b: multa fora da Planilha do mês do lançamento")
     vivo = _evento_com_elenco("45b vivo", ["A"])
-    r = _cliente("sa").post(ROTAS["multas"].format(id=vivo), json={"multas": [{"elenco_id": eid, "valor": 1}]})
-    _garante(r.status_code == 409 and _codigo(r) == "nao_cancelado", f"45b vivo → {r.status_code} {_erro(r)}")
+    r = _cliente("sa").post(
+        ROTAS["multas"].format(id=vivo), json={"multas": [{"elenco_id": eid, "valor": 1}]}
+    )
+    _garante(
+        r.status_code == 409 and _codigo(r) == "nao_cancelado",
+        f"45b vivo → {r.status_code} {_erro(r)}",
+    )
     _garante(not _multas_do_evento(vivo), "45b: o vivo ganhou multa")
     for apelido in ("cast", "com"):
-        r = _cliente(apelido).post(ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 1}]})
+        r = _cliente(apelido).post(
+            ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 1}]}
+        )
         _garante(r.status_code == 403, f"45b {apelido} → {r.status_code}")
     _garante(len(_multas_do_evento(show)) == 1, "45b: a recusa gravou multa")
-    r = _cliente("sa").post(ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 0}]})
-    _garante(r.status_code == 400 and "multas" in (_erro(r).get("fields") or {}), f"45b nada a lançar → {r.status_code} {_erro(r)}")
+    r = _cliente("sa").post(
+        ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 0}]}
+    )
+    _garante(
+        r.status_code == 400 and "multas" in (_erro(r).get("fields") or {}),
+        f"45b nada a lançar → {r.status_code} {_erro(r)}",
+    )
 
 
 def c45c_tirado_da_vaga() -> None:
@@ -5099,28 +6624,49 @@ def c45c_tirado_da_vaga() -> None:
     _escalar(show, estado["t2"])
     _cancelar_ok(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     _remocoes.clear()
-    r = _cliente("cast").post(f"/api/roles/{r1}/assign", json={"talent_id": None, "cache_value": None})
+    r = _cliente("cast").post(
+        f"/api/roles/{r1}/assign", json={"talent_id": None, "cache_value": None}
+    )
     _garante(r.status_code == 200, f"45c tirar → {r.status_code} {_erro(r)}")
     _esperar_threads()
     _garante(not _remocoes, "45c: e-mail de remoção no cancelado")
-    _garante(_no_banco("SELECT talent_id FROM event_roles WHERE id = :i", i=r1)[0][0] is None, "45c: a vaga não ficou sem talento")
+    _garante(
+        _no_banco("SELECT talent_id FROM event_roles WHERE id = :i", i=r1)[0][0] is None,
+        "45c: a vaga não ficou sem talento",
+    )
     elenco = _resumo_api(show).get("elenco") or []
     _garante(len(elenco) == 2, f"45c: a lista do ato perdeu a linha: {elenco}")
     tirado = next(e for e in elenco if not e.get("na_vaga"))
     _garante(tirado.get("talent_id") == estado["t"], f"45c: a linha do tirado mudou: {tirado}")
-    r = _cliente("sa").post(ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": tirado["elenco_id"], "valor": 100}]})
+    r = _cliente("sa").post(
+        ROTAS["multas"].format(id=show),
+        json={"multas": [{"elenco_id": tirado["elenco_id"], "valor": 100}]},
+    )
     _garante(r.status_code == 200, f"45c multa ao tirado → {r.status_code} {_erro(r)}")
     m = _multas_do_evento(show)
-    _garante(len(m) == 1 and m[0][4] == _nome_do_talento(estado["t"]) and m[0][5] == PIX, f"45c: multa com nome e PIX do cadastro {m}")
-    _garante((r.get_json() or {}).get("gastos") == [m[0][0]], f"45c: gastos da resposta {r.get_json()}")
+    _garante(
+        len(m) == 1 and m[0][4] == _nome_do_talento(estado["t"]) and m[0][5] == PIX,
+        f"45c: multa com nome e PIX do cadastro {m}",
+    )
+    _garante(
+        (r.get_json() or {}).get("gastos") == [m[0][0]], f"45c: gastos da resposta {r.get_json()}"
+    )
     outro = _evento_com_elenco("45c outro", ["A"])
     _escalar(outro, estado["t2"])
     _cancelar_ok(outro, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     alheio = (_resumo_api(outro).get("elenco") or [{}])[0].get("elenco_id")
     for rotulo, eid in (("de outro evento", alheio), ("fora da lista", 999_999_999)):
-        r = _cliente("sa").post(ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 10}]})
-        _garante(r.status_code == 400 and f"multa_{eid}" in (_erro(r).get("fields") or {}), f"45c {rotulo} → {r.status_code} {_erro(r)}")
-    _garante(len(_multas_do_evento(show)) == 1 and not _multas_do_evento(outro), "45c: a recusa gravou multa")
+        r = _cliente("sa").post(
+            ROTAS["multas"].format(id=show), json={"multas": [{"elenco_id": eid, "valor": 10}]}
+        )
+        _garante(
+            r.status_code == 400 and f"multa_{eid}" in (_erro(r).get("fields") or {}),
+            f"45c {rotulo} → {r.status_code} {_erro(r)}",
+        )
+    _garante(
+        len(_multas_do_evento(show)) == 1 and not _multas_do_evento(outro),
+        "45c: a recusa gravou multa",
+    )
     vivo = _evento_com_elenco("45c vivo", ["A"])
     rv = _escalar(vivo, estado["t"])
     _remocoes.clear()
@@ -5154,8 +6700,12 @@ def c42e_ensaios_na_passagem() -> None:
     g = _grupo_42("42e")
     velho = _ensaio(g["principal"], _data_isolada())
     fica = _ensaio(g["novo"], _data_isolada())
-    _no_banco_escrever("UPDATE calendar_events SET needs_rehearsal = true WHERE id = :i", i=g["novo"])
-    gid_velho = _no_banco("SELECT google_event_id FROM calendar_events WHERE id = :i", i=velho)[0][0]
+    _no_banco_escrever(
+        "UPDATE calendar_events SET needs_rehearsal = true WHERE id = :i", i=g["novo"]
+    )
+    gid_velho = _no_banco("SELECT google_event_id FROM calendar_events WHERE id = :i", i=velho)[0][
+        0
+    ]
     antes_fica = _no_banco(
         "SELECT parent_event_id, title, start_at, end_at, location, google_event_id FROM calendar_events WHERE id = :i",
         i=fica,
@@ -5163,22 +6713,41 @@ def c42e_ensaios_na_passagem() -> None:
     marco = google.marco()
     _cancelar_ok(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+        },
     )
-    _garante(not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=velho), "42e: o ensaio do antigo 1º dia ficou no banco")
-    _garante(gid_velho in google.deletes(marco), f"42e: o ensaio do antigo 1º dia não saiu do Google {google.deletes(marco)}")
+    _garante(
+        not _no_banco("SELECT 1 FROM calendar_events WHERE id = :i", i=velho),
+        "42e: o ensaio do antigo 1º dia ficou no banco",
+    )
+    _garante(
+        gid_velho in google.deletes(marco),
+        f"42e: o ensaio do antigo 1º dia não saiu do Google {google.deletes(marco)}",
+    )
     depois_fica = _no_banco(
         "SELECT parent_event_id, title, start_at, end_at, location, google_event_id FROM calendar_events WHERE id = :i",
         i=fica,
     )
-    _garante(depois_fica == antes_fica, f"42e: o ensaio do dia que fica foi tocado: {antes_fica} → {depois_fica}")
-    _garante(antes_fica[0][5] not in google.deletes(marco), "42e: o ensaio do dia que fica saiu do Google")
     _garante(
-        _no_banco("SELECT needs_rehearsal FROM calendar_events WHERE id = :i", i=g["novo"])[0][0] is True,
+        depois_fica == antes_fica,
+        f"42e: o ensaio do dia que fica foi tocado: {antes_fica} → {depois_fica}",
+    )
+    _garante(
+        antes_fica[0][5] not in google.deletes(marco),
+        "42e: o ensaio do dia que fica saiu do Google",
+    )
+    _garante(
+        _no_banco("SELECT needs_rehearsal FROM calendar_events WHERE id = :i", i=g["novo"])[0][0]
+        is True,
         "42e: o 'precisa ensaio' do novo principal mudou",
     )
     _garante(
-        estado["usuarios"]["ens"]["id"] in {r[0] for r in _avisos_do_ato("evento.cancelado", g["principal"])},
+        estado["usuarios"]["ens"]["id"]
+        in {r[0] for r in _avisos_do_ato("evento.cancelado", g["principal"])},
         "42e: sem o sino à equipe de Ensaio",
     )
 
@@ -5209,7 +6778,13 @@ def _mutando(modulo, nome: str, fabrica: Callable) -> Iterator[None]:
 
 
 def _sob_mutacao(
-    modulo, nome: str, fabrica: Callable, fn: Callable[[], None], rotulo: str, *, base_ja_rodou: bool = False
+    modulo,
+    nome: str,
+    fabrica: Callable,
+    fn: Callable[[], None],
+    rotulo: str,
+    *,
+    base_ja_rodou: bool = False,
 ) -> None:
     """A prova por mutação: a sonda passa com a regra certa e quebra com a errada.
 
@@ -5238,20 +6813,38 @@ def _c16c_troca(rotulo: str) -> None:
     _igual(sum(Decimal(x["valor"]) for x in da), 0, "16c: A devolve o recebido")
     _igual(sum(Decimal(x["valor"]) for x in db_), 18, "16c: B recebe a comissão do retido")
     neg = [x for x in da if x["original_id"]]
-    _garante(neg and (neg[0]["nota"] or "").startswith("Cancelamento: vendedor trocado — devolve o já recebido"), f"16c: motivo de A {neg}")
-    _garante(db_ and (db_[0]["nota"] or "").startswith("Cancelamento: vendedor trocado — comissão do retido"), f"16c: motivo de B {db_}")
+    _garante(
+        neg
+        and (neg[0]["nota"] or "").startswith(
+            "Cancelamento: vendedor trocado — devolve o já recebido"
+        ),
+        f"16c: motivo de A {neg}",
+    )
+    _garante(
+        db_
+        and (db_[0]["nota"] or "").startswith(
+            "Cancelamento: vendedor trocado — comissão do retido"
+        ),
+        f"16c: motivo de B {db_}",
+    )
 
 
 def c16c_mutacoes() -> None:
     from app.financeiro import comissoes_ops
 
     _sob_mutacao(
-        comissoes_ops, "_beneficiarios_com_linha_viva", lambda _o: (lambda *a, **k: set()),
-        lambda: _c16c_troca("16c mutação um só"), "um beneficiário só",
+        comissoes_ops,
+        "_beneficiarios_com_linha_viva",
+        lambda _o: lambda *a, **k: set(),
+        lambda: _c16c_troca("16c mutação um só"),
+        "um beneficiário só",
     )
     _sob_mutacao(
-        comissoes_ops, "_nota_do_ajuste", lambda _o: (lambda motivo, detalhe=None, **k: detalhe or ""),
-        lambda: _c16c_troca("16c mutação nota"), "nota sem prefixo",
+        comissoes_ops,
+        "_nota_do_ajuste",
+        lambda _o: lambda motivo, detalhe=None, **k: detalhe or "",
+        lambda: _c16c_troca("16c mutação nota"),
+        "nota sem prefixo",
     )
 
 
@@ -5280,23 +6873,38 @@ def c16d_mutacao() -> None:
             db.session.flush()
             for i in itens or []:
                 valor = Decimal(str(i.get("value") or 0))
-                db.session.add(EventAcrescimo(
-                    event_id=event.id, tipo=i.get("tipo") or "Outro", is_percent=bool(i.get("is_percent")),
-                    value=valor, amount_brl=valor, is_bv=(i.get("tipo") == "BV"),
-                    bv_recipient=i.get("bv_recipient"), bv_pix=i.get("bv_pix"),
-                ))
+                db.session.add(
+                    EventAcrescimo(
+                        event_id=event.id,
+                        tipo=i.get("tipo") or "Outro",
+                        is_percent=bool(i.get("is_percent")),
+                        value=valor,
+                        amount_brl=valor,
+                        is_bv=(i.get("tipo") == "BV"),
+                        bv_recipient=i.get("bv_recipient"),
+                        bv_pix=i.get("bv_pix"),
+                    )
+                )
             db.session.flush()
             return []
 
         return mutante
 
-    _sob_mutacao(comercial_ops, "alterar_acrescimos_do_cancelado", recria, lambda: _c16d_no_lugar("16d mutação"), "apagar e recriar")
+    _sob_mutacao(
+        comercial_ops,
+        "alterar_acrescimos_do_cancelado",
+        recria,
+        lambda: _c16d_no_lugar("16d mutação"),
+        "apagar e recriar",
+    )
 
 
 def _c16e_taxa(rotulo: str) -> None:
     _taxa_padrao(2.5)
     ex = _exemplo_padrao(rotulo, comissao="pago")
-    _no_banco_escrever("UPDATE calendar_events SET commission_rate = NULL WHERE id = :i", i=ex["ev"])
+    _no_banco_escrever(
+        "UPDATE calendar_events SET commission_rate = NULL WHERE id = :i", i=ex["ev"]
+    )
     with _com_hoje(_dia(10)):
         _cancelar_ok(ex["ev"], _corpo_cancelar("parte", 600))
     _taxa_padrao(3.0)
@@ -5317,7 +6925,13 @@ def c16e_mutacao() -> None:
 
         return mutante
 
-    _sob_mutacao(comissoes_ops, "comissao_cheia_do_evento", sem_taxa, lambda: _c16e_taxa("16e mutação"), "taxa de hoje")
+    _sob_mutacao(
+        comissoes_ops,
+        "comissao_cheia_do_evento",
+        sem_taxa,
+        lambda: _c16e_taxa("16e mutação"),
+        "taxa de hoje",
+    )
 
 
 def _c42_move(rotulo: str) -> None:
@@ -5325,11 +6939,19 @@ def _c42_move(rotulo: str) -> None:
     antes = _retrato_passagem([g["principal"], g["novo"]])
     _cancelar_ok(
         g["principal"],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["novo"], "venda_nova": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["novo"],
+            "venda_nova": 3000,
+        },
     )
     depois = _retrato_passagem([g["principal"], g["novo"]])
     for tabela, linhas in antes.items():
-        _garante(sorted(x[:-1] for x in linhas) == sorted(x[:-1] for x in depois[tabela]), f"42: {tabela} mudou além do vínculo")
+        _garante(
+            sorted(x[:-1] for x in linhas) == sorted(x[:-1] for x in depois[tabela]),
+            f"42: {tabela} mudou além do vínculo",
+        )
 
 
 def c42_mutacao() -> None:
@@ -5341,32 +6963,80 @@ def c42_mutacao() -> None:
             out = original(antigo, novo, *a, **k)
             nid = getattr(novo, "id", novo)
             for p in EventPayment.query.filter_by(event_id=nid).all():
-                db.session.add(EventPayment(event_id=nid, file_path=p.file_path, amount=p.amount, created_at=p.created_at))
+                db.session.add(
+                    EventPayment(
+                        event_id=nid,
+                        file_path=p.file_path,
+                        amount=p.amount,
+                        created_at=p.created_at,
+                    )
+                )
                 db.session.delete(p)
             # o acréscimo recriado perde o id e o estado do BV pago
             for a in EventAcrescimo.query.filter_by(event_id=nid).all():
-                db.session.add(EventAcrescimo(event_id=nid, tipo=a.tipo, is_percent=a.is_percent, value=a.value,
-                                              amount_brl=a.amount_brl, is_bv=a.is_bv, bv_recipient=a.bv_recipient, bv_pix=a.bv_pix))
+                db.session.add(
+                    EventAcrescimo(
+                        event_id=nid,
+                        tipo=a.tipo,
+                        is_percent=a.is_percent,
+                        value=a.value,
+                        amount_brl=a.amount_brl,
+                        is_bv=a.is_bv,
+                        bv_recipient=a.bv_recipient,
+                        bv_pix=a.bv_pix,
+                    )
+                )
                 db.session.delete(a)
             db.session.flush()
             return out
 
         return mutante
 
-    _sob_mutacao(group_ops, "passar_venda", recria, lambda: _c42_move("42 mutação"), "apagar e recriar")
+    _sob_mutacao(
+        group_ops, "passar_venda", recria, lambda: _c42_move("42 mutação"), "apagar e recriar"
+    )
 
 
 def _c42c_data(rotulo: str) -> None:
     _configurar_educamanto()
     novembro_menos_um = datetime(2047, 10, 31, 19)
-    g = _grupo(rotulo, dias=1, inicio=novembro_menos_um, passo=timedelta(days=1), comissao=None, pagos=(1000,))
-    _no_banco_escrever("UPDATE calendar_events SET title = :t WHERE id = :i", t=f"(EDU) V306 {rotulo.upper()}", i=g["principal"])
-    _no_banco_escrever("UPDATE calendar_events SET title = :t WHERE id = :i", t=f"(EDU) V306 {rotulo.upper()} DIA 2", i=g["dias"][0])
+    g = _grupo(
+        rotulo,
+        dias=1,
+        inicio=novembro_menos_um,
+        passo=timedelta(days=1),
+        comissao=None,
+        pagos=(1000,),
+    )
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t WHERE id = :i",
+        t=f"(EDU) V306 {rotulo.upper()}",
+        i=g["principal"],
+    )
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t WHERE id = :i",
+        t=f"(EDU) V306 {rotulo.upper()} DIA 2",
+        i=g["dias"][0],
+    )
     _linha_comissao(g["principal"], 50, vendedor="vend2", liberacao=novembro_menos_um.date())
-    _cancelar_ok(g["principal"], {**_corpo_cancelar("nada", None, nome=None, pix=None), "alcance": "so_este_dia", "novo_principal_id": g["dias"][0], "venda_nova": 3000})
+    _cancelar_ok(
+        g["principal"],
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["dias"][0],
+            "venda_nova": 3000,
+        },
+    )
     _comissoes(_mes(_hoje_sp()))
-    edu = [x for x in _linhas_comissao(g["dias"][0]) if x["seller"] == estado["usuarios"]["vend2"]["id"]]
-    _garante(edu and edu[0]["liberacao"] == date(2047, 11, 1), f"42c: EducaManto não foi a 01/11: {edu}")
+    edu = [
+        x
+        for x in _linhas_comissao(g["dias"][0])
+        if x["seller"] == estado["usuarios"]["vend2"]["id"]
+    ]
+    _garante(
+        edu and edu[0]["liberacao"] == date(2047, 11, 1), f"42c: EducaManto não foi a 01/11: {edu}"
+    )
 
 
 def c42c_mutacao() -> None:
@@ -5377,15 +7047,25 @@ def c42c_mutacao() -> None:
         def mutante(event):
             antes = {
                 cp.id: cp.payable_from
-                for cp in CommissionPayment.query.filter_by(event_id=event.id, status="a_pagar").all()
+                for cp in CommissionPayment.query.filter_by(
+                    event_id=event.id, status="a_pagar"
+                ).all()
             }
             original(event)
-            for cp in CommissionPayment.query.filter(CommissionPayment.id.in_(list(antes) or [0])).all():
+            for cp in CommissionPayment.query.filter(
+                CommissionPayment.id.in_(list(antes) or [0])
+            ).all():
                 cp.payable_from = antes[cp.id]
 
         return mutante
 
-    _sob_mutacao(comissoes_ops, "_sync_commission_payment", guarda_a_data, lambda: _c42c_data("42c mutação"), "data antiga")
+    _sob_mutacao(
+        comissoes_ops,
+        "_sync_commission_payment",
+        guarda_a_data,
+        lambda: _c42c_data("42c mutação"),
+        "data antiga",
+    )
 
 
 def _c44_dois_atos(rotulo: str, *, chave_do_principal: bool = False) -> None:
@@ -5400,21 +7080,36 @@ def _c44_dois_atos(rotulo: str, *, chave_do_principal: bool = False) -> None:
     def atos() -> None:
         r = _corte(dia, 2500, modo="nada", valor=None)
         _garante(r.status_code == 200, f"44 corte → {r.status_code} {_erro(r)}")
-        _cancelar_ok(g["principal"], {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"})
+        _cancelar_ok(
+            g["principal"],
+            {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"},
+        )
 
     if chave_do_principal:
-        with _mutando(cancel_ops, "_chave_do_sino", lambda o: (lambda kind, evento_id, dia_id=None: o(kind, g["principal"], dia_id))):
+        with _mutando(
+            cancel_ops,
+            "_chave_do_sino",
+            lambda o: lambda kind, evento_id, dia_id=None: o(kind, g["principal"], dia_id),
+        ):
             atos()
     else:
         atos()
     ens = estado["usuarios"]["ens"]["id"]
-    _garante(ens in {r[0] for r in _avisos_do_ato("evento.cancelado", dia)}, "44 dois atos: sem o sino do corte")
-    _garante(ens in {r[0] for r in _avisos_do_ato("evento.cancelado", g["principal"])}, "44 dois atos: o 2º sino foi engolido")
+    _garante(
+        ens in {r[0] for r in _avisos_do_ato("evento.cancelado", dia)},
+        "44 dois atos: sem o sino do corte",
+    )
+    _garante(
+        ens in {r[0] for r in _avisos_do_ato("evento.cancelado", g["principal"])},
+        "44 dois atos: o 2º sino foi engolido",
+    )
 
 
 def c44_dois_sinos() -> None:
     _c44_dois_atos("44 dois atos")
-    _deve_quebrar(lambda: _c44_dois_atos("44 mutação", chave_do_principal=True), "dedupe_key do principal")
+    _deve_quebrar(
+        lambda: _c44_dois_atos("44 mutação", chave_do_principal=True), "dedupe_key do principal"
+    )
 
 
 def _c45c_tirar(rotulo: str) -> None:
@@ -5423,7 +7118,9 @@ def _c45c_tirar(rotulo: str) -> None:
     _escalar(show, estado["t2"])
     _cancelar_ok(show, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
     _remocoes.clear()
-    r = _cliente("cast").post(f"/api/roles/{r1}/assign", json={"talent_id": None, "cache_value": None})
+    r = _cliente("cast").post(
+        f"/api/roles/{r1}/assign", json={"talent_id": None, "cache_value": None}
+    )
     _garante(r.status_code == 200, f"45c tirar → {r.status_code} {_erro(r)}")
     _esperar_threads()
     _garante(not _remocoes, "45c: e-mail de remoção no cancelado")
@@ -5434,13 +7131,20 @@ def c45c_mutacoes() -> None:
     from app.calendar import cancel_ops, casting_ops
 
     _sob_mutacao(
-        cancel_ops, "_elenco_do_resumo",
-        lambda o: (lambda cancelamento, *a, **k: [x for x in o(cancelamento, *a, **k) if x.get("na_vaga")]),
-        lambda: _c45c_tirar("45c mutação lista"), "lista lida da escala de hoje",
+        cancel_ops,
+        "_elenco_do_resumo",
+        lambda o: (
+            lambda cancelamento, *a, **k: [x for x in o(cancelamento, *a, **k) if x.get("na_vaga")]
+        ),
+        lambda: _c45c_tirar("45c mutação lista"),
+        "lista lida da escala de hoje",
     )
     _sob_mutacao(
-        casting_ops, "_manda_email_de_remocao", lambda _o: (lambda *a, **k: True),
-        lambda: _c45c_tirar("45c mutação e-mail"), "remoção sem a condição",
+        casting_ops,
+        "_manda_email_de_remocao",
+        lambda _o: lambda *a, **k: True,
+        lambda: _c45c_tirar("45c mutação e-mail"),
+        "remoção sem a condição",
     )
 
 
@@ -5448,10 +7152,20 @@ def c45c_mutacoes() -> None:
 CENARIOS: list[tuple[str, str, str, Callable[[], None]]] = [
     ("B0", "1", "chão e a casca da comissão (main × branch)", c1_chao_e_casca),
     ("B0", "16b", "cheia 0 no núcleo (cortesia e sem vendedor)", c16b_cheia_zero_nucleo),
-    ("B0", "41", "regressão das comissões dos grupos e das cobranças (main × branch)", c41_regressao_grupos_e_cobrancas),
+    (
+        "B0",
+        "41",
+        "regressão das comissões dos grupos e das cobranças (main × branch)",
+        c41_regressao_grupos_e_cobrancas,
+    ),
     ("B0", "23", "retrato main × branch dos meses sem cancelamento", c23_retrato_main_branch),
     ("B1", "7", "a pagar ajustada no lugar", c7_a_pagar_no_lugar),
-    ("B1", "8", "paga: −80 no primeiro repasse aberto (dias 2 e 10)", c8_paga_no_primeiro_repasse_aberto),
+    (
+        "B1",
+        "8",
+        "paga: −80 no primeiro repasse aberto (dias 2 e 10)",
+        c8_paga_no_primeiro_repasse_aberto,
+    ),
     ("B1", "8", "variante prévia = execução", c8_variante_previa_igual_execucao),
     ("B1", "9", "no banco como paga + desfazer", c9_no_banco_e_desfazer),
     ("B1", "10", "Tudo, linha que nasce, vendedor sem comissão", c10_tudo_e_sem_linha),
@@ -5589,8 +7303,13 @@ def regressao() -> bool:
         if "256" in rel and tok.exists():
             env["MARKETING_AGENT_TOKEN"] = tok.read_text(encoding="utf-8").strip()
         r = subprocess.run(
-            [sys.executable, str(caminho)], capture_output=True, text=True, encoding="utf-8",
-            env=env, cwd=str(REPO_ROOT), timeout=3600,
+            [sys.executable, str(caminho)],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            env=env,
+            cwd=str(REPO_ROOT),
+            timeout=3600,
         )
         atual[rel] = {"codigo": r.returncode, "placar": _placar(r.stdout)}
         print(f"  {rel}: saída {r.returncode}, placar {atual[rel]['placar']}")
@@ -5604,7 +7323,9 @@ def regressao() -> bool:
         b = base.get(rel) or {}
         if b.get("codigo") == 0 and v["codigo"] != 0:
             pior.append(rel)
-        elif re.fullmatch(r"\d+/\d+", v["placar"] or "") and re.fullmatch(r"\d+/\d+", b.get("placar") or ""):
+        elif re.fullmatch(r"\d+/\d+", v["placar"] or "") and re.fullmatch(
+            r"\d+/\d+", b.get("placar") or ""
+        ):
             ok_a, tot_a = (int(x) for x in v["placar"].split("/"))
             ok_b, _tot_b = (int(x) for x in b["placar"].split("/"))
             if ok_a < ok_b:
@@ -5681,11 +7402,22 @@ def semear_tela() -> int:
     show = _evento_com_elenco("tela show", ["A", "B"])
     _escalar(show, estado["t"])
     _escalar(show, estado["t2"])
-    print(json.dumps({
-        "usuarios": {k: v["email"] for k, v in estado["usuarios"].items()},
-        "senha": "(a do verify, no código)",
-        "eventos": {"exemplo": ex["ev"], "grupo_principal": g["principal"], "grupo_dias": g["dias"], "show": show},
-    }, ensure_ascii=False, indent=1))
+    print(
+        json.dumps(
+            {
+                "usuarios": {k: v["email"] for k, v in estado["usuarios"].items()},
+                "senha": "(a do verify, no código)",
+                "eventos": {
+                    "exemplo": ex["ev"],
+                    "grupo_principal": g["principal"],
+                    "grupo_dias": g["dias"],
+                    "show": show,
+                },
+            },
+            ensure_ascii=False,
+            indent=1,
+        )
+    )
     return 0
 
 

@@ -16,7 +16,8 @@ adaptadores (`app/api/agenda_write.py`) é que traduzem em resposta HTTP.
 
 from __future__ import annotations
 
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -37,11 +38,53 @@ TZ = ZoneInfo("America/Sao_Paulo")
 
 
 class CancelValidationError(Exception):
-    """Erro de negócio no cancelamento (ex.: cancelar evento líder de grupo)."""
+    """Recusa de negócio do cancelamento e das correções do cancelado (features 224 e 306).
 
-    def __init__(self, message: str) -> None:
+    A view a traduz numa linha só: `json_error(exc.message, exc.status, fields=exc.fields,
+    codigo=exc.codigo, **exc.extras)`.
+
+    Args:
+        message: a frase da recusa.
+        fields: todos os campos recusados de uma vez (`{campo: mensagem}`).
+        field: atalho para `{field: message}`.
+        status: 400 (forma) ou 409 (estado; vem com `codigo`).
+        codigo: um `CODIGO_*` de `app.constants` (P18).
+        **extras: os extras do envelope (`max_devolucao`, `dias`, `piso`, `teto`…); nunca `fields`.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        fields: dict[str, str] | None = None,
+        field: str | None = None,
+        status: int = 400,
+        codigo: str | None = None,
+        **extras: Any,
+    ) -> None:
         super().__init__(message)
+        if "fields" in extras:
+            raise TypeError("`fields` vai no argumento próprio, não nos extras")
         self.message = message
+        self.fields = fields if fields is not None else ({field: message} if field else None)
+        self.status = status
+        self.codigo = codigo
+        self.extras = extras
+
+
+class EventoCanceladoError(CancelValidationError):
+    """A regra única do cancelado (FR-047): só o Superadmin real corrige dados de venda.
+
+    Irmã de `EventoMarcadoError`. Sai como 409 `cancelado`; a exclusão de um cancelado também a
+    levanta (o cancelado não se exclui, FR-021).
+    """
+
+    MENSAGEM = "Este evento está cancelado: só o Superadmin corrige os dados de venda."
+
+    def __init__(self, message: str = MENSAGEM) -> None:
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        super().__init__(message, status=409, codigo=CODIGO_EVENTO_CANCELADO)
 
 
 class EventoMarcadoError(CancelValidationError):
@@ -70,6 +113,473 @@ def total_recebido(event: CalendarEvent) -> Decimal:
         .scalar()
     )
     return Decimal(str(total or 0))
+
+
+# ── Feature 306: a regra única, o BV do retido, o resumo e o período ─────────────────────────
+
+
+def pode_editar_venda_do_cancelado(user: User | None) -> bool:
+    """A regra única do cancelado (FR-047): só o papel REAL de Superadmin corrige dados de venda.
+
+    A mesma régua de `_can_delete()` (`agenda_write.py`): o "Ver como" não conta, porque o papel
+    vem de `user.roles`, não da sessão.
+    """
+    from app.constants import RoleName
+
+    return bool(user) and any(r.name.upper() == RoleName.SUPERADMIN for r in user.roles)
+
+
+_CENTAVO = Decimal("0.01")
+
+
+def _dinheiro(valor: Any) -> Decimal:
+    return Decimal(str(valor or 0)).quantize(_CENTAVO)
+
+
+def bv_do_retido(cheio: Any, retido: Any, venda: Any) -> Decimal:
+    """O BV na proporção do que a Manto reteve: `bv_que_acompanha(cheio, retido, venda)`, teto no cheio.
+
+    A mesma conta da comissão do retido (`comissoes_ops.comissao_do_retido`), para as duas
+    proporções não divergirem na tolerância de R$ 0,01 (FR-028).
+    """
+    from app.orcamento.quote_ops import bv_que_acompanha
+
+    cheio_d, retido_d, venda_d = (_dinheiro(x) for x in (cheio, retido, venda))
+    if cheio_d <= 0 or retido_d <= 0 or venda_d <= 0:
+        return Decimal("0.00")
+    return min(cheio_d, bv_que_acompanha(cheio_d, retido_d, venda_d))
+
+
+def filtro_devolucao():
+    """A devolução à cliente: categoria, evento e aprovação — nunca pelo tipo de desembolso.
+
+    `disbursement_type` a tela edita (e o "Salvar" de Gastos Extras chegou a apagá-lo), então ele
+    não serve para reconhecer a devolução (substitui o `.first()` da 224 em `listar_cancelamentos`).
+    """
+    return db.and_(
+        SpecialExpense.category == SpecialExpense.CATEGORY_DEVOLUCAO,
+        SpecialExpense.event_id.isnot(None),
+        SpecialExpense.status == "aprovado",
+    )
+
+
+def devolucoes_por_evento(ids: list[int]) -> dict[int, list[SpecialExpense]]:
+    """Todas as devoluções (categoria + evento) dos ids, numa consulta só, por id do evento."""
+    if not ids:
+        return {}
+    out: dict[int, list[SpecialExpense]] = {}
+    linhas = (
+        SpecialExpense.query.filter(
+            SpecialExpense.category == SpecialExpense.CATEGORY_DEVOLUCAO,
+            SpecialExpense.event_id.in_(ids),
+        )
+        .order_by(SpecialExpense.id)
+        .all()
+    )
+    for gasto in linhas:
+        out.setdefault(gasto.event_id, []).append(gasto)
+    return out
+
+
+def ids_do_grupo(principal_ids: list[int]) -> dict[int, list[int]]:
+    """Os ids de cada grupo, por consulta: o principal e os dias com `group_leader_id` = ele.
+
+    Nunca pela coleção (`leader.satellites`, `group_ops.group_events`): é a mesma consulta que
+    `travar_grupo` trava em T1, e o resumo e o período a leem sem `FOR UPDATE` (data-model §5).
+    Os dias cancelados entram: é dinheiro (FR-004).
+    """
+    if not principal_ids:
+        return {}
+    out: dict[int, list[int]] = {pid: [pid] for pid in principal_ids}
+    for eid, lider in (
+        db.session.query(CalendarEvent.id, CalendarEvent.group_leader_id)
+        .filter(CalendarEvent.group_leader_id.in_(principal_ids))
+        .order_by(CalendarEvent.id)
+        .all()
+    ):
+        out[lider].append(eid)
+    return out
+
+
+def _pago_por_evento(ids: list[int]) -> dict[int, Decimal]:
+    """Σ coalesce(comprovante, 0) por evento, numa consulta (o molde de `total_recebido`)."""
+    if not ids:
+        return {}
+    return {
+        eid: Decimal(str(total or 0))
+        for eid, total in (
+            db.session.query(EventPayment.event_id, db.func.coalesce(db.func.sum(EventPayment.amount), 0))
+            .filter(EventPayment.event_id.in_(ids))
+            .group_by(EventPayment.event_id)
+            .all()
+        )
+    }
+
+
+@dataclass
+class ResumoCancelado:
+    """O resumo único de um cancelado (FR-005): o que a tela, a DRE e o Comercial leem.
+
+    Pago e devolvido são do grupo por consulta, ao vivo; o resto vem do congelado. `legado` é o
+    cancelado sem linha congelada (o de antes do deploy): retido = pago − devolvido, comissão 0,
+    imposto 0, BV só o pago.
+    """
+
+    event: CalendarEvent
+    regime: str
+    modo: str | None
+    modo_corrente: str
+    venda: Decimal | None
+    pago: Decimal
+    devolvido: Decimal
+    devolucoes: list[SpecialExpense]
+    retido: Decimal
+    com_nota: bool
+    cancelado_em: datetime | None
+    principal: CalendarEvent | None
+    venda_passou_para: CalendarEvent | None
+    corte: dict[str, Decimal | None] | None
+    imposto: Decimal | None
+    taxa: Decimal | None
+    comissao_cheia: Decimal
+    comissao_retido: Decimal
+    beneficiario: User | None
+    seller_id: int | None
+    linhas: list[CommissionPayment]
+    bvs: list[dict[str, Any]] = field(default_factory=list)
+
+    @property
+    def bv_retido(self) -> Decimal:
+        """O BV que conta (pago pelo pago; a pagar pela proporção), somado."""
+        return sum((b["conta"] or Decimal("0") for b in self.bvs), Decimal("0.00"))
+
+    @property
+    def imposto_que_conta(self) -> Decimal:
+        return _dinheiro(self.imposto) if self.imposto is not None else Decimal("0.00")
+
+    @property
+    def efeito_resultado(self) -> Decimal:
+        """O que o cancelado soma ao resultado: retido − comissão − BV − imposto."""
+        return self.retido - self.comissao_retido - self.bv_retido - self.imposto_que_conta
+
+    @property
+    def tem_dinheiro(self) -> bool:
+        """Sem pago nem devolvido, o cancelado não entra em DRE nem no Comercial (P-24)."""
+        return self.pago > 0 or self.devolvido > 0
+
+
+def _modo_corrente(pago: Decimal, devolvido: Decimal) -> str:
+    from app.constants import MODO_NADA, MODO_PARTE, MODO_TUDO
+
+    if devolvido <= 0:
+        return MODO_NADA
+    if devolvido >= pago:
+        return MODO_TUDO
+    return MODO_PARTE
+
+
+def _bv_que_conta(linha, acr, *, regime: str, retido: Decimal, venda: Decimal | None) -> Decimal | None:
+    """O BV de um acréscimo no cancelado (decisão (a), data-model §7.4); `None` = some da Planilha.
+
+    - `venda`, pago ou no banco: `paid_amount` (o `amount_brl`, só na janela do deploy);
+    - `venda`, a pagar: o proporcional do retido; zero vira `None`;
+    - sem linha congelada (`legado`, `satelite`, `dia`, `virtual`): o `amount_brl` se pago ou no
+      banco; senão `None`.
+    """
+    from app.constants import REGIME_VENDA
+
+    pago = (acr.bv_payment_status or "nao_pago") in ("pago", "no_banco")
+    if regime == REGIME_VENDA and linha is not None:
+        if pago:
+            return _dinheiro(linha.paid_amount if linha.paid_amount is not None else acr.amount_brl)
+        conta = bv_do_retido(linha.original_amount, retido, venda)
+        return conta if conta > 0 else None
+    return _dinheiro(acr.amount_brl) if pago else None
+
+
+def resumos_cancelados(ids: list[int]) -> dict[int, ResumoCancelado]:
+    """O resumo de cada cancelado dos ids, em lote (consultas fixas, sem N+1)."""
+    from sqlalchemy.orm import selectinload
+
+    from app.constants import REGIME_DIA, REGIME_LEGADO, REGIME_SATELITE, REGIME_VENDA
+    from app.models import EventAcrescimo, EventCancellation
+
+    if not ids:
+        return {}
+    # O backref `cancelamento` só existe depois do `configure_mappers`: o selectinload nasce aqui.
+    eventos = (
+        CalendarEvent.query.filter(CalendarEvent.id.in_(ids), CalendarEvent.cancelled_at.isnot(None))
+        .options(selectinload(CalendarEvent.cancelamento).selectinload(EventCancellation.bvs))
+        .all()
+    )
+    # O grupo do dinheiro: o do principal no `satelite` e no `dia`; o próprio nos demais (`legado`
+    # incluído: sem congelado, não se sabe a que ato o dia pertenceu).
+    principais: dict[int, int] = {}
+    for ev in eventos:
+        canc = ev.cancelamento
+        if canc is not None and canc.regime in (REGIME_SATELITE, REGIME_DIA) and canc.group_leader_id:
+            principais[ev.id] = canc.group_leader_id
+        else:
+            principais[ev.id] = ev.id
+    grupos = ids_do_grupo(sorted(set(principais.values())))
+    todos = sorted({i for g in grupos.values() for i in g} | {ev.id for ev in eventos})
+    pago_por = _pago_por_evento(todos)
+    devolucoes = devolucoes_por_evento(todos)
+    linhas_por: dict[int, list[CommissionPayment]] = {}
+    for cp in (
+        CommissionPayment.query.filter(CommissionPayment.event_id.in_([ev.id for ev in eventos]))
+        .order_by(CommissionPayment.id)
+        .all()
+    ):
+        linhas_por.setdefault(cp.event_id, []).append(cp)
+    acrescimos: dict[int, list] = {}
+    for a in (
+        EventAcrescimo.query.filter(EventAcrescimo.event_id.in_([ev.id for ev in eventos]), EventAcrescimo.is_bv.is_(True))
+        .order_by(EventAcrescimo.id)
+        .all()
+    ):
+        acrescimos.setdefault(a.event_id, []).append(a)
+    beneficiarios = {
+        ev.cancelamento.commission_seller_id
+        for ev in eventos
+        if ev.cancelamento is not None and ev.cancelamento.commission_seller_id
+    }
+    pessoas = {u.id: u for u in User.query.filter(User.id.in_(beneficiarios)).all()} if beneficiarios else {}
+    de_fora = set(principais.values()) - {ev.id for ev in eventos}
+    lideres = {e.id: e for e in CalendarEvent.query.filter(CalendarEvent.id.in_(de_fora)).all()} if de_fora else {}
+    lideres.update({ev.id: ev for ev in eventos})
+
+    out: dict[int, ResumoCancelado] = {}
+    for ev in eventos:
+        canc = ev.cancelamento
+        regime = canc.regime if canc is not None else REGIME_LEGADO
+        grupo = grupos.get(principais[ev.id], [ev.id])
+        pago = sum((pago_por.get(i, Decimal("0")) for i in grupo), Decimal("0"))
+        do_grupo = [g for i in grupo for g in devolucoes.get(i, [])]
+        devolvido = sum((_dinheiro(g.amount) for g in do_grupo if g.status == "aprovado"), Decimal("0"))
+        pago, devolvido = _dinheiro(pago), _dinheiro(devolvido)
+        venda = _dinheiro(canc.sale_value) if canc is not None and canc.sale_value is not None else None
+        retido = max(Decimal("0.00"), pago - devolvido) if regime in (REGIME_VENDA, REGIME_LEGADO) else Decimal("0.00")
+        if regime == REGIME_VENDA and canc is not None:
+            from app.financeiro.comissoes_ops import comissao_do_retido
+
+            cheia = _dinheiro(canc.commission_full)
+            comissao_retido = comissao_do_retido(cheia, retido, venda)
+        else:
+            cheia, comissao_retido = Decimal("0.00"), Decimal("0.00")
+        congeladas = {b.acrescimo_id: b for b in (canc.bvs if canc is not None else []) if b.acrescimo_id is not None}
+        bvs = []
+        for a in acrescimos.get(ev.id, []):
+            linha = congeladas.get(a.id)
+            bvs.append({
+                "acrescimo": a,
+                "linha": linha,
+                "cheio": _dinheiro(linha.original_amount if linha is not None else a.amount_brl),
+                "conta": _bv_que_conta(linha, a, regime=regime, retido=retido, venda=venda),
+                "estado": a.bv_payment_status or "nao_pago",
+                "pago_no_ato": bool(linha.paid_at_cancellation) if linha is not None else False,
+            })
+        principal = lideres.get(canc.group_leader_id) if canc is not None and canc.group_leader_id else None
+        corte = None
+        if regime == REGIME_DIA and canc is not None:
+            corte = {
+                "venda_antes": canc.sale_value_before,
+                "venda_depois": canc.sale_value_after,
+                "cheio_antes": canc.sale_value_gross_before,
+                "cheio_depois": canc.sale_value_gross_after,
+            }
+        com_nota = bool(canc.with_invoice) if canc is not None and regime == REGIME_VENDA else bool(ev.with_invoice)
+        out[ev.id] = ResumoCancelado(
+            event=ev,
+            regime=regime,
+            modo=canc.refund_mode if canc is not None else None,
+            modo_corrente=_modo_corrente(pago, devolvido),
+            venda=venda,
+            pago=pago,
+            devolvido=devolvido,
+            devolucoes=list(devolucoes.get(ev.id, [])) if regime == REGIME_DIA else do_grupo,
+            retido=retido,
+            com_nota=com_nota,
+            cancelado_em=ev.cancelled_at,
+            principal=principal if regime in (REGIME_SATELITE, REGIME_DIA) else None,
+            venda_passou_para=principal if canc is not None and canc.sale_handed_over else None,
+            corte=corte,
+            imposto=canc.retained_tax if canc is not None and regime == REGIME_VENDA else None,
+            taxa=canc.commission_rate if canc is not None and regime == REGIME_VENDA else None,
+            comissao_cheia=cheia,
+            comissao_retido=comissao_retido,
+            beneficiario=pessoas.get(canc.commission_seller_id) if canc is not None else None,
+            seller_id=(canc.seller_id if canc is not None and canc.seller_id else ev.seller_id),
+            linhas=linhas_por.get(ev.id, []),
+            bvs=bvs,
+        )
+    return out
+
+
+def resumo_cancelado(event: CalendarEvent) -> ResumoCancelado | None:
+    """O resumo de um cancelado; `None` se o evento não está cancelado."""
+    return resumos_cancelados([event.id]).get(event.id)
+
+
+def _evento_curto(ev: CalendarEvent | None) -> dict[str, Any] | None:
+    if ev is None:
+        return None
+    return {"id": ev.id, "titulo": ev.title, "data": ev.start_at.date().isoformat() if ev.start_at else None}
+
+
+def _f(valor: Any) -> float | None:
+    return None if valor is None else float(valor)
+
+
+def serializar_resumo_cancelado(resumo: ResumoCancelado, flags: dict[str, Any]) -> dict[str, Any]:
+    """O `ResumoCancelado` do contrato (contracts §0). PIX, comissão, BV, imposto e taxa só com
+    `show_financeiro`; os limites do "Alterar devolução" só com `can_edit_venda_cancelado`."""
+    from app.financeiro.comissoes_ops import ciclo_de_pagamento_da_linha, tipo_da_linha
+
+    financeiro = bool(flags.get("show_financeiro"))
+    out: dict[str, Any] = {
+        "regime": resumo.regime,
+        "modo": resumo.modo,
+        "modo_corrente": resumo.modo_corrente,
+        "venda": _f(resumo.venda),
+        "pago": float(resumo.pago),
+        "devolvido": float(resumo.devolvido),
+        "devolucoes": [
+            {
+                "id": g.id,
+                "valor": float(g.amount or 0),
+                "nome": g.supplier_name,
+                **({"pix": g.supplier_pix} if financeiro else {}),
+                "estado": g.payment_status or "nao_pago",
+                "data": g.expense_date.isoformat() if g.expense_date else None,
+                "evento_id": g.event_id,
+                "observacao": g.notes,
+            }
+            for g in resumo.devolucoes
+        ],
+        "retido": float(resumo.retido),
+        "com_nota": resumo.com_nota,
+        "cancelado_em": resumo.cancelado_em.isoformat() if resumo.cancelado_em else None,
+        "principal": _evento_curto(resumo.principal),
+        "venda_passou_para": _evento_curto(resumo.venda_passou_para),
+        "corte": {k: _f(v) for k, v in resumo.corte.items()} if resumo.corte else None,
+    }
+    if financeiro:
+        out["imposto"] = _f(resumo.imposto)
+        out["taxa"] = _f(resumo.taxa)
+        out["comissao"] = {
+            "cheia": float(resumo.comissao_cheia),
+            "retido": float(resumo.comissao_retido),
+            "beneficiario": {"id": resumo.beneficiario.id, "nome": resumo.beneficiario.name} if resumo.beneficiario else None,
+            "liquidada": float(sum((Decimal(c.amount or 0) for c in resumo.linhas if c.status in ("pago", "no_banco")), Decimal("0"))),
+            "linhas": [
+                {
+                    "id": c.id,
+                    "seller_id": c.seller_id,
+                    "seller_nome": c.seller.name if c.seller else None,
+                    "valor": float(c.amount or 0),
+                    "status": c.status,
+                    "tipo": tipo_da_linha(c)[0],
+                    "ciclo": (lambda d: d.strftime("%Y-%m") if d else None)(ciclo_de_pagamento_da_linha(c)),
+                    "motivo": tipo_da_linha(c)[1],
+                }
+                for c in resumo.linhas
+            ],
+        }
+        out["bvs"] = [
+            {
+                "acrescimo_id": b["acrescimo"].id,
+                "recebedor": (b["linha"].recipient if b["linha"] is not None else None) or b["acrescimo"].bv_recipient,
+                "pix": (b["linha"].pix if b["linha"] is not None else None) or b["acrescimo"].bv_pix,
+                "cheio": float(b["cheio"]),
+                "conta": _f(b["conta"]),
+                "estado": b["estado"],
+                "pago_no_ato": b["pago_no_ato"],
+            }
+            for b in resumo.bvs
+        ]
+    return out
+
+
+def cancelados_do_periodo(
+    inicio: date, fim: date, *, seller_id: int | None = None, educamanto_only: bool = False
+) -> list[ResumoCancelado]:
+    """Os cancelados cujo dinheiro conta no período, pelo mês do `cancelled_at` (FR-044).
+
+    Fonte única da DRE, do Comercial e do desempenho. Só `venda` e `legado` com dinheiro (P-24);
+    `satelite`, `dia` e `virtual` não contam. O vendedor é o congelado (o de hoje no `legado`).
+    """
+    from app.constants import (
+        EDUCAMANTO_TITLE_PREFIX,
+        EVENT_TYPE_VIRTUAL,
+        REGIME_LEGADO,
+        REGIME_VENDA,
+    )
+    from app.models import EventCancellation
+
+    comeco = datetime.combine(inicio, datetime.min.time())
+    termino = datetime.combine(fim, datetime.max.time())
+    consulta = (
+        db.session.query(CalendarEvent.id)
+        .outerjoin(EventCancellation, EventCancellation.event_id == CalendarEvent.id)
+        .filter(
+            CalendarEvent.cancelled_at >= comeco,
+            CalendarEvent.cancelled_at <= termino,
+            db.func.coalesce(CalendarEvent.event_type, "") != EVENT_TYPE_VIRTUAL,
+            db.or_(EventCancellation.id.is_(None), EventCancellation.regime == REGIME_VENDA),
+        )
+    )
+    if seller_id is not None:
+        consulta = consulta.filter(db.func.coalesce(EventCancellation.seller_id, CalendarEvent.seller_id) == seller_id)
+    if educamanto_only:
+        consulta = consulta.filter(CalendarEvent.title.ilike(EDUCAMANTO_TITLE_PREFIX + "%"))
+    ids = [r[0] for r in consulta.order_by(CalendarEvent.cancelled_at, CalendarEvent.id).all()]
+    resumos = resumos_cancelados(ids)
+    return [
+        resumos[i]
+        for i in ids
+        if i in resumos and resumos[i].regime in (REGIME_VENDA, REGIME_LEGADO) and resumos[i].tem_dinheiro
+    ]
+
+
+def totais_cancelamentos(resumos: list[ResumoCancelado]) -> dict[str, Any]:
+    """Os totais do painel de cancelamentos (`paineis.cancelamentos`, contracts §19)."""
+    def soma(campo) -> Decimal:
+        return sum((campo(r) for r in resumos), Decimal("0.00"))
+
+    a_pagar = soma(lambda r: sum(
+        (_dinheiro(g.amount) for g in r.devolucoes if g.status == "aprovado" and (g.payment_status or "nao_pago") != "pago"),
+        Decimal("0.00"),
+    ))
+    return {
+        "quantidade": len(resumos),
+        "pago": soma(lambda r: r.pago),
+        "devolvido": soma(lambda r: r.devolvido),
+        "devolucao_a_pagar": a_pagar,
+        "retido": soma(lambda r: r.retido),
+        "comissao_retido": soma(lambda r: r.comissao_retido),
+        "bv_retido": soma(lambda r: r.bv_retido),
+        "imposto": soma(lambda r: r.imposto_que_conta),
+        "efeito_resultado": soma(lambda r: r.efeito_resultado),
+        "itens": [
+            {
+                "event_id": r.event.id,
+                "titulo": r.event.title,
+                "cancelado_em": r.cancelado_em.isoformat() if r.cancelado_em else None,
+                "retido": r.retido,
+            }
+            for r in resumos
+        ],
+    }
+
+
+def retido_por_vendedor(resumos: list[ResumoCancelado]) -> dict[int, Decimal]:
+    """O retido de cada vendedor (o congelado), para o Comercial e o desempenho (FR-046)."""
+    out: dict[int, Decimal] = {}
+    for r in resumos:
+        if r.seller_id is not None:
+            out[r.seller_id] = out.get(r.seller_id, Decimal("0.00")) + r.retido
+    return out
 
 
 def pode_excluir(event: CalendarEvent) -> bool:
@@ -359,9 +869,12 @@ def listar_cancelamentos() -> dict[str, list[dict[str, Any]]]:
     )
 
     def _devolucao(event: CalendarEvent) -> dict[str, Any] | None:
-        gasto = SpecialExpense.query.filter_by(
-            event_id=event.id, disbursement_type="cliente"
-        ).first()
+        # O campo fica por um ciclo (contracts §15); o `resumo` em lote é quem traz todas.
+        gasto = (
+            SpecialExpense.query.filter(filtro_devolucao(), SpecialExpense.event_id == event.id)
+            .order_by(SpecialExpense.id)
+            .first()
+        )
         if gasto is None:
             return None
         return {

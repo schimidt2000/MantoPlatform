@@ -216,6 +216,83 @@ def ciclo_de_pagamento_expr():
     )
 
 
+
+# ── Predicados únicos (feature 306) ───────────────────────────────────────────────────────────
+
+
+def filtro_estorno_orfao():
+    """O estorno órfão: `a_pagar`, negativo, sem evento e ligado a uma paga (`original_id`).
+
+    É o que a exclusão de um evento já pago deixa (`aplicar_estorno_comissao`), e o único que o
+    resgate do mês corrente traz: o ajuste do cancelado continua ligado ao evento e entra pelo
+    ciclo dele.
+    """
+    return db.and_(
+        CommissionPayment.status == "a_pagar",
+        CommissionPayment.amount < 0,
+        CommissionPayment.event_id.is_(None),
+        CommissionPayment.original_id.isnot(None),
+    )
+
+
+def _e_estorno_orfao(cp: CommissionPayment) -> bool:
+    return (
+        cp.status == "a_pagar"
+        and Decimal(cp.amount or 0) < 0
+        and cp.event_id is None
+        and cp.original_id is not None
+    )
+
+
+def linha_abre_ciclo(cp: CommissionPayment | None = None):
+    """A linha que mantém o ciclo aberto: `a_pagar`, valor ≠ 0 e não órfã (R5).
+
+    Sem argumento, devolve a expressão SQL; com a linha, o mesmo juízo em Python. O verify confere
+    os dois em toda linha do espelho. Só `primeiro_repasse_aberto` a usa.
+    """
+    if cp is None:
+        return db.and_(
+            CommissionPayment.status == "a_pagar",
+            CommissionPayment.amount != 0,
+            db.not_(filtro_estorno_orfao()),
+        )
+    return cp.status == "a_pagar" and Decimal(cp.amount or 0) != 0 and not _e_estorno_orfao(cp)
+
+
+TIPO_COMISSAO = "comissao"
+TIPO_AJUSTE = "ajuste"
+TIPO_ESTORNO = "estorno"
+
+
+def tipo_da_linha(cp: CommissionPayment) -> tuple[str, str | None]:
+    """O que a linha é — comissão, ajuste ou estorno — e o motivo pelo prefixo da nota (FR-033).
+
+    Estorno é o órfão; ajuste é a linha ligada a uma paga (`original_id`) que continua no evento;
+    o resto é comissão. O motivo é o código de `MOTIVOS_AJUSTE_COMISSAO` cujo prefixo abre a nota.
+    """
+    from app.constants import MOTIVOS_AJUSTE_COMISSAO
+
+    nota = cp.notes or ""
+    motivo = next((cod for pref, cod in MOTIVOS_AJUSTE_COMISSAO.items() if nota.startswith(pref)), None)
+    if _e_estorno_orfao(cp):
+        return TIPO_ESTORNO, motivo
+    if cp.original_id is not None:
+        return TIPO_AJUSTE, motivo
+    return TIPO_COMISSAO, motivo
+
+
+def ciclo_de_pagamento_da_linha(cp: CommissionPayment) -> date | None:
+    """Espelho em Python de `ciclo_de_pagamento_expr()`: `payable_from`, `sale_date`, `created_at`.
+
+    O terceiro degrau é a data de `created_at` em **UTC** (a coluna é `utcnow`), exatamente como o
+    `date()` do SQL — converter para São Paulo aqui faria as duas contas divergirem depois das 21h.
+    """
+    if cp.payable_from is not None:
+        return cp.payable_from
+    if cp.sale_date is not None:
+        return cp.sale_date
+    return cp.created_at.date() if cp.created_at is not None else None
+
 def liquidar_periodo(
     seller_id: int, p_start: date, p_end: date, target: str, *, linhas: str = "abertas"
 ) -> list[CommissionPayment]:
@@ -763,8 +840,45 @@ def _commission_beneficiary(event, settings) -> User | None:
     return event.seller
 
 
-def _event_commission(event, settings) -> Decimal:
-    if not event.sale_value:
+def _taxa_da_comissao(event, settings) -> Decimal:
+    """A taxa que a comissão do evento usa hoje: a do evento; senão a padrão; no EducaManto com
+    responsável, a do evento ou a de Configurações (feature 109; FR-029 da 306)."""
+    if event.is_educamanto and _educamanto_responsavel(settings) is not None:
+        if event.commission_rate is not None:
+            return Decimal(str(event.commission_rate))
+        return _educamanto_commission_rate(settings)
+    return _get_commission_rate(event, settings)
+
+
+def _base_da_comissao(
+    event,
+    settings,
+    *,
+    venda: Decimal | None = None,
+    taxa: Decimal | None = None,
+    bv_total: Decimal | None = None,
+    custo: Decimal | None = None,
+) -> Decimal:
+    """Camada 1 da comissão cheia (feature 306, P1): o corpo de sempre de `_event_commission`.
+
+    Sem as sobreposições, o número é o de hoje — é o que os oito consumidores de
+    `_event_commission` leem, e o cenário 1 confere `main` × branch em todo evento do espelho. As
+    sobreposições servem ao cancelado, que congela a venda, a taxa, o BV e o custo no ato e nunca
+    relê a venda viva (data-model §8.3).
+
+    Args:
+        event: o evento.
+        settings: `SiteSetting` (taxa padrão e responsável EducaManto).
+        venda: a venda a usar no lugar de `event.sale_value`.
+        taxa: a taxa (%) no lugar da do evento ou da padrão.
+        bv_total: o BV no lugar de `_event_bv_total(event)`.
+        custo: no EducaManto com responsável, o custo de cachês no lugar do lido ao vivo.
+
+    Returns:
+        A comissão em `Decimal`, com duas casas (ROUND_HALF_UP), nunca negativa.
+    """
+    sale_value = event.sale_value if venda is None else venda
+    if not sale_value:
         return Decimal("0")
     # Venda da Loja de Interações Virtuais não comissiona (feature 205, FR-054): ela se fecha
     # sozinha, sem vendedor, e provisionar percentual sobre ela criaria uma despesa que nunca
@@ -776,24 +890,90 @@ def _event_commission(event, settings) -> Decimal:
     beneficiary = _commission_beneficiary(event, settings)
     if beneficiary and not beneficiary.receives_commission:
         return Decimal("0")
+    bv = _event_bv_total(event) if bv_total is None else Decimal(str(bv_total))
+    rate = Decimal(str(taxa)) if taxa is not None else _taxa_da_comissao(event, settings)
     if event.is_educamanto and _educamanto_responsavel(settings) is not None:
         # Comissão EducaManto (feature 109): 5% sobre o LUCRO (venda − BV − cachês).
-        rate = (
-            Decimal(str(event.commission_rate))
-            if event.commission_rate is not None
-            else _educamanto_commission_rate(settings)
-        )
-        custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
-        base = Decimal(event.sale_value) - _event_bv_total(event) - Decimal(custo)
+        if custo is None:
+            custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
+        base = Decimal(sale_value) - bv - Decimal(custo)
     else:
-        rate = _get_commission_rate(event, settings)
         # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
-        base = Decimal(event.sale_value) - _event_bv_total(event)
+        base = Decimal(sale_value) - bv
     if base < 0:
         base = Decimal("0")
     return (base * rate / Decimal("100")).quantize(
         Decimal("0.01"), rounding=ROUND_HALF_UP
     )
+
+
+def _event_commission(event, settings) -> Decimal:
+    """A comissão do evento como sempre foi: casca da `_base_da_comissao`, sem sobreposição."""
+    return _base_da_comissao(event, settings)
+
+
+def _beneficiario_comissionado(event, settings) -> User | None:
+    """Quem recebe a comissão do evento, ou `None` quando ninguém recebe (feature 306).
+
+    Extraído do `should_have` de `_sync_commission_payment`, sem olhar o cancelamento: Loja
+    Virtual, evento sem beneficiário, beneficiário que não comissiona (`receives_commission`) e
+    cortesia ou permuta recusam. É o portão da comissão cheia do cancelado (P1).
+    """
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event):
+        return None
+    if event.is_cortesia_permuta:
+        return None
+    beneficiary = _commission_beneficiary(event, settings)
+    if beneficiary is None or not beneficiary.receives_commission:
+        return None
+    return beneficiary
+
+
+def comissao_cheia_do_evento(
+    event,
+    settings,
+    *,
+    venda: Decimal | None = None,
+    taxa: Decimal | None = None,
+    bv_total: Decimal | None = None,
+    custo: Decimal | None = None,
+) -> tuple[Decimal, int | None, Decimal]:
+    """Camada 2 da comissão cheia (feature 306, FR-027): o portão do beneficiário e a base.
+
+    É o que o cancelamento congela em `commission_full`: 0,00 quando ninguém comissiona
+    (cortesia com valor, evento sem vendedor, beneficiário sem comissão, Loja Virtual — cenário
+    16b), senão a `_base_da_comissao` com as sobreposições do ato.
+
+    Returns:
+        `(cheia, beneficiario_id, taxa_usada)`: a cheia ao centavo, o id de quem recebe (ou
+        `None`) e a taxa em % que a conta usou.
+    """
+    taxa_usada = Decimal(str(taxa)) if taxa is not None else _taxa_da_comissao(event, settings)
+    beneficiario = _beneficiario_comissionado(event, settings)
+    if beneficiario is None:
+        return Decimal("0.00"), None, taxa_usada
+    cheia = _base_da_comissao(
+        event, settings, venda=venda, taxa=taxa_usada, bv_total=bv_total, custo=custo
+    )
+    return cheia, beneficiario.id, taxa_usada
+
+
+def comissao_do_retido(cheia, retido, venda) -> Decimal:
+    """A comissão na proporção do que a Manto reteve: `cheia × retido ÷ venda` (FR-028).
+
+    Pela mesma conta de `bv_que_acompanha` (a do BV do retido), para as duas proporções não
+    divergirem na tolerância de R$ 0,01: retido a um centavo da venda conta como a venda inteira.
+    Teto na cheia; 0,00 quando venda, retido ou cheia ≤ 0.
+    """
+    from app.orcamento.quote_ops import bv_que_acompanha
+
+    cheia_d, retido_d, venda_d = (Decimal(str(x or 0)) for x in (cheia, retido, venda))
+    if cheia_d <= 0 or retido_d <= 0 or venda_d <= 0:
+        return Decimal("0.00")
+    return min(cheia_d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
+               bv_que_acompanha(cheia_d, retido_d, venda_d))
 
 
 def _valor_chegou_depois(event: CalendarEvent, hoje: date) -> bool:

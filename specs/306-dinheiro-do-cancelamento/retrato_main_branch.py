@@ -300,7 +300,9 @@ def _meses_do_espelho(url: str, hoje: date) -> tuple[list[str], list[str], dict[
 def _arvore_main() -> Path:
     base = subprocess.run(
         ["git", "-C", str(REPO_ROOT), "merge-base", "HEAD", "main"],
-        capture_output=True, text=True, check=True,
+        capture_output=True,
+        text=True,
+        check=True,
     ).stdout.strip()
     destino = Path(tempfile.mkdtemp(prefix="v306_retrato_main_"))
     arquivo = destino / "base.tar"
@@ -315,22 +317,45 @@ def _arvore_main() -> Path:
 def _rodar(raiz: Path, env_extra: dict) -> tuple[int, dict]:
     script = Path(tempfile.mkdtemp(prefix="v306_retrato_")) / "lado.py"
     script.write_text(_LADO, encoding="utf-8")
-    env = {**os.environ, "PYTHONPATH": str(raiz), "MANTO_SEM_THREADS": "1", "FLASK_ENV": "development",
-           "PYTHONUTF8": "1", **env_extra}
-    r = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, encoding="utf-8",
-                       env=env, cwd=str(raiz), timeout=3600)
+    env = {
+        **os.environ,
+        "PYTHONPATH": str(raiz),
+        "MANTO_SEM_THREADS": "1",
+        "FLASK_ENV": "development",
+        "PYTHONUTF8": "1",
+        **env_extra,
+    }
+    r = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        cwd=str(raiz),
+        timeout=3600,
+    )
     linhas = [x for x in r.stdout.strip().splitlines() if x.strip()]
     if not linhas:
         raise RuntimeError(f"lado {raiz} falhou ({r.returncode}): {r.stderr.strip()[-1500:]}")
     try:
         dados = json.loads(linhas[-1])
     except json.JSONDecodeError as exc:
-        raise RuntimeError(f"lado {raiz} sem JSON ({r.returncode}): {r.stderr.strip()[-1500:]}") from exc
+        raise RuntimeError(
+            f"lado {raiz} sem JSON ({r.returncode}): {r.stderr.strip()[-1500:]}"
+        ) from exc
     return r.returncode, dados
 
 
 IGNORAR = {"ticket_medio", "sale_count"}  # mudam de propósito (FR-043)
 _FOLHAS = [0]  # valores comparados: zero diferença em zero folhas não prova nada
+
+
+def _chave_de_ordem(lista: list) -> str | None:
+    """A chave de id comum a todos os itens da lista (`event_id` ou `id`), se houver."""
+    for chave in ("event_id", "id"):
+        if lista and all(isinstance(x, dict) and chave in x for x in lista):
+            return chave
+    return None
 
 
 def _dif(a, b, caminho: str, extras: list[str]) -> list[str]:
@@ -351,6 +376,13 @@ def _dif(a, b, caminho: str, extras: list[str]) -> list[str]:
     if isinstance(a, list) and isinstance(b, list):
         if len(a) != len(b):
             return [f"{caminho}: {len(a)} itens na main × {len(b)} na branch"]
+        chave = _chave_de_ordem(a)
+        if chave is not None and _chave_de_ordem(b) == chave:
+            # Itens com a mesma data saem na ordem do desempate do banco, que muda de uma consulta
+            # para outra (a DRE de 2026-02 trocou dois shows de lugar na rodada de 17/10): compara
+            # por id, porque o retrato confere valores, não a ordem de um empate.
+            a = sorted(a, key=lambda x: str(x[chave]))
+            b = sorted(b, key=lambda x: str(x[chave]))
         out = []
         for i, (x, y) in enumerate(zip(a, b, strict=True)):
             out.extend(_dif(x, y, f"{caminho}[{i}]", extras))
@@ -395,7 +427,10 @@ def _comparar(main: dict, branch: dict) -> tuple[list[str], list[str], list[str]
                 for chave, item in outro.items():
                     if chave in itens:
                         continue
-                    if chave.startswith("commission:") and abs(float(item.get("amount") or 0)) < 0.005:
+                    if (
+                        chave.startswith("commission:")
+                        and abs(float(item.get("amount") or 0)) < 0.005
+                    ):
                         proposito.append(f"planilha/{m}/{chave}: item aberto de soma zero (R6)")
                     else:
                         difs.append(f"planilha/{m}/{chave}: só na branch")
@@ -431,7 +466,13 @@ def _usuario_temporario() -> tuple[str, str, int | None]:
     email = f"__retrato306_{uuid.uuid4().hex[:8]}@manto.local"
     senha = uuid.uuid4().hex
     with app.app_context():
-        u = User(name="__retrato306", email=email, is_active=True, has_access=True, receives_commission=False)
+        u = User(
+            name="__retrato306",
+            email=email,
+            is_active=True,
+            has_access=True,
+            receives_commission=False,
+        )
         u.set_password(senha)
         u.roles.append(Role.query.filter_by(name=RoleName.SUPERADMIN).one())
         db.session.add(u)
@@ -461,30 +502,44 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--mutacao", action="store_true")
-    parser.add_argument("--sem-resync", action="store_true", help="os dois lados só leem (sem resync de comissões)")
+    parser.add_argument(
+        "--sem-resync", action="store_true", help="os dois lados só leem (sem resync de comissões)"
+    )
     args = parser.parse_args()
     url = os.environ.get("DATABASE_URL") or ""
     if not url or not ("localhost" in url or "127.0.0.1" in url):
         print("DATABASE_URL ausente ou não é o manto_local.")
         return 2
     if os.environ.get("MANTO_SEM_THREADS") != "1" or os.environ.get("FLASK_ENV") != "development":
-        print("Faltam MANTO_SEM_THREADS=1 e FLASK_ENV=development (o espelho escreve em serviços reais).")
+        print(
+            "Faltam MANTO_SEM_THREADS=1 e FLASK_ENV=development (o espelho escreve em serviços reais)."
+        )
         return 2
     relogio = datetime.now().replace(microsecond=0)
     meses, tendencia_fora, fora = _meses_do_espelho(url, relogio.date())
-    clientes = [r[0] for r in _sql(
-        url,
-        "SELECT DISTINCT client_id FROM calendar_events WHERE client_id IS NOT NULL "
-        "AND coalesce(google_event_id, '') NOT LIKE 'v306%' ORDER BY 1",
-    )]
+    clientes = [
+        r[0]
+        for r in _sql(
+            url,
+            "SELECT DISTINCT client_id FROM calendar_events WHERE client_id IS NOT NULL "
+            "AND coalesce(google_event_id, '') NOT LIKE 'v306%' ORDER BY 1",
+        )
+    ]
     email, senha, uid = _usuario_temporario()
     try:
-        env = {"V306_RELOGIO": relogio.isoformat(), "V306_MESES": json.dumps(meses),
-               "V306_CLIENTES": json.dumps(clientes), "V306_EMAIL": email, "V306_SENHA": senha,
-               **({"V306_SEM_RESYNC": "1"} if args.sem_resync else {})}
+        env = {
+            "V306_RELOGIO": relogio.isoformat(),
+            "V306_MESES": json.dumps(meses),
+            "V306_CLIENTES": json.dumps(clientes),
+            "V306_EMAIL": email,
+            "V306_SENHA": senha,
+            **({"V306_SEM_RESYNC": "1"} if args.sem_resync else {}),
+        }
         cod_main, main_lado = _rodar(_arvore_main(), env)
         antes = _sql(url, _LINHAS_COMISSAO)
-        cod_branch, branch = _rodar(REPO_ROOT, {**env, **({"V306_MUTACAO": "1"} if args.mutacao else {})})
+        cod_branch, branch = _rodar(
+            REPO_ROOT, {**env, **({"V306_MUTACAO": "1"} if args.mutacao else {})}
+        )
         depois = _sql(url, _LINHAS_COMISSAO)
     finally:
         _apagar_usuario(uid)
@@ -492,23 +547,41 @@ def main() -> int:
         if cod != 0:
             print(f"lado {lado} saiu {cod}: {dados.get('erro')}")
             if args.json:
-                print(json.dumps({"diferencas": None, "erro": f"{lado}: {dados.get('erro')}"}, ensure_ascii=False))
+                print(
+                    json.dumps(
+                        {"diferencas": None, "erro": f"{lado}: {dados.get('erro')}"},
+                        ensure_ascii=False,
+                    )
+                )
             return 3 if cod == 3 else 2
         vazios = _vazios(dados)
         if vazios:
-            print(f"lado {lado}: {len(vazios)} respostas vazias, a comparação não prova nada: {vazios[:10]}")
+            print(
+                f"lado {lado}: {len(vazios)} respostas vazias, a comparação não prova nada: {vazios[:10]}"
+            )
             if args.json:
-                print(json.dumps({"diferencas": None, "erro": f"{lado}: respostas vazias"}, ensure_ascii=False))
+                print(
+                    json.dumps(
+                        {"diferencas": None, "erro": f"{lado}: respostas vazias"},
+                        ensure_ascii=False,
+                    )
+                )
             return 2
     rotulos = {f"{m[5:7]}/{m[2:4]}" for m in tendencia_fora}
-    difs, extras, proposito = _comparar(_sem_rotulos(main_lado, rotulos), _sem_rotulos(branch, rotulos))
+    difs, extras, proposito = _comparar(
+        _sem_rotulos(main_lado, rotulos), _sem_rotulos(branch, rotulos)
+    )
     if antes != depois:
-        difs.append(f"a rodada da branch escreveu linhas de comissão ({len(antes)} → {len(depois)})")
+        difs.append(
+            f"a rodada da branch escreveu linhas de comissão ({len(antes)} → {len(depois)})"
+        )
     for m in tendencia_fora:
         proposito.append(f"Tendência {m}: mês com cancelado, fora da comparação (FR-043)")
     for m, motivos in sorted(fora.items()):
         proposito.append(f"{m}: fora da comparação ({', '.join(sorted(set(motivos)))})")
-    print(f"relógio: {relogio.isoformat()}; meses comparados: {len(meses)}; clientes: {len(clientes)}")
+    print(
+        f"relógio: {relogio.isoformat()}; meses comparados: {len(meses)}; clientes: {len(clientes)}"
+    )
     print(f"valores comparados: {_FOLHAS[0]}; diferenças: {len(difs)}")
     for d in difs[:60]:
         print(f"  DIF  {d}")
@@ -519,8 +592,17 @@ def main() -> int:
     for p in proposito[:40]:
         print(f"  PROPÓSITO {p}")
     if args.json:
-        print(json.dumps({"diferencas": len(difs), "meses": len(meses), "valores": _FOLHAS[0], "primeiras": difs[:20]},
-                         ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "diferencas": len(difs),
+                    "meses": len(meses),
+                    "valores": _FOLHAS[0],
+                    "primeiras": difs[:20],
+                },
+                ensure_ascii=False,
+            )
+        )
     return 0 if not difs else 1
 
 

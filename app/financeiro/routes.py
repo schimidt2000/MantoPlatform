@@ -1069,6 +1069,7 @@ def pagamentos():
     prev_year, prev_month = (year_i - 1, 12) if month_i == 1 else (year_i, month_i - 1)
     prev_start = date(prev_year, prev_month, 1)
     prev_end = _m_start
+    # O 5 é o `DIA_DO_REPASSE` (app/constants.py, feature 306): o repasse do ciclo anterior.
     items += _build_commission_items(prev_start, prev_end, date(year_i, month_i, 5), today)
 
     # Gastos recorrentes (feature 110): contas variáveis preenchidas do mês visto.
