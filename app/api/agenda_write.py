@@ -1378,13 +1378,31 @@ def api_update_event_comercial(event_id: int) -> Any:
     if erros:
         return json_error("Corrija os campos destacados", 400, fields=erros)
 
-    aviso_bv = update_event_comercial(
-        event,
-        data,
-        actor_name=current_user.name,
-        tz=_TZ_SP,
-        sincronizar_comissao=_sync_commission_payment,
-    )
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar import cancel_ops
+
+    def comissao_da_aba(ev: CalendarEvent) -> None:
+        """Feature 306 — o despachante: o cancelado (só o Superadmin chega aqui) recongela e
+        reconcilia na mesma transação; o vivo segue com o sync de sempre."""
+        if ev.is_cancelled:
+            cancel_ops.recongelar_do_comercial(ev, actor=current_user)
+        else:
+            _sync_commission_payment(ev)
+
+    try:
+        aviso_bv = update_event_comercial(
+            event,
+            data,
+            actor_name=current_user.name,
+            tz=_TZ_SP,
+            sincronizar_comissao=comissao_da_aba,
+        )
+    except cancel_ops.CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
     # Feature 305 (B10): o BV a pagar acompanhou a venda — a tela diz o que mudou.
     result = _event_detail_json(event).get_json()
     result["aviso_bv"] = aviso_bv
@@ -1738,6 +1756,10 @@ def api_set_acrescimos(event_id: int) -> Any:
 
     RBAC `_can_manage_sale()`: acréscimo mexe na base da comissão e o BV é repasse a terceiro —
     mesmo gate da nota fiscal, não o de editar evento.
+
+    Feature 306: no cancelado, só o Superadmin real, e a lista grava no lugar pelo `id`
+    (`comercial_ops.alterar_acrescimos_do_cancelado`): as linhas congeladas dos BVs acompanham e a
+    comissão do retido se recongela na mesma transação (contracts §8).
     """
     event = CalendarEvent.query.get(event_id)
     if event is None:
@@ -1763,16 +1785,29 @@ def api_set_acrescimos(event_id: int) -> Any:
     if not isinstance(itens, list):
         return json_error("Envie a lista completa em `items`.", 400, fields={"items": "Obrigatório"})
 
-    from app.calendar import comercial_ops
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar import cancel_ops, comercial_ops
     from app.constants import CODIGO_ESTADO_MUDOU
     from app.financeiro.routes import _sync_commission_payment
 
+    cancelado = event.is_cancelled
     try:
-        trocas = comercial_ops.substituir_acrescimos(event, itens)
+        if cancelado:
+            # Superadmin no cancelado: no lugar, com as travas T1 → T2 → T3 → T4 dentro (pelo nome
+            # do módulo: o 16d troca a função por um "apaga e recria" e tem de ficar vermelho).
+            trocas = comercial_ops.alterar_acrescimos_do_cancelado(event, itens, actor=current_user)
+        else:
+            trocas = comercial_ops.substituir_acrescimos(event, itens)
     except comercial_ops.AcrescimosRecusados as exc:
         db.session.rollback()
         return json_error("Corrija os acréscimos destacados.", 400, fields=exc.erros)
-    if event.is_cancelled:  # cancelado entre a leitura e a trava: nada foi gravado
+    except cancel_ops.CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
+    if not cancelado and event.is_cancelled:  # cancelado entre a leitura e a trava: nada gravado
         db.session.rollback()
         return json_error(
             "O evento mudou enquanto você editava: recarregue.", 409, codigo=CODIGO_ESTADO_MUDOU
@@ -1782,7 +1817,8 @@ def api_set_acrescimos(event_id: int) -> Any:
 
         for troca in trocas:
             audit("edit", "event_bv", event.id, event.title, comercial_ops.frase_da_troca_no_bv_pago(troca))
-    _sync_commission_payment(event)
+    if not cancelado:
+        _sync_commission_payment(event)
     db.session.commit()
     return _event_detail_json(event)
 

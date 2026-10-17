@@ -181,6 +181,9 @@ def substituir_acrescimos(
       (um "marcar pago" concorrente falha alto em vez de sumir) e, no fim, a coleção
       ``event.acrescimos`` é recarregada: o sync da comissão, que vem logo depois, lia a coleção
       VELHA (com o BV apagado) — também no gêmeo Jinja de antes.
+    - Feature 306: a montagem e a validação moram em `_montar_acrescimos` (cinco passos, comuns ao
+      cancelado); aqui só o vivo, que apaga e recria. Relido já cancelado depois da trava, devolve
+      ``[]`` sem gravar.
 
     Args:
         event: O `CalendarEvent` dono dos acréscimos.
@@ -203,24 +206,46 @@ def substituir_acrescimos(
     """
     if itens is None:
         return []
-    from app.calendar.orcamento_evento_ops import _fmt_reais, erros_do_bv, travar_evento
+    from app.calendar.orcamento_evento_ops import travar_evento
 
     travar_evento(event)
+    # Feature 306 — cinto: a view decidiu "vivo" lendo o evento sem trava. Cancelado no meio, nada
+    # se grava aqui e a view responde 409 `estado_mudou`; o cancelado se corrige NO LUGAR, por
+    # `alterar_acrescimos_do_cancelado` (apagar e recriar soltaria a linha congelada do BV).
+    if getattr(event, "cancelled_at", None) is not None:
+        return []
     # `populate_existing`: o objeto já na sessão (lido antes, sem trava) seria devolvido com os
     # valores velhos — um "pago" que entrou no meio voltaria a "a pagar".
     antigas = (
         EventAcrescimo.query.filter_by(event_id=event.id).order_by(EventAcrescimo.id)
         .with_for_update().populate_existing().all()
     )
-    por_id = {a.id: a for a in antigas}
-    usa_id = any(isinstance(i, dict) and "id" in i for i in itens)
-    sem_venda = _sem_venda(event)
-    cancelado = getattr(event, "cancelled_at", None) is not None
-    erros: dict[str, str] = {}
-    linhas: list[dict] = []
-    descricoes_livres = [a for a in antigas]
-    ids_usados: set[int] = set()
+    pares, trocas = _montar_acrescimos(event, itens, antigas, cancelado=False, reenviados=reenviados)
 
+    for antiga in antigas:
+        db.session.delete(antiga)
+    db.session.flush()
+    for _linha, registro in pares:
+        db.session.add(EventAcrescimo(event_id=event.id, **registro))
+    db.session.flush()
+    db.session.expire(event, ["acrescimos"])
+    return trocas
+
+
+# ── A montagem dos acréscimos, em cinco passos (feature 306, T072; a regra é a da 305) ─────────
+# Extraída de `substituir_acrescimos` para o cancelado reusar a mesma validação gravando NO LUGAR
+# (`alterar_acrescimos_do_cancelado`). O vivo segue com o apagar e recriar de sempre.
+
+
+def _ler_itens_dos_acrescimos(itens: list, por_id: dict, usa_id: bool, erros: dict) -> list[dict]:
+    """Passo 1 — ler os itens: tipo, valor e a linha antiga pela identidade.
+
+    Item sem tipo é a linha em branco (ignorada); valor ilegível é recusado, nunca descartado; BV
+    sem valor, zero ou negativo é recusado (apagar o valor tirava o BV da Planilha). O mesmo `id`
+    duas vezes é recusado: as duas linhas herdariam o "pago" da antiga.
+    """
+    linhas: list[dict] = []
+    ids_usados: set[int] = set()
     for indice, item in enumerate(itens):
         if not isinstance(item, dict):
             continue
@@ -244,44 +269,58 @@ def substituir_acrescimos(
         if valor < 0 and eh_bv:
             erros[f"items.{indice}.value"] = "O BV não pode ser negativo."
             continue
-        antiga = None
-        if usa_id:
-            try:
-                antiga = por_id.get(int(item.get("id"))) if item.get("id") is not None else None
-            except (TypeError, ValueError, OverflowError):
-                antiga = None
-            if antiga is not None:
-                if antiga.id in ids_usados:
-                    erros[f"items.{indice}.id"] = "Esta linha aparece duas vezes na lista: recarregue a página."
-                    continue
-                ids_usados.add(antiga.id)
+        antiga = _linha_antiga_pelo_id(item, por_id, usa_id)
+        if antiga is not None:
+            if antiga.id in ids_usados:
+                erros[f"items.{indice}.id"] = "Esta linha aparece duas vezes na lista: recarregue a página."
+                continue
+            ids_usados.add(antiga.id)
         linhas.append({"indice": indice, "item": item, "tipo": tipo[:40], "valor": valor,
-                       "is_percent": bool(item.get("is_percent")), "is_bv": tipo == ACRESCIMO_TIPO_BV,
-                       "antiga": antiga})
+                       "is_percent": bool(item.get("is_percent")), "is_bv": eh_bv, "antiga": antiga})
+    return linhas
 
-    # Bundle antigo (nenhum id): a linha antiga é achada pelo que dá — o BV pela chave (recebedor,
-    # PIX) ou pelo recebedor, só se houver UMA candidata; os outros por tipo e valor.
+
+def _linha_antiga_pelo_id(item: dict, por_id: dict, usa_id: bool) -> Any:
     if not usa_id:
-        bvs_antigos = [a for a in antigas if a.is_bv]
-        for linha in linhas:
-            item = linha["item"]
-            if linha["is_bv"]:
-                recebedor = (item.get("bv_recipient") or "").strip() if isinstance(item.get("bv_recipient"), str) else ""
-                pix = (item.get("bv_pix") or "").strip() if isinstance(item.get("bv_pix"), str) else ""
-                candidatas = [a for a in bvs_antigos if (a.bv_recipient or "") == recebedor
-                              and (not pix or (a.bv_pix or "") == pix)]
-                if len(candidatas) == 1:
-                    linha["antiga"] = candidatas[0]
-                    bvs_antigos.remove(candidatas[0])
-            else:
-                for a in descricoes_livres:
-                    if not a.is_bv and a.tipo == linha["tipo"] and _to_decimal(a.value) == linha["valor"]:
-                        linha["antiga"] = a
-                        descricoes_livres.remove(a)
-                        break
+        return None
+    try:
+        return por_id.get(int(item.get("id"))) if item.get("id") is not None else None
+    except (TypeError, ValueError, OverflowError):
+        return None
 
-    # BV pago ou no banco não sai nem vira outra coisa pelo editor (a Comercial não marca pagamento —
-    # apagar o BV pago tiraria da Planilha e da DRE dinheiro que já saiu). Desmarca-se na Planilha.
+
+def _casar_bundle_antigo(linhas: list[dict], antigas: list) -> None:
+    """Passo 2 — o bundle antigo (nenhum `id`): a linha antiga é achada pelo que dá.
+
+    O BV pela chave (recebedor, PIX) ou pelo recebedor, só se houver UMA candidata — herdar pela
+    chave fazia um BV novo para quem já tinha um BV pago nascer "pago"; os outros por tipo e valor.
+    """
+    bvs_antigos = [a for a in antigas if a.is_bv]
+    descricoes_livres = list(antigas)
+    for linha in linhas:
+        item = linha["item"]
+        if linha["is_bv"]:
+            recebedor = (item.get("bv_recipient") or "").strip() if isinstance(item.get("bv_recipient"), str) else ""
+            pix = (item.get("bv_pix") or "").strip() if isinstance(item.get("bv_pix"), str) else ""
+            candidatas = [a for a in bvs_antigos if (a.bv_recipient or "") == recebedor
+                          and (not pix or (a.bv_pix or "") == pix)]
+            if len(candidatas) == 1:
+                linha["antiga"] = candidatas[0]
+                bvs_antigos.remove(candidatas[0])
+        else:
+            for a in descricoes_livres:
+                if not a.is_bv and a.tipo == linha["tipo"] and _to_decimal(a.value) == linha["valor"]:
+                    linha["antiga"] = a
+                    descricoes_livres.remove(a)
+                    break
+
+
+def _recusar_bv_pago_mexido(linhas: list[dict], antigas: list, erros: dict) -> None:
+    """Passo 3 — o BV pago ou no banco não sai nem vira outra coisa pelo editor.
+
+    A Comercial não marca pagamento: apagar o BV pago tiraria da Planilha e da DRE dinheiro que já
+    saiu. Desmarca-se na Planilha.
+    """
     usadas = {id(linha["antiga"]) for linha in linhas if linha["antiga"] is not None}
     for linha in linhas:
         antiga = linha["antiga"]
@@ -293,7 +332,9 @@ def substituir_acrescimos(
             "para desfazer o pagamento, use a Planilha de Pagamentos."
         )
 
-    # Os BVs em reais e os % dos BVs, para a régua (todos, pagos inclusive: fazem parte do preço).
+
+def _regua_do_bv(linhas: list[dict]) -> tuple[Decimal, Decimal]:
+    """Passo 4 — os BVs em reais e os % dos BVs, para a régua do % (pagos inclusive: são preço)."""
     soma_bv_reais = Decimal("0")
     soma_perc_bv = Decimal("0")
     for linha in linhas:
@@ -310,107 +351,288 @@ def substituir_acrescimos(
             soma_perc_bv += _q(linha["valor"])
         else:
             soma_bv_reais += _q(linha["valor"])
+    return soma_bv_reais, soma_perc_bv
 
-    venda = _to_decimal(event.sale_value) or Decimal("0")
-    novas: list[dict] = []
+
+def _registro_do_acrescimo(event: Any, linha: dict, regua: dict, erros: dict, trocas: list,
+                           reenviados: list | None) -> dict | None:
+    """Passo 5 — o registro da linha (o BV pelos três ramos abaixo); `None` = linha recusada."""
+    item, antiga = linha["item"], linha["antiga"]
+    if "descricao" in item:
+        descricao = item.get("descricao")
+        descricao = (descricao.strip() or None) if isinstance(descricao, str) else None
+    else:
+        descricao = antiga.descricao if antiga is not None else None
+    registro = {"tipo": linha["tipo"], "descricao": descricao[:200] if descricao else None,
+                "is_bv": linha["is_bv"], "bv_recipient": None, "bv_pix": None,
+                "bv_payment_status": "nao_pago"}
+    if not linha["is_bv"]:
+        # Acréscimo que não é BV: só registro (não entra em comissão, DRE nem Planilha).
+        if linha["is_percent"]:
+            registro.update(is_percent=True, value=linha["valor"],
+                            amount_brl=_q(regua["venda"] * linha["valor"] / 100))
+        else:
+            registro.update(is_percent=False, value=linha["valor"], amount_brl=linha["valor"])
+        return registro
+    return _registro_do_bv(event, linha, registro, regua, erros, trocas, reenviados)
+
+
+def _registro_do_bv(event: Any, linha: dict, registro: dict, regua: dict, erros: dict, trocas: list,
+                    reenviados: list | None) -> dict | None:
+    """O BV: quem recebe e PIX obrigatórios (B8); o pago congela; o % pela régua; o em reais como
+    digitado, conferido contra o que a tela viu (`valor_visto`)."""
+    from app.calendar.orcamento_evento_ops import erros_do_bv
+
+    item, antiga, indice = linha["item"], linha["antiga"], linha["indice"]
+    recebedor = item.get("bv_recipient")
+    pix = item.get("bv_pix")
+    recebedor = recebedor.strip() if isinstance(recebedor, str) else recebedor
+    pix = pix.strip() if isinstance(pix, str) else pix
+    if not pix and antiga is not None and antiga.is_bv and antiga.bv_pix:
+        pix = antiga.bv_pix  # PIX vazio = mantém o da MESMA linha
+    for campo, mensagem in erros_do_bv(recebedor, pix).items():
+        erros[f"items.{indice}.{campo}"] = mensagem
+    registro.update(bv_recipient=recebedor or None, bv_pix=pix or None)
+    if antiga is not None and antiga.is_bv:
+        registro["bv_payment_status"] = antiga.bv_payment_status or "nao_pago"
+    if registro["bv_payment_status"] in _BV_CONGELADO and antiga is not None:
+        return _registro_do_bv_pago(registro, antiga, recebedor, pix, trocas)
+    if linha["is_percent"]:
+        return _registro_do_bv_percentual(event, linha, registro, regua, erros)
+    return _registro_do_bv_em_reais(linha, registro, erros, reenviados, recebedor, pix)
+
+
+def _registro_do_bv_pago(registro: dict, antiga: Any, recebedor: Any, pix: Any, trocas: list) -> dict:
+    """O BV pago ou no banco mantém valor e unidade; quem recebe e o PIX trocam, com rastro."""
+    registro.update(is_percent=antiga.is_percent, value=antiga.value, amount_brl=antiga.amount_brl)
+    if (recebedor or None) != antiga.bv_recipient or (pix or None) != antiga.bv_pix:
+        # O dinheiro já saiu para alguém: quem recebe e o PIX seguem editáveis, mas a troca deixa
+        # rastro — senão o registro de quem recebeu se reescreve calado.
+        trocas.append({
+            "valor": antiga.amount_brl, "status": antiga.bv_payment_status,
+            "quem_antes": antiga.bv_recipient, "quem_depois": recebedor or None,
+            "pix_antes": antiga.bv_pix, "pix_depois": pix or None,
+        })
+    return registro
+
+
+def _registro_do_bv_percentual(event: Any, linha: dict, registro: dict, regua: dict, erros: dict) -> dict | None:
+    """O BV em %: pela régua (`valor_do_bv_percentual`); sem venda (ou no cancelado), o existente
+    mantém o valor e um novo é recusado."""
+    antiga, indice = linha["antiga"], linha["indice"]
+    percentual = _q(linha["valor"])
+    if regua["sem_venda"] or regua["cancelado"]:
+        if antiga is not None and antiga.is_bv and antiga.is_percent and antiga.amount_brl is not None:
+            valor_bv = _to_decimal(antiga.amount_brl)
+        else:
+            erros[f"items.{indice}.value"] = (
+                "No evento cancelado, lance o BV em reais."
+                if regua["cancelado"]
+                else "Sem valor de venda, o BV em % não tem base: lance-o em reais ou depois do valor de venda."
+            )
+            return None
+    else:
+        valor_bv = valor_do_bv_percentual(
+            regua["venda"], bool(event.with_invoice), percentual, regua["soma_bv_reais"], regua["soma_perc_bv"]
+        )
+        if valor_bv is None:
+            erros[f"items.{indice}.value"] = "A base do BV ficou negativa: confira os valores."
+            return None
+    registro.update(is_percent=True, value=percentual, amount_brl=valor_bv)
+    return registro
+
+
+def _registro_do_bv_em_reais(linha: dict, registro: dict, erros: dict, reenviados: list | None,
+                             recebedor: Any, pix: Any) -> dict | None:
+    """O BV em reais como digitado (3a-Q7 = B), recusado se a venda o mudou depois que o editor
+    abriu (`valor_visto`)."""
+    from app.calendar.orcamento_evento_ops import _fmt_reais
+
+    item, antiga, indice = linha["item"], linha["antiga"], linha["indice"]
+    visto = _to_decimal(item.get("valor_visto")) if not isinstance(item.get("valor_visto"), bool) else None
+    if visto is not None and (not visto.is_finite() or abs(visto) >= _TETO_DO_VALOR):
+        visto = None  # lixo (inf, NaN, 1e30): como se não viesse — nunca 500 no `_q`
+    if (
+        visto is not None
+        and antiga is not None
+        and antiga.is_bv
+        and not antiga.is_percent
+        and _q(visto) != _q(_to_decimal(antiga.amount_brl) or Decimal("0"))
+    ):
+        # O editor abriu antes de a venda mudar o BV (B10, outra aba ou outra pessoa): gravar
+        # "como digitado" desfaria a proporção sem ninguém ver.
+        erros[f"items.{indice}.value"] = (
+            f"O BV mudou para {_fmt_reais(antiga.amount_brl or 0)} desde que o editor abriu: "
+            "recarregue a página e confira."
+        )
+        return None
+    registro.update(is_percent=False, value=_q(linha["valor"]), amount_brl=_q(linha["valor"]))
+    if (
+        reenviados is not None
+        and antiga is not None
+        and antiga.is_bv
+        and not antiga.is_percent
+        and _q(linha["valor"]) == _q(_to_decimal(antiga.value) or Decimal("0"))
+    ):
+        # A MESMA linha (pela identidade) com o MESMO número: reenviada, não digitada — o gêmeo
+        # Jinja a deixa acompanhar a venda. Trocar só quem recebe ou o PIX não conta.
+        reenviados.append(_bv_na_tela(recebedor, pix, False, linha["valor"]))
+    return registro
+
+
+def _montar_acrescimos(event: Any, itens: list, antigas: list, *, cancelado: bool,
+                       reenviados: list | None = None) -> tuple[list[tuple[dict, dict]], list[dict]]:
+    """A montagem e a validação da 305, comum ao vivo e ao cancelado: os cinco passos acima.
+
+    Returns:
+        `(pares, trocas)`: cada linha aceita com o seu registro (a linha traz a antiga casada), e as
+        trocas de quem recebe ou do PIX num BV pago.
+
+    Raises:
+        AcrescimosRecusados: alguma linha não pode ser gravada; nada foi gravado.
+    """
+    erros: dict[str, str] = {}
+    usa_id = any(isinstance(i, dict) and "id" in i for i in itens)
+    linhas = _ler_itens_dos_acrescimos(itens, {a.id: a for a in antigas}, usa_id, erros)
+    if not usa_id:
+        _casar_bundle_antigo(linhas, antigas)
+    _recusar_bv_pago_mexido(linhas, antigas, erros)
+    soma_bv_reais, soma_perc_bv = _regua_do_bv(linhas)
+    regua = {"venda": _to_decimal(event.sale_value) or Decimal("0"), "sem_venda": _sem_venda(event),
+             "cancelado": cancelado, "soma_bv_reais": soma_bv_reais, "soma_perc_bv": soma_perc_bv}
+    pares: list[tuple[dict, dict]] = []
     trocas: list[dict] = []
     for linha in linhas:
-        item, antiga, indice = linha["item"], linha["antiga"], linha["indice"]
-        if "descricao" in item:
-            descricao = item.get("descricao")
-            descricao = (descricao.strip() or None) if isinstance(descricao, str) else None
-        else:
-            descricao = antiga.descricao if antiga is not None else None
-        registro = {"tipo": linha["tipo"], "descricao": descricao[:200] if descricao else None,
-                    "is_bv": linha["is_bv"], "bv_recipient": None, "bv_pix": None,
-                    "bv_payment_status": "nao_pago"}
-        if linha["is_bv"]:
-            recebedor = item.get("bv_recipient")
-            pix = item.get("bv_pix")
-            recebedor = recebedor.strip() if isinstance(recebedor, str) else recebedor
-            pix = pix.strip() if isinstance(pix, str) else pix
-            if not pix and antiga is not None and antiga.is_bv and antiga.bv_pix:
-                pix = antiga.bv_pix  # PIX vazio = mantém o da MESMA linha
-            for campo, mensagem in erros_do_bv(recebedor, pix).items():
-                erros[f"items.{indice}.{campo}"] = mensagem
-            registro.update(bv_recipient=recebedor or None, bv_pix=pix or None)
-            if antiga is not None and antiga.is_bv:
-                registro["bv_payment_status"] = antiga.bv_payment_status or "nao_pago"
-            if registro["bv_payment_status"] in _BV_CONGELADO and antiga is not None:
-                registro.update(is_percent=antiga.is_percent, value=antiga.value, amount_brl=antiga.amount_brl)
-                if (recebedor or None) != antiga.bv_recipient or (pix or None) != antiga.bv_pix:
-                    # O dinheiro já saiu para alguém: quem recebe e o PIX seguem editáveis, mas a
-                    # troca deixa rastro — senão o registro de quem recebeu se reescreve calado.
-                    trocas.append({
-                        "valor": antiga.amount_brl, "status": antiga.bv_payment_status,
-                        "quem_antes": antiga.bv_recipient, "quem_depois": recebedor or None,
-                        "pix_antes": antiga.bv_pix, "pix_depois": pix or None,
-                    })
-            elif linha["is_percent"]:
-                percentual = _q(linha["valor"])
-                if sem_venda or cancelado:
-                    if antiga is not None and antiga.is_bv and antiga.is_percent and antiga.amount_brl is not None:
-                        valor_bv = _to_decimal(antiga.amount_brl)
-                    else:
-                        erros[f"items.{indice}.value"] = (
-                            "Sem valor de venda, o BV em % não tem base: lance-o em reais ou depois do valor de venda."
-                        )
-                        continue
-                else:
-                    valor_bv = valor_do_bv_percentual(
-                        venda, bool(event.with_invoice), percentual, soma_bv_reais, soma_perc_bv
-                    )
-                    if valor_bv is None:
-                        erros[f"items.{indice}.value"] = "A base do BV ficou negativa: confira os valores."
-                        continue
-                registro.update(is_percent=True, value=percentual, amount_brl=valor_bv)
-            else:
-                visto = _to_decimal(item.get("valor_visto")) if not isinstance(item.get("valor_visto"), bool) else None
-                if visto is not None and (not visto.is_finite() or abs(visto) >= _TETO_DO_VALOR):
-                    visto = None  # lixo (inf, NaN, 1e30): como se não viesse — nunca 500 no `_q`
-                if (
-                    visto is not None
-                    and antiga is not None
-                    and antiga.is_bv
-                    and not antiga.is_percent
-                    and _q(visto) != _q(_to_decimal(antiga.amount_brl) or Decimal("0"))
-                ):
-                    # O editor abriu antes de a venda mudar o BV (B10, outra aba ou outra pessoa):
-                    # gravar "como digitado" desfaria a proporção sem ninguém ver.
-                    erros[f"items.{indice}.value"] = (
-                        f"O BV mudou para {_fmt_reais(antiga.amount_brl or 0)} desde que o editor abriu: "
-                        "recarregue a página e confira."
-                    )
-                    continue
-                registro.update(is_percent=False, value=_q(linha["valor"]), amount_brl=_q(linha["valor"]))
-                if (
-                    reenviados is not None
-                    and antiga is not None
-                    and antiga.is_bv
-                    and not antiga.is_percent
-                    and _q(linha["valor"]) == _q(_to_decimal(antiga.value) or Decimal("0"))
-                ):
-                    # A MESMA linha (pela identidade) com o MESMO número: reenviada, não digitada —
-                    # o gêmeo Jinja a deixa acompanhar a venda. Trocar só quem recebe ou o PIX não conta.
-                    reenviados.append(_bv_na_tela(recebedor, pix, False, linha["valor"]))
-        else:
-            # Acréscimo que não é BV: só registro (não entra em comissão, DRE nem Planilha).
-            if linha["is_percent"]:
-                registro.update(is_percent=True, value=linha["valor"], amount_brl=_q(venda * linha["valor"] / 100))
-            else:
-                registro.update(is_percent=False, value=linha["valor"], amount_brl=linha["valor"])
-        novas.append(registro)
-
+        registro = _registro_do_acrescimo(event, linha, regua, erros, trocas, reenviados)
+        if registro is not None:
+            pares.append((linha, registro))
     if erros:
         raise AcrescimosRecusados(erros)
+    return pares, trocas
 
+
+def _resumo_do_acrescimo(a: Any) -> str:
+    from app.calendar.orcamento_evento_ops import _fmt_reais
+
+    unidade = f"{a.value}%" if a.is_percent else _fmt_reais(a.amount_brl or 0)
+    quem = f" para {a.bv_recipient}" if a.is_bv and a.bv_recipient else ""
+    return f"{a.tipo} {unidade}{quem}"
+
+
+def _gravar_no_lugar(event: Any, pares: list, antigas: list) -> tuple[list, list]:
+    """Os acréscimos do cancelado NO LUGAR, pelo `id` (decisão (d) do plan). Sem commit.
+
+    Apagar e recriar, como no vivo, soltaria a linha congelada do BV (`ondelete SET NULL` = órfã,
+    que nenhum leitor soma) e trocaria o id que a Planilha mostra. A antiga ausente do corpo sai; a
+    casada é regravada; a nova nasce. Cada mudança deixa `audit`.
+
+    Returns:
+        `(gravados, removidos)`: os acréscimos que ficam (na ordem do corpo) e os ids que saíram.
+    """
+    from app.utils import audit
+
+    usadas = {linha["antiga"].id for linha, _ in pares if linha["antiga"] is not None}
+    removidos = []
     for antiga in antigas:
-        db.session.delete(antiga)
+        if antiga.id not in usadas:
+            audit("delete", "event_acrescimo", antiga.id, event.title,
+                  f"Acréscimo removido do cancelado: {_resumo_do_acrescimo(antiga)}")  # fmt: skip
+            removidos.append(antiga.id)
+            db.session.delete(antiga)
+    gravados, novos = [], []
+    for linha, registro in pares:
+        a = linha["antiga"]
+        if a is None:
+            a = EventAcrescimo(event_id=event.id, **registro)
+            db.session.add(a)
+            novos.append(a)
+        else:
+            antes = _resumo_do_acrescimo(a)
+            mudou = any(getattr(a, campo) != valor for campo, valor in registro.items())
+            for campo, valor in registro.items():
+                setattr(a, campo, valor)
+            if mudou:
+                audit("edit", "event_acrescimo", a.id, event.title,
+                      f"Acréscimo corrigido no cancelado: {antes} → {_resumo_do_acrescimo(a)}")  # fmt: skip
+        gravados.append(a)
     db.session.flush()
-    for registro in novas:
-        db.session.add(EventAcrescimo(event_id=event.id, **registro))
+    for a in novos:
+        audit("create", "event_acrescimo", a.id, event.title,
+              f"Acréscimo lançado no cancelado: {_resumo_do_acrescimo(a)}")  # fmt: skip
+    return gravados, removidos
+
+
+def _sincronizar_bvs_congelados(canc: Any, gravados: list, removidos: list) -> None:
+    """As linhas congeladas dos BVs acompanham a gravação (data-model §7.4). Sem commit.
+
+    - BV não pago: quem recebe, PIX e o cheio (`original_amount`) regravados — é a base do BV do
+      retido e da cheia recongelada;
+    - BV pago ou no banco: a linha não muda (o valor que conta é o pago; quem recebe e o PIX trocam
+      só no acréscimo, com rastro);
+    - BV novo (ou o acréscimo que passou a BV): nasce a linha, não paga no ato;
+    - BV removido ou que deixou de ser BV: a linha sai junto.
+    """
+    from app.models import EventCancellationBv
+
+    por_acrescimo = {b.acrescimo_id: b for b in canc.bvs if b.acrescimo_id is not None}
+    for acrescimo_id in removidos:
+        if acrescimo_id in por_acrescimo:
+            canc.bvs.remove(por_acrescimo.pop(acrescimo_id))
+    for a in gravados:
+        linha = por_acrescimo.get(a.id)
+        if not a.is_bv:
+            if linha is not None:
+                canc.bvs.remove(linha)
+        elif linha is None:
+            canc.bvs.append(EventCancellationBv(
+                acrescimo_id=a.id, recipient=a.bv_recipient, pix=a.bv_pix,
+                original_amount=_q(_to_decimal(a.amount_brl) or Decimal("0")),
+                paid_at_cancellation=False,
+                paid_amount=a.amount_brl if a.bv_payment_status in _BV_CONGELADO else None,
+            ))  # fmt: skip
+        elif a.bv_payment_status not in _BV_CONGELADO:
+            linha.recipient, linha.pix = a.bv_recipient, a.bv_pix
+            linha.original_amount = _q(_to_decimal(a.amount_brl) or Decimal("0"))
+
+
+def alterar_acrescimos_do_cancelado(event: Any, itens: list, *, actor: Any) -> list[dict]:
+    """O `PUT …/acrescimos` do cancelado, pelo Superadmin (FR-052; contracts §8). Sem commit.
+
+    A validação é a da 305 (`_montar_acrescimos`, com o cancelado: BV novo em % é recusado, o pago
+    mantém valor e unidade); a gravação é no lugar (`_gravar_no_lugar`), e as linhas congeladas dos
+    BVs acompanham. Ordem das travas: T1 → T2 → T3 → gravar → `expire` → T4 → recongelar a cheia
+    (BV = Σ `original_amount` das linhas) e reconciliar ("Cancelamento: correção da venda").
+    Chamado pelo nome do módulo (o 16d o troca por um "apaga e recria" e tem de ficar vermelho).
+
+    Returns:
+        As trocas de quem recebe ou do PIX num BV pago — a view grava o rastro.
+
+    Raises:
+        AcrescimosRecusados: alguma linha não pode ser gravada; nada foi gravado.
+        CancelValidationError: o grupo mudou (T1) ou o evento não está cancelado.
+    """
+    from app.calendar import cancel_ops
+    from app.constants import CODIGO_ESTADO_MUDOU, MOTIVO_AJUSTE_CORRECAO_VENDA, REGIME_VENDA
+
+    ids = [e.id for e in cancel_ops.travar_grupo(event)]  # T1
+    canc = cancel_ops._ler_congelados(ids).get(event.id)  # T2
+    if not event.is_cancelled:
+        raise cancel_ops.CancelValidationError(
+            "O evento mudou enquanto você editava: recarregue.", status=409, codigo=CODIGO_ESTADO_MUDOU
+        )
+    antigas = cancel_ops._travar_acrescimos(event.id)  # T3
+    if antigas and itens and not any(isinstance(i, dict) and "id" in i for i in itens):
+        # Página anterior à 305 (nenhum id): casar pela chave reescreveria a linha errada no lugar.
+        raise AcrescimosRecusados(
+            {"items": "Recarregue a página antes de salvar: a lista veio sem as linhas gravadas."}
+        )
+    pares, trocas = _montar_acrescimos(event, itens, antigas, cancelado=True)
+    gravados, removidos = _gravar_no_lugar(event, pares, antigas)
+    if canc is not None and canc.regime == REGIME_VENDA:
+        _sincronizar_bvs_congelados(canc, gravados, removidos)
     db.session.flush()
     db.session.expire(event, ["acrescimos"])
+    cancel_ops.recongelar_do_comercial(event, actor=actor, motivo=MOTIVO_AJUSTE_CORRECAO_VENDA)  # T4 dentro
     return trocas
 
 

@@ -1593,11 +1593,15 @@ def _piso_da_devolucao(aprovadas: list[SpecialExpense]) -> Decimal:
     )
 
 
-def reaplicar_cancelado(event: CalendarEvent, *, motivo: str) -> list[dict]:
+def reaplicar_cancelado(
+    event: CalendarEvent, *, motivo: str, motivos: dict[int, str] | None = None
+) -> list[dict]:
     """Refaz a comissão do retido de um cancelado `venda` pelo dinheiro de agora. Não faz commit.
 
     A cheia, a venda e o beneficiário são os congelados; o retido é o do grupo, ao vivo; o BV do
     retido é lido na hora (`bv_da_planilha`), então não há o que gravar nele. Supõe a T4 tomada.
+    A cheia não se recalcula aqui (o comprovante não a mexe): quem corrige a venda recongela antes
+    (`recongelar_do_comercial`) e passa os `motivos` por beneficiário da troca de vendedor.
     """
     from app.constants import REGIME_VENDA
     from app.financeiro import comissoes_ops
@@ -1609,8 +1613,119 @@ def reaplicar_cancelado(event: CalendarEvent, *, motivo: str) -> list[dict]:
     resumo = resumo_cancelado(event)
     alvo = comissoes_ops.comissao_do_retido(canc.commission_full, resumo.retido, canc.sale_value)
     alvos = {canc.commission_seller_id: alvo} if canc.commission_seller_id else {}
-    plano = comissoes_ops.reconciliar_comissao_do_cancelado(event, alvos, motivo=motivo)
+    plano = comissoes_ops.reconciliar_comissao_do_cancelado(event, alvos, motivo=motivo, motivos=motivos)
     db.session.expire(event, ["commission_payments"])
+    return plano
+
+
+def travar_para_corrigir_venda(event: CalendarEvent, *, novo_vendedor_id: Any = None) -> None:
+    """T1 → T2 → T4 da correção comercial do cancelado (plan §Travas), antes de gravar. Sem commit.
+
+    O grupo (pelo nome do módulo: o 16c-corrida troca `travar_grupo` para injetar a corrida), os
+    congelados e, num SELECT só, as linhas do evento e as abertas dos beneficiários antigo e novo —
+    o primeiro repasse aberto de cada um não pode mudar entre a leitura e a escrita. É a trava de
+    `primeiro_repasse_aberto(…, travar=True)` para os dois de uma vez, em ordem de id.
+    """
+    from app.financeiro import comissoes_ops
+    from app.models import SiteSetting
+
+    ids = [e.id for e in travar_grupo(event)]
+    canc = _ler_congelados(ids).get(event.id)
+    try:
+        novo = int(novo_vendedor_id) if novo_vendedor_id not in (None, "") else None
+    except (TypeError, ValueError):
+        novo = None
+    responsavel = (
+        comissoes_ops._educamanto_responsavel(SiteSetting.query.get(1)) if event.is_educamanto else None
+    )
+    antigo = canc.commission_seller_id if canc is not None else None
+    _travar_linhas_de_comissao(
+        ids, {antigo, novo, getattr(responsavel, "id", None), *_beneficiarios_das_linhas(ids)}
+    )
+
+
+def _bv_congelado_total(canc) -> Decimal:
+    """O BV da cheia recongelada: Σ `original_amount` das linhas com acréscimo (a órfã não conta),
+    nunca `_event_bv_total` do evento vivo (data-model §8, invariante 3)."""
+    return _dinheiro(
+        sum((_dinheiro(b.original_amount) for b in canc.bvs if b.acrescimo_id is not None), Decimal("0"))
+    )
+
+
+def recongelar_do_comercial(event: CalendarEvent, *, actor: User, motivo: str | None = None) -> list[dict]:
+    """A correção da venda do cancelado `venda` pelo Superadmin (FR-049–FR-051; R20). Sem commit.
+
+    O evento já está gravado; compara-o com o congelado e recongela na mesma transação:
+
+    - **taxa**: só a taxa explícita nova troca a congelada (`_mesma_taxa`); a padrão das
+      Configurações não alcança o cancelado. Motivo "taxa corrigida", para mais e para menos;
+    - **venda**: a nova vira a congelada. A cortesia zera a venda viva, não a congelada: a cheia vai
+      a 0 pelo portão do beneficiário, e a volta da cortesia a restaura;
+    - **vendedor** (`_mesmo_vendedor`): o congelado passa ao novo; o antigo vai ao alvo 0 ("vendedor
+      trocado — devolve o já recebido") e o novo leva o alvo inteiro ("— comissão do retido"), numa
+      chamada só da reconciliação;
+    - a cheia sai sempre dos insumos congelados (taxa, BV das linhas, custo do ato), pelo nome do
+      módulo: a mutação do 16e tira a taxa e a conta cai na de hoje.
+
+    Venda nova abaixo do retido não é recusada: a comissão do retido tem teto na cheia. Os outros
+    regimes não têm o que recongelar (devolve `[]`).
+    """
+    from app.calendar.event_ops import _mesma_taxa, _mesmo_valor, _mesmo_vendedor
+    from app.constants import (
+        MOTIVO_AJUSTE_CORRECAO_VENDA,
+        MOTIVO_AJUSTE_TAXA,
+        MOTIVO_AJUSTE_TROCA_DEVOLVE,
+        MOTIVO_AJUSTE_TROCA_RETIDO,
+        REGIME_VENDA,
+        now_sp,
+    )
+    from app.financeiro import comissoes_ops
+    from app.models import SiteSetting
+
+    canc = event.cancelamento
+    if not event.is_cancelled or canc is None or canc.regime != REGIME_VENDA:
+        return []
+    mudou: list[str] = []
+    motivo = motivo or MOTIVO_AJUSTE_CORRECAO_VENDA
+    if event.commission_rate is not None and not _mesma_taxa(canc.commission_rate, event.commission_rate):
+        mudou.append(f"taxa {canc.commission_rate}% → {event.commission_rate}%")
+        canc.commission_rate = Decimal(str(event.commission_rate))
+        motivo = MOTIVO_AJUSTE_TAXA
+    if not event.is_cortesia_permuta and not _mesmo_valor(event.sale_value, canc.sale_value):
+        mudou.append(f"venda {_brl(canc.sale_value)} → {_brl(event.sale_value)}")
+        canc.sale_value = _dinheiro(event.sale_value)
+    vendedor_mudou = not _mesmo_vendedor(canc.seller_id, event.seller_id)
+    if vendedor_mudou:
+        mudou.append("vendedor trocado")
+        canc.seller_id = event.seller_id
+    cheia, beneficiario, _taxa = comissoes_ops.comissao_cheia_do_evento(
+        event, SiteSetting.query.get(1), venda=canc.sale_value, taxa=canc.commission_rate,
+        bv_total=_bv_congelado_total(canc), custo=canc.commission_cost,
+    )  # fmt: skip
+    antigo = canc.commission_seller_id
+    if cheia != _dinheiro(canc.commission_full):
+        mudou.append(f"comissão cheia {_brl(canc.commission_full)} → {_brl(cheia)}")
+    canc.commission_full = cheia
+    canc.commission_seller_id = beneficiario
+    canc.updated_at = now_sp()
+    canc.updated_by_id = actor.id
+    principal_id = event.group_leader_id or event.id
+    ids = ids_do_grupo([principal_id])[principal_id]
+    motivos: dict[int, str] = {}
+    if vendedor_mudou and antigo != beneficiario:
+        devolvem = {antigo, *_beneficiarios_das_linhas(ids)} - {beneficiario, None}
+        motivos = dict.fromkeys(devolvem, MOTIVO_AJUSTE_TROCA_DEVOLVE)
+        if beneficiario is not None:
+            motivos[beneficiario] = MOTIVO_AJUSTE_TROCA_RETIDO
+    db.session.flush()
+    # T4 de novo, já com o beneficiário resolvido (as linhas já travadas não esperam).
+    _travar_linhas_de_comissao(ids, {antigo, beneficiario, *_beneficiarios_das_linhas(ids)})
+    plano = reaplicar_cancelado(event, motivo=motivo, motivos=motivos)
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    texto = "Venda do cancelado corrigida" + (f" ({'; '.join(mudou)})" if mudou else "")
+    db.session.add(
+        EventLog(event_id=event.id, actor_name=actor.name, actor_role=papel, message=texto[:500])
+    )
     return plano
 
 

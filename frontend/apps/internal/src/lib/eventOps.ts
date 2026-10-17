@@ -497,6 +497,8 @@ function invalidarComercial(queryClient: ReturnType<typeof useQueryClient>, even
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
   // Parcela muda o vencimento da cobrança na Home (feature 299).
   queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+  // Feature 306: no cancelado, o BV corrigido refaz a comissão e o BV do retido no painel.
+  queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
 }
 
 /**

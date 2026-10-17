@@ -4515,7 +4515,12 @@ def c16d_acrescimos() -> None:
         "SELECT id FROM event_reimbursements WHERE event_id = :i AND amount = 70", i=ex["ev"]
     )
     _garante(reembolso, "16d: o reembolso não gravou")
-    r = _cliente("sa").post(f"/api/reimbursements/{reembolso[0][0]}/collect")
+    # A cobrança exige o valor recebido e o comprovante (feature 153), como na tela.
+    r = _cliente("sa").post(
+        f"/api/reimbursements/{reembolso[0][0]}/collect",
+        data={"collected_amount": "70", "file": _arquivo("cobranca.pdf")},
+        content_type="multipart/form-data",
+    )
     _garante(r.status_code in (200, 201), f"16d cobrar o reembolso → {r.status_code} {_erro(r)}")
     _igual(_resumo_api(ex["ev"])["retido"], retido, "16d: o reembolso mexeu no retido")
 

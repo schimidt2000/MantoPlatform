@@ -64,7 +64,12 @@ function semValor(v: number | string | null | undefined): boolean {
 function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
   const acrescimos = data.acrescimos ?? [];
   const salvar = useSetAcrescimos(data.event.id);
-  const canEdit = Boolean(data.flags.show_comercial) && !data.event.is_satellite;
+  // Feature 306: no cancelado, só o Superadmin corrige (o servidor dá 409 aos outros); a lista grava
+  // no lugar e a comissão e o BV do retido se refazem na mesma hora.
+  const cancelado = Boolean(data.event.cancelled_at);
+  const canEdit = cancelado
+    ? Boolean(data.flags.can_edit_venda_cancelado)
+    : Boolean(data.flags.show_comercial) && !data.event.is_satellite;
   const pendente = data.venda?.bv_do_orcamento_pendente ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const [editando, setEditando] = useState(false);
@@ -145,7 +150,9 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
         const nova = { ...l, [campo]: valor };
         // Linha NOVA que vira BV nasce em % (o BV lançado à mão costuma ser "10%"), mas só se ainda
         // não tem valor: com "300" digitado, virar % gravaria 300% (R$ 1.500 numa venda de 2.000).
+        // No cancelado o BV novo é em reais (sem venda viva, o % não tem base).
         if (
+          !cancelado &&
           campo === "tipo" &&
           l.id == null &&
           semValor(l.value) &&
@@ -327,6 +334,12 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
               digitado; se a venda mudar depois, acompanha na mesma proporção enquanto não for pago.
             </p>
             <p>Outros acréscimos em % são sobre a venda. BV exige quem recebe e o PIX.</p>
+            {cancelado && (
+              <p className="text-ink">
+                <strong>Evento cancelado</strong>: BV novo só em reais. Ao salvar, a comissão e o BV
+                do retido são refeitos sobre o que ficou com a Manto.
+              </p>
+            )}
           </div>
 
           {salvar.isError && (

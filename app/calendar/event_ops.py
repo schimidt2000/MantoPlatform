@@ -1218,11 +1218,32 @@ def update_event_comercial(
             linhas que JÁ existem: uma venda que nunca gerou linha nenhuma nunca ganhava uma.
 
             Injetada, e não importada, para o domínio da agenda não puxar a régua de comissão de
-            9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`.
+            9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`. Feature 306: a view
+            injeta um despachante — no cancelado, recongela (`cancel_ops.recongelar_do_comercial`);
+            no vivo, o sync de sempre (a B10 da 305 intacta).
+
+    Raises:
+        CancelValidationError: 409 `estado_mudou` — o evento foi cancelado (ou deixou de estar)
+            entre a decisão da view e a trava; nada foi gravado.
     """
     from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
 
+    cancelado_antes = event.is_cancelled
     antes = estado_da_venda(event)
+    # Feature 306 — cinto: `estado_da_venda` trava e relê. A view decidiu cancelado × vivo antes.
+    if event.is_cancelled != cancelado_antes:
+        from app.calendar.cancel_ops import CancelValidationError
+        from app.constants import CODIGO_ESTADO_MUDOU
+
+        raise CancelValidationError(
+            "O evento mudou enquanto você editava: recarregue.", status=409, codigo=CODIGO_ESTADO_MUDOU
+        )
+    if event.is_cancelled:
+        # T1 → T2 → T4 antes de gravar (plan §Travas): o grupo, o congelado e as linhas do evento e
+        # dos beneficiários antigo e novo. Pelo nome do módulo: o 16c-corrida troca `travar_grupo`.
+        from app.calendar import cancel_ops
+
+        cancel_ops.travar_para_corrigir_venda(event, novo_vendedor_id=data.get("seller_id"))
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
