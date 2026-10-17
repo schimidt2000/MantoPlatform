@@ -295,6 +295,7 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({...})  # todos acima; o verify confe
 | `event_ops._apagar_ensaio_no_banco(ensaio)` | A parte de banco de `delete_ensaio` (`:1791-1811`), sem commit | — |
 | `dre_ops.ROTULO_RETIDO = "Retido de cancelamentos"`, `gastos_extras_do_periodo`, `tendencia_mensal` | A DRE única da API e do Jinja | 1c (pelo `paineis.cancelamentos`) |
 | Flags `can_edit_venda_cancelado`, `can_edit_pagamentos` | Calculadas depois de `_role_flags` (`agenda_read.py:155-204`) | 1c |
+| Ganchos das provas por mutação (Living Spec do implement, 16/10) | Funções internas que o núcleo chama **pelo módulo** (nunca por `from … import`), para o `verify_306.py` trocá-las: `comissoes_ops._beneficiarios_com_linha_viva(event_ids) -> set[int]` (a reconciliação dá alvo 0 a todo beneficiário com linha viva que não está em `alvos`; a troca de vendedor passa só o novo em `alvos` e os dois em `motivos`), `comissoes_ops._nota_do_ajuste(motivo, detalhe=None) -> str` (o prefixo da FR-033), `comissoes_ops._reconciliar_ajuste_vivo(event, …)` (a regra nova (b) do `_sync`), `cancel_ops._chave_do_sino(kind, evento_id, dia_id=None) -> str` (a `dedupe_key` do ato), `cancel_ops._elenco_do_resumo(cancelamento) -> list[dict]` (o `elenco[]` do resumo, lido das linhas congeladas) e `casting_ops._manda_email_de_remocao(event) -> bool` (a condição do e-mail de remoção de `assign_role`, com o `not event.is_cancelled` da T089). Também `group_ops.passar_venda`, `comercial_ops.alterar_acrescimos_do_cancelado` e `comissoes_ops.comissao_cheia_do_evento` são chamados pelo módulo | Só o verify |
 
 ### 6.5 Nomes que não existem
 
@@ -417,7 +418,8 @@ linha do elenco (ato) ── multa no ato (multas[role_id]) ou POST …/multas (
           "Informe a multa de ao menos um artista"
    gasto: category CATEGORY_MULTA_CANCELAMENTO · aprovado · disbursement_type="fornecedor" · nao_pago ·
           supplier_name/pix do Talent (pix_key, models.py:169) · event_id = day_event_id ·
-          expense_date = data do ato / do lançamento (P-34)
+          expense_date = data do ato / do lançamento (P-34), por `now_sp().date()` (como todo "agora"
+          do ato em `cancel_ops`: o verify fixa o dia trocando `now_sp`; Living Spec do implement, 16/10)
 gasto ── Gastos Extras (livre, sem trava) ─▶ continua lançada;  Planilha: nao_pago ⇄ no_banco ⇄ pago
 gasto excluído ── SET NULL ─▶ "não lançada" (pode lançar de novo)
 artista tirado da vaga pelo Casting (talent_id → NULL na vaga) ─▶ linha fica ("saiu da escala"); sem e-mail de remoção

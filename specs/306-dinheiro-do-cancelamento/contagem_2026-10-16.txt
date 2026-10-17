@@ -1,0 +1,69 @@
+Contagem do espelho manto_local — 16/10/2026, só leitura (sql_ro.py), T002 da 306.
+Espelho: dump de 30/09 (último event_log 2026-09-30 23:08 UTC); alembic a7c3e91f4d28; código da branch = main 6356b80.
+Bate com o plan §Contexto técnico (15/10). A comissão própria de satélite é a do 287 (R$ 137,50 paga, P-51).
+
+item | n
+eventos cancelados | 0
+eventos marcados (303) | 0
+grupos (principais com satélite) | 7
+satélites | 22
+ensaios futuros ligados | 14
+comissões no_banco | 0
+comissões vivas de evento cancelado | 0
+comissões a_pagar com evento (resync) | 72
+comissões pagas | 142
+comissões com original_id | 2
+satélites com comissão própria | 1
+BVs não pagos sem PIX | 1
+devoluções (categoria) ligadas a evento vivo | 0
+cachê pago em evento futuro | 0
+último event_log (UTC) | 2026-09-30 23:08:52.783455
+alembic_version | a7c3e91f4d28
+-- 16 linha(s)
+
+── contagem_pre_deploy.py (T011), 16/10/2026 ~16:10 (Get-Date), depois da primeira rodada do verify ──
+Igual à T002 onde as duas contam. Nota da rodada: a 1ª rodada do verify (15:48) apagou as linhas 227 e
+229 de commission_payments (EducaManto do espelho, reatribuídas ao responsável do verify e apagadas na
+limpeza); repostas às 15:58 com os valores do dump de produção de 02/10 (a 227 conferida campo a campo);
+o verify passou a restaurar a configuração com resync depois de cada cenário e a nunca apagar linha pelo
+vendedor sozinho.
+
+eventos cancelados | 0
+cancelados sem venda nem comprovante | 0
+marcados pela 303 | 0
+grupos (principais) | 7
+grupos com dia futuro | 0
+grupos com o principal fora do 1º dia | 3
+grupos cruzando o mês | 0
+satélites com comissão própria (ids) | 287
+ensaios futuros ligados | 14
+shows futuros com ensaio | 14
+escalados de shows futuros com ensaio | 22
+eventos futuros com cachê pago | 0
+escalados sem e-mail (eventos futuros) | 0
+talentos escalados sem PIX (eventos futuros) | 0
+comprovantes sem valor | 22
+eventos com pago maior que a venda | 22
+comissões no_banco | 0
+comissões no_banco por mês | -
+comissões a_pagar negativas com evento | 0
+estornos órfãos a_pagar | 0
+linhas vivas de evento cancelado | 0
+linhas que o resync alcança | 72
+comissões pagas | 142
+comissões pagas de evento futuro | 25
+comissões com original_id | 2
+ciclos abertos de soma zero com linha de valor (vendedor:ciclo) | -
+gastos aprovados com evento | 84
+devoluções com tipo nulo | 0
+devoluções pendentes ligadas a evento | 0
+devoluções ligadas a evento vivo (vendas vivas com devolução à mão) | 0
+gasto aprovado com categoria fora de CATEGORIES | 0
+BV em satélite | 0
+BV não pago de cancelado legado | 0
+BV não pago sem recebedor ou PIX | 1
+usuários ativos por papel (FINANCEIRO, ENSAIO, CASTING, SUPERADMIN) | CASTING:2, ENSAIO:2, SUPERADMIN:3
+alembic_version | a7c3e91f4d28
+event_cancellations | (não existe)
+event_cancellation_bvs | (não existe)
+event_cancellation_elenco | (não existe)

@@ -168,7 +168,7 @@ export interface CancelarEventoResult {
   gasto_id?: number | null;           // mantida um ciclo (a devolução, se nasceu)
   dias_cancelados?: number[];
   ensaios_cancelados?: { id: number; data: string | null; local: string | null }[];
-  avisados?: { email: number; ensaio: number; casting: number };
+  avisados?: { email: number; ensaio: number; casting: number };  // e-mails (um por talento), sinos à equipe de Ensaio (um por pessoa) e sinos ao Casting (um por pessoa × dia com escalados)
   venda_passou_para?: { id: number; titulo: string; data: string | null } | null;
 }
 ```
