@@ -112,6 +112,11 @@ function EventoVincular({ expense }: { expense: GastoExtra }) {
           </option>
         ))}
       </select>
+      {link.isError && (
+        <p className="w-full text-red" role="alert">
+          {(link.error as Error | null)?.message || "Não foi possível vincular o evento."}
+        </p>
+      )}
     </div>
   );
 }
@@ -285,13 +290,22 @@ function EventoFields({
   values,
   onChange,
   travado = false,
+  vinculoAtual = null,
 }: {
   values: GastoFormValues;
   onChange: (patch: Partial<GastoFormValues>) => void;
   /** Feature 306: o vínculo da devolução de um cancelado não muda por aqui. */
   travado?: boolean;
+  /** O evento já ligado ao gasto: a lista é a da data escolhida e pode não trazê-lo. */
+  vinculoAtual?: { id: number; titulo: string } | null;
 }) {
   const eventos = useGastosEventos(values.eventDate);
+  // Sem isto, o evento ligado de outra data aparecia como "Sem evento vinculado" — e, na devolução
+  // travada (306), num campo que nem se pode mudar.
+  const faltaNaLista =
+    vinculoAtual !== null &&
+    values.eventId === vinculoAtual.id &&
+    !(eventos.data?.events ?? []).some((ev) => ev.id === vinculoAtual.id);
   return (
     <div>
       <label className={LABEL}>Vincular a um evento (opcional)</label>
@@ -310,6 +324,7 @@ function EventoFields({
           onChange={(e) => onChange({ eventId: e.target.value ? Number(e.target.value) : "" })}
         >
           <option value="">Sem evento vinculado</option>
+          {faltaNaLista && vinculoAtual && <option value={vinculoAtual.id}>{vinculoAtual.titulo}</option>}
           {eventos.data?.events.map((ev) => (
             <option key={ev.id} value={ev.id}>
               {ev.label}
@@ -474,7 +489,16 @@ function GastoFormModal({
           />
         </div>
         <DesembolsoFields values={values} onChange={patch} fieldErrors={fieldErrors} />
-        <EventoFields values={values} onChange={patch} travado={travado} />
+        <EventoFields
+          values={values}
+          onChange={patch}
+          travado={travado}
+          vinculoAtual={
+            mode === "edit" && expense?.event_id
+              ? { id: expense.event_id, titulo: expense.event_title ?? `Evento #${expense.event_id}` }
+              : null
+          }
+        />
         {mode === "create" && (
           <>
             <div>
@@ -575,7 +599,11 @@ function GastoRow({
   const del = useDeleteGasto();
   const [showLink, setShowLink] = useState(false);
 
-  const canDelete = canManage || (expense.status === "pendente");
+  // Feature 306: a devolução de um evento cancelado não se exclui nem se religa aqui (o servidor
+  // recusa com 409); a correção do valor é pelo "Alterar devolução" na tela do evento.
+  const travado = Boolean(expense.locked);
+  const canDelete = !travado && (canManage || expense.status === "pendente");
+  const erroDaAcao = (del.error ?? approve.error ?? reject.error) as Error | null;
 
   const handleReject = () => {
     const motivo = window.prompt("Motivo da rejeição (opcional):") ?? "";
@@ -652,9 +680,11 @@ function GastoRow({
                 <Button size="sm" variant="ghost" onClick={() => onEdit(expense)}>
                   Editar
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowLink((v) => !v)}>
-                  Vincular evento
-                </Button>
+                {!travado && (
+                  <Button size="sm" variant="ghost" onClick={() => setShowLink((v) => !v)}>
+                    Vincular evento
+                  </Button>
+                )}
               </>
             )}
             {canDelete && (
@@ -663,9 +693,17 @@ function GastoRow({
               </Button>
             )}
           </div>
+          {travado && (
+            <p className="mt-1 whitespace-normal text-xs text-muted">Devolução de cancelado: travada.</p>
+          )}
+          {erroDaAcao && (
+            <p className="mt-1 max-w-[16rem] whitespace-normal text-xs text-red" role="alert">
+              {erroDaAcao.message || "Não foi possível concluir."}
+            </p>
+          )}
         </td>
       </tr>
-      {showLink && (
+      {showLink && !travado && (
         <tr className="border-b border-line bg-surface-2/50">
           <td colSpan={canManage ? 10 : 9} className="px-3 py-2">
             <EventoVincular expense={expense} />

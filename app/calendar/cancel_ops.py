@@ -7,8 +7,10 @@ depois disso não há a que a devolução se referir. Foi exatamente o que acont
 
 A regra: evento **vazio** (sem venda, sem pagamento, sem contrato e sem elenco escalado) continua
 sendo excluído de verdade — é o caso do evento criado por engano. Evento com qualquer uma dessas
-coisas presa vira **cancelado**: o registro fica, some de toda métrica (via `cancelled_at`), e a
-devolução ao cliente nasce vinculada a ele.
+coisas presa, ou marcado "Sumiu do Google Agenda", vira **cancelado**: o registro fica e sai da
+agenda e das métricas do evento (via `cancelled_at`). O que a Manto reteve (pago − devolvido)
+entra na DRE, no Comercial e na comissão pelo mês do cancelamento (feature 306), e a devolução à
+cliente nasce vinculada a ele.
 
 Funções puras no sentido do projeto: sem `flask.request`/`render_template`/`flash`. Os
 adaptadores (`app/api/agenda_write.py`) é que traduzem em resposta HTTP.
@@ -1581,9 +1583,10 @@ def _registrar_devolucao(
     """Cria o Gasto Extra da devolução à cliente. Não faz commit.
 
     Nasce **aprovado** porque quem cancela já é Superadmin — pedir uma segunda aprovação da
-    mesma pessoa só atrasaria o repasse. Aprovado, ele entra sozinho na Planilha de Pagamentos e
-    na DRE do mês, que já somam `SpecialExpense` do período. Direto no ORM, nunca por
-    `create_expense` (que nasce pendente e avisa o Financeiro). A data é a de São Paulo do ato.
+    mesma pessoa só atrasaria o repasse. Aprovado, ele entra sozinho na Planilha de Pagamentos. Na
+    DRE, não: a devolução de cancelado sai dos gastos extras (`dre_ops.gastos_extras_do_periodo`),
+    porque já está descontada no retido. Direto no ORM, nunca por `create_expense` (que nasce
+    pendente e avisa o Financeiro). A data é a de São Paulo do ato.
     """
     from app.constants import now_sp
 

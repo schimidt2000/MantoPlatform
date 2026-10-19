@@ -77,7 +77,8 @@ function KpiCard({
 /**
  * Grade financeira de resultado do evento (feature 190): venda, custo de cachês, gastos
  * extras, comissão e o lucro líquido em destaque — verde quando positivo, vermelho quando
- * negativo. Os números vêm prontos do servidor (`kpi`), agregados pelo grupo comercial.
+ * negativo. Os números vêm prontos do servidor (`kpi`), agregados pelos dias vivos do grupo (o dia
+ * cancelado fica fora; no cancelado, a grade dá lugar ao resultado do cancelamento).
  */
 function KpiGrid({ data }: { data: EventoDetalhe }) {
   const kpi = data.kpi;
@@ -1172,8 +1173,8 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
             ) : (
               "outro evento"
             )}
-            . Os valores que este evento tinha antes de ser agrupado ficaram guardados na aba
-            Histórico.
+            . Os valores que este evento tinha antes de ser agrupado (ou de a venda passar ao novo
+            1º dia) ficaram guardados na aba Histórico.
           </p>
         </div>
         {podeAgrupar && (

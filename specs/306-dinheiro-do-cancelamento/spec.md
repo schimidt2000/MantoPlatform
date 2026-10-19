@@ -1298,7 +1298,8 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   - **Pendência "em aberto"**: dá lugar à devolução e ao retido.
   - **Link para Comissões**: aponta o ciclo e o beneficiário do ajuste.
   - **Caixa do cancelado**: termina com "saiu da agenda e das listas; fica na página de Cancelamentos e no card do
-    período".
+    período". *Implement (T094, FR-074)*: até a 1c entregar o card, a frase é "Saiu da agenda e das listas de venda
+    e de cobrança; fica na página de Cancelamentos e, marcado, na ficha da cliente".
   - **Botões do Google**: "Sincronizar" e "Editar no Google Agenda" não aparecem; já somem hoje, então é só
     conferência.
   - **Quem vê o quê**: o bloco aparece só para quem vê o comercial; comissão, BV, imposto, PIX e taxa, só para

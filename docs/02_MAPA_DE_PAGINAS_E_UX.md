@@ -6,7 +6,13 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (em produção desde 20/10 ~09:15): card "Produtos de
+> Última atualização: **2026-10-20** · **306-dinheiro-do-cancelamento**: o diálogo de cancelar
+> ganha a devolução em três modos (nenhum vem marcado), a prévia do servidor, o BV, o imposto, os
+> dias do grupo, a recusa por cachê pago, a multa ao elenco e os avisos; o evento cancelado troca o
+> *Resultado* pelo "Resultado do cancelamento", com "Alterar devolução" e "Lançar multa ao
+> elenco"; o marcado ganha a segunda saída, cancelar; Gastos Extras trava a devolução; Comissões
+> ganha "No banco", tipo e ciclo; a Planilha mostra as linhas da comissão; a DRE ganha o retido —
+> A.1, A.2, A.5, A.6, A.7 e A.8. Antes: **2026-10-20** · **309-produtos-de-tabela** (em produção desde 20/10 ~09:15): card "Produtos de
 > tabela" (`Combobox`) na calculadora com valor único "Preço de tabela", avisos da conta, "N
 > incluído(s) no produto" no coordenador e "Gerar Orçamento" travado sem `quote.produtos`; linha do
 > produto em `/orcamento/:id`; card "Produtos de tabela" + "Estimativa" em `/orcamento/configuracoes`
@@ -224,6 +230,12 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `evento.sumiu_google` usa o ícone `CalendarX` (o do selo da agenda), e todo aviso `urgent` deixa
   de ser cortado numa linha — título em até duas, corpo em até três (`line-clamp`), com o texto
   inteiro no `title`; os `info` seguem numa linha.
+  **Feature 306**: `evento.cancelado` (ícone `CalendarX`) avisa a equipe de Ensaio, um por pessoa
+  por ato que derrubou ensaio ("Evento cancelado: <título>", com os ensaios no corpo), e
+  `evento.cancelado_escala` (ícone `UserX`) avisa o Casting, um por dia cancelado com escalados
+  ("Evento cancelado: tire os N artistas da escala e avise cada um pelo WhatsApp"); este abre a aba
+  Produção do dia (`?aba=producao`) e é `urgent` quando o dia é em até 7 dias. O Superadmin, que é
+  quem cancela, não recebe nenhum dos dois.
 - **Faixa "N eventos sumiram do Google Agenda" (feature 303)** — `FaixaSumidosGoogle`, montada no
   `AppShell` antes do `<Outlet />`: fixa no topo de toda tela do shell (`sticky top-14 lg:top-0
   z-[25]`, 40 px, vermelha), para Superadmin e Comercial pelo **papel efetivo** (quem decide é o
@@ -277,6 +289,8 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     pt-BR ("Atrasado", "Vence hoje", "Vence em N dias", "Sinal pendente"; "sem sinal" ao lado no
     vermelho), "vence DD/MM" (+ "(data combinada)" e "venceu há N dias") e "Recebido R$ X de R$ Y —
     falta R$ Z"; ação "Abrir cobrança" (`?aba=comercial`).
+    **Feature 306**: com devolução aprovada no grupo (o corte de um dia), a linha diz "Recebido R$ X
+    (devolvidos R$ W) de R$ Y", e o saldo, o "quitado" e o sinal descontam o devolvido.
   - **Sem valor** (a lista "Evento sem valor de venda"): dois grupos, "Ainda vai acontecer" (hoje
     incluído, o mais próximo em cima) e "Já aconteceu" (o mais recente em cima), com a régua da 298
     (vermelho até 7 dias); "a definir" ou "R$ 0,01 (valor simbólico)", "já recebeu R$ X". Ação "Pôr
@@ -463,13 +477,73 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     **Editar tudo (formulário completo)** · **Excluir ou cancelar** (só `SUPERADMIN`) ou
     **Solicitar exclusão** (`COMERCIAL`, com motivo obrigatório) — feature 224. Itens
     indisponíveis ficam desabilitados **com `title` explicando o porquê**.
+    **Feature 306**: no evento cancelado, "Editar tudo" some (a edição em bloco não corrige venda;
+    o servidor recusaria); no marcado, o item do Superadmin vira **Cancelar evento**.
   - **Banners** acima das abas (feature 224): evento **cancelado** (motivo, autor, data, e o
-    aviso de que não conta em métrica nenhuma) e **exclusão solicitada** aguardando decisão,
+    aviso "Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
+    marcado, na ficha da cliente" — desde a 306 o retido conta na DRE e nos relatórios do mês do
+    cancelamento; o card do período chega com a 1c) e **exclusão solicitada** aguardando decisão,
     esta com os botões "Analisar e decidir" e "Recusar solicitação" para o Superadmin. O
     diálogo de exclusão abre com o resumo de impacto — venda, quanto a cliente já pagou, elenco
     escalado e comissão em jogo — e diz qual das duas ações vai acontecer **antes** de
-    confirmar; quando é cancelamento, pede o valor a devolver (pré-preenchido com o recebido),
-    nome e PIX de quem recebe.
+    confirmar. O evento vazio vira "Excluir de vez" (o principal de um grupo pede antes tirar os
+    satélites, com "Ir para o painel do grupo"); o cancelamento é o diálogo do item seguinte.
+  - **Diálogo de cancelar (feature 306)** — `ExcluirEventoDialog`, só para o Superadmin
+    (`can_delete`). Nenhuma conta de dinheiro no navegador: todo número vem do impacto
+    (`GET …/impacto-exclusao`) ou da prévia. O topo diz "Este evento será cancelado, não excluído"
+    com a venda, o já recebido **do grupo**, contrato, escalações, comissão já paga e gastos
+    vinculados, e que a comissão e o BV passam a acompanhar o que a Manto reteve (num grupo, também
+    que num dia só acompanham a venda nova do grupo; na Loja Virtual a frase não aparece); no marcado, "Este
+    evento já não está no Google Agenda: nada será removido de lá". Motivo obrigatório. Os blocos,
+    na ordem:
+    - **Devolução à cliente**: "A cliente pagou R$ X" ("— dá para devolver até R$ Y" quando já
+      houve devolução) e três modos, **nenhum marcado ao abrir**: *Devolver tudo* (o máximo do
+      servidor, só leitura), *Devolver parte* (o valor digitado) e *Não devolver*. Em Tudo e Parte,
+      "Quem recebe" (sugere o nome da cliente uma vez por abertura), PIX e observação; a devolução
+      entra aprovada em Gastos Extras e vai à Planilha do mês. Sem pagamento com valor, só "Não
+      devolver" fica habilitado, com o aviso dos comprovantes sem valor ("corrija na aba
+      Financeiro").
+    - **BV do parceiro**: sem campo de valor. Por BV, o cheio e o que acompanha o retido ("R$ X a
+      pagar na Planilha"; "Sem retido, o BV sai da Planilha"; o pago "fica pelo valor pago, sem
+      acerto ao parceiro"); faltando, "Quem recebe o BV" e "PIX do BV" são obrigatórios.
+    - **Imposto sobre o retido**: só com nota fiscal; obrigatório (0 vale), com a referência
+      "<alíquota>% do retido = R$ X" — vale o que for informado.
+    - **Efeito do cancelamento**: a prévia (`?devolucao=`, 400 ms depois de parar de digitar, a
+      mesma conta da execução) diz "A Manto retém R$ X", a comissão cheia → a do retido, com o
+      desconto ou o acréscimo e o repasse em que entra, e o BV a pagar.
+    - **Dias do grupo**: os dias vivos, com os selos "este", "1º dia" e "cachê pago" (o dia já
+      cancelado fica como está). No 1º dia com outro dia vivo, a escolha **Todos os dias do grupo**
+      (a venda inteira; cada dia vivo sai da agenda) ou **Só este dia** ("A venda, os comprovantes,
+      a comissão, o BV, as parcelas, a nota e o contrato passam para DD/MM — <título>", o dia vivo
+      mais cedo); o resto do diálogo só aparece depois da escolha. No **corte** (um dia que não é
+      o 1º, ou "Só este dia"): "Novo valor da venda do grupo" (nasce com a venda de hoje, até
+      ela), só *Devolver parte* e *Não devolver*, sem BV nem imposto; a prévia (`&venda_nova=`) diz
+      a devolução mínima ("devolva pelo menos R$ X — ou aumente o valor") e o efeito no grupo (a
+      comissão da venda do grupo passa a R$ X, com o ajuste, e o BV a pagar do grupo).
+    - **Cachê pago**: escalação paga ou no banco num dia que o ato alcança recusa o cancelamento —
+      "Há cachê pago ao elenco", com os dias, "Ir para Gastos Extras" (a devolução se lança lá) e
+      sem o botão de cancelar; no 1º dia, a recusa vem depois da escolha, que fica à vista.
+    - **Multa ao elenco (opcional)**: uma linha por escalação (artista, vaga e dia) dos dias
+      alcançados, com o cachê de referência, "faltavam N dias" (ou "foi há N dias") e "Sem PIX no
+      cadastro: a multa vai à Planilha sem chave"; vazio é sem multa; cada multa vira um Gasto
+      Extra aprovado a pagar ao artista. Não existe na Loja Virtual, onde o diálogo pede só o
+      motivo ("o dinheiro segue o pedido") e mostra os avisos.
+    - **Avisos**: "O ensaio de DD/MM HH:MM também será cancelado (no Google Agenda também), e a
+      equipe de Ensaio é avisada no sistema"; "N artistas recebem o e-mail de cancelamento (M sem
+      e-mail cadastrado). O Casting é avisado no sistema para tirar os artistas da escala e
+      avisá-los pelo WhatsApp".
+    - **Envio**: "Cancelar evento" fica desabilitado até tudo estar informado, com a primeira
+      pendência escrita embaixo ("Escolha quanto devolver à cliente.", "Informe o imposto retido (0
+      se não houve).", "Conferindo a devolução mínima…"…). A prévia que o servidor recusa (o valor
+      acima do pago, por exemplo) vira pendência com a frase dele e aparece no campo do valor, em
+      qualquer modo. A recusa do servidor cai no campo
+      (`fields`) ou vem na frase dele — uma devolução pendente em qualquer dia do grupo, por
+      exemplo, pede "aprove ou rejeite antes de cancelar"; `ja_cancelado` recarrega o evento e
+      fecha; `max_devolucao_mudou`, `grupo_mudou`, `sem_outro_dia_vivo` e `cache_pago` rebuscam o
+      impacto e zeram a escolha dos dias. Sem `regime` no impacto (backend antigo na janela do
+      deploy): "O sistema está atualizando — tente em um minuto". Quando o Google não confirma a
+      remoção, ou o ambiente não o altera, o diálogo fica aberto com "Evento cancelado." e o aviso
+      (que cita os ensaios a conferir).
   - **Evento marcado "Sumiu do Google Agenda" (feature 303)** — `SumiuDoGoogleBanner`, entre o
     banner de cancelado e o de exclusão solicitada (o do sumiço vem primeiro). Para todos: a
     marca, "percebido em dd/mm/aaaa", que o evento continua valendo e que a edição fica só no
@@ -478,16 +552,22 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     o quadro **"O que está em jogo"** (venda, pago pela cliente, comissão — "(estimativa)" quando
     for —, BV, escalados e, quando existem, contrato, comprovantes e grupo; no **satélite** as
     linhas de dinheiro dão lugar a "Venda do grupo — os valores estão no evento principal" com
-    link), o botão **Devolver ao Google Agenda** (largura total no celular), a linha de que o
-    cancelamento com devolução chega na próxima entrega e o recolhível "O evento já foi recriado
+    link), os botões **Devolver ao Google Agenda** e, desde a 306, **Cancelar o evento** (os dois com
+    largura total no celular), a linha "Devolva ao Google se o evento continua valendo; se ele foi
+    cancelado de verdade, cancele — a devolução do dinheiro, a comissão e o BV se acertam no próprio
+    cancelamento" e o recolhível "O evento já foi recriado
     à mão no Google?" com três passos. O diálogo (`DevolverAoGoogleDialog`, `ConfirmDialog`) diz
     "Será recriado como: <título> — <data e horário>" (dia inteiro como "(dia inteiro)"), avisa
     quando a data já passou e que os convidados e ensaios não voltam; recusa do servidor (inclusive
     a trava do ambiente local) aparece dentro dele, e não fecha durante o envio. Depois de
     devolver, a linha `aria-live` do cabeçalho diz o resultado. Enquanto marcado: "Editar no
     Google Agenda" some (o servidor manda o link nulo), **Sincronizar** continua e responde que o
-    evento não está no Google, e **Excluir ou cancelar** e **Analisar e decidir** ficam
-    desabilitados com o motivo no `title` ("Recusar solicitação" e "Solicitar exclusão" seguem).
+    evento não está no Google, e desde a 306 o item do menu vira **Cancelar evento** e, como
+    **Analisar e decidir**, abre o diálogo já no cancelar (o impacto do marcado é sempre
+    `acao: "cancelar"`), com o motivo no `title` ("devolva-o ao Google Agenda ou cancele o
+    evento"). A exclusão do marcado segue recusada pelo servidor. Cancelar desmarca o evento, e a
+    faixa do `AppShell` some sem esperar o poll. "Recusar solicitação" e "Solicitar exclusão"
+    seguem.
   - **Aba Resumo**: **faixa de pendências** (chips *Elenco 2/2 escalados*, *Presença*,
     *Figurino n/m com ficha*, *Logística sem maquiagem e saída*, *Agenda n com conflito*,
     *Contrato*, *Recebimento*, *Evento confirmado* — verde quando resolvido, dourado quando não;
@@ -543,7 +623,8 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     não abre". O 409 "já vinculado a outro evento" vem com link para esse evento ·
     *Resultado* (grade de KPI: venda,
     custo de cachês, gastos extras, comissão e **lucro líquido** em verde/vermelho, + lista dos
-    gastos extras aprovados) ·
+    gastos extras aprovados; no principal vivo de um grupo, cachês, gastos e BV contam só os dias
+    vivos — feature 306; no evento cancelado dá lugar ao *Resultado do cancelamento*, abaixo) ·
     *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" pela regra
     da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
   - **Hotfix 215b na aba Comercial e na edição completa**: a "Taxa de comissão (%)" fica travada
@@ -567,6 +648,58 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     R$ 0,01; para o FINANCEIRO o painel do orçamento continua só leitura (a lista de orçamentos e o
     vínculo são do vendedor dono). `?editar=venda` abre a venda em edição (é o destino do "Pôr o
     valor" da Home).
+  - **Evento cancelado (feature 306)**: a tela fica para consulta, e o que mexe em dinheiro é do
+    Superadmin — os botões seguem `flags.can_edit_venda_cancelado` (somem no "Ver como") e o
+    servidor confere o papel real; aos demais, 409 `cancelado` ("Este evento está cancelado: só o
+    Superadmin corrige os dados de venda."), mostrado no painel. O bloco `event.cancelamento` vem
+    para quem vê o comercial; PIX, comissão, BV, imposto e taxa, só para quem vê o financeiro.
+    - **Resultado do cancelamento** (`ResultadoCancelamento`, no lugar do *Resultado*, que contaria
+      a devolução como custo e o BV cheio; o `kpi` nem vem no payload): *Pago pela cliente*,
+      *Devolvido* (cada devolução com o estado: a pagar, no banco, paga), *Retido pela Manto*,
+      *Comissão do retido* (beneficiário, a cheia e "ver em comissões", que abre
+      `/financeiro/comissoes` no ciclo e no vendedor da linha viva mais recente, recortado no
+      evento), *BV que conta* e *Imposto retido*; embaixo, as devoluções (quem recebe, PIX, data,
+      valor e estado) e, no antigo 1º dia de uma passagem, "A venda passou para <título>
+      (DD/MM/AAAA)", com link. No **dia cortado** e no **satélite** de um "todos", que não têm venda
+      própria, os cards são *Pago no grupo* e *Devolvido no grupo* — sem retido nem comissão do retido,
+      que moram no 1º dia —, o dia cortado ganha *Venda do grupo* ("era R$ X antes do corte"), e uma
+      frase leva ao 1º dia ("A venda continua no 1º dia do grupo…: a comissão e o BV acompanham a venda
+      de lá"; no satélite, "A venda, o retido e a comissão deste cancelamento estão no 1º dia…").
+    - **Alterar devolução** (`AlterarDevolucaoDialog`, `PATCH …/devolucao`; venda, legado e dia
+      cortado): o novo **total** devolvido (no dia cortado, o daquele dia), entre o piso e o teto
+      do servidor ("Entre R$ X (já pago ou no banco) e R$ Y"; no dia, o mínimo do corte e "o pago
+      do grupo menos as devoluções dos outros dias"), "Quem recebe" e PIX só se mudarem,
+      observação e, na venda com nota, o imposto. A descrição diz o que acompanha: o retido, a
+      comissão e o BV; no dia cortado, "A venda do grupo não muda" — ou, com o 1º dia já cancelado
+      inteiro, que o retido e a comissão dele acompanham. A recusa (`abaixo_do_piso`,
+      `acima_do_teto`) aparece no campo do total, com o valor digitado mantido.
+    - **Lançar multa ao elenco** (`LancarMultaDialog`, `POST …/multas`): as escalações congeladas
+      no ato, inclusive quem o Casting já tirou ("saiu da escala"), com quantos dias faltavam do
+      cancelamento ao dia da vaga; a multa já lançada fica só leitura ("corrija em Gastos
+      Extras"); o gasto nasce aprovado, com a data de hoje; sem valor, "Lançar multa" fica
+      desabilitado com "Informe a multa de ao menos um artista". Com todas as escalações multadas,
+      o botão dá lugar a "Todas as escalações já têm multa: corrija em Gastos Extras". O dia
+      satélite de um "todos" mostra as linhas dele.
+    - **Venda e acréscimos**: o Superadmin edita a venda, e um `ConfirmDialog` ("Corrigir a venda
+      do evento cancelado?") diz antes de gravar o que muda — "A venda do cancelamento passa de R$ X
+      para R$ Y", "A taxa de comissão congelada passa a N%", "Cortesia / permuta: a comissão do
+      retido vai a zero", "O retido (R$ X) e a comissão do retido passam a <novo>; <antigo> devolve
+      o que já recebeu desta venda" — e que a diferença entra no próximo repasse aberto, sem mexer
+      no que já foi pago. Em "Acréscimos", o BV novo é só em reais e salvar refaz a comissão e o
+      BV do retido (o BV pago segue travado). O alerta de BV do orçamento some, e o painel
+      "Orçamento" fica sem ações para todos.
+    - **Comprovantes, notas e reembolsos**: os formulários de lançar (e o recebimento do
+      reembolso) só aparecem com a flag; corrigir ou excluir comprovante mostra a frase do
+      servidor quando ele recusa. Quando o grupo tem devolução aprovada (o corte de um dia, por
+      exemplo), "Recebido R$ X (devolvidos R$ W) de R$ Y". No cancelado não sai o "— falta R$ Z" (a
+      venda acabou); só o dia cortado de um grupo que segue vivo mostra o que falta da venda do grupo.
+    - **Grupo comercial**: o dia cancelado não agrupa, não desfaz nem recebe outro evento (o nome
+      do grupo segue editável); no principal vivo, o dia cancelado leva o selo "cancelado" e não
+      tem "Remover".
+    - **Faixa de pendências**: o chip "Recebimento" vira **Cancelado** — "devolução de R$ X a pagar
+      · retido R$ Y" (dourado) ou "retido R$ Y" (verde) — e leva à aba Comercial.
+    - **Escala**: tirar um artista da vaga de um cancelado não manda o e-mail de remoção — ele já
+      recebeu o de cancelamento no ato.
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
     critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM
     para `SUPERADMIN`**.
@@ -659,6 +792,9 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `availability` desta janela) · `PATCH /api/events/<id>/basico` ·
   `PATCH /api/events/<id>/comercial` · `PUT /api/events/<id>/clients` ·
   `PATCH /api/events/<id>/form-response`.
+  **Feature 306**: `GET /api/events/<id>/impacto-exclusao` (com `?devolucao=&venda_nova=`, a
+  prévia) · `POST /api/events/<id>/cancelar` · `PATCH /api/events/<id>/devolucao` ·
+  `POST /api/events/<id>/multas`.
 - **Vínculos**: Talentos · Figurino (`EventRole.figurino_sheet_id`) · Financeiro (comissões e
   pagamentos) · Ensaios (`parent_event_id`) · Grupo comercial (`group_leader_id`) · Clientes ·
   Gastos Extras (`SpecialExpense.event_id`) · Avaliação pública da cliente (`/avaliar/<token>`).
@@ -1406,6 +1542,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   4. **Comissão prevista** (R$) — **destacado em verde sutil** (borda + fundo `green-soft`) para
      incentivar o comercial. Para gestor é a comissão projetada da equipe; para o vendedor, a
      projeção sobre as vendas dele.
+- **Cancelados** *(feature 306)*: o retido dos cancelados do período (pelo mês do cancelamento, no
+  escopo da tela) entra no **Total vendido** do vendedor congelado no ato, com a sublinha "… ·
+  inclui R$ X retidos de N cancelamento(s)", e a comissão do retido entra na **Comissão prevista**
+  do beneficiário congelado ("· inclui R$ X do retido"); ticket médio, eventos fechados e desconto
+  não mudam.
 - **Tabela de acompanhamento (funil fechado)**, componentes `Table`/`TableRow`/`TableCell` de
   `@manto/ui`. Colunas: **Data do evento** · **Cliente** (contratante do `EventClient`, com
   fallback para o cliente denormalizado) · **Evento** (título ou rótulo do grupo, com badge
@@ -1500,17 +1641,29 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - **Financeiro/Superadmin** → título **"Comissões"**, seletor de vendedor, ações de liquidação.
 - **UX**:
   - Seletor de **mês** (`AAAA-MM`) com fallback tolerante para o mês corrente.
-  - **3 cards de KPI**: Total do mês · Pago · A pagar (`MetricBadge`), somados da mesma fonte que
+  - **4 cards de KPI**: Total do mês (pago + no banco + a pagar) · Pago · **No banco** (feature 306)
+    · A pagar (`MetricBadge`), somados da mesma fonte que
     alimenta os botões "Pagar Mês" — batem centavo a centavo.
   - **Duas abas** (`Tabs`): **Resumo por Vendedor** (linha por vendedor com contagem de vendas,
     total, pendente e status do mês; `AccordionRow` expande os eventos que compõem o total) e
-    **Detalhamento de Vendas** (uma linha por comissão, com filtros por vendedor/evento/status).
+    **Detalhamento de Vendas** (uma linha por comissão, com filtros por vendedor/evento/status — o status ganhou "No banco"
+    na 306).
   - **"Pagar Mês"** abre `Dialog` de confirmação com o valor exato **somado no servidor**; após
     confirmar, KPIs, status do vendedor e detalhamento atualizam **sem F5** (TanStack Query).
     Vendedor sem nada `a_pagar` → ação desabilitada.
   - **"Exportar Relatório (CSV)"** do resumo do mês (mês vazio → só o cabeçalho).
-  - **Estornos** (valores negativos pendentes) aparecem em qualquer mês até serem resolvidos e são
-    liquidados **junto** com as comissões do vendedor — nunca isoladamente.
+  - **Feature 306**: as três tabelas ganham **Tipo** (Comissão; Ajuste, a linha ligada a uma paga
+    que acerta a diferença de um cancelamento, de uma correção ou de uma troca de vendedor, com o
+    motivo no `title`; ou Estorno, o órfão da exclusão) e **Ciclo** (MM/AAAA, o repasse em que a
+    linha entra); o evento cancelado leva o selo "cancelado"; o "No banco" entra no mês (antes
+    ficava de fora e a tela não fechava com a Planilha); a contagem de vendas do resumo não conta
+    ajuste; as datas saem da própria string (o `new Date` mostrava o dia anterior no fuso de
+    Brasília). O "ver em comissões" do evento cancelado chega com `?mes=&vendedor=&evento=`.
+  - **Estornos** — desde a 306, só o **órfão**: o que a exclusão de um evento já pago (ou no banco)
+    deixa, negativo, sem evento e ligado à paga, nascido no primeiro repasse aberto do vendedor.
+    Aparece no mês do ciclo dele e, até ser resolvido, também no **mês corrente**, e é liquidado
+    **junto** com as comissões do vendedor — nunca isoladamente. O ajuste de um cancelamento não é
+    estorno: continua ligado ao evento e aparece só no ciclo dele.
 - **API**: `GET /api/financeiro/comissoes` · `POST /api/financeiro/comissoes/pagar-mes`.
 
 #### `/formularios` — Respostas e Editor de Formulários
@@ -1662,6 +1815,18 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   por Tipo (identificada, nunca diluída dentro de SHOW) e num **card consolidado** com vendas,
   receita e ticket do canal, mais o botão "Incluir a loja nos indicadores de evento" — opt-in
   explícito, `?incluir_loja_virtual=1`. Venda virtual **nunca** gera comissão.
+- **Cancelamentos** *(feature 306)*: o que a Manto reteve de um cancelado entra no **mês do
+  cancelamento**, no Realizado e no Total (nunca no Projetado). Com cancelado no período — pela
+  quantidade, nunca pelo valor —, a DRE mostra sob a Receita Bruta a linha informativa "↳ Retido
+  de cancelamentos" ("N cancelamento(s), já na receita"), a linha dos impostos diz "+ imposto
+  informado de N cancelamento(s)" (o do cancelado é o informado no ato), o BV do retido entra no
+  custo e a comissão do retido nas comissões; a devolução não conta em Gastos Extras (já saiu do
+  retido), como diz o rodapé. Na coluna analítica, o retido é barra própria em Receita por Tipo
+  ("Retido de cancelamentos"), soma na receita do vendedor congelado em Top Vendedores ("inclui
+  R$ X retidos") e na Tendência do mês do cancelamento; a nota a emitir de um cancelado leva o selo
+  "cancelado · retido R$ X", e a parcela de um cancelado sai dos Recebimentos Previstos. O ticket
+  médio segue pela venda dos eventos. A DRE antiga (Jinja, `/financeiro/`) tem a mesma linha e
+  bate ao centavo.
 - **API**: `GET /api/financeiro/dashboard?incluir_loja_virtual=`.
 - **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
   Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
@@ -1672,6 +1837,18 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   falta pagar, e "Comissões MM/AAAA — pago" o que já saiu. O item pago mostra "Pago" sem seletor; o
   Superadmin vê o seletor sem "No banco", e o "Não pago" pede o motivo ("só para pagamento marcado
   por engano"). A mensagem de recusa do servidor aparece embaixo do seletor.
+- **Cancelamento** *(feature 306)*: o BV de um evento cancelado fica no mês do evento pelo que
+  acompanha o retido (o pago, pelo valor pago; sem retido, some), com o recebedor e o PIX
+  informados no ato; a devolução à cliente e a multa ao elenco entram como gasto no mês da data
+  deles (a do cancelamento; a multa lançada depois, a do lançamento). O seletor manda o valor da
+  tela (`valor_esperado`) no BV e no gasto: se o "Alterar devolução" ou o acompanhamento mudou o
+  valor, o servidor recusa ("A devolução mudou para R$ X desde que a Planilha abriu…", 409
+  `valor_mudou`; "Este BV não está a pagar: recarregue a Planilha.", 409 `bv_nao_esta_a_pagar`),
+  e a frase aparece sob o seletor; o pago em lote não confere o valor. O item de comissão, aberto
+  ou pago, ganha **"ver linhas (N)"** sob o valor, recolhido, nas duas caras (no cartão, com alvo
+  de 44 px): tipo, evento (link), valor, ciclo e situação de cada linha — o ajuste do cancelado ao
+  lado da comissão que ele acerta; valor negativo em vermelho. O item aberto que soma zero com
+  linhas de valor (−100 de um ajuste e +100 de outra venda) não some mais.
 - **UX**: itens de cachê, salário, gasto, BV, comissão e contas recorrentes em uma planilha
   única, na ordem de colunas clássica — **checkbox** (com "selecionar tudo") · **vencimento** ·
   **descrição detalhada** (badge do tipo + descrição do item, com botão de cópia) · **favorecido**
@@ -1763,6 +1940,21 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   reportado pelas plataformas, a rodada de origem e o selo "atualiza até aprovar" / "congelado".
   Nasce pendente e sem comprovante — anexar a fatura do cartão antes de aprovar.
 
+- **Feature 306 — devolução de evento cancelado travada**: a devolução à cliente nasce do
+  cancelamento, aprovada, com o desembolso **"Devolução à cliente"** (rótulo na tabela; o tipo
+  não se escolhe ao criar). Na edição de uma devolução de cancelado (`locked`), a janela avisa
+  "Devolução de evento cancelado: valor, data, categoria e vínculo mudam só pelo 'Alterar
+  devolução' na tela do evento" (link para a aba Comercial) e desabilita esses campos; quem
+  recebe, PIX e descrição seguem livres, e "Salvar" sem mexer passa. O servidor recusa com 409
+  `devolucao_travada` mudar valor, data, categoria ou vínculo da devolução de um cancelado e
+  excluí-la, e os caminhos inversos — criar ou religar uma devolução num cancelado, ou trocar para
+  devolução a categoria de um gasto ligado a ele; na janela, a frase dele aparece. Na linha da
+  tabela, a devolução travada não oferece "Excluir" nem "Vincular evento" (diz "Devolução de
+  cancelado: travada."), e a recusa do servidor ao excluir, aprovar, rejeitar ou vincular aparece
+  embaixo das ações. Na edição, o evento ligado aparece no seletor de vínculo mesmo quando é de
+  outra data que a do gasto (antes, "Sem evento vinculado"). A multa ao elenco nasce aprovada, na categoria **"Multa de cancelamento"**, a pagar ao
+  artista (fornecedor, com o nome e o PIX do cadastro), e se corrige aqui.
+
 #### `/gastos/recorrentes` — Gastos Recorrentes *(refeita na feature 189)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
 - **UX**: seletor de **mês de referência** no topo, cards de resumo (estimativa mensal por tipo +
@@ -1804,7 +1996,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com um modo fora de SP ativo já dispara o cálculo. **Deslocamento em duas etapas** (feature 262, no lugar da checkbox "Evento Fora de São Paulo"): "Evento em São Paulo" (padrão) × "Evento fora de São Paulo"; marcando fora, o painel dourado abre com a escolha "Por nossa conta" (padrão) × "Por conta da cliente" — no modo cliente o painel vira "Adicionais — Fora de SP", esconde tipo de transporte/carretinha/nº de carros (km e colaboradores ficam) e o veículo sai da conta. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190; snapshot antigo fora de SP reabre como "por nossa conta"). **Feature 307 — data especial pela data**: sob o campo Data, com a data vazia, a dica "Em 24/12 e 25/12 a tabela especial entra pela data" (dias lidos da tabela); quando o resultado volta com `quote.data_especial`, um aviso dourado (`AnimatePresence` + `motion.div`, `useReducedMotion`) diz "🎄 Data especial — Véspera e Natal: markup 3,34× e cachês próprios…" e, **só na faixa `natal`**, orienta a usar o item "Ajudante do Noel" e não somar o acréscimo "Outro" (outra faixa mostra só rótulo e markup; com "Personalizar valores" ligado o aviso lembra que o valor digitado vence); o painel de resultado mostra "🎄 Valores da data especial: …"; o botão vira **"Recalculando…"** e fica desabilitado do momento em que o payload muda até o resultado novo chegar (`calcPendente` + contador `seq` que descarta resposta antiga) e também após erro de cálculo (aí com o rótulo normal) — antes ele salvava o `result` da data anterior durante o debounce. **Feature 309 — produtos de tabela**: card **"Produtos de tabela"** (`ProdutosCard`) no topo da coluna direita, antes de Equipe, só quando `settings.produtos` chega no `/opcoes` (backend velho = sem card): `Combobox` de `@manto/ui` com os produtos ativos (descrição = preço normal + descrição ao cliente, ícone 🎅) + "Adicionar" (pode repetir); cada exemplar vira uma `ProdutoLinha` ("📦 Visita Mágica — Papai Noel (visita padrão, até 1h) — preço de tabela R$ 2.500,00", "Inclui: Papai Noel · Coordenador · Maquiador", selo "estimativa" em dourado quando a faixa não tem preço, selo "inativo" num orçamento recalculado) lida de `quote.produtos` — enquanto a resposta não volta a linha diz "calculando…" em vez de chutar o preço; o estado `produtos` entra em `INITIAL_STATE`/`resetAll`/payload/rehydrate (só a chave; o preço é resolvido de novo). Abaixo da Data, `quote.avisos` em bloco `role="alert"` com borda dourada cheia ("Para a Visita Mágica use o produto…", "preço ESTIMADO… Confira antes de enviar"), com a mesma regra de vida do aviso da 307 (some enquanto o recálculo não voltou). No painel de resultado, com só produto (servidor devolve só `show_1h`) o tile único se chama **"Preço de tabela"**; as `ProdutoLinha`s aparecem junto da nota da data especial. O contador de coordenadores mostra "N incluído(s) no produto" (`quote.coordenadores_inclusos`) e não desce abaixo deles. **Janela de deploy**: com produto selecionado e `quote.produtos` ausente (backend velho) o botão fica desabilitado com o aviso "O servidor não aplicou o produto — recarregue a página" |
-| `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN` | fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com o valor e a situação da devolução de cada um. É a **única porta de entrada** para um evento cancelado — ele sai da agenda de propósito (feature 224). Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
+| `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN` | fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com, por cancelado, todas as devoluções (valor, estado — a devolver, no banco, devolvido —, quem recebe e, para quem vê o financeiro, o PIX) e "pago R$ X · retido R$ Y" (feature 306; sem devolução, "nada a devolver"). É a **única porta de entrada** para um evento cancelado — ele sai da agenda de propósito (feature 224). Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
 | `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP (no modo "deslocamento por conta da cliente" o tile "Veículo" some e aparece a nota "van/carro não incluído" — feature 262), memória de cálculo e envio do PDF por e-mail; **feature 307**: nota "🎄 Valores da data especial: <rótulo>" junto da nota de NF quando o quote congelado tem `data_especial`, e a mesma nota em itálico na mensagem e no PDF; **feature 309**: uma `ProdutoLinha` por `quote.produtos` (preço congelado) e os `quote.avisos` em bloco dourado no "Resumo de valores", tile único "Preço de tabela" quando só há produto, memória com a linha `produto` (fundo próprio `bg-blue-soft`, depois de "= Após markup") e "= Após produtos", mensagem com o bloco "🎅 *Visita Mágica — …* (descrição): *R$ X*" e PIX único. **Feature 266**: ganhou **Criar evento** (`/events/new?orcamento_id=`) como única ação sólida da barra — esta é a tela onde o "sim" da cliente chega, e converter exigia voltar ao histórico e reencontrar a linha. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190. **Feature 273**: linha vinculada a um evento vivo mostra **Ver evento** (`/events/:id`); excluir orçamento vinculado é recusado com 409 e a mensagem, mostrada na página com link "Ver evento", aponta o evento a desvincular. **Feature 301**: a tabela passou a ser **do time inteiro** — a coluna **Vendedor** e o filtro por vendedor, que só o superadmin via, agora aparecem para todo o comercial, e a lista **abre sem filtro** (não começa em "meus orçamentos"). O botão **Excluir** só é renderizado na linha de quem pode excluir (autor ou superadmin), por `pode_excluir` do payload — antes aparecia em toda linha e só falhava depois do `confirm()`. Com 1.809 orçamentos concentrados (90% de um vendedor) e teto de 300 linhas, os filtros passam a ser o caminho normal |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190). **Feature 307**: card **"Datas especiais — Véspera e Natal"** (`DatasEspeciaisCard`, um por faixa do bloco `datas_especiais`): rótulo, dias como chips `DD/MM` (adicionar/remover, `AnimatePresence`), `PriceTable` (extraída para `components/orcamento/PriceTable.tsx`) com markup, coordenador, piso e um cachê por especial sobrescrito, chips "+ Nome"/"× Nome" para sobrescrever (nada de `<select>` — a lista de especiais passa de 10; "+ Nome" nasce com o piso, nunca zerado, e "× Nome" pede confirmação porque o especial cai para o piso), campo da nota (uma linha, ≤ 200); salva pelo mesmo "Salvar configurações"; o 400 do servidor (`fields` `datas_especiais.<faixa>.<campo>`) destaca o campo — inclusive as linhas da `PriceTable` (`invalid`) — com `aria-invalid`, borda vermelha e mensagem com rótulo legível ("Markup: …", "Cachê — Papai Noel: …"), leva o foco ao primeiro inválido e deixa fora do rodapé as chaves `datas_especiais.*`; excluir um especial tira a sobrescrita dele das faixas no estado local e no servidor. As linhas "Papai Noel" e "Ajudante do Noel" da tabela normal aparecem pela migração na carga — **600 / 270 desde a 309** (a 307 tinha posto 712 / 423 por engenharia reversa do preço da Visita; a 309 desfaz). **Feature 309**: card **"Produtos de tabela"** (`ProdutosConfigCard`, molde do `DatasEspeciaisCard`, ocupa as duas colunas; só quando `settings.produtos` existe): por produto — rótulo (≤ 60) com a chave, "Ativo", "Remover produto" (`ConfirmDialog`), descrição ao cliente (≤ 120), "Preço por visita" (`MoneyInput`), um "Preço em <faixa> (dias)" por faixa de `datas_especiais` (zero = sem preço = "estimativa na data"), vagas como linhas (tipo por botões Especial/Ator/Coordenador/Maquiador — os dois últimos travam o nome —, nome, "cachê pela tabela" ou valor fixo, "maquiagem" para especial/ator, "×" com `ConfirmDialog`, aviso dourado quando o nome do especial não está na tabela), "+ Vaga" (≤ 10), "Noturno embutido no preço"; "Novo produto" por chave `^[a-z0-9_]{1,30}$`; card "Estimativa" (fator × markup). O 400 (`fields` `produtos.<chave>.<campo>` / `…vagas.<i>.<campo>` / `produtos_estimativa.<campo>`) destaca o campo com `aria-invalid`, leva o foco e lista "Preço: …"/"Vaga 2 — cachê: …" no próprio card; os `avisos` do 200 (faixa órfã descartada) aparecem em amarelo no card; o rodapé filtra `produtos*` |
@@ -1822,7 +2014,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
-| `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período |
+| `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período; **feature 306**: o cancelado sai do total do vendedor, e o retido do período aparece à parte, "+ R$ X retidos de N cancelamento(s)" |
 | `/admin/sync` | Sincronização Agenda | `SUPERADMIN` | status e execução manual do sync com o Google Calendar. **Feature 303**: "Limpar eventos fantasma" confirma num `ConfirmDialog` (não mais `window.confirm`) que diz o que a limpeza faz; o resultado mostra a mensagem com os seis números (removidos, mantidos e marcados, com data atualizada, de volta ao Google, sem confirmação, com falha) e uma linha por mês que teve algo — o mês que não respondeu aparece como "não foi possível consultar o Google Agenda"; com falha, sem confirmação ou mês com erro, a caixa sai no tom de alerta |
 | `/admin/anuncio-portal` | Anúncio do Portal | `SUPERADMIN` | mensagem exibida no Portal do Artista |
 | `/admin/migrar-arquivos` | Migrar Arquivos | `SUPERADMIN` | job de migração de storage com status |

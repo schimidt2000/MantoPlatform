@@ -295,8 +295,9 @@ def dashboard():
             CalendarEvent.start_at >= start_dt,
             CalendarEvent.start_at <= end_dt,
             CalendarEvent.event_type != "ENSAIO",
-            # Espelha o filtro da API (`app/api/financeiro_read.py`): evento cancelado não
-            # entra na receita (feature 224).
+            # Espelha o filtro da API (`app/api/financeiro_read.py`): a venda do cancelado não
+            # entra na receita (feature 224); o retido dele entra pela linha própria, no mês do
+            # cancelamento (feature 306).
             CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(CalendarEvent.start_at.desc())
@@ -1590,7 +1591,8 @@ def comissoes():
         .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
     )
 
-    # Estornos pendentes (gerados por cancelamentos de meses anteriores)
+    # Linhas negativas a pagar: o estorno órfão da exclusão e o ajuste negativo da reconciliação
+    # (cancelado, corte de dia, correção da venda — feature 306).
     estornos_q = (
         CommissionPayment.query
         .filter(

@@ -575,10 +575,11 @@ def _serialize_client_feedbacks(event_id: int) -> list[dict[str, Any]]:
 
 
 def _serialize_gastos(group_ids: list[int]) -> list[dict[str, Any]]:
-    """Gastos extras APROVADOS vinculados a qualquer evento do grupo comercial.
+    """Gastos extras APROVADOS dos dias que o painel lê (`cancel_ops.dias_dos_gastos`).
 
-    São os mesmos gastos que já entram como custo em `_compute_kpi` — aqui detalhados para a
-    grade "Gastos extras vinculados" da tela.
+    No evento vivo são os dos dias vivos, os mesmos que entram como custo em `_compute_kpi` — aqui
+    detalhados para a grade "Gastos extras vinculados" da tela. No cancelado não há KPI: a grade
+    mostra a devolução e a multa dos dias dele (feature 306).
     """
     return [
         {

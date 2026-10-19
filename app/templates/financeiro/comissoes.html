@@ -36,13 +36,13 @@
   <div class="panel-title" style="color:var(--red); margin-bottom:10px;">
     ⚠ Estornos pendentes ({{ estornos | length }})
   </div>
-  <p class="meta" style="margin-bottom:12px;">Comissões de eventos cancelados após pagamento — serão descontadas do próximo ciclo.</p>
+  <p class="meta" style="margin-bottom:12px;">Linhas negativas a pagar: o estorno de evento excluído depois de pago e o ajuste de evento cancelado ou corrigido (só a diferença). Saem no primeiro repasse aberto do vendedor.</p>
   <div class="table-wrap">
     <table>
       <thead>
         <tr>
           <th>Vendedor</th>
-          <th>Evento (cancelado)</th>
+          <th>Evento</th>
           <th>Data venda</th>
           <th class="text-right">Valor</th>
           {% if can_manage %}<th></th>{% endif %}

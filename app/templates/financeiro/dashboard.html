@@ -3,7 +3,7 @@
 {% block page_title %}Painel Financeiro{% endblock %}
 
 {% block page_subtitle %}
-  <p class="sub">Resultado mês a mês — regime de competência (data do evento) · {{ period_label }}</p>
+  <p class="sub">Resultado mês a mês — regime de competência (data do evento; o retido de cancelamento, a do cancelamento) · {{ period_label }}</p>
 {% endblock %}
 
 {% macro money(v) %}R$ {{ (v or 0) | brl }}{% endmacro %}
@@ -183,7 +183,7 @@
           </tr>
 
           <tr>
-            <td><span class="dre-op">(–)</span> Gastos Extras <small>(aprovados)</small></td>
+            <td><span class="dre-op">(–)</span> Gastos Extras <small>(aprovados, sem a devolução de cancelado — já está no retido)</small></td>
             <td class="text-right num text-red">– {{ money(drg_realizado.gastos_extras) }}</td>
             <td class="text-right num text-muted text-red">– {{ money(drg_projetado.gastos_extras) }}</td>
             <td class="text-right num strong text-red">– {{ money(drg_total.gastos_extras) }}</td>
@@ -358,7 +358,8 @@
   </div>
   <p class="muted" style="margin-top:-4px;">
     16% de cada nota com data de emissão no período selecionado. Reconhecido pelo mês da emissão
-    (visão de caixa); o balanço/DRE continua por data do evento.
+    (visão de caixa); o balanço/DRE continua por data do evento (o retido de cancelamento, pela
+    data do cancelamento).
   </p>
   {% if custo_nota_itens %}
   <div class="table-wrap table-flush">

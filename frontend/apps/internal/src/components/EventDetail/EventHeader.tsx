@@ -413,8 +413,8 @@ export function EventHeader({ data }: EventHeaderProps) {
             {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
           </p>
           <p className="mt-1 text-muted">
-            Saiu da agenda e das listas; fica na página de Cancelamentos e no card do período. Os
-            dados abaixo ficam para consulta.
+            Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
+            marcado, na ficha da cliente. Os dados abaixo ficam para consulta.
           </p>
         </div>
       )}

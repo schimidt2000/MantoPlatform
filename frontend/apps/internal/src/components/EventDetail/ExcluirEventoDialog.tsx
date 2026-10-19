@@ -91,8 +91,12 @@ function ResumoImpacto({ impacto }: { impacto: ImpactoExclusao }) {
         </ul>
       )}
       <p className="mt-2 text-ink">
-        O registro fica (é a ele que a devolução se refere), mas o evento sai da agenda e das
-        listas. A comissão e o BV passam a acompanhar o que a Manto reteve.
+        O registro fica (é a ele que a devolução se refere): o evento sai da agenda e das listas de
+        venda, mas segue, marcado, na ficha da cliente e na página de Cancelamentos.
+        {impacto.regime !== "virtual" &&
+          ` A comissão e o BV passam a acompanhar o que a Manto reteve${
+            impacto.grupo ? "; num dia só do grupo, acompanham a venda nova do grupo" : ""
+          }.`}
       </p>
     </div>
   );
@@ -309,6 +313,12 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     () => new Map((efeito?.bvs ?? []).map((b) => [b.acrescimo_id, b.bv_retido])),
     [efeito],
   );
+  const erroDoValorNaPrevia =
+    previa.error instanceof ApiRequestError ? previa.error.fields?.devolucao : undefined;
+  const errosDaDevolucao = useMemo(
+    () => (erroDoValorNaPrevia ? { devolucao_valor: erroDoValorNaPrevia, ...erros } : erros),
+    [erroDoValorNaPrevia, erros],
+  );
 
   const pendencia = useMemo<string | null>(() => {
     if (!dados || !cancelando) return null;
@@ -322,12 +332,17 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     if (devolucao.modo === "parte" && devolucao.valor <= 0) return "Informe quanto devolve.";
     if (devolucao.modo !== "nada" && (!devolucao.nome.trim() || !devolucao.pix.trim()))
       return "Informe quem recebe a devolução e o PIX.";
+    if (devolucao.modo === "parte" && devolucao.valor > maxDevolucao)
+      return `Acima do que dá para devolver (${brl(maxDevolucao)}).`;
+    // A prévia recusou (o valor passou do pago, a venda mudou, o dia foi cancelado no meio): a frase
+    // do servidor, em qualquer modo — nunca o efeito sumindo calado com o botão habilitado, nem
+    // "conferindo" para sempre no corte.
+    if (previa.isError)
+      return (
+        previa.error?.message ||
+        (corta ? "Não foi possível conferir a devolução mínima." : "Não foi possível conferir a prévia.")
+      );
     if (corta) {
-      if (devolucao.modo === "parte" && devolucao.valor > maxDevolucao)
-        return `Acima do que dá para devolver (${brl(maxDevolucao)}).`;
-      // A prévia recusou (a venda mudou, o dia foi cancelado no meio): a frase do servidor, nunca
-      // "conferindo" para sempre.
-      if (previa.isError) return previa.error?.message || "Não foi possível conferir a devolução mínima.";
       // A mínima é a da prévia dos valores de agora: a de antes (ou a que está chegando) não vale.
       if (!previa.emDia || previa.isFetching || previa.isPlaceholderData || efeito?.devolucao_minima === undefined)
         return "Conferindo a devolução mínima…";
@@ -476,7 +491,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent open={open} className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{dados?.acao === "excluir" ? "Excluir evento" : "Cancelar evento"}</DialogTitle>
+          {/* Concluído, o impacto relido do evento já cancelado (ou do dia que virou satélite na passagem)
+              pode vir como "excluir": o título continua o do ato que acabou de acontecer. */}
+          <DialogTitle>{dados?.acao === "excluir" && !concluido ? "Excluir evento" : "Cancelar evento"}</DialogTitle>
         </DialogHeader>
 
         {impacto.isLoading && <Skeleton className="h-32 w-full" />}
@@ -590,7 +607,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                       pago={pago}
                       maxDevolucao={maxDevolucao}
                       comprovantesSemValor={dados.comprovantes_sem_valor ?? 0}
-                      erros={erros}
+                      erros={errosDaDevolucao}
                       semTudo={corta}
                       minima={corta ? (efeito?.devolucao_minima ?? 0) : 0}
                     />

@@ -395,6 +395,12 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
 ```
 
 - Abra o Browser pane por URL (`http://localhost:5173`), com a porta 5000 livre.
+- Com a 5000 ou a 5173 ocupadas por outro checkout (foi o caso em 19/10): suba o Flask do worktree em
+  `127.0.0.1:5001` (uma cópia do `run-local-sem-google.py` com `app.run(host="127.0.0.1", port=5001)`) e o
+  app interno com uma config temporária do Vite que importa a de sempre e troca `port` e o `target` do
+  proxy (`npm run dev -- --config <config>`, em `127.0.0.1:5183`). O `127.0.0.1` não divide o cookie
+  `session` com o `localhost` do outro checkout; a DRE antiga fica em `http://127.0.0.1:5001/financeiro/…`.
+  A config temporária sai do repositório no fim.
 - **Não use**:
   - as entradas `manto-backend-sem-google` e `manto-internal` do `launch.json` do usuário: elas servem o
     repositório principal, isto é, o código da `main`;
@@ -461,7 +467,7 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
     - quem saiu da escala aparece marcado;
     - 150 vira o Gasto Extra "Multa de cancelamento"; vazio e 0 são ignorados;
     - tudo vazio ou 0 mostra "Informe a multa de ao menos um artista" (pendência, com o botão desabilitado; pela API, 400 `fields.multas`), e nada é lançado; a escalação com multa já lançada fica só leitura ("corrija em Gastos Extras"), e com todas multadas o botão some;
-    - multa já lançada mostra erro no campo ("Corrija em Gastos Extras").
+    - numa aba aberta antes do lançamento, a multa já lançada volta com o erro no campo ("corrija em Gastos Extras").
 11. (H6) Como CASTING: o sino do cancelado (um por dia com escalados) abre o evento em `?aba=producao`.
 12. (H2) Como COMERCIAL, com login real e não pelo "Ver como":
     - a tela é só de consulta;

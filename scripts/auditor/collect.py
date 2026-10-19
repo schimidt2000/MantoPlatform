@@ -18,18 +18,16 @@ import hashlib
 import json
 import shutil
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import config
 import psycopg
 import psycopg.rows
 import requests
-
-import config
 import store
-from pixnorm import normalize_pix
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -43,15 +41,15 @@ def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
     Esta é a janela dos números da semana (sem sobreposição entre relatórios). A coleta de
     itens usa uma janela estendida (margem de recoleta) derivada dela no `main`.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if args.desde:
         start_sp = datetime.strptime(args.desde, "%Y-%m-%d").replace(tzinfo=TZ_SP)
-        return start_sp.astimezone(timezone.utc), now
+        return start_sp.astimezone(UTC), now
     last_end = store.last_window_end()
     if last_end:
         start = datetime.fromisoformat(last_end)
         if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+            start = start.replace(tzinfo=UTC)
     else:
         start = now - timedelta(days=7)
     return start, now
@@ -59,7 +57,7 @@ def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
 
 def _naive_utc(dt: datetime) -> datetime:
     """Colunas gravadas com `datetime.utcnow` são naive UTC — parâmetro precisa casar."""
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def _naive_sp(dt: datetime) -> datetime:

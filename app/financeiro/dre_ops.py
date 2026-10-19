@@ -67,20 +67,27 @@ def tendencia_mensal(today: date, meses: int = 6) -> list[dict]:
         rec = sum(e.sale_value or 0 for e in normais)
         cst = sum(_group_cost(e) for e in normais)
         retido = sum(
-            (r.retido for r in cancel_ops.cancelados_do_periodo(s_dt.date(), (e_dt - timedelta(days=1)).date())),
+            (
+                r.retido
+                for r in cancel_ops.cancelados_do_periodo(
+                    s_dt.date(), (e_dt - timedelta(days=1)).date()
+                )
+            ),
             Decimal("0"),
         )
         item: dict = {"label": f"{m:02d}/{str(y)[2:]}"}
         if retido != 0:
             rec = rec + retido
             item["retido"] = retido
-        item.update({
-            "receita": rec,
-            "custo": cst,
-            "lucro": rec - cst,
-            "margem": _pct(rec - cst, rec),
-            "n_eventos": len(evs),
-        })
+        item.update(
+            {
+                "receita": rec,
+                "custo": cst,
+                "lucro": rec - cst,
+                "margem": _pct(rec - cst, rec),
+                "n_eventos": len(evs),
+            }
+        )
         tendencia.insert(0, item)
         y, m = _prev_month(y, m)
     return tendencia

@@ -7511,26 +7511,59 @@ def main() -> int:
 
 
 def semear_tela() -> int:
-    """Dados da conferência de tela (quickstart §8): eventos que sobrevivem ao verify."""
-    ex = _exemplo_padrao("tela exemplo", nota=True, comissao="pago")
-    g = _grupo("tela grupo", dias=2)
+    """Dados da conferência de tela (quickstart §8): eventos que sobrevivem ao verify.
+
+    O evento-exemplo da spec (venda 2.000 a 5%, comprovante de 1.000, BV 200 a pagar sem recebedor
+    nem PIX, nota fiscal e a cheia 90 a pagar), um evento à parte para o 409 do Comercial (item
+    12), três grupos (todos os dias, corte de um satélite, passagem do principal), um show com dois
+    escalados (um sem PIX) e um com cachê pago, um evento marcado e uma linha "no banco" com data
+    no dia 1º. Os eventos ficam nos meses isolados; o cancelamento, feito na tela, cai no mês
+    corrente. Limpa com `--limpar-tela`, com o backend parado.
+    """
+    hoje = _hoje_sp()
+    ex = _evento("tela exemplo", nota=True)
+    bv = _bv(ex, 200, recebedor=None, pix=None)
+    _comprovante(ex, 1000)
+    linha = _linha_comissao(ex, 90, status="a_pagar")
+    comercial = _evento("tela comercial")
+    _comprovante(comercial, 1000)
+    g_todos = _grupo("tela todos", dias=2)
+    g_corte = _grupo("tela corte", dias=2)
+    g_passagem = _grupo("tela passagem", dias=2)
     show = _evento_com_elenco("tela show", ["A", "B"])
     _escalar(show, estado["t"])
-    _escalar(show, estado["t2"])
+    _escalar(show, estado["t_sem_pix"])
+    pago = _evento_com_elenco("tela pago", ["A"])
+    role_pago = _escalar(pago, estado["t2"])
+    _no_banco_escrever("UPDATE event_roles SET payment_status = 'pago' WHERE id = :i", i=role_pago)
+    marcado = _evento("tela marcado")
+    _comprovante(marcado, 500)
+    _marcar_sumido(marcado)
+    no_banco = _evento("tela no banco")
+    linha_no_banco = _linha_comissao(
+        no_banco, 50, status="no_banco", venda_em=date(hoje.year, hoje.month, 1)
+    )
     print(
         json.dumps(
             {
                 "usuarios": {k: v["email"] for k, v in estado["usuarios"].items()},
-                "senha": "(a do verify, no código)",
+                "senha": SENHA,
                 "eventos": {
-                    "exemplo": ex["ev"],
-                    "grupo_principal": g["principal"],
-                    "grupo_dias": g["dias"],
-                    "show": show,
+                    "exemplo": {"id": ex, "bv": bv, "linha": linha},
+                    "comercial_409": comercial,
+                    "grupo_todos": g_todos,
+                    "grupo_corte": g_corte,
+                    "grupo_passagem": g_passagem,
+                    "show_escalados": show,
+                    "show_cache_pago": pago,
+                    "marcado": marcado,
+                    "no_banco": {"id": no_banco, "linha": linha_no_banco},
                 },
+                "talentos": {"com_pix": estado["t"], "sem_pix": estado["t_sem_pix"]},
             },
             ensure_ascii=False,
             indent=1,
+            default=str,
         )
     )
     return 0

@@ -9,7 +9,9 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
+> Última revisão: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
+> 6 a 10 do Financeiro, e as correções no lugar da exclusão, do grupo, da cobrança, da regra de
+> comissão, do estorno, da cascata da DRE e da comissão exibida). Antes: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
 > vagas congeladas e teto pela tabela — na linha Orçamento do §5). Antes: **2026-10-15** (feature 307: data especial pela data do evento na linha Orçamento
 > do §5 e o teto das vagas seguindo a data do evento, §3). Antes: **2026-09-30** (feature 303: fluxos de sincronização, "Sincronizar", exclusão e
 > devolução ao Google; invariantes 13-17 da Agenda; invariante 6 do frontend). Antes: **2026-08-06**.
@@ -53,6 +55,7 @@ exceção é `virtuais_ops.py:28`, que importa `current_app` para ler config (ac
 | `app/calendar/service.py` | 297 | camada fina sobre a Google Calendar API — **único arquivo que fala com o Google**, zero regra de negócio |
 | `app/calendar/sync.py` | 150 | moldura do sync; excelente docstring de módulo |
 | `app/calendar/sumico_ops.py` | ~900 | feature 303 — a limpeza do mês (`limpar_mes`), o retrato do que prende o evento (`preso_ao_evento`), marcar e desmarcar "Sumiu do Google Agenda", a reconferência dos marcados, a faixa e a devolução ao Google; chama o Google por atributo de `service` e os helpers de `routes.py` por import tardio |
+| `app/calendar/cancel_ops.py` | ~3.330 | features 224 e 306 — o cancelamento inteiro: o ato (`cancelar_evento`, nas quatro formas de `FormaDoAto`), a prévia pela mesma conta (`previa_cancelamento`), o resumo único do cancelado em lote (`resumos_cancelados`), os cancelados do período (fonte da DRE e do Comercial), o BV da Planilha, o "Alterar devolução", as correções que recongelam, a multa ao elenco e o estorno da exclusão (`aplicar_estorno_comissao`). É "folha": no topo só importa `db` e `app.models`; o resto entra por import tardio, para `sumico_ops` e `cobranca_ops` o importarem sem ciclo |
 | `app/api/agenda_read.py` | 766 | fonte única do formato JSON de leitura (sem rotas) |
 | `app/api/agenda_write.py` | 1.437 | 41 rotas, 56 funções, **zero sem docstring** — melhor arquivo do domínio |
 | `app/api/agenda.py` | 167 | 8 rotas de leitura |
@@ -136,13 +139,23 @@ cliente, sem elenco, indistinguível de um evento criado direto no Google.
 ### Fluxo: exclusão
 
 `DELETE /api/events/<id>` (e a rota Jinja `POST /events/<id>/delete`) → `_delete_event_flow` →
-**recusa evento marcado "Sumiu do Google Agenda"** (`EventoMarcadoError`, feature 303 — a API
-responde 409 `sumiu_do_google`, o Jinja volta ao evento com a mensagem; `cancelar_evento` recusa
+**trava o evento e relê** (`refresh(…, with_for_update=True)`, feature 306: um cancelamento ou uma
+marca no meio do caminho mudaria o que a decisão leu) → **recusa evento cancelado**
+(`EventoCanceladoError`, feature 306 — 409 `cancelado` para todos, o Superadmin inclusive: cancelar não
+tem volta, e o cancelado por engano se recria à mão; o Jinja volta ao evento com o aviso) → **recusa
+evento marcado "Sumiu do Google Agenda"** (`EventoMarcadoError`, feature 303 — a API
+responde 409 `sumiu_do_google`, o Jinja volta ao evento com a mensagem, que oferece as duas saídas:
+devolver ao Google ou cancelar. Desde a 306 o cancelar aceita o marcado e o desmarca com o motivo
+"cancelado" antes de gravar o cancelamento; antes da 306, `cancelar_evento` recusava
 pela mesma regra) → recusa líder de grupo → `AuditLog 'manual_deleted'` →
 `_delete_event(also_from_google=True)` → `_clear_event_side_tables` do evento **e de cada
 ensaio-filho** (o histórico do ensaio estourava a exclusão do pai) + tratamento de comissão
-(pendente vira `cancelado`; paga gera estorno negativo) → delete no Google (falha não trava) →
-apaga os avisos do sino do evento → delete local.
+(`cancel_ops.aplicar_estorno_comissao`: a pendente vira `cancelado`; a paga **ou no banco** gera um
+estorno órfão negativo no **primeiro repasse aberto** do vendedor, com o motivo "Exclusão do evento" —
+antes da 306 ele copiava a data da venda e caía num repasse já pago —, e as duas perdem o vínculo com
+o evento; ver §2, Estorno) → delete no Google (falha não trava) →
+apaga os avisos do sino do evento → delete local. A limpeza do sync (`sumico_ops._apagar_vazio`) trava
+e relê do mesmo jeito antes de apagar, e o evento que se descobre cancelado ali fica.
 
 ### Fluxo: devolver ao Google (feature 303)
 
@@ -155,6 +168,45 @@ os dados ATUAIS do sistema (dia inteiro como dia inteiro), troca o id e o link; 
 **presente** (alguém restaurou da lixeira): nada é criado, o cabeçalho do sistema é empurrado ao id
 velho se diferir → desmarca → commit. Falha do Google: rollback, auditoria `google_return_failed`
 com o tipo do erro, 502 com mensagem fixa — a marca continua.
+
+### Fluxo: cancelar (features 224 e 306)
+
+`POST /api/events/<id>/cancelar` (só o Superadmin, `_can_delete()`) → `cancel_ops.cancelar_evento`,
+numa transação e numa ordem só (as travas: `docs/00` §6, itens 25 e 26): **T1** trava o grupo inteiro
+(`travar_grupo`: o principal e todos os dias, vivos e cancelados, com os ids por consulta) e relê →
+recusa o já cancelado (409 `ja_cancelado`) e o Ensaio (409 `ensaio`) → decide a **forma**
+(`_forma_do_ato`): `avulso` (também o principal cujos outros dias já foram todos cortados), `todos`
+(pelo principal: ele no regime `venda`, cada outro dia vivo em `satelite`), `corte` (um dia que não é o
+principal: `dia`, e a venda fica no principal, menor) ou `passagem` (só o 1º dia: `dia`, e a venda passa
+ao dia vivo mais cedo) → T3 a T6 (acréscimos, linhas de comissão, devoluções do grupo, escalações dos
+dias alcançados) → recusa cachê pago (409 `cache_pago`) e devolução pendente em qualquer dia (409
+`devolucao_pendente`) → valida todos os campos de uma vez (400 com `fields`) e o "Tudo" contra o máximo
+de agora (409 `max_devolucao_mudou`) → desmarca o marcado (`sumico_ops.desmarcar`, motivo "cancelado")
+→ congela (`event_cancellations`, os BVs em `event_cancellation_bvs`, o elenco em
+`event_cancellation_elenco`) → na passagem, marca a comissão própria do novo 1º dia e chama
+`group_ops.passar_venda` → a devolução, quando há, nasce como Gasto Extra **aprovado** ligado ao evento
+da URL → a comissão: no `venda`, a reconciliação pelo retido; no corte e na passagem, a venda nova do
+principal que fica, com o BV a pagar acompanhando uma vez e a comissão refeita quando a cheia muda →
+`cancelled_at` e `ao_cancelar` (o ponto de extensão da 2a, hoje sem efeito) de cada dia → os ensaios
+saem do banco, os sinos e as multas nascem → um `EventLog` por dia → commit → **depois do commit**, fora
+da trava, a remoção do Google (dias e ensaios) e o e-mail ao elenco. O marcado e o `virtual-local-…` não
+chamam o Google; `CALENDAR_SUPPRESS_EVENT_WRITES` é lida a cada chamada (chave ausente = travado); falha
+ou trava viram `aviso` e nunca desfazem o cancelamento. A venda da Loja Virtual (regime `virtual`) só
+pede o motivo: sem retido, devolução nem multa por aqui. O clique duplo para em T1 (409
+`ja_cancelado`), com o `UNIQUE(event_id)` como segunda barreira; o deadlock vira 409 `tente_de_novo`
+(`cancel_ops.traduzir_erro_de_banco`).
+
+A **prévia** (`GET /api/events/<id>/impacto-exclusao?devolucao=…`, `previa_cancelamento`) faz a mesma
+conta do ato, sem trava e sem escrita: o retido, a comissão do retido, o ajuste, o ciclo, a data do
+repasse e o BV do retido que ela mostra são os que o ato grava logo depois, também nos dias 1 a 5.
+Depois do ato, só o Superadmin corrige, e a correção refaz o dinheiro na mesma transação: "Alterar
+devolução" (`PATCH /api/events/<id>/devolucao`, `alterar_devolucao`), comprovante
+(`gravar_comprovante_no_grupo` → `reaplicar_por_dinheiro`), aba Comercial e acréscimos
+(`recongelar_do_comercial`). Multa (`POST /api/events/<id>/multas`), reembolsos, parcelas e notas não
+mexem no congelado. **Relógio**: `cancelled_at`, `event_cancellations.created_at/updated_at` e a data
+da devolução e da multa em São Paulo sem fuso (`now_sp()`); o `EventLog` da 306 (ato, passagem e
+correções) sai sem `created_at`, pelo default UTC do modelo — o do cancelamento da 224 saía 3 h antes.
+Modelo e transições: `specs/306-dinheiro-do-cancelamento/data-model.md` §5 a §8.
 
 ### Invariantes
 
@@ -189,7 +241,11 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
     o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova.
 12. **Venda e cobrança: o grupo é uma venda só** (feature 299, `app/financeiro/cobranca_ops.py`,
     fonte única da Home e da página do evento). O valor é o do principal e o recebido é a soma dos
-    comprovantes de TODOS os eventos do grupo, cancelados inclusive; nada é movido de lugar. A data
+    comprovantes de TODOS os eventos do grupo, cancelados inclusive; nada é movido de lugar (a
+    cobrança soma na leitura; só a passagem da venda da 306 move linhas, invariante 20). Desde a 306, o
+    saldo, a quitação, o sinal e a parcela descoberta contam o recebido **menos as devoluções à cliente
+    aprovadas** ligadas a qualquer dia do grupo (`VendaResumo.devolvido` e `recebido_liquido`; o
+    recebido mostrado segue bruto): venda 2.000, pago 1.500 e devolvido 300 dão 800 a receber. A data
     do grupo é a do 1º evento não cancelado e que não é compromisso interno.
     - **"Sem valor" tem duas definições, de propósito**: na Home, vazio, zero ou abaixo de R$ 1,00
       (`event_ops.sem_valor_de_venda`); no Financeiro e na Auditoria, `<= 0`. Não unificar de
@@ -213,7 +269,8 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
     evento ter venda, qualquer comprovante (mesmo sem valor), contrato, escala com talento — menos,
     em SHOW, a vaga automática do técnico de som com o técnico padrão — ou pertencer a grupo
     comercial (principal ou satélite). Comissão já paga **não** segura (decisão do dono, 30/09): o
-    evento vazio é apagado e o estorno sai contra o vendedor, como antes.
+    evento vazio é apagado e o estorno sai contra o vendedor — desde a 306, no primeiro repasse aberto
+    dele (§2, Estorno). A limpeza trava e relê o evento antes de apagar, e o cancelado nunca é apagado.
 14. **Ausência só vale confirmada.** A falta na lista do mês não basta: só 404, 410 ou `status:
     cancelled` na consulta ao próprio evento contam. Inconclusivo não apaga nem marca — na dúvida,
     o evento fica. Mudança de data não é sumiço: o evento presente com outros dados recebe a data
@@ -231,6 +288,75 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
 17. **Relógio de cada carimbo da 303**: `google_missing_since` e `notifications.created_at` em
     horário de parede de São Paulo (`now_sp()`); o `EventLog` novo usa o default UTC do modelo (a
     tela converte); `AuditLog.created_at` é UTC.
+18. **Cancelar tem uma regra de dinheiro só, e não tem volta** (feature 306). O avulso, o marcado pela
+    303, a venda inteira pelo principal e o corte de um dia passam pelo mesmo `cancelar_evento`; a
+    exceção é a venda da Loja Virtual (regime `virtual`), que passa pelo ato sem retido nem devolução e
+    mantém o estorno próprio da loja. O regime e o modo da devolução nunca mudam depois do ato; o
+    cancelado sem linha congelada (anterior à 306) é `legado`. O cancelado não se exclui (409
+    `cancelado`), não se "descancela" e não volta pelo Google (o sync o pula desde a 224); aplicar
+    orçamento nele também dá 409 para todos, porque recriaria venda e acréscimos de uma vez.
+19. **Grupo: cancelar não desagrupa.** No principal com outro dia vivo, o alcance é obrigatório: "todos"
+    cancela todos os dias vivos numa confirmação (o principal em `venda`, os outros em `satelite`, sem
+    dinheiro próprio); "só este dia" no principal faz a passagem (invariante 20). Num dia que não é o
+    principal, só o corte (invariante 21). O dia cancelado **fica no grupo** — é o histórico da venda —
+    e não entra nem sai dele: agrupar com cancelado, desagrupar ou tirar o dia cancelado dá 409
+    `cancelado` para todos, o Superadmin inclusive (`group_ops.recusar_cancelado_no_grupo`). Como
+    `is_group_leader` continua verdadeiro com os outros dias cancelados, quem lê o grupo vivo usa
+    `group_ops.dias_vivos`: o custo de cachês (`_group_cost`, base da EducaManto e CPV), o KPI e os
+    gastos do principal vivo não contam o dia cancelado.
+20. **A passagem muda o dono, não o valor nem a data** (`group_ops.passar_venda`). O novo principal é o
+    dia vivo mais cedo (início, depois id; se mudou enquanto o diálogo estava aberto, 409
+    `grupo_mudou`). Passam as mesmas linhas, só com o `event_id` trocado — nunca apagar e recriar:
+    comprovantes, parcelas, notas, contratos, reembolsos, acréscimos (com o estado do BV), formulários e
+    **todas** as linhas de comissão, pagas e no banco inclusive (`TABELAS_DA_PASSAGEM`), mais a devolução
+    aprovada do antigo e as clientes que faltam no novo; os campos de venda e o nome do grupo passam por
+    `CAMPOS_DA_PASSAGEM`. Quem acrescentar tabela ou campo de venda acrescenta nessas listas. Todo dia
+    passa a apontar para o novo, e o antigo, cancelado, vira satélite dele. Ficam no antigo o elenco, os
+    ensaios (que caem), a logística, o histórico, os outros Gastos Extras e a devolução do próprio ato.
+    A comissão comum segue a data da venda (o mesmo repasse); a EducaManto **a pagar** vai à data do
+    novo 1º dia, pela sincronização de sempre; a DRE segue o evento que guarda a venda (receita,
+    imposto, BV, cachês dos dias vivos e comissão vão ao mês do novo 1º dia, e o BV à Planilha desse
+    mês). A comissão própria que o novo dia já tinha de quando era venda avulsa fica marcada
+    (`NOTA_COMISSAO_PROPRIA_DO_DIA`) e fora da conta da venda, da sincronização e da comissão exibida.
+21. **Corte de um dia: a venda do grupo diminui e ninguém fica com retido.** O Superadmin informa a
+    venda nova (maior que zero e até a atual) e devolve Parte ou Nada, com teto (pago do grupo − já
+    devolvido) e **piso**: a cliente nunca fica com mais pago do que a venda nova
+    (`cancel_ops._devolucao_minima`). No principal, que segue vivo e na DRE do mês do evento, o valor
+    cheio cai na mesma proporção (o percentual de desconto fica), o BV a pagar acompanha uma vez só
+    (`acompanhar_bv_da_venda`), o pago fica, e a comissão vai ao alvo da venda nova pela reconciliação
+    ("Corte de dia: venda diminuiu") só quando a cheia muda. A devolução nasce ligada ao dia, conta no
+    "já devolvido" do grupo e se corrige pelo "Alterar devolução" do dia, que só refaz o principal se
+    ele já foi cancelado inteiro.
+22. **Cachê pago impede o cancelamento**, por papel nenhum: 409 `cache_pago`, com os dias alcançados que
+    têm cachê pago, e nada é gravado nem avisado. A régua é única (`cancel_ops.cache_pago_do_evento`,
+    que a 2a importa): escalação com artista em pago ou no banco, fora a vaga de presença do técnico de
+    som. Para devolver dinheiro nesse caso, a Devolução se lança em Gastos Extras.
+23. **O ensaio segue o show.** Ensaio não passa pelo cancelar (409 `ensaio`). Todo ensaio dos dias
+    cancelados sai do banco na transação do ato (`event_ops._apagar_ensaio_no_banco`, a mesma do
+    "Cancelar ensaio" e da troca de tipo) e do Google depois do commit, com a mesma trava de ambiente; o
+    histórico do show guarda data, hora e local de cada um. Na passagem, o ensaio do antigo 1º dia cai e
+    não passa ao novo. Ensaio que o Google não apagou volta no próximo sync como ensaio órfão (dívida
+    no `docs/05`).
+24. **Multa ao elenco: um Gasto Extra por escalação** (vaga × dia). O ato congela a lista
+    (`event_cancellation_elenco`: com artista, sem quem recusou o convite e sem a vaga de presença);
+    tirar o artista da vaga depois não apaga a linha nem o direito à multa, e só quem está na lista
+    recebe multa, no ato ou depois (`POST …/multas`, uma por linha). O gasto nasce aprovado e a pagar ao
+    artista (categoria "Multa de cancelamento", PIX do cadastro), ligado ao dia, com a data do ato ou do
+    lançamento — é gasto extra desse mês na DRE e na Planilha. Corrige-se em Gastos Extras, sem trava, e
+    **não mexe em comissão nem em BV**. Vazio ou 0 é "sem multa".
+25. **Permissão: uma regra só para os dados de venda do cancelado** —
+    `cancel_ops.pode_editar_venda_do_cancelado`, o Superadmin pelo papel real (o "Ver como" não conta),
+    aplicada depois da trava e da releitura (em geral por `cancel_ops.recusar_se_cancelado`). Quem passa
+    no gate da porta e não é Superadmin recebe 409 `cancelado`; nas portas que não recongelam, o 409
+    vale para todos. As portas e o 409 de cada uma: `docs/00` §4 e `docs/01` §4.3.
+26. **Avisos do ato.** Cada artista alcançado recebe uma vez o e-mail de remoção que já existe
+    (`send_removal_email`), depois do commit — só quem tem e-mail, nunca quem recusou o convite nem a
+    vaga de presença; no corte, só o elenco daquele dia. Tirar da vaga um artista de evento cancelado
+    **não** manda o e-mail de remoção (`casting_ops._manda_email_de_remocao`): ele já recebeu o do ato.
+    Na transação, dois sinos: a equipe de Ensaio recebe `evento.cancelado` só quando caiu ensaio; o
+    Casting recebe `evento.cancelado_escala` por dia cancelado com escalados (`urgent` a 7 dias ou
+    menos). A `dedupe_key` é a do evento da URL do ato (`cancel_ops._chave_do_sino`): um corte de dia e
+    depois o "todos" dão dois sinos a cada pessoa. Cancelamento recusado não avisa ninguém.
 
 ### Armadilhas
 
@@ -245,7 +371,12 @@ com o tipo do erro, 502 com mensagem fixa — a marca continua.
 - ~~Agrupar/desagrupar só existe no Jinja morto~~ — **desatualizado** (corrigido na 299): desde a
   feature 246 a aba Comercial agrupa, desagrupa, tira satélite e nomeia o grupo
   (`group_ops`, `PATCH|DELETE /api/events/<id>/grupo`). `_delete_event_flow` continua recusando o
-  líder de grupo: para excluir, desagrupar antes.
+  líder de grupo: para **excluir**, desagrupar antes. Para **cancelar**, não (feature 306): pelo
+  principal, "todos" cancela o grupo inteiro e "só este dia" passa a venda; num outro dia, o corte.
+  ⚠️ Desde a 306 **o principal pode mudar**: cancelar só o 1º dia leva a venda ao dia vivo mais cedo
+  (`group_ops.passar_venda`), que vira o principal, e o antigo vira satélite dele — não guarde o id do
+  principal como fixo. O dia cancelado fica no grupo e não entra nem sai dele (409 `cancelado`, também
+  ao Superadmin). Invariantes 19 e 20, acima.
 - ~~Acréscimos, notas e parcelas só têm escrita no Jinja~~ — **desatualizado** desde a 251: a API
   grava (`PUT /api/events/<id>/acrescimos|parcelas`, notas pela aba Comercial), pelo mesmo núcleo
   `comercial_ops` que o Jinja usa.
@@ -312,12 +443,28 @@ Nunca esteve escrita em lugar nenhum. São 9 ramos, em ordem:
    R$ 5.162,26, em agosto/2026). A regra de negócio "venda tem data" mora em
    `event_ops.resolver_data_da_venda` (venda nova sem data → hoje em São Paulo; venda antiga sem
    data não ganha data inventada — é caso do backfill em `specs/267b-hotfix-data-da-venda/`).
-8. Comissão já **paga** nunca é reescrita (`:198`) — é histórico.
-9. Se o evento é líder de grupo, o custo somado inclui os satélites (`_group_cost`, `:79`).
+8. Comissão já **paga** ou **no banco** nunca é reescrita — é histórico (`_sync_commission_payment` só
+   regrava a `a_pagar`). Desde a 306, a diferença que o cancelamento, uma correção do cancelado ou o
+   corte de um dia pedem nasce numa linha nova de ajuste, no primeiro repasse aberto de quem recebeu
+   (invariantes 8 e 10, abaixo). Valor e datas dela nunca mudam; o vínculo (`event_id`) só muda em dois
+   caminhos: a passagem da venda ao novo 1º dia (`group_ops.passar_venda`) e a exclusão do evento, que
+   a desvincula e gera o estorno.
+9. Se o evento é líder de grupo, o custo somado inclui os satélites **vivos**
+   (`comissoes_ops._group_cost`): desde a 306 o dia cancelado sai do custo, da base da EducaManto e do
+   CPV, porque o corte já tirou o dia da venda do grupo (a régua de `group_ops.dias_vivos`).
 
-**Estorno** = `CommissionPayment` com `amount` negativo e `event_id` nulo. Herda o `sale_date` da
-venda original, por isso `_pending_reversals_query` (`comissoes_ops.py:206`) o lista **sem filtro de
-mês** — senão um estorno de março sumiria da tela em abril.
+**Estorno** = o **órfão**: `CommissionPayment` `a_pagar`, negativo, sem evento e ligado à paga que
+estorna (`original_id`) — o que a exclusão de um evento pago deixa (`comissoes_ops.filtro_estorno_orfao`,
+predicado único desde a 306). Desde a 306 ele nasce no **primeiro repasse aberto** do vendedor, com o
+motivo "Exclusão do evento" e sem copiar as datas da venda; os de antes (151, 211) herdaram o `sale_date` da
+venda original, por isso `_pending_reversals_query` lista o órfão **sem filtro de
+mês** e `_estornos_do_mes` o resgata no mês corrente — senão um estorno de março sumiria da tela em
+abril. **Só o órfão** é resgatado: o **ajuste** do cancelado (linha ± com `original_id`, ainda ligada
+ao evento) entra pelo próprio ciclo, e resgatá-lo o mostraria duas vezes. `comissoes_ops.tipo_da_linha`
+diz de cada linha se é comissão, ajuste ou estorno, e o motivo sai do prefixo da nota
+(`MOTIVOS_AJUSTE_COMISSAO`); Comissões e a Planilha mostram tipo e ciclo. ⚠️ Nos dias 1 a 5, o órfão
+novo que caiu no repasse do mês anterior aparece duas vezes na tela de Comissões (no mês anterior, pela
+data, e no corrente, pelo resgate); a Planilha o mostra uma vez (dívida no `docs/05`).
 
 ### A cascata da DRE Gerencial (`_compute_drg`, `routes.py:351`)
 
@@ -329,7 +476,19 @@ vezes) → `− impostos` (`DEFAULT_TAX_RATE = 16%`, só sobre eventos `with_inv
 fora do CPV, para não distorcer a margem) → `− comissões` → `− pessoal` → `EBITDA` → `− gastos
 extras` → `− gastos recorrentes` → `resultado_liquido`.
 
-- **Regime: competência pela data do evento** (`start_at`), não pela venda nem pelo recebimento.
+**Com cancelado no período (feature 306)**, a cascata ganha quatro parcelas, todas pelo mês do
+**cancelamento** e da mesma fonte na API e no Jinja (`cancel_ops.cancelados_do_periodo` →
+`totais_cancelamentos`, passadas a `_compute_drg(…, cancelamentos=)` só no Realizado e no Total): o
+**retido** soma na `receita_bruta` (linha própria "Retido de cancelamentos", logo abaixo), o **imposto
+informado** no ato soma em `impostos` (nunca alíquota × retido), o **BV do retido** soma no `CPV` e a
+**comissão do retido** em `comissões`. Os `gastos extras` saem de `dre_ops.gastos_extras_do_periodo`,
+sem a devolução de evento cancelado, que já está descontada no retido. A condição é a **quantidade**
+de cancelados, nunca o valor: somar `Decimal("0.00")` muda o expoente, e a DRE dos meses sem cancelado
+deixaria de sair idêntica à de antes. `retido_cancelamentos` e `n_cancelados` saem sempre; `n_eventos`,
+`n_normais` e `n_permutas` não contam o cancelado.
+
+- **Regime: competência pela data do evento** (`start_at`), não pela venda nem pelo recebimento —
+  salvo o cancelado, que sai do mês do evento e entra pelo do cancelamento (parágrafo acima).
   Recebimentos previstos (`:602-621`) são informativos de caixa e **não** alteram receita reconhecida.
 - **Fator R** (`:481-484`): folha ÷ faturamento; acima de 28% a empresa fica no Anexo III (rótulo 6%),
   abaixo cai para o Anexo V (rótulo 15,5%). São **rótulos de exibição**, não entram em conta.
@@ -358,10 +517,16 @@ assinatura) nunca vira pendência (`:1075-1081`).
   item misto devolvia a "a pagar" o que já tinha saído, e a ressincronização o recalculava pela venda
   de hoje — o vendedor aparecia devendo o valor cheio. O valor pago gravado e o lote são da 1e.
 - ✅ **Feature 267 fechou os quatro defeitos abaixo.** Hoje a comissão exibida no evento vem de
-  `comissoes_ops.comissao_exibida_do_evento` (linha real → regra canônica → 0 se cancelado), a
+  `comissoes_ops.comissao_exibida_do_evento` (0 se cancelado → linha real → regra canônica), a
   mesma função na API e no Jinja; e a liquidação, das quatro cópias, vem de
   `comissoes_ops.liquidar_periodo`, que usa a **mesma** expressão de ciclo que monta o item. O que
   segue documentado é o estado ANTERIOR — mantido porque explica o porquê das funções existirem.
+  **No cancelado (feature 306)** o número da tela não sai desta função: o detalhe da API não manda
+  `kpi` (ele contaria a devolução como custo e o BV cheio) e mostra a comissão do retido, do bloco
+  `cancelamento` (`cancel_ops.resumo_cancelado`). O zero continua na função, porque sem ele o fallback
+  inventaria a comissão cheia de uma venda que não houve; a tela Jinja do evento cancelado mostra esse
+  0 (P-28, dívida no `docs/05`). A linha real ignora a comissão própria do novo 1º dia, marcada na
+  passagem (`NOTA_COMISSAO_PROPRIA_DO_DIA`).
 - **A comissão tem 4 implementações divergentes.** `routes.py:120` (a completa),
   `app/api/agenda_read.py:245` (`_compute_kpi` — desconta BV mas ignora EducaManto, Loja Virtual e
   `receives_commission`, e usa **2%** de padrão), `app/calendar/routes.py:1752` (idem) e o filtro SQL
@@ -392,7 +557,65 @@ assinatura) nunca vira pendência (`:1075-1081`).
 2. **Permuta/cortesia não gera receita, mas gera custo** — o cachê sai do CPV e entra em Marketing.
 3. **BV é repasse a terceiro**, nunca receita.
 4. **Loja Virtual não comissiona.**
-5. **Comissão paga é histórico** — nunca reescrita por recálculo.
+5. **Comissão paga (ou no banco) é histórico** — nunca reescrita por recálculo.
+6. **O cancelado entra pelo que ficou, no mês do cancelamento** (feature 306). O **retido** (pago −
+   devolvido do grupo, nunca negativo) entra na receita, o imposto informado nos impostos, o BV do
+   retido no custo e a comissão do retido nas comissões — nas DREs Realizado e Total, na API e no
+   Jinja, ao centavo (a cascata, acima) —, e o retido soma na Tendência do mês do cancelamento. A venda,
+   os cachês e o evento do cancelado não aparecem no mês do evento, e o Projetado não muda. Fonte única
+   da DRE, do Dashboard Comercial, de `/admin/desempenho` e da página de Cancelamentos:
+   `cancel_ops.cancelados_do_periodo` (pela data de `cancelled_at`, fora a Loja Virtual) sobre o resumo
+   em lote `resumos_cancelados`; nenhuma tela refaz a conta. Só o regime `venda` e o `legado` (cancelado
+   de antes da 306: comissão 0, imposto 0, BV só o pago) trazem dinheiro; `satelite` e `dia` entram com
+   zero e não contam em `n_cancelados`, que conta vendas, não dias — o que a Manto retém do dia cortado
+   já está na venda nova do principal, no mês do evento. Cancelado sem pago nem devolvido fica fora. O
+   retido conta como venda do **vendedor congelado** (total vendido, Top Vendedores, desempenho, ficha
+   da cliente) e a comissão do retido na comissão prevista do **beneficiário congelado**; ticket médio,
+   eventos fechados e desconto concedido contam só venda viva.
+7. **A devolução de cancelado nunca é gasto na DRE.** `dre_ops.gastos_extras_do_periodo` (a conta única
+   da API e do Jinja) tira dos gastos extras toda devolução ligada a evento cancelado, de qualquer
+   regime — a do dia cortado e a lançada antes do ato inclusive —, porque ela já está descontada no
+   retido; a multa ao elenco e a devolução de evento vivo continuam gasto. A devolução é reconhecida por
+   categoria + evento + aprovação (`cancel_ops.filtro_devolucao`), nunca pelo tipo de destinatário, que
+   a tela edita. Ela nasce como Gasto Extra **aprovado** e a pagar e fica **travada** nas seis portas de
+   Gastos Extras: valor, data, categoria, vínculo e exclusão só mudam pelo "Alterar devolução" (409
+   `devolucao_travada`, `gastos_ops.GastoLockedError`); nome, PIX e descrição são livres, e o estado de
+   pagamento é da Planilha.
+8. **Comissão do cancelado = cheia × retido ÷ venda, com teto na cheia**
+   (`comissoes_ops.comissao_do_retido`, pela mesma conta de proporção do BV, `quote_ops.bv_que_acompanha`:
+   retido a um centavo da venda vale a cheia). A cheia tem uma definição só, `comissao_cheia_do_evento`:
+   o portão do beneficiário (Loja Virtual, sem beneficiário, `receives_commission` falso ou
+   cortesia/permuta → 0) sobre `_base_da_comissao`, o corpo intocado de `_event_commission` — a comissão
+   do evento vivo não mudou número. A **taxa** do ato fica congelada e não acompanha a padrão das
+   Configurações; só a correção da taxa do próprio cancelado a troca. A reconciliação
+   (`reconciliar_comissao_do_cancelado`) mantém, por beneficiário, Σ(a pagar + no banco + pago) = alvo —
+   a comissão do retido para o beneficiário congelado, 0 para todo outro com linha viva no evento: a
+   `a_pagar` mais antiga recebe a falta no lugar, sem mudar de data, e as outras são canceladas; sem
+   `a_pagar`, nasce uma linha de ajuste (±, `original_id` = a paga que ela acerta, o motivo de
+   `MOTIVOS_AJUSTE_COMISSAO` no começo da nota) no **primeiro repasse aberto** de quem recebeu
+   (`primeiro_repasse_aberto`: nos dias 1 a 5, o mês anterior, se ele ainda tem ali linha que abre
+   ciclo; senão o corrente; nunca reabre ciclo liquidado). A sincronização (`_sync_commission_payment`)
+   relê `cancelled_at` e não toca linha de evento cancelado, e nunca toma um ajuste (nem a comissão
+   própria marcada na passagem) por "a comissão do evento".
+9. **BV do retido.** O BV a pagar do cancelado vale BV cheio congelado × retido ÷ venda, com teto no
+   cheio — calculado na leitura, nunca gravado; zero some da Planilha. BV pago ou no banco **nunca é
+   reescrito nem escondido**, em regime nenhum: fica pelo valor pago (`event_cancellation_bvs.paid_amount`,
+   gravado no ato ou quando a Planilha o marca) e, desfeito o pago, volta ao proporcional. Fonte única:
+   `cancel_ops.bv_da_planilha` (Planilha nova e antiga, resumo e custo da DRE). Na **Planilha** o BV
+   fica no mês do **evento**; na **DRE**, entra no mês do cancelamento. Marcar BV, nas duas Planilhas,
+   passa por `cancel_ops.marcar_status_do_bv`, que trava o evento antes do acréscimo: valor esperado
+   diferente → 409 `valor_mudou`; BV que não está a pagar → 409 `bv_nao_esta_a_pagar`. A multa ao elenco
+   não mexe no BV, e corrigir a venda ou a taxa não muda o BV cheio congelado.
+10. **Congelado: nada se recalcula da venda viva.** No ato, `event_cancellations` guarda venda, cheia,
+    taxa, custo de cachês da EducaManto (`commission_cost`), beneficiário, vendedor, nota e imposto, e
+    `event_cancellation_bvs`, recebedor, PIX e BV cheio de cada BV. Pago e devolvido **nunca** são
+    congelados: são lidos ao vivo, somando os ids do grupo por consulta (`cancel_ops.ids_do_grupo`,
+    nunca `leader.satellites`), para que corrigir comprovante ou devolução refaça as contas. Toda
+    correção do Superadmin refaz retido, comissão e BV do retido na mesma transação, a partir do
+    congelado (`reaplicar_cancelado`; na aba Comercial e nos acréscimos, `recongelar_do_comercial`
+    recalcula a cheia pelos insumos congelados); o comprovante não recalcula a cheia, para que
+    Configurações mudadas depois do ato não alcancem o cancelado. Trocar o vendedor passa o retido e a
+    comissão do retido ao novo; o antigo devolve o que recebeu, no primeiro repasse aberto dele.
 
 ---
 

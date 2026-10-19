@@ -34,8 +34,9 @@ const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" |
 
 /**
  * Fila do Superadmin (feature 224): pedidos de exclusão do Comercial aguardando decisão, e o
- * histórico dos eventos cancelados com a situação da devolução. É por aqui que se chega a um
- * evento cancelado — ele sumiu da agenda de propósito.
+ * histórico dos eventos cancelados com a situação da devolução. É a porta principal de um evento
+ * cancelado, que sai da agenda de propósito; Comissões, a ficha da cliente e o sino também levam a
+ * ele (feature 306).
  */
 export function EventosCancelamentosPage() {
   const query = useCancelamentos();

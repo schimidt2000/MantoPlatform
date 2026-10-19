@@ -12,7 +12,7 @@ import {
 import { ApiRequestError } from "@manto/api-client";
 import { formatBRL, MoneyInput } from "@manto/money";
 import type { ResumoCancelado } from "../../lib/agenda";
-import { useAlterarDevolucao } from "../../lib/eventOps";
+import { codigoDaRecusa, useAlterarDevolucao } from "../../lib/eventOps";
 
 const LABEL = "mb-1 block text-xs font-semibold uppercase text-muted";
 const FIELD =
@@ -85,6 +85,12 @@ export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: 
             return;
           }
           if (e instanceof ApiRequestError && e.fields) setErros(e.fields);
+          // O 409 do piso e do teto é sobre o novo total: a frase vai ao campo, não ao rodapé.
+          const codigo = codigoDaRecusa(e);
+          if (codigo === "abaixo_do_piso" || codigo === "acima_do_teto") {
+            setErros({ devolucao_total: e.message });
+            return;
+          }
           setErro(e.message);
         },
       },

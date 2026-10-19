@@ -57,14 +57,17 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
   const todasComMulta =
     Boolean(data.flags.can_edit_venda_cancelado) && elencoDoAto.length > 0 && !elencoDoAto.some((e) => !e.multa);
   const bv = (resumo.bvs ?? []).reduce((soma, b) => soma + (b.conta ?? 0), 0);
+  // O dia cortado e o satélite de um "todos" não têm venda própria: o retido, a comissão e o BV
+  // moram no 1º dia (`principal`). Mostrar "retido R$ 0,00 · sem comissionado" aqui mentiria.
+  const doGrupo = resumo.regime === "dia" || resumo.regime === "satelite";
   const linkComissoes = resumo.comissao ? linkDeComissoes(data.event.id, resumo) : undefined;
 
   return (
     <Panel title="Resultado do cancelamento">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <Card label="Pago pela cliente" value={brl(resumo.pago)} />
+        <Card label={doGrupo ? "Pago no grupo" : "Pago pela cliente"} value={brl(resumo.pago)} />
         <Card
-          label="Devolvido"
+          label={doGrupo ? "Devolvido no grupo" : "Devolvido"}
           value={brl(resumo.devolvido)}
           hint={
             resumo.devolucoes.length > 0
@@ -72,8 +75,15 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
               : "nada a devolver"
           }
         />
-        <Card label="Retido pela Manto" value={brl(resumo.retido)} />
-        {resumo.comissao && (
+        {!doGrupo && <Card label="Retido pela Manto" value={brl(resumo.retido)} />}
+        {resumo.regime === "dia" && resumo.corte && (
+          <Card
+            label="Venda do grupo"
+            value={brl(resumo.corte.venda_depois)}
+            hint={`era ${brl(resumo.corte.venda_antes)} antes do corte`}
+          />
+        )}
+        {resumo.comissao && !doGrupo && (
           <div className="rounded-md border border-line bg-surface-2/60 p-3">
             <div className="text-[10px] font-bold uppercase tracking-wider text-muted">Comissão do retido</div>
             <div className="mt-0.5 text-lg font-semibold tabular-nums text-ink">{brl(resumo.comissao.retido)}</div>
@@ -107,6 +117,19 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
             </li>
           ))}
         </ul>
+      )}
+
+      {doGrupo && resumo.principal && !resumo.venda_passou_para && (
+        <p className="mt-3 text-sm text-ink">
+          {resumo.regime === "dia"
+            ? "A venda continua no 1º dia do grupo, "
+            : "A venda, o retido e a comissão deste cancelamento estão no 1º dia do grupo, "}
+          <Link to={`/events/${resumo.principal.id}?aba=comercial`} className="text-blue underline">
+            {resumo.principal.titulo}
+            {resumo.principal.data ? ` (${dia(resumo.principal.data)})` : ""}
+          </Link>
+          {resumo.regime === "dia" ? ": a comissão e o BV acompanham a venda de lá." : "."}
+        </p>
       )}
 
       {resumo.venda_passou_para && (

@@ -96,8 +96,9 @@ conflito, ela prevalece). Como rodar, publicar e operar: `DEVELOPMENT.md`.
   threads de fundo, e o `manto_local` traz token do Google e credenciais de e-mail REAIS: escreve
   no calendário da empresa e manda e-mail para artista. As travas `_suppress_mail` /
   `_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e
-  `_suppress_calendar_event_writes` só a devolução ao Google (303) — as outras escritas e todas as
-  leituras do Google seguem sem trava (`DEVELOPMENT.md`).
+  `_suppress_calendar_event_writes` só a devolução ao Google (303) e a remoção do Google no
+  cancelamento (306) — as outras escritas e todas as leituras do Google seguem sem trava
+  (`DEVELOPMENT.md`).
 * Verify de escrita confere por conexão separada (o autoflush esconde falta de commit); login só
   por `POST /api/auth/login`; requisições FORA de `app.app_context()`; cookie montado à mão exige
   `test_client(use_cookies=False)`; todo verify de autorização tem um cenário que DEVE falhar.

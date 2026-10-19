@@ -144,7 +144,10 @@ export interface ImpactoElenco {
  * só perguntava "tem certeza?", sem dizer que havia pagamento recebido em jogo.
  */
 export interface ImpactoExclusao {
-  /** `"excluir"` = evento vazio, some de vez; `"cancelar"` = tem dinheiro, o registro fica. */
+  /**
+   * `"excluir"` = evento vazio, some de vez; `"cancelar"` = tem venda, pagamento, contrato ou elenco,
+   * ou está marcado "Sumiu do Google Agenda": o registro fica.
+   */
   acao: "excluir" | "cancelar";
   sale_value: number;
   total_recebido: number;
@@ -347,8 +350,9 @@ function invalidarDoCancelamento(queryClient: ReturnType<typeof useQueryClient>,
 }
 
 /**
- * Cancela o evento (feature 306): congela a venda, devolve à cliente (Tudo, Parte ou Nada), leva a
- * comissão e o BV ao retido e tira o evento do Google Agenda. O registro **não** é apagado.
+ * Cancela o evento (feature 306): congela a venda, devolve à cliente (Tudo, Parte ou Nada),
+ * reconcilia a comissão e o BV (ao retido; num dia só do grupo, à venda nova do grupo), cancela os
+ * ensaios, avisa o elenco e as equipes e tira o evento do Google Agenda. O registro **não** é apagado.
  */
 export function useCancelarEvento(eventId: number) {
   const queryClient = useQueryClient();
@@ -756,7 +760,8 @@ export function useDesagruparEvento(eventId: number) {
  * Tira um satélite a partir da tela do PRINCIPAL (feature 246).
  *
  * Existe para não ser preciso abrir cada satélite: o maior grupo do sistema tem 13. E é o que
- * destrava cancelar um evento principal, que o sistema recusa enquanto houver satélites.
+ * destrava excluir um evento principal, que o sistema recusa enquanto houver satélites. Cancelar o
+ * principal já pode (feature 306), e o dia cancelado não sai do grupo.
  */
 export function useRemoverSatelite(leaderId: number) {
   const queryClient = useQueryClient();

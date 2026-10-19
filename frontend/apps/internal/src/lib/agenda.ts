@@ -424,7 +424,10 @@ export interface EventoDetalhe {
     location: string | null;
     confirmed: boolean;
     confirmed_by: string | null;
-    /** Preenchido = evento cancelado (feature 224): sai da agenda e de toda métrica. */
+    /**
+     * Preenchido = evento cancelado (features 224 e 306): sai da agenda; o retido (pago − devolvido)
+     * conta na DRE e no Comercial pelo mês do cancelamento.
+     */
     cancelled_at: string | null;
     cancelled_by: string | null;
     cancellation_reason: string | null;

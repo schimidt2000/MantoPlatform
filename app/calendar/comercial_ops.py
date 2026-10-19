@@ -802,7 +802,9 @@ def acompanhar_bv_da_venda(
     - **em %**: a régua de `valor_do_bv_percentual` sobre a venda e a nota novas;
     - venda que vai a "Valor a definir" ou cortesia: nada muda; na volta a um valor, o BV em % é
       recalculado (é % do preço) e o em reais fica, com o aviso "confira o BV";
-    - pago ou no banco: intacto. Evento cancelado ou satélite: nada (o cancelamento é da 1b).
+    - pago ou no banco: intacto. Evento cancelado ou satélite: nada aqui. O BV do cancelado
+      acompanha o retido pelo `cancel_ops`, e o do corte de um dia acompanha a venda nova do grupo
+      (`bvs_que_acompanham`, feature 306).
 
     Args:
         event: O evento, já com a venda e a nota novas atribuídas.

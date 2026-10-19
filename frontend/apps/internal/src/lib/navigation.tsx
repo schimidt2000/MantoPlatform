@@ -491,8 +491,9 @@ const SECTIONS: NavSectionConfig[] = [
         isVisible: (user) => hasRole(user, "SUPERADMIN"),
       },
       {
-        // Feature 224: é a única porta de entrada para um evento cancelado — ele sai da agenda
-        // de propósito, e é aqui que se vê o pedido do Comercial esperando decisão.
+        // Feature 224: a porta principal de um evento cancelado — ele sai da agenda de propósito
+        // (desde a 306, Comissões, a ficha da cliente e o sino também levam a ele) —, e é aqui
+        // que se vê o pedido do Comercial esperando decisão.
         key: "events-cancelamentos",
         label: "Exclusões e cancelamentos",
         href: "/events/cancelamentos",

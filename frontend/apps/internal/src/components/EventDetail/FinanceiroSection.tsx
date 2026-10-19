@@ -252,6 +252,10 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
     );
   }
   const recebido = cobranca.recebido ?? 0;
+  // Feature 306 (FR-074): no evento cancelado a venda acabou, e nada falta receber. Só o dia cortado
+  // de um grupo que segue vivo (regime `dia`) continua mostrando o que falta da venda do grupo.
+  const semFalta =
+    cobranca.quitado || (Boolean(data.event.cancelled_at) && data.event.cancelamento?.regime !== "dia");
   // Cortesia ou permuta não é venda: nada de "de R$ 0,00 — falta R$ 0,00" nem "Quitado".
   const cortesia = Boolean(cobranca.cortesia);
   if (cobranca.escopo === "grupo_outro") {
@@ -280,7 +284,7 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
               Recebido no grupo {brl(recebido)}
               {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
               {brl(cobranca.valor ?? 0)}
-              {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+              {!semFalta && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
             </>
           )}
         </span>
@@ -310,7 +314,7 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
         Recebido {brl(recebido)}
         {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
         {brl(cobranca.valor ?? 0)}
-        {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+        {!semFalta && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
       </span>
       <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
     </span>

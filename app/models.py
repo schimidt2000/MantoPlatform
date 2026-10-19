@@ -290,10 +290,11 @@ class CalendarEvent(db.Model):
     # primeira vez que alguém pede o link — nunca o id sequencial, para não ser adivinhável.
     feedback_token = db.Column(db.String(43), unique=True, nullable=True)
 
-    # Cancelamento (feature 224). Evento que já tem dinheiro preso — pagamento recebido,
-    # contrato ou elenco escalado — não é apagado: vira cancelado. Some da agenda e de toda
-    # métrica, mas o registro fica, porque é a ele que a devolução ao cliente se refere.
-    # Excluir de verdade continua valendo para evento vazio (criado por engano).
+    # Cancelamento (features 224 e 306). Evento que já tem venda, pagamento, contrato ou elenco
+    # escalado não é apagado: vira cancelado. Sai da agenda e das métricas do evento, mas o
+    # registro fica: é a ele que a devolução se refere, e o retido (pago − devolvido) entra na
+    # DRE e no Comercial pelo mês do cancelamento (`cancel_ops.resumo_cancelado`). Excluir de
+    # verdade continua valendo para evento vazio (criado por engano).
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     cancellation_reason = db.Column(db.Text, nullable=True)
@@ -398,7 +399,7 @@ class CalendarEvent(db.Model):
 
     @property
     def is_cancelled(self) -> bool:
-        """True se o evento foi cancelado (feature 224) — o registro existe, mas não conta.
+        """True se o evento foi cancelado (feature 224) — o registro existe; só o retido conta.
 
         Cancelado não aparece na agenda nem nas métricas de venda e de casting. O dinheiro que a
         Manto reteve (pago − devolvido) entra na DRE, no Comercial e na comissão pelo mês do
@@ -970,11 +971,12 @@ class CommissionPayment(db.Model):
     event_id    = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     event_title = db.Column(db.String(500), nullable=False)  # cópia: persiste mesmo se evento for deletado (500: feature 254)
     seller_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # Ajuste e estorno (feature 306): `sale_date` = `payable_from` = o primeiro repasse aberto.
     sale_date   = db.Column(db.Date, nullable=True)          # data da venda (herda do evento)
     # Feature 109: comissões EducaManto só entram no ciclo de pagamento após a realização do
     # evento — esta é a data da realização. NULL = comissão comum (ciclo pela sale_date).
     payable_from = db.Column(db.Date, nullable=True)
-    amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (estorno)
+    amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (ajuste ou estorno)
     status      = db.Column(db.String(20), nullable=False, default="a_pagar", server_default="a_pagar")
     paid_at     = db.Column(db.Date, nullable=True)
     notes       = db.Column(db.Text, nullable=True)
@@ -1059,7 +1061,10 @@ class SpecialExpense(db.Model):
 
     Fluxo: qualquer colaborador registra (status 'pendente'); só impacta o balanço
     financeiro quando um super admin aprova (status 'aprovado'). O impacto ocorre no
-    período/mês da `expense_date` (regime de competência).
+    período/mês da `expense_date` (regime de competência). Exceções do cancelamento (feature
+    306): a devolução e a multa nascem aprovadas pelo `cancel_ops`, e a devolução de evento
+    cancelado não pesa na DRE pela `expense_date` — já está descontada no retido, que conta no
+    mês do cancelamento.
     """
     __tablename__ = "special_expenses"
     __table_args__ = (
@@ -1108,8 +1113,9 @@ class SpecialExpense(db.Model):
     # (feature 128).
     paid_at_creation  = db.Column(db.Boolean, default=False, nullable=False)
 
-    # Vínculo opcional a um evento: gasto aprovado entra como custo do evento
-    # (lucro do evento = venda − cachês − gastos extras aprovados)
+    # Vínculo opcional a um evento: gasto aprovado entra como custo do evento vivo
+    # (lucro = venda − cachês − gastos extras aprovados dos dias vivos); a devolução e a multa de
+    # um dia cancelado ficam fora do lucro do contrato (feature 306)
     event_id          = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
 
     # Vínculo opcional a um pedido de produção de figurino (feature 225). Responde "quanto custou

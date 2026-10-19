@@ -19,7 +19,8 @@ export interface SumiuDoGoogleBannerProps {
  * Para todos que abrem o evento: a marca, desde quando, e que a edição fica só no sistema — sem
  * dinheiro, sem botão, sem motivo (o resumo vai a todo papel que vê a agenda). Para o Comercial,
  * uma frase a mais: a decisão é do Superadmin. Para o Superadmin (`flags.can_delete`), o que está
- * em jogo, o botão de devolver e o caminho para quem já recriou o evento à mão. O front não decide
+ * em jogo, os botões de devolver e de cancelar (feature 306) e o caminho para quem já recriou o
+ * evento à mão. O front não decide
  * por papel, só por flag.
  */
 export function SumiuDoGoogleBanner({ data, onDevolver, onCancelar }: SumiuDoGoogleBannerProps) {
@@ -51,7 +52,7 @@ export function SumiuDoGoogleBanner({ data, onDevolver, onCancelar }: SumiuDoGoo
   );
 }
 
-/** O que só o Superadmin vê: o quadro, o botão, a linha da próxima entrega e os três passos. */
+/** O que só o Superadmin vê: o quadro, os botões de devolver e de cancelar, a frase de qual usar e os três passos. */
 function ParteDoSuperadmin({ data, onDevolver, onCancelar }: SumiuDoGoogleBannerProps) {
   return (
     <div className="mt-3 space-y-3">

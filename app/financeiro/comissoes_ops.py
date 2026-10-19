@@ -480,7 +480,8 @@ def liquidar_item_de_comissao(
 
 
 #: Status de comissão que representam dinheiro vivo (o que será ou já foi pago). `cancelado`
-#: fica de fora: é linha de evento cancelado, sem movimentação.
+#: fica de fora: é linha anulada (sem comissão elegível, excedente da reconciliação ou evento
+#: excluído), sem movimentação. A linha do evento cancelado continua viva, com o retido (306).
 _STATUS_VIVOS = ("a_pagar", "no_banco", "pago")
 
 
@@ -494,10 +495,11 @@ def comissao_exibida_do_evento(event, settings) -> tuple[Decimal, str]:
 
     Três camadas, nesta ordem:
 
-    1. **Evento cancelado → 0.** O cancelamento esvazia o backref (a linha e o estorno ficam com
-       `event_id` nulo), então sem esta guarda o fallback voltaria a inventar número exatamente
-       onde o financeiro já estornou. A regra canônica sozinha NÃO protege: quem checa
-       cancelamento é a sincronização, não o cálculo.
+    1. **Evento cancelado → 0.** A comissão do cancelado é a do retido e mora no resumo
+       (`cancel_ops.resumo_cancelado`); as linhas continuam ligadas ao evento e se acertam pela
+       reconciliação (feature 306). Sem esta guarda, o fallback inventaria a comissão cheia de
+       uma venda que não houve. A regra canônica sozinha NÃO protege: quem checa cancelamento é
+       a sincronização, não o cálculo.
     2. **Linha real**, quando existe: é o que o Financeiro efetivamente vai pagar — e, se já foi
        pago, é histórico congelado que não deve mais acompanhar a venda.
     3. **Regra canônica** como reserva, nunca a fórmula flat: ela já devolve 0 para Loja Virtual
@@ -563,8 +565,9 @@ def _is_mes_corrente(month: str) -> bool:
 def _pending_reversals_query(seller_id: int | None = None):
     """Estornos órfãos pendentes (`filtro_estorno_orfao`), sem filtro de mês.
 
-    Um estorno herda o `sale_date` da venda original, que costuma cair num mês já quitado — sem
-    esta consulta ele ficaria invisível e nunca seria descontado (feature 187). Quem chama é que
+    O estorno de antes da feature 306 herdou o `sale_date` da venda original, que costuma cair
+    num mês já quitado — sem esta consulta ele ficaria invisível e nunca seria descontado
+    (feature 187). O de agora já nasce no primeiro repasse aberto (FR-036). Quem chama é que
     decide **onde** exibi-lo: hoje só no mês corrente, via `_estornos_do_mes` — trazê-lo para
     todos os meses fazia o mesmo estorno reaparecer em cada tela e derrubar o total de meses que
     não tinham nada com ele.
@@ -628,9 +631,9 @@ def _estornos_do_mes(month: str, seller_id: int | None) -> list[CommissionPaymen
     todos, um estorno de julho derrubava também o total de abril — meses que não tinham nada a
     ver com ele — e a mesma linha reaparecia em cada tela, parecendo comissão ressuscitada.
 
-    O estorno não se perde: fica no mês corrente até ser liquidado. E o mês da venda original
-    continua mostrando-o pela via normal (`_month_scoped_query`), porque a `sale_date` dele é a
-    da venda estornada.
+    O estorno não se perde: fica no mês corrente até ser liquidado. E o mês do `sale_date` dele
+    continua mostrando-o pela via normal (`_month_scoped_query`): no estorno de antes da feature
+    306, o mês da venda estornada; no de agora, o do primeiro repasse aberto (FR-036).
 
     Feature 306: só o estorno **órfão** (`filtro_estorno_orfao`, o da exclusão). O ajuste do
     cancelado nasce no primeiro repasse aberto, ligado ao evento, e entra pelo ciclo dele.
@@ -846,8 +849,10 @@ def pay_seller_month(seller_id: int, month: str, actor: User) -> PayoutResult:
 #
 # São nove ramos de decisão até o valor final: Loja Virtual não comissiona, beneficiário pode ser
 # o responsável EducaManto em vez do vendedor, EducaManto calcula sobre o LUCRO (venda − BV −
-# cachês) e o resto sobre a venda, BV sempre sai da base, evento cancelado não comissiona, custo
-# de líder de grupo agrega os satélites, e comissão já paga nunca é reescrita.
+# cachês) e o resto sobre a venda, BV sempre sai da base, evento cancelado comissiona só o retido
+# (`comissao_do_retido`, pela reconciliação do ato — nenhuma sincronização a reescreve), custo
+# de líder de grupo agrega os satélites vivos (o dia cancelado fica fora), e comissão já paga
+# nunca é reescrita.
 # ─────────────────────────────────────────────────────────────────────────────
 
 DEFAULT_COMMISSION = Decimal("2.5")
@@ -1592,7 +1597,7 @@ def _resync_pending_commissions() -> None:
     """Reconcilia as comissões A PAGAR com o cálculo atual do evento (mesma base da aba comercial).
 
     Evita divergência quando a taxa muda depois de a comissão ter sido registrada. Não altera
-    comissões já pagas (histórico) nem estornos (valores negativos).
+    comissões já pagas (histórico) nem linhas negativas (ajuste ou estorno).
 
     Feature 306 (Travas, item 4): percorre os eventos por id, cada um sob `FOR NO KEY UPDATE SKIP
     LOCKED`, relê `cancelled_at` e commita por evento. O evento que um ato (ou uma correção) tem

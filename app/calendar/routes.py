@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta, date
+from datetime import UTC, datetime, timedelta, date
 from decimal import Decimal
 import calendar as cal
 import json
@@ -333,9 +333,9 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str |
         _clear_event_side_tables(ensaio.id)
     _clear_event_side_tables(event.id)
 
-    # Comissões (pendente → cancelada; paga → estorno negativo). A regra mora em `cancel_ops`
-    # para que o cancelamento use exatamente a mesma — ela não pode existir só no caminho que
-    # apaga o evento (feature 224).
+    # Comissões da exclusão (pendente → cancelada; paga ou no banco → estorno órfão negativo,
+    # no primeiro repasse aberto). Mora em `cancel_ops`, mas só a exclusão a usa: desde a feature
+    # 306 o cancelamento reconcilia a comissão pelo retido.
     from app.calendar.cancel_ops import aplicar_estorno_comissao
 
     aplicar_estorno_comissao(event)
@@ -416,7 +416,6 @@ def google_connect():
 @calendar_bp.route("/google/callback")
 @login_required
 def google_callback():
-    state = session.get("google_oauth_state")
     redirect_uri = _oauth_redirect_uri()
 
     flow = build_flow(redirect_uri)
@@ -1664,7 +1663,7 @@ def event_detail(event_id: int):
     for log in raw_logs:
         dt = log.created_at
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         dt = dt.astimezone(tz_sp)
         logs.append(
             {
@@ -2174,7 +2173,6 @@ def _ensure_sound_technician(event_id: int) -> None:
 def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> list[str]:
     """Retorna lista de strings descrevendo o que mudou (data/hora/local)."""
     changes = []
-    tz_sp = ZoneInfo("America/Sao_Paulo")
 
     old_start = _dt_naive(event.start_at)
     chk_start = _dt_naive(new_start)
@@ -2570,8 +2568,8 @@ def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
 
     Retorna o dict com os dados ou {} em caso de falha/sem API key.
     """
-    import urllib.request
     import json as _json
+    import urllib.request
 
     if not event.location:
         return {}
@@ -2904,13 +2902,18 @@ def _compute_performer_caches(
     ``_create_roles_from_input`` grava em ``EventRole.cache_cap_note`` para o superadmin
     entender de onde saiu o teto, em vez de ver só um número que ninguém sabe explicar.
     """
-    from app.orcamento.pricing import (
-        cache_na_faixa, get_ator_prices, get_cantor_prices, get_especial_prices,
-        get_coordenador_prices, get_tecnico_prices, calcular_maquiador,
-        compute_show_pricing,
-    )
     from app.orcamento import produtos as _produtos
     from app.orcamento import settings as _orc_cfg
+    from app.orcamento.pricing import (
+        cache_na_faixa,
+        calcular_maquiador,
+        compute_show_pricing,
+        get_ator_prices,
+        get_cantor_prices,
+        get_coordenador_prices,
+        get_especial_prices,
+        get_tecnico_prices,
+    )
 
     performers     = snapshot.get("performers", [])
     coordenador_qty = int(snapshot.get("coordenador_qty", 1) or 1)
@@ -4295,7 +4298,7 @@ def _can_ensaio(user) -> bool:
 def ensaio_upload_material(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    event = CalendarEvent.query.get_or_404(event_id)
+    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
 
     file = request.files.get("material_file")
     label = request.form.get("label", "").strip()
@@ -4345,7 +4348,7 @@ def ensaio_upload_material(event_id: int):
 def ensaio_add_link(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    event = CalendarEvent.query.get_or_404(event_id)
+    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
 
     url   = request.form.get("link_url", "").strip()
     label = request.form.get("link_label", "").strip()

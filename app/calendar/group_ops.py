@@ -37,8 +37,10 @@ um cancelado, desagrupar um dia cancelado ou removê-lo pelo principal é recusa
 `cancelado`, também para o Superadmin. As duas portas travam e releem os eventos em ordem de id
 antes de decidir, na mesma ordem do ato. `dias_vivos` é a régua única de leitura do grupo sem os
 dias cancelados (custo, gastos e KPI do principal vivo). `passar_venda` leva a venda do antigo 1º
-dia ao novo quando só o 1º dia é cancelado: as mesmas linhas, com o mesmo valor e as mesmas datas
-— só o `event_id` muda.
+dia ao novo quando só o 1º dia é cancelado, e o principal muda: os campos de venda e o nome do grupo
+passam ao novo, todo dia passa a apontar para ele e o antigo, cancelado, vira satélite. As linhas
+(comprovantes, parcelas, comissão…) são as mesmas, com o mesmo valor e as mesmas datas: só o
+`event_id` delas muda.
 """
 
 from __future__ import annotations

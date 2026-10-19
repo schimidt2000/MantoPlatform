@@ -5,6 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **306-dinheiro-do-cancelamento** (migration `c5d2f7a9e306`, três tabelas novas; **pronta para o
+> merge, ainda NÃO publicada** — cancelar devolvendo o dinheiro: o retido entra na DRE, na comissão
+> e no BV; absorve a 224g) — antes dela pós-feature
 > **309-produtos-de-tabela** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~09:15** pelo merge
 > `merge: 309 — …` sobre a `main` `98192e8`, a pedido do dono, em horário comercial — a Visita Mágica
 > vira produto de tabela com preço fixo fora do markup e os cachês de "Papai Noel"/"Ajudante do Noel"
@@ -136,6 +139,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **306-dinheiro-do-cancelamento** | *(pronta para o merge, ainda NÃO publicada)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
 | **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
 | **308-casting-sem-compromisso-interno** | *(EM PRODUÇÃO 19/10 ~22:15)* Os painéis Casting e Figurino da Home deixam de listar evento marcado com 🟧/🟠 (compromisso interno — a mesma marca da 299), o que tira também o `🟧 - ENSAIO` que escapava do filtro de ensaio pelo hífen. O SUPERADMIN ganha **Dispensar** na linha e **Restaurar** na lista de dispensados, direto da Home; Casting não dispensa (decisão do dono) | 2026-10-19 | `—` | (aqui) | — |
 | **307-natal-papai-noel-calculadora** | *(EM PRODUÇÃO 16/10 ~01:25)* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
@@ -280,12 +284,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
-| Financeiro, comissões e pagamentos | 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
+| Financeiro, comissões e pagamentos | 306, 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 309, 307, 305, 262, 214, 191 (orçamento), 190 |
 | Portal do Artista | 303 (aviso "em confirmação"; cancelado fora da avaliação), 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
@@ -311,6 +315,101 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 306 — Cancelar devolvendo o dinheiro: o que a Manto retém entra na DRE, na comissão e no BV na mesma proporção   (306-dinheiro-do-cancelamento · 2026-10-19 · migration `c5d2f7a9e306`)
+
+> **Pronta para o merge, ainda NÃO publicada** — o merge e o push são do pedido do dono. Item 1b do
+> backlog de setembro (2ª das três entregas da 303; absorve a **224g**). Commits: `8ba8358`…`70211db`
+> (spec, clarify, plano, checklists, tasks, analyze), `9ab4d49` verify antes do núcleo, `d43c961`
+> fundação, `f8969f5` H1, `10faded` H2, `d777463` H3, `5e6103f` H4, `7c11364` H5, `daa4c17` H6 e o
+> polimento. `verify_306.py` 59/59 cenários (86/86 linhas) com todas as variantes e mutações
+> quebrando; `--regressao` com os 17 verifies antigos iguais à base (266 7/9 e 273 8/15 já vermelhos
+> na base). Sem script nem variável de ambiente nova para o dono (SC-014).
+
+**Motivação.** O dono, em 29/09: "evento cancelado e com 600 devolvido aparecendo como −600, sendo
+que ele é +400". A devolução virava gasto extra no mês do cancelamento e o retido (pago − devolvido)
+não aparecia em mês nenhum. A comissão já paga virava estorno com a **data da venda** e caía num
+repasse que já tinha saído (o estorno 211, −R$ 92,39, nasceu em 17/09 com data de 21/08 — a 224g); a
+"no banco" era paga cheia e a "a pagar" era cancelada inteira; abrir Comissões ou a Planilha zeraria
+qualquer comissão do retido. O BV do cancelado continuava na Planilha pelo cheio. Venda de vários
+dias só se cancelava desagrupando, o marcado "Sumiu do Google Agenda" não se cancelava (409
+`sumiu_do_google`, "próxima entrega" da 303) e o cancelado não tinha como ser corrigido.
+
+**O que mudou.**
+- **Banco** (aditiva, só `create_table`): `event_cancellations` (um por evento, `UNIQUE(event_id)`:
+  regime `venda`/`satelite`/`dia`/`virtual`, modo da devolução, venda, comissão cheia, taxa, custo,
+  imposto, vendedor congelado, `sale_handed_over`, venda antes/depois no corte),
+  `event_cancellation_bvs` (o BV congelado por acréscimo, com recebedor e PIX) e
+  `event_cancellation_elenco` (uma linha por escalação × dia, com o Gasto Extra da multa).
+  Cancelado sem linha é `legado` e segue lido como antes.
+- **O ato** (`cancel_ops.cancelar_evento`): devolução **Tudo, Parte ou Nada** com prévia (o retido, a
+  comissão e o BV do retido, o efeito em cada linha), recebedor e PIX do BV e imposto (com nota)
+  obrigatórios; congela venda, BV e elenco; a devolução nasce como Gasto Extra **aprovado** e
+  **travado** (só "Alterar devolução" a muda, entre o piso do que já foi pago e o teto); a comissão
+  e o BV se **reconciliam por beneficiário** (a diferença vira ajuste ligado ao evento, no
+  **primeiro repasse aberto**, nunca no mês da venda); os ensaios dos dias caem; o elenco recebe
+  e-mail, o Casting e o Ensaio recebem sino; o Google sai depois do commit (e pela trava
+  `CALENDAR_SUPPRESS_EVENT_WRITES` fora da produção). Quatro formas: avulso, **todos os dias** do
+  grupo, **um dia** (corte: a venda do grupo diminui, com a devolução mínima) e a **passagem** (cancelar
+  só o 1º dia passa a venda ao dia vivo mais cedo, que vira principal). Cachê pago (ou no banco) em
+  dia alcançado recusa o ato (409 `cache_pago`, nomeando o dia). Multa ao elenco no ato ou depois
+  ("Lançar multa ao elenco"), como Gasto Extra "Multa de cancelamento".
+- **Relatórios**: a DRE (API e Jinja, ao centavo — `dre_ops.py`) ganha a linha **"Retido de
+  cancelamentos"** no **mês do cancelamento**, menos o imposto, o BV e a comissão do retido; a
+  devolução do cancelado sai dos gastos extras; o mês do evento fica sem nada. O retido conta como
+  venda do vendedor **congelado** no Dashboard Comercial, em `/admin/desempenho` e na ficha da
+  cliente. `paineis.cancelamentos` vai sempre no payload (o card é da 1c).
+- **Correção do cancelado** (FR-047, só o **Superadmin real**): comprovantes, devolução, imposto,
+  aba Comercial, acréscimos, parcelas, notas e reembolsos abertos a ele; cada correção recongela e
+  refaz o retido, a comissão e o BV na mesma transação. Os demais papéis levam **409 `cancelado`**
+  depois do gate de hoje.
+- **Comissões e Planilha**: estado **"no banco"** (filtro e card), colunas tipo e ciclo,
+  `commission_lines` no detalhe da Planilha (inclusive as negativas), o BV do retido no mês do
+  evento com recebedor e PIX, a devolução e a multa no mês do cancelamento. A exclusão continua
+  "apagando como hoje", mas o estorno dela nasce no primeiro repasse aberto (FR-036).
+
+**RBAC.** Uma regra só, `cancel_ops.pode_editar_venda_do_cancelado(user)`, pelo papel real (o "Ver
+como" não conta): o papel passa no gate de hoje, o estado recusa com 409. Os dois endpoints novos
+(`PATCH /api/events/<id>/devolucao`, `POST /api/events/<id>/multas`) usam a própria regra como
+gate (403). Onde a porta não recongela ("Editar tudo" com campo de venda, orçamento, exclusão,
+agrupar/desagrupar/soltar dia, ações de dinheiro da tela Jinja), o 409 vale para todos, o
+Superadmin inclusive. Detalhe por porta: `docs/00` §4 e `docs/01` §4.3.
+
+**Rotas.** Novas: `PATCH /api/events/<id>/devolucao`, `POST /api/events/<id>/multas`. Alteradas:
+`POST …/cancelar` (corpo com devolução, BV, imposto, alcance, venda nova e multas; recusas na ordem
+`ja_cancelado` → ensaio → alcance → `sem_outro_dia_vivo` → `grupo_mudou` → `cache_pago` →
+`devolucao_pendente` → campos → `max_devolucao_mudou`; o marcado deixa de dar `sumiu_do_google`),
+`GET …/impacto-exclusao` (a prévia), `GET /api/events/<id>` (o resumo do cancelado no lugar do
+`kpi`), as portas de venda, Gastos Extras, Planilha (`set-status`), Comissões, DRE e relatórios
+comerciais. Contratos: `specs/306-dinheiro-do-cancelamento/contracts/api.md`.
+
+**Mudanças de comportamento intencionais** (plan H3): o ticket médio Jinja e o `sale_count` passam
+a contar o retido; a ficha da cliente mantém o cancelado (marcado, fora do `event_count`); o item
+aberto de comissão de soma zero com linha de valor aparece na Planilha também em mês sem
+cancelamento; o cancelado `legado` sem dinheiro, que hoje se exclui (inclusive pelo sync), passa a
+dar 409 e a ficar; nos `legado`, a DRE do mês perde a devolução dos gastos e a Tendência do mês do
+evento perde a venda e o cachê; a cobrança da Home de venda viva com devolução lançada à mão passa a
+descontá-la. A contagem do dia (`contagem_pre_deploy.py`) mede esses casos antes do push.
+
+**Riscos e pegadinhas.**
+- **Rollback assimétrico.** Depois do primeiro cancelamento real, defeito se corrige para a frente
+  (`306b`): o código antigo zeraria a comissão do retido, regravaria com a cheia o ajuste do corte,
+  voltaria a listar pelo cheio o BV não pago do cancelado e a deixar excluir o cancelado vazio,
+  levando o congelamento junto (CASCADE).
+- **Travas** sempre evento → dependentes (T1 `travar_grupo` … T6 elenco) e **releitura depois de
+  travar** (`docs/00` §6, itens 25 e 26). O deadlock que sobra vira 409 `tente_de_novo`.
+- O `"cancelado"` do 409 (`CODIGO_EVENTO_CANCELADO`) tem o mesmo nome que `sumico_ops.CODIGO_CANCELADO`
+  e `SITUACAO_CANCELADO`: nunca compare um com o outro.
+- Criar `EventCancellation` **sempre pela relação** (`EventCancellation(event=event, …)`): pela
+  coluna, `event.cancelamento` fica `None` na sessão e a resposta sai `legado`.
+- A caixa do evento cancelado diz "Saiu da agenda e das listas de venda e de cobrança; fica na página de
+  Cancelamentos e, marcado, na ficha da cliente": a frase do FR-022 citava o "card do período", que é da 1c
+  (FR-074, nenhum texto aponta para o que não existe). O card volta à frase quando a 1c o entregar.
+- PowerShell lê `--so=16d` como o número 16: no verify, argumento com sufixo vai entre aspas simples.
+- Ensaio que falhou no Google volta pelo sync como órfão (o mesmo do botão "Cancelar ensaio") —
+  registrado no `docs/05`.
+- Revisões adversariais antes dos commits das histórias 5 e 6 (23 e 25 achados; 21 confirmados em
+  cada, corrigidos e reconferidos), cada defeito travado por uma variante do verify.
 
 ### 309 — Produtos de tabela: a Visita Mágica vendida pelo preço da tabela, com os cachês das vagas definidos pela tabela de preços   (309-produtos-de-tabela · 2026-10-19 · sem migration)
 

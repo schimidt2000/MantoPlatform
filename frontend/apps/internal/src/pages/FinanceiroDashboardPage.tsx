@@ -240,7 +240,7 @@ export function FinanceiroDashboardPage() {
     <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Painel Financeiro"
-        subtitle="Resultado mês a mês — regime de competência (data do evento)"
+        subtitle="Resultado mês a mês — regime de competência (data do evento; o retido de cancelamento, a do cancelamento)"
         className="mb-0"
       />
 
