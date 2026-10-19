@@ -28,10 +28,16 @@
 
 ## D3 — Preço fixo por visita (escalar), igual nas quatro colunas, fora da régua
 
-- **Decisão (dono)**: `preco: 2500` (um número). Entra igual em `total_1h..4h`; régua >4h:
-  `total_custom = (total_4h − produtos_total) ÷ 4 × h + produtos_total` em `quote_ops.py:444-446`,
-  `_build_orcamento_prefill` (`routes.py:3248-3253`) e `_total_da_duracao`
-  (`orcamento_evento_ops.py:160-169`) — os três leem `produtos_total` do snapshot.
+- **Decisão (dono)**: `preco: 2500` (um número). Entra igual em `total_1h..4h`; régua >4h por UMA
+  função, `produtos.total_na_duracao(subtotal_4h_pre, produtos_total, h, acrescimos, nota_fiscal)`
+  (data-model §6): a parte líquida do produto fica fixa e os % e a NF reaplicam sobre a coluna custom.
+  Consumidores: venda (`quote_ops.py:440-442`, com o subtotal de 4h capturado antes dos acréscimos),
+  `_build_orcamento_prefill` (`routes.py:3248-3253`), `_total_da_duracao`
+  (`orcamento_evento_ops.py:160-169`, que passa a ler `snapshot_do_orcamento(entry)`) e o BV da duração
+  custom (`acrescimos_do_orcamento`, `:256-270`) — os três últimos derivam o subtotal pré-acréscimos de
+  `entry.total_4h` pela conta inversa (`_conta_inversa`, `:211-229`). **Achado do analyze**: a fórmula
+  ingênua `(total_4h − produtos_total) ÷ 4 × h + produtos_total` escalava a parte de NF/BV do produto
+  (R$ 238 a mais numa Visita + boneco de 6h com NF).
 - **Razão**: "esse valor é para uma visita padrão, com tempo e roteiro pré-determinados; evento de 3h
   com Noel vai para o cálculo normal". Evita inventar 2h–4h (2.750/2.880/3.000 e 10.000/15.000/20.000
   que os arquitetos propuseram não existem na tabela do dono).
@@ -50,11 +56,14 @@
 
 ## D5 — Cachê da vaga `null` = pela tabela vigente na data
 
-- **Decisão**: `cache: null` resolve pela tabela com a faixa da data do evento — especial →
-  `get_especial_prices(label, show=False, faixa=)` + `cache_na_faixa`; coordenador →
-  `get_coordenador_prices(has_show, 1, faixa)`; maquiador → `calcular_maquiador(1)` (`make_1`); ator →
-  `get_ator_prices`. Coluna 1h (a visita é uma unidade), replicada nas 4 colunas (flat). `cache: 650`
-  (número) fixa quando divergir.
+- **Decisão**: `cache: null` resolve pela tabela com a faixa da data do evento e **`has_show = False`
+  sempre** (a Visita não tem show; com um avulso de show no mesmo orçamento o coordenador do produto
+  continua 250) — especial → `label in cfg["especiais"]` ANTES do getter (senão `None`: o getter
+  devolveria zeros e o piso os elevaria a 650), depois `get_especial_prices(label, show=False, faixa=)`
+  + `cache_na_faixa`; coordenador → `get_coordenador_prices(False, 1, faixa)`; maquiador →
+  `calcular_maquiador(1, 0)` (`make_1`; a função exige os DOIS contadores); ator → `get_ator_prices`.
+  Coluna 1h (a visita é uma unidade), replicada nas 4 colunas (flat). `cache: 650` (número) fixa
+  quando divergir.
 - **Razão**: uma fonte só para o cachê — o dono edita Noel 600/1.000 em Itens Especiais/Datas especiais e
   o produto só sabe de preço e composição; evita a duplicação `datas_especiais.natal.cache` ×
   `produto.vagas` (cético: "mesmo artista, mesmo dia, dois tetos").
@@ -111,35 +120,42 @@
 
 ## D10 — Memória: linha tipo `produto`; personalizado; multiplicador
 
-- **Decisão**: tipo novo `produto` na união `MemoriaLinha.tipo` (`lib/orcamento.ts:169-174`) e em
-  `FUNDO` (`MemoriaDeCalculo.tsx:19-25`); linha por exemplar depois de "= Após markup", `valores` iguais
-  nas 4 colunas; linha de "= Após produtos" (subtotal). Personalizado `valor_final`: a filtragem da
-  memória (`quote_ops.py:448-476`) remove as linhas `produto` (o digitado vence; hotfix 210 continua);
-  `multiplicador`: `totals = cache_base × mult + produtos_total`, com a linha `produto` depois de
-  "× Multiplicador".
-- **Razão**: a soma das linhas tem de fechar com o TOTAL (cen_16 da 307); tipo explícito > reaproveitar
-  `pos`/`cache` (que entrariam em `Σcache × markup`).
-- **Alternativas**: tipo `info` (existe no comentário, nunca emitido; `FUNDO` não o tem).
+- **Decisão**: tipo novo `produto` na união `MemoriaLinha.tipo` (`lib/orcamento.ts:173` — a união real
+  é `cache | subtotal | markup | pos | total`, sem "info") e em `FUNDO` (`MemoriaDeCalculo.tsx:19-25`);
+  linha por exemplar depois de "= Após markup", `valores` iguais nas 4 colunas; subtotal "= Após
+  produtos". Invariante nova, codificada no verify: `Σcache × markup + Σproduto + Σpos = TOTAL`.
+  Personalizado `valor_final`: a filtragem da memória (`quote_ops.py:444-472`) remove as linhas `produto`
+  e a subtotal (o digitado vence); `multiplicador`: `totals = cache_base × mult + produtos_total`
+  (invariante `Σcache × mult + Σproduto = TOTAL`), e a validação "Informe valores válidos" continua
+  olhando `cache_base × mult` ANTES de somar o produto (senão um multiplicador zerado passaria).
+- **Razão**: a soma das linhas tem de fechar com o TOTAL (cen_16 da 307 só conhece `cache`/`pos` — a
+  309 escreve a sua); tipo explícito > reaproveitar `pos`/`cache` (que entrariam em `Σcache × markup`).
+- **Alternativas**: tipo `info` (só existe no comentário do backend, `quote_ops.py:190`).
 
 ## D11 — Coordenador: regra única de split
 
-- **Decisão**: `coord_produtos = Σ vagas tipo coordenador dos produtos`; `coordenador_qty_total =
-  max(payload.coordenador_qty, coord_produtos)` (depois de `min_coordenadores`, `quote_ops.py:122-134`);
-  `coordenadores_da_formula = coordenador_qty_total − coord_produtos` entram em
-  `get_coordenador_prices(has_show, n, faixa)` (`:285-287`); no teto, os `coord_produtos` primeiros
-  saem "pela tabela na data" com `cap_note` do produto e os demais como hoje (`routes.py:3015-3047`).
-  `_ensure_coordinator` (`:2080-2092`) não cria vaga extra porque o produto já traz Coordenador.
+- **Decisão**: UMA função `produtos.split_coordenadores(coordenador_qty, min_coordenadores_dos_avulsos,
+  produtos) → (total, da_formula, inclusos)` com `total = max(qty, min_coordenadores, inclusos)` e
+  `da_formula = total − inclusos` — o coordenador do produto conta para o mínimo que um especial avulso
+  exige (BGE: 2 → produto + 1 da fórmula). Venda (`quote_ops.py:122-134`, `:285-287`) e teto
+  (`routes.py:3015-3047`) chamam a mesma função; `quote["coordenadores_inclusos"]` leva o número à tela
+  ("N incluído(s) no produto" não é aviso). No teto, os `inclusos` primeiros saem "pela tabela na data"
+  com `MARCA_PRODUTO` e os demais como hoje. `_ensure_coordinator` (`:2080-2092`) não cria vaga extra
+  porque o label do produto é "Coordenador" (forçado na validação).
 - **Razão**: sem isso o produto cobra 250 × 2,6 por cima dos 2.500 e cria duas vagas.
 - **Alternativas**: produto sem coordenador (rejeitada: a Visita tem coordenador; teto 250/500 vem da
   tabela).
 
 ## D12 — Maquiador incluso; make de avulso é incremento
 
-- **Decisão (dono)**: a vaga Maquiador do produto nasce pela tabela (`make_1` 250), sem cobrar à parte
-  no preço; makes de avulsos no mesmo orçamento: venda cobra `calcular_maquiador(makes_produto +
-  makes_avulsos) − calcular_maquiador(makes_produto)` × 1,5 (incremento), teto da vaga única =
-  `calcular_maquiador(total)`. Noel do produto tem `needs_makeup: true` para o vínculo 273 marcar a
-  vaga.
+- **Decisão (dono + analyze)**: **UMA vaga Maquiador por orçamento**, não uma por produto — teto =
+  `calcular_maquiador(mp + ra, ea)` com `mp` = makes dos produtos (comuns), `ra`/`ea` = makes comuns/
+  especiais dos avulsos (a função exige os dois contadores, `pricing.py:172`); dois Noéis = 300
+  (`make_1` + `make_2_adicional`). O preço do produto não cobra make; a venda cobra só o incremento dos
+  avulsos: `(calcular_maquiador(mp + ra, ea) − calcular_maquiador(mp, 0)) × 1,5` (zero quando só há
+  produto). Noel do produto tem `needs_makeup: true` para o vínculo 273 marcar a vaga. **Achado do
+  analyze**: "um Maquiador por produto" daria tetos diferentes conforme o caminho — a criação cria um
+  `EventRole` por item extra (`routes.py:3588-3612`) e o 273 aplica só o primeiro "Maquiador" (`:733`).
 - **Razão**: 2025 pagou make em 4 de 5 visitas dentro dos 2.500; cliente não paga duas vezes.
 
 ## D13 — Teto honesto; cachê continua nascendo vazio
@@ -154,11 +170,14 @@
 ## D14 — Produto apagado depois da venda
 
 - **Decisão**: venda → `QuoteValidationError("produtos", 'O produto "X" não está mais na tabela…')`
-  (molde `:238-243`); teto (prefill/criação/vínculo) → as vagas do produto saem com `cache_Nh = None` e
-  `cap_note` "produto X não está mais na tabela — teto não aplicado"; `_create_roles_from_input` e
-  `aplicar_equipe_do_orcamento` já toleram cap `None` (`routes.py:3523`; `orcamento_evento_ops.py:701-704`).
-  Produto `ativo: false` continua resolvendo (some só do Combobox).
-- **Razão**: nunca teto 0; nunca 500 na criação do evento.
+  (molde `:238-243`); teto (prefill/criação/vínculo) → as vagas CONGELADAS do produto saem com
+  `cache_Nh = None` e `cap_note` "produto X não está mais na tabela — teto não aplicado"; os três
+  consumidores toleram cap `None` mas DESCARTAM a nota (`routes.py:3531`, `:3596`;
+  `orcamento_evento_ops.py:654`, `:703`) — então a explicação aparece só no prefill de "Novo evento"
+  (`caches[].cap_notes`) e no 400 da venda, e a `EventRole` nasce sem teto e sem nota, como hoje para
+  qualquer cap `None`. Produto `ativo: false` continua resolvendo (some só do Combobox).
+- **Razão**: nunca teto 0; nunca 500 na criação do evento; não mexer nos três consumidores por causa de
+  uma nota.
 
 ## D15 — Janela de deploy
 
@@ -170,43 +189,73 @@
 
 - **Decisão**: `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (`scripts/oneoff/` é
   gitignored; molde `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py`):
-  relatório de `EventRole` com `character_name` ∈ {Papai Noel, Ajudante do Noel}, `cache_cap` ∈ {712,
-  423} (exato), em eventos a partir de 16/10/2026; `--execute` rebaixa para 600/270 só onde
-  `cache_value IS NULL AND talent_id IS NULL`, acrescentando "(teto corrigido pela 309: 712 → 600)" ao
-  `cache_cap_note`; as demais ficam listadas como "conferir à mão". Roda com `MANTO_SEM_THREADS=1`.
+  relatório de `EventRole` com `cache_cap` exatamente 712/423 em eventos `start_at ≥ 16/10/2026`,
+  **qualquer nome** (um Noel apelidado "Noel 2" nasce com o `nome` digitado como `character_name`,
+  `routes.py:2945`); `--execute` rebaixa para 600/270 só "Papai Noel"/"Ajudante do Noel" com
+  `cache_value IS NULL AND talent_id IS NULL`, acrescentando "(teto corrigido pela 309: {antes} →
+  {depois})" ao `cache_cap_note`; nome diferente, cachê digitado ou artista → "conferir à mão". Roda com
+  `MANTO_SEM_THREADS=1`.
 - **Razão**: vínculo 273 nunca rebaixa (`orcamento_evento_ops.py:701-704`); sem o script os eventos
   de dezembro ficam com 712 até alguém editar.
 
 ## D17 — `verify_307.py` reescrito
 
-- **Decisão**: cenários que afirmam 712/2.501/3.601/teto 712 passam a 600/2.210/2.912/teto 600; a
-  config de teste da 307 grava Noel `[600, …]` e passa a afirmar que a carga NÃO troca para 712; a
-  faixa natal (5.010/7.181 para avulsos) continua. A mudança de regra fica registrada no `docs/03`.
+- **Decisão**: cenários que afirmam 712/2.501,20/3.601/teto 712 passam a 600/2.210/2.912/teto 600 —
+  lista completa: cen_01 (:253), cen_02 (:263), cen_10 EducaManto (:428), cen_11 tetos (:507-508),
+  cen_12 migração (:574-578, :652 — passam a afirmar Noel 600, Ajudante [270, 320, 345, 370] e a inversa
+  712→600/423→270), cen_15 legado (:792), docstring (:7-13) e `NOEL_ANTIGO` (:61); a config de teste da
+  307 grava Noel `[600, …]` e Ajudante `[270, …]`; a faixa natal (5.010/7.181 para avulsos) continua. A
+  mudança de regra fica registrada no `docs/03`. O cenário 19 da 309 roda SÓ `verify_307.py
+  --regressao` — ele já encadeia a 305 (rodar as duas com flag faria a 305 rodar duas vezes).
 - **Razão**: a 307 é regressão obrigatória da 309 e o comportamento mudou por decisão do dono.
 
 ## D18 — Telas
 
 - **Calculadora**: card "Produtos de tabela" no topo da coluna direita (antes de Equipe,
-  `OrcamentoCalculadoraPage.tsx:616`): `Combobox` (clearable, `fallbackIcon`) com os produtos `ativo` de
-  `opcoes.data.settings.produtos ?? {}` (description = preço normal), lista de selecionados com
-  `AnimatePresence` (rótulo, chip "preço de tabela"/"estimativa", vagas incluídas, Remover); estado
-  `produtos` em `INITIAL_STATE` (:62-84), `useState` (:179-199), `resetAll` (:273-298), payload
-  (:303-357) e rehydrate (:245-271); `coordenadoresInclusos` para o `PerformersEditor` (prop opcional);
-  avisos de `quote.avisos`; valor único quando as 4 colunas são iguais e só há produto; botão travado
-  (D15).
-- **Resultado** (`OrcamentoResultadoPage.tsx:229-233`): linha "📦 <rótulo> — preço de tabela R$ X"
-  (ou "estimativa") junto das notas.
+  `OrcamentoCalculadoraPage.tsx:616`): `Combobox` de `@manto/ui` (`clearable` já é o padrão; cada
+  `ComboboxOption` leva `description = brl(preco)`, `fallbackIcon` 🎅 e `badge` para inativo —
+  `combobox.tsx:15-34`) com os produtos `ativo` de `opcoes.data.settings.produtos ?? {}`, lista de
+  selecionados com `AnimatePresence` (componente único `ProdutoLinha` para a linha "📦 <rótulo> — preço
+  de tabela R$ X" / "estimativa", reusado no resultado e em `/orcamento/:id`), vagas incluídas,
+  Remover; estado `produtos` em `INITIAL_STATE` (:62-84), `useState` (:179-199), `resetAll` (:273-298),
+  payload (:303-357) e rehydrate (:245-271); `coordenadoresInclusos` para o `PerformersEditor` (prop
+  opcional, número vindo de `quote.coordenadores_inclusos`); avisos de `quote.avisos` em bloco
+  `role="alert"` dourado com borda ("Confira antes de enviar" vem no texto do servidor); tile único
+  quando só `show_1h` é verdadeiro; botão travado (D15).
+- **Resultado** (`OrcamentoResultadoPage.tsx:229-233`): `ProdutoLinha` junto das notas.
 - **Configuração** (`OrcamentoConfigPrecosPage.tsx:463-478`): `ProdutosConfigCard` no molde do
   `DatasEspeciaisCard` (props `{chave, produto, faixas, erros, onChange}`, erro por campo com foco):
   rótulo, descrição, ativo, preço (`MoneyInput`), uma linha de preço por faixa existente, vagas como
-  chips (+ tipo + label + cachê "pela tabela"/valor), `inclui_noturno`; bloco `produtos_estimativa`
-  (fator e markup) num card pequeno; rodapé filtra `produtos.*`; "Remover" produto = `null` na chave.
+  chips (tipo, label, cachê "pela tabela"/valor, maquiagem), `inclui_noturno`; remover produto ou vaga
+  com `ConfirmDialog` de `@manto/ui` (constituição V — o `window.confirm` do molde da 307 não se propaga);
+  bloco `produtos_estimativa` (fator e markup) num card pequeno; rodapé filtra `produtos.*` e
+  `produtos_estimativa.*`.
 - **Razão**: `PriceTable` não se aplica (preço escalar); nada de `<select>`.
 
 ## D19 — Visibilidade dos cachês
 
 - **Decisão**: `GET /opcoes` já entrega `settings` inteiro a todo COMERCIAL (`orcamento_read.py:55-71`);
   `produtos` vai junto. Registrado no `docs/05` como dívida leve; recorte só-superadmin é fatia própria.
+
+## D21 — Oráculo da paridade (cenário 1)
+
+- **Decisão**: o verify não consegue chamar o código da 307 depois de implementado; o cenário 1 grava
+  um **gabarito** (`verify_309_golden.json`: quote, `message` e texto do PDF de payloads sem produto e
+  sem Noel/Ajudante — boneco + coordenador em 20/12 e 24/12, fora de SP, NF, BV) na primeira rodada, no
+  HEAD `6356b80` antes do núcleo (T003), e compara chave a chave nas seguintes, ignorando só as chaves
+  novas (`produtos`, `produtos_total`, `coordenadores_inclusos`, `avisos`). O gabarito é commitado.
+- **Razão**: "payload sem `produtos`" × "com `produtos: []`" roda o mesmo código e não prova nada;
+  números fixos da 307 mudam por decisão do dono (Noel 600).
+
+## D22 — Riscos aceitos e dívidas registradas (analyze)
+
+- Preço congelado pela data do orçamento × teto pela data do evento (orçamento de 20/12 vinculado a
+  evento de 24/12: 2.500 vendidos, tetos 1.000 + 500 + 250): aceito como na 307; `docs/05`.
+- `num_colaboradores` vazio no snapshot vira 1 pessoa no prefill (`routes.py:3221`) enquanto a venda
+  conta `num_going` — pré-existente, a 309 só alarga com as pessoas do produto; `docs/05`.
+- `calculate_quote` ainda recarrega a tabela em `:238` e `:299` e cada getter de `pricing.py` chama
+  `load()`: a 309 não piora (resolve o produto a partir de `cfg_precos`/`faixa` já carregados) e não
+  conserta — a meta de desempenho do plano é "sem `load()` adicional", não "carga única".
 
 ## D20 — Esforço e fatias
 

@@ -52,9 +52,10 @@ staff em desktop (calculadora e configuração são internas; nada público)
 
 **Tipo de projeto**: SPA desacoplada (API JSON + React)
 
-**Metas de desempenho**: `calculate_quote` continua com UMA carga da tabela (`cfg_precos`,
-`quote_ops.py:129`) e UMA resolução de faixa (`:146-147`); o produto é resolvido a partir dessas duas,
-sem ida nova ao banco (a calculadora dispara request a cada tecla)
+**Metas de desempenho**: o produto é resolvido a partir de `cfg_precos` (`quote_ops.py:129`) e da
+`faixa` (`:146-147`) já carregados — sem `load()` adicional (a calculadora dispara request a cada
+tecla). Hoje a função ainda recarrega a tabela em `:238`/`:299` e nos getters de `pricing.py`; a 309
+não piora nem conserta isso (research D22)
 
 **Restrições**: sem migration; chave `produtos` ausente = conta byte a byte a de hoje (padrão 262/305/
 307); `_migrar_309` roda dentro do `try` de `load()` (`settings.py:569-578`) — exceção ali devolve os
@@ -66,11 +67,12 @@ criação (`routes.py:3508-3523`) exige a mesma ordem de emissão no prefill e n
 afirma 712/2.501/3.601 e passa a afirmar 600/2.210/2.912; worktree próprio (a árvore principal está
 com a 308 de outro chat)
 
-**Escala/escopo**: 0 tabelas/colunas novas; 0 endpoints novos (3 alterados: `POST /orcamento/calcular`
-e `/salvar` aceitam `produtos`; `POST /orcamento/settings` aceita `produtos` + `produtos_estimativa`;
-`GET /orcamento/opcoes` passa a devolvê-los por já devolver `settings` inteiro); 1 módulo puro novo;
-1 script one-off; 2 componentes React novos (card da calculadora, card de configuração); 4 telas
-tocadas; ~20 cenários de verify; 2 produtos padrão
+**Escala/escopo**: 0 tabelas/colunas novas; 0 endpoints novos (5 alterados: `POST /orcamento/calcular`
+e `POST /orcamento/salvar` aceitam `produtos`; `POST /orcamento/settings` aceita `produtos` +
+`produtos_estimativa`; `GET /orcamento/opcoes` e `GET /orcamento/settings` passam a devolvê-los por já
+devolver `settings` inteiro); 1 módulo puro novo; 1 script one-off; 3 componentes React novos
+(`ProdutoLinha`, card da calculadora, card de configuração); 4 telas tocadas; 20 cenários de verify +
+gabarito; 2 produtos padrão
 
 ## Constitution Check
 
@@ -79,17 +81,17 @@ tocadas; ~20 cenários de verify; 2 produtos padrão
 | Princípio / seção | Como o plano cumpre (ou por que não se aplica) |
 |---|---|
 | I. Reutilizar antes de criar | Reusa: `settings.load()/_migrate` e o molde `_migrar_307`/`validar_datas_especiais` (`settings.py:469-534`) para o bloco novo; `SettingsValidationError.fields` e o ramo de `api_orcamento_settings_save` (`orcamento_write.py:208, 276-282`); getters `get_especial_prices/get_coordenador_prices(faixa=)` e `calcular_maquiador` para "pela tabela vigente na data"; `_compute_performer_caches` e `_montar_cap_note` (`routes.py:2801-2832`) para o teto; `Combobox` de `@manto/ui`; `DatasEspeciaisCard` como molde do card de configuração (contrato de props/erros/foco, `DatasEspeciaisCard.tsx:26-55`); `useSaveOrcamentoSettings` manda `settings` inteiro (sem endpoint novo); padrão `calcPendente`/`seq` da 307 para o botão; molde `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py` para o script. Nada de camada de repositório |
-| II. Padrões de código | `produtos.py` com type hints, docstrings pt-BR e constantes (`TIPOS_DE_VAGA`, limites); `ruff check` nos tocados, `ruff format` só nos novos; TS estrito com tipos opcionais (`produtos?`); `calculate_quote` e `_compute_performer_caches` já excedem 30 linhas (docs/05 #106) — a 309 NÃO acrescenta ramo inline: toda a lógica do produto fica em `produtos.py` e entra por 3 chamadas (resolver, somar, emitir vagas) |
+| II. Padrões de código | `produtos.py` com type hints, docstrings pt-BR e constantes (`TIPOS_DE_VAGA`, limites); `ruff check` nos tocados, `ruff format` só nos novos; TS estrito com tipos opcionais (`produtos?`); `calculate_quote` e `_compute_performer_caches` já excedem 30 linhas (docs/05 #106) — a 309 põe TODA a regra do produto em helpers puros de `produtos.py` (`resolver_produtos`, `split_coordenadores`, `incremento_make`, `total_na_duracao`, `linhas_da_memoria`, `itens_do_teto`, `avisos_para`…) e as duas funções só os chamam nos pontos em que o produto entra (antes do laço, depois do markup, nos pós-markup, na saída); o que sobra inline são as atribuições de `quote`/`snapshot` — registrado no Rastreamento de complexidade |
 | III. Camadas / API First | núcleo puro em `app/orcamento/produtos.py` (sem `flask.request`); `orcamento_write.py` só traduz `SettingsValidationError` em 400 (como a 307); nenhum endpoint novo, nenhum módulo novo em `app/api/`; nada em `BACKEND_PREFIXES` (não há rota pública); exceção documentada: `routes.py` do calendar continua sendo o dono do teto (`docs/00` §7) |
 | IV. Não quebrar o que funciona | aditivo: chave `produtos` ausente = conta de hoje (cenário 1 de paridade chave a chave); produto entra ANTES de acréscimos/NF (BV 305 e `_conta_inversa` em `orcamento_evento_ops.py:211-229` continuam); `cache_value` continua nascendo vazio (236/238 intactas); EducaManto com `pop` explícito (cenário 16); a ÚNICA mudança de comportamento para quem não usa produto é Noel/Ajudante avulsos a 600/270 — decisão do dono, registrada na spec (SC-003) e no `docs/03`; `verify_307` atualizado em vez de silenciado |
-| V. UI/UX com feedback | TanStack Query (`useOrcamentoOpcoes`, `useCalcularOrcamento`, `useSaveOrcamentoSettings`); 400 do servidor por campo → `aria-invalid` + foco no card de configuração (molde 307); "Gerar Orçamento" com rótulo "Recalculando…" e travado na janela de deploy; avisos pt-BR vindos do servidor (`quote.avisos`); toasts existentes |
+| V. UI/UX com feedback | TanStack Query (`useOrcamentoOpcoes`, `useCalcularOrcamento`, `useSaveOrcamentoSettings`); 400 do servidor por campo → `aria-invalid` + foco no card de configuração (molde 307); remover produto/vaga com `ConfirmDialog` de `@manto/ui` (não o `window.confirm` do molde); "Gerar Orçamento" com rótulo "Recalculando…" e travado na janela de deploy; avisos pt-BR vindos do servidor (`quote.avisos`); toasts existentes |
 | VI. Esteira (Nível 1) | specify ✓ (309, worktree) → clarify ✓ (3 perguntas) → plan (este) → checklist → tasks (verify na Foundational) → analyze → implement → converge; artefatos em `specs/309-produtos-de-tabela/` |
 | VII. Living Spec | spec com Clarifications de 19/10 antes de qualquer código; decisões D5–D12 do plano de análise viraram Premissas/FRs |
 | VIII. Verify antes do núcleo | `verify_309.py` escrito e rodado VERMELHO antes de `produtos.py` (primeira falha guardada em `verify_309_primeira_falha.txt`); 20 cenários, cenário 17 DEVE FALHAR (COMERCIAL 403); config real salva/restaurada por conexão separada; evento descartável só pela API |
 | IX. Dinheiro BRL | preços e cachês do produto como `float` com 2 casas no JSON, `parse_brl` na validação (como a 307), `Decimal` HALF_UP onde a 305 já usa (`valores_brl`); React com `MoneyInput`/`brl` de `@manto/money` |
 | X. Mobile-first público | não se aplica (calculadora e configuração são internas, desktop) |
 | XI. Framer Motion | lista de produtos selecionados e avisos com `AnimatePresence`/`motion.div` + `useReducedMotion`, como o `DataEspecialAlert` da 307 |
-| XII. Combobox / Maps | seletor de produto é `Combobox` de `@manto/ui` (clearable, `fallbackIcon`); o `<select>` nativo de especiais do `PerformersEditor` (docs/05 #103) NÃO é tocado nem agravado (o produto não entra nele) — fatia Nível 2 própria |
+| XII. Combobox / Maps | seletor de produto é `Combobox` de `@manto/ui` (`clearable` padrão; `description`/`fallbackIcon`/`badge` por opção); o `<select>` nativo de especiais do `PerformersEditor` (docs/05 #103) NÃO é tocado nem agravado (o produto não entra nele) — fatia Nível 2 própria |
 | XIII. RBAC declarado | nenhum endpoint novo; `_require_superadmin` em `POST /settings` e `_require_vendas` em `/calcular`, `/salvar`, `/opcoes` inalterados; linhas de `docs/01` §4.3 atualizadas (payload/bloco) |
 | XIV. Config / efeito externo | nenhuma env nova; o script one-off é dry-run por padrão e `--execute` explícito; o verify cria evento com `_suppress_calendar_event_writes`/Google suprimido (`MANTO_SEM_THREADS=1`) |
 | Stack | sem migration (`models.py` intocado); sem Jinja novo (o wrapper Jinja de criação `routes.py:4039-4041` continua passando as mesmas chaves — paridade mantida); sem segredo |
@@ -136,6 +138,7 @@ specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py  # NOVO: relatório + --
 frontend/apps/internal/src/lib/orcamento.ts # ProdutoDeTabela, ProdutosEstimativa, Quote.produtos/avisos,
                                             #   snapshot.produtos, CalcularOrcamentoInput.produtos, MemoriaLinha.tipo
 frontend/apps/internal/src/components/MemoriaDeCalculo.tsx          # FUNDO["produto"]
+frontend/apps/internal/src/components/orcamento/ProdutoLinha.tsx      # NOVO: linha "📦 rótulo — preço de tabela" (fonte única das 3 telas)
 frontend/apps/internal/src/components/orcamento/ProdutosCard.tsx      # NOVO: card da calculadora (Combobox + lista)
 frontend/apps/internal/src/components/orcamento/ProdutosConfigCard.tsx# NOVO: card de configuração (molde DatasEspeciaisCard)
 frontend/apps/internal/src/components/orcamento/PerformersEditor.tsx  # prop OPCIONAL coordenadoresInclusos (EducaManto não passa)
@@ -151,9 +154,12 @@ docs/01, docs/02, docs/03, docs/04, docs/05                           # document
 `app/orcamento/produtos.py` e é importado pelo calendário (`routes.py` já importa `pricing`/`settings`
 do orçamento para o teto — mesma direção da 307). A venda (`quote_ops`) e o teto (`routes`) chamam as
 MESMAS funções com os MESMOS argumentos (`cfg_precos`, `faixa`), como `cache_na_faixa` fez na 307 — é
-isso que impede "preço certo com teto errado". O preço aplicado é **congelado no snapshot**
-(`snapshot.produtos[].preco_aplicado`), para o prefill e o vínculo não dependerem da tabela viva para
-saber o que foi vendido; o cachê das vagas continua vindo da tabela viva na data do evento, como hoje.
+isso que impede "preço certo com teto errado". O preço aplicado E as vagas são **congelados no
+snapshot** (`snapshot.produtos[]` com `preco_aplicado` e `vagas`), para o prefill, a criação e o
+vínculo não dependerem da tabela viva para saber o que foi vendido nem para listar as vagas (pareamento
+posicional estável; produto apagado continua produzindo as vagas); só o VALOR do cachê das vagas vem da
+tabela viva na data do evento, como hoje. A régua >4h sai de uma função só (`total_na_duracao`) para a
+venda, o prefill, `_total_da_duracao` e o BV da duração custom.
 Na UI, o produto NÃO entra no `PerformersEditor` (que já viola XII.1 e é compartilhado com o
 EducaManto): ganha card próprio, e o editor recebe só uma prop opcional para mostrar "N incluído(s) no
 produto".
