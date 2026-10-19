@@ -5041,6 +5041,34 @@ def c38_so_este_dia() -> None:
         f"38 P-52 → {r.status_code} {_erro(r)}",
     )
     _igual(_devolucoes(quitado["dias"][0])[0]["valor"], 1000, "38: o 409 do piso gravou")
+    # P-52 com dois cortes seguidos (revisão da H5, 19/10): o piso do 1º corte não cai porque o 2º
+    # devolveu contando com a devolução dele; e o Alterar do dia parte do total DO DIA.
+    dois = _grupo("38 dois cortes", dias=2, pagos=(3000,), comissao=None)
+    d1, d2 = dois["dias"]
+    r = _corte(d1, 2000, valor=1000)
+    _garante(r.status_code == 200, f"38 dois cortes, 1º → {r.status_code} {_erro(r)}")
+    r = _corte(d2, 1000, valor=1000)
+    _garante(r.status_code == 200, f"38 dois cortes, 2º → {r.status_code} {_erro(r)}")
+    _igual(_resumo_api(d1)["limites_devolucao"]["atual"], 1000, "38: o Alterar do dia não parte do total do dia")
+    r = _alterar_devolucao(d1, 0)
+    _garante(
+        r.status_code == 409 and _codigo(r) == "abaixo_do_piso",
+        f"38 P-52 depois do 2º corte → {r.status_code} {_erro(r)}",
+    )
+    _igual(_devolucoes(d1)[0]["valor"], 1000, "38: o piso do 1º corte caiu com o 2º")
+    # a venda que a tela viu (revisão da H5): outro corte no meio → 409 grupo_mudou, nada gravado
+    tres = _grupo("38 venda que mudou", dias=2, pagos=(3000,), comissao=None)
+    r = _corte(tres["dias"][0], 2000, valor=1000)
+    _garante(r.status_code == 200, f"38 venda que mudou, 1º corte → {r.status_code} {_erro(r)}")
+    r = _cancelar(
+        tres["dias"][1],
+        {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 2000, "venda_esperada": 3000},
+    )
+    _garante(
+        r.status_code == 409 and _codigo(r) == "grupo_mudou",
+        f"38 venda que mudou → {r.status_code} {_erro(r)}",
+    )
+    _nada_gravado(tres["dias"][1], "38 venda que mudou")
     # variante 38-comprovante: acrescentar no dia cortado não refaz nada; a cobrança relê o pago
     v = _grupo("38 comprovante")
     _corte(v["dias"][0], 2000)
@@ -5327,6 +5355,32 @@ def c41_custo_do_grupo() -> None:
     rc = _corte(dia_edu, 3000, modo="nada", valor=None)
     _garante(rc.status_code == 200, f"41 corte EducaManto → {rc.status_code} {_erro(rc)}")
     _igual(base_edu() - antes, 15, "41: o cachê do dia cancelado não saiu da base EducaManto")
+    # com a base já paga (revisão da H5, 19/10): o corte com a mesma venda muda a cheia da
+    # EducaManto, e o ajuste de +15 nasce ligado à linha paga (o `_sync` não toca a paga).
+    e2 = _grupo("41 edu paga", comissao=None)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t, commission_rate = NULL WHERE id = :i",
+        t="(EDU) V306 41 PAGA",
+        i=e2["principal"],
+    )
+    dia_pago = _evento_com_elenco("41 edu paga dia", ["X"], inicio=_data_isolada())
+    _agrupar(e2["principal"], dia_pago)
+    _escalar(dia_pago, estado["t"])
+
+    def base_paga() -> Decimal:
+        with app.app_context():
+            s = db.session.get(SiteSetting, 1)
+            return comissoes_ops._event_commission(db.session.get(CalendarEvent, e2["principal"]), s)
+
+    paga = _linha_comissao(e2["principal"], float(base_paga()), status="pago", vendedor="vend2")
+    with _com_hoje(_dia(10)):
+        rc = _corte(dia_pago, 3000, modo="nada", valor=None)
+    _garante(rc.status_code == 200, f"41 corte EducaManto paga → {rc.status_code} {_erro(rc)}")
+    ajustes = [x for x in _linhas_comissao(e2["principal"]) if x["original_id"] == paga]
+    _garante(
+        len(ajustes) == 1 and q(Decimal(str(ajustes[0]["valor"]))) == q(Decimal("15")),
+        f"41: o ajuste da EducaManto com a base paga {ajustes}",
+    )
 
 
 def _cliente_descartavel(rotulo: str) -> int:

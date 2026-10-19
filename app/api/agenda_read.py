@@ -398,8 +398,13 @@ def _serialize_role(
 
 
 def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
-    """KPIs financeiros agregados pelo grupo comercial — mesma fórmula da view `event_detail`."""
+    """KPIs financeiros agregados pelo grupo comercial — mesma fórmula da view `event_detail`.
+
+    Feature 306: custo, gastos e BV pelos dias vivos (`dias_vivos`): o dia cortado já saiu da venda
+    do grupo, e o cachê e os gastos dele não pesam mais no lucro do principal.
+    """
     from app.calendar.casting_ops import e_vaga_de_presenca
+    from app.calendar.group_ops import dias_vivos
     from app.calendar.routes import _group_events
 
     settings = SiteSetting.query.get(1)
@@ -410,6 +415,7 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     ))
     group = _group_events(event)
     kpi_event = group[0]
+    vivos = dias_vivos(event) or [kpi_event]
     rate = (
         Decimal(str(kpi_event.commission_rate))
         if kpi_event.commission_rate is not None else default_rate
@@ -419,7 +425,7 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     cost = sum(
         (
             r.cache_value or 0
-            for ge in group
+            for ge in vivos
             for r in ge.roles
             if r.talent_id and not e_vaga_de_presenca(r)
         ),
@@ -429,7 +435,7 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         (
             e.amount
             for e in SpecialExpense.query.filter(
-                SpecialExpense.event_id.in_([ge.id for ge in group]),
+                SpecialExpense.event_id.in_([ge.id for ge in vivos]),
                 SpecialExpense.status == "aprovado",
             ).all()
         ),
@@ -438,7 +444,7 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     bv_total = sum(
         (
             Decimal(a.amount_brl)
-            for ge in group for a in ge.acrescimos if a.is_bv and a.amount_brl
+            for ge in vivos for a in ge.acrescimos if a.is_bv and a.amount_brl
         ),
         Decimal("0"),
     )
@@ -464,7 +470,7 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         # "Comissão (2,5%)" sobre esse valor seria uma conta que não fecha.
         "rate": float(rate),
         "commission_source": commission_source,
-        "group_size": len(group),
+        "group_size": len(vivos),
         "seller": kpi_event.seller.name if kpi_event.seller else None,
     }
 
@@ -487,6 +493,8 @@ def _compute_cobranca(event: CalendarEvent, venda: "VendaResumo") -> dict[str, A
         "enabled": cobranca_ops.pode_copiar_cobranca(venda, event, now_sp().date()),
         "valor": _money(venda.valor),
         "recebido": _money(venda.recebido),
+        # Feature 306: a devolução à cliente do grupo, à parte (o saldo já a desconta do recebido).
+        "devolvido": _money(venda.devolvido),
         "quitado": venda.quitada,
         # Cortesia ou permuta não é venda: a página não diz "falta R$ 0,00" nem "Quitado".
         "cortesia": venda.cortesia,
@@ -1166,13 +1174,12 @@ def serialize_event_detail(
 
     # KPIs e gastos do evento (lucro, cachês, despesas) — FINANCEIRO/SUPERADMIN.
     if flags["show_financeiro"]:
-        from app.calendar.routes import _group_events
-
         # Feature 306: sem `kpi` no cancelado — ele contaria a devolução como custo e o BV
         # cheio; a aba Comercial abre pelo `venda` e mostra o resultado do cancelamento.
         if not cancelado:
             data["kpi"] = _compute_kpi(event)
-        dias = [event.id] if cancelado else [ge.id for ge in _group_events(event)]
-        data["gastos"] = _serialize_gastos(dias)
+        from app.calendar.cancel_ops import dias_dos_gastos
+
+        data["gastos"] = _serialize_gastos(dias_dos_gastos(event))
 
     return data

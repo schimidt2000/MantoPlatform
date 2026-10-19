@@ -513,7 +513,14 @@ def comissao_exibida_do_evento(event, settings) -> tuple[Decimal, str]:
     if getattr(event, "is_cancelled", False):
         return Decimal("0"), "linha"
 
-    linhas = [c for c in event.commission_payments if c.status in _STATUS_VIVOS]
+    from app.constants import NOTA_COMISSAO_PROPRIA_DO_DIA
+
+    # Feature 306 (P-51): a comissão própria do novo 1º dia, marcada na passagem, fica fora da venda.
+    linhas = [
+        c
+        for c in event.commission_payments
+        if c.status in _STATUS_VIVOS and NOTA_COMISSAO_PROPRIA_DO_DIA not in (c.notes or "")
+    ]
     if linhas:
         total = sum((Decimal(c.amount) for c in linhas), Decimal("0"))
         return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "linha"
@@ -883,10 +890,15 @@ def _event_cost(event) -> int:
 
 
 def _group_cost(event) -> int:
-    """Custo de cachês do evento, somando os satélites quando for principal de grupo (FR-011)."""
+    """Custo de cachês do evento, somando os satélites quando for principal de grupo (FR-011).
+
+    Feature 306: sem o dia cancelado — o corte já tirou o dia da venda do grupo, e o cachê dele
+    não pesa mais na base da comissão EducaManto nem no CPV (a mesma régua de `dias_vivos`).
+    """
     total = _event_cost(event)
     for satellite in event.satellites:
-        total += _event_cost(satellite)
+        if not satellite.is_cancelled:
+            total += _event_cost(satellite)
     return total
 
 

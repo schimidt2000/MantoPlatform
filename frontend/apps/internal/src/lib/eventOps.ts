@@ -185,7 +185,29 @@ export interface ImpactoExclusao {
   comprovantes_sem_valor?: number;
   /** Total de cachê pago; > 0 → o diálogo explica e não oferece cancelar. */
   cache_pago?: number;
+  /** Feature 306, H5: o grupo (`null` no avulso). */
+  grupo?: GrupoDoImpacto | null;
+  /** A venda do grupo hoje (a do principal): o ponto de partida do "Novo valor da venda". */
+  venda_do_grupo?: number;
 }
+
+/** Os dias do grupo no impacto (contracts §2). */
+export interface GrupoDoImpacto {
+  principal_id: number;
+  dias: {
+    id: number;
+    titulo: string;
+    data: string | null;
+    cancelado: boolean;
+    cache_pago: boolean;
+    faltam_dias: number | null;
+  }[];
+  /** No 1º dia: o dia vivo mais cedo, que recebe a venda em "só este dia". */
+  proximo_principal?: { id: number; titulo: string; data: string | null } | null;
+}
+
+/** O alcance do cancelamento no 1º dia de um grupo. */
+export type AlcanceCancelamento = "todos" | "so_este_dia";
 
 /** O efeito da prévia (`GET …/impacto-exclusao?devolucao=`) — a mesma conta da execução. */
 export interface EfeitoCancelamento {
@@ -226,10 +248,13 @@ export function usePreviaCancelamento(
   enabled: boolean,
   opcoes: { vendaNova?: number | null; alcance?: string | null } = {},
 ) {
-  const valor = useDebounced(devolucao, 400);
-  const vendaNova = useDebounced(opcoes.vendaNova ?? null, 400);
-  const alcance = opcoes.alcance ?? null;
-  return useQuery<{ efeito: EfeitoCancelamento }>({
+  // Feature 306, H5: um debounce só para os três — trocar o alcance e a venda nova juntos nunca
+  // pede uma prévia meio a meio (o servidor decide o corte por `venda_nova`). `emDia` diz se a
+  // prévia na tela é a dos valores de agora.
+  const chave = JSON.stringify([devolucao, opcoes.vendaNova ?? null, opcoes.alcance ?? null]);
+  const atrasada = useDebounced(chave, 400);
+  const [valor, vendaNova, alcance] = JSON.parse(atrasada) as [number | null, number | null, string | null];
+  const query = useQuery<{ efeito: EfeitoCancelamento }>({
     queryKey: ["evento-previa-cancelamento", eventId, valor, vendaNova, alcance],
     queryFn: () => {
       const params = new URLSearchParams({ devolucao: (valor ?? 0).toFixed(2) });
@@ -243,6 +268,7 @@ export function usePreviaCancelamento(
     staleTime: 0,
     retry: false,
   });
+  return { ...query, emDia: atrasada === chave };
 }
 
 /** Resumo de impacto — só carregado quando o diálogo abre (`enabled`). */
@@ -271,6 +297,14 @@ export interface CancelarEventoInput {
   imposto_retido?: number;
   /** Completa o BV a pagar que está sem recebedor ou PIX. */
   bvs?: { acrescimo_id: number; recebedor: string; pix: string }[];
+  /** Feature 306, H5 — só no 1º dia com outros dias vivos. */
+  alcance?: AlcanceCancelamento;
+  /** Com `so_este_dia`: o dia que o diálogo mostrou como o novo 1º dia. */
+  novo_principal_id?: number;
+  /** No corte (um dia do grupo, ou o 1º dia com `so_este_dia`): a venda do grupo depois. */
+  venda_nova?: number;
+  /** A venda do grupo que o diálogo mostrou: se mudou (outro corte), 409 `grupo_mudou`. */
+  venda_esperada?: number;
 }
 
 export interface CancelarEventoResult {
@@ -280,6 +314,9 @@ export interface CancelarEventoResult {
   aviso?: string | null;
   google_removido?: boolean;
   gasto_id?: number | null;
+  /** Feature 306, H5: os dias que o ato cancelou e, na passagem, o novo 1º dia. */
+  dias_cancelados?: number[];
+  venda_passou_para?: { id: number; titulo: string; data: string | null } | null;
 }
 
 /** As chaves que um ato ou uma correção do cancelado muda (contracts §22). */

@@ -277,7 +277,9 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
             `Recebido no grupo ${brl(recebido)} · valor de venda a definir`
           ) : (
             <>
-              Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
+              Recebido no grupo {brl(recebido)}
+              {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
+              {brl(cobranca.valor ?? 0)}
               {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
             </>
           )}
@@ -305,7 +307,9 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
   return (
     <span className="block text-ink">
       <span className="font-medium tabular-nums">
-        Recebido {brl(recebido)} de {brl(cobranca.valor ?? 0)}
+        Recebido {brl(recebido)}
+        {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
+        {brl(cobranca.valor ?? 0)}
         {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
       </span>
       <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />

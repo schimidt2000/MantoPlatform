@@ -1544,7 +1544,14 @@ def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash(error, "error")
         return
 
-    error = _validate_group_satellites(leader, satellites)
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        error = _validate_group_satellites(leader, satellites)
+    except CancelValidationError as exc:  # feature 306: cancelado não entra em grupo
+        db.session.rollback()
+        flash(exc.message, "error")
+        return
     if error:
         flash(error, "error")
         return
@@ -1586,7 +1593,14 @@ def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash("Este evento não pertence a um grupo.", "error")
         return
 
-    group_ops.desagrupar(event, current_user.name, datetime.now(tz=tz_sp))
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        group_ops.desagrupar(event, current_user.name, datetime.now(tz=tz_sp))
+    except CancelValidationError as exc:  # feature 306: o dia cancelado não sai do grupo
+        db.session.rollback()
+        flash(exc.message, "error")
+        return
     flash("Agrupamento desfeito.", "success")
 
 
@@ -1796,8 +1810,11 @@ def event_detail(event_id: int):
     # (principal ou satélite) mostra custo/gastos/lucro do CONTRATO inteiro, não só do
     # evento aberto — venda/comissão vêm sempre do principal (`kpi_event`), que é quem
     # mantém esses campos preenchidos (satélites os têm zerados ao entrar no grupo).
-    group_events = _group_events(event)
-    kpi_event = group_events[0]
+    # Feature 306: o custo, os gastos e o BV pelos dias vivos (o dia cortado saiu da venda).
+    from app.calendar.group_ops import dias_vivos
+
+    kpi_event = _group_events(event)[0]
+    group_events = dias_vivos(event) or [kpi_event]
     event_group_size = len(group_events)
     event_rate = (
         Decimal(str(kpi_event.commission_rate))
@@ -1807,17 +1824,28 @@ def event_detail(event_id: int):
         (r.cache_value or 0 for ge in group_events for r in ge.roles if r.talent_id), 0
     )
     # Gastos extras aprovados vinculados a qualquer evento do grupo (entram como custo:
-    # lucro = venda − cachês − gastos).
+    # lucro = venda − cachês − gastos). Feature 306: pela régua do detalhe (`dias_dos_gastos`) — o
+    # dia cancelado mostra os gastos dele, e o principal vivo, os dos dias vivos.
+    from app.calendar.cancel_ops import dias_dos_gastos
+
     event_expenses = (
         SpecialExpense.query
         .filter(
-            SpecialExpense.event_id.in_([ge.id for ge in group_events]),
+            SpecialExpense.event_id.in_(dias_dos_gastos(event)),
             SpecialExpense.status == "aprovado",
         )
         .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
         .all()
     )
-    event_expenses_total = sum((e.amount for e in event_expenses), Decimal("0"))
+    # O KPI fica no mesmo grupo do custo e do BV (os dias vivos): no dia cancelado a tabela mostra
+    # os gastos dele (a devolução, a multa), mas o lucro do contrato não os conta de novo.
+    event_expenses_total = Decimal(
+        str(
+            db.session.query(db.func.coalesce(db.func.sum(SpecialExpense.amount), 0))
+            .filter(SpecialExpense.event_id.in_([ge.id for ge in group_events]), SpecialExpense.status == "aprovado")
+            .scalar()
+        )
+    )
     # BV (feature 099): repasse a terceiros — sai da base de comissão e desconta do lucro.
     event_bv_total = sum(
         (

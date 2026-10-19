@@ -33,6 +33,10 @@ interface CancelamentoDevolucaoBlocoProps {
   maxDevolucao: number;
   comprovantesSemValor: number;
   erros: Record<string, string>;
+  /** Feature 306, H5: no corte de um dia só cabem Parte e Nada (a venda continua no grupo). */
+  semTudo?: boolean;
+  /** No corte: o mínimo a devolver para a venda nova (da prévia); 0 = sem mínimo. */
+  minima?: number;
 }
 
 /**
@@ -47,9 +51,12 @@ export function CancelamentoDevolucaoBloco({
   maxDevolucao,
   comprovantesSemValor,
   erros,
+  semTudo = false,
+  minima = 0,
 }: CancelamentoDevolucaoBlocoProps) {
   const pagoZero = pago <= 0;
   const devolve = state.modo === "tudo" || state.modo === "parte";
+  const modos = semTudo ? MODOS.filter((m) => m.modo !== "tudo") : MODOS;
 
   return (
     <fieldset className="rounded-md border border-line p-3">
@@ -65,8 +72,17 @@ export function CancelamentoDevolucaoBloco({
             ` ${comprovantesSemValor} comprovante(s) estão sem valor — corrija na aba Financeiro se a cliente pagou.`}
         </p>
       )}
-      <div className="grid gap-2 sm:grid-cols-3" role="radiogroup" aria-label="Quanto devolver">
-        {MODOS.map(({ modo, rotulo, ajuda }) => {
+      {minima > 0 && (
+        <p className="mb-2 text-xs text-gold-ink" role="note">
+          Com o novo valor da venda, devolva pelo menos {brl(minima)} — ou aumente o valor.
+        </p>
+      )}
+      <div
+        className={`grid gap-2 ${semTudo ? "sm:grid-cols-2" : "sm:grid-cols-3"}`}
+        role="radiogroup"
+        aria-label="Quanto devolver"
+      >
+        {modos.map(({ modo, rotulo, ajuda }) => {
           const desabilitado = pagoZero && modo !== "nada";
           const marcado = state.modo === modo;
           return (

@@ -2,8 +2,10 @@
 
 Uma **venda** é um evento avulso ou um grupo, sempre representada pelo principal: o valor é o do
 principal, e o recebido é a soma dos comprovantes de TODOS os eventos do grupo — cancelados
-inclusive, porque o dinheiro entrou (a devolução, se houve, é gasto). Nada é movido de lugar: a soma
-é feita na leitura.
+inclusive, porque o dinheiro entrou. Feature 306: a devolução à cliente do grupo (a do corte de um
+dia, por exemplo) fica à parte em `devolvido`, e o saldo, a quitação, o sinal e a parcela descoberta
+contam o recebido menos o devolvido — o recebido mostrado continua o bruto. Nada é movido de lugar:
+a soma é feita na leitura.
 
 Fonte única da Home (`vendas_desde`, em lote, com consultas fixas) e da página do evento
 (`resumo_da_venda_do_evento`): as duas mostram o mesmo recebido, o mesmo saldo e o mesmo
@@ -105,7 +107,9 @@ class VendaResumo:
         principal: O evento que guarda a venda (o próprio evento, quando avulso).
         eventos: O principal primeiro e os outros eventos do grupo depois, cancelados inclusive.
         valor: `sale_value` do principal (`None` = vazio).
-        recebido: Soma dos comprovantes de todos os eventos do grupo.
+        recebido: Soma dos comprovantes de todos os eventos do grupo (o bruto).
+        devolvido: Devoluções à cliente aprovadas do grupo (feature 306); saem do que conta para
+            o saldo, não do recebido.
         data_do_grupo: 1º evento não cancelado e que não é compromisso interno.
         vencimento: Data em que o saldo vence (ver `vencimento_do_saldo`).
         vencimento_origem: `data_combinada`, `parcela` ou `politica`.
@@ -127,6 +131,12 @@ class VendaResumo:
     motivo_fora: str | None
     corte: date | None = None
     mapa: dict[int, tuple[Decimal, int]] = field(default_factory=dict, compare=False)
+    devolvido: Decimal = Decimal("0.00")
+
+    @property
+    def recebido_liquido(self) -> Decimal:
+        """O que ficou com a Manto: o recebido menos o devolvido à cliente."""
+        return _dinheiro(self.recebido - self.devolvido)
 
     @property
     def cortesia(self) -> bool:
@@ -135,8 +145,8 @@ class VendaResumo:
 
     @property
     def saldo(self) -> Decimal | None:
-        """Valor menos recebido do grupo; `None` sem valor. Negativo = recebeu acima do valor."""
-        return None if self.valor is None else _dinheiro(self.valor - self.recebido)
+        """Valor menos o recebido líquido do grupo; `None` sem valor. Negativo = recebeu acima."""
+        return None if self.valor is None else _dinheiro(self.valor - self.recebido_liquido)
 
     @property
     def sem_valor(self) -> bool:
@@ -169,7 +179,7 @@ class VendaResumo:
             return False
         if self.principal.payment_due_date or self.principal.installments:
             return False
-        return self.recebido < self.valor / 2 - FOLGA_COBRANCA
+        return self.recebido_liquido < self.valor / 2 - FOLGA_COBRANCA
 
     @property
     def eventos_vivos(self) -> int:
@@ -212,6 +222,22 @@ def comprovantes_por_evento(ids: list[int]) -> dict[int, tuple[Decimal, int]]:
         .all()
     )
     return {evento_id: (_dinheiro(total), int(quantos)) for evento_id, total, quantos in linhas}
+
+
+def devolvido_por_evento(ids: list[int]) -> dict[int, Decimal]:
+    """Devoluções à cliente aprovadas por evento, numa consulta só (feature 306)."""
+    from app.calendar.cancel_ops import filtro_devolucao
+    from app.models import SpecialExpense
+
+    if not ids:
+        return {}
+    linhas = (
+        db.session.query(SpecialExpense.event_id, func.coalesce(func.sum(SpecialExpense.amount), 0))
+        .filter(filtro_devolucao(), SpecialExpense.event_id.in_(ids))
+        .group_by(SpecialExpense.event_id)
+        .all()
+    )
+    return {evento_id: _dinheiro(total) for evento_id, total in linhas}
 
 
 def recebido_da_venda(
@@ -263,7 +289,8 @@ def motivo_fora_da_venda(principal: CalendarEvent) -> str | None:
 
 
 def _primeira_parcela_descoberta(parcelas: list[Any], recebido: Decimal) -> date | None:
-    """Data da 1ª parcela que o recebido do grupo ainda não cobre, somando pela ordem das datas.
+    """Data da 1ª parcela que o recebido do grupo (líquido do devolvido) ainda não cobre, somando
+    pela ordem das datas.
 
     A folga de centavos vale aqui também: o sinal pago com R$ 0,50 a menos cobre a parcela.
     """
@@ -304,11 +331,13 @@ def resumir_venda(
     mapa: dict[int, tuple[Decimal, int]],
     *,
     corte: date | None = None,
+    devolvidos: dict[int, Decimal] | None = None,
 ) -> VendaResumo:
-    """Monta o `VendaResumo` de uma venda, sem I/O (os comprovantes chegam no `mapa`)."""
+    """Monta o `VendaResumo` de uma venda, sem I/O (os comprovantes e as devoluções chegam prontos)."""
     recebido = recebido_da_venda(eventos, mapa)
+    devolvido = sum(((devolvidos or {}).get(evento.id, Decimal("0")) for evento in eventos), Decimal("0"))
     data_grupo = data_do_grupo(eventos)
-    vencimento, origem = vencimento_do_saldo(principal, data_grupo, recebido)
+    vencimento, origem = vencimento_do_saldo(principal, data_grupo, _dinheiro(recebido - devolvido))
     return VendaResumo(
         principal=principal,
         eventos=tuple(eventos),
@@ -321,6 +350,7 @@ def resumir_venda(
         motivo_fora=motivo_fora_da_venda(principal),
         corte=corte,
         mapa=mapa,
+        devolvido=_dinheiro(devolvido),
     )
 
 
@@ -424,8 +454,11 @@ def vendas_desde(corte: date) -> list[VendaResumo]:
     )
     ids = [evento.id for principal in principais for evento in (principal, *principal.satellites)]
     mapa = comprovantes_por_evento(ids)
+    devolvidos = devolvido_por_evento(ids)
     return [
-        resumir_venda(principal, [principal, *_por_data(principal.satellites)], mapa, corte=corte)
+        resumir_venda(
+            principal, [principal, *_por_data(principal.satellites)], mapa, corte=corte, devolvidos=devolvidos
+        )
         for principal in principais
     ]
 
@@ -453,6 +486,8 @@ def linha_da_cobranca(venda: VendaResumo, hoje: date) -> dict[str, Any]:
         "start_at": _iso(principal.start_at),
         "sale": _float(venda.valor),
         "received": _float(venda.recebido),
+        # Feature 306: a devolução à cliente do grupo, à parte (o saldo já a desconta).
+        "devolvido": _float(venda.devolvido),
         "saldo": _float(venda.saldo),
         "severity": _severity_antiga(cor, dias),
         "due_date": _iso(venda.vencimento),
@@ -546,8 +581,8 @@ def resumo_da_venda_do_evento(event: CalendarEvent) -> VendaResumo:
     """A venda de que o evento faz parte, com a mesma conta da Home (uma consulta a mais)."""
     principal = principal_da_venda(event)
     eventos = group_events(principal)
-    mapa = comprovantes_por_evento([evento.id for evento in eventos])
-    return resumir_venda(principal, eventos, mapa)
+    ids = [evento.id for evento in eventos]
+    return resumir_venda(principal, eventos, comprovantes_por_evento(ids), devolvidos=devolvido_por_evento(ids))
 
 
 def escopo_do_evento(venda: VendaResumo, event: CalendarEvent) -> str:

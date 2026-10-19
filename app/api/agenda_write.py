@@ -671,6 +671,9 @@ def api_cancelar_evento(event_id: int) -> Any:
             "aviso": resultado["aviso"],
             "google_removido": resultado["google_removido"],
             "gasto_id": resultado["gasto_id"],
+            # Feature 306, H5: os dias que o ato cancelou e, na passagem, o novo 1º dia.
+            "dias_cancelados": resultado["dias_cancelados"],
+            "venda_passou_para": resultado["venda_passou_para"],
         }
     )
 
@@ -2617,7 +2620,14 @@ def api_agrupar_eventos(event_id: int) -> Any:
     leader = participantes.pop(int(leader_raw))
     satellites = list(participantes.values())
 
-    erro = group_ops.validar_agrupamento(leader, satellites)
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        # Feature 306: trava e relê em ordem de id e recusa o cancelado (409 `cancelado`).
+        erro = group_ops.validar_agrupamento(leader, satellites)
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     if erro:
         return json_error(erro, 409)
 
@@ -2663,9 +2673,13 @@ def api_desagrupar_evento(event_id: int) -> Any:
     if not event.is_satellite:
         return json_error("Este evento não pertence a um grupo.", 409)
 
-    resultado = group_ops.desagrupar(
-        event, current_user.name, datetime.now(tz=_TZ_SP)
-    )
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        resultado = group_ops.desagrupar(event, current_user.name, datetime.now(tz=_TZ_SP))
+    except CancelValidationError as exc:  # feature 306: o dia cancelado não sai do grupo
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     return _grupo_detalhe_json(event, leader_id=resultado["leader_id"])
 
 
@@ -2675,8 +2689,9 @@ def api_remover_satelite(leader_id: int, sat_id: int) -> Any:
     """Tira um satélite a partir da tela do PRINCIPAL — o Jinja não tinha isto.
 
     Sem esta rota, dissolver o grupo de 13 satélites que existe no banco exigiria abrir os 13, um
-    por um. E é ela que destrava o cancelamento: um evento principal não pode ser cancelado
-    enquanto tiver satélites.
+    por um. Feature 306: o principal com satélites já se cancela (todos os dias, só o 1º dia com a
+    passagem da venda, ou um dia pelo corte), e o dia cancelado não sai do grupo — 409 `cancelado`
+    (antes, a recusa do núcleo virava 500).
     """
     from app.calendar import group_ops
 
@@ -2688,9 +2703,13 @@ def api_remover_satelite(leader_id: int, sat_id: int) -> Any:
     if satelite.group_leader_id != leader_id:
         return json_error("Este evento não é satélite deste grupo.", 404)
 
-    group_ops.desagrupar(
-        satelite, current_user.name, datetime.now(tz=_TZ_SP)
-    )
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        group_ops.desagrupar(satelite, current_user.name, datetime.now(tz=_TZ_SP), lider_esperado=leader_id)
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     leader = CalendarEvent.query.get(leader_id)
     return _grupo_detalhe_json(leader, leader_id=leader_id)
 

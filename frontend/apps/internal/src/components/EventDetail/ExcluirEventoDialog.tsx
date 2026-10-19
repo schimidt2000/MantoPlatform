@@ -19,12 +19,14 @@ import {
   useDeleteEvent,
   useImpactoExclusao,
   usePreviaCancelamento,
+  type AlcanceCancelamento,
   type CancelarEventoInput,
   type EfeitoCancelamento,
   type ImpactoExclusao,
 } from "../../lib/eventOps";
 import { CancelamentoBvBloco, type BvEntrada } from "./CancelamentoBvBloco";
 import { CancelamentoDevolucaoBloco, type DevolucaoState } from "./CancelamentoDevolucaoBloco";
+import { CancelamentoDiasBloco } from "./CancelamentoDiasBloco";
 
 const LABEL = "mb-1 block text-xs font-semibold uppercase text-muted";
 const FIELD =
@@ -92,6 +94,27 @@ function EfeitoNaComissao({ efeito, carregando }: { efeito?: EfeitoCancelamento;
   if (!efeito) {
     return carregando ? <Skeleton className="h-16 w-full" /> : null;
   }
+  // Feature 306, H5: no corte ninguém fica com retido — a venda do grupo diminui, e a comissão e o
+  // BV dela acompanham.
+  if (efeito.retido == null) {
+    return (
+      <div className="rounded-md border border-line bg-surface-2 p-3 text-sm" aria-live="polite">
+        <p className="mb-1 text-xs font-semibold uppercase text-muted">Efeito no grupo</p>
+        <p className="text-ink">
+          Comissão da venda do grupo passa a <strong>{brl(efeito.comissao_cheia)}</strong>
+          {efeito.ajuste != null && (
+            <>
+              {" "}
+              — {efeito.ajuste < 0 ? "desconto de" : "acréscimo de"} {brl(Math.abs(efeito.ajuste))}
+              {efeito.repasse_em ? ` no repasse de ${dataCurta(efeito.repasse_em)}` : ""}
+            </>
+          )}
+          .
+        </p>
+        {efeito.bv_retido > 0 && <p className="text-ink">BV a pagar do grupo: {brl(efeito.bv_retido)}.</p>}
+      </div>
+    );
+  }
   return (
     <div className="rounded-md border border-line bg-surface-2 p-3 text-sm" aria-live="polite">
       <p className="mb-1 text-xs font-semibold uppercase text-muted">Efeito do cancelamento</p>
@@ -145,6 +168,11 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
   const [bvs, setBvs] = useState<Record<number, BvEntrada>>({});
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erro, setErro] = useState("");
+  const [alcance, setAlcance] = useState<AlcanceCancelamento | null>(null);
+  const [vendaNova, setVendaNova] = useState(0);
+  // Até a pessoa digitar, o "Novo valor da venda" acompanha a venda do grupo que o servidor manda
+  // (o impacto da abertura anterior fica no cache e é rebuscado ao abrir).
+  const [vendaEditada, setVendaEditada] = useState(false);
   const sugeriu = useRef(false);
 
   const dados = impacto.data;
@@ -157,6 +185,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     }
   }, [open, dados]);
   useEffect(() => {
+    if (open && dados && !vendaEditada) setVendaNova(dados.venda_do_grupo ?? 0);
+  }, [open, dados, vendaEditada]);
+  useEffect(() => {
     if (!open) {
       sugeriu.current = false;
       setMotivo("");
@@ -166,6 +197,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
       setBvs({});
       setErros({});
       setErro("");
+      setAlcance(null);
+      setVendaNova(0);
+      setVendaEditada(false);
     }
   }, [open]);
 
@@ -174,6 +208,15 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
   const venda = regime === "venda";
   const virtual = regime === "virtual";
   const atualizando = cancelando && regime === undefined;
+  // Feature 306, H5: o grupo. Um dia do grupo (`dia`) é o corte; o 1º dia com outros dias vivos
+  // escolhe entre todos e só ele (a venda passa ao dia vivo mais cedo, e é corte também).
+  const grupo = dados?.grupo ?? null;
+  const ehDia = regime === "dia";
+  const outrosVivos = Boolean(grupo && !ehDia && grupo.dias.some((d) => d.id !== eventId && !d.cancelado));
+  const corta = ehDia || (outrosVivos && alcance === "so_este_dia");
+  const comDevolucao = venda || ehDia;
+  const vendaDoGrupo = dados?.venda_do_grupo ?? dados?.sale_value ?? 0;
+  const vendaNovaValida = vendaNova > 0 && vendaNova <= vendaDoGrupo;
   const pago = dados?.pago ?? dados?.total_recebido ?? 0;
   const maxDevolucao = dados?.max_devolucao ?? 0;
   const devolve =
@@ -184,8 +227,24 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
         : devolucao.modo === "nada"
           ? 0
           : null;
-  const previa = usePreviaCancelamento(eventId, devolve, open && Boolean(cancelando) && venda && devolve != null);
+  const previa = usePreviaCancelamento(
+    eventId,
+    devolve,
+    open && Boolean(cancelando) && comDevolucao && devolve != null && (!outrosVivos || alcance !== null) &&
+      (!corta || vendaNovaValida),
+    { vendaNova: corta ? vendaNova : null, alcance },
+  );
   const efeito = devolve != null ? previa.data?.efeito : undefined;
+  // A prévia que esbarra no estado de agora (o dia já foi cancelado, ou ficou sem outro dia vivo)
+  // rebusca o impacto, como a recusa do POST faz.
+  const codigoDaPrevia = codigoDaRecusa(previa.error);
+  useEffect(() => {
+    if (codigoDaPrevia === "ja_cancelado" || codigoDaPrevia === "sem_outro_dia_vivo") {
+      setAlcance(null);
+      void impacto.refetch();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [codigoDaPrevia]);
   const proporcional = useMemo(
     () => new Map((efeito?.bvs ?? []).map((b) => [b.acrescimo_id, b.bv_retido])),
     [efeito],
@@ -195,11 +254,27 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     if (!dados || !cancelando) return null;
     if (atualizando) return "O sistema está atualizando — tente em um minuto.";
     if (!motivo.trim()) return "Explique o motivo do cancelamento.";
-    if (!venda) return null;
+    if (outrosVivos && alcance === null) return "Escolha se cancela todos os dias ou só este.";
+    if (!comDevolucao) return null;
+    if (corta && !vendaNovaValida) return "Informe o novo valor da venda do grupo (até o de hoje).";
     if (devolucao.modo === null) return "Escolha quanto devolver à cliente.";
     if (devolucao.modo === "parte" && devolucao.valor <= 0) return "Informe quanto devolve.";
     if (devolucao.modo !== "nada" && (!devolucao.nome.trim() || !devolucao.pix.trim()))
       return "Informe quem recebe a devolução e o PIX.";
+    if (corta) {
+      if (devolucao.modo === "parte" && devolucao.valor > maxDevolucao)
+        return `Acima do que dá para devolver (${brl(maxDevolucao)}).`;
+      // A prévia recusou (a venda mudou, o dia foi cancelado no meio): a frase do servidor, nunca
+      // "conferindo" para sempre.
+      if (previa.isError) return previa.error?.message || "Não foi possível conferir a devolução mínima.";
+      // A mínima é a da prévia dos valores de agora: a de antes (ou a que está chegando) não vale.
+      if (!previa.emDia || previa.isFetching || previa.isPlaceholderData || efeito?.devolucao_minima === undefined)
+        return "Conferindo a devolução mínima…";
+      const minima = efeito.devolucao_minima;
+      return (devolve ?? 0) < minima
+        ? `Devolva pelo menos ${brl(minima)} ou aumente o novo valor da venda.`
+        : null;
+    }
     if (dados.com_nota && !impostoInformado) return "Informe o imposto retido (0 se não houve).";
     for (const bv of dados.bvs ?? []) {
       const conta = proporcional.get(bv.acrescimo_id);
@@ -209,11 +284,41 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
         return "Informe quem recebe o BV e o PIX.";
     }
     return null;
-  }, [dados, cancelando, atualizando, motivo, venda, devolucao, impostoInformado, bvs, proporcional]);
+  }, [
+    dados,
+    cancelando,
+    atualizando,
+    motivo,
+    outrosVivos,
+    alcance,
+    comDevolucao,
+    corta,
+    vendaNovaValida,
+    devolucao,
+    devolve,
+    efeito,
+    previa.emDia,
+    previa.isFetching,
+    previa.isPlaceholderData,
+    previa.isError,
+    previa.error,
+    maxDevolucao,
+    impostoInformado,
+    bvs,
+    proporcional,
+  ]);
 
   function corpo(): CancelarEventoInput {
     const input: CancelarEventoInput = { motivo: motivo.trim() };
-    if (!venda || devolucao.modo === null) return input;
+    if (outrosVivos && alcance) input.alcance = alcance;
+    if (outrosVivos && alcance === "so_este_dia" && grupo?.proximo_principal) {
+      input.novo_principal_id = grupo.proximo_principal.id;
+    }
+    if (corta) {
+      input.venda_nova = vendaNova;
+      input.venda_esperada = vendaDoGrupo;
+    }
+    if (!comDevolucao || devolucao.modo === null) return input;
     input.devolucao = { modo: devolucao.modo };
     if (devolucao.modo === "parte") input.devolucao.valor = devolucao.valor;
     if (devolucao.modo === "tudo") input.devolucao.valor = maxDevolucao;
@@ -222,6 +327,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
       input.devolucao.pix = devolucao.pix.trim();
       if (devolucao.observacao.trim()) input.devolucao.observacao = devolucao.observacao.trim();
     }
+    if (corta) return input; // no corte, sem imposto e sem PIX de BV
     if (dados?.com_nota) input.imposto_retido = imposto;
     const completados = Object.entries(bvs)
       .filter(([, e]) => e.recebedor.trim() || e.pix.trim())
@@ -255,7 +361,11 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
           onOpenChange(false);
           return;
         }
-        if (codigo === "max_devolucao_mudou" || codigo === "grupo_mudou") void impacto.refetch();
+        if (codigo === "max_devolucao_mudou" || codigo === "grupo_mudou" || codigo === "sem_outro_dia_vivo") {
+          setAlcance(null);
+          setVendaEditada(false);
+          void impacto.refetch();
+        }
         if (e instanceof ApiRequestError && e.fields) setErros(e.fields);
         setErro(e.message);
       },
@@ -282,17 +392,11 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
 
             <ResumoImpacto impacto={dados} />
 
-            {dados.sumiu_do_google && (
-              <p className="rounded-md border border-line bg-surface-2 p-3 text-sm text-ink" role="note">
-                Este evento já não está no Google Agenda: nada será removido de lá.
-              </p>
-            )}
-
-            {dados.is_group_leader && (
+            {dados.acao === "excluir" && dados.is_group_leader && (
               <div className="rounded-md border border-red/40 bg-surface-2 p-3 text-sm" role="alert">
                 <p className="font-semibold text-red">Este evento é o principal de um grupo comercial.</p>
                 <p className="mt-1 text-ink">
-                  Tire os satélites do grupo primeiro — dá para fazer isso na aba Comercial, no painel{" "}
+                  Para excluí-lo, tire os satélites do grupo primeiro — na aba Comercial, no painel{" "}
                   <strong>Grupo comercial</strong>.
                 </p>
                 <Button
@@ -309,7 +413,13 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
               </div>
             )}
 
-            {cancelando && !dados.is_group_leader && (
+            {dados.sumiu_do_google && (
+              <p className="rounded-md border border-line bg-surface-2 p-3 text-sm text-ink" role="note">
+                Este evento já não está no Google Agenda: nada será removido de lá.
+              </p>
+            )}
+
+            {cancelando && (
               <>
                 <div>
                   <label className={LABEL} htmlFor="motivo-cancelamento">
@@ -335,7 +445,30 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                   </p>
                 )}
 
-                {venda && (
+                {grupo && (ehDia || outrosVivos) && (
+                  <CancelamentoDiasBloco
+                    eventId={eventId}
+                    grupo={grupo}
+                    ehDia={ehDia}
+                    outrosVivos={outrosVivos}
+                    alcance={alcance}
+                    onAlcance={(a) => {
+                      setAlcance(a);
+                      // Trocar entre todos e só este muda o que cabe ("Tudo" não vale no corte).
+                      if (a === "so_este_dia" && devolucao.modo === "tudo") setDevolucao((d) => ({ ...d, modo: null }));
+                    }}
+                    corta={corta}
+                    vendaDoGrupo={vendaDoGrupo}
+                    vendaNova={vendaNova}
+                    onVendaNova={(v) => {
+                      setVendaEditada(true);
+                      setVendaNova(v);
+                    }}
+                    erros={erros}
+                  />
+                )}
+
+                {comDevolucao && (!outrosVivos || alcance !== null) && (
                   <>
                     <CancelamentoDevolucaoBloco
                       state={devolucao}
@@ -344,7 +477,10 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                       maxDevolucao={maxDevolucao}
                       comprovantesSemValor={dados.comprovantes_sem_valor ?? 0}
                       erros={erros}
+                      semTudo={corta}
+                      minima={corta ? (efeito?.devolucao_minima ?? 0) : 0}
                     />
+                    {!corta && (
                     <CancelamentoBvBloco
                       bvs={dados.bvs ?? []}
                       proporcional={proporcional}
@@ -352,7 +488,8 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                       onEntrada={(id, entrada) => setBvs((atual) => ({ ...atual, [id]: entrada }))}
                       erros={erros}
                     />
-                    {dados.com_nota && (
+                    )}
+                    {!corta && dados.com_nota && (
                       <fieldset className="rounded-md border border-line p-3">
                         <legend className="px-1 text-xs font-semibold uppercase text-muted">
                           Imposto sobre o retido
@@ -405,7 +542,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
             variant="outline"
             className="text-red"
             loading={pendente}
-            disabled={!dados || dados.is_group_leader || (cancelando && pendencia !== null)}
+            disabled={
+              !dados || (dados.acao === "excluir" && dados.is_group_leader) || (cancelando && pendencia !== null)
+            }
             onClick={confirmar}
           >
             {dados?.acao === "excluir" ? "Excluir de vez" : "Cancelar evento"}

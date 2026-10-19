@@ -399,7 +399,8 @@ export interface ResumoCancelado {
     pago_no_ato: boolean;
   }[];
   // ── só com flags.can_edit_venda_cancelado ──
-  limites_devolucao?: { piso: number; teto: number } | null;
+  /** `atual`: o total de que o Alterar parte — no `dia`, o daquele dia (não o do grupo). */
+  limites_devolucao?: { piso: number; teto: number; atual?: number; refaz_retido?: boolean } | null;
   elenco?: {
     elenco_id: number;
     talent_id: number;
@@ -641,6 +642,8 @@ export interface EventoDetalhe {
     enabled: boolean;
     valor?: number | null;
     recebido?: number | null;
+    /** Feature 306: a devolução à cliente do grupo (o `outstanding` já a desconta). */
+    devolvido?: number | null;
     quitado?: boolean;
     /** Cortesia ou permuta: não é venda — sem "falta" nem "Quitado". */
     cortesia?: boolean;

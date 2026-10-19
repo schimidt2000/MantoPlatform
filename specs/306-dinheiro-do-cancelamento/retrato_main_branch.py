@@ -16,7 +16,8 @@ Como compara (quickstart §3):
   gravaria); depois a branch roda e NÃO pode escrever linha nenhuma de comissão;
 - compara os valores das chaves que a `main` devolve; chave que só existe na branch fica fora e é
   listada à parte; os itens da Planilha se comparam pela identidade (tipo e id);
-- fica fora o que muda de propósito: o ticket médio do Jinja (FR-043), o `sale_count`, o item aberto
+- fica fora o que muda de propósito (listado em PROPÓSITO): a cobrança da Home das vendas com devolução
+  aprovada no grupo (H5, R22: o saldo desconta o devolvido), o ticket médio do Jinja (FR-043), o `sale_count`, o item aberto
   de comissão de soma zero (R6) e, por cancelado com dinheiro (o `legado` e o que o verify já
   cancelou), o mês do `cancelled_at`, o do `expense_date` de cada devolução ligada a ele e, na
   Tendência embutida em toda resposta da DRE, esses meses e o do evento.
@@ -421,10 +422,75 @@ def _sem_rotulos(corpo, rotulos: set[str]):
     return corpo
 
 
-def _comparar(main: dict, branch: dict) -> tuple[list[str], list[str], list[str]]:
+def _vendas_com_devolucao(url: str) -> set[int]:
+    """Os principais com devolução à cliente aprovada no grupo (vivos ou não).
+
+    A H5 (R22) passa a descontar o devolvido do saldo da cobrança: a venda viva com devolução
+    (o corte de um dia, ou uma devolução avulsa) muda de saldo, de selo e de lista de propósito.
+    """
+    return {
+        r[0]
+        for r in _sql(
+            url,
+            "SELECT DISTINCT coalesce(e.group_leader_id, e.id) FROM special_expenses s "
+            "JOIN calendar_events e ON e.id = s.event_id "
+            "WHERE s.category = 'Devolução a cliente' AND s.status = 'aprovado'",
+        )
+    }
+
+
+def _sem_as_vendas(corpo, ids: set[int], achados: set[int]):
+    """Tira das listas da Home os itens dessas vendas (pelo `event_id`), anotando quais apareceram."""
+    if isinstance(corpo, dict):
+        return {k: _sem_as_vendas(v, ids, achados) for k, v in corpo.items()}
+    if isinstance(corpo, list):
+        saida = []
+        for x in corpo:
+            if isinstance(x, dict) and x.get("event_id") in ids:
+                achados.add(x["event_id"])
+                continue
+            saida.append(_sem_as_vendas(x, ids, achados))
+        return saida
+    return corpo
+
+
+def _sem_resumo_da_cobranca(corpo):
+    if isinstance(corpo, dict):
+        return {k: _sem_resumo_da_cobranca(v) for k, v in corpo.items() if k != "cobrancas_resumo"}
+    if isinstance(corpo, list):
+        return [_sem_resumo_da_cobranca(x) for x in corpo]
+    return corpo
+
+
+def _home_sem_a_devolucao(main: dict, branch: dict, ids: set[int]) -> tuple[dict, dict, list[str]]:
+    """A Home dos dois lados sem as vendas com devolução (e sem o agregado, se alguma apareceu)."""
+    if not ids or "home" not in main:
+        return main, branch, []
+    achados: set[int] = set()
+    main = {**main, "home": _sem_as_vendas(main["home"], ids, achados)}
+    branch = {**branch, "home": _sem_as_vendas(branch.get("home"), ids, achados)}
+    if not achados:
+        return main, branch, []
+    main = {**main, "home": _sem_resumo_da_cobranca(main["home"])}
+    branch = {**branch, "home": _sem_resumo_da_cobranca(branch["home"])}
+    return (
+        main,
+        branch,
+        [
+            f"home: {len(achados)} venda(s) com devolução aprovada fora da cobrança e do resumo "
+            "(H5, R22: o saldo desconta o devolvido)"
+        ],
+    )
+
+
+def _comparar(
+    main: dict, branch: dict, devolucao: set[int] | None = None
+) -> tuple[list[str], list[str], list[str]]:
     extras: list[str] = []
     proposito: list[str] = []
     difs: list[str] = []
+    main, branch, proposito_home = _home_sem_a_devolucao(main, branch, devolucao or set())
+    proposito.extend(proposito_home)
     for secao, valor in main.items():
         if secao == "planilha":
             for m, itens in valor.items():
@@ -579,7 +645,7 @@ def main() -> int:
             return 2
     rotulos = {f"{m[5:7]}/{m[2:4]}" for m in tendencia_fora}
     difs, extras, proposito = _comparar(
-        _sem_rotulos(main_lado, rotulos), _sem_rotulos(branch, rotulos)
+        _sem_rotulos(main_lado, rotulos), _sem_rotulos(branch, rotulos), _vendas_com_devolucao(url)
     )
     if antes != depois:
         difs.append(

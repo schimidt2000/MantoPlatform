@@ -864,6 +864,14 @@ class PedidoDeCancelamento:
     imposto_invalido: bool
     bvs: dict[int, tuple[str, str]]
     venda_nova_enviada: bool
+    # Feature 306, H5 (contracts §1, itens 5–7 e 10): o grupo.
+    alcance: str | None = None
+    alcance_enviado: bool = False
+    novo_principal_id: int | None = None
+    venda_nova: Decimal | None = None
+    venda_nova_invalida: bool = False
+    # A venda do grupo que o diálogo mostrou: outro corte (ou a aba Comercial) no meio dá 409.
+    venda_esperada: Decimal | None = None
 
     @classmethod
     def ler(cls, corpo: dict[str, Any] | None) -> PedidoDeCancelamento:
@@ -876,6 +884,9 @@ class PedidoDeCancelamento:
             if isinstance(item, dict) and isinstance(item.get("acrescimo_id"), int):
                 bvs[item["acrescimo_id"]] = (_texto(item.get("recebedor")), _texto(item.get("pix")))
         modo = devolucao.get("modo")
+        venda_nova, venda_nova_invalida = _decimal(corpo.get("venda_nova"))
+        alcance = corpo.get("alcance")
+        novo = corpo.get("novo_principal_id")
         return cls(
             motivo=_texto(corpo.get("motivo")),
             modo=modo if isinstance(modo, str) else None,
@@ -889,6 +900,12 @@ class PedidoDeCancelamento:
             imposto_invalido=imposto_invalido,
             bvs=bvs,
             venda_nova_enviada=corpo.get("venda_nova") is not None,
+            alcance=alcance if isinstance(alcance, str) else None,
+            alcance_enviado=corpo.get("alcance") is not None,
+            novo_principal_id=novo if isinstance(novo, int) and not isinstance(novo, bool) else None,
+            venda_nova=venda_nova,
+            venda_nova_invalida=venda_nova_invalida,
+            venda_esperada=_decimal(corpo.get("venda_esperada"))[0],
         )
 
     def devolve(self, max_devolucao: Decimal) -> Decimal:
@@ -986,34 +1003,330 @@ def _conta_do_ato(
     )
 
 
+# ── O grupo: a forma do ato e a conta do corte (H5; FR-054–FR-058) ──────────────────────────
+
+
+@dataclass
+class FormaDoAto:
+    """Quem o ato cancela e onde a venda fica (contracts §1, itens 5–7).
+
+    - `avulso`: o evento sem outro dia vivo (o principal de um grupo já todo cortado inclusive);
+    - `todos`: o principal e todos os dias vivos (o principal em `venda`; os outros em `satelite`);
+    - `corte`: um dia do grupo que não é o principal (`dia`); a venda fica no principal, menor;
+    - `passagem`: só o 1º dia (`dia`); a venda passa ao novo 1º dia, o dia vivo mais cedo.
+    """
+
+    tipo: str
+    principal: CalendarEvent  # o dono da venda no momento do ato
+    dias: list[CalendarEvent]  # os que o ato cancela, o da URL primeiro
+    vivo: CalendarEvent | None = None  # o principal que continua vivo (corte e passagem)
+
+    @property
+    def corta(self) -> bool:
+        return self.tipo in ("corte", "passagem")
+
+
+def _grupo_mudou(**extras: Any) -> CancelValidationError:
+    from app.constants import CODIGO_GRUPO_MUDOU
+
+    return CancelValidationError(
+        "O grupo deste evento mudou enquanto você decidia: recarregue e confira.",
+        status=409,
+        codigo=CODIGO_GRUPO_MUDOU,
+        **extras,
+    )
+
+
+def _dias_vivos_ordenados(event: CalendarEvent, eventos: list[CalendarEvent]) -> list[CalendarEvent]:
+    """Os outros dias vivos do grupo (já travados em T1), o mais cedo primeiro (início, depois id)."""
+    return sorted(
+        (e for e in eventos if e.id != event.id and not e.is_cancelled),
+        key=lambda e: (e.start_at or datetime.max, e.id),
+    )
+
+
+def _forma_do_ato(event: CalendarEvent, eventos: list[CalendarEvent], pedido: PedidoDeCancelamento) -> FormaDoAto:
+    """400 `alcance` → 409 `sem_outro_dia_vivo` → 409 `grupo_mudou`, nesta ordem (contracts §1).
+
+    Conta os dias vivos de verdade: `is_group_leader` segue verdadeiro com os outros dias já
+    cancelados (eles ficam no grupo).
+    """
+    from app.constants import ALCANCE_SO_ESTE_DIA, ALCANCE_TODOS, CODIGO_SEM_OUTRO_DIA_VIVO
+
+    if event.group_leader_id is not None:
+        if pedido.alcance_enviado:
+            raise CancelValidationError(
+                "Este dia se cancela sozinho: escolher o alcance só vale no 1º dia do grupo.", field="alcance"
+            )
+        principal = next((e for e in eventos if e.id == event.group_leader_id), None)
+        if principal is None or principal.is_cancelled:
+            raise _grupo_mudou()
+        _recusa_da_venda_que_mudou(principal, pedido)
+        return FormaDoAto("corte", principal=principal, dias=[event], vivo=principal)
+    if pedido.alcance_enviado and pedido.alcance not in (ALCANCE_TODOS, ALCANCE_SO_ESTE_DIA):
+        raise CancelValidationError("Escolha se cancela todos os dias do grupo ou só este.", field="alcance")
+    outros = _dias_vivos_ordenados(event, eventos)
+    if not outros:
+        if pedido.alcance == ALCANCE_SO_ESTE_DIA:
+            raise CancelValidationError(
+                "Não há outro dia vivo no grupo para receber a venda: cancele todos os dias.",
+                status=409,
+                codigo=CODIGO_SEM_OUTRO_DIA_VIVO,
+            )
+        return FormaDoAto("avulso", principal=event, dias=[event])
+    if not pedido.alcance_enviado:
+        raise CancelValidationError(
+            "Este evento tem outros dias no grupo: escolha se cancela todos ou só este.", field="alcance"
+        )
+    if pedido.alcance == ALCANCE_TODOS:
+        return FormaDoAto("todos", principal=event, dias=[event, *outros])
+    novo = outros[0]
+    if pedido.novo_principal_id != novo.id:
+        raise _grupo_mudou(novo_principal=_evento_curto(novo))
+    _recusa_da_venda_que_mudou(event, pedido)
+    return FormaDoAto("passagem", principal=event, dias=[event], vivo=novo)
+
+
+def _recusa_da_venda_que_mudou(principal: CalendarEvent, pedido: PedidoDeCancelamento) -> None:
+    """A venda do grupo mudou desde que o diálogo abriu (outro corte, ou a aba Comercial): o novo
+    valor foi pensado sobre a de antes — 409 `grupo_mudou`, com a venda de agora."""
+    if pedido.venda_esperada is not None and pedido.venda_esperada != _dinheiro(principal.sale_value):
+        raise _grupo_mudou(venda_do_grupo=float(_dinheiro(principal.sale_value)))
+
+
+def _regime_do_ato(forma: FormaDoAto) -> str:
+    from app.constants import REGIME_DIA, REGIME_VENDA, REGIME_VIRTUAL
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if forma.corta:
+        return REGIME_DIA
+    return REGIME_VIRTUAL if is_loja_virtual(forma.principal) else REGIME_VENDA
+
+
+@dataclass
+class ContaDoCorte:
+    """O dinheiro do corte de um dia (FR-056): a venda do grupo diminui; ninguém fica com retido."""
+
+    pago: Decimal
+    ja_devolvido: Decimal
+    max_devolucao: Decimal  # o teto: pago do grupo − já devolvido
+    devolucao: Decimal
+    venda: Decimal
+    venda_nova: Decimal | None  # `None` = inválida (o 400 de `venda_nova`)
+    cheio: Decimal | None
+    cheio_novo: Decimal | None
+    minima: Decimal
+
+
+def _devolucao_minima(pago: Decimal, ja_devolvido: Decimal, venda_nova: Decimal, venda: Decimal) -> Decimal:
+    """O mínimo a devolver no corte (FR-056): o que a cliente pagou acima da venda nova, menos o que
+    já passava da venda de antes (esse excedente não nasce do corte)."""
+    livre = pago - ja_devolvido
+    return _dinheiro(max(Decimal("0"), (livre - venda_nova) - max(Decimal("0"), livre - venda)))
+
+
+def _conta_do_corte(principal: CalendarEvent, ids: list[int], devolucao: Decimal, venda_nova: Any) -> ContaDoCorte:
+    """A mesma na prévia e no ato. O cheio novo é o de antes na proporção da venda (meio centavo
+    para cima)."""
+    from decimal import ROUND_HALF_UP
+
+    pago, ja_devolvido = _dinheiro_do_grupo(ids)
+    venda = _dinheiro(principal.sale_value)
+    nova, invalida = _decimal(venda_nova)
+    if invalida or nova is None or nova <= 0 or nova > venda:
+        nova = None
+    cheio = _dinheiro(principal.sale_value_gross) if principal.sale_value_gross is not None else None
+    cheio_novo = None
+    if nova is not None and cheio is not None and venda > 0:
+        cheio_novo = (cheio * nova / venda).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
+    return ContaDoCorte(
+        pago=pago,
+        ja_devolvido=ja_devolvido,
+        max_devolucao=max(Decimal("0.00"), pago - ja_devolvido),
+        devolucao=_dinheiro(devolucao),
+        venda=venda,
+        venda_nova=nova,
+        cheio=cheio,
+        cheio_novo=cheio_novo,
+        minima=_devolucao_minima(pago, ja_devolvido, nova, venda) if nova is not None else Decimal("0.00"),
+    )
+
+
+def _frase_da_minima(conta: ContaDoCorte) -> str:
+    return (
+        f"A cliente pagou {_brl(conta.pago)}: devolva pelo menos {_brl(conta.minima)} "
+        "ou aumente o novo valor da venda."
+    )
+
+
+def _erros_do_corte(pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> dict[str, str]:
+    """Todos os campos recusados do corte de uma vez: só Parte ou Nada, sem imposto e sem PIX de BV."""
+    from app.constants import MODO_NADA, MODO_PARTE, MODO_TUDO
+
+    erros: dict[str, str] = {}
+    if not pedido.motivo:
+        erros["motivo"] = "Explique o motivo do cancelamento."
+    if conta.venda_nova is None:
+        erros["venda_nova"] = f"Informe o novo valor da venda do grupo: maior que zero e até {_brl(conta.venda)}."
+    if pedido.imposto_enviado:
+        erros["imposto_retido"] = "Ao cancelar só um dia não há imposto a reter: a venda continua no grupo."
+    modo = pedido.modo
+    if modo == MODO_TUDO:
+        erros["devolucao_modo"] = "Ao cancelar só um dia, devolva parte ou nada: a venda continua no grupo."
+    elif modo not in (MODO_PARTE, MODO_NADA):
+        erros["devolucao_modo"] = "Escolha se devolve parte ou nada à cliente."
+    elif modo == MODO_PARTE and conta.pago <= 0:
+        erros["devolucao_modo"] = "A cliente não pagou nada (nenhum comprovante com valor): só cabe Nada."
+    elif modo == MODO_PARTE:
+        if pedido.valor_invalido or pedido.valor is None or pedido.valor <= 0:
+            erros["devolucao_valor"] = "Informe quanto devolve à cliente."
+        elif pedido.valor > conta.max_devolucao:
+            erros["devolucao_valor"] = f"Acima do que dá para devolver ({_brl(conta.max_devolucao)})."
+        elif pedido.valor < conta.minima:
+            erros["devolucao_valor"] = _frase_da_minima(conta)
+    elif conta.minima > 0:
+        erros["devolucao_modo"] = _frase_da_minima(conta)
+    if modo == MODO_PARTE and "devolucao_modo" not in erros:
+        _erros_de_quem_recebe(pedido, erros)
+    return erros
+
+
+def _bvs_depois_do_corte(principal: CalendarEvent, conta: ContaDoCorte) -> list[tuple[Any, Decimal, bool]]:
+    """O BV do principal depois de acompanhar a venda nova, pela MESMA conta da gravação
+    (`comercial_ops.bvs_que_acompanham`, FR-011): o pago fica; o a pagar acompanha. `(acréscimo, BV,
+    pago)`."""
+    from app.calendar.comercial_ops import bvs_que_acompanham
+    from app.models import EventAcrescimo
+
+    linhas = [
+        a
+        for a in EventAcrescimo.query.filter(EventAcrescimo.event_id == principal.id).order_by(EventAcrescimo.id).all()
+        if a.is_bv
+    ]
+    antes = (principal.sale_value, bool(principal.with_invoice), bool(principal.is_cortesia_permuta))
+    novos: dict[int, Decimal] = {}
+    if conta.venda_nova is not None:
+        novos, _ficou = bvs_que_acompanham(
+            linhas, antes, conta.venda_nova, bool(principal.with_invoice), bool(principal.is_cortesia_permuta)
+        )
+    saida = []
+    for a in linhas:
+        if not a.amount_brl:
+            continue
+        pago = (a.bv_payment_status or "nao_pago") in ("pago", "no_banco")
+        saida.append((a, _dinheiro(novos.get(a.id, a.amount_brl)), pago))
+    return saida
+
+
+def _custo_sem_o_dia(vivo: CalendarEvent, dia: CalendarEvent, settings) -> Decimal | None:
+    """O custo da comissão EducaManto do principal que fica, sem o dia cortado (que ainda não tem
+    `cancelled_at` quando a comissão é refeita). Fora da EducaManto, `None`."""
+    from app.calendar.group_ops import dias_vivos
+    from app.financeiro import comissoes_ops
+
+    if not (vivo.is_educamanto and comissoes_ops._educamanto_responsavel(settings) is not None):
+        return None
+    return _dinheiro(sum((comissoes_ops._event_cost(e) for e in dias_vivos(vivo) if e.id != dia.id), 0))
+
+
+def _previa_do_corte(event: CalendarEvent, devolucao: Any, venda_nova: Any) -> dict[str, Any]:
+    """A prévia do corte (contracts §2): sem retido nem comissão do retido; a cheia nova do
+    principal, o BV dele depois de acompanhar a venda e a devolução mínima. Sem trava."""
+    from app.constants import CODIGO_SEM_OUTRO_DIA_VIVO, MOTIVO_AJUSTE_CORTE_DE_DIA, now_sp
+    from app.financeiro import comissoes_ops
+    from app.models import SiteSetting
+
+    principal_id = event.group_leader_id or event.id
+    ids = ids_do_grupo([principal_id])[principal_id]
+    principal = event if event.group_leader_id is None else db.session.get(CalendarEvent, event.group_leader_id)
+    if event.group_leader_id is None and not _dias_vivos_ordenados(event, CalendarEvent.query.filter(CalendarEvent.id.in_(ids)).all()):
+        raise CancelValidationError(
+            "Não há outro dia vivo no grupo para receber a venda: cancele todos os dias.",
+            status=409,
+            codigo=CODIGO_SEM_OUTRO_DIA_VIVO,
+        )
+    valor, invalido = _decimal(devolucao)
+    conta = _conta_do_corte(principal, ids, valor or Decimal("0"), venda_nova)
+    if conta.venda_nova is None:
+        raise CancelValidationError(
+            f"Informe o novo valor da venda do grupo: maior que zero e até {_brl(conta.venda)}.", field="venda_nova"
+        )
+    if invalido or valor is None or valor < 0 or valor > conta.max_devolucao:
+        raise CancelValidationError(f"Informe um valor de 0 a {_brl(conta.max_devolucao)}.", field="devolucao")
+    settings = SiteSetting.query.get(1)
+    bvs = _bvs_depois_do_corte(principal, conta)
+    bv_total = _dinheiro(sum((b for _a, b, _p in bvs), Decimal("0")))
+    bv_a_pagar = _dinheiro(sum((b for _a, b, pago in bvs if not pago), Decimal("0")))
+    cheia_antes, _b, _t = comissoes_ops.comissao_cheia_do_evento(principal, settings)
+    cheia, beneficiario, _taxa = comissoes_ops.comissao_cheia_do_evento(
+        principal, settings, venda=conta.venda_nova, bv_total=bv_total, custo=_custo_sem_o_dia(principal, event, settings)
+    )  # fmt: skip
+    plano: list[dict] = []
+    if _dinheiro(cheia) != _dinheiro(cheia_antes):
+        alvos = {beneficiario: cheia} if beneficiario else {}
+        plano = comissoes_ops.reconciliar_comissao_do_cancelado(
+            principal, alvos, motivo=MOTIVO_AJUSTE_CORTE_DE_DIA, hoje=now_sp().date(), simular=True
+        )
+    nova, ciclo, repasse = _ajuste_do_plano(plano, beneficiario)
+    return {
+        "devolucao": float(conta.devolucao),
+        "retido": None,
+        "comissao_cheia": float(cheia),
+        "comissao_retido": None,
+        # No corte, o BV a pagar do principal depois de acompanhar (contracts §2); o pago não conta.
+        "bv_retido": float(bv_a_pagar),
+        "bvs": [{"acrescimo_id": a.id, "bv_retido": float(b)} for a, b, pago in bvs if not pago],
+        "ja_liquidada": float(_liquidada(principal, beneficiario)),
+        "ajuste": float(nova["valor"]) if nova else None,
+        "ciclo": ciclo.strftime("%Y-%m") if ciclo else None,
+        "repasse_em": repasse.isoformat() if repasse else None,
+        "imposto_referencia": None,
+        "devolucao_minima": float(conta.minima),
+    }
+
+
 def _aliquota(settings) -> Decimal:
     from app.financeiro.routes import _get_tax_rate
 
     return Decimal(str(_get_tax_rate(settings)))
 
 
-def _efeito(event: CalendarEvent, conta: ContaDoAto, plano: list[dict], settings) -> dict[str, Any]:
-    """O `EfeitoCancelamento` (contracts §2) a partir da conta e do plano da reconciliação."""
+def _ajuste_do_plano(plano: list[dict], beneficiario_id: int | None) -> tuple[dict | None, date | None, date | None]:
+    """A linha nova do plano (a do beneficiário primeiro), o ciclo dela e o dia do repasse."""
     from app.constants import DIA_DO_REPASSE
 
-    novas = [p for p in plano if p["linha_id"] is None and p["seller_id"] == conta.beneficiario_id]
+    novas = [p for p in plano if p["linha_id"] is None and p["seller_id"] == beneficiario_id]
     nova = novas[0] if novas else (next((p for p in plano if p["linha_id"] is None), None))
     ciclo = (nova["payable_from"] or nova["sale_date"]) if nova else None
     repasse = None
     if ciclo is not None:
         seguinte = date(ciclo.year + 1, 1, 1) if ciclo.month == 12 else date(ciclo.year, ciclo.month + 1, 1)
         repasse = seguinte.replace(day=DIA_DO_REPASSE)
-    liquidada = (
+    return nova, ciclo, repasse
+
+
+def _liquidada(event: CalendarEvent, beneficiario_id: int | None) -> Decimal:
+    from app.financeiro import comissoes_ops
+
+    if not beneficiario_id:
+        return Decimal("0.00")
+    soma = (
         db.session.query(db.func.coalesce(db.func.sum(CommissionPayment.amount), 0))
         .filter(
             CommissionPayment.event_id == event.id,
-            CommissionPayment.seller_id == conta.beneficiario_id,
+            CommissionPayment.seller_id == beneficiario_id,
             CommissionPayment.status.in_(("pago", "no_banco")),
+            comissoes_ops._sem_marca_propria(),
         )
         .scalar()
-        if conta.beneficiario_id
-        else 0
     )
+    return _dinheiro(soma)
+
+
+def _efeito(event: CalendarEvent, conta: ContaDoAto, plano: list[dict], settings) -> dict[str, Any]:
+    """O `EfeitoCancelamento` (contracts §2) a partir da conta e do plano da reconciliação."""
+    nova, ciclo, repasse = _ajuste_do_plano(plano, conta.beneficiario_id)
+    liquidada = _liquidada(event, conta.beneficiario_id)
     referencia = None
     if event.with_invoice:
         referencia = (_aliquota(settings) * conta.retido / Decimal("100")).quantize(_CENTAVO)
@@ -1038,6 +1351,9 @@ def previa_cancelamento(event: CalendarEvent, devolucao: Any, venda_nova: Any = 
     `reconciliar_comissao_do_cancelado(simular=True)` não toca o ORM, e `primeiro_repasse_aberto`
     exclui as linhas do próprio evento: a prévia sai igual à execução (FR-011).
 
+    Com `venda_nova`, é a prévia do corte (o dia do grupo, ou o 1º dia com a passagem da venda):
+    `_previa_do_corte`.
+
     Raises:
         CancelValidationError: 400 `fields.devolucao` / `fields.venda_nova`; 409 `ja_cancelado`.
     """
@@ -1049,9 +1365,11 @@ def previa_cancelamento(event: CalendarEvent, devolucao: Any, venda_nova: Any = 
     valor, invalido = _decimal(devolucao)
     if event.is_cancelled:
         raise CancelValidationError("Este evento já está cancelado.", status=409, codigo=CODIGO_JA_CANCELADO)
-    if venda_nova is not None:
+    if venda_nova not in (None, ""):
+        return _previa_do_corte(event, devolucao, venda_nova)
+    if event.group_leader_id is not None:
         raise CancelValidationError(
-            "O novo valor da venda só vale ao cancelar um dia do grupo.", field="venda_nova"
+            "Informe o novo valor da venda do grupo para cancelar só este dia.", field="venda_nova"
         )
     principal_id = event.group_leader_id or event.id
     ids = ids_do_grupo([principal_id])[principal_id]
@@ -1095,7 +1413,8 @@ def ao_cancelar(event: CalendarEvent, *, alcance: str, novo_principal: CalendarE
 
 
 def _recusas_de_estado(event: CalendarEvent) -> None:
-    """As recusas que não dependem do corpo, depois de T1: já cancelado, ensaio, grupo (até a H5)."""
+    """As recusas que não dependem do corpo, depois de T1: já cancelado e ensaio. O grupo se resolve
+    em `_forma_do_ato` (alcance, dia vivo, novo principal)."""
     from app.constants import CODIGO_ENSAIO, CODIGO_JA_CANCELADO
 
     if event.is_cancelled:
@@ -1105,10 +1424,6 @@ def _recusas_de_estado(event: CalendarEvent) -> None:
             "Ensaio não se cancela sozinho: ele sai junto com o cancelamento do evento.",
             status=409,
             codigo=CODIGO_ENSAIO,
-        )
-    if event.is_group_leader or event.is_satellite:
-        raise CancelValidationError(
-            "Desagrupe os eventos satélites antes de cancelar este evento.", field="motivo"
         )
 
 
@@ -1157,14 +1472,7 @@ def _erros_do_pedido(
     elif modo == MODO_TUDO and (pedido.valor_invalido or pedido.valor is None):
         erros["devolucao_valor"] = "Recarregue a página: falta o total a devolver."
     if modo in (MODO_TUDO, MODO_PARTE) and "devolucao_modo" not in erros:
-        if not pedido.nome:
-            erros["devolucao_nome"] = "Informe quem recebe a devolução."
-        elif len(pedido.nome) > 200:
-            erros["devolucao_nome"] = "Quem recebe: até 200 caracteres."
-        if not pedido.pix:
-            erros["devolucao_pix"] = "Informe o PIX da devolução."
-        elif len(pedido.pix) > 120:
-            erros["devolucao_pix"] = "PIX: até 120 caracteres."
+        _erros_de_quem_recebe(pedido, erros)
     if event.with_invoice:
         if pedido.imposto_invalido or pedido.imposto is None:
             erros["imposto_retido"] = "Informe o imposto retido em reais (0 se não houve)."
@@ -1180,6 +1488,17 @@ def _erros_do_pedido(
         if erros_do_bv(recebedor or (a.bv_recipient or ""), pix or (a.bv_pix or "")):
             erros[f"bv_pix_{a.id}"] = "Informe quem recebe e o PIX do BV — ele vai à Planilha de Pagamentos."
     return erros
+
+
+def _erros_de_quem_recebe(pedido: PedidoDeCancelamento, erros: dict[str, str]) -> None:
+    if not pedido.nome:
+        erros["devolucao_nome"] = "Informe quem recebe a devolução."
+    elif len(pedido.nome) > 200:
+        erros["devolucao_nome"] = "Quem recebe: até 200 caracteres."
+    if not pedido.pix:
+        erros["devolucao_pix"] = "Informe o PIX da devolução."
+    elif len(pedido.pix) > 120:
+        erros["devolucao_pix"] = "PIX: até 120 caracteres."
 
 
 def _gravar_pix_dos_bvs(acrescimos: list, pedido: PedidoDeCancelamento) -> None:
@@ -1349,31 +1668,200 @@ def _remover_do_google(ids_do_google: list[str]) -> tuple[bool, str | None]:
     return removeu, None
 
 
+def _congelar_satelite(dia: CalendarEvent, *, principal: CalendarEvent, actor: User) -> None:
+    """A linha `satelite` de um dia do "todos": sem dinheiro próprio, ligada ao principal."""
+    from app.constants import REGIME_SATELITE
+    from app.models import EventCancellation
+
+    db.session.add(EventCancellation(
+        event=dia, regime=REGIME_SATELITE, seller_id=dia.seller_id, with_invoice=False,
+        group_leader_id=principal.id, updated_by_id=actor.id,
+    ))  # fmt: skip
+
+
+def _congelar_dia(
+    dia: CalendarEvent, *, principal: CalendarEvent, pedido: PedidoDeCancelamento, conta: ContaDoCorte, actor: User
+) -> None:
+    """A linha `dia` do corte: a venda do grupo antes e depois (e o cheio), ligada ao principal
+    que fica vivo — na passagem, o novo (`passar_venda` marca `sale_handed_over`)."""
+    from app.constants import REGIME_DIA
+    from app.models import EventCancellation
+
+    db.session.add(EventCancellation(
+        event=dia, regime=REGIME_DIA, refund_mode=pedido.modo, seller_id=dia.seller_id, with_invoice=False,
+        group_leader_id=principal.id, sale_value_before=conta.venda, sale_value_after=conta.venda_nova,
+        sale_value_gross_before=conta.cheio, sale_value_gross_after=conta.cheio_novo, updated_by_id=actor.id,
+    ))  # fmt: skip
+
+
+def _marcar_comissao_propria(novo: CalendarEvent) -> None:
+    """Antes de `passar_venda`, pelo `event_id` de antes: a comissão que o novo 1º dia já tinha de
+    quando era venda avulsa fica fora da reconciliação da venda do grupo (P-29, P-51)."""
+    from app.constants import NOTA_COMISSAO_PROPRIA_DO_DIA
+    from app.utils import audit
+
+    linhas = (
+        CommissionPayment.query.filter(CommissionPayment.event_id == novo.id, CommissionPayment.status != "cancelado")
+        .order_by(CommissionPayment.id)
+        .all()
+    )
+    for cp in linhas:
+        if NOTA_COMISSAO_PROPRIA_DO_DIA in (cp.notes or ""):
+            continue
+        cp.notes = f"{NOTA_COMISSAO_PROPRIA_DO_DIA} | {cp.notes}" if cp.notes else NOTA_COMISSAO_PROPRIA_DO_DIA
+        audit("edit", "commission", cp.id, novo.title, "Comissão própria do dia: fica fora da venda do grupo")
+
+
+def _seguir_o_corte(vivo: CalendarEvent, conta: ContaDoCorte, *, dia: CalendarEvent, actor: User, settings) -> None:
+    """A venda do principal que fica diminui, o BV a pagar acompanha UMA vez e a comissão se refaz.
+
+    Pela 305: `estado_da_venda` (trava e relê o "antes"), a venda nova, `acompanhar_bv_da_venda`
+    e só então a comissão — com a cheia nova sobre a venda nova, o BV acompanhado e o custo sem o
+    dia cortado. Só refaz quando o corte muda a cheia (a venda que diminuiu, ou o cachê do dia que
+    sai da base da EducaManto): com a mesma cheia, refazer acertaria diferenças que não são do corte.
+    """
+    from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
+    from app.constants import MOTIVO_AJUSTE_CORTE_DE_DIA
+    from app.financeiro import comissoes_ops
+
+    antes = estado_da_venda(vivo)
+    cheia_antes, _b, _t = comissoes_ops.comissao_cheia_do_evento(vivo, settings)
+    vivo.sale_value = conta.venda_nova
+    if conta.cheio_novo is not None:
+        vivo.sale_value_gross = conta.cheio_novo
+    acompanhar_bv_da_venda(vivo, antes, actor_name=actor.name, tz=TZ)
+    db.session.flush()
+    cheia, beneficiario, _taxa = comissoes_ops.comissao_cheia_do_evento(
+        vivo, settings, custo=_custo_sem_o_dia(vivo, dia, settings)
+    )
+    if _dinheiro(cheia) != _dinheiro(cheia_antes):
+        alvos = {beneficiario: cheia} if beneficiario else {}
+        comissoes_ops.reconciliar_comissao_do_cancelado(vivo, alvos, motivo=MOTIVO_AJUSTE_CORTE_DE_DIA)
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    texto = f'Dia "{dia.title}" cancelado: venda do grupo {_brl(conta.venda)} → {_brl(conta.venda_nova)}'
+    if conta.cheio_novo is not None:
+        texto += f" (antes do desconto {_brl(conta.cheio)} → {_brl(conta.cheio_novo)})"
+    db.session.add(EventLog(event_id=vivo.id, actor_name=actor.name, actor_role=papel, message=texto))
+
+
+def _conta_validada(forma: FormaDoAto, regime: str, ids: list[int], acrescimos: list, pedido, settings):
+    """A conta da forma do ato e as recusas de campo (400) e do máximo (409)."""
+    from app.constants import CODIGO_MAX_DEVOLUCAO_MUDOU, MODO_TUDO, REGIME_VENDA
+
+    if forma.corta:
+        conta = _conta_do_corte(forma.principal, ids, pedido.devolve(Decimal("0.00")), pedido.venda_nova)
+        erros = _erros_do_corte(pedido, conta)
+    else:
+        pago, ja_devolvido = _dinheiro_do_grupo(ids)
+        maximo = max(Decimal("0.00"), pago - ja_devolvido)
+        devolve = pedido.devolve(maximo) if regime == REGIME_VENDA else Decimal("0.00")
+        conta = _conta_do_ato(forma.principal, ids, acrescimos, devolve, settings)
+        erros = _erros_do_pedido(forma.principal, pedido, regime=regime, conta=conta)
+    if erros:
+        raise CancelValidationError("Corrija os campos destacados.", fields=erros)
+    if not forma.corta and regime == REGIME_VENDA and pedido.modo == MODO_TUDO and pedido.valor != conta.max_devolucao:
+        raise CancelValidationError(
+            f"O valor a devolver mudou para {_brl(conta.max_devolucao)}: confira antes de cancelar.",
+            status=409,
+            codigo=CODIGO_MAX_DEVOLUCAO_MUDOU,
+            max_devolucao=float(conta.max_devolucao),
+        )
+    return conta
+
+
+def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, settings) -> SpecialExpense | None:
+    """Congela, devolve e refaz a comissão, na ordem do plan §Travas. Devolve o gasto da devolução."""
+    from app.calendar import group_ops
+    from app.constants import MOTIVO_AJUSTE_RETIDO, REGIME_VENDA
+    from app.financeiro import comissoes_ops
+
+    if not forma.corta:
+        _congelar(forma.principal, regime=regime, pedido=pedido, conta=conta, actor=actor)
+        for dia in forma.dias[1:]:
+            _congelar_satelite(dia, principal=forma.principal, actor=actor)
+        gasto = None
+        if regime == REGIME_VENDA:
+            gasto = _registrar_devolucao(forma.principal, valor=conta.devolucao, nome=pedido.nome, pix=pedido.pix,
+                                         observacao=pedido.observacao, actor=actor)  # fmt: skip
+        db.session.flush()
+        if regime == REGIME_VENDA:
+            comissoes_ops.reconciliar_comissao_do_cancelado(forma.principal, conta.alvos, motivo=MOTIVO_AJUSTE_RETIDO)
+        return gasto
+    dia = forma.dias[0]
+    _congelar_dia(dia, principal=forma.vivo, pedido=pedido, conta=conta, actor=actor)
+    if forma.tipo == "passagem":
+        db.session.flush()
+        _marcar_comissao_propria(forma.vivo)
+        # Pelo nome do módulo: a mutação do 42 a troca por um "apaga e recria".
+        group_ops.passar_venda(dia, forma.vivo, actor_name=actor.name)
+    # Ligada ao dia da URL: a devolução do ato não viaja com a venda (fica no antigo 1º dia).
+    gasto = _registrar_devolucao(dia, valor=conta.devolucao, nome=pedido.nome, pix=pedido.pix,
+                                 observacao=pedido.observacao, actor=actor)  # fmt: skip
+    db.session.flush()
+    _seguir_o_corte(forma.vivo, conta, dia=dia, actor=actor, settings=settings)
+    return gasto
+
+
+def _texto_do_corte(forma: FormaDoAto, pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> str:
+    partes = [f"Dia cancelado: {pedido.motivo}", f"venda do grupo {_brl(conta.venda)} → {_brl(conta.venda_nova)}"]
+    if conta.devolucao > 0:
+        partes.append(f"devolução de {_brl(conta.devolucao)} a {pedido.nome}")
+    else:
+        partes.append("não devolve nada")
+    if forma.tipo == "passagem":
+        partes.append(f'a venda passou para "{forma.vivo.title}"')
+    return " | ".join(partes)
+
+
+def _encerrar_os_dias(forma: FormaDoAto, regime: str, pedido, conta, actor: User) -> None:
+    """`cancelled_at`, `ao_cancelar` e o histórico de cada dia que o ato cancela (um por dia)."""
+    from app.calendar.routes import _log_sync
+    from app.constants import ALCANCE_SO_ESTE_DIA, ALCANCE_TODOS, now_sp
+
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    for dia in forma.dias:
+        dia.cancelled_at = now_sp()
+        dia.cancelled_by_id = actor.id
+        dia.cancellation_reason = pedido.motivo
+        # A solicitação foi atendida: limpa para o evento não ficar marcado como pendente.
+        dia.deletion_requested_at = None
+        dia.deletion_requested_by_id = None
+        dia.deletion_request_reason = None
+        if forma.corta:
+            novo = forma.vivo if forma.tipo == "passagem" else None
+            ao_cancelar(dia, alcance=ALCANCE_SO_ESTE_DIA, novo_principal=novo)
+            detalhe = _texto_do_corte(forma, pedido, conta)
+        else:
+            ao_cancelar(dia, alcance=ALCANCE_TODOS, novo_principal=None)
+            detalhe = (
+                _texto_do_historico(pedido.motivo, regime, pedido, conta)
+                if dia is forma.principal
+                else f'Evento cancelado com todos os dias do grupo de "{forma.principal.title}": {pedido.motivo}'
+            )
+        # Sem `created_at`: vale o default UTC do modelo, que o histórico da tela converte (FR-016).
+        db.session.add(EventLog(event_id=dia.id, actor_name=actor.name, actor_role=papel, message=detalhe))
+        _log_sync("event_cancelled", dia, details=detalhe, actor=actor.name, actor_role=papel)
+
+
 def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor: User) -> dict[str, Any]:
     """Cancela o evento: congela, devolve, reconcilia a comissão e tira do Google. Commita.
 
-    A ordem é a única do ato (data-model §7.1; contracts §1): travas → recusas → validação de
-    todos os campos → (marcado: desmarcar) → congelar → devolução → reconciliar → `cancelled_at`
-    → `ao_cancelar` → `EventLog` (UTC) → commit → Google, fora da trava.
+    A ordem é a única do ato (data-model §7.1; contracts §1): travas → recusas (o grupo em
+    `_forma_do_ato`) → validação de todos os campos → (marcado: desmarcar) → congelar → (passagem:
+    a comissão própria do novo e `passar_venda`) → devolução → comissão (ou o corte: a venda do
+    principal que fica, o BV e a comissão dele) → `cancelled_at` → `ao_cancelar` → `EventLog`
+    (UTC) → commit → Google, fora da trava. As quatro formas estão em `FormaDoAto`.
 
     Returns:
-        `{"event", "gasto_id", "google_removido", "aviso"}`; a view monta o `resumo`.
+        `{"event", "gasto_id", "google_removido", "aviso", "dias_cancelados", "venda_passou_para"}`;
+        a view monta o `resumo`.
 
     Raises:
         CancelValidationError: as recusas do contrato (400 com `fields`, 409 com `codigo`).
     """
     from app.calendar import sumico_ops
-    from app.constants import (
-        ALCANCE_TODOS,
-        CODIGO_MAX_DEVOLUCAO_MUDOU,
-        MODO_TUDO,
-        MOTIVO_AJUSTE_RETIDO,
-        REGIME_VENDA,
-        REGIME_VIRTUAL,
-        now_sp,
-    )
+    from app.constants import REGIME_VENDA, REGIME_VIRTUAL
     from app.financeiro import comissoes_ops
-    from app.financeiro.vendas_ops import is_loja_virtual
     from app.models import SiteSetting
 
     pedido = PedidoDeCancelamento.ler(corpo)
@@ -1381,63 +1869,40 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
     ids = [e.id for e in eventos]
     _ler_congelados(ids)  # T2
     _recusas_de_estado(event)
-    regime = REGIME_VIRTUAL if is_loja_virtual(event) else REGIME_VENDA
+    forma = _forma_do_ato(event, eventos, pedido)
+    regime = _regime_do_ato(forma)
     settings = SiteSetting.query.get(1)
-    acrescimos = _travar_acrescimos(event.id) if regime == REGIME_VENDA else []  # T3
-    beneficiario = comissoes_ops._beneficiario_comissionado(event, settings)
+    acrescimos = _travar_acrescimos(forma.principal.id) if regime != REGIME_VIRTUAL else []  # T3
+    beneficiario = comissoes_ops._beneficiario_comissionado(forma.principal, settings)
     _travar_linhas_de_comissao(ids, {getattr(beneficiario, "id", None), *_beneficiarios_das_linhas(ids)})  # T4
     _recusa_da_pendente(_travar_devolucoes(ids))  # T5
-    pago, ja_devolvido = _dinheiro_do_grupo(ids)
-    maximo = max(Decimal("0.00"), pago - ja_devolvido)
-    conta = _conta_do_ato(event, ids, acrescimos, pedido.devolve(maximo) if regime == REGIME_VENDA else Decimal("0.00"), settings)
-    erros = _erros_do_pedido(event, pedido, regime=regime, conta=conta)
-    if erros:
-        raise CancelValidationError("Corrija os campos destacados.", fields=erros)
-    if regime == REGIME_VENDA and pedido.modo == MODO_TUDO and pedido.valor != conta.max_devolucao:
-        raise CancelValidationError(
-            f"O valor a devolver mudou para {_brl(conta.max_devolucao)}: confira antes de cancelar.",
-            status=409,
-            codigo=CODIGO_MAX_DEVOLUCAO_MUDOU,
-            max_devolucao=float(conta.max_devolucao),
-        )
+    conta = _conta_validada(forma, regime, ids, acrescimos, pedido, settings)
 
     # ── grava ──
-    alvos_google = _alvos_do_google([event])
-    if event.is_google_missing:
-        sumico_ops.desmarcar(event, motivo=sumico_ops.MOTIVO_CANCELADO)
-    _gravar_pix_dos_bvs(acrescimos, pedido)
-    db.session.flush()
-    _congelar(event, regime=regime, pedido=pedido, conta=conta, actor=actor)
-    gasto = None
+    alvos_google = _alvos_do_google(forma.dias)
+    for dia in forma.dias:
+        if dia.is_google_missing:
+            sumico_ops.desmarcar(dia, motivo=sumico_ops.MOTIVO_CANCELADO)
     if regime == REGIME_VENDA:
-        gasto = _registrar_devolucao(
-            event, valor=conta.devolucao, nome=pedido.nome, pix=pedido.pix, observacao=pedido.observacao, actor=actor
-        )
+        _gravar_pix_dos_bvs(acrescimos, pedido)
     db.session.flush()
-    if regime == REGIME_VENDA:
-        comissoes_ops.reconciliar_comissao_do_cancelado(event, conta.alvos, motivo=MOTIVO_AJUSTE_RETIDO)
-    event.cancelled_at = now_sp()
-    event.cancelled_by_id = actor.id
-    event.cancellation_reason = pedido.motivo
-    # A solicitação foi atendida: limpa para o evento não ficar marcado como pendente.
-    event.deletion_requested_at = None
-    event.deletion_requested_by_id = None
-    event.deletion_request_reason = None
-    ao_cancelar(event, alcance=ALCANCE_TODOS, novo_principal=None)
-    detalhe = _texto_do_historico(pedido.motivo, regime, pedido, conta)
-    papel = ", ".join(r.name for r in actor.roles)[:60] or None
-    # Sem `created_at`: vale o default UTC do modelo, que o histórico da tela converte (FR-016).
-    db.session.add(EventLog(event_id=event.id, actor_name=actor.name, actor_role=papel, message=detalhe))
-    from app.calendar.routes import _log_sync
-
-    _log_sync("event_cancelled", event, details=detalhe, actor=actor.name, actor_role=papel)
+    gasto = _gravar_o_ato(forma, regime, pedido, conta, actor, settings)
+    _encerrar_os_dias(forma, regime, pedido, conta, actor)
     db.session.flush()
     gasto_id = gasto.id if gasto is not None else None
-    db.session.expire(event, ["commission_payments"])
+    for dia in {*forma.dias, forma.principal, *([forma.vivo] if forma.vivo else [])}:
+        db.session.expire(dia, ["commission_payments"])
     db.session.commit()
 
     google_removido, aviso = _remover_do_google(alvos_google)
-    return {"event": event, "gasto_id": gasto_id, "google_removido": google_removido, "aviso": aviso}
+    return {
+        "event": event,
+        "gasto_id": gasto_id,
+        "google_removido": google_removido,
+        "aviso": aviso,
+        "dias_cancelados": [d.id for d in forma.dias],
+        "venda_passou_para": _evento_curto(forma.vivo) if forma.tipo == "passagem" else None,
+    }
 
 
 def elenco_do_ato(event: CalendarEvent, dias: list[int] | None = None) -> list[EventRole]:
@@ -1454,8 +1919,81 @@ def elenco_do_ato(event: CalendarEvent, dias: list[int] | None = None) -> list[E
     return [r for r in papeis if r.invite_status != "rejected" and not e_vaga_de_presenca(r)]
 
 
+def _papeis_com_cache_pago(ids: list[int]) -> list[EventRole]:
+    """As escalações com talento em "pago" ou "no banco" dos dias, fora a vaga de presença (FR-063)."""
+    from app.calendar.casting_ops import e_vaga_de_presenca
+
+    if not ids:
+        return []
+    papeis = (
+        EventRole.query.filter(
+            EventRole.event_id.in_(ids),
+            EventRole.talent_id.isnot(None),
+            EventRole.payment_status.in_(("pago", "no_banco")),
+        )
+        .order_by(EventRole.id)
+        .all()
+    )
+    return [r for r in papeis if not e_vaga_de_presenca(r)]
+
+
+def dias_dos_gastos(event: CalendarEvent) -> list[int]:
+    """De que dias o painel de gastos lê (data-model §5): o principal vivo, pelos dias vivos; o
+    cancelado em `venda` (o "todos"), com os dias `satelite` dele; os outros cancelados (`satelite`,
+    `dia`, `virtual`, `legado`), só o próprio dia. A API e o Jinja usam esta mesma régua."""
+    from app.calendar.group_ops import dias_vivos
+    from app.constants import REGIME_SATELITE, REGIME_VENDA
+    from app.models import EventCancellation
+
+    if not event.is_cancelled:
+        return [ge.id for ge in dias_vivos(event)] or [event.id]
+    canc = event.cancelamento
+    if canc is not None and canc.regime == REGIME_VENDA:
+        satelites = EventCancellation.query.filter(
+            EventCancellation.group_leader_id == event.id, EventCancellation.regime == REGIME_SATELITE
+        ).all()
+        return [event.id, *(x.event_id for x in satelites)]
+    return [event.id]
+
+
+def _dias_com_cache_pago(ids: list[int]) -> set[int]:
+    """Os dias com escalação de cachê já pago ou no banco (o diálogo explica; a recusa é da H6)."""
+    return {r.event_id for r in _papeis_com_cache_pago(ids)}
+
+
+def _vivos_por_id(ids: list[int]) -> dict[int, bool]:
+    """`{id: vivo}` dos dias, por consulta."""
+    return {i: c is None for i, c in db.session.query(CalendarEvent.id, CalendarEvent.cancelled_at).filter(CalendarEvent.id.in_(ids))}
+
+
+def _grupo_do_impacto(event: CalendarEvent, ids: list[int]) -> dict[str, Any] | None:
+    """O bloco `grupo` do impacto (contracts §2): os dias, e no 1º dia o próximo principal."""
+    from app.constants import now_sp
+
+    if len(ids) <= 1:
+        return None
+    dias = sorted(CalendarEvent.query.filter(CalendarEvent.id.in_(ids)).all(), key=lambda e: (e.start_at or datetime.max, e.id))
+    pagos = _dias_com_cache_pago(ids)
+    hoje = now_sp().date()
+    proximo = _dias_vivos_ordenados(event, dias) if event.group_leader_id is None else []
+    return {
+        "principal_id": event.group_leader_id or event.id,
+        "dias": [
+            {
+                **_evento_curto(d),
+                "cancelado": d.is_cancelled,
+                "cache_pago": d.id in pagos,
+                "faltam_dias": (d.start_at.date() - hoje).days if d.start_at else None,
+            }
+            for d in dias
+        ],
+        "proximo_principal": _evento_curto(proximo[0]) if proximo else None,
+    }
+
+
 def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dict[str, Any]:
-    """O que será perdido/afetado — a tela mostra isso ANTES de confirmar.
+    """O que será perdido/afetado — a tela mostra isso ANTES de confirmar. No grupo (H5), o bloco
+    `grupo` e o elenco dos dias vivos (o "todos" leva todos; a tela filtra por `day_event_id`).
 
     Foi a falta disso que deixou a exclusão ser uma decisão às cegas: o diálogo antigo só
     perguntava "tem certeza?", sem dizer que havia pagamento recebido e comissão paga em jogo.
@@ -1464,7 +2002,7 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
     (`ids_do_grupo`; `total_recebido` continua o do próprio evento), o máximo a devolver, a nota
     e a alíquota de referência, os BVs, a comissão em jogo e os comprovantes sem valor.
     """
-    from app.constants import REGIME_VENDA, REGIME_VIRTUAL, now_sp
+    from app.constants import REGIME_DIA, REGIME_VENDA, REGIME_VIRTUAL, now_sp
     from app.financeiro import comissoes_ops
     from app.financeiro.vendas_ops import is_loja_virtual
     from app.models import EventAcrescimo, SiteSetting
@@ -1492,6 +2030,11 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
         .scalar()
     )
     faltam = (event.start_at.date() - now_sp().date()).days if event.start_at else None
+    vivos = [i for i, c in _vivos_por_id(ids).items() if c] if event.group_leader_id is None else [event.id]
+    if event.group_leader_id is not None:
+        regime = REGIME_DIA
+    else:
+        regime = REGIME_VIRTUAL if is_loja_virtual(event) else REGIME_VENDA
 
     return {
         "acao": "cancelar" if event.is_google_missing or not pode_excluir(event) else "excluir",
@@ -1510,7 +2053,7 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
                 "talent_pix_informado": bool(r.talent and (r.talent.pix_key or "").strip()),
                 **({"talent_pix": r.talent.pix_key if r.talent else None} if show_financeiro else {}),
             }
-            for r in elenco_do_ato(event)
+            for r in elenco_do_ato(event, dias=vivos or [event.id])
         ],
         "comissoes": [
             {
@@ -1527,7 +2070,13 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
         ],
         "tem_contrato": EventContract.query.filter_by(event_id=event.id).count() > 0,
         "is_group_leader": event.is_group_leader,
-        "regime": REGIME_VIRTUAL if is_loja_virtual(event) else REGIME_VENDA,
+        "regime": regime,
+        "grupo": _grupo_do_impacto(event, ids),
+        # A venda do grupo hoje (a do principal): de onde parte o "Novo valor da venda" do corte.
+        "venda_do_grupo": float(
+            (db.session.get(CalendarEvent, principal_id).sale_value if principal_id != event.id else event.sale_value)
+            or 0
+        ),
         "sumiu_do_google": event.is_google_missing,
         "pago": float(pago),
         "ja_devolvido": float(ja_devolvido),
@@ -1562,25 +2111,33 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
 # ── As correções do cancelado: devolução, dinheiro e a regra única das portas ─────────────────
 
 
-def limites_da_devolucao(event: CalendarEvent) -> dict[str, float] | None:
-    """Piso e teto do "Alterar devolução" no `venda` e no `legado` (data-model §7.2).
+def limites_da_devolucao(event: CalendarEvent) -> dict[str, Any] | None:
+    """Piso e teto do "Alterar devolução" no `venda`, no `dia` e no `legado` (data-model §7.2).
 
-    Piso = as devoluções do grupo pagas ou no banco; teto = o pago do grupo. `None` nos regimes
-    sem devolução própria (`satelite`, `virtual`).
+    A mesma régua da gravação (`_regua_da_devolucao`). `None` nos regimes sem devolução própria
+    (`satelite`, `virtual`).
     """
-    from app.constants import REGIME_LEGADO, REGIME_VENDA
+    from app.constants import REGIME_DIA, REGIME_LEGADO, REGIME_VENDA
+    from app.models import EventCancellation
 
     canc = event.cancelamento
     regime = canc.regime if canc is not None else REGIME_LEGADO
-    if not event.is_cancelled or regime not in (REGIME_VENDA, REGIME_LEGADO):
+    if not event.is_cancelled or regime not in (REGIME_VENDA, REGIME_LEGADO, REGIME_DIA):
         return None
     principal_id = event.group_leader_id or event.id
     ids = ids_do_grupo([principal_id])[principal_id]
-    pago, _ = _dinheiro_do_grupo(ids)
-    piso = _piso_da_devolucao(
-        SpecialExpense.query.filter(filtro_devolucao(), SpecialExpense.event_id.in_(ids)).all()
-    )
-    return {"piso": float(piso), "teto": float(pago)}
+    congelados = {c.event_id: c for c in EventCancellation.query.filter(EventCancellation.event_id.in_(ids)).all()}
+    regua = _regua_da_devolucao(event, canc, congelados, ids)
+    atual = _dinheiro(sum((_dinheiro(d.amount) for d in regua.ajustaveis), Decimal("0"))) + regua.fixas
+    # `refaz_retido`: o novo total mexe num retido — o próprio (`venda`) ou, no `dia`, o do 1º dia
+    # já cancelado em `venda`; com o principal vivo, a venda do grupo não muda.
+    if regime == REGIME_DIA:
+        do_principal = congelados.get(event.group_leader_id)
+        refaz = do_principal is not None and do_principal.regime == REGIME_VENDA
+    else:
+        refaz = regime == REGIME_VENDA
+    # `atual`: o total que o Alterar parte — no `dia`, o daquele dia (não o devolvido do grupo).
+    return {"piso": float(regua.piso), "teto": float(regua.teto), "atual": float(atual), "refaz_retido": refaz}
 
 
 def _piso_da_devolucao(aprovadas: list[SpecialExpense]) -> Decimal:
@@ -1846,6 +2403,24 @@ def _dono_das_aberta(aprovadas: list[SpecialExpense], dono_id: int) -> list[Spec
     return sorted(abertas, key=lambda d: (d.event_id != dono_id, d.id))
 
 
+def _absorver_nas_outras(outras: list[SpecialExpense], restante: Decimal, actor: User) -> None:
+    """A redução que sobrou do dono, nas abertas dos outros dias por id: cada uma até zerar."""
+    from app.gastos.gastos_ops import _log
+
+    for d in outras:
+        if restante >= 0:
+            return
+        antes = _dinheiro(d.amount)
+        novo = antes + restante
+        if novo > 0:
+            d.amount = novo
+            _log(actor, "gasto", d.id, d.description, "editou", f"Alterar devolução: {_brl(antes)} → {_brl(novo)}")
+            return
+        _log(actor, "gasto", d.id, d.description, "excluiu", "Devolução zerada no Alterar devolução")
+        db.session.delete(d)
+        restante = novo
+
+
 def _aplicar_novo_total(
     dono: CalendarEvent,
     aprovadas: list[SpecialExpense],
@@ -1858,15 +2433,18 @@ def _aplicar_novo_total(
 ) -> None:
     """O helper único da gravação (data-model §7.2). Não faz commit.
 
-    A aberta absorve a diferença e fica uma só (a do dono primeiro); zerada, é excluída com
-    auditoria; sem aberta e acima do que já está, nasce o complemento. Tocar uma devolução regrava
-    `disbursement_type="cliente"` e completa nome e PIX vazios (FR-020).
+    As abertas do dono absorvem a diferença e ficam uma só; zerada, é excluída com auditoria. O que
+    a redução ainda pede depois vai às abertas dos outros dias (os `satelite` da venda), por id,
+    cada uma até zerar. Sem aberta do dono e acima do que já está, nasce o complemento no dono.
+    Tocar uma devolução regrava `disbursement_type="cliente"` e completa nome e PIX vazios (FR-020).
     """
     from app.gastos.gastos_ops import _log
 
     atual = _dinheiro(sum((_dinheiro(d.amount) for d in aprovadas), Decimal("0")))
     diferenca = total - atual
     abertas = _dono_das_aberta(aprovadas, dono.id)
+    do_dono = [d for d in abertas if d.event_id == dono.id]
+    outras = [d for d in abertas if d.event_id != dono.id]
     herdado = next((d for d in reversed(aprovadas) if d.supplier_name or d.supplier_pix), None)
     for d in abertas:
         d.disbursement_type = "cliente"
@@ -1874,50 +2452,108 @@ def _aplicar_novo_total(
         d.supplier_pix = d.supplier_pix or (pix[:120] or None)
     if diferenca == 0:
         return
-    if abertas:
-        fica, *demais = abertas
-        novo = _dinheiro(sum((_dinheiro(d.amount) for d in abertas), Decimal("0")) + diferenca)
+    if do_dono:
+        fica, *demais = do_dono
+        novo = _dinheiro(sum((_dinheiro(d.amount) for d in do_dono), Decimal("0")) + diferenca)
         for d in demais:
-            _log(actor, "SpecialExpense", d.id, d.description, "excluiu", "Devolução juntada no Alterar devolução")
+            _log(actor, "gasto", d.id, d.description, "excluiu", "Devolução juntada no Alterar devolução")
             db.session.delete(d)
-        if novo <= 0:
-            _log(actor, "SpecialExpense", fica.id, fica.description, "excluiu", "Devolução zerada no Alterar devolução")
-            db.session.delete(fica)
+        if novo > 0:
+            antes = _dinheiro(fica.amount)
+            fica.amount = novo
+            if observacao:
+                fica.notes = observacao
+            _log(
+                actor, "gasto", fica.id, fica.description, "editou",
+                f"Alterar devolução: {_brl(antes)} → {_brl(novo)}",
+            )  # fmt: skip
             return
-        antes = _dinheiro(fica.amount)
-        fica.amount = novo
-        if observacao:
-            fica.notes = observacao
-        _log(
-            actor, "SpecialExpense", fica.id, fica.description, "editou",
-            f"Alterar devolução: {_brl(antes)} → {_brl(novo)}",
-        )  # fmt: skip
+        _log(actor, "gasto", fica.id, fica.description, "excluiu", "Devolução zerada no Alterar devolução")
+        db.session.delete(fica)
+        _absorver_nas_outras(outras, novo, actor)
         return
-    if diferenca > 0:
-        gasto = _registrar_devolucao(
-            dono,
-            valor=diferenca,
-            nome=nome or (herdado.supplier_name if herdado else "") or "",
-            pix=pix or (herdado.supplier_pix if herdado else "") or "",
-            observacao=observacao,
-            actor=actor,
-        )
-        db.session.flush()
-        _log(actor, "SpecialExpense", gasto.id, gasto.description, "criou", f"Complemento de devolução {_brl(diferenca)}")
+    if diferenca < 0:
+        _absorver_nas_outras(outras, diferenca, actor)
+        return
+    gasto = _registrar_devolucao(
+        dono,
+        valor=diferenca,
+        nome=nome or (herdado.supplier_name if herdado else "") or "",
+        pix=pix or (herdado.supplier_pix if herdado else "") or "",
+        observacao=observacao,
+        actor=actor,
+    )
+    db.session.flush()
+    _log(actor, "gasto", gasto.id, gasto.description, "criou", f"Complemento de devolução {_brl(diferenca)}")
+
+
+@dataclass
+class ReguaDaDevolucao:
+    """Piso, teto e as devoluções que o "Alterar devolução" mexe (data-model §7.2)."""
+
+    piso: Decimal
+    teto: Decimal
+    ajustaveis: list[SpecialExpense]
+    fixas: Decimal  # as devoluções dos dias `dia` na venda do grupo (só o Alterar do dia as muda)
+    teto_e_409: bool  # no `dia`, acima do teto é 409 `acima_do_teto`; no resto, 400
+
+
+def _regua_da_devolucao(event: CalendarEvent, canc, congelados: dict, ids: list[int]) -> ReguaDaDevolucao:
+    """A régua do Alterar devolução, a mesma no diálogo (`limites_da_devolucao`) e na gravação."""
+    from app.constants import REGIME_DIA, REGIME_VENDA
+
+    pago, _ = _dinheiro_do_grupo(ids)
+    aprovadas = (
+        SpecialExpense.query.filter(filtro_devolucao(), SpecialExpense.event_id.in_(ids)).order_by(SpecialExpense.id).all()
+    )
+    soma = lambda xs: _dinheiro(sum((_dinheiro(d.amount) for d in xs), Decimal("0")))  # noqa: E731
+    regime = canc.regime if canc is not None else None
+    if regime == REGIME_DIA:
+        do_dia = [d for d in aprovadas if d.event_id == event.id]
+        das_outras = [d for d in aprovadas if d.event_id != event.id]
+        outras = soma(das_outras)
+        # P-52: o mínimo com o "já devolvido" de quando este dia foi cortado. A devolução de um dia
+        # cancelado depois foi pensada contando com a deste, e não o desfaz.
+        depois = {eid for eid, c in congelados.items() if c.id is not None and canc.id is not None and c.id > canc.id}
+        antes = soma([d for d in das_outras if d.event_id not in depois])
+        minima = Decimal("0.00")
+        if canc.sale_value_after is not None and canc.sale_value_before is not None:
+            minima = _devolucao_minima(pago, antes, _dinheiro(canc.sale_value_after), _dinheiro(canc.sale_value_before))
+        return ReguaDaDevolucao(
+            piso=max(_piso_da_devolucao(do_dia), minima), teto=max(Decimal("0.00"), pago - outras),
+            ajustaveis=do_dia, fixas=Decimal("0.00"), teto_e_409=True,
+        )  # fmt: skip
+    if regime == REGIME_VENDA:
+        dias_dia = {eid for eid, c in congelados.items() if c.regime == REGIME_DIA}
+        fixas = [d for d in aprovadas if d.event_id in dias_dia]
+        ajustaveis = [d for d in aprovadas if d.event_id not in dias_dia]
+        return ReguaDaDevolucao(
+            piso=_piso_da_devolucao(ajustaveis) + soma(fixas), teto=pago, ajustaveis=ajustaveis,
+            fixas=soma(fixas), teto_e_409=False,
+        )  # fmt: skip
+    return ReguaDaDevolucao(
+        piso=_piso_da_devolucao(aprovadas), teto=pago, ajustaveis=aprovadas, fixas=Decimal("0.00"), teto_e_409=False
+    )
 
 
 def alterar_devolucao(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor: User) -> CalendarEvent:
-    """O "Alterar devolução" do cancelado `venda` e `legado` (FR-017; contracts §3). Não faz commit.
+    """O "Alterar devolução" do cancelado `venda`, `dia` e `legado` (FR-017; contracts §3). Sem commit.
 
     O regime só se lê depois de T1: antes da trava, só a forma de `devolucao_total`. Depois:
-    T1 → T2 → T4 (no `venda`) → T5 → 409 `nao_cancelado` → 409 `regime_sem_retido` → 400 com
-    todos os campos → 409 `abaixo_do_piso` → grava → `reaplicar_cancelado`.
+    T1 → T2 → 409 `nao_cancelado` → 409 `regime_sem_retido` → T4 (no `venda`, e no `dia` com o
+    principal cancelado em `venda`) → T5 → 400 com todos os campos → 409 `abaixo_do_piso` → 409
+    `acima_do_teto` (só no `dia`) → grava → refaz a comissão do retido de quem a tem.
+
+    No `dia`, o total é o daquele dia; com o principal vivo nada se refaz (a venda do grupo não
+    muda pela devolução do dia); com o principal cancelado em `venda`, o retido dele muda.
     """
     from app.constants import (
         CODIGO_ABAIXO_DO_PISO,
+        CODIGO_ACIMA_DO_TETO,
         CODIGO_NAO_CANCELADO,
         CODIGO_REGIME_SEM_RETIDO,
         MOTIVO_AJUSTE_RETIDO,
+        REGIME_DIA,
         REGIME_LEGADO,
         REGIME_VENDA,
         now_sp,
@@ -1938,26 +2574,28 @@ def alterar_devolucao(event: CalendarEvent, *, corpo: dict[str, Any] | None, act
         raise CancelValidationError("Este evento não está cancelado.", status=409, codigo=CODIGO_NAO_CANCELADO)
     canc = congelados.get(event.id)
     regime = canc.regime if canc is not None else REGIME_LEGADO
-    if regime not in (REGIME_VENDA, REGIME_LEGADO):
+    if regime not in (REGIME_VENDA, REGIME_LEGADO, REGIME_DIA):
         raise CancelValidationError(
             "Este cancelamento não tem devolução própria para alterar.",
             status=409,
             codigo=CODIGO_REGIME_SEM_RETIDO,
         )
-    if regime == REGIME_VENDA:
-        _travar_linhas_de_comissao(ids, {canc.commission_seller_id, *_beneficiarios_das_linhas(ids)})  # T4
-    devolucoes = _travar_devolucoes(ids)  # T5
-    aprovadas = [d for d in devolucoes if d.status == "aprovado"]
-    pago, _ = _dinheiro_do_grupo(ids)
+    principal = next((e for e in eventos if e.id == event.group_leader_id), None) if regime == REGIME_DIA else event
+    canc_principal = congelados.get(principal.id) if principal is not None else None
+    refaz = principal if canc_principal is not None and canc_principal.regime == REGIME_VENDA and principal.is_cancelled else None
+    if refaz is not None:
+        _travar_linhas_de_comissao(ids, {canc_principal.commission_seller_id, *_beneficiarios_das_linhas(ids)})  # T4
+    _travar_devolucoes(ids)  # T5
+    regua = _regua_da_devolucao(event, canc, congelados, ids)
+    atual = _dinheiro(sum((_dinheiro(d.amount) for d in regua.ajustaveis), Decimal("0"))) + regua.fixas
 
     erros: dict[str, str] = {}
     if total < 0:
         erros["devolucao_total"] = "O total devolvido não pode ser negativo."
-    elif total > pago:
-        erros["devolucao_total"] = f"Acima do que a cliente pagou ({_brl(pago)})."
-    atual = _dinheiro(sum((_dinheiro(d.amount) for d in aprovadas), Decimal("0")))
-    nasce_complemento = total > atual and not _dono_das_aberta(aprovadas, event.id)
-    herdado = next((d for d in reversed(aprovadas) if d.supplier_name or d.supplier_pix), None)
+    elif total > regua.teto and not regua.teto_e_409:
+        erros["devolucao_total"] = f"Acima do que a cliente pagou ({_brl(regua.teto)})."
+    nasce_complemento = total > atual and not [d for d in _dono_das_aberta(regua.ajustaveis, event.id) if d.event_id == event.id]
+    herdado = next((d for d in reversed(regua.ajustaveis) if d.supplier_name or d.supplier_pix), None)
     if len(nome) > 200:
         erros["devolucao_nome"] = "Quem recebe: até 200 caracteres."
     elif nasce_complemento and not (nome or (herdado and herdado.supplier_name)):
@@ -1973,22 +2611,34 @@ def alterar_devolucao(event: CalendarEvent, *, corpo: dict[str, Any] | None, act
             erros["imposto_retido"] = "Informe o imposto retido em reais (0 se não houve)."
     if erros:
         raise CancelValidationError("Corrija os campos destacados.", fields=erros)
-    piso = _piso_da_devolucao(aprovadas)
-    if total < piso:
+    if total < regua.piso:
         raise CancelValidationError(
-            f"Já saíram {_brl(piso)} de devolução (pagos ou no banco): o novo total não pode ser menor.",
+            f"Já saíram {_brl(regua.piso)} de devolução (pagos, no banco ou de um dia cortado): "
+            "o novo total não pode ser menor.",
             status=409,
             codigo=CODIGO_ABAIXO_DO_PISO,
-            piso=float(piso),
+            piso=float(regua.piso),
+        )
+    if regua.teto_e_409 and total > regua.teto:
+        raise CancelValidationError(
+            f"Acima do que dá para devolver neste dia ({_brl(regua.teto)}: o pago do grupo menos as "
+            "devoluções dos outros dias).",
+            status=409,
+            codigo=CODIGO_ACIMA_DO_TETO,
+            teto=float(regua.teto),
         )
 
-    _aplicar_novo_total(event, aprovadas, total, nome=nome, pix=pix, observacao=observacao, actor=actor)
-    if regime == REGIME_VENDA:
+    _aplicar_novo_total(
+        event, regua.ajustaveis, total - regua.fixas, nome=nome, pix=pix, observacao=observacao, actor=actor
+    )
+    if canc is not None:
         if imposto_enviado:
             canc.retained_tax = imposto
         canc.updated_at = now_sp()
         canc.updated_by_id = actor.id
-        reaplicar_cancelado(event, motivo=MOTIVO_AJUSTE_RETIDO)
+    if refaz is not None:
+        db.session.flush()
+        reaplicar_cancelado(refaz, motivo=MOTIVO_AJUSTE_RETIDO)
     papel = ", ".join(r.name for r in actor.roles)[:60] or None
     db.session.add(
         EventLog(

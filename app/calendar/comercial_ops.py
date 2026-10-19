@@ -711,6 +711,76 @@ def _liquido(venda: Decimal, nota: bool) -> Decimal:
     return venda * divisor_da_nota() if nota else venda
 
 
+def bvs_que_acompanham(
+    linhas: list,
+    antes: tuple[Any, bool, bool],
+    venda_nova: Any,
+    nota_nova: bool,
+    cortesia_nova: bool,
+    *,
+    so_estes: set[int] | None = None,
+) -> tuple[dict[int, Decimal], bool]:
+    """A conta do B10 sem escrever no ORM (feature 306): o BV novo de cada BV a pagar, pelo id.
+
+    A mesma de `acompanhar_bv_da_venda` (que a usa para gravar) e da prévia do corte (FR-011: a
+    prévia sai igual à execução). Em reais, na proporção do líquido; em %, pela régua de
+    `valor_do_bv_percentual` com os BVs em reais já acompanhados. Venda que vai a "a definir" ou
+    cortesia: nada; venda e nota iguais: nada.
+
+    `so_estes` recorta os BVs que acompanham (o gêmeo Jinja leva só os reenviados); os outros
+    entram na régua do % pelo valor que têm.
+
+    Returns:
+        `({acrescimo_id: valor novo}, algum em reais ficou porque a venda de antes não era real)`.
+    """
+    from app.calendar.event_ops import _mesmo_valor, sem_valor_de_venda
+    from app.orcamento.quote_ops import bv_que_acompanha
+
+    venda_antes, nota_antes, cortesia_antes = antes
+    venda_d = _to_decimal(venda_nova)
+    real_antes = not cortesia_antes and not sem_valor_de_venda(venda_antes)
+    real_nova = not cortesia_nova and not sem_valor_de_venda(venda_d)
+    if not real_nova or (real_antes and _mesmo_valor(venda_antes, venda_d) and nota_antes == nota_nova):
+        return {}, False
+    a_pagar = [
+        a
+        for a in linhas
+        if a.is_bv
+        and (a.bv_payment_status or "nao_pago") not in _BV_CONGELADO
+        and (so_estes is None or a.id in so_estes)
+    ]
+    novos: dict[int, Decimal] = {}
+    em_reais_ficou = False
+    for a in a_pagar:
+        if a.is_percent:
+            continue
+        valor_antes = _to_decimal(a.amount_brl) or Decimal("0")
+        if not real_antes:
+            em_reais_ficou = True
+            continue
+        novo = bv_que_acompanha(
+            valor_antes, _liquido(venda_d, nota_nova), _liquido(_to_decimal(venda_antes), nota_antes)
+        )
+        if novo != valor_antes:
+            novos[a.id] = novo
+    soma_bv_reais = sum(
+        (novos.get(a.id, _to_decimal(a.amount_brl) or Decimal("0")) for a in linhas if a.is_bv and not a.is_percent),
+        Decimal("0"),
+    )
+    soma_perc_bv = sum(
+        (_to_decimal(a.value) or Decimal("0") for a in linhas if a.is_bv and a.is_percent), Decimal("0")
+    )
+    for a in a_pagar:
+        if not a.is_percent:
+            continue
+        valor_antes = _to_decimal(a.amount_brl) or Decimal("0")
+        novo = valor_do_bv_percentual(venda_d, nota_nova, _to_decimal(a.value) or Decimal("0"),
+                                      soma_bv_reais, soma_perc_bv)  # fmt: skip
+        if novo is not None and novo != valor_antes:
+            novos[a.id] = novo
+    return novos, em_reais_ficou
+
+
 def acompanhar_bv_da_venda(
     event: Any,
     antes: tuple[Any, bool, bool],
@@ -780,37 +850,20 @@ def acompanhar_bv_da_venda(
         a_pagar = reenviados
     if not a_pagar:
         return None
-    from app.orcamento.quote_ops import bv_que_acompanha
-
-    mudancas: list[tuple[EventAcrescimo, Decimal, Decimal]] = []
-    em_reais_ficou = False
-    for a in a_pagar:
-        if a.is_percent:
-            continue
-        valor_antes = _to_decimal(a.amount_brl) or Decimal("0")
-        if not real_antes:
-            em_reais_ficou = True
-            continue
-        novo = bv_que_acompanha(
-            valor_antes, _liquido(venda_nova, nota_nova), _liquido(_to_decimal(venda_antes), nota_antes)
-        )
-        if novo != valor_antes:
-            a.amount_brl = novo
-            a.value = novo
-            mudancas.append((a, valor_antes, novo))
-    soma_bv_reais = sum(
-        (_to_decimal(a.amount_brl) or Decimal("0") for a in linhas if not a.is_percent), Decimal("0")
+    # A conta é a de `bvs_que_acompanham` (a mesma da prévia do corte, feature 306); aqui só grava.
+    novos, em_reais_ficou = bvs_que_acompanham(
+        linhas, antes, venda_nova, nota_nova, cortesia_nova, so_estes={a.id for a in a_pagar}
     )
-    soma_perc_bv = sum((_to_decimal(a.value) or Decimal("0") for a in linhas if a.is_percent), Decimal("0"))
-    for a in a_pagar:
-        if not a.is_percent:
-            continue
-        valor_antes = _to_decimal(a.amount_brl) or Decimal("0")
-        novo = valor_do_bv_percentual(venda_nova, nota_nova, _to_decimal(a.value) or Decimal("0"),
-                                      soma_bv_reais, soma_perc_bv)
-        if novo is not None and novo != valor_antes:
-            a.amount_brl = novo
-            mudancas.append((a, valor_antes, novo))
+    mudancas: list[tuple[EventAcrescimo, Decimal, Decimal]] = []
+    for em_percentual in (False, True):
+        for a in a_pagar:
+            if bool(a.is_percent) != em_percentual or a.id not in novos:
+                continue
+            valor_antes = _to_decimal(a.amount_brl) or Decimal("0")
+            a.amount_brl = novos[a.id]
+            if not em_percentual:
+                a.value = novos[a.id]
+            mudancas.append((a, valor_antes, novos[a.id]))
     from app.calendar.orcamento_evento_ops import _fmt_reais
 
     for a, de, para in mudancas:

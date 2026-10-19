@@ -542,18 +542,21 @@ def collect_aggregates(cur, win: tuple[datetime, datetime]) -> dict:
 
     # Margem por evento: `start_at` é SP-naive; em grupos a venda fica no líder e os cachês
     # se espalham nos satélites (regra do próprio app, `_group_cost`) — o custo soma o grupo
-    # inteiro e satélites (sale_value zerado) não entram na lista.
+    # inteiro e satélites (sale_value zerado) não entram na lista. Feature 306: sem o dia cancelado
+    # (o corte já o tirou da venda) e sem o principal cancelado (a DRE o trata à parte).
     cur.execute(
         """
         SELECT e.id, e.title, e.start_at, e.sale_value,
                COALESCE((SELECT SUM(COALESCE(r.cache_value, 0) + COALESCE(r.travel_cache, 0))
                            FROM event_roles r
                           WHERE r.event_id IN (SELECT s.id FROM calendar_events s
-                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
+                                                WHERE s.id = e.id
+                                                   OR (s.group_leader_id = e.id AND s.cancelled_at IS NULL))
                             AND r.dismissed_at IS NULL), 0) AS custo_caches,
                COALESCE((SELECT SUM(g.amount) FROM special_expenses g
                           WHERE g.event_id IN (SELECT s.id FROM calendar_events s
-                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
+                                                WHERE s.id = e.id
+                                                   OR (s.group_leader_id = e.id AND s.cancelled_at IS NULL))
                             AND g.status = 'aprovado'), 0) AS custo_gastos
           FROM calendar_events e
          WHERE e.start_at >= %s AND e.start_at < %s
@@ -561,6 +564,7 @@ def collect_aggregates(cur, win: tuple[datetime, datetime]) -> dict:
            AND e.is_cortesia_permuta IS NOT TRUE
            AND e.event_type != 'VIRTUAL'
            AND e.group_leader_id IS NULL
+           AND e.cancelled_at IS NULL
          ORDER BY e.start_at
         """,
         (asp, bsp),

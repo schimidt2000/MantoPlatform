@@ -36,7 +36,11 @@ interface AlterarDevolucaoDialogProps {
  */
 export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: AlterarDevolucaoDialogProps) {
   const alterar = useAlterarDevolucao(eventId);
-  const [total, setTotal] = useState(resumo.devolvido);
+  // Feature 306, H5: no `dia`, o total é o daquele dia (o servidor manda em `limites.atual`); o
+  // `devolvido` do resumo é o do grupo inteiro e duplicaria a devolução ao salvar.
+  const doDia = resumo.regime === "dia";
+  const inicial = resumo.limites_devolucao?.atual ?? resumo.devolvido;
+  const [total, setTotal] = useState(inicial);
   const [nome, setNome] = useState("");
   const [pix, setPix] = useState("");
   const [observacao, setObservacao] = useState("");
@@ -47,7 +51,7 @@ export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: 
 
   useEffect(() => {
     if (open) {
-      setTotal(resumo.devolvido);
+      setTotal(inicial);
       setImposto(resumo.imposto ?? 0);
       setMexeuImposto(false);
     } else {
@@ -57,7 +61,7 @@ export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: 
       setErros({});
       setErro("");
     }
-  }, [open, resumo.devolvido, resumo.imposto]);
+  }, [open, inicial, resumo.imposto]);
 
   const limites = resumo.limites_devolucao;
   const comImposto = resumo.regime === "venda" && resumo.com_nota;
@@ -93,14 +97,26 @@ export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: 
         <DialogHeader>
           <DialogTitle>Alterar devolução</DialogTitle>
           <DialogDescription>
-            O retido, a comissão e o BV acompanham o novo total. Hoje: devolvidos {brl(resumo.devolvido)} de{" "}
-            {brl(resumo.pago)} pagos.
+            {doDia ? (
+              <>
+                O total devolvido por este dia. Hoje: {brl(inicial)} neste dia; o grupo devolveu{" "}
+                {brl(resumo.devolvido)} de {brl(resumo.pago)} pagos.{" "}
+                {resumo.limites_devolucao?.refaz_retido
+                  ? "O retido e a comissão do retido do 1º dia, já cancelado, acompanham o novo total."
+                  : "A venda do grupo não muda."}
+              </>
+            ) : (
+              <>
+                O retido, a comissão e o BV acompanham o novo total. Hoje: devolvidos {brl(resumo.devolvido)} de{" "}
+                {brl(resumo.pago)} pagos.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div>
             <label className={LABEL} htmlFor="novo-total-devolvido">
-              Novo total devolvido
+              {doDia ? "Novo total devolvido neste dia" : "Novo total devolvido"}
             </label>
             <MoneyInput
               id="novo-total-devolvido"
@@ -111,7 +127,9 @@ export function AlterarDevolucaoDialog({ eventId, resumo, open, onOpenChange }: 
             />
             {limites && (
               <p className="mt-1 text-xs text-muted">
-                Entre {brl(limites.piso)} (já pago ou no banco) e {brl(limites.teto)}.
+                {doDia
+                  ? `Entre ${brl(limites.piso)} (o mínimo do corte, ou o já pago ou no banco) e ${brl(limites.teto)} (o pago do grupo menos as devoluções dos outros dias).`
+                  : `Entre ${brl(limites.piso)} (já pago ou no banco) e ${brl(limites.teto)}.`}
               </p>
             )}
             {erros.devolucao_total && (

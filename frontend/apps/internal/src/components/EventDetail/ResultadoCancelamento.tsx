@@ -45,8 +45,10 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
   const resumo = data.event.cancelamento;
   const [alterando, setAlterando] = useState(false);
   if (!resumo) return null;
+  // Feature 306, H5: o dia cortado (`dia`) também corrige a devolução dele (piso e teto do corte).
   const podeAlterar =
-    Boolean(data.flags.can_edit_venda_cancelado) && (resumo.regime === "venda" || resumo.regime === "legado");
+    Boolean(data.flags.can_edit_venda_cancelado) &&
+    (resumo.regime === "venda" || resumo.regime === "legado" || resumo.regime === "dia");
   const bv = (resumo.bvs ?? []).reduce((soma, b) => soma + (b.conta ?? 0), 0);
   const linkComissoes = resumo.comissao ? linkDeComissoes(data.event.id, resumo) : undefined;
 
