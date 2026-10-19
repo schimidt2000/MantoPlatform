@@ -58,6 +58,12 @@ def e_vaga_de_presenca(role: Any) -> bool:
     )
 
 
+def _manda_email_de_remocao(event: Any) -> bool:
+    """Feature 306 (FR-069): tirar o artista da vaga de um evento cancelado não manda "você foi
+    removido" — o ato já avisou o elenco. Gancho da mutação do 45c (chamado pelo módulo)."""
+    return not getattr(event, "is_cancelled", False)
+
+
 def assign_role(
     event: Any,
     role: Any,
@@ -155,6 +161,7 @@ def assign_role(
         and old_talent_id
         and old_talent_id != role.talent_id
         and old_invite_status != "rejected"
+        and _manda_email_de_remocao(event)
     ):
         old_talent = Talent.query.get(old_talent_id)
         if old_talent:

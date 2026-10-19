@@ -56,6 +56,8 @@ KIND_AVALIACAO = "avaliacao.recebida"
 KIND_CONVITE_RECUSADO = "convite.recusado"
 KIND_RECADO_NFC = "recado_nfc.novo"
 KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
+KIND_EVENTO_CANCELADO = "evento.cancelado"
+KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -68,6 +70,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     KIND_RECADO_NFC: (RoleName.ARTISTA_3D, RoleName.SUPERADMIN),
     # Feature 303: quem vende (e precisa saber que a data saiu do calendário) e quem decide.
     KIND_EVENTO_SUMIU_GOOGLE: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    # Feature 306 (FR-067): o ensaio cancelado avisa quem ensaia; a escala, quem escala — sem o
+    # Superadmin, que é quem cancela.
+    KIND_EVENTO_CANCELADO: (RoleName.ENSAIO,),
+    KIND_EVENTO_CANCELADO_ESCALA: (RoleName.CASTING,),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -272,6 +278,46 @@ def notificar_convite_recusado(role: EventRole) -> int:
         link_path=f"/events/{role.event_id}?aba=producao",
         entidade=("event_role", role.id),
         dedupe_key=f"{KIND_CONVITE_RECUSADO}:{role.id}:{agora:%Y%m%d}",
+        severity="urgent" if urgente else "info",
+    )
+
+
+def notificar_evento_cancelado(event: CalendarEvent, ensaios: list[str], *, dedupe_key: str) -> int:
+    """Feature 306 (FR-067): o evento foi cancelado e os ensaios dele caíram → equipe de Ensaio.
+
+    Um por pessoa por ato (a chave vem do ato, pelo evento da URL: dois atos no mesmo grupo dão dois
+    avisos). Só é chamado quando algum dia cancelado tinha ensaio. Informativo.
+    """
+    _garante_id(event)
+    return emitir(
+        KIND_EVENTO_CANCELADO,
+        title=f"Evento cancelado: {event.title}",
+        body=("Ensaios cancelados: " + "; ".join(ensaios)) if ensaios else None,
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=dedupe_key,
+        severity="info",
+    )
+
+
+def notificar_cancelamento_na_escala(dia: CalendarEvent, escalados: int, *, dedupe_key: str) -> int:
+    """Feature 306 (FR-067): um dia com elenco escalado foi cancelado → Casting, para tirar a escala.
+
+    Um por dia cancelado com escalados; `urgent` quando o dia é em até 7 dias, como a recusa de
+    convite. A tela leva à aba Produção do dia.
+    """
+    _garante_id(dia)
+    agora = now_sp()
+    urgente = bool(dia.start_at and dia.start_at - agora <= timedelta(days=ANTECEDENCIA_URGENTE_DIAS))
+    quem = "o artista" if escalados == 1 else f"os {escalados} artistas"
+    quando = f" · {dia.start_at:%d/%m %H:%M}" if dia.start_at else ""
+    return emitir(
+        KIND_EVENTO_CANCELADO_ESCALA,
+        title=f"Evento cancelado: tire {quem} da escala e avise cada um pelo WhatsApp",
+        body=f"{dia.title}{quando}",
+        link_path=f"/events/{dia.id}?aba=producao",
+        entidade=("calendar_event", dia.id),
+        dedupe_key=dedupe_key,
         severity="urgent" if urgente else "info",
     )
 

@@ -674,6 +674,9 @@ def api_cancelar_evento(event_id: int) -> Any:
             # Feature 306, H5: os dias que o ato cancelou e, na passagem, o novo 1º dia.
             "dias_cancelados": resultado["dias_cancelados"],
             "venda_passou_para": resultado["venda_passou_para"],
+            # H6: os ensaios que caíram e quantos foram avisados (e-mail, Ensaio, Casting).
+            "ensaios_cancelados": resultado["ensaios_cancelados"],
+            "avisados": resultado["avisados"],
         }
     )
 
@@ -711,6 +714,42 @@ def api_alterar_devolucao(event_id: int) -> Any:
     except DBAPIError as exc:
         return _recusa_do_banco(exc)
     return jsonify({"ok": True, "resumo": _resumo_do_cancelado(event)})
+
+
+@api_bp.route("/events/<int:event_id>/multas", methods=["POST"])
+@api_login_required
+def api_lancar_multas(event_id: int) -> Any:
+    """Lança a multa ao elenco depois do cancelamento (feature 306, FR-072; contracts §4).
+
+    RBAC: só o Superadmin real (`pode_editar_venda_do_cancelado`), como as outras correções do
+    cancelado. Corpo `{"multas": [{"elenco_id", "valor"}]}`, pelas linhas do elenco do ato; cada
+    multa vira um Gasto Extra aprovado, a pagar ao artista, com a data de hoje. Resposta: o resumo e
+    os ids dos gastos.
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import (
+        CancelValidationError,
+        lancar_multas_do_cancelado,
+        pode_editar_venda_do_cancelado,
+    )
+
+    if not pode_editar_venda_do_cancelado(current_user):
+        return json_error("Sem permissão", 403)
+    body = request.get_json(silent=True) or {}
+    try:
+        gastos = lancar_multas_do_cancelado(event, corpo=body, actor=current_user)
+        db.session.commit()
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
+    return jsonify({"ok": True, "resumo": _resumo_do_cancelado(event), "gastos": gastos})
 
 
 @api_bp.route("/events/<int:event_id>/devolver-ao-google", methods=["POST"])

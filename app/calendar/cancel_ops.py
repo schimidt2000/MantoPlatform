@@ -841,7 +841,11 @@ def _decimal(valor: Any) -> tuple[Decimal | None, bool]:
         return None, True
     if not numero.is_finite():
         return None, True
-    return numero.quantize(_CENTAVO), False
+    try:
+        # `1e26` passa no `Decimal` e estoura no `quantize` (precisão 28): é inválido, não 500.
+        return numero.quantize(_CENTAVO), False
+    except ArithmeticError:
+        return None, True
 
 
 def _texto(valor: Any) -> str:
@@ -872,6 +876,9 @@ class PedidoDeCancelamento:
     venda_nova_invalida: bool = False
     # A venda do grupo que o diálogo mostrou: outro corte (ou a aba Comercial) no meio dá 409.
     venda_esperada: Decimal | None = None
+    # H6 (contracts §1): a multa por escalação no ato, `{role_id: (valor, inválido, talent_id visto)}`.
+    multas: dict[int, tuple[Decimal | None, bool, int | None]] = field(default_factory=dict)
+    multas_malformadas: bool = False
 
     @classmethod
     def ler(cls, corpo: dict[str, Any] | None) -> PedidoDeCancelamento:
@@ -885,6 +892,17 @@ class PedidoDeCancelamento:
                 bvs[item["acrescimo_id"]] = (_texto(item.get("recebedor")), _texto(item.get("pix")))
         modo = devolucao.get("modo")
         venda_nova, venda_nova_invalida = _decimal(corpo.get("venda_nova"))
+        multas: dict[int, tuple[Decimal | None, bool, int | None]] = {}
+        brutas = corpo.get("multas")
+        multas_malformadas = brutas is not None and not isinstance(brutas, list)
+        for item in brutas if isinstance(brutas, list) else []:
+            rid = item.get("role_id") if isinstance(item, dict) else None
+            if not isinstance(rid, int) or isinstance(rid, bool):
+                multas_malformadas = True
+                continue
+            visto = item.get("talent_id")
+            visto = visto if isinstance(visto, int) and not isinstance(visto, bool) else None
+            multas[rid] = (*_decimal(item.get("valor")), visto)
         alcance = corpo.get("alcance")
         novo = corpo.get("novo_principal_id")
         return cls(
@@ -906,6 +924,8 @@ class PedidoDeCancelamento:
             venda_nova=venda_nova,
             venda_nova_invalida=venda_nova_invalida,
             venda_esperada=_decimal(corpo.get("venda_esperada"))[0],
+            multas=multas,
+            multas_malformadas=multas_malformadas,
         )
 
     def devolve(self, max_devolucao: Decimal) -> Decimal:
@@ -1681,17 +1701,19 @@ def _congelar_satelite(dia: CalendarEvent, *, principal: CalendarEvent, actor: U
 
 def _congelar_dia(
     dia: CalendarEvent, *, principal: CalendarEvent, pedido: PedidoDeCancelamento, conta: ContaDoCorte, actor: User
-) -> None:
+):
     """A linha `dia` do corte: a venda do grupo antes e depois (e o cheio), ligada ao principal
     que fica vivo — na passagem, o novo (`passar_venda` marca `sale_handed_over`)."""
     from app.constants import REGIME_DIA
     from app.models import EventCancellation
 
-    db.session.add(EventCancellation(
+    canc = EventCancellation(
         event=dia, regime=REGIME_DIA, refund_mode=pedido.modo, seller_id=dia.seller_id, with_invoice=False,
         group_leader_id=principal.id, sale_value_before=conta.venda, sale_value_after=conta.venda_nova,
         sale_value_gross_before=conta.cheio, sale_value_gross_after=conta.cheio_novo, updated_by_id=actor.id,
-    ))  # fmt: skip
+    )  # fmt: skip
+    db.session.add(canc)
+    return canc
 
 
 def _marcar_comissao_propria(novo: CalendarEvent) -> None:
@@ -1746,7 +1768,7 @@ def _seguir_o_corte(vivo: CalendarEvent, conta: ContaDoCorte, *, dia: CalendarEv
 
 def _conta_validada(forma: FormaDoAto, regime: str, ids: list[int], acrescimos: list, pedido, settings):
     """A conta da forma do ato e as recusas de campo (400) e do máximo (409)."""
-    from app.constants import CODIGO_MAX_DEVOLUCAO_MUDOU, MODO_TUDO, REGIME_VENDA
+    from app.constants import CODIGO_MAX_DEVOLUCAO_MUDOU, MODO_TUDO, REGIME_VENDA, REGIME_VIRTUAL
 
     if forma.corta:
         conta = _conta_do_corte(forma.principal, ids, pedido.devolve(Decimal("0.00")), pedido.venda_nova)
@@ -1757,6 +1779,12 @@ def _conta_validada(forma: FormaDoAto, regime: str, ids: list[int], acrescimos: 
         devolve = pedido.devolve(maximo) if regime == REGIME_VENDA else Decimal("0.00")
         conta = _conta_do_ato(forma.principal, ids, acrescimos, devolve, settings)
         erros = _erros_do_pedido(forma.principal, pedido, regime=regime, conta=conta)
+    papeis_do_ato = (
+        {r.id: r.talent_id for r in elenco_do_ato(forma.dias[0], dias=[d.id for d in forma.dias])}
+        if regime != REGIME_VIRTUAL
+        else {}
+    )
+    erros.update(_erros_das_multas_do_ato(pedido, papeis_do_ato))
     if erros:
         raise CancelValidationError("Corrija os campos destacados.", fields=erros)
     if not forma.corta and regime == REGIME_VENDA and pedido.modo == MODO_TUDO and pedido.valor != conta.max_devolucao:
@@ -1769,14 +1797,23 @@ def _conta_validada(forma: FormaDoAto, regime: str, ids: list[int], acrescimos: 
     return conta
 
 
-def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, settings) -> SpecialExpense | None:
-    """Congela, devolve e refaz a comissão, na ordem do plan §Travas. Devolve o gasto da devolução."""
+def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, settings) -> tuple:
+    """Congela (a linha, os BVs e o elenco), devolve e refaz a comissão, na ordem do plan §Travas.
+
+    Returns:
+        `(gasto da devolução, linha congelada que guarda o elenco)` — no `venda`, a do principal com
+        todos os dias do "todos"; no corte e na passagem, a do dia; na Loja Virtual, nenhuma.
+    """
     from app.calendar import group_ops
     from app.constants import MOTIVO_AJUSTE_RETIDO, REGIME_VENDA
     from app.financeiro import comissoes_ops
 
     if not forma.corta:
-        _congelar(forma.principal, regime=regime, pedido=pedido, conta=conta, actor=actor)
+        canc = _congelar(forma.principal, regime=regime, pedido=pedido, conta=conta, actor=actor)
+        if regime == REGIME_VENDA:
+            _congelar_elenco(canc, forma.dias)
+        else:
+            canc = None
         for dia in forma.dias[1:]:
             _congelar_satelite(dia, principal=forma.principal, actor=actor)
         gasto = None
@@ -1786,9 +1823,10 @@ def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, se
         db.session.flush()
         if regime == REGIME_VENDA:
             comissoes_ops.reconciliar_comissao_do_cancelado(forma.principal, conta.alvos, motivo=MOTIVO_AJUSTE_RETIDO)
-        return gasto
+        return gasto, canc
     dia = forma.dias[0]
-    _congelar_dia(dia, principal=forma.vivo, pedido=pedido, conta=conta, actor=actor)
+    canc = _congelar_dia(dia, principal=forma.vivo, pedido=pedido, conta=conta, actor=actor)
+    _congelar_elenco(canc, [dia])
     if forma.tipo == "passagem":
         db.session.flush()
         _marcar_comissao_propria(forma.vivo)
@@ -1799,7 +1837,7 @@ def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, se
                                  observacao=pedido.observacao, actor=actor)  # fmt: skip
     db.session.flush()
     _seguir_o_corte(forma.vivo, conta, dia=dia, actor=actor, settings=settings)
-    return gasto
+    return gasto, canc
 
 
 def _texto_do_corte(forma: FormaDoAto, pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> str:
@@ -1813,12 +1851,19 @@ def _texto_do_corte(forma: FormaDoAto, pedido: PedidoDeCancelamento, conta: Cont
     return " | ".join(partes)
 
 
-def _encerrar_os_dias(forma: FormaDoAto, regime: str, pedido, conta, actor: User) -> None:
-    """`cancelled_at`, `ao_cancelar` e o histórico de cada dia que o ato cancela (um por dia)."""
+def _encerrar_os_dias(
+    forma: FormaDoAto, regime: str, pedido, conta, actor: User, *, url_id: int, ensaios: list, canc
+) -> dict[str, Any]:
+    """O fim do ato, na ordem única (data-model §7.1): `cancelled_at` e `ao_cancelar` de cada dia;
+    depois os ensaios saem do banco, os sinos e as multas nascem (H6); por fim o histórico, um por
+    dia (FR-016), com os ensaios do dia e, no da URL, as multas e quem foi avisado.
+
+    Returns:
+        `{"ensaios", "avisados", "emails"}` — os e-mails saem depois do commit (`_mandar_os_emails`).
+    """
     from app.calendar.routes import _log_sync
     from app.constants import ALCANCE_SO_ESTE_DIA, ALCANCE_TODOS, now_sp
 
-    papel = ", ".join(r.name for r in actor.roles)[:60] or None
     for dia in forma.dias:
         dia.cancelled_at = now_sp()
         dia.cancelled_by_id = actor.id
@@ -1830,17 +1875,43 @@ def _encerrar_os_dias(forma: FormaDoAto, regime: str, pedido, conta, actor: User
         if forma.corta:
             novo = forma.vivo if forma.tipo == "passagem" else None
             ao_cancelar(dia, alcance=ALCANCE_SO_ESTE_DIA, novo_principal=novo)
-            detalhe = _texto_do_corte(forma, pedido, conta)
         else:
             ao_cancelar(dia, alcance=ALCANCE_TODOS, novo_principal=None)
-            detalhe = (
-                _texto_do_historico(pedido.motivo, regime, pedido, conta)
-                if dia is forma.principal
-                else f'Evento cancelado com todos os dias do grupo de "{forma.principal.title}": {pedido.motivo}'
+
+    feitos = _apagar_os_ensaios(ensaios)
+    for dia in forma.dias:
+        db.session.expire(dia, ["ensaios"])
+    escalados = _escalados_do_ato(forma, canc)
+    sinos = _avisar_no_sino(forma, url_id, feitos, escalados)
+    multas = _multas_do_ato(canc, pedido, actor)
+    emails = _alvos_do_email(escalados)
+    avisados = {"email": len(emails), **sinos}
+
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    for dia in forma.dias:
+        if forma.corta:
+            partes = [_texto_do_corte(forma, pedido, conta)]
+        elif dia is forma.principal:
+            partes = [_texto_do_historico(pedido.motivo, regime, pedido, conta)]
+        else:
+            partes = [f'Evento cancelado com todos os dias do grupo de "{forma.principal.title}": {pedido.motivo}']
+        do_dia = [e["texto"] for e in feitos if e["pai"] == dia.id]
+        if do_dia:
+            partes.append("ensaios cancelados: " + "; ".join(do_dia))
+        if dia.id == url_id:
+            if multas:
+                partes.append(
+                    "multa ao elenco: " + "; ".join(f"{g.supplier_name or '?'} {_brl(g.amount)}" for g in multas)
+                )
+            partes.append(
+                f"avisados: {avisados['email']} por e-mail, {avisados['ensaio']} da equipe de Ensaio, "
+                f"{avisados['casting']} do Casting"
             )
+        detalhe = " | ".join(partes)
         # Sem `created_at`: vale o default UTC do modelo, que o histórico da tela converte (FR-016).
         db.session.add(EventLog(event_id=dia.id, actor_name=actor.name, actor_role=papel, message=detalhe))
         _log_sync("event_cancelled", dia, details=detalhe, actor=actor.name, actor_role=papel)
+    return {"ensaios": feitos, "avisados": avisados, "emails": emails}
 
 
 def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor: User) -> dict[str, Any]:
@@ -1850,10 +1921,14 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
     `_forma_do_ato`) → validação de todos os campos → (marcado: desmarcar) → congelar → (passagem:
     a comissão própria do novo e `passar_venda`) → devolução → comissão (ou o corte: a venda do
     principal que fica, o BV e a comissão dele) → `cancelled_at` → `ao_cancelar` → `EventLog`
-    (UTC) → commit → Google, fora da trava. As quatro formas estão em `FormaDoAto`.
+    (UTC) → commit → Google, fora da trava. As quatro formas estão em `FormaDoAto`. H6: T6 e a recusa
+    do cachê pago antes da pendente; o elenco congela com a linha; depois de `ao_cancelar`, os
+    ensaios saem do banco, os sinos e as multas nascem; depois do commit, o Google (dias e ensaios)
+    e os e-mails ao elenco.
 
     Returns:
-        `{"event", "gasto_id", "google_removido", "aviso", "dias_cancelados", "venda_passou_para"}`;
+        `{"event", "gasto_id", "google_removido", "aviso", "dias_cancelados", "venda_passou_para",
+        "ensaios_cancelados", "avisados"}`;
         a view monta o `resumo`.
 
     Raises:
@@ -1875,19 +1950,24 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
     acrescimos = _travar_acrescimos(forma.principal.id) if regime != REGIME_VIRTUAL else []  # T3
     beneficiario = comissoes_ops._beneficiario_comissionado(forma.principal, settings)
     _travar_linhas_de_comissao(ids, {getattr(beneficiario, "id", None), *_beneficiarios_das_linhas(ids)})  # T4
-    _recusa_da_pendente(_travar_devolucoes(ids))  # T5
+    devolucoes = _travar_devolucoes(ids)  # T5
+    _travar_elenco([d.id for d in forma.dias])  # T6
+    _recusa_do_cache_pago(forma.dias)
+    _recusa_da_pendente(devolucoes)
     conta = _conta_validada(forma, regime, ids, acrescimos, pedido, settings)
 
     # ── grava ──
-    alvos_google = _alvos_do_google(forma.dias)
+    ensaios = _ensaios_dos_dias(forma.dias)
+    # Antes do `desmarcar`: o marcado já não está no Google; os ensaios estão (FR-014, FR-065).
+    alvos_google = _alvos_do_google(forma.dias) + _alvos_do_google(ensaios)
     for dia in forma.dias:
         if dia.is_google_missing:
             sumico_ops.desmarcar(dia, motivo=sumico_ops.MOTIVO_CANCELADO)
     if regime == REGIME_VENDA:
         _gravar_pix_dos_bvs(acrescimos, pedido)
     db.session.flush()
-    gasto = _gravar_o_ato(forma, regime, pedido, conta, actor, settings)
-    _encerrar_os_dias(forma, regime, pedido, conta, actor)
+    gasto, canc = _gravar_o_ato(forma, regime, pedido, conta, actor, settings)
+    efeitos = _encerrar_os_dias(forma, regime, pedido, conta, actor, url_id=event.id, ensaios=ensaios, canc=canc)
     db.session.flush()
     gasto_id = gasto.id if gasto is not None else None
     for dia in {*forma.dias, forma.principal, *([forma.vivo] if forma.vivo else [])}:
@@ -1895,6 +1975,9 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
     db.session.commit()
 
     google_removido, aviso = _remover_do_google(alvos_google)
+    if aviso and efeitos["ensaios"]:
+        aviso += " Confira também os ensaios: " + "; ".join(e["texto"] for e in efeitos["ensaios"]) + "."
+    _mandar_os_emails(efeitos["emails"])
     return {
         "event": event,
         "gasto_id": gasto_id,
@@ -1902,6 +1985,8 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
         "aviso": aviso,
         "dias_cancelados": [d.id for d in forma.dias],
         "venda_passou_para": _evento_curto(forma.vivo) if forma.tipo == "passagem" else None,
+        "ensaios_cancelados": [{"id": e["id"], "data": e["data"], "local": e["local"]} for e in efeitos["ensaios"]],
+        "avisados": efeitos["avisados"],
     }
 
 
@@ -1935,6 +2020,352 @@ def _papeis_com_cache_pago(ids: list[int]) -> list[EventRole]:
         .all()
     )
     return [r for r in papeis if not e_vaga_de_presenca(r)]
+
+
+# ── História 6: cachê pago, elenco congelado, ensaios, sinos, multas e e-mails ─────────────────
+
+#: FR-063: a frase da recusa do cachê pago (o diálogo a mostra sem botão, apontando Gastos Extras).
+FRASE_CACHE_PAGO = (
+    "Este evento tem cachê pago ao elenco e não pode ser cancelado. Para devolver dinheiro à "
+    "cliente, lance uma Devolução em Gastos Extras."
+)
+
+
+def cache_pago_do_evento(event: CalendarEvent) -> Decimal:
+    """O cachê já pago (ou no banco) do elenco do evento — a régua única do FR-063 (exportada à 2a).
+
+    Escalação com talento em "pago" ou "no banco", fora a vaga de presença (que nunca tem cachê).
+    Soma os valores; uma escalação paga de valor vazio conta R$ 0,01, para nunca sair "sem cachê pago".
+    """
+    papeis = _papeis_com_cache_pago([event.id])
+    total = _dinheiro(sum((_dinheiro(r.cache_value) for r in papeis), Decimal("0")))
+    return max(total, _CENTAVO) if papeis else Decimal("0.00")
+
+
+def _travar_elenco(ids: list[int]) -> None:
+    """T6: as escalações com talento dos dias que o ato alcança, `ORDER BY id FOR UPDATE` (só no ato)."""
+    if ids:
+        (
+            EventRole.query.filter(EventRole.event_id.in_(ids), EventRole.talent_id.isnot(None))
+            .order_by(EventRole.id)
+            .with_for_update()
+            .populate_existing()
+            .all()
+        )
+
+
+def _recusa_do_cache_pago(dias: list[CalendarEvent]) -> None:
+    """409 `cache_pago` com os dias (FR-063): nada se grava, ninguém é avisado."""
+    from app.constants import CODIGO_CACHE_PAGO
+
+    pagos = {r.event_id for r in _papeis_com_cache_pago([d.id for d in dias])}
+    if pagos:
+        raise CancelValidationError(
+            FRASE_CACHE_PAGO,
+            status=409,
+            codigo=CODIGO_CACHE_PAGO,
+            dias=[_evento_curto(d) for d in dias if d.id in pagos],
+        )
+
+
+def _congelar_elenco(canc, dias: list[CalendarEvent]) -> None:
+    """As linhas do elenco do ato (FR-070; data-model §3), uma por escalação (vaga × dia), pela
+    `elenco_do_ato`: é delas que saem a multa, o e-mail e a lista do resumo — nunca da escala de hoje."""
+    from app.models import EventCancellationElenco
+
+    for r in elenco_do_ato(dias[0], dias=[d.id for d in dias]):
+        canc.elenco.append(EventCancellationElenco(
+            talent_id=r.talent_id, role_id=r.id, day_event_id=r.event_id,
+            character_name=(r.character_name or "")[:120], cache_reference=r.cache_value,
+        ))  # fmt: skip
+
+
+def _chave_do_sino(kind: str, evento_id: int, dia_id: int | None = None) -> str:
+    """A `dedupe_key` dos sinos do ato: sempre pelo evento da URL (data-model §6.5) — pelo principal,
+    o corte de um dia e o "todos" depois engoliriam um ao outro. Gancho da mutação do 44."""
+    return f"{kind}:{evento_id}" + (f":{dia_id}" if dia_id is not None else "")
+
+
+def _ensaios_dos_dias(dias: list[CalendarEvent]) -> list[CalendarEvent]:
+    """Os ensaios (filhos) dos dias que o ato cancela — no "só este dia", só os do antigo 1º dia."""
+    ids = [d.id for d in dias]
+    return (
+        CalendarEvent.query.filter(CalendarEvent.parent_event_id.in_(ids), CalendarEvent.event_type == "ENSAIO")
+        .order_by(CalendarEvent.start_at, CalendarEvent.id)
+        .all()
+    )
+
+
+def _descrever_ensaio(ensaio: CalendarEvent) -> str:
+    quando = ensaio.start_at.strftime("%d/%m %H:%M") if ensaio.start_at else "sem data"
+    return f"{quando}" + (f" ({ensaio.location})" if ensaio.location else "")
+
+
+def _apagar_os_ensaios(ensaios: list[CalendarEvent]) -> list[dict[str, Any]]:
+    """FR-065: os ensaios saem do banco na transação do ato (o Google, depois do commit)."""
+    from app.calendar.event_ops import _apagar_ensaio_no_banco
+
+    saida = []
+    for ensaio in ensaios:
+        saida.append({
+            "id": ensaio.id,
+            "data": ensaio.start_at.isoformat() if ensaio.start_at else None,
+            "local": ensaio.location,
+            "pai": ensaio.parent_event_id,
+            "texto": _descrever_ensaio(ensaio),
+        })  # fmt: skip
+        _apagar_ensaio_no_banco(ensaio)
+    return saida
+
+
+def _avisar_no_sino(forma: FormaDoAto, url_id: int, ensaios: list[dict], escalados: list) -> dict[str, int]:
+    """Os dois sinos do ato (FR-067), na transação: a equipe de Ensaio (só com ensaio cancelado) e
+    o Casting (um por dia cancelado com escalados). As chaves saem de `_chave_do_sino`, pelo módulo."""
+    from app.notificacoes import notificacoes_ops as nops
+
+    ensaio = 0
+    if ensaios:
+        ensaio = nops.notificar_evento_cancelado(
+            forma.dias[0], [e["texto"] for e in ensaios],
+            dedupe_key=_chave_do_sino(nops.KIND_EVENTO_CANCELADO, url_id),
+        )  # fmt: skip
+    # Pessoas, não vagas: o artista em duas vagas do mesmo dia é um a tirar da escala.
+    pessoas: dict[int, set[int]] = {}
+    for e in escalados:
+        pessoas.setdefault(e.day_event_id, set()).add(e.talent_id)
+    por_dia = {dia_id: len(quem) for dia_id, quem in pessoas.items()}
+    casting = 0
+    for dia in forma.dias:
+        if por_dia.get(dia.id):
+            casting += nops.notificar_cancelamento_na_escala(
+                dia, por_dia[dia.id], dedupe_key=_chave_do_sino(nops.KIND_EVENTO_CANCELADO_ESCALA, url_id, dia.id)
+            )
+    return {"ensaio": ensaio, "casting": casting}
+
+
+@dataclass(frozen=True)
+class Escalado:
+    """Uma escalação que o ato alcança: o artista, o dia, a vaga (e a ordem de desempate)."""
+
+    talent_id: int
+    day_event_id: int
+    character_name: str
+    ordem: int
+
+
+def _escalados_do_ato(forma: FormaDoAto, canc) -> list[Escalado]:
+    """Quem o ato avisa (FR-066, FR-068): as linhas congeladas do elenco; na Loja Virtual, que não
+    congela elenco (não tem multa), as escalações dos dias pela mesma `elenco_do_ato` — o artista
+    pré-escalado da campanha também recebe o e-mail e entra no sino do Casting."""
+    if canc is not None:
+        return [Escalado(x.talent_id, x.day_event_id, x.character_name, x.id) for x in canc.elenco]
+    papeis = elenco_do_ato(forma.dias[0], dias=[d.id for d in forma.dias])
+    return [Escalado(r.talent_id, r.event_id, r.character_name or "", r.id) for r in papeis]
+
+
+def _alvos_do_email(escalados: list[Escalado]) -> list[tuple[int, int, str]]:
+    """Um e-mail por talento com e-mail cadastrado (R17): o dia mais cedo em que ele estava entre os
+    dias do ato e o personagem dessa vaga. `(talent_id, day_event_id, character_name)`."""
+    from app.models import Talent
+
+    com_email = {
+        t.id
+        for t in Talent.query.filter(Talent.id.in_({e.talent_id for e in escalados} or {-1})).all()
+        if (t.email_contact or "").strip()
+    }
+    dias = {d.id: d for d in CalendarEvent.query.filter(CalendarEvent.id.in_({e.day_event_id for e in escalados} or {-1}))}
+    por_talento: dict[int, tuple] = {}
+    for e in escalados:
+        if e.talent_id not in com_email:
+            continue
+        dia = dias.get(e.day_event_id)
+        chave = ((dia.start_at if dia is not None else None) or datetime.max, e.day_event_id, e.ordem)
+        atual = por_talento.get(e.talent_id)
+        if atual is None or chave < atual[0]:
+            por_talento[e.talent_id] = (chave, e.day_event_id, e.character_name)
+    return [(tid, dia_id, nome) for tid, (_c, dia_id, nome) in sorted(por_talento.items())]
+
+
+def _mandar_os_emails(alvos: list[tuple[int, int, str]]) -> None:
+    """Depois do commit: "você foi removido do evento" a cada talento do ato (FR-066)."""
+    from app.email_service import send_async, send_removal_email
+    from app.models import Talent
+
+    for talent_id, dia_id, personagem in alvos:
+        talento = db.session.get(Talent, talent_id)
+        dia = db.session.get(CalendarEvent, dia_id)
+        if talento is not None and dia is not None:
+            send_async(send_removal_email, talento, dia, personagem)
+
+
+# ── Multa ao elenco (FR-070–FR-072; data-model §7.5) ─────────────────────────────────────────
+
+
+def _registrar_multa(linha, valor: Decimal, actor: User) -> SpecialExpense:
+    """O Gasto Extra da multa de uma escalação: aprovado, a pagar ao artista, ligado ao dia. Sem
+    commit. Pelo ORM, no molde de `_registrar_devolucao` (nunca `create_expense`, que nasce pendente)."""
+    from app.constants import now_sp
+    from app.gastos.gastos_ops import _log
+
+    agora = now_sp()
+    talento = linha.talent
+    dia = linha.day_event or db.session.get(CalendarEvent, linha.day_event_id)
+    nome = (talento.full_name if talento else "") or ""
+    gasto = SpecialExpense(
+        description=f"Multa de cancelamento — {nome} ({linha.character_name}) — {dia.title if dia else ''}"[:200],
+        category=SpecialExpense.CATEGORY_MULTA_CANCELAMENTO,
+        amount=valor,
+        expense_date=agora.date(),
+        status="aprovado",
+        created_by_id=actor.id,
+        approved_by_id=actor.id,
+        approved_at=agora,
+        disbursement_type="fornecedor",
+        supplier_name=nome[:200] or None,
+        supplier_pix=((talento.pix_key or "").strip()[:120] or None) if talento else None,
+        payment_status="nao_pago",
+        paid_at_creation=False,
+        event_id=linha.day_event_id,
+    )
+    db.session.add(gasto)
+    db.session.flush()
+    linha.special_expense_id = gasto.id
+    _log(actor, "gasto", gasto.id, gasto.description, "criou", f"Multa de cancelamento {_brl(valor)}")
+    return gasto
+
+
+#: O teto da coluna do gasto (`Numeric(10,2)`): acima disso o flush estoura com 500.
+_TETO_DA_MULTA = Decimal("100000000")
+
+
+def _erro_do_valor_da_multa(valor: Decimal | None, invalido: bool) -> str | None:
+    if invalido or (valor is not None and valor < 0):
+        return "Informe a multa em reais (0 ou mais)."
+    if valor is not None and valor >= _TETO_DA_MULTA:
+        return "Valor alto demais para uma multa: confira."
+    return None
+
+
+def _erros_das_multas_do_ato(pedido: PedidoDeCancelamento, papeis_do_ato: dict[int, int]) -> dict[str, str]:
+    """`fields.multa_<role_id>` (contracts §1): valor negativo, inválido ou acima do teto; vaga fora do
+    ato; o artista da vaga mudou desde que a tela abriu (a multa iria para outra pessoa). Vazio e 0 não
+    são erro — são "sem multa". `papeis_do_ato` = `{role_id: talent_id}`, lido sob a T6."""
+    erros: dict[str, str] = {}
+    if pedido.multas_malformadas:
+        erros["multas"] = "Envie as multas como uma lista de {role_id, valor}."
+    for role_id, (valor, invalido, visto) in pedido.multas.items():
+        erro = _erro_do_valor_da_multa(valor, invalido)
+        if erro:
+            erros[f"multa_{role_id}"] = erro
+        elif valor and valor > 0 and role_id not in papeis_do_ato:
+            erros[f"multa_{role_id}"] = "Esta escalação não está no cancelamento: confira o artista e o dia."
+        elif valor and valor > 0 and visto is not None and papeis_do_ato[role_id] != visto:
+            erros[f"multa_{role_id}"] = "O artista desta vaga mudou desde que a tela abriu: recarregue e confira."
+    return erros
+
+
+def _multas_do_ato(canc, pedido: PedidoDeCancelamento, actor: User) -> list[SpecialExpense]:
+    """As multas do corpo do ato, nas linhas do elenco recém-congeladas (pela vaga)."""
+    if canc is None or not pedido.multas:
+        return []
+    db.session.flush()
+    gastos = []
+    for linha in canc.elenco:
+        valor = pedido.multas.get(linha.role_id, (None, False, None))[0]
+        if valor and valor > 0 and linha.special_expense_id is None:
+            gastos.append(_registrar_multa(linha, valor, actor))
+    return gastos
+
+
+def lancar_multas_do_cancelado(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor: User) -> list[int]:
+    """`POST /api/events/<id>/multas` (contracts §4): a multa depois do ato, por linha do elenco. Sem commit.
+
+    T1 → T2 → 409 `nao_cancelado` → 400. A linha vale quando é do cancelamento deste evento ou do
+    dia dele; a multa já lançada se corrige em Gastos Extras. A data do gasto é a do lançamento (P-34).
+    """
+    from app.constants import CODIGO_NAO_CANCELADO
+    from app.models import EventCancellationElenco
+
+    corpo = corpo if isinstance(corpo, dict) else {}
+    itens = corpo.get("multas")
+    travar_grupo(event)  # T1
+    _ler_congelados([event.id])  # T2
+    if not event.is_cancelled:
+        raise CancelValidationError("Este evento não está cancelado.", status=409, codigo=CODIGO_NAO_CANCELADO)
+    if not isinstance(itens, list):
+        raise CancelValidationError("Informe a multa de ao menos um artista", field="multas")
+    pedidos: dict[int, tuple[Decimal | None, bool]] = {}
+    for item in itens:
+        eid = item.get("elenco_id") if isinstance(item, dict) else None
+        if not isinstance(eid, int) or isinstance(eid, bool):
+            raise CancelValidationError("Envie as multas como uma lista de {elenco_id, valor}.", field="multas")
+        pedidos[eid] = _decimal(item.get("valor"))
+    ids = list(pedidos)
+    linhas = {
+        x.id: x
+        for x in EventCancellationElenco.query.filter(EventCancellationElenco.id.in_(ids or [-1]))
+        .order_by(EventCancellationElenco.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    }
+    erros: dict[str, str] = {}
+    lancar: list[tuple[Any, Decimal]] = []
+    for eid, (valor, invalido) in pedidos.items():
+        erro = _erro_do_valor_da_multa(valor, invalido)
+        if erro:
+            erros[f"multa_{eid}"] = erro
+            continue
+        if not valor:
+            continue
+        linha = linhas.get(eid)
+        if linha is None or event.id not in (linha.cancelamento.event_id, linha.day_event_id):
+            erros[f"multa_{eid}"] = "Esta escalação não é do cancelamento deste evento."
+        elif linha.special_expense_id is not None:
+            erros[f"multa_{eid}"] = "Já há multa lançada para esta escalação: corrija em Gastos Extras."
+        else:
+            lancar.append((linha, valor))
+    if erros:
+        raise CancelValidationError("Corrija os campos destacados.", fields=erros)
+    if not lancar:
+        raise CancelValidationError("Informe a multa de ao menos um artista", field="multas")
+    gastos = [_registrar_multa(linha, valor, actor) for linha, valor in lancar]
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    texto = "Multa ao elenco lançada: " + "; ".join(
+        f"{(linha.talent.full_name if linha.talent else '?')} ({linha.character_name}) {_brl(valor)}"
+        for linha, valor in lancar
+    )
+    db.session.add(EventLog(event_id=event.id, actor_name=actor.name, actor_role=papel, message=texto[:2000]))
+    return [g.id for g in gastos]
+
+
+def _elenco_do_resumo(cancelamento, dia_id: int | None = None) -> list[dict[str, Any]]:
+    """O `elenco[]` do resumo (contracts §0): das linhas congeladas no ato, nunca da escala de hoje.
+
+    `na_vaga` diz se o artista ainda está na vaga (o Casting pode tê-lo tirado depois). `dia_id`
+    recorta um dia (o satélite do "todos" mostra as linhas dele, que moram no principal). Gancho da
+    mutação do 45c: o detalhe o chama pelo módulo.
+    """
+    if cancelamento is None:
+        return []
+    saida = []
+    linhas = [x for x in cancelamento.elenco if dia_id is None or x.day_event_id == dia_id]
+    for linha in sorted(linhas, key=lambda x: x.id):
+        talento = linha.talent
+        dia = linha.day_event
+        gasto = linha.special_expense
+        saida.append({
+            "elenco_id": linha.id,
+            "talent_id": linha.talent_id,
+            "artista": (talento.artistic_name or talento.full_name) if talento else None,
+            "vaga": linha.character_name,
+            "dia": {"id": linha.day_event_id, "data": dia.start_at.date().isoformat() if dia and dia.start_at else None},
+            "cache_referencia": _f(linha.cache_reference),
+            "na_vaga": bool(linha.role_id is not None and linha.role is not None and linha.role.talent_id == linha.talent_id),
+            "talent_pix_informado": bool(talento and (talento.pix_key or "").strip()),
+            "multa": {"gasto_id": gasto.id, "valor": _f(gasto.amount)} if gasto is not None else None,
+        })  # fmt: skip
+    return saida
 
 
 def dias_dos_gastos(event: CalendarEvent) -> list[int]:
@@ -2044,6 +2475,8 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
         "cliente_nome": event.client.name if event.client else None,
         "elenco": [
             {
+                # O artista que a tela viu: a multa no ato confere que a vaga ainda é dele.
+                "talent_id": r.talent_id,
                 "character_name": r.character_name,
                 "talent_name": r.talent.full_name if r.talent else None,
                 "cache_value": float(r.cache_value or 0),
@@ -2051,6 +2484,7 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
                 "role_id": r.id,
                 "day_event_id": r.event_id,
                 "talent_pix_informado": bool(r.talent and (r.talent.pix_key or "").strip()),
+                "talent_email_informado": bool(r.talent and (r.talent.email_contact or "").strip()),
                 **({"talent_pix": r.talent.pix_key if r.talent else None} if show_financeiro else {}),
             }
             for r in elenco_do_ato(event, dias=vivos or [event.id])
@@ -2105,6 +2539,16 @@ def resumo_impacto(event: CalendarEvent, *, show_financeiro: bool = True) -> dic
         },
         "faltam_dias": faltam,
         "comprovantes_sem_valor": int(sem_valor or 0),
+        # H6 (contracts §2): os ensaios que cairiam (dos dias vivos que o "todos" alcança) e o
+        # cachê pago (> 0 → o diálogo explica e não oferece cancelar).
+        "ensaios": [
+            {"id": e.id, "data": e.start_at.isoformat() if e.start_at else None, "local": e.location,
+             "day_event_id": e.parent_event_id}
+            for e in _ensaios_dos_dias(CalendarEvent.query.filter(CalendarEvent.id.in_(vivos or [event.id])).all())
+        ],  # fmt: skip
+        "cache_pago": float(
+            sum((cache_pago_do_evento(d) for d in CalendarEvent.query.filter(CalendarEvent.id.in_(vivos or [event.id]))), Decimal("0"))
+        ),
     }
 
 

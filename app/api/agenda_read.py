@@ -237,7 +237,21 @@ def _cancelamento_do_detalhe(event: CalendarEvent, flags: dict[str, bool]) -> di
         return None
     out = serializar_resumo_cancelado(resumo, flags)
     if flags.get("can_edit_venda_cancelado"):
+        from app.calendar import cancel_ops
+
         out["limites_devolucao"] = limites_da_devolucao(event)
+        # Feature 306, H6: a lista do ato (das linhas congeladas), pelo módulo — a mutação do 45c a troca.
+        # No satélite do "todos" as linhas moram na linha do principal: a dele, recortada no dia.
+        from app.constants import REGIME_SATELITE
+
+        canc = event.cancelamento
+        if canc is not None and canc.regime == REGIME_SATELITE and canc.group_leader_id:
+            from app.models import EventCancellation
+
+            do_principal = EventCancellation.query.filter_by(event_id=canc.group_leader_id).one_or_none()
+            out["elenco"] = cancel_ops._elenco_do_resumo(do_principal, dia_id=event.id)
+        else:
+            out["elenco"] = cancel_ops._elenco_do_resumo(canc)
     return out
 
 

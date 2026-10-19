@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@manto/ui";
 import type { EstadoPagamento, EventoDetalhe, ResumoCancelado } from "../../lib/agenda";
 import { AlterarDevolucaoDialog } from "./AlterarDevolucaoDialog";
+import { LancarMultaDialog } from "./LancarMultaDialog";
 import { brl, Panel } from "./parts";
 
 const ESTADO: Record<EstadoPagamento, string> = {
@@ -44,11 +45,17 @@ function linkDeComissoes(eventId: number, resumo: ResumoCancelado): string | und
 export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
   const resumo = data.event.cancelamento;
   const [alterando, setAlterando] = useState(false);
+  const [multando, setMultando] = useState(false);
   if (!resumo) return null;
   // Feature 306, H5: o dia cortado (`dia`) também corrige a devolução dele (piso e teto do corte).
   const podeAlterar =
     Boolean(data.flags.can_edit_venda_cancelado) &&
     (resumo.regime === "venda" || resumo.regime === "legado" || resumo.regime === "dia");
+  // H6: a multa depois do ato, pelas escalações congeladas (só o Superadmin recebe o `elenco`).
+  const elencoDoAto = resumo.elenco ?? [];
+  const podeMultar = Boolean(data.flags.can_edit_venda_cancelado) && elencoDoAto.some((e) => !e.multa);
+  const todasComMulta =
+    Boolean(data.flags.can_edit_venda_cancelado) && elencoDoAto.length > 0 && !elencoDoAto.some((e) => !e.multa);
   const bv = (resumo.bvs ?? []).reduce((soma, b) => soma + (b.conta ?? 0), 0);
   const linkComissoes = resumo.comissao ? linkDeComissoes(data.event.id, resumo) : undefined;
 
@@ -113,17 +120,33 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
         </p>
       )}
 
-      {podeAlterar && (
-        <div className="mt-3">
-          <Button variant="outline" size="sm" onClick={() => setAlterando(true)}>
-            Alterar devolução
-          </Button>
-          <AlterarDevolucaoDialog
-            eventId={data.event.id}
-            resumo={resumo}
-            open={alterando}
-            onOpenChange={setAlterando}
-          />
+      {todasComMulta && (
+        <p className="mt-3 text-xs text-muted">Todas as escalações já têm multa: corrija em Gastos Extras.</p>
+      )}
+
+      {(podeAlterar || podeMultar) && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {podeAlterar && (
+            <Button variant="outline" size="sm" onClick={() => setAlterando(true)}>
+              Alterar devolução
+            </Button>
+          )}
+          {podeMultar && (
+            <Button variant="outline" size="sm" onClick={() => setMultando(true)}>
+              Lançar multa ao elenco
+            </Button>
+          )}
+          {podeAlterar && (
+            <AlterarDevolucaoDialog
+              eventId={data.event.id}
+              resumo={resumo}
+              open={alterando}
+              onOpenChange={setAlterando}
+            />
+          )}
+          {podeMultar && (
+            <LancarMultaDialog eventId={data.event.id} resumo={resumo} open={multando} onOpenChange={setMultando} />
+          )}
         </div>
       )}
     </Panel>

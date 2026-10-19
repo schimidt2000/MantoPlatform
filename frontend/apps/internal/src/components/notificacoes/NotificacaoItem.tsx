@@ -10,6 +10,9 @@ const ICONE_POR_KIND: Record<string, LucideIcon> = {
   "convite.recusado": UserX,
   // Feature 303 — o mesmo ícone do selo "Sumiu do Google" na agenda.
   "evento.sumiu_google": CalendarX,
+  // Feature 306 — o cancelamento: o ensaio que caiu e a escala a desfazer.
+  "evento.cancelado": CalendarX,
+  "evento.cancelado_escala": UserX,
 };
 
 interface NotificacaoItemProps {

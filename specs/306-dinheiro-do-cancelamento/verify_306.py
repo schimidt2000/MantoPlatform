@@ -2727,13 +2727,23 @@ def c4_multas_recusadas() -> None:
     papel = _escalar(show, estado["t"])
     outro = _evento_com_elenco("4 multa outro", ["A"])
     alheio = _escalar(outro, estado["t2"])
-    for rotulo, multa, campo in (
-        ("multa negativa", {"role_id": papel, "valor": -10}, f"multa_{papel}"),
-        ("multa de outro evento", {"role_id": alheio, "valor": 10}, f"multa_{alheio}"),
+    for rotulo, multas, campo in (
+        ("multa negativa", [{"role_id": papel, "valor": -10}], f"multa_{papel}"),
+        ("multa de outro evento", [{"role_id": alheio, "valor": 10}], f"multa_{alheio}"),
+        # revisão da H6 (19/10): a vaga mudou de artista desde a tela; o teto da coluna; o formato
+        (
+            "artista trocado na vaga",
+            [{"role_id": papel, "valor": 10, "talent_id": estado["t2"]}],
+            f"multa_{papel}",
+        ),
+        ("multa acima do teto", [{"role_id": papel, "valor": 1_000_000_000}], f"multa_{papel}"),
+        ("multa com expoente enorme", [{"role_id": papel, "valor": 1e26}], f"multa_{papel}"),
+        ("multas fora de lista", 5, "multas"),
+        ("vaga que não é número", [{"role_id": "x", "valor": 10}], "multas"),
     ):
         _deve_400(
             show,
-            {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "multas": [multa]},
+            {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "multas": multas},
             campo,
             rotulo,
         )
@@ -5049,7 +5059,11 @@ def c38_so_este_dia() -> None:
     _garante(r.status_code == 200, f"38 dois cortes, 1º → {r.status_code} {_erro(r)}")
     r = _corte(d2, 1000, valor=1000)
     _garante(r.status_code == 200, f"38 dois cortes, 2º → {r.status_code} {_erro(r)}")
-    _igual(_resumo_api(d1)["limites_devolucao"]["atual"], 1000, "38: o Alterar do dia não parte do total do dia")
+    _igual(
+        _resumo_api(d1)["limites_devolucao"]["atual"],
+        1000,
+        "38: o Alterar do dia não parte do total do dia",
+    )
     r = _alterar_devolucao(d1, 0)
     _garante(
         r.status_code == 409 and _codigo(r) == "abaixo_do_piso",
@@ -5062,7 +5076,11 @@ def c38_so_este_dia() -> None:
     _garante(r.status_code == 200, f"38 venda que mudou, 1º corte → {r.status_code} {_erro(r)}")
     r = _cancelar(
         tres["dias"][1],
-        {**_corpo_cancelar("nada", None, nome=None, pix=None), "venda_nova": 2000, "venda_esperada": 3000},
+        {
+            **_corpo_cancelar("nada", None, nome=None, pix=None),
+            "venda_nova": 2000,
+            "venda_esperada": 3000,
+        },
     )
     _garante(
         r.status_code == 409 and _codigo(r) == "grupo_mudou",
@@ -5370,7 +5388,9 @@ def c41_custo_do_grupo() -> None:
     def base_paga() -> Decimal:
         with app.app_context():
             s = db.session.get(SiteSetting, 1)
-            return comissoes_ops._event_commission(db.session.get(CalendarEvent, e2["principal"]), s)
+            return comissoes_ops._event_commission(
+                db.session.get(CalendarEvent, e2["principal"]), s
+            )
 
     paga = _linha_comissao(e2["principal"], float(base_paga()), status="pago", vendedor="vend2")
     with _com_hoje(_dia(10)):
@@ -6404,7 +6424,9 @@ def c44_avisos() -> None:
         not _avisos_do_ato("evento.cancelado_escala", vazio), "44: sem elenco, sino ao Casting"
     )
     # corte: só o elenco do dia cortado, com a data dele
-    c1 = _evento_com_elenco("44 corte 1", ["A"], inicio=_dias_a_frente(20))
+    c1 = _evento_com_elenco(
+        "44 corte 1", ["A", "B"], inicio=_dias_a_frente(20)
+    )  # duas vagas: t e t2
     c2 = _evento_com_elenco("44 corte 2", ["A", "B"], inicio=_dias_a_frente(21))
     _agrupar(c1, c2)
     _no_banco_escrever(
@@ -6448,6 +6470,31 @@ def c44_avisos() -> None:
     _garante(
         _remocoes_por_talento() == {estado["t2"]: [(p1, _personagem(v_p1))]},
         f"44: na passagem, e-mails {_remocoes_por_talento()}",
+    )
+    # Loja Virtual (revisão da H6, 19/10): o artista que a campanha pré-escala também é avisado
+    virtual = _evento(
+        "44 virtual", tipo="VIRTUAL", vendedor=None, taxa=None, inicio=_dias_a_frente(40)
+    )
+    with app.app_context():
+        # Como o `_pre_escalar` da Loja Virtual: a vaga nasce com o artista da campanha.
+        db.session.add(EventRole(
+            event_id=virtual, character_name="Papai Noel", role_type="character",
+            talent_id=estado["t"], cache_value=300, invite_status="accepted",
+        ))  # fmt: skip
+        db.session.commit()
+    _remocoes.clear()
+    corpo = _cancelar_ok(virtual, {"motivo": "verify 306 virtual"})
+    _esperar_threads()
+    _garante(
+        _remocoes_por_talento() == {estado["t"]: [(virtual, "Papai Noel")]},
+        f"44: Loja Virtual sem o e-mail ao artista {_remocoes_por_talento()}",
+    )
+    _garante(
+        _avisos_do_ato("evento.cancelado_escala", virtual), "44: Loja Virtual sem o sino do Casting"
+    )
+    _garante(
+        (corpo.get("avisados") or {}).get("email") == 1,
+        f"44: avisados da Loja Virtual {corpo.get('avisados')}",
     )
     # 409 não avisa
     recusado = _evento_com_elenco("44 recusado", ["A"])
@@ -6605,6 +6652,15 @@ def c45_multa_no_ato() -> None:
     _garante(
         sorted(q(g[1]) for g in gastos) == [q(100), q(120)],
         f"45: uma multa por escalação: {gastos}",
+    )
+    # o dia satélite do "todos" mostra as linhas DELE (que moram na linha do principal) — revisão da H6
+    do_sat = _resumo_api(d2).get("elenco") or []
+    _garante(
+        len(do_sat) == 1
+        and do_sat[0]["dia"]["id"] == d2
+        and do_sat[0].get("multa")
+        and q(Decimal(str(do_sat[0]["multa"]["valor"]))) == q(Decimal("120")),
+        f"45: o elenco no dia satélite {do_sat}",
     )
 
 

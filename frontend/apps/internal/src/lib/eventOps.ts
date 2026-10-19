@@ -128,9 +128,13 @@ export interface ImpactoElenco {
   cache_value: number;
   payment_status: string;
   // Feature 306 — opcionais (backend antigo).
+  /** O artista que a tela viu (a multa no ato confere que a vaga ainda é dele). */
+  talent_id?: number;
   role_id?: number;
   day_event_id?: number;
   talent_pix_informado?: boolean;
+  /** Feature 306, H6: o e-mail de cancelamento só sai para quem tem e-mail cadastrado. */
+  talent_email_informado?: boolean;
   /** Só com `show_financeiro`. */
   talent_pix?: string | null;
 }
@@ -187,6 +191,8 @@ export interface ImpactoExclusao {
   cache_pago?: number;
   /** Feature 306, H5: o grupo (`null` no avulso). */
   grupo?: GrupoDoImpacto | null;
+  /** H6: os ensaios que cairiam com o cancelamento (dos dias vivos que o "todos" alcança). */
+  ensaios?: { id: number; data: string | null; local: string | null; day_event_id: number }[];
   /** A venda do grupo hoje (a do principal): o ponto de partida do "Novo valor da venda". */
   venda_do_grupo?: number;
 }
@@ -305,6 +311,9 @@ export interface CancelarEventoInput {
   venda_nova?: number;
   /** A venda do grupo que o diálogo mostrou: se mudou (outro corte), 409 `grupo_mudou`. */
   venda_esperada?: number;
+  /** H6: a multa por escalação (vaga × dia); vazio ou 0 = sem multa. `talent_id`: o artista que a
+   * tela mostrou — se a vaga mudou de artista, 400 `multa_<role_id>`. */
+  multas?: { role_id: number; valor: number; talent_id?: number }[];
 }
 
 export interface CancelarEventoResult {
@@ -317,6 +326,9 @@ export interface CancelarEventoResult {
   /** Feature 306, H5: os dias que o ato cancelou e, na passagem, o novo 1º dia. */
   dias_cancelados?: number[];
   venda_passou_para?: { id: number; titulo: string; data: string | null } | null;
+  /** H6: os ensaios que caíram e quantos foram avisados. */
+  ensaios_cancelados?: { id: number; data: string | null; local: string | null }[];
+  avisados?: { email: number; ensaio: number; casting: number };
 }
 
 /** As chaves que um ato ou uma correção do cancelado muda (contracts §22). */
@@ -379,6 +391,28 @@ export function useAlterarDevolucao(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
       queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
       invalidarFinanceiro(queryClient);
+    },
+  });
+}
+
+export interface LancarMultasInput {
+  multas: { elenco_id: number; valor: number }[];
+}
+
+/** "Lançar multa ao elenco" depois do ato (feature 306, contracts §4). Só o Superadmin. */
+export function useLancarMultas(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<{ ok: true; resumo: ResumoCancelado | null; gastos: number[] }, ApiRequestError, LancarMultasInput>({
+    mutationFn: (input) =>
+      apiFetch<{ ok: true; resumo: ResumoCancelado | null; gastos: number[] }>(`/api/events/${eventId}/multas`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
     },
   });
 }

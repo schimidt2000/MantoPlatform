@@ -1830,13 +1830,28 @@ def update_ensaio(
     return None
 
 
+def _apagar_ensaio_no_banco(ensaio: Any) -> None:
+    """O ensaio sai do banco: as tabelas satélite, os sinos que apontam para ele e a linha. Sem commit.
+
+    Feature 306 (FR-065): o cancelamento do show apaga os ensaios na mesma transação do ato (o
+    Google sai depois do commit, pela trava do ambiente); o botão e a troca de tipo seguem por
+    `delete_ensaio`, que chama esta e commita.
+    """
+    from app.calendar.routes import _clear_event_side_tables
+    from app.notificacoes.notificacoes_ops import apagar_por_entidade
+
+    _clear_event_side_tables(ensaio.id)
+    apagar_por_entidade("calendar_event", ensaio.id)
+    db.session.delete(ensaio)
+
+
 def delete_ensaio(ensaio: Any) -> str | None:
     """Cancela um ensaio (Google + banco). Retorna aviso se o Google falhar.
 
     A limpeza de tabelas satélite (`_clear_event_side_tables`) é a mesma da rota Jinja —
     sem ela o DELETE viola FK quando o ensaio tem histórico.
     """
-    from app.calendar.routes import CALENDAR_ID, _clear_event_side_tables
+    from app.calendar.routes import CALENDAR_ID
     from app.calendar.service import delete_event
 
     warning = None
@@ -1847,8 +1862,7 @@ def delete_ensaio(ensaio: Any) -> str | None:
             logger.exception("Falha ao remover ensaio %s do Google Agenda", ensaio.id)
             warning = f"Removido do banco, mas erro ao remover do Google Calendar: {exc}"
 
-    _clear_event_side_tables(ensaio.id)
-    db.session.delete(ensaio)
+    _apagar_ensaio_no_banco(ensaio)
     db.session.commit()
     return warning
 

@@ -460,7 +460,7 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
 10. (H6) "Lançar multa ao elenco":
     - quem saiu da escala aparece marcado;
     - 150 vira o Gasto Extra "Multa de cancelamento"; vazio e 0 são ignorados;
-    - tudo vazio ou 0 dá o erro "Informe a multa de ao menos um artista" no campo, e nada é lançado;
+    - tudo vazio ou 0 mostra "Informe a multa de ao menos um artista" (pendência, com o botão desabilitado; pela API, 400 `fields.multas`), e nada é lançado; a escalação com multa já lançada fica só leitura ("corrija em Gastos Extras"), e com todas multadas o botão some;
     - multa já lançada mostra erro no campo ("Corrija em Gastos Extras").
 11. (H6) Como CASTING: o sino do cancelado (um por dia com escalados) abre o evento em `?aba=producao`.
 12. (H2) Como COMERCIAL, com login real e não pelo "Ver como":
