@@ -315,7 +315,7 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   ganhou o subgrupo **"Convites recusados"** — `rejected_invites` já vinha da API (231) e era
   descartado pela tela; recusa cujo cargo já voltou para `pending` não conta duas vezes.
   `SectorPanel` agora aceita modo controlado (`open`/`onOpenChange`) e `urgentCount`.
-- **Feature 308**: o painel Casting não lista vaga de evento com 🟧/🟠 no começo do título
+- **Feature 308**: os painéis Casting e Figurino não listam evento com 🟧/🟠 no começo do título
   (compromisso interno — gravação, visita técnica, troca de figurino com parceira; inclusive o
   `🟧 - ENSAIO`). Para o **SUPERADMIN**, cada linha de "A escalar" tem **Dispensar** ao lado do
   "Abrir", e o card "Cargos dispensados" virou lista com **Restaurar** (antes só a contagem).

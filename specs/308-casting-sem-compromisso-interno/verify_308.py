@@ -8,7 +8,8 @@ Cenários (spec.md):
     gravado (conferido por conexão separada); restaura: volta a `pending`.
  4. DEVE FALHAR: CASTING tenta dispensar → 403 e o banco não muda.
  5. CASTING não recebe `dismissed_casting` (a lista de restaurar é só do SUPERADMIN).
- 6. Limpeza (devolve `dismissed_at` original, apaga logs e usuários do verify).
+ 6. O mesmo no figurino: `figurino.pending` sem evento 🟧/🟠, e o resto continua.
+ 7. Limpeza (devolve `dismissed_at` original, apaga logs e usuários do verify).
 
 Não semeia EventRole (o sync do Google apagaria e mandaria e-mail de remoção): usa vagas que já
 existem no espelho com `talent_id IS NULL`. Requisições FORA do `app.app_context()`.
@@ -119,6 +120,14 @@ _SQL_PENDENTES = """
     ORDER BY e.start_at
 """
 
+# Idem para o figurino (dashboard_service.compute_figurino_tasks), menos o marcador.
+_SQL_FIGURINO = """
+    SELECT r.id, e.title FROM event_roles r JOIN calendar_events e ON e.id = r.event_id
+    WHERE r.talent_id IS NOT NULL AND r.figurino_done_at IS NULL
+      AND r.invite_status <> 'rejected' AND r.role_type <> 'extra'
+      AND e.title NOT LIKE '🟧 ENSAIO%' AND e.start_at >= :corte AND e.cancelled_at IS NULL
+"""
+
 
 def preparar() -> None:
     from app.calendar.routes import PRESENCE_CHARACTER
@@ -139,6 +148,14 @@ def preparar() -> None:
     _garante(estado["internas"], "o espelho não tem vaga pendente em evento 🟧/🟠 — nada a provar")
     _garante(estado["normais"], "o espelho não tem vaga pendente fora do laranja")
     estado["alvo"] = estado["normais"][0]
+    figurino = _no_banco(_SQL_FIGURINO, corte=corte)
+    estado["figurino_internas"] = {rid for rid, titulo in figurino if _interno(titulo)}
+    estado["figurino_normais"] = {rid for rid, titulo in figurino if not _interno(titulo)}
+    print(
+        f"  (figurino antes: {len(figurino)}; {len(estado['figurino_internas'])} de compromisso "
+        f"interno)"
+    )
+    _garante(estado["figurino_internas"], "o espelho não tem figurino pendente em evento 🟧/🟠")
 
 
 def limpar() -> None:
@@ -204,7 +221,15 @@ def cen_05_casting_sem_lista_de_dispensados() -> None:
     _garante(dados["dismissed_casting"] == [], "CASTING recebeu a lista de dispensados")
 
 
-def cen_06_limpeza() -> None:
+def cen_06_figurino() -> None:
+    pendentes = {t["role_id"] for t in _dashboard("superadmin")["figurino"]["pending"]}
+    vazou = pendentes & estado["figurino_internas"]
+    _garante(not vazou, f"{len(vazou)} figurino(s) laranja na Home, ex.: {sorted(vazou)[:5]}")
+    faltam = estado["figurino_normais"] - pendentes
+    _garante(not faltam, f"{len(faltam)} figurino(s) normal(is) sumiram, ex.: {sorted(faltam)[:5]}")
+
+
+def cen_07_limpeza() -> None:
     with app.app_context():
         limpar()
         _garante(User.query.filter(User.email.like(f"{PREFIX}%")).count() == 0, "sobrou usuário")
@@ -225,8 +250,9 @@ def main() -> int:
         cenario("3. SUPERADMIN dispensa e restaura", cen_03_dispensar_e_restaurar)
         cenario("4. DEVE FALHAR: CASTING dispensa → 403", cen_04_casting_nao_dispensa)
         cenario("5. CASTING não recebe dispensados", cen_05_casting_sem_lista_de_dispensados)
+        cenario("6. figurino de evento 🟧/🟠 fora; o resto fica", cen_06_figurino)
     finally:
-        cenario("6. limpeza", cen_06_limpeza)
+        cenario("7. limpeza", cen_07_limpeza)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"{ok}/{len(resultados)} OK")
     return 0 if ok == len(resultados) else 1

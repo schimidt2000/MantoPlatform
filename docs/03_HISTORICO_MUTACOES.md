@@ -129,7 +129,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **308-casting-sem-compromisso-interno** | *(em branch)* O painel Casting da Home deixa de listar a vaga de evento marcado com 🟧/🟠 (compromisso interno — a mesma marca da 299), o que tira também o `🟧 - ENSAIO` que escapava do filtro de ensaio pelo hífen. O SUPERADMIN ganha **Dispensar** na linha e **Restaurar** na lista de dispensados, direto da Home; Casting não dispensa (decisão do dono) | 2026-10-19 | `—` | (aqui) | — |
+| **308-casting-sem-compromisso-interno** | *(em branch)* Os painéis Casting e Figurino da Home deixam de listar evento marcado com 🟧/🟠 (compromisso interno — a mesma marca da 299), o que tira também o `🟧 - ENSAIO` que escapava do filtro de ensaio pelo hífen. O SUPERADMIN ganha **Dispensar** na linha e **Restaurar** na lista de dispensados, direto da Home; Casting não dispensa (decisão do dono) | 2026-10-19 | `—` | (aqui) | — |
 | **307-natal-papai-noel-calculadora** | *(EM PRODUÇÃO 16/10 ~01:25)* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
 | **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:49)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
@@ -323,10 +323,13 @@ nem cobrança — a equipe põe 🟠 e a regra cobre; nada de palavra-chave. Dis
 SUPERADMIN** (o dono não quer o Casting dispensando — RBAC do endpoint da 108 inalterado). Evento
 passado continua na lista (o corte segue o `release_date`): o pagamento depende do registro.
 
-**Fora.** Painéis de Figurino (a conferência de tela mostrou a 🟠 GRAVAÇÃO lá) e de Confirmações.
+**Figurino junto.** A conferência de tela mostrou a 🟠 GRAVAÇÃO no painel de Figurino; o dono
+pediu a mesma regra lá: `compute_figurino_tasks` usa o mesmo filtro (quem foi escalado num
+compromisso interno não tem figurino a separar). Confirmações ficou fora.
 
-**Verificação.** `verify_308.py` 5/6 antes (7 vagas laranja na Home do espelho) e 6/6 depois, com o
-"deve falhar" do Casting (403, banco intacto). Tela: Dispensar e Restaurar pela Home no espelho,
+**Verificação.** `verify_308.py` 5/6 antes (7 vagas laranja no casting da Home do espelho) e 6/6
+depois, com o "deve falhar" do Casting (403, banco intacto); com o figurino, 6/7 antes (7 laranja no
+painel) e 7/7 depois. Tela: Dispensar e Restaurar pela Home no espelho,
 celular a 375px sem rolagem lateral.
 
 ### 307 — Papai Noel em data especial: a tabela de preços tem os valores de 24 e 25/12 e a calculadora os aplica pela data do evento   (307-natal-papai-noel-calculadora · 2026-10-15 · sem migration)

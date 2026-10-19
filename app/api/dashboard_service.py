@@ -37,8 +37,8 @@ def _base_filters(cutoff: datetime) -> dict[str, Any]:
         "not_cancelled": CalendarEvent.cancelled_at.is_(None),
         # Compromisso interno (🟧/🟠 no começo do título — gravação, visita técnica, troca de
         # figurino com parceira) é marcação de agenda: a vaga de Coordenador que todo evento ganha
-        # não é pendência de casting (feature 308). Pega também o "🟧 - ENSAIO", que escapa do
-        # `exclude_ensaios` pelo hífen.
+        # não é pendência de casting, nem quem foi escalado ali precisa de figurino separado
+        # (feature 308). Pega também o "🟧 - ENSAIO", que escapa do `exclude_ensaios` pelo hífen.
         "not_compromisso_interno": not_(
             or_(
                 *(
@@ -113,8 +113,15 @@ def compute_unconfirmed_invites() -> list[EventRole]:
 
 
 def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
-    """Pendências e contagens de figurino (roles com talento, sem figurino, exceto extras)."""
+    """Pendências e contagens de figurino (roles com talento, sem figurino, exceto extras e
+    compromisso interno)."""
     f = _base_filters(cutoff)
+    eventos = (
+        f["exclude_ensaios"],
+        f["future_events"],
+        f["not_cancelled"],
+        f["not_compromisso_interno"],
+    )
     pending = (
         EventRole.query.filter(
             EventRole.talent_id.isnot(None),
@@ -123,7 +130,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -134,7 +141,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .count()
     )
     return {"pending": pending, "total": total, "done": total - len(pending)}

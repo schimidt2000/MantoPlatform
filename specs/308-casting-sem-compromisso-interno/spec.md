@@ -70,5 +70,10 @@ aberta pela skill `manto-conferir-tela` (botão visível como superadmin, ausent
   remoção a artista).
 - Painel "Confirmações" (`escalacoes_sem_confirmacao`): quem foi escalado num compromisso interno
   ainda precisa confirmar.
-- Painéis de figurino e ensaio.
+- Painel de ensaio.
+
+## Acréscimo (19/10, pedido do dono)
+
+"Aplica a mesma regra no figurino também": `compute_figurino_tasks` (pending e total) usa o mesmo
+`not_compromisso_interno`. Cenário 6 do `verify_308.py` (6/7 antes, 7/7 depois).
 - Mudar o corte de data (`release_date`).
