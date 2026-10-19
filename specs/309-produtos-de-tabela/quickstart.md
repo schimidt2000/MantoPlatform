@@ -40,8 +40,8 @@ Esperado: `20/20 OK` — inclui o cenário 19 (`verify_307.py --regressao` reesc
 ## 2. Lint e typecheck
 
 ```powershell
-C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\ruff.exe check app\orcamento\ app\api\orcamento_write.py app\calendar\routes.py app\calendar\orcamento_evento_ops.py app\educamanto\quote_ops.py scripts\oneoff\rebaixar_tetos_noel_309.py specs\309-produtos-de-tabela\verify_309.py
-C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\ruff.exe format app\orcamento\produtos.py scripts\oneoff\rebaixar_tetos_noel_309.py specs\309-produtos-de-tabela\verify_309.py
+C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\ruff.exe check app\orcamento\ app\api\orcamento_write.py app\calendar\routes.py app\calendar\orcamento_evento_ops.py app\educamanto\quote_ops.py specs\309-produtos-de-tabela\rebaixar_tetos_noel_309.py specs\309-produtos-de-tabela\verify_309.py
+C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\ruff.exe format app\orcamento\produtos.py specs\309-produtos-de-tabela\rebaixar_tetos_noel_309.py specs\309-produtos-de-tabela\verify_309.py
 cd frontend; npm run typecheck   # três SPAs
 ```
 
@@ -61,11 +61,11 @@ Depois da conferência, restaurar a tabela do `manto_local` se algum "Salvar" pe
 
 ```powershell
 # local (espelho): só relatório
-C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\python.exe scripts\oneoff\rebaixar_tetos_noel_309.py
+C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\python.exe specs\309-produtos-de-tabela\rebaixar_tetos_noel_309.py
 ```
 
 Em produção, no Shell do Render (ou SSH `srv-da8o06on74is73ehf4q0`): `cd /opt/render/project/src &&
-MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python scripts/oneoff/rebaixar_tetos_noel_309.py` → ler o
+MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` → ler o
 relatório → `--execute` → rodar de novo sem flag e conferir "0 a corrigir".
 
 ## 5. Pós-deploy (só quando o dono pedir "push" — skill `manto-deploy`)

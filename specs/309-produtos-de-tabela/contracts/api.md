@@ -94,11 +94,13 @@ por nome). `_build_orcamento_prefill` e `_total_da_duracao` passam a usar `produ
 
 `payload.pop("produtos", None)` ao lado de `event_date`/`nota_fiscal`/`fora_sp` (`:119-140`).
 
-## CLI — `scripts/oneoff/rebaixar_tetos_noel_309.py`
+## CLI — `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py`
+
+(`scripts/oneoff/` é gitignored; o script mora na pasta da spec, como o da 239b.)
 
 ```bash
-MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python scripts/oneoff/rebaixar_tetos_noel_309.py            # relatório
-MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python scripts/oneoff/rebaixar_tetos_noel_309.py --execute  # corrige
+MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py            # relatório
+MANTO_SEM_THREADS=1 PYTHONPATH=$PWD .venv/bin/python specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py --execute  # corrige
 ```
 
 Seleção: `EventRole` com `character_name` ∈ {"Papai Noel", "Ajudante do Noel"} e `cache_cap` exatamente

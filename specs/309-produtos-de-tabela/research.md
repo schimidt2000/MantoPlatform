@@ -168,7 +168,8 @@
 
 ## D16 — Script dos tetos já gravados
 
-- **Decisão**: `scripts/oneoff/rebaixar_tetos_noel_309.py` (molde `reclassificar_fora_de_sp.py`):
+- **Decisão**: `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (`scripts/oneoff/` é
+  gitignored; molde `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py`):
   relatório de `EventRole` com `character_name` ∈ {Papai Noel, Ajudante do Noel}, `cache_cap` ∈ {712,
   423} (exato), em eventos a partir de 16/10/2026; `--execute` rebaixa para 600/270 só onde
   `cache_value IS NULL AND talent_id IS NULL`, acrescentando "(teto corrigido pela 309: 712 → 600)" ao

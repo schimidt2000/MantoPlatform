@@ -328,7 +328,7 @@ veio sem `quote.produtos`.
   payload antes de calcular; o card não existe lá.
 - **FR-017**: "Gerar Orçamento" DEVE ficar desabilitado quando há produto selecionado e a resposta do
   cálculo veio sem `quote.produtos` (backend antigo na janela de deploy), com aviso.
-- **FR-018**: Um script de uma vez (`scripts/oneoff/rebaixar_tetos_noel_309.py`) DEVE relatar e, com
+- **FR-018**: Um script de uma vez (`specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py`) DEVE relatar e, com
   `--execute`, rebaixar para 600/270 as vagas "Papai Noel"/"Ajudante do Noel" com teto exatamente
   712/423, `cache_value` vazio e sem artista, registrando a correção na nota do teto; as demais só
   aparecem no relatório.

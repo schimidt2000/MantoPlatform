@@ -248,7 +248,8 @@ personalizado nos dois critérios).
 
 **Verificação da história (obrigatória)**: cenário 18 em PASS.
 
-- [ ] T025 [US6] `scripts/oneoff/rebaixar_tetos_noel_309.py` (NOVO, molde `reclassificar_fora_de_sp.py`):
+- [ ] T025 [US6] `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (NOVO; `scripts/oneoff/` é
+      gitignored — molde `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py`):
       seleção `EventRole.character_name ∈ {Papai Noel, Ajudante do Noel}`, `cache_cap` exatamente
       712/423, evento `start_at >= 2026-10-16`; relatório por linha (evento, data, vaga, teto, cachê,
       artista, ação); `--execute` rebaixa só `cache_value IS NULL AND talent_id IS NULL`, acrescenta
@@ -286,8 +287,8 @@ personalizado nos dois critérios).
 
 - [ ] T030 `cd frontend && npm run typecheck` limpo (três SPAs, pelas junções do worktree) e `ruff check`
       em `app/orcamento/`, `app/api/orcamento_write.py`, `app/calendar/routes.py`,
-      `app/calendar/orcamento_evento_ops.py`, `app/educamanto/quote_ops.py`, `scripts/oneoff/
-      rebaixar_tetos_noel_309.py`, `specs/309-…/verify_309.py`, `specs/307-…/verify_307.py`; `ruff
+      `app/calendar/orcamento_evento_ops.py`, `app/educamanto/quote_ops.py`,
+      `specs/309-…/rebaixar_tetos_noel_309.py`, `specs/309-…/verify_309.py`, `specs/307-…/verify_307.py`; `ruff
       format` só nos arquivos novos
 - [ ] T031 Telas abertas no Browser pane (skill `manto-conferir-tela`, `launch.json` `manto-internal` +
       `manto-backend-sem-google`): `/orcamento` (produto em 20/12 e 24/12, valor único, boneco junto,
@@ -305,7 +306,8 @@ personalizado nos dois critérios).
       `checklists/dinheiro-e-regressao.md` marcado
 - [ ] T034 Commits por caminho no worktree: `feat(309): núcleo` (settings, produtos.py, quote_ops, pdf,
       orcamento_write, educamanto), `feat(309): teto e script` (routes, orcamento_evento_ops,
-      scripts/oneoff), `feat(309): telas` (frontend), `docs(309): …` (specs + docs); nunca `git add -A`
+      specs/309-…/rebaixar_tetos_noel_309.py), `feat(309): telas` (frontend), `docs(309): …` (specs +
+      docs); nunca `git add -A`
 - [ ] T035 `/speckit-converge` (workflow: leitores por história + cético) e aplicar os achados como
       `fix(309): converge`. Depois, **só quando o dono pedir**: merge `--no-ff` na `main` + `git push
       origin main` a partir das ~19h (a partir do worktree; `git -C` no principal só se ele estiver limpo
