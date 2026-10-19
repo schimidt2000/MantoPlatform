@@ -18,6 +18,7 @@ import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useFaixaSumidosVisivel } from "../lib/sumidosGoogle";
 import { useCurrentUser } from "../lib/useAuth";
+import { useAcaoNoCargoDaHome } from "../lib/casting";
 import type {
   ComercialSummary,
   DashboardSummary,
@@ -78,7 +79,16 @@ function DashboardSkeleton() {
   );
 }
 
-function TaskRow({ task, badge }: { task: DashboardTaskRef; badge?: ReactNode }) {
+function TaskRow({
+  task,
+  badge,
+  acao,
+}: {
+  task: DashboardTaskRef;
+  badge?: ReactNode;
+  /** Botão extra ao lado do "Abrir" (Dispensar/Restaurar do SUPERADMIN — feature 308). */
+  acao?: ReactNode;
+}) {
   const urgency = getUrgency(task.start_at);
   return (
     <div
@@ -100,10 +110,35 @@ function TaskRow({ task, badge }: { task: DashboardTaskRef; badge?: ReactNode })
           {task.start_at && ` — ${new Date(task.start_at).toLocaleDateString("pt-BR")}`}
         </Link>
       </div>
-      <Button asChild variant="outline" size="sm" className="shrink-0">
-        <Link to={`/events/${task.event_id}`}>Abrir</Link>
-      </Button>
+      <div className="flex shrink-0 items-center gap-2">
+        {acao}
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/events/${task.event_id}`}>Abrir</Link>
+        </Button>
+      </div>
     </div>
+  );
+}
+
+/**
+ * Dispensar/Restaurar um cargo direto da Home — só o SUPERADMIN recebe (feature 308; o servidor
+ * também recusa os outros). Dispensar não exclui: o cargo fica no evento e volta pelo Restaurar.
+ */
+function BotaoCargo({ task, acao }: { task: DashboardTaskRef; acao: "dismiss" | "restore" }) {
+  const mutacao = useAcaoNoCargoDaHome(acao);
+  if (task.role_id == null) return null;
+  const roleId = task.role_id;
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      loading={mutacao.isPending}
+      title={mutacao.isError ? mutacao.error.message : undefined}
+      className={mutacao.isError ? "text-red" : undefined}
+      onClick={() => mutacao.mutate({ roleId, eventId: task.event_id })}
+    >
+      {mutacao.isError ? "Tentar de novo" : acao === "dismiss" ? "Dispensar" : "Restaurar"}
+    </Button>
   );
 }
 
@@ -1134,7 +1169,11 @@ export function DashboardPage() {
                         ) : (
                           <ListaTruncada>
                             {data.casting.pending.map((t) => (
-                              <TaskRow key={t.role_id ?? `${t.event_id}-${t.character_name}`} task={t} />
+                              <TaskRow
+                                key={t.role_id ?? `${t.event_id}-${t.character_name}`}
+                                task={t}
+                                acao={user?.is_superadmin ? <BotaoCargo task={t} acao="dismiss" /> : undefined}
+                              />
                             ))}
                           </ListaTruncada>
                         )}
@@ -1344,12 +1383,18 @@ export function DashboardPage() {
           {user?.is_superadmin && data.dismissed_casting.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Cargos dispensados</CardTitle>
+                <CardTitle>Cargos dispensados ({data.dismissed_casting.length})</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-muted">
-                  {data.dismissed_casting.length} cargo(s) marcados como dispensados.
-                </p>
+                <ListaTruncada>
+                  {data.dismissed_casting.map((t) => (
+                    <TaskRow
+                      key={t.role_id ?? `${t.event_id}-${t.character_name}`}
+                      task={t}
+                      acao={<BotaoCargo task={t} acao="restore" />}
+                    />
+                  ))}
+                </ListaTruncada>
               </CardContent>
             </Card>
           )}
