@@ -46,6 +46,7 @@ def portal_api_login_required(view: Callable[..., Any]) -> Callable[..., Any]:
 
 def _talent_to_dict(talent: Talent) -> dict:
     """Identidade + etapas de conta pendentes — o React roteia o onboarding a partir daqui."""
+    aceite = portal_account_ops.aceite_do_termo_para_exibir(talent)
     return {
         "id": talent.id,
         "full_name": talent.full_name,
@@ -54,6 +55,9 @@ def _talent_to_dict(talent: Talent) -> dict:
         "photo_full_url": portal_ops.portal_photo_url(talent.photo_full_path),
         "must_change_password": bool(talent.must_change_password),
         "terms_accepted": talent.terms_accepted_at is not None,
+        # Horário de parede de São Paulo, em ISO ingênuo como o resto do portal: a tela do termo
+        # mostra "você aceitou em ..." (a Jinja da 091 mostrava; a migração para React perdeu).
+        "terms_accepted_at": aceite.isoformat() if aceite else None,
         "pending_steps": portal_account_ops.pending_account_steps(talent),
     }
 

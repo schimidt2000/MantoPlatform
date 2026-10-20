@@ -633,3 +633,13 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | 129 | **P4** | verifies não versionados de `scripts/db/` que a 306 envelheceu | `verify_cancelamento_evento.py` (224) cancela sem `modo` (hoje 400 `devolucao_modo`) e espera o estorno cheio da comissão paga; `verify_158_financeiro_comissoes.py` compara a API de Comissões com o `comissoes()` Jinja, que agora divergem (`no_banco`, dívida 113); `verify_estorno_comissao_mes.py` (224c) semeia o estorno do jeito antigo (sem evento, na data da venda); `verify_187_comissoes.py` e `verify_199_no_banco_comissao_recorrente.py` testam Comissões e o "no banco" de antes da 306. A pasta é gitignored: nenhum deles foi rodado contra a 306 nem está no `--regressao` do `verify_306` | não rodar sem reescrever; reescrever um quando a regra dele for tocada de novo, ou mover para o arquivo morto com o dono |
 | 130 | **P4** | "Pagar Mês" de Comissões (`comissoes_ops.pay_seller_month`), herdado da 187 | junta `_pending_reversals_query` sem olhar o mês: pagar qualquer mês liquida o estorno órfão que a tela só mostra no mês corrente (achado do converge da 306, refutado como escopo — a 306 só estreitou o filtro ao órfão) | liquidar o órfão só pelo mês em que a tela o mostra |
 | 131 | **P4** | passagem da venda com BV em satélite (observação sobre a dívida 90) | se a dívida 90 deixar um BV preso num satélite e esse dia virar o novo principal na passagem, o BV passa a contar na venda do grupo e é proporcionado pelo corte; a prévia não o mostra. Zero casos no espelho e na produção (contagem de 19/10) | some com a correção da 90 |
+
+## Baixa da feature 311-aviso-prazo-pagamento (2026-10-20, branch)
+
+**Quitada.** A data do aceite voltou à tela `/portal/termos` (a Jinja da 091 mostrava; a 191 perdeu).
+
+**Criada.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 132 | **P3** | escalação e pagamento × `Talent.terms_accepted_at` | o termo (prazo de pagamento, uso de imagem) só é exigido para usar o portal; escalar e pagar não olham o aceite. No backup de 20/10, 128 de 309 ativos não tinham aceitado, e 30 deles já tinham trabalhado em evento | decisão do dono: avisar o casting ao escalar quem não aceitou, ou exigir o aceite antes do primeiro evento |

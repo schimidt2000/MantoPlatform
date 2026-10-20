@@ -640,6 +640,122 @@ def send_foto_pendente_email(talent, *, faltas: list[str], acao_url: str, valida
     )
 
 
+# ── Aviso do prazo de pagamento (feature 311) ─────────────────────────────────
+
+_MESES = (
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+)
+
+
+def send_prazo_pagamento_email(
+    talent, *, aceite, acao_url: str, validade_dias: int | None = None
+) -> bool:
+    """Avisa que o cachê sai em até 3 dias úteis e mostra onde está o termo que diz isso.
+
+    O prazo não é novo — está no Termo de Consentimento desde a primeira versão (06/04/2026) —,
+    mas a equipe costuma pagar em 2 dias úteis, e quando o banco atrasa para o terceiro a base
+    estranha. O texto é do dono: direto, sem juridiquês.
+
+    Há duas versões porque **nem todo mundo aceitou o termo** (128 de 309 em 20/10/2026). Para
+    quem aceitou, o e-mail diz quando; para quem não aceitou, ele não pode dizer "você aceitou" e
+    leva ao primeiro acesso, onde o portal pede o aceite antes de qualquer outra tela.
+
+    Args:
+        talent: Destinatário.
+        aceite: Data do aceite em São Paulo (`aceite_do_termo_para_exibir`), ou `None`.
+        acao_url: Link do botão — `/termos` do portal, ou o de criar senha com `?destino=/termos`.
+        validade_dias: Validade do link de criar senha, quando é ele que vai no botão. `None`
+            quando o link é o do portal, que não expira.
+
+    Returns:
+        `True` se a mensagem saiu.
+    """
+    if not talent.email_contact:
+        return False
+
+    first_name = (talent.artistic_name or talent.full_name or "").split()[0]
+    link = f'<a href="{acao_url}" style="color:#2d1f6e;">{acao_url}</a>'
+
+    if aceite is not None:
+        data = f"{aceite.day} de {_MESES[aceite.month - 1]} de {aceite.year}"
+        sobre_o_termo = (
+            _paragraph(
+                "Isso não é regra nova. Esse prazo está no Termo de Consentimento do portal do "
+                "artista desde que ele foi criado, em abril de 2026, e todo mundo que entra no "
+                f"portal lê e aceita o termo no primeiro acesso. <strong>Você aceitou em {data}.</strong> "
+                "A gente só está reforçando pra ninguém ser pego de surpresa."
+            )
+            + _btn("Ver o termo que aceitei →", acao_url)
+            + _paragraph(
+                "Se o botão não funcionar, copie e cole: "
+                f"{link}. Dentro do portal ele fica em <strong>Perfil → Termo de uso de imagem</strong>."
+            )
+        )
+    else:
+        if validade_dias:
+            como_entrar = (
+                "O botão abaixo abre o portal, você cria sua senha e o termo aparece logo em "
+                "seguida pra você ler e aceitar."
+            )
+            rodape = _alert_box(
+                f"Este link vale por <strong>{validade_dias} dias</strong>. Se ele expirar, entre "
+                "no portal e toque em <strong>Esqueci minha senha</strong> com este e-mail.",
+                color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
+            )
+        else:
+            como_entrar = (
+                "O botão abaixo abre o portal. Entre com o seu e-mail e a sua senha (esqueceu? "
+                "toque em <strong>Esqueci minha senha</strong>) e o termo aparece pra você ler e "
+                "aceitar."
+            )
+            rodape = ""
+        sobre_o_termo = (
+            _paragraph(
+                "Isso não é regra nova. Esse prazo está no Termo de Consentimento do portal do "
+                "artista desde que ele foi criado, em abril de 2026, e todo mundo que entra no "
+                "portal lê e aceita o termo no primeiro acesso. Pelo nosso cadastro, "
+                "<strong>você ainda não aceitou</strong>: leva um minuto."
+            )
+            + _paragraph(como_entrar)
+            + _btn("Entrar no portal e ler o termo →", acao_url)
+            + _paragraph(f"Se o botão não funcionar, copie e cole: {link}")
+            + rodape
+        )
+
+    content = (
+        _greeting(first_name)
+        + _paragraph("Quero passar um recado rápido sobre o prazo de pagamento dos cachês.")
+        + _paragraph(
+            "Na maioria das vezes a gente paga em 2 dias úteis depois do evento, e muita gente se "
+            "acostumou com isso. Só que de vez em quando o banco dá problema, o pagamento cai no "
+            "terceiro dia útil e a gente precisa sair mandando mensagem pra avisar. Não é bom pra "
+            "ninguém."
+        )
+        + _info_box(
+            '<tr><td style="padding:2px 0;font-size:14px;color:#1a1a2e;line-height:1.6;">'
+            "<strong>O prazo de pagamento é de até 3 dias úteis depois do evento.</strong><br>"
+            '<span style="color:#555;font-size:13px;">Exemplo: evento no sábado, pagamento até '
+            "quarta. Feriado não conta como dia útil. Se cair antes, ótimo, mas o compromisso é "
+            "esse.</span></td></tr>"
+        )
+        + sobre_o_termo
+        + _paragraph(
+            "Qualquer dúvida, é só responder este e-mail.<br><br>"
+            "Valeu por fazer parte do time!<br>João — Manto Produções"
+        )
+    )
+
+    return _send(
+        to=talent.email_contact,
+        subject="Prazo de pagamento: até 3 dias úteis",
+        html=_html_wrap(
+            content,
+            preheader="O cachê sai em até 3 dias úteis depois do evento — está no termo do portal.",
+        ),
+    )
+
+
 # ── Confirmação do email do cadastro público ──────────────────────────────────
 
 def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:

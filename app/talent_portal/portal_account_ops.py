@@ -215,6 +215,19 @@ def expiracao_para_exibir(talent: Talent) -> str | None:
     )
 
 
+def aceite_do_termo_para_exibir(talent: Talent) -> datetime | None:
+    """Quando o talento aceitou o termo, no horário de parede de São Paulo (feature 311).
+
+    `terms_accepted_at` é UTC ingênuo (`accept_terms` grava `datetime.utcnow()`). Mostrar a coluna
+    crua põe o aceite das 22h no dia seguinte — e essa data vai num e-mail que diz à pessoa
+    "você aceitou em ...". Mesma regra de `expiracao_para_exibir`: o banco fica em UTC, só a
+    exibição converte.
+    """
+    if not talent.terms_accepted_at:
+        return None
+    return talent.terms_accepted_at.replace(tzinfo=UTC).astimezone(_TZ_SP).replace(tzinfo=None)
+
+
 def emitir_token_de_reset(talent: Talent, ttl: timedelta = RESET_TOKEN_TTL) -> str:
     """Grava um token novo de redefinição no talento e devolve o token (sem commit).
 

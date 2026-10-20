@@ -2152,7 +2152,7 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro, foto do documento (RG/CPF/CNH — card novo da feature 264) e CNH | Preview do arquivo atual antes de substituir (fotos); documento e CNH mostram sucesso apos envio |
 | `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | **Nome e data do evento no topo** (302) — a ficha abria sem nenhuma referência, e quem tem duas escalações na semana não sabia qual estava vendo; só a data, sem hora, que está no card de onde a pessoa veio. Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
 | `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral. **Feature 303**: evento cancelado não entra no contador "a avaliar" e a nota é recusada com "Este evento foi cancelado e não recebe avaliação." |
-| `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão |
+| `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão. Desde a 311 diz "Você aceitou este termo em 12 de junho de 2026." (`terms_accepted_at`, horário de São Paulo); a migração para React (191) tinha perdido a data que a Jinja da 091 mostrava |
 
 ### C.1 O Jinja do portal acabou — sobrou uma rota
 
