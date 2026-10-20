@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AvatarThumb, Combobox } from "@manto/ui";
@@ -9,6 +9,8 @@ import {
   apiMoneyToNumber,
   fieldErrorsFrom,
   getClientToken,
+  renovarClientToken,
+  useContagemDeSegundos,
   useCampanhaVirtual,
   useHorariosVirtuais,
   useReservar,
@@ -72,30 +74,6 @@ function rotuloDoDia(dia: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-/** Conta o tempo restante do soft lock (FR-019). */
-function useContagemRegressiva(ate: string | null): string | null {
-  const [restante, setRestante] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!ate) {
-      setRestante(null);
-      return;
-    }
-    const alvo = new Date(ate).getTime();
-    const tick = () => {
-      const segundos = Math.max(0, Math.floor((alvo - Date.now()) / 1000));
-      const m = String(Math.floor(segundos / 60)).padStart(2, "0");
-      const s = String(segundos % 60).padStart(2, "0");
-      setRestante(`${m}:${s}`);
-    };
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [ate]);
-
-  return restante;
-}
-
 export function CampanhaVirtualPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -121,7 +99,7 @@ export function CampanhaVirtualPage() {
   const [avisoTopo, setAvisoTopo] = useState<string | null>(null);
 
   const refs = useRef<Record<string, HTMLElement | null>>({});
-  const lockRestante = useContagemRegressiva(reservar.data?.locked_until ?? null);
+  const lockRestante = useContagemDeSegundos(reservar.data?.seconds_left);
 
   const precoInteracao = useMemo(() => {
     if (!campanha) return 0;
@@ -162,6 +140,9 @@ export function CampanhaVirtualPage() {
       },
       {
         onSuccess: (data) => {
+          // Feature 310 (FR-036): a próxima reserva nesta aba (outro horário, o irmão) é um
+          // pedido novo, não o link deste.
+          renovarClientToken();
           // O link da operadora abre em seguida; a família volta para a página do pedido.
           if (data.payment_url) window.location.href = data.payment_url;
           else navigate(`/v/pedido/${data.public_token}`);
@@ -188,7 +169,7 @@ export function CampanhaVirtualPage() {
             void recarregarHorarios();
           } else if (status === 429) {
             setAvisoTopo(erro.message);
-          } else if (status === 502) {
+          } else if (status === 502 || status === 503) {
             setAvisoTopo(erro.message);
           }
         },

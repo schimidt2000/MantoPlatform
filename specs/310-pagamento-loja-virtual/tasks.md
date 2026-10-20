@@ -105,7 +105,7 @@ conexão separada; limpeza no `finally`.
       reconsulta da cobrança nova
 - [x] T020 [US2] Endpoint `POST /api/virtuais/pedidos/<token>/retorno` em `app/api/virtuais_public.py`
       (contrato; R-08; limite 20/min por IP do cliente) chamando `registrar_retorno` em `virtuais_ops.py`
-- [ ] T021 [P] [US2] `PedidoVirtualPage.tsx` lê a query do retorno uma vez, chama o endpoint e limpa a
+- [x] T021 [P] [US2] `PedidoVirtualPage.tsx` lê a query do retorno uma vez, chama o endpoint e limpa a
       URL (`history.replaceState`); hook em `frontend/apps/public/src/lib/virtuais.ts`
 - [x] T022 [US2] Rodar cenários 8–15 até verde (o 8 mede o tempo do retorno até "pago", SC-003); mutação: gravar identificadores antes da prova →
       cenário 15 acusa
@@ -128,7 +128,7 @@ conexão separada; limpeza no `finally`.
       validada (regex de R7) e audit antigo→novo; regerar guarda o anterior por 24 h; interruptor
 - [x] T027 [P] [US3] `app/api/admin_config_read.py`: `virtuais_pagamento_ativo` e
       `virtuais_pedidos_aguardando`
-- [ ] T028 [P] [US3] `AdminSettingsPage.tsx` + `lib/adminConfig.ts`: interruptor; confirmação com a
+- [x] T028 [P] [US3] `AdminSettingsPage.tsx` + `lib/adminConfig.ts`: interruptor; confirmação com a
       contagem antes de regerar; caixa volta a desmarcada no `onSuccess`; erro de tag no campo
 - [x] T029 [US3] Sino `KIND_VIRTUAL_ATENCAO` em `app/notificacoes/notificacoes_ops.py` (COMERCIAL,
       SUPERADMIN) e disparo na falha de link (dedupe por código/hora, R-19)
@@ -172,9 +172,9 @@ conexão separada; limpeza no `finally`.
       horário, evento local e Google, entrega, presente via `delete_event_gift` se a impressão não
       começou — se começou, fica e entra em "a conferir" (R-04) —, devolução
       `desistencia`, e-mail) + `POST /api/virtuais/pedidos/<id>/cancelar` em `virtuais_write.py`
-- [ ] T040 [P] [US6] `VirtuaisDevolucoesPage.tsx`: aba "Pagamentos a conferir" (NSU, slug, recibo,
+- [x] T040 [P] [US6] `VirtuaisDevolucoesPage.tsx`: aba "Pagamentos a conferir" (NSU, slug, recibo,
       data, valor) com "marcar como resolvido"; mostrar `order_nsu` e data nas devoluções
-- [ ] T041 [P] [US6] Botão "Cancelar e abrir devolução" com confirmação e motivo na linha do pedido
+- [x] T041 [P] [US6] Botão "Cancelar e abrir devolução" com confirmação e motivo na linha do pedido
       pago da Fila de Produção (`frontend/apps/internal/src/pages/FilaProducaoMidiaPage.tsx`, rota
       `/virtuais/producao`) + hook em `frontend/apps/internal/src/lib/virtuais.ts`
 - [x] T042 [US6] Sino na devolução nova e no "a conferir" novo (dedupe por item)
@@ -189,7 +189,7 @@ conexão separada; limpeza no `finally`.
 - [x] T044 [US7] `seconds_left` e `confirming` em `serialize` do pedido e na resposta de reserva
 - [x] T045 [US7] `client_token` só reaproveita com horário, formato, presente e criança iguais
       (`reservar`)
-- [ ] T046 [P] [US7] `CampanhaVirtualPage.tsx` / `PedidoVirtualPage.tsx` / `lib/virtuais.ts`:
+- [x] T046 [P] [US7] `CampanhaVirtualPage.tsx` / `PedidoVirtualPage.tsx` / `lib/virtuais.ts`:
       contagem por `seconds_left`; token novo depois de cada 201; três estados de espera com
       textos distintos; `refetchInterval` também em `reservado`
 - [x] T047 [US7] Rodar cenários 33–35
@@ -215,7 +215,7 @@ conexão separada; limpeza no `finally`.
 
 - [x] T051 [US9] Com `INFINITEPAY_API_KEY`: `valid_until` = fim da trava em ISO com `-03:00` e
       `single_payment=true` (T006 já monta; aqui o `_gerar_link_pagamento` passa o fim da trava)
-- [ ] T052 [US9] Rodar cenários 39–40; `render.yaml` ganha `INFINITEPAY_API_KEY` com `sync: false`
+- [x] T052 [US9] Rodar cenários 39–40; `render.yaml` ganha `INFINITEPAY_API_KEY` com `sync: false`
 
 ---
 

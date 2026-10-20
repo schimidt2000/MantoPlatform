@@ -89,6 +89,7 @@ export function VirtuaisCampanhaFormPage() {
   const [deliveryDays, setDeliveryDays] = useState(7);
   const [faq, setFaq] = useState<VirtualFaqItem[]>([]);
   const [acervoIds, setAcervoIds] = useState<number[]>([]);
+  const [listada, setListada] = useState(true);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [cover, setCover] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
@@ -112,6 +113,7 @@ export function VirtuaisCampanhaFormPage() {
     setDeliveryDays(campaign.recorded_delivery_days);
     setFaq(campaign.faq);
     setAcervoIds(campaign.acervo_item_ids);
+    setListada(campaign.listada);
   }, [campaign]);
 
   const handleSave = () => {
@@ -128,6 +130,7 @@ export function VirtuaisCampanhaFormPage() {
         recorded_capacity: recordedCapacity,
         recorded_delivery_days: deliveryDays,
         faq,
+        listada,
         ...(cover ? { cover } : {}),
       },
       {
@@ -369,6 +372,22 @@ export function VirtuaisCampanhaFormPage() {
             <CardTitle>Preços e estoque</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Feature 310: campanha de teste publicada sem aparecer para o público. */}
+            <label className="flex items-start gap-2 text-[13px] text-ink">
+              <input
+                type="checkbox"
+                className="mt-0.5 h-4 w-4"
+                checked={listada}
+                onChange={(e) => setListada(e.target.checked)}
+              />
+              <span>
+                <strong>Aparece na vitrine</strong>
+                <span className="block text-[11px] text-muted">
+                  Desmarcada, a campanha publicada só é achada por quem tem o link — use para
+                  testes.
+                </span>
+              </span>
+            </label>
             <div className="grid grid-cols-3 gap-2">
               <div>
                 <label className="text-[12px] font-medium text-muted" htmlFor="price-live">

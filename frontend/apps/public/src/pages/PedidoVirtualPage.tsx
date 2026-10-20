@@ -1,12 +1,15 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
 import { formatBRL } from "@manto/money";
 import {
   apiMoneyToNumber,
+  useContagemDeSegundos,
   usePedidoCompleto,
   usePedidoVirtual,
+  useRetornoCheckout,
   useVerificarPedido,
+  type VirtualOrderSummary,
 } from "../lib/virtuais";
 import { DICAS_DO_DIA, FORMATOS, whatsappLink } from "../lib/lojaTema";
 import {
@@ -34,15 +37,27 @@ import {
  */
 
 const ROTULOS: Record<string, { titulo: string; texto: string }> = {
+  // Feature 310 (FR-037): três esperas diferentes, três textos. Antes, quem voltava do checkout SEM
+  // pagar lia "aguardando a confirmação do pagamento" e achava que tinha pago.
+  gerando: {
+    titulo: "Gerando o pagamento…",
+    texto: "Seu horário está guardado. Em instantes aparece o botão para pagar — pode esperar aqui.",
+  },
   reservado: {
     titulo: "Reserva feita",
     texto: "Seu horário está guardado. Conclua o pagamento para confirmar.",
   },
   aguardando: {
-    titulo: "Aguardando a confirmação do pagamento",
+    titulo: "Ainda não identificamos o pagamento",
     texto:
-      "Assim que o pagamento cair, esta página atualiza sozinha — pode deixar aberta. " +
-      "Você também recebe um e-mail com a confirmação.",
+      "Se você já pagou, esta página atualiza sozinha em instantes — pode deixar aberta. " +
+      "Se ainda não, é só tocar em \"Ir para o pagamento\".",
+  },
+  confirmando: {
+    titulo: "Confirmando o pagamento…",
+    texto:
+      "Recebemos o aviso da operadora e estamos conferindo. Esta página atualiza sozinha, e você " +
+      "também recebe um e-mail com a confirmação.",
   },
   pago: {
     titulo: "Tudo certo! Reserva confirmada",
@@ -73,33 +88,44 @@ function formatarData(iso: string): string {
   return `${dia}/${mes}/${ano}`;
 }
 
-/** Contagem regressiva do soft lock, para a família saber quanto tempo tem (FR-019). */
-function useContagem(ate: string | null): string | null {
-  const [restante, setRestante] = useState<string | null>(null);
+/** Qual dos textos de espera vale para o pedido agora (feature 310, FR-037). */
+function chaveDoRotulo(pedido: VirtualOrderSummary, confirmando: boolean): string {
+  if (pedido.status === "reservado" && !pedido.payment_url) return "gerando";
+  if ((pedido.status === "aguardando" || pedido.status === "reservado") &&
+      (pedido.confirming || confirmando)) return "confirmando";
+  return pedido.status;
+}
+
+/**
+ * Lê UMA vez os identificadores que a InfinitePay põe na URL de retorno, manda ao servidor e
+ * limpa a URL (feature 310, R3): o link compartilhado depois não carrega identificador nenhum.
+ */
+function useRetornoDoCheckout(token: string | undefined): boolean {
+  const [params, setParams] = useSearchParams();
+  const retorno = useRetornoCheckout(token);
+  const enviado = useRef(false);
   useEffect(() => {
-    if (!ate) {
-      setRestante(null);
-      return;
-    }
-    const alvo = new Date(ate).getTime();
-    const tick = () => {
-      const segundos = Math.max(0, Math.floor((alvo - Date.now()) / 1000));
-      const m = String(Math.floor(segundos / 60)).padStart(2, "0");
-      const s = String(segundos % 60).padStart(2, "0");
-      setRestante(`${m}:${s}`);
-    };
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [ate]);
-  return restante;
+    const orderNsu = params.get("order_nsu");
+    if (!token || !orderNsu || enviado.current) return;
+    enviado.current = true;
+    retorno.mutate({
+      order_nsu: orderNsu,
+      slug: params.get("slug"),
+      transaction_nsu: params.get("transaction_nsu"),
+      capture_method: params.get("capture_method"),
+      receipt_url: params.get("receipt_url"),
+    });
+    setParams({}, { replace: true });
+  }, [params, setParams, token, retorno]);
+  return retorno.isPending;
 }
 
 export function PedidoVirtualPage() {
   const { token } = useParams<{ token: string }>();
   const reduceMotion = useReducedMotion();
   const { data: pedido, isLoading, error } = usePedidoVirtual(token);
-  const restante = useContagem(pedido?.locked_until ?? null);
+  const restante = useContagemDeSegundos(pedido?.seconds_left);
+  const conferindoRetorno = useRetornoDoCheckout(token);
 
   const [telefone, setTelefone] = useState("");
   const verificar = useVerificarPedido(token);
@@ -130,7 +156,7 @@ export function PedidoVirtualPage() {
     );
   }
 
-  const rotulo = ROTULOS[pedido.status] ?? ROTULOS.reservado;
+  const rotulo = ROTULOS[chaveDoRotulo(pedido, conferindoRetorno)] ?? ROTULOS.reservado;
   const pago = pedido.status === "pago";
   const aoVivo = pedido.modality === "ao_vivo";
 

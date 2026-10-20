@@ -77,6 +77,8 @@ export interface VirtualCampaign {
   figurino_sheet_id: number | null;
   max_reservations_per_origin: number;
   reservation_window_minutes: number;
+  /** Aparece na vitrine de alo.* (feature 310). Desligado = só quem tem o link chega. */
+  listada: boolean;
   gift_items: VirtualGiftItem[];
   /** Acervo 3D ativo inteiro — as opções do seletor de peças liberadas. */
   available_gift_items: VirtualGiftItem[];
@@ -167,6 +169,7 @@ export interface VirtualCampaignInput {
   figurino_sheet_id?: number | null;
   max_reservations_per_origin?: number;
   reservation_window_minutes?: number;
+  listada?: boolean;
   /**
    * Foto de capa. Quando presente, a requisição vira `multipart` — o servidor lê o arquivo do
    * campo `cover`. É **obrigatória para publicar**: sem ela a campanha não sai do rascunho.
@@ -420,6 +423,28 @@ export function useReenviarAviso() {
   });
 }
 
+/**
+ * Cancela um pedido pago e abre a devolução (feature 310, FR-034).
+ *
+ * O servidor recusa (409) quando o presente 3D já está em impressão — a peça existe e a decisão
+ * é da produção.
+ */
+export function useCancelarPedidoPago() {
+  const queryClient = useQueryClient();
+  return useMutation<{ refund: VirtualRefund }, ApiRequestError, { orderId: number; motivo: string }>({
+    mutationFn: ({ orderId, motivo }) =>
+      apiFetch<{ refund: VirtualRefund }>(`/api/virtuais/pedidos/${orderId}/cancelar`, {
+        method: "POST",
+        body: JSON.stringify({ motivo }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: PRODUCAO_KEY });
+      void queryClient.invalidateQueries({ queryKey: ["virtuais", "devolucoes"] });
+      void queryClient.invalidateQueries({ queryKey: ["event"] });
+    },
+  });
+}
+
 /** Tenta de novo a sala do Meet que ficou pendente (FR-037). */
 export function useRegerarSala() {
   const queryClient = useQueryClient();
@@ -485,6 +510,62 @@ export function useConcluirDevolucao() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: REFUNDS_KEY });
+    },
+  });
+}
+
+/** De onde veio um item "a conferir" (feature 310, R-07). */
+export type AConferirTipo = "aviso" | "pedido" | "falha_link";
+
+/** Pagamento que precisa de olho humano — nunca abandono de checkout (feature 310, R-07). */
+export interface PagamentoAConferir {
+  tipo: AConferirTipo;
+  id: number;
+  order_nsu: string | null;
+  pedido_id: number | null;
+  campanha: string | null;
+  /** Chave de sistema: o rótulo em pt-BR sai de `A_CONFERIR_MOTIVOS`. */
+  motivo: string;
+  valor_pedido: string | null;
+  valor_pago: string | null;
+  invoice_slug: string | null;
+  transaction_nsu: string | null;
+  receipt_url: string | null;
+  criado_em: string | null;
+  /** Falhas de link vêm agrupadas por código: quantas vezes aconteceu. */
+  ocorrencias: number;
+}
+
+/** O que cada motivo quer dizer para quem vai abrir o painel da InfinitePay. */
+export const A_CONFERIR_MOTIVOS: Record<string, string> = {
+  divergente: "Pagou um valor diferente do pedido",
+  orfao: "Pagamento sem pedido correspondente",
+  retido: "Aviso parado sem decisão — conferir na operadora",
+  pendente_prova: "A operadora não confirmou o pagamento a tempo",
+  nao_sei: "Reserva liberada sem resposta da operadora — pode ter sido paga",
+  travado_neste_ambiente: "Pagamento travado neste ambiente (não é produção)",
+};
+
+const A_CONFERIR_KEY = ["virtuais", "a-conferir"] as const;
+
+export function usePagamentosAConferir() {
+  return useQuery<{ itens: PagamentoAConferir[] }>({
+    queryKey: A_CONFERIR_KEY,
+    queryFn: () => apiFetch<{ itens: PagamentoAConferir[] }>("/api/virtuais/pagamentos-a-conferir"),
+  });
+}
+
+/** Marca como resolvido — irreversível e auditado; a falha de link resolve o grupo inteiro. */
+export function useResolverAConferir() {
+  const queryClient = useQueryClient();
+  return useMutation<{ ok: boolean }, ApiRequestError, { tipo: AConferirTipo; id: number }>({
+    mutationFn: ({ tipo, id }) =>
+      apiFetch<{ ok: boolean }>(`/api/virtuais/pagamentos-a-conferir/${tipo}/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ resolvido: true }),
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: A_CONFERIR_KEY });
     },
   });
 }
