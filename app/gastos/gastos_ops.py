@@ -57,6 +57,75 @@ class GastoStateError(Exception):
     """Transição de estado não permitida (ex.: aprovar gasto que já não está pendente)."""
 
 
+class GastoLockedError(Exception):
+    """A devolução de um evento cancelado está travada em Gastos Extras (feature 306, FR-019).
+
+    Só o "Alterar devolução" (`cancel_ops.alterar_devolucao`) escreve valor, data, categoria e
+    vínculo dela; nome, PIX e descrição ficam livres. A view responde 409 `devolucao_travada`
+    com o campo que chegou diferente e o `event_id`.
+    """
+
+    MENSAGEM = (
+        "Esta é a devolução de um evento cancelado: valor, data, categoria e vínculo só mudam pelo "
+        '"Alterar devolução" na tela do evento.'
+    )
+
+    def __init__(self, field: str, event_id: int | None, message: str = MENSAGEM) -> None:
+        super().__init__(message)
+        self.field = field
+        self.message = message
+        self.event_id = event_id
+
+
+def _evento_cancelado(event_id: int | None) -> bool:
+    if not event_id:
+        return False
+    ev = db.session.get(CalendarEvent, event_id)
+    return ev is not None and ev.is_cancelled
+
+
+def devolucao_de_cancelado(expense: SpecialExpense) -> bool:
+    """A devolução à cliente ligada a um evento cancelado (categoria + evento + cancelado)."""
+    return expense.category == SpecialExpense.CATEGORY_DEVOLUCAO and _evento_cancelado(expense.event_id)
+
+
+def _travar_eventos(*ids: int | None) -> None:
+    """Os eventos por id, `FOR UPDATE`, relidos (`populate_existing`)."""
+    alvos = sorted({i for i in ids if i})
+    if not alvos:
+        return
+    db.session.flush()
+    (
+        CalendarEvent.query.filter(CalendarEvent.id.in_(alvos))
+        .order_by(CalendarEvent.id)
+        .with_for_update()
+        .populate_existing()
+        .all()
+    )
+
+
+def _travar_devolucao(expense: SpecialExpense, *outros_eventos: int | None) -> SpecialExpense:
+    """Trava os eventos (o da devolução e, no vínculo trocado, o novo; por id) e relê o gasto.
+
+    Evento → gasto, a ordem do "Alterar devolução": sem a trava, uma edição em Gastos Extras e o
+    "Alterar devolução" se cruzariam.
+    """
+    _travar_eventos(expense.event_id, *outros_eventos)
+    return (
+        SpecialExpense.query.filter(SpecialExpense.id == expense.id)
+        .with_for_update()
+        .populate_existing()
+        .one()
+    )
+
+
+def _recusar_se_travada(expense: SpecialExpense, campo: str) -> SpecialExpense:
+    expense = _travar_devolucao(expense)
+    if devolucao_de_cancelado(expense):
+        raise GastoLockedError(campo, expense.event_id)
+    return expense
+
+
 def is_superadmin(user: User) -> bool:
     """True se `user` tem o papel SUPERADMIN."""
     return any(r.name.upper() == RoleName.SUPERADMIN for r in user.roles)
@@ -191,7 +260,7 @@ def save_receipt(file: FileStorage, upload_dir: str) -> str | None:
     return url[len("/uploads/"):] if url.startswith("/uploads/") else url
 
 
-def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:
+def _validate_expense_data(data: dict, *, require_receipt: bool, tipo_atual: str | None = None) -> dict:
     """Valida e normaliza os campos comuns de um gasto extra (criação e edição).
 
     Args:
@@ -199,6 +268,8 @@ def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:
             `disbursement_type`, `reimburse_user_id`, `supplier_name`, `supplier_pix`.
         require_receipt: se `True`, exige `data["receipt_path"]` preenchido (só na criação —
             a edição não reenvia nota fiscal).
+        tipo_atual: o `disbursement_type` gravado (na edição). O tipo `cliente` (devolução à
+            cliente) só vale quando já era: ele nasce pelo cancelamento do evento (feature 306).
 
     Returns:
         Dict normalizado com `description`, `category`, `amount`, `expense_date`,
@@ -234,6 +305,13 @@ def _validate_expense_data(data: dict, *, require_receipt: bool) -> dict:
         supplier_pix = (data.get("supplier_pix") or "").strip() or None
         if not supplier_name:
             raise GastoValidationError("supplier_name", "Informe o nome do fornecedor.")
+    elif disbursement_type == "cliente":
+        if tipo_atual != "cliente":
+            raise GastoValidationError(
+                "disbursement_type", "Devolução à cliente nasce pelo cancelamento do evento."
+            )
+        supplier_name = (data.get("supplier_name") or "").strip() or None
+        supplier_pix = (data.get("supplier_pix") or "").strip() or None
     else:
         disbursement_type = None
 
@@ -283,6 +361,12 @@ def create_expense(
             incompleto (funcionário não selecionado / fornecedor sem nome).
     """
     parsed = _validate_expense_data({**data, "receipt_path": receipt_path}, require_receipt=require_receipt)
+    # Feature 306: devolução ligada a evento cancelado só nasce pelo cancelamento (pela categoria
+    # já normalizada, depois da trava do evento).
+    if parsed["category"] == SpecialExpense.CATEGORY_DEVOLUCAO and event_id:
+        _travar_eventos(event_id)
+        if _evento_cancelado(event_id):
+            raise GastoLockedError("event_id", event_id)
     disbursement_type = parsed["disbursement_type"]
     paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
 
@@ -320,6 +404,7 @@ def create_expense(
 
 def approve_expense(expense: SpecialExpense, approver: User) -> SpecialExpense:
     """Aprova um gasto pendente — passa a contar no balanço."""
+    expense = _recusar_se_travada(expense, "status")
     if expense.status != "pendente":
         raise GastoStateError("Este gasto já não está pendente.")
     expense.status = "aprovado"
@@ -332,6 +417,7 @@ def approve_expense(expense: SpecialExpense, approver: User) -> SpecialExpense:
 
 def reject_expense(expense: SpecialExpense, approver: User, motivo: str) -> SpecialExpense:
     """Rejeita um gasto pendente, com motivo opcional."""
+    expense = _recusar_se_travada(expense, "status")
     if expense.status != "pendente":
         raise GastoStateError("Este gasto já não está pendente.")
     expense.status = "rejeitado"
@@ -355,6 +441,7 @@ def can_delete_expense(expense: SpecialExpense, user: User) -> bool:
 
 def delete_expense(expense: SpecialExpense, actor: User) -> None:
     """Exclui um gasto — chamador já deve ter checado `can_delete_expense`."""
+    expense = _recusar_se_travada(expense, "id")
     _log(actor, "gasto", expense.id, expense.description, "delete", "Gasto excluído")
     db.session.delete(expense)
     db.session.commit()
@@ -364,18 +451,69 @@ def link_expense_to_event(
     expense: SpecialExpense, event_id: int | None, actor: User
 ) -> SpecialExpense:
     """Vincula/remove o evento de um gasto existente."""
+    if event_id is not None:
+        try:
+            event_id = int(event_id)
+        except (TypeError, ValueError):
+            raise GastoValidationError("event_id", "Evento inválido.") from None
+        if CalendarEvent.query.get(event_id) is None:
+            raise GastoValidationError("event_id", "Evento inválido.")
+    # Feature 306: os dois eventos por id; a devolução de cancelado não muda de vínculo, e a
+    # devolução viva não se liga a um cancelado (o caminho inverso).
+    expense = _travar_devolucao(expense, event_id)
+    if devolucao_de_cancelado(expense):
+        raise GastoLockedError("event_id", expense.event_id)
+    if expense.category == SpecialExpense.CATEGORY_DEVOLUCAO and _evento_cancelado(event_id):
+        raise GastoLockedError("event_id", event_id)
     if event_id is None:
         expense.event_id = None
         detail = "Vínculo de evento removido"
     else:
         event = CalendarEvent.query.get(event_id)
-        if event is None:
-            raise GastoValidationError("event_id", "Evento inválido.")
         expense.event_id = event_id
         detail = f"Gasto vinculado ao evento: {event.title}"
     _log(actor, "gasto", expense.id, expense.description, "link_event", detail)
     db.session.commit()
     return expense
+
+
+def _conferir_trava_na_edicao(
+    expense: SpecialExpense, parsed: dict, event_id: int | None, aprovar: bool
+) -> tuple[SpecialExpense, dict]:
+    """A trava da edição (feature 306, contracts §16): antes das atribuições. Devolve o gasto
+    relido e o `parsed` ajustado à devolução (tipo `cliente`, nome e PIX só com valor).
+
+    - devolução de cancelado **gravada**: valor, data, categoria ou vínculo diferentes, ou
+      `aprovar`, → 409 no campo;
+    - o caminho inverso: o gasto que **passaria a ser** devolução de cancelado — pela categoria
+      (`fields.category`) ou pelo vínculo (`fields.event_id`).
+    """
+    expense = _travar_devolucao(expense, event_id)
+    if devolucao_de_cancelado(expense):
+        if aprovar:
+            raise GastoLockedError("status", expense.event_id)
+        for campo, novo, atual in (
+            ("amount", Decimal(str(parsed["amount"])).quantize(Decimal("0.01")), Decimal(str(expense.amount)).quantize(Decimal("0.01"))),
+            ("expense_date", parsed["expense_date"], expense.expense_date),
+            ("category", parsed["category"], expense.category),
+            ("event_id", event_id, expense.event_id),
+        ):
+            if novo != atual:
+                raise GastoLockedError(campo, expense.event_id)
+        parsed = {
+            **parsed,
+            "disbursement_type": "cliente",
+            "reimburse_user_id": None,
+            "supplier_name": parsed["supplier_name"] or expense.supplier_name,
+            "supplier_pix": parsed["supplier_pix"] or expense.supplier_pix,
+        }
+        return expense, parsed
+    if parsed["category"] == SpecialExpense.CATEGORY_DEVOLUCAO:
+        if expense.category != SpecialExpense.CATEGORY_DEVOLUCAO and _evento_cancelado(event_id):
+            raise GastoLockedError("category", event_id)
+        if _evento_cancelado(event_id) and event_id != expense.event_id:
+            raise GastoLockedError("event_id", event_id)
+    return expense, parsed
 
 
 def edit_expense(
@@ -404,7 +542,8 @@ def edit_expense(
             "Gasto rejeitado só pode ser editado reconsiderando a aprovação."
         )
 
-    parsed = _validate_expense_data(data, require_receipt=False)
+    parsed = _validate_expense_data(data, require_receipt=False, tipo_atual=expense.disbursement_type)
+    expense, parsed = _conferir_trava_na_edicao(expense, parsed, event_id, aprovar)
     changed = (
         expense.description != parsed["description"]
         or expense.category != parsed["category"]
@@ -432,7 +571,8 @@ def edit_expense(
         expense.approved_by_id = actor.id
         expense.approved_at = datetime.utcnow()
 
-    if expense.status == "aprovado" and changed:
+    # A devolução de cancelado nunca acende a marca (só nome, PIX e descrição mudaram).
+    if expense.status == "aprovado" and changed and not devolucao_de_cancelado(expense):
         expense.approved_with_edits = True
 
     action = "edit_and_approve" if aprovar else "edit"

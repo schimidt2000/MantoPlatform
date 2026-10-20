@@ -164,9 +164,9 @@ MSG_RECUSOU_CRIACAO = (
     "O Google Agenda não confirmou a criação. A marca continua. Antes de tentar de novo, confira na "
     "Agenda se o evento apareceu — se apareceu, apague-o lá e devolva de novo."
 )
+# Feature 306: o marcado ganhou o "Cancelar e devolver o dinheiro"; a exclusão continua recusada.
 MSG_MARCADO = (
-    "Este evento sumiu do Google Agenda. O cancelamento com devolução do dinheiro chega na próxima "
-    "entrega — por enquanto, devolva-o ao Google Agenda."
+    "Este evento sumiu do Google Agenda e não se exclui: devolva-o ao Google Agenda ou cancele o evento."
 )
 MSG_AVALIACAO_CANCELADO = "Este evento foi cancelado e não recebe avaliação."
 MSG_FALHA_SYNC_EDICAO = "Não foi possível sincronizar a mudança com o Google Agenda."
@@ -2337,22 +2337,19 @@ def c11_superadmin_gate() -> None:
 
 
 def c12_nao_cancela() -> None:
+    """O marcado não se exclui (nem pela rota antiga, nem o satélite). Desde a feature 306 ele se
+    CANCELA: o ato o desmarca, sem chamar o Google (já não está lá) — o fim deste cenário."""
     mes = _mes_novo()
     ev = _marcado_novo("doze", mes, dia=3)
     n_dest = _destinatarios()
     c = _cliente(estado["superadmin"])
     m = google.marco()
-    r = c.post(ROTAS["cancelar"].format(id=ev), json={"motivo": "verify 303"})
-    _garante(
-        r.status_code == 409 and _erro(r).get("codigo") == "sumiu_do_google",
-        f"cancelar marcado → {r.status_code} {_erro(r)} (deve falhar com 409)",
-    )
-    _garante(_erro(r).get("message") == MSG_MARCADO, f"mensagem {_erro(r).get('message')!r}")
     r = c.delete(ROTAS["excluir"].format(id=ev))
     _garante(
         r.status_code == 409 and _erro(r).get("codigo") == "sumiu_do_google",
         f"excluir marcado → {r.status_code} {_erro(r)} (deve falhar com 409)",
     )
+    _garante(_erro(r).get("message") == MSG_MARCADO, f"mensagem {_erro(r).get('message')!r}")
     r = c.post(ROTAS["excluir_jinja"].format(id=ev))
     _garante(r.status_code in (302, 303), f"rota antiga → {r.status_code}")
     _garante(_existe(ev), "a rota antiga de exclusão apagou o evento marcado")
@@ -2385,6 +2382,16 @@ def c12_nao_cancela() -> None:
     r = c.delete(ROTAS["excluir"].format(id=controle))
     _garante(r.status_code == 200, f"controle: excluir evento vazio não marcado → {r.status_code}")
     estado["apagados"].add(controle)
+    # Feature 306: cancelar o marcado vale — sai cancelado, sem a marca e sem ir ao Google.
+    cancelavel = _marcado_novo("doze-cancela", mes, dia=8)
+    m2 = google.marco()
+    r = c.post(
+        ROTAS["cancelar"].format(id=cancelavel),
+        json={"motivo": "verify 303", "devolucao": {"modo": "nada"}},
+    )
+    _garante(r.status_code == 200, f"cancelar marcado → {r.status_code} {_erro(r)}")
+    _garante(_marca(cancelavel) is None, "o cancelamento do marcado não tirou a marca")
+    _garante(google.contar("delete", None, m2) == 0, "o cancelamento do marcado foi ao Google")
 
 
 # ── B5 — portal ────────────────────────────────────────────────────────────────────────────────
@@ -2680,7 +2687,7 @@ def main() -> int:
         ("B4", "10i (sem data)", c10i_sem_data),
         ("B4", "11 (Comercial recusado)", c11_comercial),
         ("B4", "11 (Superadmin passa o gate)", c11_superadmin_gate),
-        ("B4", "12 (cancelar e excluir recusados)", c12_nao_cancela),
+        ("B4", "12 (excluir recusado; cancelar desmarca)", c12_nao_cancela),
         ("B5", "24 (portal)", c24_portal),
         ("B5", "24b (avaliação de cancelado)", c24b_avaliacao),
     ]

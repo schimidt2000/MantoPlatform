@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, DenseCard, FileUpload, PageHeader, Skeleton } from "@manto/ui";
 import { formatBRL, MoneyInput } from "@manto/money";
@@ -25,6 +26,18 @@ const TH = "px-3 py-2";
 const TD = "px-3 py-2 align-top";
 
 type DisplayStatus = "pendente" | "aprovado" | "aprovado_com_edicoes" | "rejeitado";
+
+/** As chaves de `fields` que o formulário mostra no próprio campo; as outras vão ao rodapé. */
+const CAMPOS_COM_LUGAR = new Set([
+  "description",
+  "amount",
+  "receipt",
+  "supplier_name",
+  "reimburse_user_id",
+  "category",
+  "expense_date",
+  "event_id",
+]);
 
 function displayStatus(expense: GastoExtra): DisplayStatus {
   if (expense.status === "aprovado" && expense.approved_with_edits) return "aprovado_com_edicoes";
@@ -111,6 +124,11 @@ function EventoVincular({ expense }: { expense: GastoExtra }) {
           </option>
         ))}
       </select>
+      {link.isError && (
+        <p className="w-full text-red" role="alert">
+          {(link.error as Error | null)?.message || "Não foi possível vincular o evento."}
+        </p>
+      )}
     </div>
   );
 }
@@ -121,7 +139,8 @@ interface GastoFormValues {
   amount: number;
   expenseDate: string;
   notes: string;
-  disbursementType: "" | "reembolso" | "fornecedor";
+  /** `cliente` = devolução à cliente (feature 306): só vem do cancelamento, nunca se escolhe aqui. */
+  disbursementType: "" | "reembolso" | "fornecedor" | "cliente";
   reimburseUserId: number | "";
   supplierName: string;
   supplierPix: string;
@@ -152,10 +171,17 @@ function formFromExpense(expense: GastoExtra): GastoFormValues {
     amount: expense.amount,
     expenseDate: expense.expense_date,
     notes: expense.notes,
-    disbursementType: (expense.disbursement_type ?? "") as "" | "reembolso" | "fornecedor",
+    disbursementType: (expense.disbursement_type ?? "") as GastoFormValues["disbursementType"],
     reimburseUserId: "",
-    supplierName: expense.disbursement_type === "fornecedor" ? expense.payee_name : "",
-    supplierPix: expense.disbursement_type === "fornecedor" ? expense.payee_pix : "",
+    // Feature 306: a devolução à cliente carrega e reenvia nome e PIX — antes o "Salvar" os apagava.
+    supplierName:
+      expense.disbursement_type === "fornecedor" || expense.disbursement_type === "cliente"
+        ? expense.payee_name
+        : "",
+    supplierPix:
+      expense.disbursement_type === "fornecedor" || expense.disbursement_type === "cliente"
+        ? expense.payee_pix
+        : "",
     eventDate: expense.expense_date,
     eventId: expense.event_id ?? "",
   };
@@ -171,6 +197,37 @@ function DesembolsoFields({
   fieldErrors: Record<string, string>;
 }) {
   const funcionarios = useGastosFuncionarios();
+
+  // Feature 306: a devolução à cliente não troca de tipo; nome e PIX seguem editáveis.
+  if (values.disbursementType === "cliente") {
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-ink">
+          <span className={LABEL}>Como será pago?</span>
+          Devolução à cliente
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className={LABEL}>Quem recebe</label>
+            <input
+              className={INPUT}
+              value={values.supplierName}
+              onChange={(e) => onChange({ supplierName: e.target.value })}
+            />
+            {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red">{fieldErrors.supplier_name}</p>}
+          </div>
+          <div>
+            <label className={LABEL}>Chave PIX</label>
+            <input
+              className={INPUT}
+              value={values.supplierPix}
+              onChange={(e) => onChange({ supplierPix: e.target.value })}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -244,11 +301,23 @@ function DesembolsoFields({
 function EventoFields({
   values,
   onChange,
+  travado = false,
+  vinculoAtual = null,
 }: {
   values: GastoFormValues;
   onChange: (patch: Partial<GastoFormValues>) => void;
+  /** Feature 306: o vínculo da devolução de um cancelado não muda por aqui. */
+  travado?: boolean;
+  /** O evento já ligado ao gasto: a lista é a da data escolhida e pode não trazê-lo. */
+  vinculoAtual?: { id: number; titulo: string } | null;
 }) {
   const eventos = useGastosEventos(values.eventDate);
+  // Sem isto, o evento ligado de outra data aparecia como "Sem evento vinculado" — e, na devolução
+  // travada (306), num campo que nem se pode mudar.
+  const faltaNaLista =
+    vinculoAtual !== null &&
+    values.eventId === vinculoAtual.id &&
+    !(eventos.data?.events ?? []).some((ev) => ev.id === vinculoAtual.id);
   return (
     <div>
       <label className={LABEL}>Vincular a um evento (opcional)</label>
@@ -257,14 +326,17 @@ function EventoFields({
           type="date"
           className={INPUT}
           value={values.eventDate}
+          disabled={travado}
           onChange={(e) => onChange({ eventDate: e.target.value })}
         />
         <select
           className={INPUT}
           value={values.eventId}
+          disabled={travado}
           onChange={(e) => onChange({ eventId: e.target.value ? Number(e.target.value) : "" })}
         >
           <option value="">Sem evento vinculado</option>
+          {faltaNaLista && vinculoAtual && <option value={vinculoAtual.id}>{vinculoAtual.titulo}</option>}
           {eventos.data?.events.map((ev) => (
             <option key={ev.id} value={ev.id}>
               {ev.label}
@@ -312,8 +384,14 @@ function GastoFormModal({
     expense_date: values.expenseDate,
     disbursement_type: values.disbursementType,
     reimburse_user_id: values.reimburseUserId === "" ? undefined : values.reimburseUserId,
-    supplier_name: values.disbursementType === "fornecedor" ? values.supplierName : undefined,
-    supplier_pix: values.disbursementType === "fornecedor" ? values.supplierPix : undefined,
+    supplier_name:
+      values.disbursementType === "fornecedor" || values.disbursementType === "cliente"
+        ? values.supplierName
+        : undefined,
+    supplier_pix:
+      values.disbursementType === "fornecedor" || values.disbursementType === "cliente"
+        ? values.supplierPix
+        : undefined,
     event_id: values.eventId === "" ? undefined : values.eventId,
   });
 
@@ -324,7 +402,13 @@ function GastoFormModal({
     }
     setFieldErrors({});
     create.mutate(
-      { ...buildPayload(), notes: values.notes, receipt },
+      {
+        ...buildPayload(),
+        // A devolução à cliente nunca nasce aqui (feature 306): o formulário de criação nem a oferece.
+        disbursement_type: values.disbursementType === "cliente" ? "" : values.disbursementType,
+        notes: values.notes,
+        receipt,
+      },
       {
         onSuccess: onClose,
         onError: (err) => {
@@ -349,14 +433,34 @@ function GastoFormModal({
   };
 
   const busy = create.isPending || update.isPending;
+  const erroDoServidor = (create.error ?? update.error) as Error | null;
+  // Toda recusa do servidor aparece: no campo que a tela tem, ou no rodapé quando a chave não tem
+  // lugar (Constituição V — o 409 `devolucao_travada` vinha só com `fields` e sumia calado).
+  const semLugar = Object.keys(fieldErrors).some((k) => !CAMPOS_COM_LUGAR.has(k));
   const genericError =
-    (create.isError || update.isError) && !Object.keys(fieldErrors).length
-      ? "Não foi possível salvar o gasto."
+    (create.isError || update.isError) && (semLugar || !Object.keys(fieldErrors).length)
+      ? erroDoServidor?.message || "Não foi possível salvar o gasto."
       : null;
+  const eventoDaTrava =
+    erroDoServidor instanceof ApiRequestError && erroDoServidor.details.codigo === "devolucao_travada"
+      ? Number(erroDoServidor.details.event_id) || null
+      : null;
+  // Feature 306: a devolução de um evento cancelado — valor, data, categoria e vínculo só mudam pelo
+  // "Alterar devolução" na tela do evento; nome, PIX e descrição ficam livres.
+  const travado = mode === "edit" && Boolean(expense?.locked);
 
   return (
     <Modal open={open} onClose={onClose} title={mode === "create" ? "Novo gasto" : "Editar gasto"}>
       <div className="space-y-3">
+        {travado && expense?.event_id && (
+          <p className="rounded-md border border-gold/40 bg-gold-soft p-2 text-sm text-ink" role="note">
+            Devolução de evento cancelado: valor, data, categoria e vínculo mudam só pelo “Alterar devolução”{" "}
+            <Link to={`/events/${expense.event_id}?aba=comercial`} className="text-blue underline">
+              na tela do evento
+            </Link>
+            .
+          </p>
+        )}
         <div>
           <label className={LABEL}>Descrição</label>
           <input
@@ -369,17 +473,32 @@ function GastoFormModal({
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className={LABEL}>Categoria</label>
-            <select className={INPUT} value={values.category} onChange={(e) => patch({ category: e.target.value })}>
+            <select
+              className={INPUT}
+              value={values.category}
+              disabled={travado}
+              onChange={(e) => patch({ category: e.target.value })}
+            >
               {categories.map((c) => (
                 <option key={c} value={c}>
                   {c}
                 </option>
               ))}
             </select>
+            {fieldErrors.category && (
+              <p className="mt-1 text-xs text-red" role="alert">
+                {fieldErrors.category}
+              </p>
+            )}
           </div>
           <div>
             <label className={LABEL}>Valor (R$)</label>
-            <MoneyInput className={INPUT} value={values.amount} onValueChange={(amount) => patch({ amount })} />
+            <MoneyInput
+              className={INPUT}
+              value={values.amount}
+              disabled={travado}
+              onValueChange={(amount) => patch({ amount })}
+            />
             {fieldErrors.amount && <p className="mt-1 text-xs text-red">{fieldErrors.amount}</p>}
           </div>
         </div>
@@ -389,11 +508,39 @@ function GastoFormModal({
             type="date"
             className={INPUT}
             value={values.expenseDate}
+            disabled={travado}
             onChange={(e) => patch({ expenseDate: e.target.value })}
           />
+          {fieldErrors.expense_date && (
+            <p className="mt-1 text-xs text-red" role="alert">
+              {fieldErrors.expense_date}
+            </p>
+          )}
         </div>
         <DesembolsoFields values={values} onChange={patch} fieldErrors={fieldErrors} />
-        <EventoFields values={values} onChange={patch} />
+        <EventoFields
+          values={values}
+          onChange={patch}
+          travado={travado}
+          vinculoAtual={
+            mode === "edit" && expense?.event_id
+              ? { id: expense.event_id, titulo: expense.event_title ?? `Evento #${expense.event_id}` }
+              : null
+          }
+        />
+        {fieldErrors.event_id && (
+          <p className="-mt-1 text-xs text-red" role="alert">
+            {fieldErrors.event_id}
+            {eventoDaTrava && (
+              <>
+                {" "}
+                <Link to={`/events/${eventoDaTrava}?aba=comercial`} className="text-blue underline">
+                  Abrir o evento
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         {mode === "create" && (
           <>
             <div>
@@ -494,7 +641,11 @@ function GastoRow({
   const del = useDeleteGasto();
   const [showLink, setShowLink] = useState(false);
 
-  const canDelete = canManage || (expense.status === "pendente");
+  // Feature 306: a devolução de um evento cancelado não se exclui nem se religa aqui (o servidor
+  // recusa com 409); a correção do valor é pelo "Alterar devolução" na tela do evento.
+  const travado = Boolean(expense.locked);
+  const canDelete = !travado && (canManage || expense.status === "pendente");
+  const erroDaAcao = (del.error ?? approve.error ?? reject.error) as Error | null;
 
   const handleReject = () => {
     const motivo = window.prompt("Motivo da rejeição (opcional):") ?? "";
@@ -525,7 +676,13 @@ function GastoRow({
             <>
               {expense.payee_name}
               <span className="ml-1 text-xs text-muted">
-                ({expense.disbursement_type === "reembolso" ? "reembolso" : "fornecedor"})
+                (
+                {expense.disbursement_type === "reembolso"
+                  ? "reembolso"
+                  : expense.disbursement_type === "cliente"
+                    ? "devolução à cliente"
+                    : "fornecedor"}
+                )
               </span>
             </>
           ) : (
@@ -565,9 +722,11 @@ function GastoRow({
                 <Button size="sm" variant="ghost" onClick={() => onEdit(expense)}>
                   Editar
                 </Button>
-                <Button size="sm" variant="ghost" onClick={() => setShowLink((v) => !v)}>
-                  Vincular evento
-                </Button>
+                {!travado && (
+                  <Button size="sm" variant="ghost" onClick={() => setShowLink((v) => !v)}>
+                    Vincular evento
+                  </Button>
+                )}
               </>
             )}
             {canDelete && (
@@ -576,9 +735,17 @@ function GastoRow({
               </Button>
             )}
           </div>
+          {travado && (
+            <p className="mt-1 whitespace-normal text-xs text-muted">Devolução de cancelado: travada.</p>
+          )}
+          {erroDaAcao && (
+            <p className="mt-1 max-w-[16rem] whitespace-normal text-xs text-red" role="alert">
+              {erroDaAcao.message || "Não foi possível concluir."}
+            </p>
+          )}
         </td>
       </tr>
-      {showLink && (
+      {showLink && !travado && (
         <tr className="border-b border-line bg-surface-2/50">
           <td colSpan={canManage ? 10 : 9} className="px-3 py-2">
             <EventoVincular expense={expense} />

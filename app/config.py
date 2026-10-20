@@ -143,16 +143,18 @@ def _suppress_calendar_invites() -> bool:
 
 
 def _suppress_calendar_event_writes() -> bool:
-    """Decide se este processo está proibido de recriar eventos de show no Google Agenda real.
+    """Decide se este processo está proibido de escrever eventos de show no Google Agenda real.
 
     Feature 303 (Princípio XIV): a devolução ao Google de um evento marcado "Sumiu do Google
     Agenda" é a primeira escrita de evento de show que nasce com trava. O token do Google vem do
     banco espelhado, então um processo local recriaria o evento na agenda da empresa — e a
     produção o importaria 5 minutos depois.
 
-    Cobre SÓ a devolução. A sincronização, a limpeza e o "Sincronizar" de um evento continuam
-    lendo o Google real no ambiente local, e criar, editar, excluir e cancelar evento continuam
-    escrevendo sem trava (dívida registrada no ``docs/05``). O núcleo lê a chave de
+    Cobre a devolução e, desde a feature 306, a remoção do cancelamento (os dias e os ensaios do
+    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). A sincronização, a
+    limpeza e o "Sincronizar" de um evento continuam lendo o Google real no ambiente local, e
+    criar, editar e excluir evento continuam escrevendo sem trava (dívida registrada no
+    ``docs/05``). O núcleo lê a chave de
     ``current_app.config`` a cada chamada, para o verify poder ligá-la e desligá-la no mesmo
     processo; chave ausente = travado.
 
@@ -261,8 +263,9 @@ class Config:
     # `_suppress_calendar_invites` (feature 225).
     CALENDAR_SUPPRESS_INVITES = _suppress_calendar_invites()
 
-    # Trava própria da devolução de evento de show ao Google Agenda (feature 303). Separada da de
-    # convites: liberar uma não pode liberar a outra. Ver `_suppress_calendar_event_writes`.
+    # Trava das escritas de evento de show no Google Agenda: a devolução (feature 303) e a remoção
+    # no cancelamento (feature 306). Separada da de convites: liberar uma não pode liberar a outra.
+    # Ver `_suppress_calendar_event_writes`.
     CALENDAR_SUPPRESS_EVENT_WRITES = _suppress_calendar_event_writes()
 
     # Varredura das devoluções de email (feature 219). Lê a MESMA conta que envia, por IMAP e em

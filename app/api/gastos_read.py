@@ -50,6 +50,11 @@ def _expense_dict(e, batches: dict[int, object] | None = None) -> dict:
         "paid_at_creation": e.paid_at_creation,
         "event_id": e.event_id,
         "event_title": e.event.title if e.event else None,
+        # Feature 306: a devolução de cancelado fica travada (só o "Alterar devolução" a muda).
+        "event_cancelled": bool(e.event and e.event.is_cancelled),
+        "locked": bool(
+            e.event and e.event.is_cancelled and e.category == SpecialExpense.CATEGORY_DEVOLUCAO
+        ),
         "created_by_name": e.created_by.name if e.created_by else None,
         "created_at": e.created_at.isoformat(),
         "approved_by_name": e.approved_by.name if e.approved_by else None,

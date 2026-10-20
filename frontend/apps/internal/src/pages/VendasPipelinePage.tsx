@@ -42,6 +42,7 @@ const PAYMENT_TONE: Record<SalePaymentStatus, "green" | "gold" | "red" | "accent
   pendente: "red",
   permuta: "accent",
   sem_valor: "neutral",
+  cancelado: "neutral",
 };
 
 /** Formata em BRL sempre com prefixo (Princípio VII) — 0 vira "R$ 0,00", nunca travessão. */
@@ -89,14 +90,23 @@ function KpiGrid({
     eventos_fechados: number;
     comissao_prevista: number;
     desconto_concedido: number;
+    retido_cancelamentos?: number;
+    n_cancelados?: number;
+    comissao_retido?: number;
   };
   periodLabel: string;
   comissaoSub: string;
 }) {
-  const descontoSub =
+  const desconto =
     kpis.desconto_concedido > 0
       ? `${brl(kpis.desconto_concedido)} de desconto concedido`
       : "Sem desconto sobre o preço de tabela";
+  // Feature 306: o retido dos cancelados do período já está no total — a sublinha diz quanto.
+  const nCancelados = kpis.n_cancelados ?? 0;
+  const descontoSub =
+    nCancelados > 0
+      ? `${desconto} · inclui ${brl(kpis.retido_cancelamentos)} retidos de ${nCancelados} cancelamento(s)`
+      : desconto;
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <KpiCard label="Total vendido" value={brl(kpis.total_vendido)} sub={descontoSub} />
@@ -113,7 +123,11 @@ function KpiGrid({
       <KpiCard
         label="Comissão prevista"
         value={brl(kpis.comissao_prevista)}
-        sub={comissaoSub}
+        sub={
+          (kpis.comissao_retido ?? 0) > 0
+            ? `${comissaoSub} · inclui ${brl(kpis.comissao_retido)} do retido`
+            : comissaoSub
+        }
         highlight
       />
     </div>

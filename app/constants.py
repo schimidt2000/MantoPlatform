@@ -465,6 +465,49 @@ MOTIVO_FORA_LOJA_VIRTUAL = "loja_virtual"
 # EducaManto e não passa para o ramo comum. Aparece para o Financeiro nas notas da linha.
 NOTA_CICLO_VALOR_TARDIO = "Ciclo: mês em que o valor foi posto"
 
+# Feature 306: o dinheiro do cancelamento. Nomes da tabela única do data-model (§6.1).
+# Regimes do cancelamento (`event_cancellations.regime`). `legado` é derivado — cancelado sem linha
+# congelada, o de antes do deploy — e nunca é gravado.
+REGIME_VENDA = "venda"
+REGIME_SATELITE = "satelite"
+REGIME_DIA = "dia"
+REGIME_VIRTUAL = "virtual"
+REGIME_LEGADO = "legado"
+# Modo da devolução escolhido no ato (`refund_mode`). O modo corrente sai de pago × devolvido.
+MODO_TUDO = "tudo"
+MODO_PARTE = "parte"
+MODO_NADA = "nada"
+# Alcance num grupo (FR-055) e o que o ponto da 2a recebe (FR-062).
+ALCANCE_TODOS = "todos"
+ALCANCE_SO_ESTE_DIA = "so_este_dia"
+# Dia do repasse das comissões (FR-031): até ele, o ciclo do mês anterior ainda está aberto. Os dois
+# literais 5 da data do item de comissão da Planilha (`financeiro_read.py` e `financeiro/routes.py`)
+# apontam para cá, sem refatorar.
+DIA_DO_REPASSE = 5
+# Prefixo da nota da linha de comissão que o cancelamento, as correções e a exclusão escrevem
+# (FR-033): uma constante por motivo, e o dict leva ao código do motivo que a 1e lê.
+MOTIVO_AJUSTE_RETIDO = "Cancelamento: comissão do retido"
+MOTIVO_AJUSTE_TROCA_DEVOLVE = "Cancelamento: vendedor trocado — devolve o já recebido"
+MOTIVO_AJUSTE_TROCA_RETIDO = "Cancelamento: vendedor trocado — comissão do retido"
+MOTIVO_AJUSTE_TAXA = "Cancelamento: taxa corrigida"
+MOTIVO_AJUSTE_CORRECAO_VENDA = "Cancelamento: correção da venda"
+MOTIVO_AJUSTE_CORTE_DE_DIA = "Corte de dia: venda diminuiu"
+MOTIVO_AJUSTE_EXCLUSAO = "Exclusão do evento"
+MOTIVO_AJUSTE_TROCA_DE_TIPO = "Troca de tipo"  # só declarado: a 2b usa
+MOTIVOS_AJUSTE_COMISSAO = {
+    MOTIVO_AJUSTE_RETIDO: "cancelamento",
+    MOTIVO_AJUSTE_TROCA_DEVOLVE: "troca_de_vendedor",
+    MOTIVO_AJUSTE_TROCA_RETIDO: "troca_de_vendedor",
+    MOTIVO_AJUSTE_TAXA: "correcao",
+    MOTIVO_AJUSTE_CORRECAO_VENDA: "correcao",
+    MOTIVO_AJUSTE_CORTE_DE_DIA: "corte_de_dia",
+    MOTIVO_AJUSTE_EXCLUSAO: "exclusao",
+    MOTIVO_AJUSTE_TROCA_DE_TIPO: "troca_de_tipo",
+}
+# P-29: marca a comissão própria do novo principal na passagem da venda, no molde da
+# `NOTA_CICLO_VALOR_TARDIO`. `_comissao_existente` e a reconciliação ignoram a linha marcada.
+NOTA_COMISSAO_PROPRIA_DO_DIA = "Comissão própria do dia"
+
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
 VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"
@@ -573,3 +616,34 @@ DEPARTURE_DEFAULT_LOCATION = "Manto Produções"
 SITUACAO_CANCELADO = "cancelado"
 SITUACAO_SUMIU_DO_GOOGLE = "sumiu_do_google"
 SITUACAO_EXCLUSAO_SOLICITADA = "exclusao_solicitada"
+
+# Feature 306: os códigos das recusas (P18), no `codigo` do envelope de `json_error`; a tela os lê
+# pela união `CodigoRecusaCancelamento` (`lib/eventOps.ts`). Homônimos de outros fluxos — nunca
+# comparar entre si: `sumico_ops.CODIGO_CANCELADO`, `MOTIVO_FORA_CANCELADO`, `SITUACAO_CANCELADO` e
+# `MOTIVO_FORA_ENSAIO`.
+CODIGO_EVENTO_CANCELADO = "cancelado"  # a regra única do cancelado (FR-047)
+CODIGO_JA_CANCELADO = "ja_cancelado"
+CODIGO_ENSAIO = "ensaio"
+CODIGO_GRUPO_MUDOU = "grupo_mudou"
+CODIGO_SEM_OUTRO_DIA_VIVO = "sem_outro_dia_vivo"
+CODIGO_CACHE_PAGO = "cache_pago"
+CODIGO_DEVOLUCAO_PENDENTE = "devolucao_pendente"
+CODIGO_MAX_DEVOLUCAO_MUDOU = "max_devolucao_mudou"
+CODIGO_TENTE_DE_NOVO = "tente_de_novo"
+CODIGO_NAO_CANCELADO = "nao_cancelado"
+CODIGO_REGIME_SEM_RETIDO = "regime_sem_retido"
+CODIGO_ABAIXO_DO_PISO = "abaixo_do_piso"
+CODIGO_ACIMA_DO_TETO = "acima_do_teto"
+CODIGO_PAGO_ABAIXO_DO_DEVOLVIDO = "pago_abaixo_do_devolvido"
+CODIGO_BV_NAO_ESTA_A_PAGAR = "bv_nao_esta_a_pagar"
+CODIGO_VALOR_MUDOU = "valor_mudou"
+CODIGO_DEVOLUCAO_TRAVADA = "devolucao_travada"
+CODIGO_ESTADO_MUDOU = "estado_mudou"
+CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({
+    CODIGO_EVENTO_CANCELADO, CODIGO_JA_CANCELADO, CODIGO_ENSAIO, CODIGO_GRUPO_MUDOU,
+    CODIGO_SEM_OUTRO_DIA_VIVO, CODIGO_CACHE_PAGO, CODIGO_DEVOLUCAO_PENDENTE,
+    CODIGO_MAX_DEVOLUCAO_MUDOU, CODIGO_TENTE_DE_NOVO, CODIGO_NAO_CANCELADO,
+    CODIGO_REGIME_SEM_RETIDO, CODIGO_ABAIXO_DO_PISO, CODIGO_ACIMA_DO_TETO,
+    CODIGO_PAGO_ABAIXO_DO_DEVOLVIDO, CODIGO_BV_NAO_ESTA_A_PAGAR, CODIGO_VALOR_MUDOU,
+    CODIGO_DEVOLUCAO_TRAVADA, CODIGO_ESTADO_MUDOU,
+})

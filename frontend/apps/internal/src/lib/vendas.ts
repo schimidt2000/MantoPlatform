@@ -11,7 +11,9 @@ export type SalePaymentStatus =
   | "sem_valor"
   | "pago_total"
   | "parcial"
-  | "pendente";
+  | "pendente"
+  /** Feature 306: o evento cancelado (no painel dos cancelamentos). */
+  | "cancelado";
 
 /** Uma venda fechada no período (feature 196). Sem custo/lucro — isso é do Financeiro. */
 export interface VendaFechada {
@@ -46,6 +48,11 @@ export interface VendasKpis {
   eventos_fechados: number;
   comissao_prevista: number;
   desconto_concedido: number;
+  // Feature 306 (D33) — o retido conta como venda do vendedor congelado, no mês do cancelamento;
+  // opcionais (backend antigo). `total_vendido` e `comissao_prevista` já os incluem.
+  retido_cancelamentos?: number;
+  n_cancelados?: number;
+  comissao_retido?: number;
 }
 
 export interface VendedorOption {

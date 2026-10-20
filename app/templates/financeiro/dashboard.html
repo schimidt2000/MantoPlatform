@@ -3,7 +3,7 @@
 {% block page_title %}Painel Financeiro{% endblock %}
 
 {% block page_subtitle %}
-  <p class="sub">Resultado mês a mês — regime de competência (data do evento) · {{ period_label }}</p>
+  <p class="sub">Resultado mês a mês — regime de competência (data do evento; o retido de cancelamento, a do cancelamento) · {{ period_label }}</p>
 {% endblock %}
 
 {% macro money(v) %}R$ {{ (v or 0) | brl }}{% endmacro %}
@@ -121,8 +121,17 @@
             <td class="text-right num text-muted">{{ money(drg_projetado.receita_bruta) }}</td>
             <td class="text-right num strong">{{ money(drg_total.receita_bruta) }}</td>
           </tr>
+          {# Feature 306 (FR-041): o retido dos cancelados do período, já somado na Receita Bruta. #}
+          {% if drg_total.n_cancelados %}
           <tr>
-            <td><span class="dre-op">(–)</span> Impostos Provisionados <small>(eventos com nota)</small></td>
+            <td class="text-muted"><span class="dre-op">↳</span> Retido de cancelamentos <small>({{ drg_total.n_cancelados }} cancelamento(s), já na receita)</small></td>
+            <td class="text-right num text-muted">{{ money(drg_realizado.retido_cancelamentos) }}</td>
+            <td class="text-right num text-muted">{{ money(drg_projetado.retido_cancelamentos) }}</td>
+            <td class="text-right num text-muted">{{ money(drg_total.retido_cancelamentos) }}</td>
+          </tr>
+          {% endif %}
+          <tr>
+            <td><span class="dre-op">(–)</span> Impostos Provisionados <small>(eventos com nota{% if drg_total.n_cancelados %} + imposto informado de {{ drg_total.n_cancelados }} cancelamento(s){% endif %})</small></td>
             <td class="text-right num text-red">– {{ money(drg_realizado.impostos) }}</td>
             <td class="text-right num text-muted text-red">– {{ money(drg_projetado.impostos) }}</td>
             <td class="text-right num strong text-red">– {{ money(drg_total.impostos) }}</td>
@@ -174,7 +183,7 @@
           </tr>
 
           <tr>
-            <td><span class="dre-op">(–)</span> Gastos Extras <small>(aprovados)</small></td>
+            <td><span class="dre-op">(–)</span> Gastos Extras <small>(aprovados, sem a devolução de cancelado — já está no retido)</small></td>
             <td class="text-right num text-red">– {{ money(drg_realizado.gastos_extras) }}</td>
             <td class="text-right num text-muted text-red">– {{ money(drg_projetado.gastos_extras) }}</td>
             <td class="text-right num strong text-red">– {{ money(drg_total.gastos_extras) }}</td>
@@ -324,7 +333,7 @@
         {% for n in nf_a_emitir %}
         <div class="audit-item" style="display:block;">
           <div style="display:flex;justify-content:space-between;gap:8px;">
-            <a href="{{ url_for('calendar.event_detail', event_id=n.event_id) }}" class="audit-title">{{ n.event_title }}</a>
+            <a href="{{ url_for('calendar.event_detail', event_id=n.event_id) }}" class="audit-title">{{ n.event_title }}{% if n.cancelado %} <small class="muted">(cancelado)</small>{% endif %}</a>
             <span class="audit-date">{{ n.date.strftime('%d/%m/%Y') if n.date else 'sem data' }} · {{ money(n.amount) }}</span>
           </div>
           <form method="POST" action="{{ url_for('financeiro.nf_emitir', invoice_id=n.id) }}"
@@ -349,7 +358,8 @@
   </div>
   <p class="muted" style="margin-top:-4px;">
     16% de cada nota com data de emissão no período selecionado. Reconhecido pelo mês da emissão
-    (visão de caixa); o balanço/DRE continua por data do evento.
+    (visão de caixa); o balanço/DRE continua por data do evento (o retido de cancelamento, pela
+    data do cancelamento).
   </p>
   {% if custo_nota_itens %}
   <div class="table-wrap table-flush">

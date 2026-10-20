@@ -107,8 +107,17 @@ export interface EventComercialInput {
 export function useUpdateEventComercial(eventId: number) {
   // Pôr o valor tira a linha de "Sem valor" (feature 299): a Home recarrega ao voltar, sem F5.
   return useEventPatch<EventComercialInput>(eventId, "/comercial", "PATCH", {
-    // Feature 305: a venda nova pode regravar o BV a pagar (Planilha) e a comissão.
-    invalidar: [["dashboard"], ["financeiro-pagamentos"], ["financeiro-comissoes"]],
+    // Feature 305: a venda nova pode regravar o BV a pagar (Planilha) e a comissão. Feature 306: no
+    // cancelado, a correção recongela a venda e muda o retido do vendedor na DRE e no Comercial.
+    invalidar: [
+      ["dashboard"],
+      ["financeiro-pagamentos"],
+      ["financeiro-comissoes"],
+      ["financeiro-dashboard"],
+      ["vendas-dashboard"],
+      ["admin-desempenho"],
+      ["cancelamentos"],
+    ],
   });
 }
 

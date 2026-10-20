@@ -26,15 +26,17 @@ function data(iso: string | null): string {
   return dia && mes && ano ? `${dia}/${mes}/${ano}` : iso;
 }
 
-const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" }> = {
+const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" | "blue" }> = {
   pago: { label: "devolvido", tone: "green" },
+  no_banco: { label: "no banco", tone: "blue" },
   nao_pago: { label: "a devolver", tone: "gold" },
 };
 
 /**
  * Fila do Superadmin (feature 224): pedidos de exclusão do Comercial aguardando decisão, e o
- * histórico dos eventos cancelados com a situação da devolução. É por aqui que se chega a um
- * evento cancelado — ele sumiu da agenda de propósito.
+ * histórico dos eventos cancelados com a situação da devolução. É a porta principal de um evento
+ * cancelado, que sai da agenda de propósito; Comissões, a ficha da cliente e o sino também levam a
+ * ele (feature 306).
  */
 export function EventosCancelamentosPage() {
   const query = useCancelamentos();
@@ -152,7 +154,12 @@ export function EventosCancelamentosPage() {
                           <TableCell className="text-ink">{c.title}</TableCell>
                           <TableCell className="tabular-nums">{data(c.start_at)}</TableCell>
                           <TableCell align="right" className="tabular-nums">
-                            {brl(c.sale_value)}
+                            {/* O satélite e o dia cortado não têm venda própria: ela mora no 1º dia. */}
+                            {c.resumo?.regime === "satelite" || c.resumo?.regime === "dia" ? (
+                              <span className="text-muted">no 1º dia</span>
+                            ) : (
+                              brl(c.sale_value)
+                            )}
                           </TableCell>
                           <TableCell>
                             {c.cancelled_by ?? "—"}
@@ -162,7 +169,64 @@ export function EventosCancelamentosPage() {
                           </TableCell>
                           <TableCell className="text-muted">{c.reason ?? "—"}</TableCell>
                           <TableCell>
-                            {c.devolucao && situacao ? (
+                            {/* Feature 306 (FR-025): o resumo traz todas as devoluções e o retido; o PIX
+                                só vem para quem vê o financeiro. Sem ele (backend antigo), a primeira. */}
+                            {c.resumo?.regime === "satelite" ? (
+                              // Converge (T111): o dinheiro do "todos" está no 1º dia; repetir aqui a
+                              // devolução e o pago do grupo contava a mesma devolução N vezes.
+                              <span className="text-xs text-muted">
+                                dinheiro no 1º dia do grupo
+                                {c.resumo.principal && (
+                                  <>
+                                    {": "}
+                                    <Link to={`/events/${c.resumo.principal.id}`} className="text-blue underline">
+                                      {c.resumo.principal.titulo}
+                                    </Link>
+                                  </>
+                                )}
+                              </span>
+                            ) : c.resumo ? (
+                              <>
+                                {c.resumo.devolucoes.length === 0 && (
+                                  <span className="text-muted">nada a devolver</span>
+                                )}
+                                {c.resumo.devolucoes.map((d) => {
+                                  const estado = STATUS_DEVOLUCAO[d.estado] ?? STATUS_DEVOLUCAO.nao_pago;
+                                  return (
+                                    <span key={d.id} className="block">
+                                      <span className="tabular-nums text-ink">{brl(d.valor)}</span>
+                                      <Badge tone={estado.tone} className="ml-2">
+                                        {estado.label}
+                                      </Badge>
+                                      <span className="block text-xs text-muted">
+                                        {d.nome ?? "—"}
+                                        {d.pix ? ` · PIX ${d.pix}` : ""}
+                                      </span>
+                                    </span>
+                                  );
+                                })}
+                                <span className="mt-1 block text-xs text-muted">
+                                  {c.resumo.regime === "dia" ? (
+                                    <>
+                                      pago no grupo {brl(c.resumo.pago)}
+                                      {c.resumo.principal && (
+                                        <>
+                                          {" · venda no "}
+                                          <Link
+                                            to={`/events/${c.resumo.principal.id}`}
+                                            className="text-blue underline"
+                                          >
+                                            1º dia
+                                          </Link>
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    `pago ${brl(c.resumo.pago)} · retido ${brl(c.resumo.retido)}`
+                                  )}
+                                </span>
+                              </>
+                            ) : c.devolucao && situacao ? (
                               <>
                                 <span className="tabular-nums text-ink">
                                   {brl(c.devolucao.amount)}

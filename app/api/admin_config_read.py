@@ -6,7 +6,7 @@ Reusa, sem duplicar, os helpers já existentes em `app.calendar`, `app.drive_mig
 
 import json
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from flask import jsonify, request
@@ -151,10 +151,31 @@ def api_admin_desempenho() -> Any:
         CalendarEvent.seller_id.isnot(None),
         CalendarEvent.start_at >= start,
         CalendarEvent.start_at < end,
+        # Feature 306: a venda cancelada não aconteceu; o retido dela entra à parte, abaixo.
+        CalendarEvent.cancelled_at.is_(None),
     ).all():
         nome = ev.seller.name if ev.seller else "Desconhecido"
         vendas_raw[nome]["count"] += 1
         vendas_raw[nome]["total"] += float(ev.sale_value or 0)
+
+    # Feature 306 (D33): o retido dos cancelados do mês (pelo mês do cancelamento), do vendedor
+    # congelado. A agregação daqui é por nome, então o id vira nome.
+    from app.calendar.cancel_ops import cancelados_do_periodo
+    from app.models import User
+
+    cancelados = cancelados_do_periodo(start.date(), (end - timedelta(days=1)).date())
+    pessoas = {
+        u.id: u.name
+        for u in User.query.filter(User.id.in_({r.seller_id for r in cancelados if r.seller_id})).all()
+    } if cancelados else {}
+    retido_total = 0.0
+    for r in cancelados:
+        if r.seller_id is None:
+            continue
+        nome = pessoas.get(r.seller_id, "Desconhecido")
+        vendas_raw[nome]["retido"] = vendas_raw[nome].get("retido", 0.0) + float(r.retido)
+        vendas_raw[nome]["cancelados"] = vendas_raw[nome].get("cancelados", 0) + 1
+        retido_total += float(r.retido)
 
     casting_stats = sorted(casting_raw.items(), key=lambda x: -x[1])
     figurino_stats = sorted(figurino_raw.items(), key=lambda x: -x[1])
@@ -166,13 +187,20 @@ def api_admin_desempenho() -> Any:
             "casting": [{"name": n, "count": c} for n, c in casting_stats],
             "figurino": [{"name": n, "count": c} for n, c in figurino_stats],
             "vendas": [
-                {"name": n, "count": v["count"], "total": v["total"]} for n, v in vendas_stats
+                {
+                    "name": n,
+                    "count": v["count"],
+                    "total": v["total"],
+                    **({"retido": v["retido"], "cancelados": v["cancelados"]} if "retido" in v else {}),
+                }
+                for n, v in vendas_stats
             ],
             "totals": {
                 "casting": sum(casting_raw.values()),
                 "figurino": sum(figurino_raw.values()),
                 "vendas": sum(v["count"] for v in vendas_raw.values()),
                 "valor": sum(v["total"] for v in vendas_raw.values()),
+                **({"retido": retido_total} if cancelados else {}),
             },
         }
     )

@@ -290,10 +290,11 @@ class CalendarEvent(db.Model):
     # primeira vez que alguém pede o link — nunca o id sequencial, para não ser adivinhável.
     feedback_token = db.Column(db.String(43), unique=True, nullable=True)
 
-    # Cancelamento (feature 224). Evento que já tem dinheiro preso — pagamento recebido,
-    # contrato ou elenco escalado — não é apagado: vira cancelado. Some da agenda e de toda
-    # métrica, mas o registro fica, porque é a ele que a devolução ao cliente se refere.
-    # Excluir de verdade continua valendo para evento vazio (criado por engano).
+    # Cancelamento (features 224 e 306). Evento que já tem venda, pagamento, contrato ou elenco
+    # escalado não é apagado: vira cancelado. Sai da agenda e das métricas do evento, mas o
+    # registro fica: é a ele que a devolução se refere, e o retido (pago − devolvido) entra na
+    # DRE e no Comercial pelo mês do cancelamento (`cancel_ops.resumo_cancelado`). Excluir de
+    # verdade continua valendo para evento vazio (criado por engano).
     cancelled_at = db.Column(db.DateTime, nullable=True)
     cancelled_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     cancellation_reason = db.Column(db.Text, nullable=True)
@@ -398,11 +399,12 @@ class CalendarEvent(db.Model):
 
     @property
     def is_cancelled(self) -> bool:
-        """True se o evento foi cancelado (feature 224) — o registro existe, mas não conta.
+        """True se o evento foi cancelado (feature 224) — o registro existe; só o retido conta.
 
-        Cancelado não aparece na agenda nem em nenhuma métrica (venda, DRE, planilha de
-        pagamentos, disponibilidade do casting). Equivalente SQL:
-        ``CalendarEvent.cancelled_at.isnot(None)``.
+        Cancelado não aparece na agenda nem nas métricas de venda e de casting. O dinheiro que a
+        Manto reteve (pago − devolvido) entra na DRE, no Comercial e na comissão pelo mês do
+        cancelamento (feature 306, `cancel_ops.resumo_cancelado`); a venda e o cachê do evento,
+        não. Equivalente SQL: ``CalendarEvent.cancelled_at.isnot(None)``.
         """
         return self.cancelled_at is not None
 
@@ -950,10 +952,13 @@ class CommissionPayment(db.Model):
       a_pagar   — pendente de pagamento no próximo ciclo (dia 5)
       no_banco  — enviado ao banco, aguardando confirmação de compensação (feature 199)
       pago      — marcado como pago pelo financeiro
-      cancelado — evento cancelado antes do pagamento; sem movimentação financeira
+      cancelado — linha que deixou de valer; sem movimentação financeira
 
-    Para estorno (evento cancelado após pagamento), cria-se uma nova linha com
-    amount negativo e status='a_pagar', referenciando o registro original em original_id.
+    Linha paga ou no banco nunca é reescrita. Quando o valor devido muda depois dela (evento
+    cancelado com retido, correção, exclusão — feature 306), nasce um AJUSTE: linha nova a pagar,
+    positiva ou negativa, ligada à liquidada por `original_id`, no primeiro repasse aberto do
+    beneficiário, com o motivo no prefixo da nota (`constants.MOTIVOS_AJUSTE_COMISSAO`). O ajuste
+    continua ligado ao evento; só a exclusão o deixa sem evento (o estorno órfão).
     """
     __tablename__ = "commission_payments"
     __table_args__ = (
@@ -966,11 +971,12 @@ class CommissionPayment(db.Model):
     event_id    = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
     event_title = db.Column(db.String(500), nullable=False)  # cópia: persiste mesmo se evento for deletado (500: feature 254)
     seller_id   = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # Ajuste e estorno (feature 306): `sale_date` = `payable_from` = o primeiro repasse aberto.
     sale_date   = db.Column(db.Date, nullable=True)          # data da venda (herda do evento)
     # Feature 109: comissões EducaManto só entram no ciclo de pagamento após a realização do
     # evento — esta é a data da realização. NULL = comissão comum (ciclo pela sale_date).
     payable_from = db.Column(db.Date, nullable=True)
-    amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (estorno)
+    amount      = db.Column(db.Numeric(12, 2), nullable=False)  # positivo ou negativo (ajuste ou estorno)
     status      = db.Column(db.String(20), nullable=False, default="a_pagar", server_default="a_pagar")
     paid_at     = db.Column(db.Date, nullable=True)
     notes       = db.Column(db.Text, nullable=True)
@@ -1055,7 +1061,10 @@ class SpecialExpense(db.Model):
 
     Fluxo: qualquer colaborador registra (status 'pendente'); só impacta o balanço
     financeiro quando um super admin aprova (status 'aprovado'). O impacto ocorre no
-    período/mês da `expense_date` (regime de competência).
+    período/mês da `expense_date` (regime de competência). Exceções do cancelamento (feature
+    306): a devolução e a multa nascem aprovadas pelo `cancel_ops`, e a devolução de evento
+    cancelado não pesa na DRE pela `expense_date` — já está descontada no retido, que conta no
+    mês do cancelamento.
     """
     __tablename__ = "special_expenses"
     __table_args__ = (
@@ -1066,11 +1075,17 @@ class SpecialExpense(db.Model):
     # "Devolução a cliente" (feature 224) é o dinheiro que volta para a cliente quando um evento
     # já pago é cancelado. Entra aqui, e não numa entidade própria, porque Gasto Extra já carrega
     # tudo que uma devolução precisa — aprovação, comprovante, PIX do destinatário, status de
-    # pago — e já é somado pela Planilha de Pagamentos e pela DRE do período.
+    # pago — e já é somado pela Planilha de Pagamentos. Na feature 306, a devolução ligada a evento
+    # cancelado sai dos gastos extras da DRE (o retido entra pelo mês do cancelamento) e só
+    # `cancel_ops` escreve valor, data, categoria e vínculo dela (as portas de Gastos Extras travam).
+    # "Multa de cancelamento" (feature 306) é a multa ao elenco do cancelado, uma por escalação;
+    # sem estar na lista, a primeira edição em Gastos Extras a remapearia para "Outros".
     CATEGORIES = [
-        "Figurino", "Escritório", "Marketing", "Manutenção", "Devolução a cliente", "Outros",
+        "Figurino", "Escritório", "Marketing", "Manutenção", "Devolução a cliente",
+        "Multa de cancelamento", "Outros",
     ]
     CATEGORY_DEVOLUCAO = "Devolução a cliente"
+    CATEGORY_MULTA_CANCELAMENTO = "Multa de cancelamento"
     STATUSES = ["pendente", "aprovado", "rejeitado"]
     DISBURSEMENT_TYPES = ["reembolso", "fornecedor", "cliente"]
 
@@ -1088,7 +1103,7 @@ class SpecialExpense(db.Model):
     approved_at    = db.Column(db.DateTime, nullable=True)
 
     # Desembolso: como o gasto será pago (entra na lista de pagamentos quando aprovado)
-    disbursement_type = db.Column(db.String(20), nullable=True)   # "reembolso" | "fornecedor"
+    disbursement_type = db.Column(db.String(20), nullable=True)   # "reembolso" | "fornecedor" | "cliente"
     reimburse_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)  # funcionário a reembolsar
     supplier_name     = db.Column(db.String(200), nullable=True)  # nome do fornecedor
     supplier_pix      = db.Column(db.String(120), nullable=True)  # chave PIX do fornecedor
@@ -1098,8 +1113,9 @@ class SpecialExpense(db.Model):
     # (feature 128).
     paid_at_creation  = db.Column(db.Boolean, default=False, nullable=False)
 
-    # Vínculo opcional a um evento: gasto aprovado entra como custo do evento
-    # (lucro do evento = venda − cachês − gastos extras aprovados)
+    # Vínculo opcional a um evento: gasto aprovado entra como custo do evento vivo
+    # (lucro = venda − cachês − gastos extras aprovados dos dias vivos); a devolução e a multa de
+    # um dia cancelado ficam fora do lucro do contrato (feature 306)
     event_id          = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=True)
 
     # Vínculo opcional a um pedido de produção de figurino (feature 225). Responde "quanto custou
@@ -1115,6 +1131,7 @@ class SpecialExpense(db.Model):
     # em que ele está/ficou "aprovado" (migração 179). Não é um status novo — os cálculos que já
     # filtram status=="aprovado" (DRE, planilha de pagamentos, custo de evento) continuam
     # somando esses gastos normalmente; a flag só adiciona transparência visual na tela React.
+    # Na devolução de cancelado (feature 306) ela nunca acende: quem a edita é `cancel_ops`.
     approved_with_edits = db.Column(
         db.Boolean, default=False, nullable=False, server_default="false"
     )
@@ -1158,7 +1175,12 @@ class SpecialExpense(db.Model):
 
     @property
     def is_devolucao_cliente(self) -> bool:
-        """True se este gasto é uma devolução de dinheiro à cliente (feature 224)."""
+        """True se este gasto é uma devolução de dinheiro à cliente (feature 224).
+
+        Reconhece pelo tipo de desembolso, que a tela edita e não tem uso. Não use: a devolução se
+        reconhece pela categoria, pelo evento e pela aprovação — `cancel_ops.filtro_devolucao`
+        (feature 306).
+        """
         return self.disbursement_type == "cliente"
 
 
@@ -2401,6 +2423,171 @@ class Event3DDismissal(db.Model):
         backref=db.backref("dispensa_3d", uselist=False, cascade="all, delete-orphan"),
     )
     dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
+
+
+class EventCancellation(db.Model):
+    """O dinheiro congelado no ato do cancelamento (feature 306).
+
+    Uma linha por evento cancelado por esta entrega ou depois dela; cancelado **sem** linha é
+    `legado` (o de antes do deploy, FR-003). Guarda o que a conta do retido precisa e não pode ser
+    relido ao vivo depois: a venda, a comissão cheia com a taxa, o BV e o custo do ato, o
+    beneficiário, a nota e o imposto. Pago e devolvido **não** ficam aqui — são lidos ao vivo, do
+    grupo por consulta (`cancel_ops.ids_do_grupo`), porque o Superadmin ainda pode corrigir os
+    comprovantes e a devolução (FR-002).
+
+    `regime` (`REGIME_*`) e `refund_mode` (`MODO_*`) nunca mudam. Só a `venda` congela dinheiro;
+    `satelite` e `dia` apontam o principal em `group_leader_id`, e o `dia` guarda a venda do
+    principal antes e depois do corte. Horários em São Paulo sem fuso (`now_sp`), como
+    `cancelled_at`.
+    """
+
+    __tablename__ = "event_cancellations"
+    __table_args__ = (
+        db.UniqueConstraint("event_id", name="uq_event_cancellations_event_id"),
+        db.Index("ix_event_cancellations_group_leader_id", "group_leader_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    regime = db.Column(db.String(12), nullable=False)
+    refund_mode = db.Column(db.String(8), nullable=True)
+    sale_value = db.Column(db.Numeric(12, 2), nullable=True)
+    commission_full = db.Column(db.Numeric(12, 2), nullable=True)
+    commission_rate = db.Column(db.Numeric(6, 3), nullable=True)
+    # EducaManto com responsável: a base de custo da comissão no ato. É o "com os cachês, como no
+    # ato" da FR-049 — o custo é lido ao vivo, e o Casting pode esvaziar a escala depois.
+    commission_cost = db.Column(db.Numeric(12, 2), nullable=True)
+    # Sem `ondelete`: o beneficiário e o vendedor congelados bloqueiam a exclusão do usuário (FR-073).
+    commission_seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    with_invoice = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    retained_tax = db.Column(db.Numeric(12, 2), nullable=True)
+    group_leader_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
+    )
+    # True só no antigo 1º dia que passou a venda ao novo principal (FR-058).
+    sale_handed_over = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="false"
+    )
+    sale_value_before = db.Column(db.Numeric(12, 2), nullable=True)
+    sale_value_after = db.Column(db.Numeric(12, 2), nullable=True)
+    sale_value_gross_before = db.Column(db.Numeric(12, 2), nullable=True)
+    sale_value_gross_after = db.Column(db.Numeric(12, 2), nullable=True)
+    created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
+    updated_at = db.Column(db.DateTime, default=now_sp, onupdate=now_sp, nullable=False)
+    updated_by_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    # `foreign_keys=` em toda relação: duas FKs para `calendar_events` e três para `users`; sem
+    # isso o `configure_mappers` levanta `AmbiguousForeignKeysError` e o `create_app()` não sobe.
+    event = db.relationship(
+        "CalendarEvent",
+        foreign_keys=[event_id],
+        lazy=True,
+        backref=db.backref("cancelamento", uselist=False, cascade="all, delete-orphan"),
+    )
+    group_leader = db.relationship("CalendarEvent", foreign_keys=[group_leader_id], lazy=True)
+    seller = db.relationship("User", foreign_keys=[seller_id], lazy=True)
+    commission_seller = db.relationship("User", foreign_keys=[commission_seller_id], lazy=True)
+    updated_by = db.relationship("User", foreign_keys=[updated_by_id], lazy=True)
+
+
+class EventCancellationBv(db.Model):
+    """Um BV do evento no ato do cancelamento (feature 306).
+
+    `original_amount` é o BV cheio (`amount_brl` no ato) e `paid_at_cancellation` diz se ele já
+    estava pago ou no banco, lido sob a trava do evento. `paid_amount` é o valor que conta enquanto
+    o BV está pago ou no banco (decisão (a)): só `cancel_ops.marcar_status_do_bv` o escreve, e ele
+    volta a `NULL` no desfazer. Linha com `acrescimo_id` NULL é órfã, e nenhum leitor a soma.
+    """
+
+    __tablename__ = "event_cancellation_bvs"
+    __table_args__ = (
+        db.UniqueConstraint("acrescimo_id", name="uq_event_cancellation_bvs_acrescimo_id"),
+        db.Index("ix_event_cancellation_bvs_cancellation_id", "cancellation_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    cancellation_id = db.Column(
+        db.Integer, db.ForeignKey("event_cancellations.id", ondelete="CASCADE"), nullable=False
+    )
+    acrescimo_id = db.Column(
+        db.Integer, db.ForeignKey("event_acrescimos.id", ondelete="SET NULL"), nullable=True
+    )
+    recipient = db.Column(db.String(200), nullable=True)
+    pix = db.Column(db.String(140), nullable=True)
+    original_amount = db.Column(db.Numeric(12, 2), nullable=False)
+    paid_at_cancellation = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="false"
+    )
+    paid_amount = db.Column(db.Numeric(12, 2), nullable=True)
+
+    cancelamento = db.relationship(
+        "EventCancellation",
+        foreign_keys=[cancellation_id],
+        lazy=True,
+        backref=db.backref(
+            "bvs", cascade="all, delete-orphan", order_by="EventCancellationBv.id", lazy=True
+        ),
+    )
+    acrescimo = db.relationship("EventAcrescimo", foreign_keys=[acrescimo_id], lazy=True)
+
+
+class EventCancellationElenco(db.Model):
+    """Uma escalação (vaga × dia) dos dias que o ato do cancelamento alcança (feature 306).
+
+    Escalação, não artista: quem está em dois dias, ou em duas vagas do mesmo dia, tem duas linhas
+    e, se lançadas, duas multas. Ficam fora a vaga recusada e a de presença (FR-070). A linha nunca
+    é apagada por mudança na escala; "na vaga" é `role_id` não nulo com o mesmo talento.
+    `cache_reference` é só referência: nunca entra em custo, DRE ou multa.
+    """
+
+    __tablename__ = "event_cancellation_elenco"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "special_expense_id", name="uq_event_cancellation_elenco_special_expense_id"
+        ),
+        db.Index("ix_event_cancellation_elenco_cancellation_id", "cancellation_id"),
+        db.Index("ix_event_cancellation_elenco_talent_id", "talent_id"),
+        db.Index("ix_event_cancellation_elenco_role_id", "role_id"),
+        db.Index("ix_event_cancellation_elenco_day_event_id", "day_event_id"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    cancellation_id = db.Column(
+        db.Integer, db.ForeignKey("event_cancellations.id", ondelete="CASCADE"), nullable=False
+    )
+    # Sem `ondelete`: artista com multa não some.
+    talent_id = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=False)
+    role_id = db.Column(
+        db.Integer, db.ForeignKey("event_roles.id", ondelete="SET NULL"), nullable=True
+    )
+    # CASCADE e NOT NULL: dia cancelado não se exclui (FR-021); se a regra for furada, a linha sai
+    # com o dia em vez de ficar sem dia.
+    day_event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    character_name = db.Column(db.String(120), nullable=False)
+    cache_reference = db.Column(db.Numeric(12, 2), nullable=True)
+    special_expense_id = db.Column(
+        db.Integer, db.ForeignKey("special_expenses.id", ondelete="SET NULL"), nullable=True
+    )
+
+    cancelamento = db.relationship(
+        "EventCancellation",
+        foreign_keys=[cancellation_id],
+        lazy=True,
+        backref=db.backref(
+            "elenco", cascade="all, delete-orphan", order_by="EventCancellationElenco.id", lazy=True
+        ),
+    )
+    talent = db.relationship("Talent", foreign_keys=[talent_id], lazy=True)
+    role = db.relationship("EventRole", foreign_keys=[role_id], lazy=True)
+    day_event = db.relationship("CalendarEvent", foreign_keys=[day_event_id], lazy=True)
+    special_expense = db.relationship("SpecialExpense", foreign_keys=[special_expense_id], lazy=True)
 
 
 class NfcTag(db.Model):

@@ -22,6 +22,10 @@ export interface DreView {
   n_eventos: number;
   n_normais: number;
   n_permutas: number;
+  /** Feature 306: o retido dos cancelados do período (já somado na receita bruta). */
+  retido_cancelamentos?: number;
+  /** Feature 306: a linha do retido aparece por esta contagem, nunca pelo valor. */
+  n_cancelados?: number;
 }
 
 export interface FinanceiroKpis {
@@ -48,6 +52,8 @@ export interface TopSeller {
   user_name: string;
   receita: number;
   lucro: number;
+  /** Feature 306: quanto da receita é retido de cancelamentos (já somado). */
+  retido?: number;
 }
 
 export interface MonthlyTrendItem {
@@ -57,6 +63,22 @@ export interface MonthlyTrendItem {
   lucro: number;
   margem: number;
   n_eventos: number;
+  /** Feature 306: o retido do mês (pelo mês do cancelamento), já somado na receita. */
+  retido?: number;
+}
+
+/** O painel dos cancelamentos do período (feature 306, contracts §19). */
+export interface CancelamentosDoPeriodo {
+  quantidade: number;
+  pago: number;
+  devolvido: number;
+  devolucao_a_pagar: number;
+  retido: number;
+  comissao_retido: number;
+  bv_retido: number;
+  imposto: number;
+  efeito_resultado: number;
+  itens: { event_id: number; titulo: string; cancelado_em: string | null; retido: number; status?: EventoStatus }[];
 }
 
 export interface AuditoriaItem {
@@ -89,9 +111,11 @@ export interface FinanceiroPaineis {
   top_sellers: TopSeller[];
   monthly_trend: MonthlyTrendItem[];
   auditoria: AuditoriaItem[];
+  /** Feature 306 — opcional (backend antigo). */
+  cancelamentos?: CancelamentosDoPeriodo;
 }
 
-export type EventoStatus = "permuta" | "sem_valor" | "pago_total" | "parcial" | "pendente";
+export type EventoStatus = "permuta" | "sem_valor" | "pago_total" | "parcial" | "pendente" | "cancelado";
 
 export interface FinanceiroEvento {
   event_id: number;
@@ -122,6 +146,9 @@ export interface NotaFiscalPendente {
   event_id: number;
   event_title: string;
   amount: number;
+  /** Feature 306: a nota de um cancelado (sobre o retido) leva o selo. */
+  cancelado?: boolean;
+  retido?: number;
 }
 
 export interface CustoNotaItem {
@@ -191,8 +218,33 @@ export function useFinanceiroDashboard({
   });
 }
 
-export type CommissionStatus = "a_pagar" | "pago" | "cancelado";
+export type CommissionStatus = "a_pagar" | "no_banco" | "pago" | "cancelado";
 export type CommissionMonthStatus = "pendente" | "pago";
+/** O que a linha é (feature 306): a comissão, o ajuste ligado a uma paga ou o estorno órfão. */
+export type CommissionLineTipo = "comissao" | "ajuste" | "estorno";
+
+const ROTULO_DO_TIPO: Record<CommissionLineTipo, string> = {
+  comissao: "Comissão",
+  ajuste: "Ajuste",
+  estorno: "Estorno",
+};
+
+/** "Comissão", "Ajuste" ou "Estorno"; sem o campo (backend antigo), "Comissão". */
+export function rotuloDoTipoDaLinha(tipo: CommissionLineTipo | null | undefined): string {
+  return ROTULO_DO_TIPO[tipo ?? "comissao"] ?? "Comissão";
+}
+
+/** `AAAA-MM` → `MM/AAAA`; sem ciclo, "—". */
+export function rotuloDoCiclo(ciclo: string | null | undefined): string {
+  if (!ciclo) return "—";
+  const [ano, mes] = ciclo.split("-");
+  return ano && mes ? `${mes}/${ano}` : "—";
+}
+
+/** O rótulo da situação do mês de um vendedor — o mesmo na tela e no CSV. */
+export function rotuloDoMesDaComissao(status: CommissionMonthStatus): string {
+  return status === "pago" ? "Pago" : "Pendente";
+}
 
 /** Uma linha de comissão (`CommissionPayment`), feature 158 (payload evoluído na 187). */
 export interface CommissionEntry {
@@ -206,6 +258,15 @@ export interface CommissionEntry {
   status: CommissionStatus;
   status_label: string;
   paid_at: string | null;
+  // Feature 306 — opcionais: o bundle novo convive alguns minutos com o backend antigo.
+  tipo?: CommissionLineTipo;
+  /** A paga que o ajuste acerta. */
+  original_id?: number | null;
+  evento_cancelado?: boolean;
+  /** O ciclo em que a linha entra no repasse, `AAAA-MM`. */
+  ciclo?: string | null;
+  /** O código do motivo do ajuste (`cancelamento`, `correcao`, `exclusao`…). */
+  motivo?: string | null;
 }
 
 export interface CommissionSeller {
@@ -213,11 +274,13 @@ export interface CommissionSeller {
   name: string;
 }
 
-/** Os 3 KPIs do topo da tela de Comissões (feature 187). */
+/** Os KPIs do topo da tela de Comissões (feature 187; o "No banco" é da 306). */
 export interface CommissionKpis {
+  /** Pago + no banco + a pagar. */
   total_month: number;
   total_paid: number;
   total_pending: number;
+  total_no_banco?: number;
 }
 
 /** Uma linha agregada por vendedor — visão "Resumo por Vendedor" (feature 187). */
@@ -297,7 +360,7 @@ export function usePagarMesComissao() {
  * Invalida por prefixo de propósito: as chaves carregam mês/filtros, e o que mudou pode estar
  * em outro recorte (a liquidação alcança comissão de outro mês de venda).
  */
-function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClient>) {
+export function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClient>) {
   queryClient.invalidateQueries({ queryKey: ["financeiro-pagamentos"] });
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
   queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
@@ -313,7 +376,7 @@ export function exportComissoesCsv(rows: CommissionMonthSummaryRow[], month: str
       r.seller_name,
       String(r.sale_count),
       r.total_amount.toFixed(2).replace(".", ","),
-      r.month_status === "pago" ? "Pago" : "Pendente",
+      rotuloDoMesDaComissao(r.month_status),
     ]
       .map((cell) => `"${cell.replace(/"/g, '""')}"`)
       .join(";"),
@@ -359,6 +422,20 @@ export interface PagamentoItem {
   advance_amount?: number;
   advances?: SalaryAdvanceItem[];
   missing_data?: boolean;
+  /** As linhas do item de comissão (feature 306): o ajuste aparece ao lado da comissão que acerta. */
+  commission_lines?: CommissionLine[];
+}
+
+/** Uma linha de `CommissionPayment` dentro do item de comissão da Planilha (feature 306). */
+export interface CommissionLine {
+  id: number;
+  tipo: CommissionLineTipo;
+  event_id: number | null;
+  event_title: string;
+  amount: number;
+  /** `AAAA-MM`. */
+  ciclo: string | null;
+  status: CommissionStatus;
 }
 
 export interface PagamentoTotals {

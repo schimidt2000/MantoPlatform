@@ -7,7 +7,16 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (EM PRODUÇÃO desde 20/10/2026 ~09:15, a pedido do dono; sem migration — head
+> Última atualização: **2026-10-20** · **306-dinheiro-do-cancelamento** (EM PRODUÇÃO desde 20/10/2026 ~09:30; migration
+> **`c5d2f7a9e306`** — head: as tabelas `event_cancellations`, `event_cancellation_bvs` e
+> `event_cancellation_elenco`, §2.2; o ajuste e o `no_banco` das comissões, a categoria "Multa de
+> cancelamento" e a devolução de cancelado travada, §2.6; a cobrança desconta a devolução, §3.2;
+> `PATCH /api/events/<id>/devolucao`, `POST /api/events/<id>/multas`, o cancelar reescrito e o
+> cancelar do marcado liberado, §3.3; o retido na DRE, no Comercial e na Planilha, §3.6; Gastos
+> Extras, §3.7; o bloqueio `cancelamentos` na exclusão de usuário, §3.11; kinds `evento.cancelado`
+> e `evento.cancelado_escala`, §3.13.5; a regra única do cancelado, o gate e o 409 de cada porta e
+> os 18 códigos de 409, §4.3; a trava `CALENDAR_SUPPRESS_EVENT_WRITES` passa a cobrir a remoção do
+> Google no cancelamento, §2.4.1 e §5.4). Antes: **2026-10-20** · **309-produtos-de-tabela** (EM PRODUÇÃO desde 20/10/2026 ~09:15, a pedido do dono; sem migration — head
 > continua `a7c3e91f4d28`; blocos `produtos` e `produtos_estimativa` no `pricing_config` e "Papai Noel"/
 > "Ajudante do Noel" de volta a 600/270, §2.10; `produtos` no payload, `quote` e `snapshot` de
 > `/orcamento/calcular`, validação do bloco em `/orcamento/settings`, teto das vagas do produto no
@@ -226,7 +235,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e de **toda** métrica, mas o registro fica porque é a ele que a devolução ao cliente se refere; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender), **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender), **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -236,6 +245,9 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | `event_acrescimos` | `EventAcrescimo` | acréscimos tipados (`BV`, `Taxa de urgência`, `Outro`…) | `event_id` |
 | `event_clients` | `EventClient` | múltiplos clientes por evento com tipo de relação (`Contratante`, `Assessora`, `Mãe/Pai`, `Familiar`, `Outros`) | `event_id`, `client_id` |
 | `event_reimbursements` | `EventReimbursement` | reembolso de despesa da cliente | `event_id`, `created_by_id`, `collected_by_id` |
+| `event_cancellations` | `EventCancellation` | **Feature 306** — o dinheiro congelado no ato do cancelamento, **uma linha por evento** (`UNIQUE(event_id)`, a segunda barreira do clique duplo: estourar vira 409 `ja_cancelado`). `regime` (`venda`\|`satelite`\|`dia`\|`virtual`; cancelado **sem** linha é `legado`, o de antes do deploy, e esse valor nunca é gravado), `refund_mode` (`tudo`\|`parte`\|`nada`; nulo em `satelite` e `virtual`), `sale_value`, `commission_full`, `commission_rate` (`Numeric(6,3)`), `commission_cost` (a base de custo da comissão EducaManto no ato), `commission_seller_id` (o beneficiário) e `seller_id`, `with_invoice`, `retained_tax` (NULL = não se aplica), `sale_handed_over` (o antigo 1º dia que passou a venda), `sale_value_before`/`_after` e `sale_value_gross_before`/`_after` (a venda do principal antes e depois do corte, no `dia`), `created_at`/`updated_at` em `now_sp()`, `updated_by_id`. Só a `venda` congela comissão e BV; **pago e devolvido não ficam aqui**: são lidos ao vivo, do grupo, por consulta (`cancel_ops.ids_do_grupo`), porque o Superadmin ainda corrige comprovantes e devolução. Regimes e modos em `app/constants.py` (`REGIME_*`, `MODO_*`); só `cancel_ops` escreve. Índice `ix_event_cancellations_group_leader_id` | `event_id`→`calendar_events` (**CASCADE**), `group_leader_id`→`calendar_events` (**SET NULL**; o principal, no `satelite` e no `dia`), `commission_seller_id`/`seller_id`→`users` (**sem `ondelete`**: bloqueiam a exclusão do usuário, §3.11), `updated_by_id`→`users` (SET NULL) |
+| `event_cancellation_bvs` | `EventCancellationBv` | **Feature 306** — cada BV do evento no ato: `original_amount` (o BV cheio, `amount_brl` no ato), `recipient`, `pix`, `paid_at_cancellation` (já estava pago ou no banco, lido sob a trava) e `paid_amount` (o valor que conta enquanto o BV está pago ou no banco; só `cancel_ops.marcar_status_do_bv` escreve, e ele volta a NULL no desfazer). `UNIQUE(acrescimo_id)`; linha com `acrescimo_id` NULL é órfã e nenhum leitor a soma. Índice em `cancellation_id` | `cancellation_id`→`event_cancellations` (**CASCADE**), `acrescimo_id`→`event_acrescimos` (SET NULL) |
+| `event_cancellation_elenco` | `EventCancellationElenco` | **Feature 306** — a lista do elenco do ato, para a multa: **uma linha por escalação** (vaga × dia), sem a vaga recusada e sem a de presença (`cancel_ops.elenco_do_ato`). `character_name`, `cache_reference` (só referência: nunca entra em custo, DRE nem multa). A linha nunca é apagada por mudança na escala; "na vaga" = `role_id` não nulo com o mesmo talento. No "todos", as linhas de todos os dias moram no congelado do principal; no corte e na passagem, no do dia; a Loja Virtual não tem lista. `UNIQUE(special_expense_id)` (uma multa por linha); índices em `cancellation_id`, `talent_id`, `role_id` e `day_event_id` | `cancellation_id`→`event_cancellations` (**CASCADE**), `talent_id`→`talents` (**sem `ondelete`**: artista com multa não some), `role_id`→`event_roles` (SET NULL), `day_event_id`→`calendar_events` (**CASCADE**, NOT NULL), `special_expense_id`→`special_expenses` (SET NULL) |
 | `event_logs` | `EventLog` | trilha por evento (`actor_name`, `actor_role`, `message`) | `event_id` |
 | `ensaio_materials` | `EnsaioMaterial` | materiais de ensaio (upload/link) | `event_id`, `user_id` |
 | `audit_logs` | `AuditLog` | trilha global de auditoria (usada por `app.utils.audit`) | — |
@@ -247,6 +259,13 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 - `parent_event_id` = vínculo **Ensaio → evento pai**.
 - `group_leader_id` = **agrupamento comercial** (evento satélite → evento principal). São coisas
   distintas — nunca reutilizar um pelo outro.
+  Desde a **306** o principal pode mudar: cancelar só o 1º dia passa a venda ao dia vivo mais cedo
+  (`group_ops.passar_venda`), e o antigo 1º dia, cancelado, vira dia do novo principal. O dia
+  cancelado continua no grupo (não se desagrupa nem se solta).
+- `cancelamento` (backref de `EventCancellation`, `uselist=False`) = o dinheiro congelado no ato
+  (feature 306); `None` no evento vivo e no cancelado `legado`. ⚠️ `EventCancellation` tem duas FKs
+  para `calendar_events` e três para `users`: toda relação declara `foreign_keys=`, senão o
+  `configure_mappers` levanta `AmbiguousForeignKeysError` e o `create_app()` não sobe.
 - `is_educamanto` (property) = título começa com `(EDU` (`EDUCAMANTO_TITLE_PREFIX`).
 - `event_requires_client(event)` (em `app/constants.py`): eventos com início ≥ **2026-06-29**
   (`CLIENT_REQUIRED_FROM`) exigem cliente para salvar a venda; anteriores são grandfathered.
@@ -419,7 +438,9 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
   de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo. A
   trava irmã da feature 303, **`CALENDAR_SUPPRESS_EVENT_WRITES`**
   (`config._suppress_calendar_event_writes`; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`), cobre
-  **só** a devolução de evento marcado ao Google — ver §5.4.
+  **só** duas escritas: a devolução de evento marcado ao Google e, desde a feature 306, a remoção
+  do Google no cancelamento (os dias e os ensaios do ato, `cancel_ops._remover_do_google`;
+  travada, o ato cancela no sistema e só avisa na tela) — ver §5.4.
 - **O fluxo depende do tipo** (225b): `FIGURINO_PROD_FLUXOS` define a ordem por `kind` e
   `producao_ops._transicoes_do_fluxo` **deriva** as transições dela — nunca escrever duas
   tabelas. Manutenção pula `aprovado`; nem SUPERADMIN consegue aprovar uma.
@@ -475,11 +496,11 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `commission_payments` | `CommissionPayment` | `event_title` (**cópia**, sobrevive à exclusão do evento), `sale_date`, `payable_from` (EducaManto: só entra no ciclo após a realização), `amount` (`Numeric(12,2)`, **pode ser negativo = estorno**), `status` (`a_pagar`\|`pago`\|`cancelado`), `paid_at`, `notes`. Índices em `seller_id`, `event_id`, `status` | `event_id`→`calendar_events` (nullable), `seller_id`→`users`, `original_id`→`commission_payments` (auto-referência do estorno) |
+| `commission_payments` | `CommissionPayment` | `event_title` (**cópia**, sobrevive à exclusão do evento), `sale_date`, `payable_from` (EducaManto: só entra no ciclo após a realização), `amount` (`Numeric(12,2)`, **pode ser negativo** = estorno ou ajuste), `status` (`a_pagar`\|`no_banco`\|`pago`\|`cancelado`), `paid_at`, `notes`. **Feature 306**: linha paga ou no banco nunca é reescrita; quando o valor devido muda depois dela (cancelamento com retido, correção da venda do cancelado, corte de dia, exclusão), nasce um **ajuste** — linha nova `a_pagar`, positiva ou negativa, com `original_id` na liquidada, `sale_date` = `payable_from` = o primeiro repasse aberto do beneficiário (`DIA_DO_REPASSE` = 5) e o motivo no prefixo de `notes` (`MOTIVOS_AJUSTE_COMISSAO`, `app/constants.py`). O ajuste continua ligado ao evento; só a exclusão deixa a linha sem evento (o estorno **órfão**). Índices em `seller_id`, `event_id`, `status` | `event_id`→`calendar_events` (nullable), `seller_id`→`users`, `original_id`→`commission_payments` (auto-referência do estorno e do ajuste) |
 | `salary_history` | `SalaryHistory` | `salary`, `payment_type` (`semanal`\|`quinzenal`\|`comissao`), `start_date`, `end_date` (`NULL` = vigente) | `user_id` |
 | `salary_payments` | `SalaryPayment` | `due_date`, `amount`, `payment_status`, `paid_at`, `month_ref` (`YYYY-MM`); **UNIQUE (`user_id`,`due_date`)**; `advance_amount`/`advance_proof` são legado migrado para `salary_advances` | `user_id`, `salary_history_id` |
 | `salary_advances` | `SalaryAdvance` | adiantamentos (N por pagamento) — reduzem o líquido a pagar, **não** o custo de salário do balanço | `salary_payment_id` |
-| `special_expenses` | `SpecialExpense` | gastos extras com fluxo de aprovação e reembolso a funcionário | `created_by_id`, `approved_by_id`, `reimburse_user_id`, `event_id` |
+| `special_expenses` | `SpecialExpense` | gastos extras com fluxo de aprovação e reembolso a funcionário. `CATEGORIES`: Figurino, Escritório, Marketing, Manutenção, **Devolução a cliente** (224, `CATEGORY_DEVOLUCAO`), **Multa de cancelamento** (306, `CATEGORY_MULTA_CANCELAMENTO`) e Outros — categoria fora da lista vira "Outros" na primeira edição em Gastos Extras. `disbursement_type` ∈ `reembolso`\|`fornecedor`\|`cliente`. **Feature 306**: a devolução e a multa do cancelamento nascem **aprovadas** pelo `cancel_ops`, nunca por `create_expense`. A devolução se reconhece pela categoria, pelo evento e pela aprovação (`cancel_ops.filtro_devolucao`), não pelo `disbursement_type`; a de evento cancelado sai dos gastos extras da DRE (já está descontada no retido) e fica **travada** em Gastos Extras (§3.7). A multa é uma por escalação, `fornecedor`, a pagar ao artista (nome e `Talent.pix_key`), ligada ao dia, e conta como gasto do mês da `expense_date` (o dia do ato, ou o do lançamento depois dele) | `created_by_id`, `approved_by_id`, `reimburse_user_id`, `event_id` |
 | `recurring_expenses` | `RecurringExpense` | contas recorrentes | `created_by_id` |
 | `recurring_expense_entries` | `RecurringExpenseEntry` | parcelas geradas da conta recorrente | `recurring_id`, `filled_by_id` |
 
@@ -702,7 +723,10 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `{corte, pode_editar_venda, pending_payments[], cobrancas_resumo, sem_valor}`, montado por
 > `app/financeiro/cobranca_ops.py` — núcleo novo e puro, **fonte única da Home e da página do
 > evento**. O grupo é uma venda só: valor do principal, recebido de todos os eventos do grupo
-> (cancelados inclusive); vencimento = data combinada > 1ª parcela que o recebido não cobre > 2 dias
+> (cancelados inclusive; desde a **306** o saldo, a quitação, o sinal e a parcela descoberta contam o
+> recebido **menos** as devoluções à cliente aprovadas do grupo, que saem à parte em `devolvido` —
+> `pending_payments[]` e o `cobranca` do detalhe ganham a chave; o `recebido` mostrado continua o
+> bruto); vencimento = data combinada > 1ª parcela que o recebido não cobre > 2 dias
 > antes do 1º evento vivo e sem 🟧/🟠 (os dois últimos nunca antes da data da venda); folga de
 > centavos de R$ 1,00; sinal pendente só sem data combinada e sem cronograma. `pending_payments`
 > continua sendo a lista de cobranças, com as chaves antigas (bundle em cache) mais `cliente`,
@@ -723,6 +747,10 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | GET | `/api/events/<id>/casting-options` *(feature 215)* |
 | GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio)* |
 | POST | `/api/events/<id>/devolver-ao-google` *(feature 303 — só Superadmin; responde o detalhe + `devolucao_google: {resultado}`; erros com `codigo`)* |
+| POST | `/api/events/<id>/cancelar` *(feature 224; corpo, resposta e recusas reescritos na 306 — ver "Feature 306" abaixo)* |
+| GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado)* |
+| PATCH | `/api/events/<id>/devolucao` *(feature 306 — "Alterar devolução" do cancelado; só Superadmin real; responde `{ok, resumo}`)* |
+| POST | `/api/events/<id>/multas` *(feature 306 — multa ao elenco depois do ato; só Superadmin real; responde `{ok, resumo, gastos}`)* |
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
@@ -824,13 +852,73 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > confirmada → **409** "Este evento não está mais no Google Agenda. Nada foi alterado." (marcado ou
 > não; nada é tocado), sem resposta → 502 como antes, presente e marcado → a marca sai (histórico
 > com quem clicou) e sincroniza. `PATCH /api/events/<id>` e `…/basico` de evento marcado não
-> escrevem no Google e nunca dão 409 por isso. `POST …/cancelar` e `DELETE /api/events/<id>` de
-> evento marcado → **409** `codigo: "sumiu_do_google"` (a recusa mora em `cancelar_evento` e
-> `_delete_event_flow`; a rota Jinja `POST /events/<id>/delete` recusa pela mesma regra). Toda
+> escrevem no Google e nunca dão 409 por isso. `DELETE /api/events/<id>` de
+> evento marcado → **409** `codigo: "sumiu_do_google"` (a recusa mora em `_delete_event_flow`; a
+> rota Jinja `POST /events/<id>/delete` recusa pela mesma regra). **Corrigido na 306**: o
+> `POST …/cancelar` de evento marcado deixou de dar 409 — o ato tira a marca
+> (`sumico_ops.desmarcar`, motivo `MOTIVO_CANCELADO`, que dá o aviso do sino como lido) antes de
+> gravar `cancelled_at`, e não tenta remover do Google o dia marcado, que já não está lá; o impacto
+> responde `acao: "cancelar"` para todo marcado. A mensagem do `DELETE` passou a oferecer as duas
+> saídas: devolver ao Google Agenda ou cancelar. Toda
 > exclusão passa a limpar o histórico do ensaio-filho e os avisos do sino do evento. Resumo da
 > agenda (mês, dia, busca): `situacao?` (`cancelado` > `sumiu_do_google` > `exclusao_solicitada`)
 > e `situacao_desde?`. Detalhe: `event.situacao?`, `event.sumiu_do_google?: {desde}` (só marcado e
 > não cancelado) e `event.google_html_link` nulo em evento marcado ou cancelado.
+>
+> **Feature 306 — o dinheiro do cancelamento.** Contrato completo, com o corpo, a resposta e a
+> ordem das recusas de cada porta: `specs/306-dinheiro-do-cancelamento/contracts/api.md`. Gate e
+> 409 de cada porta, e os 18 códigos: §4.3. O que muda aqui:
+> - **`POST /api/events/<id>/cancelar`**: corpo `{motivo, devolucao: {modo, valor?, nome?, pix?,
+>   observacao?}, imposto_retido?, bvs?: [{acrescimo_id, recebedor, pix}], multas?: [{role_id,
+>   valor, talent_id?}], alcance?, novo_principal_id?, venda_nova?, venda_esperada?}`, com `modo` em
+>   `tudo`, `parte` ou `nada`; sai `bv_negociado`, e o corpo antigo sem `modo` leva 400
+>   `devolucao_modo`. Resposta `{ok, resumo, aviso, google_removido, gasto_id, dias_cancelados,
+>   venda_passou_para, ensaios_cancelados, avisados: {email, ensaio, casting}}` (`google_removido` e
+>   `gasto_id` ficam um ciclo). Os 400 de campo saem todos de uma vez e **depois** da trava, porque
+>   dependem do pago, do regime e da nota relidos nela. O núcleo (`cancel_ops.cancelar_evento`)
+>   trava, grava e commita; o Google (os dias e os ensaios) e os e-mails ao elenco saem depois do
+>   commit. Grupo: no 1º dia, `alcance` escolhe entre `todos` (o principal em `venda`, os outros
+>   dias em `satelite`) e `so_este_dia` (a venda passa ao dia vivo mais cedo, `novo_principal_id`,
+>   com `venda_nova`); um dia que não é o 1º se cancela sozinho pelo corte (`dia`, com `venda_nova`:
+>   a venda do grupo diminui). Sai a 409 de líder. Venda da Loja Virtual é `virtual`, sem devolução
+>   nem multa.
+> - **`GET …/impacto-exclusao`** ganha `regime`, `sumiu_do_google`, `pago`, `ja_devolvido` e
+>   `max_devolucao` do **grupo** (`total_recebido` continua o do próprio evento), `com_nota`,
+>   `imposto_aliquota`, `bvs[]`, `comissao {beneficiario, cheia, paga, a_pagar}`, `grupo?`,
+>   `venda_do_grupo`, `ensaios[]`, `cache_pago`, `faltam_dias` e `comprovantes_sem_valor`; cada
+>   item de `elenco[]` (uma escalação, sem quem recusou e sem a vaga de presença) ganha `role_id`,
+>   `day_event_id`, `talent_id`, `talent_pix_informado` e `talent_email_informado`, com o PIX só
+>   para `show_financeiro`. Com `?devolucao=` (e `&venda_nova=`) é a **prévia**: a mesma conta da
+>   execução, sem trava e sem gravar, que responde só `{efeito}`. `devolucao_sugerida` e
+>   `is_group_leader` ficam um ciclo.
+> - **Detalhe** (`GET /api/events/<id>`): `event.cancelamento` (o `ResumoCancelado`,
+>   `cancel_ops.serializar_resumo_cancelado`) só com `show_comercial`; comissão, BVs, imposto,
+>   taxa e PIX só com `show_financeiro`; `limites_devolucao {piso, teto, atual, refaz_retido}` e
+>   `elenco[]` só com `flags.can_edit_venda_cancelado`. Flags novas `can_edit_venda_cancelado` e
+>   `can_edit_pagamentos` (`agenda_read.flags_do_detalhe`). No cancelado, `kpi` não sai, `bv_pix` só
+>   sai com a flag de correção e `venda.pode_mudar_taxa`/`pode_trocar_vendedor` exigem a flag; os
+>   `gastos` são os dos dias do ato (`cancel_ops.dias_dos_gastos`). No vivo, o KPI e os gastos
+>   contam só os dias vivos. Novos: `cobranca.devolvido` e `group.satellites[].cancelado`.
+> - **`PATCH …/devolucao`** `{devolucao_total, nome?, pix?, observacao?, imposto_retido?}` →
+>   `{ok, resumo}`: no `venda` e no `legado`, o novo total devolvido do grupo; no `dia`, o total
+>   daquele dia. **`POST …/multas`** `{multas: [{elenco_id, valor}]}` → `{ok, resumo, gastos}`: um
+>   Gasto Extra aprovado por escalação, com a data do lançamento; vazio ou 0 é ignorado, e nada com
+>   valor > 0 dá 400 `fields.multas`.
+> - **O Superadmin corrige o cancelado** e o retido, a comissão e o BV do retido se refazem na mesma
+>   transação: `PATCH …/comercial` (o gancho de comissão vira despachante —
+>   `cancel_ops.recongelar_do_comercial` no cancelado, `_sync_commission_payment` no vivo), `PUT
+>   …/acrescimos` (grava no lugar pelo `id`, `comercial_ops.alterar_acrescimos_do_cancelado`; lista
+>   não vazia sem nenhum `id` num evento com acréscimos → 400 "Recarregue a página"; BV novo em % →
+>   400) e os três comprovantes (`cancel_ops.gravar_comprovante_no_grupo`, que trava o grupo também
+>   no vivo e, no `POST`, recusa antes de salvar o arquivo). As três respondem o detalhe, com
+>   `event.cancelamento`.
+> - **Jinja gêmeo**: a tela antiga do evento recusa no cancelado, com aviso e para todo papel,
+>   `update_comercial`, `update_sale` e as ações de comprovante e de reembolso
+>   (`_ACOES_RECUSADAS_NO_CANCELADO`, `app/calendar/routes.py`); agrupar, desagrupar e excluir
+>   recusam o cancelado; na Planilha antiga, o BV passa por `marcar_status_do_bv` e a devolução de
+>   cancelado trava o evento; `set_commission_status` recusa linha de evento cancelado.
+> - **Escala**: no cancelado, tirar o artista da vaga não manda o e-mail de remoção
+>   (`casting_ops._manda_email_de_remocao`) — o ato já avisou o elenco. Vale para a API e o Jinja.
 
 ### 3.4 Talentos — `talents_read.py` / `talents_write.py`
 `GET /api/talents/directory`, `/api/talents/character-suggestions`, `/api/talents/<id>`,
@@ -886,6 +974,41 @@ o pedido foi salvo.
 | POST | `/api/financeiro/pagamentos/set-status`, `/bulk-action` | Status válidos: **`nao_pago` \| `pago` \| `no_banco`** (`_VALID_PAYMENT_STATUS`) — não existem `pendente`/`agendado`. **Feature 199**: os 3 status valem para TODOS os tipos de item (`cache`/`salary`/`expense`/`bv`/`commission`/`recurring`), inclusive `bulk-action`; `_build_commission_items`/`_build_recurring_items` (`app/financeiro/routes.py`) passaram a incluir `no_banco` no filtro de leitura — antes esses itens sumiam da planilha ao virar `no_banco` |
 | POST | `/api/financeiro/pagamentos/salary/<sp_id>/advance`, `/salary/advance/<adv_id>/delete` | |
 | GET | `/api/financeiro/pagamentos/export` | CSV |
+
+**Feature 306 — o cancelado nos relatórios e na Planilha** (gates sem mudança; contrato em
+`specs/306-dinheiro-do-cancelamento/contracts/api.md` §17–§19). O cancelado sai das métricas do
+mês do evento, e o **retido** (pago − devolvido do grupo; só `venda` e `legado` com dinheiro) entra
+pelo **mês do cancelamento**, por uma fonte só: `cancel_ops.cancelados_do_periodo`.
+- `GET /api/financeiro/dashboard`: `dre.{realizado,projetado,total}.retido_cancelamentos` e
+  `.n_cancelados` sempre (o retido entra no Realizado e no Total, nunca no Projetado);
+  `paineis.cancelamentos` sempre (`{quantidade, pago, devolvido, devolucao_a_pagar, retido,
+  comissao_retido, bv_retido, imposto, efeito_resultado, itens[]}`); a barra "Retido de
+  cancelamentos" em `receita_por_tipo` (`dre_ops.ROTULO_RETIDO`); `monthly_trend[].retido?`,
+  `top_sellers[].retido?` e `notas_fiscais[].cancelado?`/`retido?`. Os gastos extras do período e a
+  tendência saem de `app/financeiro/dre_ops.py`, a mesma fonte do Jinja, **sem** a devolução de
+  evento cancelado (já está no retido).
+- `GET /api/vendas/pipeline`: `kpis.retido_cancelamentos?`, `n_cancelados?` e `comissao_retido?`; o
+  retido entra em `total_vendido` do vendedor congelado e a comissão do retido em
+  `comissao_prevista` do beneficiário congelado.
+- `GET /api/financeiro/comissoes`: `status` pode ser `no_banco` ("No banco"); cada linha ganha
+  `tipo?` (`comissao`, `ajuste` ou `estorno`), `original_id?`, `evento_cancelado?`, `ciclo?` e
+  `motivo?` (o código lido do prefixo da nota, `MOTIVOS_AJUSTE_COMISSAO`); `kpis.total_no_banco?`
+  (`total_month` = pago + no banco + a pagar); quem só tem `no_banco` aparece em `by_seller`.
+- `GET /api/financeiro/pagamentos`: o item `bv` sai com `amount = cancel_ops.bv_da_planilha` (no
+  cancelado, o BV do retido) e some quando ele é `None`; o item `commission` ganha
+  `commission_lines?` (`{id, tipo, event_id, event_title, amount, ciclo, status}`).
+- `POST /api/financeiro/pagamentos/set-status`: o `bv` passa por `cancel_ops.marcar_status_do_bv`, a
+  função única das duas Planilhas — trava o evento e o acréscimo, compara `valor_esperado` com
+  `bv_da_planilha` (409 `valor_mudou`, com `atual`; 409 `bv_nao_esta_a_pagar`) e guarda o valor pago
+  em `event_cancellation_bvs.paid_amount`. O `expense` que é devolução de cancelado passa por
+  `cancel_ops.marcar_status_da_devolucao`: trava o evento e o gasto e confere `valor_esperado` (409
+  `valor_mudou`). A tela manda `valor_esperado` no BV e na devolução; `bulk-action` segue sem
+  conferência de valor (`docs/05`).
+- `GET /api/admin/desempenho` (rota em §3.11): o cancelado sai do mês do evento; entram
+  `vendas[].retido?`, `vendas[].cancelados?` e `totals.retido?`, pelo nome do vendedor congelado.
+  `GET /api/clientes/<id>`: `total_sales` inclui o retido, `event_count` não conta cancelado e cada
+  item de `events[]` ganha `cancelado`; "Com evento" e "Recorrentes" (`/metricas`) e a lista não
+  contam cancelado. `GET /api/dashboard`: a Performance ignora o cancelado.
 
 **Agente auditor financeiro — `audit_agent.py` (feature 221).** Endpoints para o auditor
 semanal que roda FORA do servidor (Claude Code na máquina do dono): `GET
@@ -944,6 +1067,20 @@ Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 recorrentes: `POST /api/gastos/recorrentes` (+ `/<id>/toggle`, `/preencher`, `/pular`),
 `PATCH|DELETE /api/gastos/recorrentes/<id>`,
 `POST /api/gastos/recorrentes/entry/<id>/{pagar,reabrir}`, `DELETE .../entry/<id>`.
+
+**Feature 306 — a devolução de cancelado travada.** As seis portas de gasto avulso (`POST
+/api/gastos`, `…/aprovar`, `…/rejeitar`, `PATCH`, `DELETE` e `…/vincular-evento`) mantêm o gate e
+a ordem de hoje e, depois deles, travam o evento da devolução (no vínculo trocado, os dois, por id)
+e relêem o gasto. Devolução à cliente ligada a evento cancelado → **409** `codigo:
+"devolucao_travada"` (`gastos_ops.GastoLockedError`), com o `event_id` e, em `fields`, o campo que
+chegou diferente do gravado (`amount`, `expense_date`, `category` ou `event_id`; `status` no
+aprovar e no rejeitar; `id` no excluir): valor, data, categoria e vínculo só mudam pelo "Alterar
+devolução" (§3.3). Nome, PIX e descrição ficam livres, e `approved_with_edits` nunca acende. O
+caminho inverso também é 409: criar devolução ligada a evento cancelado, ou mudar a categoria ou o
+vínculo de um gasto para que vire uma. Criar com `disbursement_type: "cliente"`, ou converter para
+ele, → **400** `fields.disbursement_type` ("Devolução à cliente nasce pelo cancelamento do
+evento"). `GET /api/gastos` ganha `locked` e `event_cancelled` em cada gasto, e `categories` traz
+"Multa de cancelamento".
 
 **`GET /api/gastos/recorrentes` (payload, feature 189).** Além de `grupos`/`month_ref`/
 `is_current_month`/`type_labels`/`frequency_labels`/`alerts`, devolve `ref_year`, `ref_month`,
@@ -1015,6 +1152,11 @@ do histórico salarial; **só SUPERADMIN**, enquanto registrar salário é SUPER
 As duas devolvem `payments_resynced`: o núcleo (`user_ops._rechain_salary_history` +
 `_resync_salary_payments`) reencadeia os `end_date` e realinha os `SalaryPayment` **não pagos** ao
 valor corrigido, reatando só a FK dos já pagos e preservando os `SalaryAdvance`.
+
+`DELETE /api/admin/users/<id>` ganhou o bloqueio `cancelamentos` (feature 306): quem é vendedor ou
+beneficiário congelado de um cancelamento (`event_cancellations.seller_id`/`commission_seller_id`,
+FKs sem `ondelete`) não se exclui. Mesmo status e formato dos outros bloqueios: `400 {error:
+{message, blockers}}` (`user_ops.UserDeletionBlockedError`).
 
 `admin_config_read/write.py`: `GET /api/admin/settings`, `/logs`, `/desempenho`, `/sync-status`,
 `/migrar-arquivos/status`, `/importar-catalogo/status` · `PATCH /api/admin/settings` ·
@@ -1428,6 +1570,22 @@ transação da marca; `dedupe_key` com o carimbo da marca (um aviso por sumiço,
 de novo). Toda saída da marca dá o aviso como lido para todos; a exclusão do evento apaga os avisos
 dele (`_delete_event`).
 
+Produtores da feature 306, chamados pelo ato do cancelamento (`cancel_ops._avisar_no_sino`) na
+transação do ato, com a `dedupe_key` pronta (`cancel_ops._chave_do_sino`, sempre pelo evento da URL:
+dois atos no mesmo grupo dão dois avisos) — o `notificacoes_ops` não importa o cancelamento. Nenhum
+dos dois avisa o Superadmin, que é quem cancela:
+- `notificar_evento_cancelado` (kind `evento.cancelado`, ENSAIO, `info`, entidade
+  `calendar_event`): só quando algum dia cancelado tinha ensaio; um por pessoa por ato, com os
+  ensaios que caíram no corpo e link para o evento; chave `evento.cancelado:<id da URL>`.
+- `notificar_cancelamento_na_escala` (kind `evento.cancelado_escala`, CASTING): um por dia
+  cancelado com escalados, contando pessoas e não vagas ("tire o artista da escala e avise cada um
+  pelo WhatsApp"); `urgent` quando o dia é em até 7 dias, como a recusa de convite; link para a aba
+  Produção do dia (`/events/<dia>?aba=producao`); chave `evento.cancelado_escala:<id da URL>:<dia>`.
+
+Os ensaios que o ato apaga levam junto os avisos do sino deles (`event_ops._apagar_ensaio_no_banco`,
+o mesmo caminho do botão e da troca de tipo). O e-mail de remoção ao elenco, um por talento com
+e-mail, sai depois do commit.
+
 **Feature 298**: formulário que ganha destino (ligado a evento por qualquer caminho, ou encerrado)
 tem os avisos marcados como lidos **para todos** (`notificacoes_ops.marcar_lidas_por_entidade`, sem
 filtro de usuário, na transação do fato); reabrir não reacende; formulário que já chega ligado não
@@ -1718,7 +1876,8 @@ Gates por módulo (todos em `app/api/`):
 | `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
-| `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar, recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404 | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
+| `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação, `GET /api/events/cancelamentos` e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
+| `cancel_ops.pode_editar_venda_do_cancelado(user)` — **a regra única do cancelado** (feature 306) | gate de `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, depois do 404 (os demais → 403); nas portas de dinheiro do evento, a recusa **depois** do gate de hoje — quem passa nele e não passa na regra leva **409 `codigo: "cancelado"`** (`EventoCanceladoError`), em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê antes de decidir. Porta a porta em "RBAC do evento cancelado", abaixo | `SUPERADMIN` pelo **papel real** (`user.roles`; o "Ver como" não conta) — a régua de `_can_delete()` e `_is_superadmin()` |
 | `_ve_faixa_sumidos()` | `agenda.py`, `GET /api/events/sumidos-google` (feature 303) | `SUPERADMIN` ou `COMERCIAL` pelo **papel efetivo** (respeita o "Ver como"); os demais recebem **200** com `pode_ver: false` e a lista vazia — nunca 403 |
 | — (sem gate de papel) | `POST /api/events/<id>/sync` | qualquer usuário interno logado, como sempre; desde a 303 ele confere o evento no Google antes de mexer e pode **retirar a marca** "Sumiu do Google Agenda" de um evento que voltou |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
@@ -1752,6 +1911,72 @@ Gates por módulo (todos em `app/api/`):
 > `api_login_required` (a maioria por design — leitura aberta a staff autenticado, ou RBAC por posse
 > do recurso). A intenção está declarada na **docstring de topo do módulo**, não na view. E o nome do
 > gate pode mentir: veja as duas linhas de `_require_vendas` acima.
+
+#### RBAC do evento cancelado (feature 306)
+
+Nenhum papel novo. Cada porta mantém o gate de hoje e a ordem de hoje (401 → 404 → 403); a regra
+única do cancelado (`pode_editar_venda_do_cancelado`, na tabela acima; a regra em `docs/00` §4)
+entra **depois** do gate. Onde a porta não recongela o cancelado, o 409 `cancelado` vale **para
+todos os papéis, o Superadmin inclusive**. Toda recusa sai pelo envelope de `json_error` com
+`codigo` e os extras do caso (`fields`, `dias`, `max_devolucao`, `piso`, `teto`, `pago`,
+`devolvido`, `atual`, `event_id`, `novo_principal`, `venda_do_grupo`); a tela lê pela união
+`CodigoRecusaCancelamento` (`lib/eventOps.ts`). Deadlock (40P01) nas portas que travam o grupo vira
+rollback e 409 `tente_de_novo` (`cancel_ops.traduzir_erro_de_banco`).
+
+| Porta | Gate (papéis) | No cancelado e 409 novos |
+|---|---|---|
+| `POST /api/events/<id>/cancelar` | `_can_delete()`: `SUPERADMIN` real, depois do 404 | Trava o grupo → `ja_cancelado` → `ensaio` → 400 `alcance` → `sem_outro_dia_vivo` → `grupo_mudou` → `cache_pago` (`dias`) → `devolucao_pendente` (`dias`) → 400 com todos os `fields` → `max_devolucao_mudou` (`max_devolucao`). O `UNIQUE(event_id)` que estoura vira `ja_cancelado`. Sai a 409 de líder de grupo, e o marcado deixa de ser recusado |
+| `GET /api/events/<id>/impacto-exclusao` | `_can_delete()`, sem mudança | Sem trava. Na prévia (`?devolucao=`): 400 `fields.devolucao` ou `fields.venda_nova`; evento já cancelado → `ja_cancelado` |
+| `PATCH /api/events/<id>/devolucao` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | 400 `devolucao_total` (falta ou não é número), antes da trava → trava → `nao_cancelado` → `regime_sem_retido` (`satelite`, `virtual`) → 400 com os `fields` → `abaixo_do_piso` (`piso`) → `acima_do_teto` (`teto`, só no `dia`) |
+| `POST /api/events/<id>/multas` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | Trava → `nao_cancelado` → 400 `fields.multas` ou `fields.multa_<elenco_id>` |
+| `GET /api/events/cancelamentos` | `_can_delete()`, sem mudança | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro` |
+| `GET /api/events/<id>` | sem mudança | Só contrato: `event.cancelamento` só com `show_comercial` (§3.3) |
+| `PATCH /api/events/<id>/comercial` | `_can_create_event()` (`COMERCIAL`, `SUPERADMIN`), sem mudança | Depois do 409 de satélite e antes do 400 de data e do 403 da 215b: Comercial → `cancelado`; o Financeiro segue fora do gate (403). O Superadmin grava e recongela; o evento que mudou de estado entre a leitura e a trava → `estado_mudou` |
+| `PATCH /api/events/<id>` ("Editar tudo") | `_can_create_event()`, sem mudança | Depois do 400 de validação: `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` ou `with_invoice` **diferente** do gravado → `cancelado` **para todos, o Superadmin inclusive** (a porta não recongela; `event_ops.venda_mudaria`). Campo igual ao gravado passa |
+| `PUT /api/events/<id>/acrescimos` | `_can_manage_sale()` (`COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`), sem mudança | Depois do 409 de satélite e antes do 400 `items`: Comercial e Financeiro → `cancelado`. O Superadmin grava no lugar e recongela; cancelado entre a leitura e a trava → `estado_mudou` |
+| `PUT /api/events/<id>/parcelas`; `POST`/`PATCH`/`DELETE /api/events/<id>/invoices[/<id>]` | `_can_manage_sale()`, sem mudança | Trava o evento e relê: Comercial e Financeiro → `cancelado`; Casting e Figurino seguem no 403. O congelado não muda |
+| `PATCH /api/events/<id>/orcamento` | `_can_manage_sale()`, sem mudança | Depois do 409 de satélite: `cancelado` **para todos os que passam no gate, o Superadmin inclusive** ("O orçamento de um evento cancelado não se aplica nem se troca."), antes do 400 do corpo, da autoria da 301 e da B8 |
+| `POST /api/events/<id>/payments` | `_can_edit_event()` (`CASTING`, `FIGURINO`, `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`), sem mudança | Trava o grupo (também no vivo) e relê: quem não é Superadmin real → `cancelado`, **antes** de salvar o arquivo; `grupo_mudou` (o arquivo novo é removido) |
+| `PATCH`/`DELETE /api/payments/<id>` | `_is_superadmin()`, sem mudança | O Superadmin grava, e o principal cancelado em `venda` se refaz pelo pago do grupo; pago do grupo abaixo do devolvido → `pago_abaixo_do_devolvido` (`pago`, `devolvido`); `grupo_mudou` |
+| `POST /api/events/<id>/reimbursements`, `POST /api/reimbursements/<id>/collect` | `_can_edit_event()`, sem mudança | Trava o evento e relê: quem não é Superadmin real → `cancelado` (no `collect`, antes do 400 "já cobrado"). `DELETE /api/reimbursements/<id>` (`_is_superadmin()`) não muda |
+| `DELETE /api/events/<id>` | `_can_delete()`, sem mudança | `cancelado` antes do "use o cancelamento": o cancelado não se exclui; o núcleo relê sob trava e recusa de novo |
+| `POST`/`DELETE /api/events/<id>/grupo`, `DELETE /api/events/<leader>/grupo/satelites/<sat>` | `_can_group()` (`COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`), sem mudança | Agrupar cancelado, desagrupar ou soltar dia cancelado → `cancelado` para todos (soltar pela tela do principal virava 500); no desagrupar e no soltar, o principal que mudou entre a leitura e a trava → `grupo_mudou` |
+| Gastos Extras: `POST /api/gastos`, `…/aprovar`, `…/rejeitar`, `PATCH`/`DELETE /api/gastos/<id>`, `…/vincular-evento` | os de hoje (`POST` sem gate de papel; `DELETE` para Financeiro ou o dono do gasto pendente; os demais `_require_financeiro()`) | Devolução de evento cancelado → `devolucao_travada` (`fields`, `event_id`); `disbursement_type: "cliente"` novo → 400. Ver §3.7 |
+| `POST /api/financeiro/pagamentos/set-status` | `_require_financeiro()` (`FINANCEIRO`, `SUPERADMIN`), sem mudança | BV → `bv_nao_esta_a_pagar` ou `valor_mudou` (`atual`); devolução de cancelado → `valor_mudou`. Ver §3.6 |
+| `POST /api/roles/<id>/assign` | `_can_edit_event()`, sem mudança | No cancelado, tirar da vaga não manda e-mail de remoção |
+| `DELETE /api/admin/users/<id>` | sem mudança | Bloqueio novo `cancelamentos` (400, §3.11) |
+| `GET /api/financeiro/dashboard`, `/api/financeiro/comissoes`, `/api/financeiro/pagamentos`, `/api/vendas/pipeline`, `/api/admin/desempenho`, `/api/clientes*`, `/api/dashboard`, `/api/notificacoes` | sem mudança | Só contrato (§3.2, §3.6, §3.13.5) |
+
+O Jinja não recongela: a tela antiga do evento recusa no cancelado as ações de dinheiro para todo
+papel, o Superadmin inclusive (§3.3).
+
+**Os 18 códigos de 409** (`CODIGOS_RECUSA_DO_CANCELAMENTO`, `app/constants.py`; nenhuma view
+escreve o texto do código à mão):
+
+| `codigo` | Onde nasce |
+|---|---|
+| `cancelado` | a regra única nas portas acima; para todos em `PATCH /api/events/<id>`, orçamento, exclusão e grupo |
+| `ja_cancelado` | `POST …/cancelar` (inclusive o `UNIQUE` que estoura) e a prévia do impacto |
+| `ensaio` | `POST …/cancelar` num evento do tipo Ensaio |
+| `grupo_mudou` | `POST …/cancelar` (a composição relida na trava mudou; `novo_principal_id` que já não é o dia vivo mais cedo, com `novo_principal`; a venda do grupo mudou desde que o diálogo abriu, com `venda_do_grupo`); `PATCH …/devolucao`, `POST …/multas` e comprovantes (a trava do grupo); desagrupar e soltar dia |
+| `sem_outro_dia_vivo` | `POST …/cancelar` com `"so_este_dia"` num principal sem outro dia vivo |
+| `cache_pago` | `POST …/cancelar`, com `dias` (os dias alcançados com cachê pago ou no banco) |
+| `devolucao_pendente` | `POST …/cancelar`, com `dias` (a pendente de qualquer dia do grupo) |
+| `max_devolucao_mudou` | `POST …/cancelar` com "tudo" divergente do máximo relido, com `max_devolucao` |
+| `tente_de_novo` | deadlock residual em `…/cancelar`, `…/devolucao`, `…/multas`, `…/comercial`, `…/acrescimos` e nos três comprovantes |
+| `nao_cancelado` | `PATCH …/devolucao` e `POST …/multas` em evento vivo |
+| `regime_sem_retido` | `PATCH …/devolucao` em `satelite` e `virtual` |
+| `abaixo_do_piso` | `PATCH …/devolucao`, com `piso` |
+| `acima_do_teto` | `PATCH …/devolucao` no `dia`, com `teto` |
+| `pago_abaixo_do_devolvido` | editar ou excluir comprovante, com `pago` e `devolvido` |
+| `bv_nao_esta_a_pagar` | set-status do BV |
+| `valor_mudou` | set-status do BV e da devolução de cancelado, com `atual` |
+| `devolucao_travada` | as seis portas de Gastos Extras, com `fields` e `event_id` |
+| `estado_mudou` | `PATCH …/comercial` e `PUT …/acrescimos`, quando o evento muda de estado entre a leitura e a trava |
+
+⚠️ `"cancelado"` (`CODIGO_EVENTO_CANCELADO`) tem homônimos de outros fluxos —
+`sumico_ops.CODIGO_CANCELADO` (recusa da devolução ao Google), `SITUACAO_CANCELADO` e
+`MOTIVO_FORA_CANCELADO`: nunca compare um com o outro.
 
 #### RBAC de arquivo — `/uploads/<path>` e `/portal/photo/<path>` (feature 216)
 
@@ -2053,7 +2278,7 @@ trade-offs herdados, documentados acima.
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar, excluir e cancelar evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
+| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google (303) e a remoção do Google no cancelamento (306; travada, o ato cancela no sistema e avisa na tela) — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar e excluir evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
 | Frontend portal | `cd frontend && npm run dev:portal` |

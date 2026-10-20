@@ -177,7 +177,13 @@ export function ClientDetailPage() {
             </CardHeader>
             <CardContent>
               <p className="mb-2 text-sm text-muted">
-                {query.data.event_count} evento(s) · total vendido:{" "}
+                {query.data.event_count} evento(s)
+                {(() => {
+                  // Feature 306: o cancelado fica na lista (histórico), marcado, e fora da contagem.
+                  const cancelados = query.data.events.filter((e) => e.cancelado).length;
+                  return cancelados > 0 ? ` · ${cancelados} cancelado(s)` : "";
+                })()}{" "}
+                · total vendido:{" "}
                 <span className="tabular-nums text-ink">
                   R$ {formatBRL(query.data.total_sales)}
                 </span>
@@ -193,9 +199,17 @@ export function ClientDetailPage() {
                     >
                       <div>
                         <span className="text-muted">{formatDate(e.start_at)}</span>{" "}
-                        <Link to={`/events/${e.id}`} className="text-ink hover:underline">
+                        <Link
+                          to={`/events/${e.id}`}
+                          className={e.cancelado ? "text-muted hover:underline" : "text-ink hover:underline"}
+                        >
                           {e.title}
                         </Link>
+                        {e.cancelado && (
+                          <span className="ml-2 rounded-md bg-red-soft px-1.5 py-0.5 text-xs text-red">
+                            cancelado
+                          </span>
+                        )}
                       </div>
                       <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
                         {e.relation}

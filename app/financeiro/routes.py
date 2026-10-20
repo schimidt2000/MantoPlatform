@@ -203,12 +203,19 @@ def _salary_cost(start_date: date, end_date: date, is_full_month: bool) -> Decim
 
 
 def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
-                 gastos_recorrentes: Decimal = Decimal("0")) -> dict:
+                 gastos_recorrentes: Decimal = Decimal("0"), cancelamentos: dict | None = None) -> dict:
     """Cascata da DRE Gerencial para um conjunto de eventos.
 
     Isola permutas/cortesias: o cachê delas não entra no CPV (não distorce a margem),
     entra como Custo de Marketing. Impostos só sobre eventos com nota (with_invoice).
+
+    Feature 306 (FR-041): `cancelamentos` (os totais de `cancel_ops.totais_cancelamentos` do
+    período, pelo mês do cancelamento) soma o retido na receita, o imposto informado nos impostos,
+    o BV que conta no CPV e a comissão do retido nas comissões. A condição é a **quantidade**, não
+    o valor: somar `Decimal("0.00")` muda o expoente e a DRE de um mês sem cancelado deixaria de
+    sair idêntica à de hoje. `retido_cancelamentos` e `n_cancelados` saem sempre.
     """
+    houve = bool(cancelamentos and cancelamentos["quantidade"])
     tax_rate = _get_tax_rate(settings)
     # Satélites não entram como linha própria: seu cachê é somado ao grupo via _group_cost
     # no evento principal (FR-010/FR-011) — evita contar a venda do grupo mais de uma vez.
@@ -216,19 +223,28 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
     permutas = [e for e in events if _is_permuta(e)]
 
     receita_bruta = sum((Decimal(e.sale_value or 0) for e in normais), Decimal("0"))
+    if houve:
+        receita_bruta += cancelamentos["retido"]
     impostos = sum(
         (Decimal(e.sale_value or 0) * tax_rate / Decimal("100") for e in normais if e.with_invoice),
         Decimal("0"),
     ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    if houve:
+        # O imposto do cancelado é o informado no ato (D32), nunca alíquota × retido.
+        impostos += cancelamentos["imposto"]
     receita_liquida = receita_bruta - impostos
 
     # BV é repasse a terceiros: entra como custo (não é lucro da Manto) — feature 099.
     bv_total = sum((_event_bv_total(e) for e in normais), Decimal("0"))
     cpv = Decimal(sum(_group_cost(e) for e in normais)) + bv_total
+    if houve:
+        cpv += cancelamentos["bv_retido"]
     lucro_bruto = receita_liquida - cpv
 
     marketing = Decimal(sum(_event_cost(e) for e in permutas))
     comissoes = sum((_event_commission(e, settings) for e in normais), Decimal("0"))
+    if houve:
+        comissoes += cancelamentos["comissao_retido"]
     pessoal = Decimal(salary_cost)
     ebitda = lucro_bruto - marketing - comissoes - pessoal
 
@@ -254,6 +270,8 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
         "n_eventos": len(events),
         "n_normais": len(normais),
         "n_permutas": len(permutas),
+        "retido_cancelamentos": cancelamentos["retido"] if houve else Decimal("0"),
+        "n_cancelados": cancelamentos["quantidade"] if houve else 0,
     }
 
 
@@ -277,8 +295,9 @@ def dashboard():
             CalendarEvent.start_at >= start_dt,
             CalendarEvent.start_at <= end_dt,
             CalendarEvent.event_type != "ENSAIO",
-            # Espelha o filtro da API (`app/api/financeiro_read.py`): evento cancelado não
-            # entra na receita (feature 224).
+            # Espelha o filtro da API (`app/api/financeiro_read.py`): a venda do cancelado não
+            # entra na receita (feature 224); o retido dele entra pela linha própria, no mês do
+            # cancelamento (feature 306).
             CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(CalendarEvent.start_at.desc())
@@ -291,14 +310,15 @@ def dashboard():
 
     # ── Custos do período ─────────────────────────────────────────────────────
     salary_cost = _salary_cost(start_date, end_date, is_full_month)
-    gastos_extras = sum(
-        (Decimal(g.amount) for g in SpecialExpense.query.filter(
-            SpecialExpense.status == "aprovado",
-            SpecialExpense.expense_date >= start_date,
-            SpecialExpense.expense_date <= end_date,
-        ).all()),
-        Decimal("0"),
-    )
+    # Feature 306: a fonte única da API e daqui — sem a devolução do cancelado (já no retido).
+    from app.calendar import cancel_ops
+    from app.financeiro import dre_ops
+
+    gastos_extras = dre_ops.gastos_extras_do_periodo(start_date, end_date)
+    # O dinheiro dos cancelados do período, pelo mês do cancelamento (FR-041). Pelo módulo: a
+    # mutação do cenário 23 troca `totais_cancelamentos`.
+    cancelados = cancel_ops.cancelados_do_periodo(start_date, end_date)
+    cancelamentos = cancel_ops.totais_cancelamentos(cancelados)
 
     # Gastos recorrentes do período (feature 110): competência pelo mês de referência.
     from app.gastos.gastos_ops import ensure_recurring_entries
@@ -313,10 +333,15 @@ def dashboard():
     )
 
     # ── DRE Gerencial: realizado, projetado e total (consolidado do período) ──
-    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    # O cancelado já aconteceu: o retido entra no Realizado e no Total, nunca no Projetado.
+    drg_realizado = _compute_drg(
+        realizados, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
     # Projetado mostra só a contribuição operacional dos eventos futuros (sem custo fixo).
     drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
-    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    drg_total = _compute_drg(
+        events, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
 
     # ── KPIs (sobre o consolidado do período) ─────────────────────────────────
     # Apenas eventos normais (não-permuta) com venda contam para indicadores comerciais.
@@ -324,8 +349,10 @@ def dashboard():
         e for e in events
         if not _is_permuta(e) and not e.is_satellite and e.sale_value and e.sale_value > 0
     ]
+    # Feature 306: pela venda dos eventos com venda, não pela receita da DRE (que tem o retido).
+    receita_dos_eventos = sum((Decimal(e.sale_value or 0) for e in eventos_com_venda), Decimal("0"))
     ticket_medio = (
-        (drg_total["receita_bruta"] / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        (receita_dos_eventos / Decimal(len(eventos_com_venda))).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         if eventos_com_venda else Decimal("0")
     )
     ratio_custo_talento = _pct(drg_total["cpv"], drg_total["receita_liquida"])
@@ -375,6 +402,9 @@ def dashboard():
     receita_por_tipo = defaultdict(int)
     for e in eventos_com_venda:
         receita_por_tipo[e.event_type or "Outros"] += (e.sale_value or 0)
+    # Feature 306: o retido do período como barra própria, antes da ordenação e do máximo.
+    if cancelamentos["quantidade"] and cancelamentos["retido"]:
+        receita_por_tipo[dre_ops.ROTULO_RETIDO] += cancelamentos["retido"]
     receita_por_tipo = dict(sorted(receita_por_tipo.items(), key=lambda x: -x[1]))
     receita_tipo_max = max(receita_por_tipo.values()) if receita_por_tipo else 0
 
@@ -385,6 +415,11 @@ def dashboard():
         if e.seller_id:
             seller_revenue[e.seller_id] += (e.sale_value or 0)
             seller_margin[e.seller_id]  += (e.sale_value or 0) - _group_cost(e)
+    # Feature 306 (D33): o retido conta como venda do vendedor congelado — antes do corte do top 5.
+    for sid, retido in cancel_ops.retido_por_vendedor(cancelados).items():
+        if retido:
+            seller_revenue[sid] += retido
+            seller_margin[sid] += retido
     top_sellers = []
     for sid, rev in sorted(seller_revenue.items(), key=lambda x: -x[1])[:5]:
         u = User.query.get(sid)
@@ -392,27 +427,8 @@ def dashboard():
             top_sellers.append({"user": u, "receita": rev, "lucro": seller_margin[sid]})
 
     # ── Tendência mensal (últimos 6 meses, visão operacional pura) ───────────
-    monthly_trend = []
-    y, m = today.year, today.month
-    for _ in range(6):
-        s_dt, e_dt = _month_range(y, m)
-        evs = CalendarEvent.query.filter(
-            CalendarEvent.start_at >= s_dt,
-            CalendarEvent.start_at < e_dt,
-            CalendarEvent.event_type != "ENSAIO",
-        ).all()
-        normais = [e for e in evs if not _is_permuta(e) and not e.is_satellite]
-        rec = sum(e.sale_value or 0 for e in normais)
-        cst = sum(_group_cost(e) for e in normais)
-        monthly_trend.insert(0, {
-            "label": f"{m:02d}/{str(y)[2:]}",
-            "receita": rec,
-            "custo": cst,
-            "lucro": rec - cst,
-            "margem": _pct(rec - cst, rec),
-            "n_eventos": len(evs),
-        })
-        y, m = _prev_month(y, m)
+    # Feature 306: a fonte única da API e daqui (o cancelado sai; o retido entra no mês dele).
+    monthly_trend = dre_ops.tendencia_mensal(today)
 
     # ── Auditoria: eventos com receita zerada SEM flag de cortesia/permuta ────
     auditoria = [
@@ -470,6 +486,8 @@ def dashboard():
             EventInstallment.due_date >= start_date,
             EventInstallment.due_date <= end_date,
             EventInstallment.received.is_(False),
+            # Feature 306: a parcela de um cancelado não vai ser recebida.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(EventInstallment.due_date.asc())
         .all()
@@ -498,6 +516,9 @@ def dashboard():
             "id": inv.id, "date": inv.issue_date, "event_id": inv.event_id,
             "event_title": inv.event.title if inv.event else "—",
             "amount": inv.amount or 0,
+            # Feature 306: a nota de um cancelado continua a emitir (sobre o retido); o template
+            # põe o selo ao lado do título.
+            "cancelado": bool(inv.event and inv.event.is_cancelled),
         }
         for inv in _nf_pend
     ]
@@ -591,6 +612,18 @@ def nf_emitir(invoice_id: int):
 
     inv = EventInvoice.query.get_or_404(invoice_id)
     back = redirect(request.referrer or url_for("financeiro.dashboard"))
+
+    # Feature 306 (FR-047, FR-053; converge, T114): a regra única do cancelado também aqui — o
+    # Financeiro não emite nota de evento cancelado (a API já recusa); o Superadmin segue.
+    if inv.event is not None:
+        from app.calendar.cancel_ops import EventoCanceladoError, recusar_se_cancelado
+
+        try:
+            recusar_se_cancelado(inv.event, current_user)
+        except EventoCanceladoError as exc:
+            db.session.rollback()
+            flash(exc.message, "error")
+            return back
 
     # data de emissão (opcional) — usa a informada ou mantém a existente
     _draw = (request.form.get("issue_date", "") or "").strip()
@@ -875,8 +908,19 @@ def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
     """
     if now_dt is None:
         now_dt = datetime.now(TZ_SP).replace(tzinfo=None)
+    # Feature 306: o valor é o `bv_da_planilha` (o BV do retido no cancelado; `None` = some), com
+    # os resumos dos cancelados montados de uma vez.
+    from app.calendar.cancel_ops import bv_da_planilha, resumos_cancelados
+
+    bv_rows = list(bv_rows)
+    resumos = resumos_cancelados(
+        sorted({a.event.id for a in bv_rows if a.event is not None and a.event.is_cancelled})
+    )
     items = []
     for a in bv_rows:
+        valor = bv_da_planilha(a, resumos=resumos)
+        if valor is None:
+            continue
         ev = a.event
         ev_date = ev.start_at.date() if ev and ev.start_at else date.min
         ev_end = (ev.end_at or ev.start_at) if ev else None
@@ -891,7 +935,7 @@ def _build_bv_items(bv_rows, today: date, now_dt=None) -> list:
             "copy_label":  copy_label,
             "sublabel":    "BV (repasse)",
             "person_name": a.bv_recipient or "(sem recebedor)",
-            "amount":      a.amount_brl,
+            "amount":      valor,
             "pix_key":     (a.bv_pix or "").strip(),
             "pix_key_type": "",
             "status":      a.bv_payment_status or "nao_pago",
@@ -933,7 +977,26 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
     # mostra só o que falta. Antes era um item só, com a soma de tudo e o status "não pago"
     # quando misturado — no espelho, o item de maio dizia R$ 2.133,88 "Não pago" com R$ 1.996,38
     # já pagos, e o "Pago" do lote ia pagar de novo o que já tinha saído.
-    from app.financeiro.comissoes_ops import SUFIXO_ITEM_PAGO
+    from app.financeiro.comissoes_ops import (
+        SUFIXO_ITEM_PAGO,
+        ciclo_de_pagamento_da_linha,
+        tipo_da_linha,
+    )
+
+    def _linhas(grupo: list) -> list[dict]:
+        """As linhas do item (feature 306): o ajuste do cancelado e a comissão que ele acerta."""
+        return [
+            {
+                "id": c.id,
+                "tipo": tipo_da_linha(c)[0],
+                "event_id": c.event_id,
+                "event_title": c.event_title,
+                "amount": c.amount,
+                "ciclo": (lambda d: d.strftime("%Y-%m") if d else None)(ciclo_de_pagamento_da_linha(c)),
+                "status": c.status,
+            }
+            for c in sorted(grupo, key=lambda c: c.id)
+        ]
 
     period_tag = f"{period_start.year:04d}-{period_start.month:02d}"
     titulo = f"Comissões {period_start.month:02d}/{period_start.year}"
@@ -949,7 +1012,9 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
             (pagas, f"{seller_id}:{period_tag}:{SUFIXO_ITEM_PAGO}", " — pago"),
         ):
             total = sum((c.amount for c in grupo), Decimal("0"))
-            if total == 0:
+            # Feature 306: o aberto que soma zero com linhas de valor (−100 do ajuste e +100 de
+            # outra venda) fica: some, e as duas linhas ficariam a pagar sem item que as liquide.
+            if total == 0 and not (grupo is abertas and any(c.amount != 0 for c in grupo)):
                 continue
             if grupo is pagas:
                 status = "pago"
@@ -971,6 +1036,7 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
                 "pix_key_type": seller.pix_key_type if seller else "",
                 "status":      status,
                 "is_future":   due_date > today,
+                "commission_lines": _linhas(grupo),
             })
     return items
 
@@ -1069,6 +1135,7 @@ def pagamentos():
     prev_year, prev_month = (year_i - 1, 12) if month_i == 1 else (year_i, month_i - 1)
     prev_start = date(prev_year, prev_month, 1)
     prev_end = _m_start
+    # O 5 é o `DIA_DO_REPASSE` (app/constants.py, feature 306): o repasse do ciclo anterior.
     items += _build_commission_items(prev_start, prev_end, date(year_i, month_i, 5), today)
 
     # Gastos recorrentes (feature 110): contas variáveis preenchidas do mês visto.
@@ -1180,6 +1247,13 @@ def set_payment_status():
                   f"Salário: {old} → {status}")
             db.session.commit()
     elif item_type == "expense":
+        # Feature 306: a devolução de cancelado passa pela função única (trava o evento e relê o
+        # gasto); o Jinja não manda o valor que mostrou, então não há conferência.
+        from app.calendar.cancel_ops import marcar_status_da_devolucao
+
+        if marcar_status_da_devolucao(int(item_id), status, valor_esperado=None, actor_name=current_user.name):
+            db.session.commit()
+            return _done(status)
         exp = SpecialExpense.query.get(int(item_id))
         if exp:
             old = exp.payment_status
@@ -1188,13 +1262,18 @@ def set_payment_status():
                   f"Desembolso gasto: {old} → {status} | {exp.description}")
             db.session.commit()
     elif item_type == "bv":
-        acr = EventAcrescimo.query.get(int(item_id))
-        if acr and acr.is_bv:
-            old = acr.bv_payment_status
-            acr.bv_payment_status = status
-            audit("payment", "event_bv", acr.id, acr.bv_recipient or "—",
-                  f"BV (repasse): {old} → {status}")
-            db.session.commit()
+        # Feature 306 (R9): a mesma função da API, sem conferir valor (o Jinja não o manda).
+        from app.calendar.cancel_ops import CancelValidationError, marcar_status_do_bv
+        from app.constants import CODIGO_BV_NAO_ESTA_A_PAGAR
+
+        try:
+            marcar_status_do_bv(int(item_id), status, None, current_user.name)
+        except CancelValidationError as exc:
+            db.session.rollback()
+            if exc.codigo == CODIGO_BV_NAO_ESTA_A_PAGAR:
+                flash(exc.message, "error")
+            return _bad()
+        db.session.commit()
     else:
         role = EventRole.query.get(int(item_id))
         if role:
@@ -1451,7 +1530,10 @@ def pipeline():
     settings = SiteSetting.query.get(1)
     is_financeiro = _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN)
 
-    events_q = CalendarEvent.query.filter(CalendarEvent.event_type != "ENSAIO")
+    # Feature 306: o cancelado sai da lista de vendas (o retido aparece na DRE e no Comercial).
+    events_q = CalendarEvent.query.filter(
+        CalendarEvent.event_type != "ENSAIO", CalendarEvent.cancelled_at.is_(None)
+    )
     # Responsável EducaManto sem os papéis plenos vê APENAS os eventos EducaManto (feature 109).
     if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         events_q = events_q.filter(CalendarEvent.title.ilike(EDUCAMANTO_TITLE_PREFIX + "%"))
@@ -1521,7 +1603,8 @@ def comissoes():
         .order_by(CommissionPayment.sale_date.asc(), CommissionPayment.seller_id.asc())
     )
 
-    # Estornos pendentes (gerados por cancelamentos de meses anteriores)
+    # Linhas negativas a pagar: o estorno órfão da exclusão e o ajuste negativo da reconciliação
+    # (cancelado, corte de dia, correção da venda — feature 306).
     estornos_q = (
         CommissionPayment.query
         .filter(
@@ -1569,6 +1652,11 @@ def set_commission_status():
             # Hotfix 267c: desfazer pagamento é só do Superadmin, com motivo, pela Planilha nova.
             flash("Comissão já paga não volta por aqui. O Superadmin desfaz pela Planilha de "
                   "Pagamentos, com o motivo.", "error")
+            return redirect(next_url)
+        if cp and cp.event is not None and cp.event.is_cancelled:
+            # Feature 306: a linha do cancelado se acerta pelo cancelamento (reconciliação).
+            flash("Comissão de evento cancelado: o valor se acerta pelo cancelamento e o pagamento "
+                  "pela Planilha de Pagamentos.", "error")
             return redirect(next_url)
         if cp:
             old = cp.status

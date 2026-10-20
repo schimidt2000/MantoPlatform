@@ -843,6 +843,23 @@ def resolver_data_da_venda(
     return None
 
 
+def venda_mudaria(event: Any, data: dict) -> bool:
+    """Algum campo de venda do corpo difere do gravado (feature 306, contracts §7)?
+
+    `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` e
+    `with_invoice`, pelas mesmas comparações da 215b e da 299: o cancelado recusa a edição
+    completa que mexeria na venda, e salva o resto.
+    """
+    return not (
+        _mesmo_valor(data.get("sale_value"), event.sale_value)
+        and _mesmo_valor(data.get("sale_value_gross"), event.sale_value_gross)
+        and ("commission_rate" not in data or _mesma_taxa(event.commission_rate, data.get("commission_rate")))
+        and _mesmo_vendedor(event.seller_id, data.get("seller_id"))
+        and bool(data.get("is_cortesia_permuta")) == bool(event.is_cortesia_permuta)
+        and bool(data.get("with_invoice")) == bool(event.with_invoice)
+    )
+
+
 def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz: Any = None) -> str | None:
     """Campos comerciais da edição completa — nunca no outro evento de um grupo (feature 299).
 
@@ -857,6 +874,10 @@ def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz:
     from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
 
     antes = estado_da_venda(event)
+    # Feature 306: relido depois da trava de `estado_da_venda`, como cinto da view (que já recusou
+    # o corpo que mexeria na venda): no cancelado, a venda fica como está.
+    if event.is_cancelled:
+        return None
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
@@ -1197,11 +1218,32 @@ def update_event_comercial(
             linhas que JÁ existem: uma venda que nunca gerou linha nenhuma nunca ganhava uma.
 
             Injetada, e não importada, para o domínio da agenda não puxar a régua de comissão de
-            9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`.
+            9 ramos do financeiro — mesmo arranjo de `calendar/group_ops.py`. Feature 306: a view
+            injeta um despachante — no cancelado, recongela (`cancel_ops.recongelar_do_comercial`);
+            no vivo, o sync de sempre (a B10 da 305 intacta).
+
+    Raises:
+        CancelValidationError: 409 `estado_mudou` — o evento foi cancelado (ou deixou de estar)
+            entre a decisão da view e a trava; nada foi gravado.
     """
     from app.calendar.comercial_ops import acompanhar_bv_da_venda, estado_da_venda
 
+    cancelado_antes = event.is_cancelled
     antes = estado_da_venda(event)
+    # Feature 306 — cinto: `estado_da_venda` trava e relê. A view decidiu cancelado × vivo antes.
+    if event.is_cancelled != cancelado_antes:
+        from app.calendar.cancel_ops import CancelValidationError
+        from app.constants import CODIGO_ESTADO_MUDOU
+
+        raise CancelValidationError(
+            "O evento mudou enquanto você editava: recarregue.", status=409, codigo=CODIGO_ESTADO_MUDOU
+        )
+    if event.is_cancelled:
+        # T1 → T2 → T4 antes de gravar (plan §Travas): o grupo, o congelado e as linhas do evento e
+        # dos beneficiários antigo e novo. Pelo nome do módulo: o 16c-corrida troca `travar_grupo`.
+        from app.calendar import cancel_ops
+
+        cancel_ops.travar_para_corrigir_venda(event, novo_vendedor_id=data.get("seller_id"))
     is_cortesia = bool(data.get("is_cortesia_permuta"))
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
@@ -1228,7 +1270,8 @@ def update_event_comercial(
 
     # Antes do commit: `_sync_commission_payment` não commita, então as duas escritas saem juntas.
     if sincronizar_comissao is not None:
-        sincronizar_comissao(event)
+        # A cortesia de antes: o recongelamento do cancelado só relê o portão quando ela mudou.
+        sincronizar_comissao(event, cortesia_antes=antes[2])
 
     db.session.add(EventLog(
         event_id=event.id,
@@ -1788,13 +1831,28 @@ def update_ensaio(
     return None
 
 
+def _apagar_ensaio_no_banco(ensaio: Any) -> None:
+    """O ensaio sai do banco: as tabelas satélite, os sinos que apontam para ele e a linha. Sem commit.
+
+    Feature 306 (FR-065): o cancelamento do show apaga os ensaios na mesma transação do ato (o
+    Google sai depois do commit, pela trava do ambiente); o botão e a troca de tipo seguem por
+    `delete_ensaio`, que chama esta e commita.
+    """
+    from app.calendar.routes import _clear_event_side_tables
+    from app.notificacoes.notificacoes_ops import apagar_por_entidade
+
+    _clear_event_side_tables(ensaio.id)
+    apagar_por_entidade("calendar_event", ensaio.id)
+    db.session.delete(ensaio)
+
+
 def delete_ensaio(ensaio: Any) -> str | None:
     """Cancela um ensaio (Google + banco). Retorna aviso se o Google falhar.
 
     A limpeza de tabelas satélite (`_clear_event_side_tables`) é a mesma da rota Jinja —
     sem ela o DELETE viola FK quando o ensaio tem histórico.
     """
-    from app.calendar.routes import CALENDAR_ID, _clear_event_side_tables
+    from app.calendar.routes import CALENDAR_ID
     from app.calendar.service import delete_event
 
     warning = None
@@ -1805,8 +1863,7 @@ def delete_ensaio(ensaio: Any) -> str | None:
             logger.exception("Falha ao remover ensaio %s do Google Agenda", ensaio.id)
             warning = f"Removido do banco, mas erro ao remover do Google Calendar: {exc}"
 
-    _clear_event_side_tables(ensaio.id)
-    db.session.delete(ensaio)
+    _apagar_ensaio_no_banco(ensaio)
     db.session.commit()
     return warning
 

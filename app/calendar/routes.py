@@ -1,4 +1,4 @@
-from datetime import datetime, timezone, timedelta, date
+from datetime import UTC, datetime, timedelta, date
 from decimal import Decimal
 import calendar as cal
 import json
@@ -333,9 +333,9 @@ def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str |
         _clear_event_side_tables(ensaio.id)
     _clear_event_side_tables(event.id)
 
-    # Comissões (pendente → cancelada; paga → estorno negativo). A regra mora em `cancel_ops`
-    # para que o cancelamento use exatamente a mesma — ela não pode existir só no caminho que
-    # apaga o evento (feature 224).
+    # Comissões da exclusão (pendente → cancelada; paga ou no banco → estorno órfão negativo,
+    # no primeiro repasse aberto). Mora em `cancel_ops`, mas só a exclusão a usa: desde a feature
+    # 306 o cancelamento reconcilia a comissão pelo retido.
     from app.calendar.cancel_ops import aplicar_estorno_comissao
 
     aplicar_estorno_comissao(event)
@@ -416,7 +416,6 @@ def google_connect():
 @calendar_bp.route("/google/callback")
 @login_required
 def google_callback():
-    state = session.get("google_oauth_state")
     redirect_uri = _oauth_redirect_uri()
 
     flow = build_flow(redirect_uri)
@@ -1544,7 +1543,14 @@ def _handle_group_events(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash(error, "error")
         return
 
-    error = _validate_group_satellites(leader, satellites)
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        error = _validate_group_satellites(leader, satellites)
+    except CancelValidationError as exc:  # feature 306: cancelado não entra em grupo
+        db.session.rollback()
+        flash(exc.message, "error")
+        return
     if error:
         flash(error, "error")
         return
@@ -1586,7 +1592,14 @@ def _handle_ungroup_event(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         flash("Este evento não pertence a um grupo.", "error")
         return
 
-    group_ops.desagrupar(event, current_user.name, datetime.now(tz=tz_sp))
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        group_ops.desagrupar(event, current_user.name, datetime.now(tz=tz_sp))
+    except CancelValidationError as exc:  # feature 306: o dia cancelado não sai do grupo
+        db.session.rollback()
+        flash(exc.message, "error")
+        return
     flash("Agrupamento desfeito.", "success")
 
 
@@ -1632,6 +1645,13 @@ _EVENT_ACTIONS = {
     "rename_group":         _handle_rename_group,
 }
 
+# Feature 306 (contracts §21): o Jinja não refaz o cancelado (não tem `reaplicar_cancelado`), então
+# estas ações recusam o evento cancelado para todo papel, o Superadmin inclusive.
+_ACOES_RECUSADAS_NO_CANCELADO = frozenset({
+    "update_comercial", "update_sale", "add_payment", "edit_payment", "delete_payment",
+    "add_reembolso", "collect_reembolso", "delete_reembolso",
+})
+
 
 @calendar_bp.route("/events/<int:event_id>", methods=["GET", "POST"])
 @login_required
@@ -1643,7 +1663,7 @@ def event_detail(event_id: int):
     for log in raw_logs:
         dt = log.created_at
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
+            dt = dt.replace(tzinfo=UTC)
         dt = dt.astimezone(tz_sp)
         logs.append(
             {
@@ -1666,6 +1686,17 @@ def event_detail(event_id: int):
             abort(403)
         handler = _EVENT_ACTIONS.get(action)
         eid = event.id  # capture before commit+thread expire the ORM object
+        if handler and action in _ACOES_RECUSADAS_NO_CANCELADO:
+            from app.calendar.orcamento_evento_ops import travar_evento
+
+            travar_evento(event)
+            if event.is_cancelled:
+                db.session.rollback()
+                flash(
+                    "Evento cancelado: os dados de venda se corrigem pela tela nova, só pelo Superadmin.",
+                    "error",
+                )
+                return redirect(url_for("calendar.event_detail", event_id=eid))
         if handler:
             handler(event, tz_sp)
         return redirect(url_for("calendar.event_detail", event_id=eid))
@@ -1778,8 +1809,11 @@ def event_detail(event_id: int):
     # (principal ou satélite) mostra custo/gastos/lucro do CONTRATO inteiro, não só do
     # evento aberto — venda/comissão vêm sempre do principal (`kpi_event`), que é quem
     # mantém esses campos preenchidos (satélites os têm zerados ao entrar no grupo).
-    group_events = _group_events(event)
-    kpi_event = group_events[0]
+    # Feature 306: o custo, os gastos e o BV pelos dias vivos (o dia cortado saiu da venda).
+    from app.calendar.group_ops import dias_vivos
+
+    kpi_event = _group_events(event)[0]
+    group_events = dias_vivos(event) or [kpi_event]
     event_group_size = len(group_events)
     event_rate = (
         Decimal(str(kpi_event.commission_rate))
@@ -1789,17 +1823,28 @@ def event_detail(event_id: int):
         (r.cache_value or 0 for ge in group_events for r in ge.roles if r.talent_id), 0
     )
     # Gastos extras aprovados vinculados a qualquer evento do grupo (entram como custo:
-    # lucro = venda − cachês − gastos).
+    # lucro = venda − cachês − gastos). Feature 306: pela régua do detalhe (`dias_dos_gastos`) — o
+    # dia cancelado mostra os gastos dele, e o principal vivo, os dos dias vivos.
+    from app.calendar.cancel_ops import dias_dos_gastos
+
     event_expenses = (
         SpecialExpense.query
         .filter(
-            SpecialExpense.event_id.in_([ge.id for ge in group_events]),
+            SpecialExpense.event_id.in_(dias_dos_gastos(event)),
             SpecialExpense.status == "aprovado",
         )
         .order_by(SpecialExpense.expense_date.desc(), SpecialExpense.id.desc())
         .all()
     )
-    event_expenses_total = sum((e.amount for e in event_expenses), Decimal("0"))
+    # O KPI fica no mesmo grupo do custo e do BV (os dias vivos): no dia cancelado a tabela mostra
+    # os gastos dele (a devolução, a multa), mas o lucro do contrato não os conta de novo.
+    event_expenses_total = Decimal(
+        str(
+            db.session.query(db.func.coalesce(db.func.sum(SpecialExpense.amount), 0))
+            .filter(SpecialExpense.event_id.in_([ge.id for ge in group_events]), SpecialExpense.status == "aprovado")
+            .scalar()
+        )
+    )
     # BV (feature 099): repasse a terceiros — sai da base de comissão e desconta do lucro.
     event_bv_total = sum(
         (
@@ -2128,7 +2173,6 @@ def _ensure_sound_technician(event_id: int) -> None:
 def _detect_changes(event: CalendarEvent, new_start, new_end, new_location) -> list[str]:
     """Retorna lista de strings descrevendo o que mudou (data/hora/local)."""
     changes = []
-    tz_sp = ZoneInfo("America/Sao_Paulo")
 
     old_start = _dt_naive(event.start_at)
     chk_start = _dt_naive(new_start)
@@ -2524,8 +2568,8 @@ def _fetch_travel_data(event: CalendarEvent, settings) -> dict:
 
     Retorna o dict com os dados ou {} em caso de falha/sem API key.
     """
-    import urllib.request
     import json as _json
+    import urllib.request
 
     if not event.location:
         return {}
@@ -2858,13 +2902,18 @@ def _compute_performer_caches(
     ``_create_roles_from_input`` grava em ``EventRole.cache_cap_note`` para o superadmin
     entender de onde saiu o teto, em vez de ver só um número que ninguém sabe explicar.
     """
-    from app.orcamento.pricing import (
-        cache_na_faixa, get_ator_prices, get_cantor_prices, get_especial_prices,
-        get_coordenador_prices, get_tecnico_prices, calcular_maquiador,
-        compute_show_pricing,
-    )
     from app.orcamento import produtos as _produtos
     from app.orcamento import settings as _orc_cfg
+    from app.orcamento.pricing import (
+        cache_na_faixa,
+        calcular_maquiador,
+        compute_show_pricing,
+        get_ator_prices,
+        get_cantor_prices,
+        get_coordenador_prices,
+        get_especial_prices,
+        get_tecnico_prices,
+    )
 
     performers     = snapshot.get("performers", [])
     coordenador_qty = int(snapshot.get("coordenador_qty", 1) or 1)
@@ -4249,7 +4298,7 @@ def _can_ensaio(user) -> bool:
 def ensaio_upload_material(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    event = CalendarEvent.query.get_or_404(event_id)
+    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
 
     file = request.files.get("material_file")
     label = request.form.get("label", "").strip()
@@ -4299,7 +4348,7 @@ def ensaio_upload_material(event_id: int):
 def ensaio_add_link(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    event = CalendarEvent.query.get_or_404(event_id)
+    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
 
     url   = request.form.get("link_url", "").strip()
     label = request.form.get("link_label", "").strip()
@@ -4398,10 +4447,23 @@ def _delete_event_flow(
         excluído — `aviso` preenchido só quando o Google recusou a remoção (feature 224).
 
     Raises:
-        EventoMarcadoError: o evento está marcado — a única saída dele é devolver ao Google.
+        EventoMarcadoError: o evento está marcado — devolva ao Google ou cancele.
+        EventoCanceladoError: o evento está cancelado (feature 306, FR-021).
     """
     from app.calendar.cancel_ops import EventoMarcadoError
 
+    # Feature 306 (FR-036): trava o evento e relê antes de decidir. Um cancelamento (ou uma marca
+    # do sync) no meio do caminho mudou o que a decisão leu.
+    db.session.flush()
+    db.session.refresh(event, with_for_update=True)
+    # Feature 306 (FR-021): o cancelado não se exclui — antes da checagem do líder.
+    if event.is_cancelled:
+        from app.calendar.cancel_ops import EventoCanceladoError
+
+        raise EventoCanceladoError(
+            "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, "
+            "recrie o evento."
+        )
     if event.is_google_missing:
         raise EventoMarcadoError()
     if event.is_group_leader:  # FR-004: desagrupar antes
@@ -4513,7 +4575,7 @@ def delete_calendar_event(event_id: int):
         abort(403)
     event = CalendarEvent.query.get_or_404(event_id)
     title = event.title  # capturado antes da exclusão
-    from app.calendar.cancel_ops import EventoMarcadoError
+    from app.calendar.cancel_ops import CancelValidationError
 
     try:
         excluido, aviso = _delete_event_flow(
@@ -4521,7 +4583,8 @@ def delete_calendar_event(event_id: int):
             actor_name=current_user.name,
             actor_role=", ".join(r.name for r in current_user.roles),
         )
-    except EventoMarcadoError as exc:  # feature 303: sem isto a recusa viraria 500
+    except CancelValidationError as exc:  # marcado (303) ou cancelado (306): sem isto, 500
+        db.session.rollback()
         flash(exc.message, "error")
         return redirect(url_for("calendar.event_detail", event_id=event_id))
     if not excluido:

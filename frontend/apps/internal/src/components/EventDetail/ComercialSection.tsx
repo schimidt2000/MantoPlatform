@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
-import { Badge, Button } from "@manto/ui";
-import { ApiRequestError, assetUrl } from "@manto/api-client";
+import { Badge, Button, ConfirmDialog } from "@manto/ui";
+import { ApiRequestError } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe, RelatorioOrcamento } from "../../lib/agenda";
 import { useEventCreateOptions, useOrcamentoPrefill } from "../../lib/eventCreate";
@@ -25,7 +25,9 @@ import { dataBr, OrcamentoPicker } from "../OrcamentoPicker";
 import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
+import { GastosVinculados } from "./GastosVinculados";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
+import { ResultadoCancelamento } from "./ResultadoCancelamento";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -76,7 +78,8 @@ function KpiCard({
 /**
  * Grade financeira de resultado do evento (feature 190): venda, custo de cachês, gastos
  * extras, comissão e o lucro líquido em destaque — verde quando positivo, vermelho quando
- * negativo. Os números vêm prontos do servidor (`kpi`), agregados pelo grupo comercial.
+ * negativo. Os números vêm prontos do servidor (`kpi`), agregados pelos dias vivos do grupo (o dia
+ * cancelado fica fora; no cancelado, a grade dá lugar ao resultado do cancelamento).
  */
 function KpiGrid({ data }: { data: EventoDetalhe }) {
   const kpi = data.kpi;
@@ -139,39 +142,7 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
         />
       </div>
 
-      {gastos.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">
-            Gastos extras vinculados (aprovados)
-          </div>
-          <ul className="divide-y divide-line text-sm">
-            {gastos.map((gasto) => (
-              <li key={gasto.id} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="min-w-0 truncate text-ink">
-                  {gasto.description}
-                  <span className="ml-2 text-xs text-muted">{gasto.category}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-muted tabular-nums">
-                    {formatDay(gasto.expense_date)}
-                  </span>
-                  <span className="tabular-nums text-ink">{brl(gasto.amount)}</span>
-                  {gasto.receipt_path && (
-                    <a
-                      href={assetUrl(gasto.receipt_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue underline"
-                    >
-                      Ver
-                    </a>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <GastosVinculados gastos={gastos} />
     </Panel>
   );
 }
@@ -222,6 +193,18 @@ function VendaForm({
 
   const set = <K extends keyof EventComercialInput>(key: K, value: EventComercialInput[K]) =>
     setForm((prev) => ({ ...prev, [key]: value }));
+
+  // Feature 306: no cancelado (só o Superadmin chega aqui), a correção recongela a venda e refaz a
+  // comissão e o BV do retido na hora — a tela diz o que vai acontecer antes de gravar.
+  const cancelado = Boolean(data.event.cancelled_at);
+  const [confirmando, setConfirmando] = useState(false);
+  const enviar = () =>
+    salvar.mutate(form, {
+      onSuccess: (r) => {
+        setConfirmando(false);
+        onClose(r.aviso_bv);
+      },
+    });
 
   // O 400 do valor (feature 299, R43: R$ 0,01 não é venda) aparece no campo que o servidor nomeou,
   // com o texto dele — e não só como "Corrija os campos destacados" no rodapé —, e o foco vai até
@@ -417,16 +400,91 @@ function VendaForm({
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
-          loading={salvar.isPending}
-          onClick={() => salvar.mutate(form, { onSuccess: (r) => onClose(r.aviso_bv) })}
+          loading={salvar.isPending && !confirmando}
+          onClick={() => (cancelado ? setConfirmando(true) : enviar())}
         >
           Salvar venda
         </Button>
         <Button variant="ghost" onClick={() => onClose()} disabled={salvar.isPending}>
           Cancelar
         </Button>
-        {salvar.isError && <span className="text-sm text-red">{salvar.error?.message}</span>}
+        {salvar.isError && !confirmando && (
+          <span className="text-sm text-red">{salvar.error?.message}</span>
+        )}
       </div>
+      {cancelado && (
+        <ConfirmDialog
+          open={confirmando}
+          title="Corrigir a venda do evento cancelado?"
+          confirmLabel="Corrigir a venda"
+          pending={salvar.isPending}
+          error={salvar.isError ? (salvar.error?.message ?? null) : null}
+          onConfirm={enviar}
+          onOpenChange={(aberto) => {
+            if (!aberto) setConfirmando(false);
+          }}
+          description={
+            <ConfirmacaoDaCorrecao
+              data={data}
+              form={form}
+              novoVendedor={
+                (options.data?.sellers ?? []).find((v) => v.id === form.seller_id)?.name ?? null
+              }
+            />
+          }
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * O que a correção da venda do cancelado faz (feature 306), dito antes de gravar: a venda e a taxa
+ * congeladas mudam, o retido fica (é o pago menos o devolvido) e a comissão e o BV do retido são
+ * refeitos; na troca de vendedor, o retido e a comissão dele passam ao novo.
+ */
+function ConfirmacaoDaCorrecao({
+  data,
+  form,
+  novoVendedor,
+}: {
+  data: EventoDetalhe;
+  form: EventComercialInput;
+  novoVendedor: string | null;
+}) {
+  const venda = data.venda!;
+  const retido = data.event.cancelamento?.retido ?? null;
+  const vendaMudou = !form.is_cortesia_permuta && (form.sale_value ?? 0) !== (venda.sale_value ?? 0);
+  const vendedorMudou = (form.seller_id ?? null) !== (venda.seller_id ?? null);
+  const taxaMudou = form.commission_rate != null && form.commission_rate !== venda.commission_rate;
+  const virouCortesia = form.is_cortesia_permuta && !venda.is_cortesia_permuta;
+  return (
+    <div className="space-y-2 text-sm">
+      {vendaMudou && (
+        <p className="text-ink">
+          A venda do cancelamento passa de {brl(venda.sale_value ?? 0)} para{" "}
+          <strong>{brl(form.sale_value ?? 0)}</strong>.
+        </p>
+      )}
+      {taxaMudou && (
+        <p className="text-ink">
+          A taxa de comissão congelada passa a <strong>{form.commission_rate}%</strong>.
+        </p>
+      )}
+      {virouCortesia && (
+        <p className="text-ink">Cortesia / permuta: a comissão do retido vai a zero.</p>
+      )}
+      {vendedorMudou && (
+        <p className="text-ink">
+          O retido{retido != null ? ` (${brl(retido)})` : ""} e a comissão do retido passam a{" "}
+          <strong>{novoVendedor ?? "ninguém (sem vendedor)"}</strong>
+          {venda.seller ? `; ${venda.seller} devolve o que já recebeu desta venda` : ""}.
+        </p>
+      )}
+      <p className="text-muted">
+        {retido != null ? `O retido continua ${brl(retido)}. ` : ""}A comissão e o BV do retido são
+        refeitos na hora; a diferença entra no próximo repasse aberto, sem mexer no que já foi pago.
+      </p>
     </div>
   );
 }
@@ -561,7 +619,8 @@ function chipsDoOrcamento(orc: NonNullable<EventoDetalhe["venda"]>["orcamento"])
 function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
   const venda = data.venda!;
   const salvar = useSetEventOrcamento(data.event.id);
-  const canEdit = Boolean(data.flags.can_edit_core);
+  // Feature 306: o orçamento do cancelado não se aplica nem se troca, nem pelo Superadmin.
+  const canEdit = Boolean(data.flags.can_edit_core) && !data.event.cancelled_at;
   const orc = venda.orcamento;
   const [escolhido, setEscolhido] = useState<OrcamentoHistoricoEntry | null>(null);
   const [trocando, setTrocando] = useState(false);
@@ -916,7 +975,12 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
   const desconto = bruto > liquido ? bruto - liquido : 0;
   // Satélite não edita venda: o dinheiro do contrato mora no principal, e o servidor recusa o
   // PATCH com 409. Sem esta trava o botão existia, a pessoa preenchia e só descobria no envio.
-  const canEdit = Boolean(data.flags.can_edit_core) && !data.event.is_satellite;
+  // Feature 306: no cancelado, só o Superadmin corrige a venda (`can_edit_venda_cancelado`); a
+  // Comercial lê. O servidor confere o papel real.
+  const cancelado = Boolean(data.event.cancelled_at);
+  const canEdit =
+    !data.event.is_satellite &&
+    (cancelado ? Boolean(data.flags.can_edit_venda_cancelado) : Boolean(data.flags.can_edit_core));
 
   // Ao salvar ou cancelar, o `editar` sai da URL (preservando a aba) — senão recarregar a página
   // reabriria a edição.
@@ -959,7 +1023,7 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
           {avisoBv}
         </p>
       )}
-      {canEdit && (
+      {canEdit && !cancelado && (
         <div className="mb-3">
           {/* "Lançar o BV" abre o editor de Acréscimos, que mora mais abaixo nesta mesma aba. */}
           <AlertaBvDoOrcamento
@@ -1050,6 +1114,9 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
 function GrupoPanel({ data }: { data: EventoDetalhe }) {
   const grupo = data.event.group;
   const canGroup = Boolean(data.flags.can_group);
+  // Feature 306: o dia cancelado não agrupa, não desfaz nem recebe outro evento (o servidor recusa);
+  // o nome do grupo segue editável.
+  const podeAgrupar = canGroup && !data.event.cancelled_at;
   const [agruparAberto, setAgruparAberto] = useState(false);
   const desagrupar = useDesagruparEvento(data.event.id);
   const removerSatelite = useRemoverSatelite(data.event.id);
@@ -1075,11 +1142,11 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
             ) : (
               "outro evento"
             )}
-            . Os valores que este evento tinha antes de ser agrupado ficaram guardados na aba
-            Histórico.
+            . Os valores que este evento tinha antes de ser agrupado (ou de a venda passar ao novo
+            1º dia) ficaram guardados na aba Histórico.
           </p>
         </div>
-        {canGroup && (
+        {podeAgrupar && (
           <div className="mt-3">
             <Button
               variant="outline"
@@ -1163,7 +1230,8 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
                     </Link>
                     <span className="ml-2 text-xs text-muted">{formatDay(s.start_at)}</span>
                   </span>
-                  {canGroup && (
+                  {s.cancelado && <Badge tone="neutral">cancelado</Badge>}
+                  {podeAgrupar && !s.cancelado && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -1179,7 +1247,7 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
             {removerSatelite.isError && (
               <p className="mt-2 text-sm text-red">{removerSatelite.error?.message}</p>
             )}
-            {canGroup && (
+            {podeAgrupar && (
               <div className="mt-3">
                 <Button variant="outline" size="sm" onClick={() => setAgruparAberto(true)}>
                   Agrupar mais um evento
@@ -1193,7 +1261,7 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
     );
   }
 
-  if (!canGroup) return null;
+  if (!podeAgrupar) return null;
 
   return (
     <Panel title="Grupo comercial">
@@ -1231,7 +1299,9 @@ export function ComercialSection({ data }: ComercialSectionProps) {
       <VendaPanel data={data} />
       <ColecoesComerciaisPanel data={data} />
       <GrupoPanel data={data} />
-      <KpiGrid data={data} />
+      {/* Feature 306: no cancelado, o resultado do cancelamento no lugar do `KpiGrid` (que
+          contaria a devolução como custo e o BV cheio). Sem o bloco (backend antigo), o de antes. */}
+      {data.event.cancelamento ? <ResultadoCancelamento data={data} /> : <KpiGrid data={data} />}
     </>
   );
 }

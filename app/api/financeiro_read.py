@@ -155,6 +155,13 @@ def api_vendas_pipeline() -> Any:
         and request.args.get("incluir_loja_virtual") in ("1", "true", "sim")
     )
     funil = sales if incluir_virtual else presenciais
+    # Feature 306 (D33): o retido dos cancelados do período, no mesmo escopo, conta como venda do
+    # vendedor congelado — pelo mês do cancelamento.
+    from app.calendar.cancel_ops import cancelados_do_periodo
+
+    cancelados = cancelados_do_periodo(
+        start_date, end_date, seller_id=scope.seller_id, educamanto_only=scope.educamanto_only
+    )
 
     payload: dict[str, Any] = {
         "period": period,
@@ -164,7 +171,7 @@ def api_vendas_pipeline() -> Any:
         "can_filter_seller": scope.can_filter_seller,
         "seller_id": scope.seller_id,
         "scope_label": "Empresa toda" if scope.commission_target_id is None else "Minhas vendas",
-        "kpis": vendas_ops.build_kpis(funil, settings, scope.commission_target_id),
+        "kpis": vendas_ops.build_kpis(funil, settings, scope.commission_target_id, cancelados=cancelados),
         "eventos": vendas_ops.serialize_sales(funil, settings),
     }
     if scope.can_filter_seller:
@@ -185,8 +192,10 @@ def _floatify(d: dict) -> dict:
 def api_financeiro_dashboard() -> Any:
     """Dashboard financeiro (DRE): consolidado do período (feature 157).
 
-    Reaproveita, sem duplicar, os mesmos cálculos de `dashboard()`
-    (`app/financeiro/routes.py:387`) — só monta a query do período e serializa.
+    Reaproveita, sem duplicar, os mesmos cálculos de `dashboard()` (`app/financeiro/routes.py`) —
+    só monta a query do período e serializa. Desde a feature 306, os gastos do período e a tendência
+    saem de `dre_ops` (a mesma fonte do Jinja), e o dinheiro dos cancelados do período entra pelo
+    mês do cancelamento (`cancel_ops.cancelados_do_periodo`).
     """
     from app import db
     from app.financeiro import vendas_ops
@@ -201,15 +210,13 @@ def api_financeiro_dashboard() -> Any:
         _get_tax_rate,
         _group_cost,
         _is_permuta,
-        _month_range,
         _month_refs_between,
         _pct,
-        _prev_month,
         _resolve_period,
         _salary_cost,
     )
     from app.gastos.gastos_ops import ensure_recurring_entries
-    from app.models import EventPayment, RecurringExpenseEntry, SpecialExpense
+    from app.models import EventPayment, RecurringExpenseEntry
 
     if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         return jsonify({"error": {"message": "Sem permissão"}}), 403
@@ -228,8 +235,8 @@ def api_financeiro_dashboard() -> Any:
             CalendarEvent.start_at >= start_dt,
             CalendarEvent.start_at <= end_dt,
             CalendarEvent.event_type != "ENSAIO",
-            # Evento cancelado não gera receita (feature 224) — a devolução do que a cliente
-            # já tinha pago entra na cascata pelo outro lado, somada em `gastos_extras`.
+            # Evento cancelado não gera receita de evento (feature 224); o que a Manto reteve dele
+            # entra pela linha do retido, no mês do cancelamento (feature 306).
             CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(CalendarEvent.start_at.desc())
@@ -240,14 +247,14 @@ def api_financeiro_dashboard() -> Any:
     projetados = [e for e in events if e.start_at and e.start_at >= now_naive]
 
     salary_cost = _salary_cost(start_date, end_date, is_full_month)
-    gastos_extras = sum(
-        (Decimal(g.amount) for g in SpecialExpense.query.filter(
-            SpecialExpense.status == "aprovado",
-            SpecialExpense.expense_date >= start_date,
-            SpecialExpense.expense_date <= end_date,
-        ).all()),
-        Decimal("0"),
-    )
+    # Feature 306: a fonte única com o Jinja — sem a devolução do cancelado (já está no retido).
+    from app.calendar import cancel_ops
+    from app.financeiro import dre_ops
+
+    gastos_extras = dre_ops.gastos_extras_do_periodo(start_date, end_date)
+    # Pelo módulo: a mutação do cenário 23 troca `totais_cancelamentos`.
+    cancelados = cancel_ops.cancelados_do_periodo(start_date, end_date)
+    cancelamentos = cancel_ops.totais_cancelamentos(cancelados)
 
     ensure_recurring_entries(today.year, today.month)
     gastos_recorrentes = sum(
@@ -259,9 +266,14 @@ def api_financeiro_dashboard() -> Any:
         Decimal("0"),
     )
 
-    drg_realizado = _compute_drg(realizados, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    # O cancelado já aconteceu: o retido entra no Realizado e no Total, nunca no Projetado.
+    drg_realizado = _compute_drg(
+        realizados, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
     drg_projetado = _compute_drg(projetados, settings, Decimal("0"), Decimal("0"))
-    drg_total = _compute_drg(events, settings, salary_cost, gastos_extras, gastos_recorrentes)
+    drg_total = _compute_drg(
+        events, settings, salary_cost, gastos_extras, gastos_recorrentes, cancelamentos=cancelamentos
+    )
 
     from app.financeiro.vendas_ops import is_loja_virtual, resumo_loja_virtual
 
@@ -340,6 +352,9 @@ def api_financeiro_dashboard() -> Any:
         receita_por_tipo_dd[e.event_type or "Outros"] += (e.sale_value or 0)
     if loja_virtual["vendas"]:
         receita_por_tipo_dd["Loja Virtual"] += Decimal(str(loja_virtual["receita"]))
+    # Feature 306: o retido do período como barra própria, antes da ordenação e do máximo.
+    if cancelamentos["quantidade"] and cancelamentos["retido"]:
+        receita_por_tipo_dd[dre_ops.ROTULO_RETIDO] += cancelamentos["retido"]
     receita_por_tipo = {
         k: float(v) for k, v in sorted(receita_por_tipo_dd.items(), key=lambda x: -x[1])
     }
@@ -351,6 +366,11 @@ def api_financeiro_dashboard() -> Any:
         if e.seller_id:
             seller_revenue[e.seller_id] += (e.sale_value or 0)
             seller_margin[e.seller_id] += (e.sale_value or 0) - _group_cost(e)
+    # Feature 306 (D33): o retido conta como venda do vendedor congelado — antes do corte do top 5.
+    seller_retido = {sid: r for sid, r in cancel_ops.retido_por_vendedor(cancelados).items() if r}
+    for sid, retido in seller_retido.items():
+        seller_revenue[sid] += retido
+        seller_margin[sid] += retido
     top_sellers = []
     for sid, rev in sorted(seller_revenue.items(), key=lambda x: -x[1])[:5]:
         u = User.query.get(sid)
@@ -360,29 +380,14 @@ def api_financeiro_dashboard() -> Any:
                 "user_name": u.name,
                 "receita": float(rev),
                 "lucro": float(seller_margin[sid]),
+                **({"retido": float(seller_retido[sid])} if sid in seller_retido else {}),
             })
 
-    monthly_trend = []
-    y, m = today.year, today.month
-    for _ in range(6):
-        s_dt, e_dt = _month_range(y, m)
-        evs = CalendarEvent.query.filter(
-            CalendarEvent.start_at >= s_dt,
-            CalendarEvent.start_at < e_dt,
-            CalendarEvent.event_type != "ENSAIO",
-        ).all()
-        normais = [e for e in evs if not _is_permuta(e) and not e.is_satellite]
-        rec = sum(e.sale_value or 0 for e in normais)
-        cst = sum(_group_cost(e) for e in normais)
-        monthly_trend.insert(0, {
-            "label": f"{m:02d}/{str(y)[2:]}",
-            "receita": float(rec),
-            "custo": float(cst),
-            "lucro": float(rec - cst),
-            "margem": float(_pct(rec - cst, rec)),
-            "n_eventos": len(evs),
-        })
-        y, m = _prev_month(y, m)
+    # Feature 306: a fonte única com o Jinja (o cancelado sai; o retido entra no mês dele).
+    monthly_trend = [
+        {k: (v if k in ("label", "n_eventos") else float(v)) for k, v in item.items()}
+        for item in dre_ops.tendencia_mensal(today)
+    ]
 
     auditoria = [
         {
@@ -429,6 +434,8 @@ def api_financeiro_dashboard() -> Any:
             EventInstallment.due_date >= start_date,
             EventInstallment.due_date <= end_date,
             EventInstallment.received.is_(False),
+            # Feature 306: a parcela de um cancelado não vai ser recebida.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .order_by(EventInstallment.due_date.asc())
         .all()
@@ -453,6 +460,10 @@ def api_financeiro_dashboard() -> Any:
         .order_by(EventInvoice.issue_date.is_(None), EventInvoice.issue_date.asc())
         .all()
     )
+    # Feature 306: a nota de um cancelado continua a emitir (sobre o retido) — com o selo.
+    _resumos_nf = cancel_ops.resumos_cancelados(
+        sorted({inv.event_id for inv in _nf_pend if inv.event and inv.event.is_cancelled})
+    )
     nf_a_emitir = [
         {
             "id": inv.id,
@@ -460,6 +471,11 @@ def api_financeiro_dashboard() -> Any:
             "event_id": inv.event_id,
             "event_title": inv.event.title if inv.event else "—",
             "amount": float(inv.amount or 0),
+            **(
+                {"cancelado": True, "retido": float(_resumos_nf[inv.event_id].retido)}
+                if inv.event_id in _resumos_nf
+                else {}
+            ),
         }
         for inv in _nf_pend
     ]
@@ -532,6 +548,20 @@ def api_financeiro_dashboard() -> Any:
             "top_sellers": top_sellers,
             "monthly_trend": monthly_trend,
             "auditoria": auditoria,
+            # Feature 306: sempre, com quantidade 0 no período sem cancelado (contracts §19).
+            "cancelamentos": {
+                **{k: (v if k in ("quantidade", "itens") else float(v)) for k, v in cancelamentos.items()},
+                "itens": [
+                    {
+                        "event_id": i["event_id"],
+                        "titulo": i["titulo"],
+                        "cancelado_em": i["cancelado_em"],
+                        "retido": float(i["retido"]),
+                        "status": vendas_ops.event_payment_status(0, 0, False, cancelado=True),
+                    }
+                    for i in cancelamentos["itens"]
+                ],
+            },
         },
         "eventos": eventos_data,
         "pendencias": {
@@ -640,6 +670,10 @@ def _serialize_pagamento_item(item: dict) -> dict:
         ]
     if item["type"] == "bv":
         out["missing_data"] = bool(item.get("missing_data"))
+    if item["type"] == "commission" and "commission_lines" in item:
+        out["commission_lines"] = [
+            {**linha, "amount": float(linha["amount"] or 0)} for linha in item["commission_lines"]
+        ]
     return out
 
 
@@ -717,6 +751,7 @@ def api_financeiro_pagamentos() -> Any:
     prev_year, prev_month = (year - 1, 12) if mon == 1 else (year, mon - 1)
     prev_start = date(prev_year, prev_month, 1)
     prev_end = m_start
+    # O 5 é o `DIA_DO_REPASSE` (app/constants.py, feature 306): o repasse do ciclo anterior.
     items += _build_commission_items(prev_start, prev_end, date(year, mon, 5), today)
 
     ensure_recurring_entries(year, mon)

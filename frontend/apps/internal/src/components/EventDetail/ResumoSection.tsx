@@ -388,7 +388,33 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     });
   }
 
-  if (data.cobranca) {
+  const cancelamento = data.event.cancelamento;
+  if (cancelamento) {
+    // Feature 306: no cancelado, a pendência "em aberto" dá lugar à devolução e ao retido.
+    // O satélite do "todos" e o dia cortado não têm retido próprio (a venda mora no 1º dia), e no
+    // satélite as devoluções são as do grupo inteiro (converge, T117): nada de "retido R$ 0,00".
+    const regime = cancelamento.regime;
+    const aPagar = cancelamento.devolucoes.filter((d) => d.estado !== "pago");
+    const devolucao = brl(aPagar.reduce((s, d) => s + d.valor, 0));
+    let valor: string;
+    if (regime === "satelite") {
+      valor = aPagar.length > 0 ? `devolução do grupo de ${devolucao} a pagar` : "dinheiro no 1º dia do grupo";
+    } else if (regime === "dia") {
+      valor = aPagar.length > 0 ? `devolução de ${devolucao} a pagar` : "venda no 1º dia do grupo";
+    } else {
+      valor =
+        aPagar.length > 0
+          ? `devolução de ${devolucao} a pagar · retido ${brl(cancelamento.retido)}`
+          : `retido ${brl(cancelamento.retido)}`;
+    }
+    lista.push({
+      key: "cobranca",
+      label: "Cancelado",
+      valor,
+      ok: aPagar.length === 0,
+      tab: "comercial",
+    });
+  } else if (data.cobranca) {
     const cobranca = data.cobranca;
     const aberto = cobranca.outstanding ?? 0;
     // Feature 299: a venda sem valor não está "quitada" — falta o valor —, a cortesia não é venda,

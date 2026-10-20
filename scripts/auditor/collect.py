@@ -18,18 +18,16 @@ import hashlib
 import json
 import shutil
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import config
 import psycopg
 import psycopg.rows
 import requests
-
-import config
 import store
-from pixnorm import normalize_pix
 
 TZ_SP = ZoneInfo("America/Sao_Paulo")
 
@@ -43,15 +41,15 @@ def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
     Esta é a janela dos números da semana (sem sobreposição entre relatórios). A coleta de
     itens usa uma janela estendida (margem de recoleta) derivada dela no `main`.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if args.desde:
         start_sp = datetime.strptime(args.desde, "%Y-%m-%d").replace(tzinfo=TZ_SP)
-        return start_sp.astimezone(timezone.utc), now
+        return start_sp.astimezone(UTC), now
     last_end = store.last_window_end()
     if last_end:
         start = datetime.fromisoformat(last_end)
         if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+            start = start.replace(tzinfo=UTC)
     else:
         start = now - timedelta(days=7)
     return start, now
@@ -59,7 +57,7 @@ def compute_window(args: argparse.Namespace) -> tuple[datetime, datetime]:
 
 def _naive_utc(dt: datetime) -> datetime:
     """Colunas gravadas com `datetime.utcnow` são naive UTC — parâmetro precisa casar."""
-    return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.astimezone(UTC).replace(tzinfo=None)
 
 
 def _naive_sp(dt: datetime) -> datetime:
@@ -542,18 +540,21 @@ def collect_aggregates(cur, win: tuple[datetime, datetime]) -> dict:
 
     # Margem por evento: `start_at` é SP-naive; em grupos a venda fica no líder e os cachês
     # se espalham nos satélites (regra do próprio app, `_group_cost`) — o custo soma o grupo
-    # inteiro e satélites (sale_value zerado) não entram na lista.
+    # inteiro e satélites (sale_value zerado) não entram na lista. Feature 306: sem o dia cancelado
+    # (o corte já o tirou da venda) e sem o principal cancelado (a DRE o trata à parte).
     cur.execute(
         """
         SELECT e.id, e.title, e.start_at, e.sale_value,
                COALESCE((SELECT SUM(COALESCE(r.cache_value, 0) + COALESCE(r.travel_cache, 0))
                            FROM event_roles r
                           WHERE r.event_id IN (SELECT s.id FROM calendar_events s
-                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
+                                                WHERE s.id = e.id
+                                                   OR (s.group_leader_id = e.id AND s.cancelled_at IS NULL))
                             AND r.dismissed_at IS NULL), 0) AS custo_caches,
                COALESCE((SELECT SUM(g.amount) FROM special_expenses g
                           WHERE g.event_id IN (SELECT s.id FROM calendar_events s
-                                                WHERE s.id = e.id OR s.group_leader_id = e.id)
+                                                WHERE s.id = e.id
+                                                   OR (s.group_leader_id = e.id AND s.cancelled_at IS NULL))
                             AND g.status = 'aprovado'), 0) AS custo_gastos
           FROM calendar_events e
          WHERE e.start_at >= %s AND e.start_at < %s
@@ -561,6 +562,7 @@ def collect_aggregates(cur, win: tuple[datetime, datetime]) -> dict:
            AND e.is_cortesia_permuta IS NOT TRUE
            AND e.event_type != 'VIRTUAL'
            AND e.group_leader_id IS NULL
+           AND e.cancelled_at IS NULL
          ORDER BY e.start_at
         """,
         (asp, bsp),

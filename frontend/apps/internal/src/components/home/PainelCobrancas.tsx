@@ -52,8 +52,9 @@ function LinhaCobranca({ linha }: { linha: PendingPayment }) {
             </span>
           )}
           <span className="block tabular-nums">
-            Recebido R$ {formatBRL(linha.received)} de R$ {formatBRL(linha.sale)} — falta R${" "}
-            {formatBRL(linha.saldo)}
+            Recebido R$ {formatBRL(linha.received)}
+            {(linha.devolvido ?? 0) > 0 && ` (devolvidos R$ ${formatBRL(linha.devolvido ?? 0)})`} de R${" "}
+            {formatBRL(linha.sale)} — falta R$ {formatBRL(linha.saldo)}
           </span>
         </>
       }

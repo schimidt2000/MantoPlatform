@@ -95,7 +95,7 @@ Existe um **segundo mecanismo vestigial**: tabelas `permissions`/`role_permissio
 
 | Papel | Escopo | Notas |
 |---|---|---|
-| `SUPERADMIN` | tudo | `has_permission()` sempre `True`; único que ultrapassa o teto de cachê |
+| `SUPERADMIN` | tudo | `has_permission()` sempre `True`; único que ultrapassa o teto de cachê e único que corrige os dados de venda do evento cancelado (regra única, abaixo) |
 | `CASTING` | escalar elenco, talentos, materiais de ensaio | |
 | `FIGURINO` | fichas de figurino, peças, sync do Drive | |
 | `COMERCIAL` | venda, clientes, orçamento, campanhas da Loja Virtual | |
@@ -124,8 +124,9 @@ não basta: abra o arquivo.
 existência.
 
 **No frontend, RBAC nunca é decidido no cliente:** ou o payload traz a chave (bloco ausente = seção
-não renderiza) ou traz `flags.<nome>` (11 flags geradas por `_role_flags`,
-`app/api/agenda_read.py` — `_role_flags`).
+não renderiza) ou traz `flags.<nome>` (14 flags geradas por `_role_flags`,
+`app/api/agenda_read.py`; o detalhe do evento soma as duas do cancelado, `can_edit_venda_cancelado`
+e `can_edit_pagamentos`, em `flags_do_detalhe`).
 
 **Terceiro padrão (feature 272): RBAC na emissão, escopo por dono na leitura.** As notificações
 internas (`notifications`) são endereçadas por papel **quando o fato acontece**
@@ -133,6 +134,26 @@ internas (`notifications`) são endereçadas por papel **quando o fato acontece*
 `/api/notificacoes*` não têm gate de papel — filtram sempre por `current_user.id` no servidor e
 devolvem 404 (não 403) para id alheio. "Ver como" **não** troca a caixa: ela é da pessoa, não do
 papel.
+
+**Regra única do evento cancelado (feature 306): o papel passa, o estado recusa.** No cancelado, só o
+**Superadmin real** corrige os dados de venda: comprovantes, devolução e imposto, a aba Comercial
+inteira (valor, taxa, cortesia, vendedor, datas, pagamento), acréscimos, parcelas, notas fiscais,
+reembolsos e multa ao elenco. É **uma** função, sem parâmetro de "qual dado":
+`pode_editar_venda_do_cancelado(user)` (`app/calendar/cancel_ops.py`), a régua de `_can_delete()`.
+Ela lê `user.roles`, então o "Ver como" não conta. Cada porta mantém o gate de hoje e aplica a regra
+depois dele, em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê
+`cancelled_at` antes de decidir (§6, item 26). Quem passa no gate e não é Superadmin recebe **409
+`codigo: "cancelado"`** (`EventoCanceladoError`); quem não passava continua no 403. O 403 diz "seu
+papel não faz isso"; o 409, "faz, mas não neste evento". Os dois endpoints novos, `PATCH …/devolucao`
+e `POST …/multas`, usam a própria regra como gate (403). Onde a porta **não recongela**, o cancelado
+leva o mesmo 409 **para todos, o Superadmin inclusive**: "Editar tudo" (`PATCH /api/events/<id>`) com
+campo de venda diferente do gravado, orçamento, exclusão, agrupar, desagrupar e soltar dia, e as
+ações de dinheiro da tela Jinja do evento (`_ACOES_RECUSADAS_NO_CANCELADO`, `app/calendar/routes.py`).
+O Superadmin corrige pela tela nova, que refaz o retido, a comissão e o BV do retido na mesma
+transação. As flags `can_edit_venda_cancelado` e `can_edit_pagamentos` seguem a impersonação, como
+`can_group`, mas quem decide é o servidor. ⚠️ O `"cancelado"` do 409 (`CODIGO_EVENTO_CANCELADO`,
+`app/constants.py`) tem o mesmo nome que `sumico_ops.CODIGO_CANCELADO` (recusa da devolução ao Google)
+e que `SITUACAO_CANCELADO`: nunca compare um com o outro. Gate e 409 de cada porta: `docs/01` §4.3.
 
 ---
 
@@ -246,6 +267,30 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
     checa `video_ops.ffmpeg_disponivel()` e degrada com segurança. Dívida 34 do `docs/05`. Na
     máquina de desenvolvimento o ffmpeg é LGPL e **não** tem `libx264` — só `libopenh264`; por isso
     `video_ops.encoder_disponivel()` escolhe em vez de fixar.
+25. **Trava é sempre evento → dependentes, e trava de várias linhas é sempre `ORDER BY id`** (feature
+    306, sobre a regra da 305). O cancelamento e as correções do cancelado descem de T1 a T6 e podem
+    pular degrau, nunca subir: **T1** `cancel_ops.travar_grupo` (o principal e todos os dias, vivos e
+    cancelados, com os ids **por consulta**, nunca `event.satellites`); **T2** os congelados, só
+    leitura; **T3** os acréscimos do principal; **T4** as linhas de comissão num SELECT só (as do
+    grupo **e** as abertas dos beneficiários); **T5** as devoluções do grupo; **T6** as escalações dos
+    dias alcançados, só no ato. A porta de um evento só trava com `orcamento_evento_ops.travar_evento`
+    e só depois o dependente. Google e e-mail saem depois do commit, nunca com a trava na mão. Duas
+    travas de várias linhas sem ordem fecham ciclo: por isso `liquidar_periodo` e `pay_seller_month`
+    ordenam por id e `_resync_pending_commissions` trava um evento por vez (`SKIP LOCKED`). O clique
+    duplo para em T1, e o `UNIQUE(event_id)` de `event_cancellations` é a segunda barreira (409
+    `ja_cancelado`). O deadlock que sobra (40P01) vira rollback + 409 `tente_de_novo`
+    (`cancel_ops.traduzir_erro_de_banco`). A ordem de cada operação:
+    `specs/306-dinheiro-do-cancelamento/plan.md` §Travas.
+26. **Travar não relê: decida só depois de travar e reler** (feature 306). O `SELECT … FOR UPDATE` que
+    esperou outro ato devolve a linha nova, mas o SQLAlchemy não a copia para o objeto que já estava
+    no mapa de identidade da sessão: `event.is_cancelled`, a venda e as coleções do grupo ficam com o
+    valor de antes da espera — o comprovante que esperou o ato entraria no cancelado sem refazer o
+    retido. As regras: `db.session.flush()` antes de toda releitura com `populate_existing` (que
+    sobrescreve o que a sessão ainda não enviou); `travar_evento` relê **só** `sale_value`,
+    `with_invoice`, `is_cortesia_permuta` e `cancelled_at`; `travar_grupo` relê todas as colunas,
+    confere a composição do grupo (mudou → 409 `grupo_mudou`) e expira as coleções do grupo. A porta
+    que decidiu vivo × cancelado antes da trava confere de novo depois dela e responde 409
+    `estado_mudou`, nunca 200 sem ter gravado.
 
 ---
 

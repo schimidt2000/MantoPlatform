@@ -1,0 +1,262 @@
+﻿
+── regressão: verifies antigos ──
+  303-sync-nao-apaga-venda/verify_303.py: saída 0, placar 44/44
+  267-integridade-comissao/verify_267.py: saída 0, placar 9/9
+  267b-hotfix-data-da-venda/verify_267b.py: saída 0, placar 8/8
+  267c-hotfix-trava-do-lote/verify_267c.py: saída 0, placar 10/10
+  299-sem-valor-cobrancas/verify_299.py: saída 0, placar 17/17
+  215b-hotfix-taxa-e-vendedor/verify_215b.py: saída 0, placar 9/9
+  305-bv-do-orcamento-no-evento/verify_305.py: saída 0, placar 68/68
+  205-loja-interacoes-virtuais/verify_205.py: saída 0, placar ?
+  266-costuras-funil/verify_266.py: saída 1, placar 7/9
+  258-cliente-manual/verify_258.py: saída 0, placar 7/7
+  256-auditor-marketing/verify_256.py: saída 0, placar 12/12
+  273-orcamento-para-evento/verify_273.py: saída 1, placar 8/15
+  301-orcamentos-visiveis-comercial/verify_301.py: saída 0, placar 13/13
+  272-notificacoes-internas/verify_272.py: saída 0, placar 13/13
+  238-teto-autorizado/verify_238.py: saída 0, placar ?
+  271-hotfix-corrida-lancamentos/verify_271.py: saída 0, placar 5/5
+  307-natal-papai-noel-calculadora/verify_307.py: saída 0, placar 17/17
+
+── verify 306 ──
+  (aquecimento de 2026-09 a 2026-12: fica no espelho nada novo)
+  OK         1 · chão e a casca da comissão (main × branch)
+  FALHA      16b · cheia 0 no núcleo (cortesia e sem vendedor): module 'app.financeiro.comissoes_ops' has no attribute 'comissao_cheia_do_evento'
+  OK         41 · regressão das comissões dos grupos e das cobranças (main × branch)
+  OK         23 · retrato main × branch dos meses sem cancelamento
+  FALHA      7 · a pagar ajustada no lugar: 7: esperada uma linha viva, vieram []
+  FALHA      8 · paga: −80 no primeiro repasse aberto (dias 2 e 10): list index out of range
+  FALHA      8 · variante prévia = execução: 'efeito'
+  FALHA      9 · no banco como paga + desfazer: esperado um ajuste ligado à paga, vieram []
+  FALHA      10 · Tudo, linha que nasce, vendedor sem comissão: 10: a a_pagar não ficou cancelada (sumiu?): []
+  FALHA      11 · EducaManto: 11: reduzida no lugar (mesma linha): []
+  FALHA      12 · reabrir Comissões e Planilha: 12: depois de reabrir Comissões e Planilha: esperado 18.00, veio 0.00
+  FALHA      13 · Planilha × Comissões: esperado um ajuste ligado à paga, vieram []
+  FALHA      14 · soma zero e órfão: 14: o item aberto de soma zero com linhas de valor sumiu da Planilha
+  FALHA      14b · exclusão no primeiro repasse aberto: 14b: sale_date ≠ payable_from no estorno
+  FALHA      17 · BV na Planilha: module 'app.calendar.cancel_ops' has no attribute 'bv_da_planilha'
+  FALHA      30 · corrida com a Planilha e sync velho: module 'app.calendar.cancel_ops' has no attribute 'travar_grupo'
+  FALHA      2 · Parte de 600: 2: remoção do Google depois do commit ['v306-52b91442d6']
+  FALHA      2 · variante prévia = execução: 'efeito'
+  FALHA      2b · marcado pela 303: cancelar 5650 → 409 {
+  "error": {
+    "codigo": "sumiu_do_google",
+    "message": "Este evento sumiu do Google Agenda. O cancelamento com devolu\u00e7\u00e3o do dinheiro chega na pr\u00f3xima entrega \u2014 por enquanto, devolva-o ao Google Agenda."
+  }
+}
+
+  FALHA      3 · Tudo, Nada e divergente: 3: max_devolucao: esperado 1000, veio None
+  FALHA      4 · recusas de forma: 4 sem modo → 200 {}
+  FALHA      5 · pendente, já cancelado, clique duplo: 5 pendente → 200 {}
+  FALHA      6 · papéis: 6 com: (403, 404, 403)
+  FALHA      15 · Alterar devolução: 15 600→800 → 404 {'message': 'Recurso não encontrado.'}
+  FALHA      16 · comprovante no cancelado: evento 5657 sem `event.cancelamento` no detalhe
+  FALHA      16 · variante paid_amount e valor esperado: 16 divergente → 409 {'message': 'O BV mudou para R$ 200,00 desde que a Planilha abriu: recarregue e confira antes de marcar.'}
+  OK         16 · variante 16-vivo
+  FALHA      18 · Gastos Extras (+ 18-inverso): 18 Salvar: (None, None, None, True)
+  FALHA      19 · orçamento, excluir e acréscimos no cancelado: 19 orçamento sa → 200 {}
+  FALHA      25 · payload do cancelado e flags do vivo: 'cancelamento'
+  FALHA      28 · RBAC: 28 sem sessão patch /api/events/5666/devolucao → 404
+  FALHA      28 · união TS dos códigos: CODIGOS_RECUSA_DO_CANCELAMENTO: None
+  FALHA      31 · Google: falha, trava e Sincronizar: 31: o aviso traz o texto cru do erro
+  FALHA      32 · pago maior que a venda e comprovante sem valor: 32: Tudo devolve o pago: esperado 2500, veio None
+  FALHA      34 · excluir usuário congelado: (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: UPDATE event_cancellations SET seller_id = $1 WHERE event_id...
+               ^
+[SQL: UPDATE event_cancellations SET seller_id = %(u)s WHERE event_id = %(e)s]
+[parameters: {'u': 833, 'e': 5669}]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+  FALHA      36 · devolução na Planilha: 36 complemento → 404 {'message': 'Recurso não encontrado.'}
+  FALHA      20 · DRE do mês do cancelamento: 20 realizado: receita bruta: esperado 400.00, veio 0.00
+  FALHA      21 · mês do evento, Tendência e variantes: 21: imposto gravado: esperado 64.00, veio 0.00
+  FALHA      22 · painéis: 22: barra do retido (API): esperado 1000.00, veio 0.00
+  FALHA      23 · mutação do retrato: 23 mutação: o retrato saiu 3, não acusou o retido somado sem a condição: lado branch saiu 3: mutação sem gancho
+{"diferencas": null, "erro": "branch: mutação sem gancho"}
+arning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+[2026-10-17 01:18:58,878] INFO in __in
+  FALHA      32 · DRE com o retido inteiro (pago maior que a venda): 32: DRE com o retido inteiro: esperado 2500.00, veio 0.00
+  FALHA      24 · relatórios comerciais: 24: total vendido + retido no mês do cancelamento: esperado 400.00, veio 0.00
+  FALHA      16b · dados de venda do cancelado: (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      16c · troca de vendedor: esperado um ajuste ligado à paga, vieram []
+  FALHA      16c · mutações: um beneficiário só, nota sem prefixo: 16c: B recebe a comissão do retido: esperado 18.00, veio 0.00
+  FALHA      16c · variante 16c-corrida: esperado um ajuste ligado à paga, vieram []
+  FALHA      16d · acréscimos no lugar: (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      16d · mutação apagar e recriar: 16d: o BV foi apagado e recriado
+  FALHA      16e · taxa congelada: (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      16e · mutação taxa de hoje: (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      5 · variante 5-grupo: 5-grupo todos → 400 {'fields': {'motivo': 'Desagrupe os eventos satélites antes de cancelar este evento.'}, 'message': 'Desagrupe os eventos satélites antes de cancelar este evento.'}
+  FALHA      4 · recusas do corte e piso: 4 corte sem venda nova → 200 {}
+  FALHA      29 · agrupar e desagrupar cancelado: 29 agrupar (líder 5692) → 200 {}
+  FALHA      35 · marcado no grupo: 35: o marcado vazio ainda sai 'excluir': excluir
+  FALHA      37 · Cancelar todos os dias (+ 37-devolução): (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      37b · comprovante num satélite do grupo cancelado: cancelar 5701 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      38 · só este dia (+ comprovante e P-52): (psycopg.errors.UndefinedTable) relação "event_cancellations" não existe
+LINE 1: ...e_value_gross_before, sale_value_gross_after FROM event_canc...
+                                                             ^
+[SQL: SELECT regime, refund_mode, sale_value, commission_full, commission_rate, commission_seller_id, seller_id, with_invoice, retained_tax, group_leader_id, sale_handed_over, sale_value_before, sale_value_after, sale_value_gross_before, sale_value_gross_after FROM event_cancellations WHE
+  FALHA      38c · desfazer no principal vivo: 38c: depois do corte, esperado 100 paga + −25 a pagar: [(2139, Decimal('100.00'), 'pago')]
+  FALHA      39 · depois do 38: esperado um ajuste ligado à paga, vieram []
+  FALHA      41 · custo do grupo com dia cancelado: 41: o cachê do dia cancelado não saiu do custo: esperado 300.00, veio 0.00
+  FALHA      16b · satélite e dia cortado → 409 do satélite: cancelar 5717 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      17 · BV do satélite cancelado na Planilha: cancelar 5720 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      21 · satélite cancelado sem retido na DRE: cancelar 5723 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42 · passagem da venda: cancelar 5726 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42 · mutação apagar e recriar: cancelar 5729 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42b · passagem com corte: 42b → 400 {'fields': {'motivo': 'Desagrupe os eventos satélites antes de cancelar este evento.'}, 'message': 'Desagrupe os eventos satélites antes de cancelar este evento.'}
+  FALHA      42c · novo 1º dia noutro mês: cancelar 5735 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42c · mutação data antiga: cancelar 5740 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42d · recusas da passagem: 42d alcance → 400 {'fields': {'motivo': 'Desagrupe os eventos satélites antes de cancelar este evento.'}, 'message': 'Desagrupe os eventos satélites antes de cancelar este evento.'}
+  FALHA      33 · cachê pago: 33: impacto sem cache_pago (pago)
+  FALHA      40 · soltar, agrupar, cachê pago no grupo e ENSAIO: 40 soltar → 200 {}
+  FALHA      43 · ensaios: 43: ensaio 5751 ficou no banco
+  FALHA      2b · marcado: elenco e equipe de Ensaio avisados: cancelar 5753 → 409 {
+  "error": {
+    "codigo": "sumiu_do_google",
+    "message": "Este evento sumiu do Google Agenda. O cancelamento com devolu\u00e7\u00e3o do dinheiro chega na pr\u00f3xima entrega \u2014 por enquanto, devolva-o ao Google Agenda."
+  }
+}
+
+  FALHA      4 · multas recusadas no cancelar: 4 multa negativa → 200 {}
+  FALHA      42 · passagem: elenco avisado e ensaio apagado: cancelar 5757 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42b · passagem: multa por escalação do antigo 1º dia: cancelar 5762 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      42d · passagem: cachê pago no antigo 1º dia: 42d cachê pago → 400 {'fields': {'motivo': 'Desagrupe os eventos satélites antes de cancelar este evento.'}, 'message': 'Desagrupe os eventos satélites antes de cancelar este evento.'}
+  FALHA      42e · ensaios na passagem da venda: cancelar 5770 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      44 · avisos: cancelar 5775 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      44 · dois atos, dois sinos (+ mutação da chave do principal): cancelar 5778 → 400 {
+  "error": {
+    "fields": {
+      "motivo": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+    },
+    "message": "Desagrupe os eventos sat\u00e9lites antes de cancelar este evento."
+  }
+}
+
+  FALHA      45 · multa no ato: 45: faltam_dias None
+  FALHA      45b · multa depois do ato: evento 5784 sem `event.cancelamento` no detalhe
+  FALHA      45c · multa a quem saiu da escala: 45c: e-mail de remoção no cancelado
+  FALHA      45c · mutações: lista da escala de hoje, remoção sem a condição: 45c: e-mail de remoção no cancelado
+  (aquecimento de 2026-09 a 2026-12: fica no espelho nada novo)
+  OK         26 · passado quieto e contagem só leitura
+  OK         27 · limpeza e nenhuma rede
+
+3/59 cenários OK (6/86 linhas)
+  B0: 4/5
+  B1: 0/12
+  B2: 1/20
+  B3: 0/6
+  B4: 0/8
+  B5: 0/19
+  B6: 0/15
+  B9: 1/1

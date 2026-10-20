@@ -1,0 +1,70 @@
+{
+ "303-sync-nao-apaga-venda/verify_303.py": {
+  "codigo": 0,
+  "placar": "44/44"
+ },
+ "267-integridade-comissao/verify_267.py": {
+  "codigo": 0,
+  "placar": "9/9"
+ },
+ "267b-hotfix-data-da-venda/verify_267b.py": {
+  "codigo": 0,
+  "placar": "8/8"
+ },
+ "267c-hotfix-trava-do-lote/verify_267c.py": {
+  "codigo": 0,
+  "placar": "10/10"
+ },
+ "299-sem-valor-cobrancas/verify_299.py": {
+  "codigo": 0,
+  "placar": "17/17"
+ },
+ "215b-hotfix-taxa-e-vendedor/verify_215b.py": {
+  "codigo": 0,
+  "placar": "9/9"
+ },
+ "305-bv-do-orcamento-no-evento/verify_305.py": {
+  "codigo": 0,
+  "placar": "68/68"
+ },
+ "205-loja-interacoes-virtuais/verify_205.py": {
+  "codigo": 0,
+  "placar": "?"
+ },
+ "266-costuras-funil/verify_266.py": {
+  "codigo": 1,
+  "placar": "7/9"
+ },
+ "258-cliente-manual/verify_258.py": {
+  "codigo": 0,
+  "placar": "7/7"
+ },
+ "256-auditor-marketing/verify_256.py": {
+  "codigo": 0,
+  "placar": "12/12"
+ },
+ "273-orcamento-para-evento/verify_273.py": {
+  "codigo": 1,
+  "placar": "8/15"
+ },
+ "301-orcamentos-visiveis-comercial/verify_301.py": {
+  "codigo": 0,
+  "placar": "13/13"
+ },
+ "272-notificacoes-internas/verify_272.py": {
+  "codigo": 0,
+  "placar": "13/13"
+ },
+ "238-teto-autorizado/verify_238.py": {
+  "codigo": 0,
+  "placar": "?"
+ },
+ "271-hotfix-corrida-lancamentos/verify_271.py": {
+  "codigo": 0,
+  "placar": "5/5"
+ },
+ "307-natal-papai-noel-calculadora/verify_307.py": {
+  "codigo": 0,
+  "placar": "17/17"
+ }
+}

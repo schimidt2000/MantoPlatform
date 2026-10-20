@@ -2,7 +2,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 
 export type ExpenseStatus = "pendente" | "aprovado" | "rejeitado";
-export type DisbursementType = "reembolso" | "fornecedor" | null;
+/** `cliente` = devolução à cliente: nasce só pelo cancelamento do evento (feature 306). */
+export type DisbursementType = "reembolso" | "fornecedor" | "cliente" | null;
 
 /** Lote de reembolso gerado pelo auditor de marketing (feature 256) — detalhe por campanha. */
 export interface GastoMarketingBatch {
@@ -37,6 +38,12 @@ export interface GastoExtra {
   created_at: string;
   approved_by_name: string | null;
   approved_at: string | null;
+  /**
+   * Feature 306: devolução de evento cancelado — valor, data, categoria e vínculo travados (só o
+   * "Alterar devolução" do evento os muda). Opcionais: backend antigo.
+   */
+  locked?: boolean;
+  event_cancelled?: boolean;
 }
 
 export interface GastosTotal {
@@ -141,7 +148,8 @@ export interface UpdateGastoInput {
   category: string;
   amount: number;
   expense_date: string;
-  disbursement_type?: "reembolso" | "fornecedor" | "";
+  /** `cliente` só se o gasto já era devolução à cliente (o servidor recusa a conversão). */
+  disbursement_type?: "reembolso" | "fornecedor" | "cliente" | "";
   reimburse_user_id?: number;
   supplier_name?: string;
   supplier_pix?: string;

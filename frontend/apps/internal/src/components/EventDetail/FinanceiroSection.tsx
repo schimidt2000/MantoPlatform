@@ -164,6 +164,11 @@ function PagamentoItem({
             Cancelar
           </Button>
         </span>
+        {edit.isError && (
+          <p className="w-full text-sm text-red" role="alert">
+            {edit.error?.message || "Não foi possível corrigir o comprovante."}
+          </p>
+        )}
       </li>
     );
   }
@@ -200,6 +205,11 @@ function PagamentoItem({
           </>
         )}
       </span>
+      {del.isError && (
+        <p className="w-full text-sm text-red" role="alert">
+          {del.error?.message || "Não foi possível excluir o comprovante."}
+        </p>
+      )}
     </li>
   );
 }
@@ -242,6 +252,10 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
     );
   }
   const recebido = cobranca.recebido ?? 0;
+  // Feature 306 (FR-074): no evento cancelado a venda acabou, e nada falta receber. Só o dia cortado
+  // de um grupo que segue vivo (regime `dia`) continua mostrando o que falta da venda do grupo.
+  const semFalta =
+    cobranca.quitado || (Boolean(data.event.cancelled_at) && data.event.cancelamento?.regime !== "dia");
   // Cortesia ou permuta não é venda: nada de "de R$ 0,00 — falta R$ 0,00" nem "Quitado".
   const cortesia = Boolean(cobranca.cortesia);
   if (cobranca.escopo === "grupo_outro") {
@@ -267,8 +281,10 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
             `Recebido no grupo ${brl(recebido)} · valor de venda a definir`
           ) : (
             <>
-              Recebido no grupo {brl(recebido)} de {brl(cobranca.valor ?? 0)}
-              {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+              Recebido no grupo {brl(recebido)}
+              {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
+              {brl(cobranca.valor ?? 0)}
+              {!semFalta && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
             </>
           )}
         </span>
@@ -295,8 +311,10 @@ function ResumoDoRecebido({ data, pagamentos }: { data: EventoDetalhe; pagamento
   return (
     <span className="block text-ink">
       <span className="font-medium tabular-nums">
-        Recebido {brl(recebido)} de {brl(cobranca.valor ?? 0)}
-        {!cobranca.quitado && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
+        Recebido {brl(recebido)}
+        {(cobranca.devolvido ?? 0) > 0 && ` (devolvidos ${brl(cobranca.devolvido ?? 0)})`} de{" "}
+        {brl(cobranca.valor ?? 0)}
+        {!semFalta && ` — falta ${brl(cobranca.outstanding ?? 0)}`}
       </span>
       <OutrosDoGrupo outros={pagamentos.outros_do_grupo ?? []} />
     </span>
@@ -312,6 +330,9 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const pagamentos = data.pagamentos;
   if (!pagamentos) return null;
+  // Feature 306: no cancelado, só quem corrige a venda do cancelado lança comprovante. O que já
+  // existia se gata com `!== false` (janela de deploy: backend antigo não manda a chave).
+  const podeLancar = data.flags.can_edit_pagamentos !== false;
 
   // "Quitado" vem do servidor, com a folga de centavos e o grupo (feature 299); sem a chave
   // (servidor antigo), a conta de antes, só com o próprio evento.
@@ -341,45 +362,49 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
           ))}
         </ul>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <MoneyInput
-          value={amount}
-          onValueChange={setAmount}
-          className={MONEY_INPUT_CLASS}
-          placeholder="0,00"
-          aria-label="Valor recebido"
-        />
-        <input
-          ref={inputRef}
-          type="file"
-          className="text-sm text-ink"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          aria-label="Comprovante de pagamento"
-        />
-        <Button
-          size="sm"
-          loading={add.isPending}
-          disabled={!amount || !file}
-          onClick={() =>
-            file &&
-            add.mutate(
-              { amount, file },
-              {
-                onSuccess: () => {
-                  setAmount(0);
-                  setFile(null);
-                  if (inputRef.current) inputRef.current.value = "";
+      {podeLancar && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          <MoneyInput
+            value={amount}
+            onValueChange={setAmount}
+            className={MONEY_INPUT_CLASS}
+            placeholder="0,00"
+            aria-label="Valor recebido"
+          />
+          <input
+            ref={inputRef}
+            type="file"
+            className="text-sm text-ink"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            aria-label="Comprovante de pagamento"
+          />
+          <Button
+            size="sm"
+            loading={add.isPending}
+            disabled={!amount || !file}
+            onClick={() =>
+              file &&
+              add.mutate(
+                { amount, file },
+                {
+                  onSuccess: () => {
+                    setAmount(0);
+                    setFile(null);
+                    if (inputRef.current) inputRef.current.value = "";
+                  },
                 },
-              },
-            )
-          }
-        >
-          Adicionar pagamento
-        </Button>
-        {add.isError && (
-          <p className="w-full text-sm text-red">Informe o valor e anexe o comprovante.</p>
-        )}
-      </div>
+              )
+            }
+          >
+            Adicionar pagamento
+          </Button>
+          {add.isError && (
+            <p className="w-full text-sm text-red" role="alert">
+              {add.error?.message || "Informe o valor e anexe o comprovante."}
+            </p>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -394,6 +419,8 @@ function NotasFiscaisPanel({ data }: { data: EventoDetalhe }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const notas = data.notas_fiscais;
   if (!notas) return null;
+  // Feature 306: no cancelado, só pela flag de correção da venda do cancelado.
+  const podeLancar = !data.event.cancelled_at || Boolean(data.flags.can_edit_venda_cancelado);
 
   return (
     <Panel title="Notas fiscais">
@@ -426,55 +453,59 @@ function NotasFiscaisPanel({ data }: { data: EventoDetalhe }) {
           ))}
         </ul>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <MoneyInput
-          value={amount}
-          onValueChange={setAmount}
-          className={MONEY_INPUT_CLASS}
-          placeholder="0,00"
-          aria-label="Valor da nota"
-        />
-        <input
-          type="date"
-          className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={issueDate}
-          onChange={(e) => setIssueDate(e.target.value)}
-          aria-label="Data de emissão"
-        />
-        <input
-          ref={inputRef}
-          type="file"
-          className="text-sm text-ink"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          aria-label="Arquivo da nota"
-        />
-        <Button
-          size="sm"
-          loading={add.isPending}
-          disabled={!amount && !issueDate && !file}
-          onClick={() =>
-            add.mutate(
-              {
-                amount: amount || undefined,
-                issue_date: issueDate || undefined,
-                file: file ?? undefined,
-              },
-              {
-                onSuccess: () => {
-                  setAmount(0);
-                  setIssueDate("");
-                  setFile(null);
-                  if (inputRef.current) inputRef.current.value = "";
+      {podeLancar && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          <MoneyInput
+            value={amount}
+            onValueChange={setAmount}
+            className={MONEY_INPUT_CLASS}
+            placeholder="0,00"
+            aria-label="Valor da nota"
+          />
+          <input
+            type="date"
+            className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            value={issueDate}
+            onChange={(e) => setIssueDate(e.target.value)}
+            aria-label="Data de emissão"
+          />
+          <input
+            ref={inputRef}
+            type="file"
+            className="text-sm text-ink"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            aria-label="Arquivo da nota"
+          />
+          <Button
+            size="sm"
+            loading={add.isPending}
+            disabled={!amount && !issueDate && !file}
+            onClick={() =>
+              add.mutate(
+                {
+                  amount: amount || undefined,
+                  issue_date: issueDate || undefined,
+                  file: file ?? undefined,
                 },
-              },
-            )
-          }
-        >
-          Adicionar
-        </Button>
-      </div>
+                {
+                  onSuccess: () => {
+                    setAmount(0);
+                    setIssueDate("");
+                    setFile(null);
+                    if (inputRef.current) inputRef.current.value = "";
+                  },
+                },
+              )
+            }
+          >
+            Adicionar
+          </Button>
+        </div>
+      )}
       {add.isError && (
-        <p className="mt-1 text-sm text-red">Informe ao menos o valor, a data ou o arquivo.</p>
+        <p className="mt-1 text-sm text-red" role="alert">
+          {add.error?.message || "Informe ao menos o valor, a data ou o arquivo."}
+        </p>
       )}
     </Panel>
   );
@@ -524,7 +555,9 @@ function CollectForm({ reimbursementId, eventId }: { reimbursementId: number; ev
         Marcar cobrado
       </Button>
       {collect.isError && (
-        <p className="w-full text-sm text-red">Informe o valor e anexe o comprovante.</p>
+        <p className="w-full text-sm text-red" role="alert">
+          {collect.error?.message || "Informe o valor e anexe o comprovante."}
+        </p>
       )}
     </div>
   );
@@ -542,6 +575,8 @@ function ReembolsosPanel({ data }: { data: EventoDetalhe }) {
   const reembolsos = data.reembolsos;
   if (!reembolsos) return null;
   const isSuperadmin = Boolean(data.flags.is_superadmin);
+  // Feature 306: no cancelado, só pela flag de correção da venda do cancelado.
+  const podeLancar = !data.event.cancelled_at || Boolean(data.flags.can_edit_venda_cancelado);
 
   return (
     <Panel
@@ -599,59 +634,63 @@ function ReembolsosPanel({ data }: { data: EventoDetalhe }) {
                 >
                   Comprovante de recebimento ({brl(item.collected_amount)})
                 </a>
-              ) : !item.is_collected ? (
+              ) : !item.is_collected && podeLancar ? (
                 <CollectForm reimbursementId={item.id} eventId={eventId} />
               ) : null}
             </li>
           ))}
         </ul>
       )}
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
-        <input
-          className={`${INPUT_CLASS} min-w-40 flex-1`}
-          placeholder="Ex.: Bagagem extra"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          aria-label="Descrição do reembolso"
-        />
-        <MoneyInput
-          value={amount}
-          onValueChange={setAmount}
-          className={MONEY_INPUT_CLASS}
-          placeholder="0,00"
-          aria-label="Valor a cobrar"
-        />
-        <input
-          ref={inputRef}
-          type="file"
-          className="text-sm text-ink"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          aria-label="Nota fiscal do gasto (opcional)"
-        />
-        <Button
-          size="sm"
-          loading={add.isPending}
-          disabled={!description.trim() || !amount}
-          onClick={() =>
-            add.mutate(
-              { description: description.trim(), amount, file: file ?? undefined },
-              {
-                onSuccess: () => {
-                  setDescription("");
-                  setAmount(0);
-                  setFile(null);
-                  if (inputRef.current) inputRef.current.value = "";
+      {podeLancar && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
+          <input
+            className={`${INPUT_CLASS} min-w-40 flex-1`}
+            placeholder="Ex.: Bagagem extra"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            aria-label="Descrição do reembolso"
+          />
+          <MoneyInput
+            value={amount}
+            onValueChange={setAmount}
+            className={MONEY_INPUT_CLASS}
+            placeholder="0,00"
+            aria-label="Valor a cobrar"
+          />
+          <input
+            ref={inputRef}
+            type="file"
+            className="text-sm text-ink"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            aria-label="Nota fiscal do gasto (opcional)"
+          />
+          <Button
+            size="sm"
+            loading={add.isPending}
+            disabled={!description.trim() || !amount}
+            onClick={() =>
+              add.mutate(
+                { description: description.trim(), amount, file: file ?? undefined },
+                {
+                  onSuccess: () => {
+                    setDescription("");
+                    setAmount(0);
+                    setFile(null);
+                    if (inputRef.current) inputRef.current.value = "";
+                  },
                 },
-              },
-            )
-          }
-        >
-          Registrar reembolso
-        </Button>
-        {add.isError && (
-          <p className="w-full text-sm text-red">Informe a descrição e o valor do reembolso.</p>
-        )}
-      </div>
+              )
+            }
+          >
+            Registrar reembolso
+          </Button>
+          {add.isError && (
+            <p className="w-full text-sm text-red" role="alert">
+              {add.error?.message || "Informe a descrição e o valor do reembolso."}
+            </p>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }

@@ -33,12 +33,11 @@ import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBann
 import { formatRange } from "./parts";
 
 /**
- * Evento marcado "Sumiu do Google Agenda" (feature 303): a única saída nesta entrega é devolver.
- * O servidor recusa cancelar e excluir; a tela desabilita os dois caminhos com o motivo.
+ * Evento marcado "Sumiu do Google Agenda" (features 303 e 306): devolva ao Google ou cancele. O
+ * "Excluir ou cancelar" abre direto no cancelar (o servidor recusa só a exclusão).
  */
 const MOTIVO_SO_DEVOLVER =
-  "Este evento sumiu do Google Agenda — por enquanto só pode ser devolvido. O cancelamento " +
-  "chega na próxima entrega.";
+  "Este evento sumiu do Google Agenda: devolva-o ao Google Agenda ou cancele o evento.";
 
 /** `dd/mm/aaaa` a partir de um ISO, sem passar por `toLocaleDateString` de data pura. */
 function formatDataCurta(iso: string): string {
@@ -336,7 +335,8 @@ export function EventHeader({ data }: EventHeaderProps) {
   // Desde a 210 os dados do evento são editados na própria aba onde aparecem; o formulário em
   // bloco continua aqui para quem quer mexer em elenco, clientes e valores de uma vez só —
   // deixou de ser o caminho obrigatório, então saiu da barra e virou item de menu.
-  if (data.flags.can_edit_core) {
+  // Feature 306: no cancelado, a edição em bloco não corrige venda (o servidor recusa) — some.
+  if (data.flags.can_edit_core && !cancelado) {
     items.push({
       label: "✏️ Editar tudo (formulário completo)",
       title: "Abrir o formulário em bloco — elenco, clientes e valores na mesma tela",
@@ -348,9 +348,8 @@ export function EventHeader({ data }: EventHeaderProps) {
   if (!cancelado) {
     if (data.flags.can_delete) {
       items.push({
-        label: "🗑 Excluir ou cancelar",
+        label: marcado ? "🗑 Cancelar evento" : "🗑 Excluir ou cancelar",
         destructive: true,
-        disabled: marcado,
         title: marcado ? MOTIVO_SO_DEVOLVER : undefined,
         onClick: () => setDeleteOpen(true),
       });
@@ -414,13 +413,18 @@ export function EventHeader({ data }: EventHeaderProps) {
             {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
           </p>
           <p className="mt-1 text-muted">
-            Não conta em nenhuma métrica e sumiu da agenda. Os dados abaixo ficam para consulta.
+            Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
+            marcado, na ficha da cliente. Os dados abaixo ficam para consulta.
           </p>
         </div>
       )}
 
       {/* Antes do pedido de exclusão: quando os dois existem, o sumiço é o que explica o resto. */}
-      <SumiuDoGoogleBanner data={data} onDevolver={abrirDevolver} />
+      <SumiuDoGoogleBanner
+        data={data}
+        onDevolver={abrirDevolver}
+        onCancelar={data.flags.can_delete ? () => setDeleteOpen(true) : undefined}
+      />
 
       {event.deletion_request && (
         <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
@@ -437,7 +441,6 @@ export function EventHeader({ data }: EventHeaderProps) {
               <Button
                 size="sm"
                 variant="outline"
-                disabled={marcado}
                 title={marcado ? MOTIVO_SO_DEVOLVER : undefined}
                 onClick={() => setDeleteOpen(true)}
               >

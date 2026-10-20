@@ -83,6 +83,8 @@ export interface PendingPayment {
   start_at: string | null;
   sale: number;
   received: number;
+  /** Feature 306: a devolução à cliente do grupo (o `saldo` já a desconta). */
+  devolvido?: number;
   saldo: number;
   severity: "atrasado" | "vencido" | "urgent" | "warn" | "info";
   due_date: string | null;

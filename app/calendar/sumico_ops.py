@@ -59,7 +59,10 @@ _GRUPO_TEXTO = {
 # devolução, o rastro é o que a própria devolução grava antes de chamar o Google.
 MOTIVO_REAPARECEU = "reapareceu"
 MOTIVO_DEVOLVIDO = "devolvido"
-_MOTIVOS_DE_DESMARCAR = frozenset({MOTIVO_REAPARECEU, MOTIVO_DEVOLVIDO})
+# Feature 306: o cancelamento do marcado desmarca antes de `cancelled_at`, sem rastro de
+# reaparecimento (o rastro é o histórico do próprio ato).
+MOTIVO_CANCELADO = "cancelado"
+_MOTIVOS_DE_DESMARCAR = frozenset({MOTIVO_REAPARECEU, MOTIVO_DEVOLVIDO, MOTIVO_CANCELADO})
 
 # O que `_decidir_candidato` fez com um evento — só para `limpar_mes` registrar depois do commit.
 _VIRTUAL = "virtual"
@@ -341,6 +344,12 @@ def mesmos_dados(event: CalendarEvent, item: dict) -> bool:
 def _apagar_vazio(event: CalendarEvent, preso: PresoAoEvento, motivo: str, ym: str) -> _Decisao:
     from app.calendar.routes import _delete_event, _log_sync
 
+    # Feature 306 (FR-021, FR-036): trava o evento e relê antes de apagar (o molde de
+    # `_delete_event_flow`). Cancelado no meio do caminho não se apaga: pula.
+    db.session.flush()
+    db.session.refresh(event, with_for_update=True)
+    if event.is_cancelled:
+        return _Decisao(_JA_MARCADO)
     titulo = event.title
     _log_sync(
         "auto_deleted",
