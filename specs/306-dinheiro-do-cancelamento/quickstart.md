@@ -518,7 +518,7 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
 ## 9. Antes do merge e deploy
 
 **Antes do merge**
-1. A branch está rebaseada sobre a `main`, que já tem 303, 215b, 267c, 305 e 307 (`6356b80`), com as citações
+1. A branch está rebaseada sobre a `main`, que já tem 303, 215b, 267c, 305, 307 e 308 (`98192e8`), com as citações
    `arquivo:linha` reconferidas se a `main` andar de novo.
 2. Tudo verde:
    - o §1 sem argumentos e com `--regressao`, mais o §3 idêntico, o §5 e o §6;

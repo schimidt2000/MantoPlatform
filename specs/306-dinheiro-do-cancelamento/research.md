@@ -1139,7 +1139,7 @@ Regra nova em `_sync`: com ajuste vivo do próprio evento cuja original voltou a
 - **Ficha da cliente.**
   - `client_ops.get_client_detail` (`:132-159`): total = Σ vivos + Σ retido, com resumos **só se** houver cancelado (o PATCH e o DELETE também a chamam, `clientes_write.py:75`, `:101`).
   - `list_clients` (`:111-129`) e `client_metrics` (`:183-225`) filtram o cancelado.
-- **Performance da Home**: `compute_performance` (`dashboard_service.py:290-293`) com `cancelled_at IS NULL`. **`/vendas/` Jinja** (`routes.py:1454`): o mesmo filtro.
+- **Performance da Home**: `compute_performance` (`dashboard_service.py:323-328`) com `cancelled_at IS NULL`. **`/vendas/` Jinja** (`routes.py:1454`): o mesmo filtro.
 - **Status de pagamento do evento** ganha "cancelado" (`vendas_ops.py:32-38`, `:44-66`), mostrado em `paineis.cancelamentos.itens[].status` da DRE; as uniões TS `SalePaymentStatus` (`lib/vendas.ts:9`) e `EventoStatus` (`lib/financeiro.ts:94`) ganham o membro. As chaves TS entram **no mesmo commit** nas duas páginas que usam `Record<…>` (`FinanceiroDashboardPage.tsx:60-74`; `VendasPipelinePage.tsx:39-45`).
 - **Cobrança da Home** (FR-061).
   - `VendaResumo` (`cobranca_ops.py:98-195`) ganha **`devolvido` à parte**, e `recebido` continua **bruto**.
