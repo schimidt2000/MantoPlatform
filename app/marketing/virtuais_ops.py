@@ -820,10 +820,14 @@ def _checar_limites(campaign: VirtualCampaign, telefone: str, origem: str) -> No
         .first()
     )
     if existente is not None:
+        # O token da reserva existente só volta para a mesma origem (aparelho e rede): qualquer um
+        # que digitasse o telefone de outra família recebia o link do pedido dela (feature 310).
         raise VirtuaisLimiteError(
             "Você já tem uma reserva em andamento. Conclua o pagamento ou abandone-a para "
             "escolher outro horário.",
-            existing_order_token=existente.public_token,
+            existing_order_token=(
+                existente.public_token if existente.origin_hash == origem else None
+            ),
         )
 
     janela = momento - timedelta(minutes=campaign.reservation_window_minutes or 60)
@@ -1427,6 +1431,17 @@ def _expirar_um(order_id: int) -> str | None:
     return "liberadas"
 
 
+def prova_da_aba(order: VirtualOrder, client_token: str | None) -> bool:
+    """True se quem pede é a aba que criou a reserva (o ``client_token`` dela, comparado em tempo
+    constante). O link do pedido sozinho não basta para desfazer a reserva de ninguém."""
+    import hmac
+
+    return bool(
+        client_token and order.client_token
+        and hmac.compare_digest(str(client_token), str(order.client_token))
+    )
+
+
 def abandonar_reserva(order: VirtualOrder) -> bool:
     """A família desiste de uma reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
 
@@ -1441,12 +1456,26 @@ def abandonar_reserva(order: VirtualOrder) -> bool:
     Raises:
         VirtuaisConflitoError: Há sinal de pagamento deste pedido.
     """
+    from app.integracoes import infinitepay_client as ipc
+
     if order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
         return False
+    sinal = VirtuaisConflitoError(
+        "Já recebemos um sinal de pagamento deste pedido — aguarde a confirmação aqui."
+    )
     if order.transaction_nsu or _aviso_sem_decisao(order):
-        raise VirtuaisConflitoError(
-            "Já recebemos um sinal de pagamento deste pedido — aguarde a confirmação aqui."
-        )
+        raise sinal
+    if order.payment_url:
+        # Pode ter pago sem o aviso ter chegado: mesma reconsulta da varredura. "Pago" ou "não
+        # sei" (operadora fora/travada) não liberam — só "não achei a cobrança".
+        try:
+            consulta = _reconsultar(order.order_nsu, _identificadores_conhecidos(order))
+        except ipc.InfinitePayError as exc:
+            raise VirtuaisConflitoError(
+                "Não conseguimos conferir o pagamento agora. Tente de novo em alguns minutos."
+            ) from exc
+        if consulta.get("resultado") == "pago":
+            raise sinal
     return _liberar_reserva(order, motivo="abandonada pela família")
 
 
@@ -2328,6 +2357,17 @@ def reprocessar_avisos(*, limite: int = 50) -> dict[str, int]:
     )
     resultado = {"processados": 0, "esperando": 0, "esgotados": 0}
     for aviso in candidatos:
+        if aviso.created_at and aviso.created_at < limite_idade and _veio_do_retorno(aviso):
+            # Registro de retorno (POST público, sem segredo) que nunca provou nada em 48 h: fecha
+            # em silêncio — sem sino e fora de "a conferir". Um retorno inventado não pode virar
+            # alarme para a equipe; o retorno de quem pagou de verdade já decidiu antes disso.
+            aviso.state = VIRTUAL_AVISO_STATE_DECIDIDO
+            aviso.outcome = aviso.outcome or VIRTUAL_AVISO_PENDENTE_PROVA
+            aviso.resolvido_em = momento
+            aviso.resolvido_por = "sistema (retorno sem prova em 48 h)"
+            db.session.commit()
+            resultado["esgotados"] += 1
+            continue
         if aviso.created_at and aviso.created_at < limite_idade:
             aviso.state = VIRTUAL_AVISO_STATE_DECIDIDO
             # Sem desfecho nenhum (nunca chegou a decidir) vira "retido": é o que o põe em

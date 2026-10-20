@@ -9,7 +9,9 @@ import {
   apiMoneyToNumber,
   fieldErrorsFrom,
   getClientToken,
+  lembrarReservaDaAba,
   renovarClientToken,
+  tokenDaAbaPara,
   useAbandonarReserva,
   useContagemDeSegundos,
   useCampanhaVirtual,
@@ -147,7 +149,8 @@ export function CampanhaVirtualPage() {
       {
         onSuccess: (data) => {
           // Feature 310 (FR-036): a próxima reserva nesta aba (outro horário, o irmão) é um
-          // pedido novo, não o link deste.
+          // pedido novo, não o link deste. Antes de trocar, guarda a prova para "abandonar".
+          lembrarReservaDaAba(data.public_token, getClientToken());
           renovarClientToken();
           // O link da operadora abre em seguida; a família volta para a página do pedido.
           if (data.payment_url) window.location.href = data.payment_url;
@@ -276,22 +279,31 @@ export function CampanhaVirtualPage() {
                 <Link to={`/v/pedido/${reservaExistente}`} className={BOTAO_SECUNDARIO}>
                   Ver a reserva que já tenho
                 </Link>
-                <button
-                  type="button"
-                  className={BOTAO_SECUNDARIO}
-                  disabled={abandonar.isPending}
-                  onClick={() =>
-                    abandonar.mutate(reservaExistente, {
-                      onSuccess: () => enviar(),
-                      onError: (erro) => {
-                        setReservaExistente(null);
-                        setAvisoTopo(erro.message);
-                      },
-                    })
-                  }
-                >
-                  {abandonar.isPending ? "Abandonando…" : "Abandonar e reservar este"}
-                </button>
+                {/* Só a aba que criou a reserva tem a prova para abandoná-la. */}
+                {tokenDaAbaPara(reservaExistente) && (
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    disabled={abandonar.isPending}
+                    onClick={() =>
+                      abandonar.mutate(
+                        {
+                          token: reservaExistente,
+                          clientToken: tokenDaAbaPara(reservaExistente) ?? "",
+                        },
+                        {
+                          onSuccess: () => enviar(),
+                          onError: (erro) => {
+                            setReservaExistente(null);
+                            setAvisoTopo(erro.message);
+                          },
+                        },
+                      )
+                    }
+                  >
+                    {abandonar.isPending ? "Abandonando…" : "Abandonar e reservar este"}
+                  </button>
+                )}
               </div>
             )}
           </motion.div>

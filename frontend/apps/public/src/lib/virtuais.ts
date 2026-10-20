@@ -214,13 +214,43 @@ export function useRetornoCheckout(token: string | undefined) {
  * Com sinal de pagamento o servidor recusa (409): quem decide é a operadora.
  */
 export function useAbandonarReserva() {
-  return useMutation<VirtualOrderSummary, ApiRequestError, string>({
-    mutationFn: (token) =>
+  return useMutation<
+    VirtualOrderSummary,
+    ApiRequestError,
+    { token: string; clientToken: string }
+  >({
+    mutationFn: ({ token, clientToken }) =>
       apiFetch<VirtualOrderSummary>(`/api/virtuais/pedidos/${token}/abandonar`, {
         method: "POST",
-        body: JSON.stringify({}),
+        body: JSON.stringify({ client_token: clientToken }),
       }),
   });
+}
+
+const CHAVE_RESERVAS_DA_ABA = "manto_virtuais_reservas_da_aba";
+
+/**
+ * Guarda qual `client_token` criou cada reserva desta aba. É a prova que o servidor pede para
+ * abandonar (o link do pedido sozinho não basta) — e o token da aba é renovado a cada reserva.
+ */
+export function lembrarReservaDaAba(publicToken: string, clientToken: string): void {
+  try {
+    const mapa = JSON.parse(window.sessionStorage.getItem(CHAVE_RESERVAS_DA_ABA) || "{}");
+    mapa[publicToken] = clientToken;
+    window.sessionStorage.setItem(CHAVE_RESERVAS_DA_ABA, JSON.stringify(mapa));
+  } catch {
+    /* sem sessionStorage: a família só não terá o botão de abandonar nesta aba */
+  }
+}
+
+/** O `client_token` que criou a reserva nesta aba, ou `null` (outra aba, outro aparelho). */
+export function tokenDaAbaPara(publicToken: string): string | null {
+  try {
+    const mapa = JSON.parse(window.sessionStorage.getItem(CHAVE_RESERVAS_DA_ABA) || "{}");
+    return typeof mapa[publicToken] === "string" ? mapa[publicToken] : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Pedido completo — só chega depois da validação dupla (FR-044a). */

@@ -1689,22 +1689,33 @@ def c55():
     cid, slug = nova_campanha()
     tel = f"119{secrets.randbelow(10**8):08d}"
 
-    def com_telefone(slot_id):
+    def com_telefone(slot_id, *, ip="198.51.100.56", ct=None):
         return client.post(
             f"/api/virtuais/campanhas/{slug}/reservar",
             json={"modality": "ao_vivo", "slot_id": slot_id, "child_name": "Irmã", "child_age": 4,
                   "contact_phone": tel, "contact_email": f"v310-{RUN}@example.com",
-                  "client_token": secrets.token_hex(8)},
-            headers={"X-Manto-Client-Ip": "198.51.100.56", "User-Agent": "verify-310"},
+                  "client_token": ct or secrets.token_hex(8)},
+            headers={"X-Manto-Client-Ip": ip, "User-Agent": "verify-310"},
         )
 
-    r1 = com_telefone(novo_horario(cid))
+    ct1 = secrets.token_hex(8)
+    r1 = com_telefone(novo_horario(cid), ct=ct1)
     h2 = novo_horario(cid)
+    estranho = com_telefone(h2, ip="203.0.113.99")
+    check("55.0 outra origem digitando o mesmo telefone não recebe o token",
+          estranho.status_code == 429
+          and not ((estranho.get_json() or {}).get("error") or {}).get("existing_order_token"),
+          str(estranho.get_json())[:160])
     r2 = com_telefone(h2)
     existente = ((r2.get_json() or {}).get("error") or {}).get("existing_order_token")
     check("55.1 segunda reserva do mesmo telefone → 429 com o token da primeira",
           r2.status_code == 429 and existente == r1.get_json()["public_token"], str(r2.status_code))
-    ab = client.post(f"/api/virtuais/pedidos/{existente}/abandonar", json={})
+    sem_prova = client.post(f"/api/virtuais/pedidos/{existente}/abandonar", json={})
+    check("55.1b sem a prova da aba, o link sozinho não abandona (deve falhar)",
+          sem_prova.status_code == 404
+          and pedido(r1.get_json()["order_nsu"])["status"] in ("reservado", "aguardando"),
+          str(sem_prova.status_code))
+    ab = client.post(f"/api/virtuais/pedidos/{existente}/abandonar", json={"client_token": ct1})
     check("55.2 abandonar libera", ab.status_code == 200
           and pedido(r1.get_json()["order_nsu"])["status"] == "expirado", str(ab.get_json())[:120])
     r3 = com_telefone(h2)
@@ -1713,8 +1724,34 @@ def c55():
     n3 = r3.get_json()["order_nsu"]
     avisar(OP.aviso(n3, {"tx": f"tx-{RUN}-55", "slug": f"sl-{RUN}-55",
                          "amount": Decimal("100.00"), "paid_amount": Decimal("100.00")}))
-    ab2 = client.post(f"/api/virtuais/pedidos/{r3.get_json()['public_token']}/abandonar", json={})
+    ct3 = _db("select client_token from virtual_orders where order_nsu=:n", n=n3)[0][0]
+    ab2 = client.post(f"/api/virtuais/pedidos/{r3.get_json()['public_token']}/abandonar",
+                      json={"client_token": ct3})
     check("55.4 com sinal de pagamento → 409", ab2.status_code == 409, str(ab2.status_code))
+
+
+@cenario("56 retorno inventado que nunca prova nada fecha em silêncio em 48 h")
+def c56():
+    cid, slug = nova_campanha()
+    _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.57")
+    a, tok = ra["order_nsu"], ra["public_token"]
+    tx = f"inventado-{RUN}-56"
+    client.post(f"/api/virtuais/pedidos/{tok}/retorno",
+                json={"order_nsu": a, "transaction_nsu": tx, "slug": "x"})
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_payment_notifications set created_at=:t, "
+                          "last_attempt_at=:t where transaction_nsu=:x"),
+                     {"t": now_sp() - timedelta(hours=49), "x": tx})
+    with app.app_context():
+        ops.reprocessar_avisos()
+        itens = [i for i in ops.listar_a_conferir() if i.get("order_nsu") == a]
+    linha = _db("select id, state, resolvido_em is not null from virtual_payment_notifications "
+                "where transaction_nsu=:x", x=tx)[0]
+    sino = _db("select count(*) from notifications where dedupe_key=:k",
+               k=f"virtual.aviso:{linha[0]}")[0][0]
+    check("56.1 fechado e resolvido pelo sistema", linha[1] == "decidido" and linha[2],
+          str(tuple(linha)))
+    check("56.2 fora de 'a conferir' e sem sino", not itens and sino == 0, f"{itens} sino={sino}")
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
@@ -1729,7 +1766,7 @@ BLOCOS = {
     8: [c37, c38],
     9: [c39, c40],
     10: [c41, c42],
-    11: [c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55],
+    11: [c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55, c56],
 }
 
 

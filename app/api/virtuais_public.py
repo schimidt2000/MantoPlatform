@@ -187,11 +187,14 @@ def api_virtuais_pedido_retorno(public_token: str) -> Any:
 def api_virtuais_pedido_abandonar(public_token: str) -> Any:
     """A família desiste da reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
 
-    O token é o mesmo segredo que abre a página do pedido. Com sinal de pagamento → 409 (quem
-    decide é a operadora); pedido que já não está ativo → 200 com o resumo, sem efeito.
+    Exige o ``client_token`` da aba que criou a reserva: o link do pedido chega a outras pessoas
+    (é o que se compartilha), e sem a prova qualquer um desfazia a reserva de outra família. Com
+    sinal de pagamento → 409 (quem decide é a operadora); pedido que já não está ativo → 200 com o
+    resumo, sem efeito.
     """
     order = VirtualOrder.query.filter_by(public_token=public_token).first()
-    if order is None:
+    data = request.get_json(silent=True) or {}
+    if order is None or not ops.prova_da_aba(order, data.get("client_token")):
         return json_error("Pedido não encontrado.", 404)
     try:
         ops.abandonar_reserva(order)

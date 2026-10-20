@@ -242,7 +242,7 @@ conexão separada; limpeza no `finally`.
       no topo + índice), `docs/04` (máquina de estados e invariantes), `docs/05` (registra o limitador em
       memória por processo e "História 9 desligada até a API Key"; não mexe no item 88), `DEVELOPMENT.md` (§Operar a produção:
       ligar/desligar a loja, teste de R$ 1, trava local, regra R-20), skill `manto-deploy` (R-20)
-- [ ] T061 `/speckit-converge` até não sobrar tarefa nova
+- [x] T061 `/speckit-converge` até não sobrar tarefa nova
 - [ ] T062 Pré-merge: rebase na `main` do dia; reencadear `down_revision`; ensaio de
       upgrade/downgrade num banco descartável com o dump do dia; venv 3.11 com `requirements.txt`;
       relatório ao dono. **Sem push** até ele pedir.
@@ -289,3 +289,8 @@ interruptor desligado; o dono liga depois dos testes A e C.
 - [x] T075 Assunto e preheader do e-mail de cancelamento seguem o motivo da devolução (desistência, horário passou, vídeo esgotado) per R-19 (contradicts)
 - [x] T076 Prazo explícito no `insert_event` da venda virtual (http com timeout curto) per FR-016, T066 (partial)
 - [x] T077 c28 grava a linha como o gunicorn (formato do `render.yaml` com dict) para exercitar o ramo de dict da máscara per R-13, T067 (partial)
+
+## Phase 16: Convergence
+
+- [x] T078 Abandonar exige a prova da aba que criou a reserva (`client_token`), reconsulta a cobrança antes de liberar, e o 429 só devolve o token da reserva existente para a mesma origem; c55 cobre terceiro e prova ausente per FR-020a (205), FR-044a, T073 (contradicts)
+- [x] T079 Registro de retorno que nunca prova nada fecha em silêncio em 48 h (resolvido pelo sistema, sem sino, fora de "a conferir"); c56 per R-07, R-09, T072 (partial)
