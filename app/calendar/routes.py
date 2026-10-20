@@ -2260,6 +2260,17 @@ def _is_manto_task_item(item: dict) -> bool:
     return bool(private.get(GCAL_KIND_KEY))
 
 
+def _eh_evento_da_loja(item: dict) -> bool:
+    """True se o item do Google foi criado pela loja virtual (feature 310, R11).
+
+    A venda virtual cria o evento no Google com ``extendedProperties.private.manto_virtual_nsu``.
+    Se a gravação local falhar (disputa, deploy no meio), o evento existe só no Google — e sem
+    esta marca a sincronização o importaria como evento comum, com venda, funil e DRE.
+    """
+    private = (item.get("extendedProperties") or {}).get("private") or {}
+    return bool(private.get("manto_virtual_nsu"))
+
+
 def sync_events(items: list[dict]) -> None:
     for item in items:
         google_id = item.get("id")
@@ -2288,7 +2299,7 @@ def sync_events(items: list[dict]) -> None:
 
         # Compromisso interno (prazo de figurino): a plataforma criou, a plataforma é dona, e ele
         # nunca vira CalendarEvent. Ver `_is_manto_task_item`.
-        if _is_manto_task_item(item):
+        if _is_manto_task_item(item) or _eh_evento_da_loja(item):
             continue
 
         # Evento de venda virtual: a sincronização não encosta nele em nenhum caminho —

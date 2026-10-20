@@ -1249,6 +1249,43 @@ def send_virtual_order_confirmed_email(order) -> bool:
     )
 
 
+def _motivo_do_cancelamento_virtual(order) -> str:
+    """A frase do porquê, pelo motivo da devolução mais recente (feature 310).
+
+    Antes havia uma frase só ("o horário foi confirmado para outra família"), e a 310 criou
+    cancelamentos por outros motivos — dizer à família um motivo falso é pior que não dizer.
+    """
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+    from app.models import VirtualRefundRequest
+
+    devolucao = (
+        VirtualRefundRequest.query.filter_by(order_id=order.id)
+        .order_by(VirtualRefundRequest.id.desc())
+        .first()
+    )
+    motivo = devolucao.reason if devolucao else None
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado, como combinado com a nossa equipe."
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return (
+            "Precisamos te dar uma notícia chata: o seu pagamento chegou quando o horário da "
+            "chamada já estava começando, e não dava mais tempo de preparar tudo."
+        )
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return (
+            "Precisamos te dar uma notícia chata: os vídeos esgotaram antes de o seu pagamento "
+            "chegar até nós."
+        )
+    return (
+        "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
+        "confirmado para outra família antes do seu pagamento chegar até nós."
+    )
+
+
 def send_virtual_order_cancelled_email(order) -> bool:
     """Avisa o cancelamento por horário indisponível e a devolução em andamento (FR-043a).
 
@@ -1261,10 +1298,7 @@ def send_virtual_order_cancelled_email(order) -> bool:
     campanha = order.campaign
     content = (
         _virtuais_saudacao()
-        + _paragraph(
-            "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
-            "confirmado para outra família antes do seu pagamento chegar até nós."
-        )
+        + _paragraph(_motivo_do_cancelamento_virtual(order))
         + _paragraph(
             f"Seu pedido foi cancelado e a devolução de {_virtuais_valor(order)} já está em "
             "andamento. Assim que ela for concluída, o valor volta pelo mesmo meio de pagamento."

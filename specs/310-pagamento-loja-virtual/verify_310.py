@@ -1196,7 +1196,7 @@ def c42():
     script = AQUI / "limpar_venda_teste.py"
     if not script.exists():
         raise Bloqueado("limpar_venda_teste.py ainda não existe")
-    cid, slug = nova_campanha()
+    cid, slug = nova_campanha(listada=False)  # campanha de teste: fora da vitrine
     _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.38")
     a = ra["order_nsu"]
     avisar(OP.aviso(a, OP.pagar(a, Decimal("100.00"))))

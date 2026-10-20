@@ -32,6 +32,7 @@ from sqlalchemy.orm import lazyload
 from app import db
 from app.constants import (  # feature 310
     EVENT_TYPE_VIRTUAL,
+    GIFT_3D_STATUS_PENDENTE,
     VIRTUAL_ANTECEDENCIA_RESERVA_HORAS,
     VIRTUAL_AVISO_CONFLITO,
     VIRTUAL_AVISO_DEVOLUCAO,
@@ -68,6 +69,7 @@ from app.constants import (  # feature 310
     VIRTUAL_PRODUCTION_STATUS_PENDENTE,
     VIRTUAL_PRODUCTION_STATUSES,
     VIRTUAL_REFUND_REASON_CONFLITO,
+    VIRTUAL_REFUND_REASON_DESISTENCIA,
     VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
     VIRTUAL_REFUND_REASON_LABELS,
     VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO,
@@ -77,6 +79,8 @@ from app.constants import (  # feature 310
     VIRTUAL_REFUND_STATUS_PENDENTE,
     VIRTUAL_RETRY_INTERVAL_MIN,
     VIRTUAL_RETRY_MAX_ATTEMPTS,
+    VIRTUAL_SALA_ALERTA_HORAS,
+    VIRTUAL_SALA_RETRY_LONGO_MIN,
     VIRTUAL_SLOT_MINUTES,
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
@@ -380,6 +384,11 @@ def atualizar_campanha(campaign: VirtualCampaign, **campos: Any) -> VirtualCampa
         campaign.talent_id = campos["talent_id"] or None
     if "figurino_sheet_id" in campos:
         campaign.figurino_sheet_id = campos["figurino_sheet_id"] or None
+    if "listada" in campos:
+        valor = campos["listada"]
+        campaign.listada = (
+            str(valor).lower() in ("1", "true", "on") if isinstance(valor, str) else bool(valor)
+        )
 
     audit("edit", "VirtualCampaign", campaign.id, campaign.title, "Campanha virtual editada")
     db.session.commit()
@@ -695,6 +704,22 @@ def _vagas_de_video_livres(campaign: VirtualCampaign, momento: datetime | None =
     return (campaign.recorded_capacity or 0) - (campaign.recorded_sold or 0) - ativas
 
 
+def _mesma_reserva(anterior: VirtualOrder, modality: str, slot_id: Any, gift_item_id: Any,
+                   child_name: Any) -> bool:
+    def _id(valor: Any) -> int | None:
+        try:
+            return int(valor) if valor not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    return (
+        anterior.modality == (modality or "").strip().lower()
+        and anterior.slot_id == _id(slot_id)
+        and anterior.gift_item_id == _id(gift_item_id)
+        and (anterior.child_name or "").strip().lower() == str(child_name or "").strip().lower()
+    )
+
+
 def _limite_de_reserva(momento: datetime | None = None) -> datetime:
     """Primeiro instante em que um horário ainda pode ser reservado (feature 310, FR-006)."""
     return (momento or agora()) + timedelta(hours=VIRTUAL_ANTECEDENCIA_RESERVA_HORAS)
@@ -897,7 +922,11 @@ def reservar(
             VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
             VirtualOrder.locked_until > agora(),
         ).first()
-        if anterior is not None:
+        # Feature 310 (FR-036): só é o MESMO pedido se for o mesmo horário, formato, presente e
+        # criança. Antes, a família que voltava do checkout e escolhia outro horário (ou reservava
+        # para o irmão) era mandada para o link do primeiro pedido.
+        if anterior is not None and _mesma_reserva(anterior, modality, slot_id, gift_item_id,
+                                                   ficha.get("child_name")):
             return anterior
 
     peca = None
@@ -1158,6 +1187,11 @@ def _liberar_reserva(
     if unverified_reason:
         atual.expired_unverified = True
         atual.unverified_reason = unverified_reason
+        _avisar_a_conferir(
+            f"virtual.conferir:pedido:{atual.id}",
+            "Loja virtual: pagamento a conferir",
+            f"Pedido {atual.order_nsu} liberado sem prova ({unverified_reason}).",
+        )
     logger.info("[virtuais] reserva %s liberada: %s", atual.order_nsu, motivo)
     db.session.commit()
     return True
@@ -1460,6 +1494,9 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
             fim,
             description=descricao,
             conference_request_id=f"virtual-{order.order_nsu}" if ao_vivo else None,
+            # Feature 310 (R11): marca do evento da loja, para a sincronização da agenda nunca o
+            # importar como evento comum (com venda, funil e DRE) se a gravação local falhar.
+            private_props={"manto_virtual_nsu": order.order_nsu},
         ),
         descricao=f"criar evento no Google do pedido {order.order_nsu}",
         exception_types=(Exception,),
@@ -2154,6 +2191,12 @@ def _fechar_aviso(
     db.session.commit()
     if outcome not in (VIRTUAL_AVISO_EFETIVADO, VIRTUAL_AVISO_DUPLICADO):
         logger.warning("[virtuais] aviso %s: %s (%s)", registro.id, outcome, mensagem)
+    if final and outcome in (VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO):
+        _avisar_a_conferir(
+            f"virtual.conferir:aviso:{registro.id}",
+            "Loja virtual: pagamento a conferir",
+            f"Aviso {outcome} do pedido {registro.order_nsu}.",
+        )
     return outcome
 
 
@@ -2309,12 +2352,29 @@ def retentar_salas(*, limite: int = 50) -> dict[str, int]:
     )
 
     resultado = {"resolvidas": 0, "retidas": 0, "esgotadas": 0}
+    momento = agora()
     for order in pendentes:
-        if not deve_tentar_novamente(order.meet_attempts or 0, order.meet_last_attempt_at):
-            if retry_esgotou(order.meet_attempts or 0):
-                resultado["esgotadas"] += 1
-            else:
-                resultado["retidas"] += 1
+        inicio = order.slot.start_at if order.slot else None
+        if inicio is not None and inicio - momento <= timedelta(hours=VIRTUAL_SALA_ALERTA_HORAS):
+            # Feature 310 (R11): faltando menos de 6 h sem sala, a equipe precisa saber — antes
+            # ninguém percebia até a família entrar no horário e não achar a sala.
+            _avisar_a_conferir(
+                f"virtual.sala:{order.id}",
+                "Loja virtual: chamada sem sala do Meet",
+                f"Pedido {order.order_nsu} começa {inicio:%d/%m %H:%M} e ainda não tem sala.",
+            )
+        tentativas = order.meet_attempts or 0
+        if retry_esgotou(tentativas):
+            # Depois das 3 da política, a cada 10 min até o horário (antes: desistia em ~2 min).
+            passou = inicio is not None and inicio <= momento
+            recente = order.meet_last_attempt_at and order.meet_last_attempt_at > momento - (
+                timedelta(minutes=VIRTUAL_SALA_RETRY_LONGO_MIN)
+            )
+            if passou or recente:
+                resultado["esgotadas" if passou else "retidas"] += 1
+                continue
+        elif not deve_tentar_novamente(tentativas, order.meet_last_attempt_at):
+            resultado["retidas"] += 1
             continue
 
         try:
@@ -2761,7 +2821,9 @@ def listar_vitrine() -> list[dict[str, Any]]:
     de repente confundiria quem recebeu o link e voltaria depois.
     """
     campanhas = (
-        VirtualCampaign.query.filter_by(status=VIRTUAL_CAMPAIGN_STATUS_PUBLICADA)
+        # Feature 310 (R14): publicada FORA da vitrine (teste real, oferta fechada) só abre pelo
+        # link — a campanha continua pública, só não é listada.
+        VirtualCampaign.query.filter_by(status=VIRTUAL_CAMPAIGN_STATUS_PUBLICADA, listada=True)
         .order_by(VirtualCampaign.created_at.desc())
         .all()
     )
@@ -2802,6 +2864,7 @@ def serialize_campaign_admin(campaign: VirtualCampaign) -> dict[str, Any]:
         **serialize_campaign(campaign),
         "id": campaign.id,
         "status": campaign.status,
+        "listada": bool(getattr(campaign, "listada", True)),
         "catalog_character_id": campaign.catalog_character_id,
         "talent_id": campaign.talent_id,
         "figurino_sheet_id": campaign.figurino_sheet_id,
@@ -2911,6 +2974,26 @@ def serialize_refund(refund: VirtualRefundRequest) -> dict[str, Any]:
     }
 
 
+def segundos_restantes(order: VirtualOrder) -> int | None:
+    """Segundos até a trava do pedido vencer, calculados no servidor (feature 310, FR-035)."""
+    if order.locked_until is None or order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return None
+    return max(0, int((order.locked_until - agora()).total_seconds()))
+
+
+def _confirmando(order: VirtualOrder) -> bool:
+    if order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return False
+    return (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.state != VIRTUAL_AVISO_STATE_DECIDIDO,
+        ).first()
+        is not None
+    )
+
+
 def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
     """Resumo do pedido para a página pública **antes** da validação dupla (FR-044a).
 
@@ -2929,6 +3012,11 @@ def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
         "start_at": order.slot.start_at.isoformat() if order.slot else None,
         "total_value": _money(order.total_value),
         "locked_until": order.locked_until.isoformat() if order.locked_until else None,
+        # Feature 310 (FR-035): o relógio vem pronto do servidor. `locked_until` é hora de parede
+        # de São Paulo sem fuso, e o navegador em Manaus contava 75 minutos em vez de 15.
+        "seconds_left": segundos_restantes(order),
+        # Há um aviso de pagamento deste pedido esperando decisão (a página diz "confirmando").
+        "confirming": _confirmando(order),
         "payment_url": (
             order.payment_url if order.status in VIRTUAL_ORDER_STATUS_ATIVOS else None
         ),
@@ -2951,3 +3039,248 @@ def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
             else None
         ),
     }
+
+
+# ── "A conferir" e cancelamento pela equipe (feature 310, US6) ────────────────────────────────
+
+
+def _avisar_a_conferir(dedupe: str, titulo: str, corpo: str) -> None:
+    """Sino para Comercial e Superadmin quando nasce um item "a conferir" (FR-032)."""
+    try:
+        from app.notificacoes import notificacoes_ops as nops
+
+        nops.notificar_virtual_atencao(titulo=titulo, corpo=corpo, dedupe_key=dedupe)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[virtuais] aviso 'a conferir' não saiu: %s", exc)
+
+
+def listar_a_conferir(*, dias: int = 30) -> list[dict[str, Any]]:
+    """Pagamentos que precisam de olho humano (feature 310, R-07).
+
+    Três origens, nunca abandono de checkout:
+    1. aviso divergente, órfão, ou esgotado sem desfecho (48 h);
+    2. pedido liberado sem prova porque a operadora não respondeu (``nao_sei``) ou porque pagou
+       valor errado (``divergente``);
+    3. recusa da operadora ao criar o link, agrupada por código.
+    """
+    desde = agora() - timedelta(days=dias)
+    itens: list[dict[str, Any]] = []
+
+    avisos = (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.resolvido_em.is_(None),
+            VirtualPaymentNotification.created_at >= desde,
+            db.or_(
+                VirtualPaymentNotification.outcome.in_(
+                    (VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO)
+                ),
+                db.and_(
+                    VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_DECIDIDO,
+                    VirtualPaymentNotification.outcome.in_(
+                        (VIRTUAL_AVISO_RETIDO, VIRTUAL_AVISO_PENDENTE_PROVA)
+                    ),
+                ),
+            ),
+        )
+        .order_by(VirtualPaymentNotification.id.desc())
+        .all()
+    )
+    for aviso in avisos:
+        try:
+            corpo = json.loads(aviso.raw_payload or "{}")
+        except ValueError:
+            corpo = {}
+        pedido = aviso.order
+        pago = corpo.get("paid_amount")
+        itens.append({
+            "tipo": "aviso",
+            "id": aviso.id,
+            "order_nsu": aviso.order_nsu,
+            "pedido_id": aviso.order_id,
+            "campanha": pedido.campaign.title if pedido and pedido.campaign else None,
+            "motivo": aviso.outcome,
+            "valor_pedido": _money(pedido.total_value) if pedido else None,
+            "valor_pago": _money(Decimal(pago) / 100) if pago is not None else None,
+            "invoice_slug": corpo.get("invoice_slug"),
+            "transaction_nsu": aviso.transaction_nsu,
+            "receipt_url": corpo.get("receipt_url"),
+            "criado_em": aviso.created_at.isoformat() if aviso.created_at else None,
+            "ocorrencias": 1,
+        })
+
+    pedidos = (
+        VirtualOrder.query.filter(
+            VirtualOrder.unverified_reason.isnot(None),
+            VirtualOrder.conferido_em.is_(None),
+            VirtualOrder.updated_at >= desde,
+        )
+        .order_by(VirtualOrder.updated_at.desc())
+        .all()
+    )
+    for pedido in pedidos:
+        itens.append({
+            "tipo": "pedido",
+            "id": pedido.id,
+            "order_nsu": pedido.order_nsu,
+            "pedido_id": pedido.id,
+            "campanha": pedido.campaign.title if pedido.campaign else None,
+            "motivo": pedido.unverified_reason,
+            "valor_pedido": _money(pedido.total_value),
+            "valor_pago": None,
+            "invoice_slug": pedido.invoice_slug,
+            "transaction_nsu": pedido.transaction_nsu,
+            "receipt_url": pedido.receipt_url,
+            "criado_em": pedido.updated_at.isoformat() if pedido.updated_at else None,
+            "ocorrencias": 1,
+        })
+
+    falhas: dict[str, dict[str, Any]] = {}
+    for pedido in (
+        VirtualOrder.query.filter(
+            VirtualOrder.payment_link_error.isnot(None),
+            VirtualOrder.conferido_em.is_(None),
+            VirtualOrder.created_at >= desde,
+        )
+        .order_by(VirtualOrder.created_at.desc())
+        .all()
+    ):
+        codigo = pedido.payment_link_error
+        if codigo in falhas:
+            falhas[codigo]["ocorrencias"] += 1
+            continue
+        falhas[codigo] = {
+            "tipo": "falha_link",
+            "id": pedido.id,
+            "order_nsu": pedido.order_nsu,
+            "pedido_id": pedido.id,
+            "campanha": pedido.campaign.title if pedido.campaign else None,
+            "motivo": codigo,
+            "valor_pedido": _money(pedido.total_value),
+            "valor_pago": None,
+            "invoice_slug": None,
+            "transaction_nsu": None,
+            "receipt_url": None,
+            "criado_em": pedido.created_at.isoformat() if pedido.created_at else None,
+            "ocorrencias": 1,
+        }
+    itens.extend(falhas.values())
+    itens.sort(key=lambda i: i["criado_em"] or "", reverse=True)
+    return itens
+
+
+def resolver_a_conferir(tipo: str, item_id: int, *, quem: str, nota: str = "") -> bool:
+    """Marca um item "a conferir" como resolvido — irreversível e auditado (R-07)."""
+    momento = agora()
+    if tipo == "aviso":
+        aviso = db.session.get(VirtualPaymentNotification, item_id)
+        if aviso is None or not aviso.secret_ok:
+            return False
+        aviso.resolvido_em, aviso.resolvido_por = momento, quem[:120]
+        rotulo = aviso.order_nsu or str(item_id)
+    elif tipo in ("pedido", "falha_link"):
+        pedido = db.session.get(VirtualOrder, item_id)
+        if pedido is None:
+            return False
+        alvo = [pedido]
+        if tipo == "falha_link" and pedido.payment_link_error:
+            # A falha de link aparece agrupada por código: resolver resolve o grupo.
+            alvo = VirtualOrder.query.filter(
+                VirtualOrder.payment_link_error == pedido.payment_link_error,
+                VirtualOrder.conferido_em.is_(None),
+            ).all()
+        for p in alvo:
+            p.conferido_em, p.conferido_por = momento, quem[:120]
+        rotulo = pedido.order_nsu
+    else:
+        return False
+    audit("edit", "VirtualOrder", item_id, rotulo,
+          f"'A conferir' ({tipo}) resolvido por {quem}" + (f": {nota[:200]}" if nota else ""))
+    db.session.commit()
+    return True
+
+
+def cancelar_pedido_pago(order_id: int, *, motivo: str, quem: str) -> VirtualRefundRequest:
+    """Equipe cancela um pedido pago e abre a devolução (feature 310, FR-034, R15, R-19).
+
+    Trava pedido → horário. O horário volta à vitrine só se ainda faltar mais que a antecedência
+    de reserva; senão fica vendido sem dono (não reaparece em cima da hora). Evento local e do
+    Google saem (a venda some dos relatórios), a entrega sai. Presente 3D já em impressão
+    bloqueia o cancelamento: a peça existe, e a decisão é da produção.
+
+    Raises:
+        VirtuaisValidationError: Motivo vazio.
+        VirtuaisConflitoError: Pedido não está pago, ou presente já em produção.
+    """
+    from app.models import Event3DGift
+
+    if not (motivo or "").strip():
+        raise VirtuaisValidationError("motivo", "Diga o motivo do cancelamento.")
+    order = _travar_pedido(order_id)
+    if order is None or order.status != VIRTUAL_ORDER_STATUS_PAGO:
+        db.session.rollback()
+        raise VirtuaisConflitoError("Só um pedido pago pode ser cancelado por aqui.")
+
+    presentes = Event3DGift.query.filter_by(event_id=order.event_id).all() if order.event_id else []
+    if any(g.status != GIFT_3D_STATUS_PENDENTE for g in presentes):
+        db.session.rollback()
+        raise VirtuaisConflitoError(
+            "O presente 3D deste pedido já está em produção — combine com a produção antes."
+        )
+
+    if order.slot_id:
+        slot = _travar_horario(order.slot_id)
+        if slot is not None and slot.order_id == order.id:
+            slot.order_id = None
+            slot.locked_until = None
+            slot.status = (
+                VIRTUAL_SLOT_STATUS_LIVRE
+                if slot.start_at > _limite_de_reserva()
+                else VIRTUAL_SLOT_STATUS_VENDIDO
+            )
+
+    evento = db.session.get(CalendarEvent, order.event_id) if order.event_id else None
+    google_id = evento.google_event_id if evento else None
+    for presente in presentes:
+        db.session.delete(presente)
+    VirtualMediaDelivery.query.filter_by(order_id=order.id).delete()
+    if evento is not None:
+        EventRole.query.filter_by(event_id=evento.id).delete()
+        order.event_id = None
+        db.session.flush()
+        db.session.delete(evento)
+    if order.modality == VIRTUAL_MODALITY_GRAVADO and order.campaign:
+        order.campaign.recorded_sold = max(0, (order.campaign.recorded_sold or 0) - 1)
+
+    devolucao = VirtualRefundRequest(
+        order_id=order.id,
+        amount=Decimal(order.total_value),
+        reason=VIRTUAL_REFUND_REASON_DESISTENCIA,
+        status=VIRTUAL_REFUND_STATUS_PENDENTE,
+        invoice_slug=order.invoice_slug,
+        transaction_nsu=order.transaction_nsu,
+    )
+    db.session.add(devolucao)
+    order.status = VIRTUAL_ORDER_STATUS_CANCELADO
+    audit("edit", "VirtualOrder", order.id, order.order_nsu,
+          f"Pedido pago cancelado por {quem}: {motivo.strip()[:200]} — devolução aberta")
+    db.session.commit()
+
+    if google_id and not google_id.startswith(GOOGLE_ID_LOCAL_PREFIX):
+        _apagar_evento_google(google_id)
+    _enviar_aviso(order, VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO)
+    return devolucao
+
+
+def _apagar_evento_google(google_id: str) -> None:
+    """Remove o evento da venda no Google, respeitando a trava de escrita (XIV)."""
+    if current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True):
+        logger.info("[virtuais] remoção do evento %s no Google travada neste ambiente", google_id)
+        return
+    try:
+        from app.calendar.routes import CALENDAR_ID
+        from app.calendar.service import delete_event
+
+        delete_event(CALENDAR_ID, google_id)
+    except Exception as exc:  # noqa: BLE001 — o pedido já foi cancelado; o evento fica a conferir
+        logger.warning("[virtuais] não consegui apagar o evento %s do Google: %s", google_id, exc)

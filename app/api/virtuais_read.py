@@ -98,6 +98,16 @@ def api_virtuais_devolucoes() -> Any:
     return jsonify({"refunds": [ops.serialize_refund(r) for r in refunds]})
 
 
+@api_bp.route("/virtuais/pagamentos-a-conferir", methods=["GET"])
+@api_login_required
+def api_virtuais_a_conferir() -> Any:
+    """Pagamentos que precisam de olho humano (feature 310, R-07) — mesmo gate das devoluções."""
+    denied = require_virtuais_access()
+    if denied:
+        return denied
+    return jsonify({"itens": ops.listar_a_conferir()})
+
+
 @api_bp.route("/virtuais/campanhas/<int:campaign_id>/admin", methods=["GET"])
 @api_login_required
 def api_virtuais_campanha_detail(campaign_id: int) -> Any:

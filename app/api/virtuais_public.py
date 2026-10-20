@@ -141,6 +141,7 @@ def api_virtuais_reservar(slug: str) -> Any:
                 "public_token": order.public_token,
                 "order_nsu": order.order_nsu,
                 "locked_until": order.locked_until.isoformat() if order.locked_until else None,
+                "seconds_left": ops.segundos_restantes(order),
                 "total_value": ops._money(order.total_value),
                 "payment_url": order.payment_url,
             }

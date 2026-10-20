@@ -165,10 +165,10 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 30–32 e 36.
 
-- [ ] T037 [US6] `listar_a_conferir()` e `resolver_a_conferir()` em `virtuais_ops.py` (R-07; audit)
-- [ ] T038 [US6] `GET /api/virtuais/pagamentos-a-conferir` em `virtuais_read.py` e `PATCH …/<tipo>/<id>`
+- [x] T037 [US6] `listar_a_conferir()` e `resolver_a_conferir()` em `virtuais_ops.py` (R-07; audit)
+- [x] T038 [US6] `GET /api/virtuais/pagamentos-a-conferir` em `virtuais_read.py` e `PATCH …/<tipo>/<id>`
       em `virtuais_write.py` (COMERCIAL, SUPERADMIN; função de RBAC no início da view)
-- [ ] T039 [US6] `cancelar_pedido_pago(order, motivo)` em `virtuais_ops.py` (R15, R-19: travas,
+- [x] T039 [US6] `cancelar_pedido_pago(order, motivo)` em `virtuais_ops.py` (R15, R-19: travas,
       horário, evento local e Google, entrega, presente via `delete_event_gift` se a impressão não
       começou — se começou, fica e entra em "a conferir" (R-04) —, devolução
       `desistencia`, e-mail) + `POST /api/virtuais/pedidos/<id>/cancelar` em `virtuais_write.py`
@@ -177,8 +177,8 @@ conexão separada; limpeza no `finally`.
 - [ ] T041 [P] [US6] Botão "Cancelar e abrir devolução" com confirmação e motivo na linha do pedido
       pago da Fila de Produção (`frontend/apps/internal/src/pages/FilaProducaoMidiaPage.tsx`, rota
       `/virtuais/producao`) + hook em `frontend/apps/internal/src/lib/virtuais.ts`
-- [ ] T042 [US6] Sino na devolução nova e no "a conferir" novo (dedupe por item)
-- [ ] T043 [US6] Rodar cenários 30–32 e 36
+- [x] T042 [US6] Sino na devolução nova e no "a conferir" novo (dedupe por item)
+- [x] T043 [US6] Rodar cenários 30–32 e 36
 
 ---
 
@@ -186,13 +186,13 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 33–35 + tela aberta 375×812.
 
-- [ ] T044 [US7] `seconds_left` e `confirming` em `serialize` do pedido e na resposta de reserva
-- [ ] T045 [US7] `client_token` só reaproveita com horário, formato, presente e criança iguais
+- [x] T044 [US7] `seconds_left` e `confirming` em `serialize` do pedido e na resposta de reserva
+- [x] T045 [US7] `client_token` só reaproveita com horário, formato, presente e criança iguais
       (`reservar`)
 - [ ] T046 [P] [US7] `CampanhaVirtualPage.tsx` / `PedidoVirtualPage.tsx` / `lib/virtuais.ts`:
       contagem por `seconds_left`; token novo depois de cada 201; três estados de espera com
       textos distintos; `refetchInterval` também em `reservado`
-- [ ] T047 [US7] Rodar cenários 33–35
+- [x] T047 [US7] Rodar cenários 33–35
 
 ---
 
@@ -200,12 +200,12 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 37–38.
 
-- [ ] T048 [US8] `retentar_salas`: depois das 3 tentativas, a cada 10 min até `start_at`; alerta no
+- [x] T048 [US8] `retentar_salas`: depois das 3 tentativas, a cada 10 min até `start_at`; alerta no
       sino com menos de 6 h (um por pedido)
-- [ ] T049 [US8] `insert_event(..., private_props=None)` em `app/calendar/service.py`; a loja marca
+- [x] T049 [US8] `insert_event(..., private_props=None)` em `app/calendar/service.py`; a loja marca
       `manto_virtual_nsu`; a sincronização em `app/calendar/routes.py` pula itens com a marca (ao lado
       de `_is_manto_task_item`)
-- [ ] T050 [US8] Rodar cenários 37–38
+- [x] T050 [US8] Rodar cenários 37–38
 
 ---
 
@@ -213,7 +213,7 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 39–40.
 
-- [ ] T051 [US9] Com `INFINITEPAY_API_KEY`: `valid_until` = fim da trava em ISO com `-03:00` e
+- [x] T051 [US9] Com `INFINITEPAY_API_KEY`: `valid_until` = fim da trava em ISO com `-03:00` e
       `single_payment=true` (T006 já monta; aqui o `_gerar_link_pagamento` passa o fim da trava)
 - [ ] T052 [US9] Rodar cenários 39–40; `render.yaml` ganha `INFINITEPAY_API_KEY` com `sync: false`
 
@@ -223,10 +223,10 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 41–42 + quickstart §2 com o dono.
 
-- [ ] T053 [US10] `listada` em `listar_vitrine`, no PATCH da campanha e na tela de gestão
-- [ ] T054 [P] [US10] `specs/310-pagamento-loja-virtual/limpar_venda_teste.py --pedido N [--execute]`
+- [x] T053 [US10] `listada` em `listar_vitrine`, no PATCH da campanha e na tela de gestão
+- [x] T054 [P] [US10] `specs/310-pagamento-loja-virtual/limpar_venda_teste.py --pedido N [--execute]`
       (R-21; trava do Google respeitada; auditoria)
-- [ ] T055 [US10] Rodar cenários 41–42
+- [x] T055 [US10] Rodar cenários 41–42
 
 ---
 
