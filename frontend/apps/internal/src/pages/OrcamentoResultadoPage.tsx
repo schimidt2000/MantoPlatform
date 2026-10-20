@@ -13,6 +13,7 @@ import {
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
+import { ProdutoLinha } from "../components/orcamento/ProdutoLinha";
 import {
   useEnviarEmailOrcamento,
   useOrcamentoDetalhe,
@@ -35,8 +36,13 @@ function brl(v: number): string {
 
 /** Durações marcadas no orçamento + a duração personalizada, quando houver. */
 function duracoesVisiveis(quote: Quote): { label: string; total: number; destaque?: boolean }[] {
+  // Feature 309: só produto no orçamento = um valor, que não é "1 hora" — é o preço da tabela. O
+  // servidor decide (`valor_unico`); quote salvo antes da chave cai na inferência pelos `show_*`.
+  const valorUnico =
+    quote.valor_unico ??
+    ((quote.produtos?.length ?? 0) > 0 && quote.show_1h && !quote.show_2h && !quote.show_3h && !quote.show_4h);
   const linhas: { label: string; total: number; destaque?: boolean }[] = [
-    { label: "1 hora", total: quote.total_1h, mostrar: quote.show_1h },
+    { label: valorUnico ? "Preço de tabela" : "1 hora", total: quote.total_1h, mostrar: quote.show_1h },
     { label: "2 horas", total: quote.total_2h, mostrar: quote.show_2h },
     { label: "3 horas", total: quote.total_3h, mostrar: quote.show_3h },
     { label: "4 horas", total: quote.total_4h, mostrar: quote.show_4h },
@@ -222,6 +228,24 @@ export function OrcamentoResultadoPage() {
               </div>
             ))}
           </div>
+          {/* Feature 309: produtos de tabela vendidos (preço congelado no orçamento). */}
+          {(quote.produtos ?? []).length > 0 && (
+            <div className="mt-3 space-y-1">
+              {(quote.produtos ?? []).map((p, i) => (
+                <ProdutoLinha key={`${p.chave}-${i}`} produto={p} compacta />
+              ))}
+            </div>
+          )}
+          {(quote.avisos ?? []).length > 0 && (
+            <div className="mt-3 space-y-1 rounded-md border border-gold bg-gold-soft p-3 text-sm" role="alert">
+              {(quote.avisos ?? []).map((aviso) => (
+                <p key={aviso} className="text-ink">
+                  <span className="font-semibold text-gold-ink">⚠️ </span>
+                  {aviso}
+                </p>
+              ))}
+            </div>
+          )}
           {quote.nota_fiscal && (
             <p className="mt-3 text-sm text-muted">🧾 Valores com Nota Fiscal inclusa.</p>
           )}

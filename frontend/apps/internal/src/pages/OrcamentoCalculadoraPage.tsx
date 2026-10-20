@@ -22,6 +22,8 @@ import { GoogleAddressInput } from "../components/GoogleAddressInput";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
 import { AcrescimosEditor } from "../components/orcamento/AcrescimosEditor";
 import { PerformersEditor } from "../components/orcamento/PerformersEditor";
+import { ProdutoLinha } from "../components/orcamento/ProdutoLinha";
+import { ProdutosCard, type ProdutoSelecionado } from "../components/orcamento/ProdutosCard";
 import {
   useCalcularOrcamento,
   useDistancia,
@@ -61,6 +63,8 @@ type Deslocamento = "sp" | "manto" | "cliente";
 
 const INITIAL_STATE = {
   performers: [] as Performer[],
+  // Feature 309: produtos de tabela selecionados (a Visita Mágica), por chave; repetição permitida.
+  produtos: [] as ProdutoSelecionado[],
   coordenadorQty: 1,
   eventDate: "",
   eventTime: "",
@@ -177,6 +181,7 @@ export function OrcamentoCalculadoraPage() {
   const distancia = useDistancia();
 
   const [performers, setPerformers] = useState<Performer[]>(INITIAL_STATE.performers);
+  const [produtos, setProdutos] = useState<ProdutoSelecionado[]>(INITIAL_STATE.produtos);
   const [coordenadorQty, setCoordenadorQty] = useState(INITIAL_STATE.coordenadorQty);
   const [eventDate, setEventDate] = useState(INITIAL_STATE.eventDate);
   const [eventTime, setEventTime] = useState(INITIAL_STATE.eventTime);
@@ -246,6 +251,8 @@ export function OrcamentoCalculadoraPage() {
     const snap = historicoDetalhe.data?.form_snapshot;
     if (!snap) return;
     setPerformers(snap.performers ?? []);
+    // Feature 309: só a chave volta — o preço é resolvido de novo pela tabela vigente ("Recalcular").
+    setProdutos(snap.produtos?.map((p) => ({ chave: p.chave })) ?? []);
     setCoordenadorQty(snap.coordenador_qty ?? 1);
     setEventDate(snap.event_date ?? "");
     setEventTime(snap.event_time ?? "");
@@ -272,6 +279,7 @@ export function OrcamentoCalculadoraPage() {
 
   function resetAll() {
     setPerformers(INITIAL_STATE.performers);
+    setProdutos(INITIAL_STATE.produtos);
     setCoordenadorQty(INITIAL_STATE.coordenadorQty);
     setEventDate(INITIAL_STATE.eventDate);
     setEventTime(INITIAL_STATE.eventTime);
@@ -303,6 +311,7 @@ export function OrcamentoCalculadoraPage() {
   const payload: CalcularOrcamentoInput = useMemo(
     () => ({
       performers,
+      produtos,
       coordenador_qty: coordenadorQty,
       event_date: eventDate,
       event_time: eventTime,
@@ -333,6 +342,7 @@ export function OrcamentoCalculadoraPage() {
     }),
     [
       performers,
+      produtos,
       coordenadorQty,
       eventDate,
       eventTime,
@@ -383,8 +393,32 @@ export function OrcamentoCalculadoraPage() {
 
   // Feature 307: a faixa de data especial vem do servidor, no resultado — fonte única. Enquanto o
   // recálculo não voltou (ou falhou), o `result` é de outra data: o aviso some para não mentir.
-  const faixaAtiva =
-    calcPendente || calcular.isPending || calcular.isError ? null : (result?.quote.data_especial ?? null);
+  const resultadoVivo = !(calcPendente || calcular.isPending || calcular.isError);
+  const faixaAtiva = resultadoVivo ? (result?.quote.data_especial ?? null) : null;
+  // Feature 309: avisos da conta (Noel avulso sem produto, preço estimado) — mesma regra: só do
+  // resultado que corresponde ao payload atual.
+  const avisosAtivos = resultadoVivo ? (result?.quote.avisos ?? []) : [];
+  const tabelaDeProdutos = opcoes.data?.settings.produtos ?? {};
+  // Janela de deploy (bundle novo, backend velho): com produto selecionado e `quote.produtos` ausente,
+  // o servidor NÃO aplicou o produto — gerar gravaria um orçamento sem a Visita. Trava o botão.
+  const produtoSemBackend = produtos.length > 0 && !!result && result.quote.produtos === undefined;
+  const produtosAplicados = result?.quote.produtos ?? [];
+  // Só produto no orçamento = UM valor rotulado "Preço de tabela" — decisão do SERVIDOR
+  // (`quote.valor_unico`); inferir pelos `show_*` rotulava errado produto + avulso com 2h–4h desmarcadas.
+  const valorUnico = result?.quote.valor_unico === true;
+  // Coordenadores que a seleção traz pela tabela (para descontar do contador ao remover um produto).
+  const coordenadoresDaSelecao = (selecao: ProdutoSelecionado[]) =>
+    selecao.reduce(
+      (n, sel) => n + (tabelaDeProdutos[sel.chave]?.vagas ?? []).filter((v) => v.tipo === "coordenador").length,
+      0,
+    );
+  // Ao remover um produto, o contador desconta os coordenadores que ele trazia — senão o "+" dado
+  // com o produto na tela viraria coordenador da fórmula cobrado sem a vendedora ter pedido.
+  const handleProdutosChange = (next: ProdutoSelecionado[]) => {
+    const retirados = coordenadoresDaSelecao(produtos) - coordenadoresDaSelecao(next);
+    if (retirados > 0) setCoordenadorQty((q) => Math.max(1, q - retirados));
+    setProdutos(next);
+  };
   const diasEspeciais = useMemo(
     () =>
       listaEmPortugues(
@@ -506,6 +540,18 @@ export function OrcamentoCalculadoraPage() {
                     />
                   )}
                 </AnimatePresence>
+                {/* Feature 309: avisos da conta vindos do servidor — borda cheia (não /40) porque
+                    pedem ação da vendedora antes de enviar ("use o produto", "preço estimado"). */}
+                {avisosAtivos.length > 0 && (
+                  <div className="space-y-1 rounded-md border border-gold bg-gold-soft p-3 text-sm" role="alert">
+                    {avisosAtivos.map((aviso) => (
+                      <p key={aviso} className="text-ink">
+                        <span className="font-semibold text-gold-ink">⚠️ </span>
+                        {aviso}
+                      </p>
+                    ))}
+                  </div>
+                )}
 
                 {deslocamento !== "sp" && (
                   // Mesmo motivo do alerta acima: `amber` cru não troca de tema.
@@ -613,6 +659,20 @@ export function OrcamentoCalculadoraPage() {
 
           {/* ── Coluna direita — Equipe, Customização e Resultados (2/3) ─────── */}
           <div className="space-y-4 lg:col-span-2">
+            {/* Feature 309: o pacote fechado vem ANTES da equipe — é por onde a Visita Mágica se vende;
+                sem produtos na tabela (ou backend velho) o card não existe. */}
+            {/* `produtos.length > 0` cobre o recalcular de um orçamento cujo produto sumiu da tabela:
+                sem o card não haveria como removê-lo. */}
+            {(Object.keys(tabelaDeProdutos).length > 0 || produtos.length > 0) && (
+              <ProdutosCard
+                produtos={tabelaDeProdutos}
+                selecionados={produtos}
+                aplicados={resultadoVivo ? result?.quote.produtos : undefined}
+                calculando={calcPendente || calcular.isPending}
+                onChange={handleProdutosChange}
+              />
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Equipe</CardTitle>
@@ -626,6 +686,7 @@ export function OrcamentoCalculadoraPage() {
                   especiais={opcoes.data.especiais}
                   especiaisComShow={opcoes.data.especiais_com_show}
                   especiaisComCantor={opcoes.data.especiais_com_cantor}
+                  coordenadoresInclusos={result?.quote.coordenadores_inclusos ?? 0}
                 />
               </CardContent>
             </Card>
@@ -775,7 +836,7 @@ export function OrcamentoCalculadoraPage() {
                 <CardContent className="space-y-4">
                   <div className={`grid grid-cols-2 gap-3 sm:grid-cols-4 transition-opacity ${calcular.isPending ? "opacity-50" : ""}`}>
                     {([
-                      ["1 Hora", result.quote.show_1h, result.quote.total_1h],
+                      [valorUnico ? "Preço de tabela" : "1 Hora", result.quote.show_1h, result.quote.total_1h],
                       ["2 Horas", result.quote.show_2h, result.quote.total_2h],
                       ["3 Horas", result.quote.show_3h, result.quote.total_3h],
                       ["4 Horas", result.quote.show_4h, result.quote.total_4h],
@@ -794,6 +855,19 @@ export function OrcamentoCalculadoraPage() {
                       🎄 Valores da data especial: {result.quote.data_especial.rotulo}.
                     </p>
                   )}
+                  {/* Feature 309: o que foi vendido pela tabela, com o preço que o servidor resolveu. */}
+                  {produtosAplicados.length > 0 && (
+                    <div className="space-y-1">
+                      {produtosAplicados.map((p, i) => (
+                        <ProdutoLinha key={`${p.chave}-${i}`} produto={p} compacta />
+                      ))}
+                    </div>
+                  )}
+                  {produtoSemBackend && (
+                    <p className="text-sm text-red" role="alert">
+                      O servidor não aplicou o produto — recarregue a página.
+                    </p>
+                  )}
                   <div className="flex items-center justify-between gap-2">
                     <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
                       Ver memória de cálculo
@@ -801,7 +875,9 @@ export function OrcamentoCalculadoraPage() {
                     <Button
                       loading={salvar.isPending}
                       onClick={handleSalvar}
-                      disabled={saved || calcPendente || calcular.isPending || calcular.isError}
+                      disabled={
+                        saved || calcPendente || calcular.isPending || calcular.isError || produtoSemBackend
+                      }
                     >
                       {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar Orçamento"}
                     </Button>

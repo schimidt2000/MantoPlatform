@@ -576,3 +576,21 @@ merge para `main` antes disso** — o Render faz deploy automático da `main`.
 | 105 | **P4** | `OrcamentoCalculadoraPage.tsx` rehydrate (`?recalcular_id=`) | não restaura `incluir_duracao` (nem vai ao snapshot) nem `personalizado_criterio`/`cust_*` (estão no snapshot, faltam no tipo e no efeito): um orçamento "1 entrada de 30 min" reabre com as 4 durações | pôr `incluir_duracao` no snapshot e restaurar os três no efeito |
 | 106 | **P4** | `calculate_quote` (~540 l.), `_compute_performer_caches` (~260 l.), `api_orcamento_settings_save` (~75 l.) | já excediam as 30 linhas do Princípio II; a 307 só acrescentou chamadas a helpers (`cache_na_faixa`, `markup_vigente`, `validar_datas_especiais`) — o 3b vai reescrever o núcleo em "por dia" e é a hora de quebrar | quebrar junto com o 3b, com o gabarito de paridade |
 | 107 | **P4** | eventos de 24 e 25/12 criados antes do deploy da 307 | o vínculo 273 só preenche teto onde `cache_cap` é `NULL`: Noel 600 / coordenador 250 ficam nos eventos já criados | pós-deploy, consulta só de leitura (eventos com `start_at` em 24/25/12 e `orcamento_history_id`) e ajuste manual pelo superadmin |
+
+## Baixa da feature 309-produtos-de-tabela (2026-10-20, branch)
+
+- **Quitada em parte**: a engenharia reversa da 307 ("Papai Noel" 712 / "Ajudante do Noel" 423 como
+  cachê para o preço da Visita bater) saiu da tabela — cachê 600 / 270 de volta, preço no produto.
+  Os tetos 712/423 já gravados em vagas desde 16/10 são rebaixados pelo script
+  `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (dry-run; `--execute` só sem cachê e
+  sem artista) — **rodar no pós-deploy** e conferir à mão o que ele listar como "conferir".
+- #103 continua (o `<select>` de especiais do `PerformersEditor`); a 309 pôs o `Combobox` só no
+  card de produtos.
+
+| # | Prio | Onde | Sintoma | Ação |
+|---|---|---|---|---|
+| 108 | **P4** | `ProdutosCard.tsx` × `quote.produtos` | a linha do produto casa `aplicados[i]` com `selecionados[i]` pela posição e pela chave; se o servidor um dia reordenar ou filtrar os aplicados, a linha mostra "calculando…" para sempre | devolver no `quote` um índice/identificador do exemplar |
+| 109 | **P4** | `calculate_quote` (~600 l. depois da 309), `_compute_performer_caches` (~300 l.) | a 309 acrescentou mais chamadas a helpers (`produtos.*`) às duas maiores funções do repositório (ver #106) | quebrar junto com o 3b, com o gabarito de paridade (`verify_309_golden.json` já serve de oráculo) |
+| 110 | **P4** | `ProdutosConfigCard.tsx` | produto novo nasce com rótulo vazio e preço 0 — o 400 do servidor é a única trava (nada local), e o card não sabe quais faixas foram desligadas (`dias: []`): mostra "Preço em <faixa>" mesmo para faixa sem dias | validação local mínima (rótulo e preço) e esconder faixa sem dias |
+| 112 | **P4** | `quote_ops.py` (`num_colaboradores`) × `routes.py` prefill — **pré-existente na main** | com "Nº de colaboradores" vazio a venda dimensiona a van por `num_going` (performers + coordenadores — e, desde a 309, as pessoas do produto), mas o snapshot grava `""` e o prefill lê `1`: o `transport_value` do Novo evento difere da venda (R$ 33,33 com 50 km e divisor 3; cresce com km e pessoas). A 309 só torna o caso padrão da Visita | gravar no snapshot o `num_colaboradores` efetivo (ou o prefill recompor `num_going` do snapshot); mexe no snapshot de todo orçamento — fatia própria com gabarito |
+| 111 | **P4** | `GET /api/orcamento/opcoes` (`orcamento_read.py`) | devolve `settings` inteiro a todo COMERCIAL — desde sempre com os cachês da tabela, agora também com a composição e os cachês fixos dos produtos (decisão consciente da 309: a calculadora precisa dos produtos ativos; os cachês já eram visíveis) | se um dia a tabela de cachês virar segredo do superadmin, enxugar o `/opcoes` para o que a calculadora usa (produtos ativos sem `vagas[].cache`, dias das faixas) |

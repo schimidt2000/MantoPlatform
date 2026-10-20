@@ -21,6 +21,7 @@ export function PerformersEditor({
   especiais,
   especiaisComShow,
   especiaisComCantor,
+  coordenadoresInclusos = 0,
 }: {
   performers: Performer[];
   onPerformersChange: (performers: Performer[]) => void;
@@ -29,7 +30,15 @@ export function PerformersEditor({
   especiais: string[];
   especiaisComShow: string[];
   especiaisComCantor: string[];
+  /**
+   * Feature 309: coordenadores que os produtos de tabela já trazem (número do servidor,
+   * `quote.coordenadores_inclusos`). O contador não desce abaixo deles e a tela diz "N incluído(s)
+   * no produto". Opcional: o EducaManto não passa (neutro).
+   */
+  coordenadoresInclusos?: number;
 }) {
+  // O total vendido nunca fica abaixo do que os produtos trazem — a mesma regra do servidor.
+  const coordenadoresExibidos = Math.max(coordenadorQty, coordenadoresInclusos);
   return (
     <>
       <Table className="min-w-[720px]">
@@ -55,15 +64,27 @@ export function PerformersEditor({
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => onCoordenadorQtyChange(Math.max(0, coordenadorQty - 1))}
+                  disabled={coordenadoresExibidos <= coordenadoresInclusos}
+                  onClick={() =>
+                    onCoordenadorQtyChange(Math.max(coordenadoresInclusos, coordenadoresExibidos - 1))
+                  }
                 >
                   −
                 </Button>
-                <span className="w-6 text-center tabular-nums text-ink">{coordenadorQty}</span>
-                <Button size="sm" variant="outline" onClick={() => onCoordenadorQtyChange(coordenadorQty + 1)}>
+                <span className="w-6 text-center tabular-nums text-ink">{coordenadoresExibidos}</span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onCoordenadorQtyChange(coordenadoresExibidos + 1)}
+                >
                   +
                 </Button>
               </div>
+              {coordenadoresInclusos > 0 && (
+                <p className="mt-1 text-xs text-muted">
+                  {coordenadoresInclusos} incluído{coordenadoresInclusos > 1 ? "s" : ""} no produto
+                </p>
+              )}
             </TableCell>
           </TableRow>
           {performers.map((p, i) => (

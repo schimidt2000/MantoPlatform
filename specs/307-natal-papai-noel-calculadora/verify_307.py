@@ -5,8 +5,8 @@ primeira rodada fica em `verify_307_primeira_falha.txt`.
 
 A configuração de preços REAL do `manto_local` é lida por conexão separada no início, substituída por
 uma configuração de teste determinística (markup receptivo 2,6 e show 2,8; coordenador 250/300;
-"Papai Noel" no cachê ANTIGO 600, sem "Ajudante do Noel" e sem `datas_especiais` — para provar a
-migração) e RESTAURADA no `finally`, conferida por conexão separada. Premissas lidas do espelho em
+"Papai Noel" em [600, 650, 675, 700] (o cachê de verdade — a 309 desfez a engenharia reversa 712 da
+307), sem "Ajudante do Noel" e sem `datas_especiais` — para provar a migração) e RESTAURADA no `finally`, conferida por conexão separada. Premissas lidas do espelho em
 15/10/2026 (T001): markup receptivo = show = [2.6, 2.5, 2.45, 2.4]; coordenador false
 [250, 300, 325, 350]; especiais."Papai Noel" = [600, 650, 675, 700]; especiais_excluidos =
 ["Ajudante Especial"]. Se o espelho vier diferente (ex.: um "Salvar configurações" da conferência de
@@ -250,7 +250,7 @@ def _texto_do_pdf(quote: dict) -> str:
 def cen_01_noel_20_12() -> None:
     res = _calcular(_payload("2026-12-20", [NOEL]))
     q = res["quote"]
-    _iguais(q["total_1h"], 2501.20, "Noel 20/12 1h")
+    _iguais(q["total_1h"], 2210.00, "Noel 20/12 1h (600 + 250) × 2,6 — feature 309")
     _iguais(q["markup_used"][0], 2.6, "markup normal")
     _garante(
         q.get("data_especial") is None, f"data_especial devia ser None: {q.get('data_especial')}"
@@ -260,7 +260,11 @@ def cen_01_noel_20_12() -> None:
 
 def cen_02_noel_mais_ajudante_20_12() -> None:
     res = _calcular(_payload("2026-12-20", [NOEL, AJUDANTE]))
-    _iguais(res["quote"]["total_1h"], 3601.00, "Noel + Ajudante 20/12 1h")
+    _iguais(
+        res["quote"]["total_1h"],
+        2912.00,
+        "Noel + Ajudante 20/12 1h (600 + 270 + 250) × 2,6 — feature 309",
+    )
 
 
 # ── 3–9 · a faixa ───────────────────────────────────────────────────────────────────────────────
@@ -425,7 +429,7 @@ def cen_10_educamanto_neutro() -> None:
             return _totais_contratacao(contratacao, "x")[0]
 
     _iguais(totais("2026-12-24")["1h"], totais("2026-12-20")["1h"], "EducaManto ignora a faixa")
-    _iguais(totais("2026-12-24")["1h"], 2501.20, "contratação Manto no preço normal")
+    _iguais(totais("2026-12-24")["1h"], 2210.00, "contratação Manto no preço normal")
 
 
 # ── 11 · teto das vagas ─────────────────────────────────────────────────────────────────────────
@@ -504,8 +508,8 @@ def cen_11_teto_pela_data() -> None:
     _iguais(t["Papai Noel"]["cache_1h"], 1050, "teto do Noel 24/12 à noite (+50)")
 
     t = _tetos(_snap("2026-12-20", [NOEL, AJUDANTE]))
-    _iguais(t["Papai Noel"]["cache_1h"], 712, "teto do Noel 20/12")
-    _iguais(t["Ajudante do Noel"]["cache_1h"], 423, "teto do Ajudante 20/12")
+    _iguais(t["Papai Noel"]["cache_1h"], 600, "teto do Noel 20/12 (cachê é cachê — feature 309)")
+    _iguais(t["Ajudante do Noel"]["cache_1h"], 270, "teto do Ajudante 20/12")
     _iguais(t["Coordenador"]["cache_1h"], 250, "teto do Coordenador 20/12")
 
     t = _tetos(_snap("2026-12-20", [NOEL, AJUDANTE]), data_evento="2026-12-24")
@@ -544,7 +548,7 @@ def cen_11_teto_pela_data() -> None:
             client_name=f"{PREFIX}vinculo",
             event_location="x",
             event_date="2026-12-20",
-            total_1h=2501.2,
+            total_1h=2210.0,
             total_2h=0,
             total_3h=0,
             total_4h=0,
@@ -570,12 +574,23 @@ def cen_12_migracao() -> None:
     base = _config_de_teste(estado["config_real"])
 
     m = _cfg._migrate(copy.deepcopy(base))
+    # Feature 309: a troca 600 → 712 da 307 foi removida; 600 fica 600 e a inversa guardada desfaz 712/423.
     _garante(
-        m["especiais"]["Papai Noel"] == [712, 800, 850, 900],
-        f"Noel antigo → 712: {m['especiais']['Papai Noel']}",
+        m["especiais"]["Papai Noel"] == [600, 650, 675, 700],
+        f"Noel 600 fica 600 (309): {m['especiais']['Papai Noel']}",
     )
     _garante(
-        m["especiais"]["Ajudante do Noel"] == [423, 480, 510, 540], "Ajudante do Noel injetado"
+        m["especiais"]["Ajudante do Noel"] == [270, 320, 345, 370],
+        "Ajudante do Noel injetado em 270",
+    )
+    reverso = copy.deepcopy(base)
+    reverso["especiais"]["Papai Noel"] = [712, 800, 850, 900]
+    reverso["especiais"]["Ajudante do Noel"] = [423, 480, 510, 540]
+    m_rev = _cfg._migrate(reverso)
+    _garante(
+        m_rev["especiais"]["Papai Noel"] == [600, 650, 675, 700]
+        and m_rev["especiais"]["Ajudante do Noel"] == [270, 320, 345, 370],
+        f"inversa guardada 712 → 600 / 423 → 270: {m_rev['especiais']['Papai Noel']} {m_rev['especiais']['Ajudante do Noel']}",
     )
     _garante(m["datas_especiais"]["natal"]["dias"] == ["12-24", "12-25"], "bloco natal injetado")
     _garante(m["markup"]["receptivo"][0] == 2.6, "markup real preservado")
@@ -649,7 +664,10 @@ def cen_12_migracao() -> None:
 
     with app.app_context():
         vivo = _cfg.load()
-    _garante(vivo["especiais"]["Papai Noel"] == [712, 800, 850, 900], "load() real migra o Noel")
+    _garante(
+        vivo["especiais"]["Papai Noel"] == [600, 650, 675, 700],
+        "load() real mantém o Noel em 600 (309)",
+    )
     _garante(
         vivo["datas_especiais"]["natal"]["markup"][0] == 3.34, "load() real tem a faixa padrão"
     )
@@ -789,7 +807,7 @@ def cen_14_comercial_nao_edita() -> None:
 def cen_15_legado_sem_data() -> None:
     res = _calcular({**_payload("", [NOEL]), "event_date": ""})
     _garante(res["quote"].get("data_especial") is None, "sem data = sem faixa")
-    _iguais(res["quote"]["total_1h"], 2501.20, "sem data = preço normal")
+    _iguais(res["quote"]["total_1h"], 2210.00, "sem data = preço normal")
 
     with app.app_context():
         entry = OrcamentoHistory(
@@ -878,8 +896,8 @@ def cen_18_limpeza() -> None:
 
 
 CENARIOS: list[tuple[str, Callable[[], None]]] = [
-    ("1. 20/12 · Papai Noel = 2.501,20, sem faixa", cen_01_noel_20_12),
-    ("2. 20/12 · Noel + Ajudante do Noel = 3.601,00", cen_02_noel_mais_ajudante_20_12),
+    ("1. 20/12 · Papai Noel = 2.210,00 (309: cachê 600), sem faixa", cen_01_noel_20_12),
+    ("2. 20/12 · Noel + Ajudante do Noel = 2.912,00", cen_02_noel_mais_ajudante_20_12),
     (
         "3. 24/12 · Noel = 5.010,00; data_especial; memória; PIX; nota na mensagem e no PDF",
         cen_03_noel_24_12,

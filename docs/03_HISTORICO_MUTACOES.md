@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-19** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **309-produtos-de-tabela** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~09:15** pelo merge
+> `merge: 309 — …` sobre a `main` `98192e8`, a pedido do dono, em horário comercial — a Visita Mágica
+> vira produto de tabela com preço fixo fora do markup e os cachês de "Papai Noel"/"Ajudante do Noel"
+> voltam a 600/270; `verify_309.py --regressao` 20/20 depois do converge) — antes dela pós-feature
 > **308-casting-sem-compromisso-interno** (sem migration; **EM PRODUÇÃO desde 19/10/2026 ~22:15**
 > pelo merge `merge: 308 — …` — evento 🟧/🟠 sai dos painéis Casting e Figurino da Home e o
 > Superadmin dispensa/restaura cargo direto da Home; `verify_308.py` 7/7) — antes dela pós-feature
@@ -132,6 +136,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
 | **308-casting-sem-compromisso-interno** | *(EM PRODUÇÃO 19/10 ~22:15)* Os painéis Casting e Figurino da Home deixam de listar evento marcado com 🟧/🟠 (compromisso interno — a mesma marca da 299), o que tira também o `🟧 - ENSAIO` que escapava do filtro de ensaio pelo hífen. O SUPERADMIN ganha **Dispensar** na linha e **Restaurar** na lista de dispensados, direto da Home; Casting não dispensa (decisão do dono) | 2026-10-19 | `—` | (aqui) | — |
 | **307-natal-papai-noel-calculadora** | *(EM PRODUÇÃO 16/10 ~01:25)* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
 | **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:49)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
@@ -281,7 +286,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
-| Orçamento e EducaManto | 307, 305, 262, 214, 191 (orçamento), 190 |
+| Orçamento e EducaManto | 309, 307, 305, 262, 214, 191 (orçamento), 190 |
 | Portal do Artista | 303 (aviso "em confirmação"; cancelado fora da avaliação), 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
 | Design system, tema e acessibilidade | 228, 217, 216, 212 |
 | Documentação e economia de token | 217 |
@@ -306,6 +311,108 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 309 — Produtos de tabela: a Visita Mágica vendida pelo preço da tabela, com os cachês das vagas definidos pela tabela de preços   (309-produtos-de-tabela · 2026-10-19 · sem migration)
+
+> **EM PRODUÇÃO desde 20/10/2026 ~09:15** (merge `merge: 309 — …` sobre a `main` `98192e8`, a pedido
+> do dono, em horário comercial; feita no worktree `C:\tmp\mp309` sobre a base `6356b80`; commits
+> `0d57112` verify vermelho + gabarito, `e84ba0c` núcleo, `0419b64` teto e script, `a6bdb99` telas,
+> `bc0e534` docs, `254c1fb` converge). Pós-deploy a fazer pelo dono: rodar `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` no
+> Shell do Render (relatório; depois `--execute`) para rebaixar os tetos 712/423 gravados desde 16/10,
+> conferir `/orcamento/configuracoes` (Papai Noel 600 / Ajudante do Noel 270 / card "Produtos de
+> tabela" com os dois produtos) e avisar a equipe: a Visita Mágica se vende pelo card de produtos,
+> não por "Papai Noel" + coordenador.
+
+**Motivação.** A 307 fez a Visita sair em R$ 2.500 / R$ 3.600 pondo "Papai Noel" em 712 e "Ajudante
+do Noel" em 423 — engenharia reversa do preço (`(712 + 250) × 2,6`). Esse número virava o **teto**
+(`cache_cap`) da vaga e, como quem escala tende a pagar o teto (valor digitado acima é rebaixado e
+gravado), a Manto passaria a pagar 712 por um cachê que em 2025 foi 600 (planilha de pagamentos:
+Noel 600 fora de 24/25, ajudante 270, coordenador 250–300, make 250). O dono (19/10): "é muito
+tendencioso que eles paguem o teto… a lógica tem que ser outra: a vendedora seleciona um pacote
+fechado, o preço é o da tabela de venda e os cachês são definidos à parte". Markup especial por
+evento foi descartado (contaminaria os outros personagens).
+
+**O que mudou.** (1) `pricing_config` ganhou `produtos` (chave → rótulo, descrição ao cliente,
+ativo, preço FIXO por visita, `por_faixa.natal`, vagas `{label, tipo, cache: null|R$, needs_makeup}`,
+`inclui_noturno`) e `produtos_estimativa {fator_cache 2,0; markup 3,0}`; dois produtos padrão
+("Visita Mágica — Papai Noel" 2.500 / natal 5.000 com Papai Noel + Coordenador + Maquiador; "… +
+Ajudante" 3.600 / 6.500); `_migrar_309` defensivo (dentro do `try` de `load()`), que também desfaz
+712→600 e 423→270 quando estiverem exatamente nesses valores; `_migrar_307` perdeu a troca 600→712.
+(2) Fonte única `app/orcamento/produtos.py` (puro) para venda e teto: `aplicar`, `preco_do_produto`
+(estimativa marcada quando a faixa não tem preço), `split_coordenadores`, `incremento_make`,
+`total_na_duracao`/`fator_regua`, `itens_do_teto`/`coordenadores_do_teto`. (3) `calculate_quote`:
+`payload.produtos = [{chave}]` (repetição permitida; chave desconhecida → 400 `fields.produtos`), o
+preço entra DEPOIS de "= Após markup" e ANTES de brinde/noturno/técnico/maquiador/transporte/
+acréscimos/NF (BV % e NF incidem; a conta inversa da 305 vale), igual nas 4 colunas, fixo na régua
+>4h; coordenador do produto fora da fórmula; UM Maquiador (incremento); noturno embutido; linhas
+`tipo: "produto"` + "= Após produtos" na memória (invariante do hotfix 210); `team_lines` com os
+personagens do produto; mensagem com "🎅 *rótulo* (descrição): *R$ X*" e, com só produto, UM valor
+e PIX único; `quote` SEMPRE com `produtos`, `produtos_total`, `coordenadores_inclusos`, `avisos`;
+`snapshot.produtos` com preço E vagas congelados + `produtos_total`. (4) Teto:
+`_compute_performer_caches` emite as vagas congeladas do produto primeiro (flat, cachê pela tabela
+vigente na data do evento, nota "cachê da tabela · produto …"; produto apagado = sem teto, nunca 0),
+depois avulsos e extras; prefill, criação e vínculo 273 iguais; `_build_orcamento_prefill` e
+`_total_da_duracao` usam `total_na_duracao`; `resumo_do_orcamento` inclui os personagens e as makes
+do produto. (5) `POST /settings` aceita `produtos`/`produtos_estimativa` validados no núcleo
+(`settings.validar_produtos`; 400 "Produtos de tabela inválidos." com `fields` por campo; faixa
+órfã = aviso no 200; chave ausente no corpo = mantém o salvo). (6) Telas: `ProdutosCard` (Combobox),
+`ProdutoLinha`, avisos dourados, tile "Preço de tabela", "N incluído(s) no produto", botão travado
+sem `quote.produtos`; `/orcamento/:id`; `ProdutosConfigCard` + "Estimativa" com `ConfirmDialog`.
+(7) EducaManto `pop("produtos")`. (8) Script `rebaixar_tetos_noel_309.py` (dry-run; `--execute`
+rebaixa só vaga "Papai Noel"/"Ajudante do Noel" com teto exatamente 712/423, sem cachê e sem artista).
+
+**Regras de negócio (decisões do dono, 19/10).** Preço fixo por visita — o produto é só a visita
+padrão (tempo e roteiro pré-determinados); evento de 3h com Noel vai para o cálculo normal; produto
+só para a Visita Mágica (Noel; Noel + ajudante/duende), o modelo é genérico mas o cadastro é do
+dono; noturno e maquiagem embutidos; coordenador e maquiador do produto pelo valor de 2026 da tabela
+(250 / 250; 500 na faixa), não o de 2025; 712/423 voltam a 600/270 e ficam; 2h–4h dos avulsos Noel
+600/650/675/700 e Ajudante 270/320/345/370; faixa sem preço → "estimar custo de cachê dobrado e
+markup um pouco mais alto que o padrão" (fator 2,0 × markup 3,0, editáveis); tudo numa feature só,
+inclusive o script dos tetos já gravados ("sem fatia 0"). Noel avulso dentro de festa grande segue a
+fórmula normal, com o aviso "Para a Visita Mágica use o produto".
+
+**Pegadinhas.** O produto entra depois do markup — pôr antes multiplicaria 2.500 por 2,6. A régua
+>4h não pode usar `total_4h ÷ 4 × h` com produto (escalaria o produto): `total_na_duracao` tira a
+parte do produto INCLUSIVE o % e a NF que incidem sobre ela (`fixo = produtos_total × (1 + Σ%) ÷
+0,84`), regra a mesma na venda, no prefill e em `_total_da_duracao`/`fator_regua`. As vagas são
+congeladas no snapshot: o teto é emitido das vagas vendidas, só o VALOR do cachê vem da tabela viva
+na data do evento (produto editado depois não muda a composição; apagado não zera teto). UM
+Maquiador por orçamento mesmo com dois produtos (`calcular_maquiador(Σ makes)`); o avulso maquiado
+paga só o incremento. `has_show=False` nas vagas do produto. O coordenador do produto conta para o
+mínimo (`total = max(qty, inclusos)`): BGE (2) + Visita = 1 do produto + 1 da fórmula. A 273 recusa
+o segundo vínculo do mesmo orçamento com 409 — o verify usa orçamento novo para o vínculo. O
+`descricao` padrão não tem parênteses ("visita padrão, até 1h") porque mensagem e tela já os põem.
+Na janela de deploy (bundle novo, backend velho) o React trava "Gerar Orçamento" quando
+`quote.produtos` vem ausente — por isso o `quote` SEMPRE traz a chave. `verify_307` foi reescrito
+onde afirmava 712/423/2.501/3.601 (agora 600/270/2.210/2.912 + inversa). Outro chat ocupava a
+árvore principal (308): tudo foi feito no worktree `C:\tmp\mp309`, e o `scripts/oneoff/` é
+gitignored — o script mora em `specs/309-…/`.
+
+**Esteira.** Nível 1: specify → clarify (3 rodadas) → plan (3 desenhos × 3 céticos; research D1–D22)
+→ checklist (`dinheiro-e-regressao`) → tasks (35) → analyze (4 lentes; HIGH tratados antes do
+implement: régua com NF/BV, vagas congeladas, um Maquiador, divergência de forma) → implement
+(`verify_309.py` ANTES do núcleo, 2/19 vermelho; gabarito de paridade `verify_309_golden.json`
+capturado no HEAD `6356b80`) → `verify_309.py --regressao` 20/20 (encadeia 307 e 305) → typecheck
+das três SPAs limpo → telas no Browser pane (calculadora em 20/12 e 24/12, boneco junto, aviso do
+avulso, botão travado simulando `quote.produtos` ausente, `/orcamento/:id`, prefill 600/270/250/250,
+configuração com 400 apontando o campo e `ConfirmDialog`) → converge (5 leitores por história + 2
+céticos; 23 achados, todos confirmados contra o código, aplicados em `fix(309): converge` — tasks
+T036–T052). Os que mexiam em dinheiro mostrado/gravado: a mensagem só-produto com NF/transporte/BV
+mostrava só o preço do produto (agora "Total da visita" com VALOR TOTAL e logística); o vínculo 273
+criava e aplicava coordenadores a partir do MESMO prefixo da lista (o do produto, 250, ia para duas
+vagas e o da fórmula com show nunca era gravado); as linhas de acréscimo do evento acima de 4h usavam
+um fator único (fixa para baixo, BV para cima — agora linha a linha, fechando com a régua); o
+personalizado "valor final" gravava `produtos_total` 2.500 e a régua do evento dava 3.250 em vez de
+4.500 (agora 0 e linear; multiplicador sem reaplicar % e NF); Maquiador do produto sem make contada
+dava teto 0 (agora a 1ª maquiagem, e cachê fixo da vaga honrado); o script dos tetos não pegava 762
+(712 + noturno) nem 2h–4h (agora pela base da nota da 239, rebaixando pela diferença da coluna);
+`vagas` escalar derrubava `_migrar_309` (e `load()` inteiro para DEFAULTS). Nas telas: `valor_unico`
+vem do servidor (o rótulo "Preço de tabela" não é mais inferido pelos `show_*`), card de produtos
+visível mesmo com a tabela vazia (para remover o fantasma), "não calculado" em vez de "calculando…"
+com 400 persistente, contador de coordenadores desconta os do produto removido, `errosDeSalvar`
+memoizado (o efeito de foco roubava o foco a cada tecla — valia também para o card da 307), erros
+`produtos.<chave>`/`produtos_estimativa` visíveis. Verify 20/20 com regressão depois do converge
+(cenários 6, 7, 9, 11 e 18 ganharam as provas dos achados).
 
 ### 308 — Compromisso interno não vira pendência de casting; dispensar direto da Home   (308-casting-sem-compromisso-interno · 2026-10-19 · sem migration)
 
