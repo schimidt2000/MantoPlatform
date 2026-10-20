@@ -42,7 +42,11 @@ export function useCastingOptions(eventId: number) {
 interface AssignInput {
   roleId: number;
   talent_id: number | null;
-  cache_value: number;
+  /**
+   * Ausente = não mexe no cachê. Feature 312: tirar da escala no cancelado manda só
+   * `{talent_id: null}` — com cachê no corpo o servidor recusa (a tela é só consulta).
+   */
+  cache_value?: number;
   travel_cache?: number;
 }
 

@@ -531,25 +531,36 @@ export interface EventoCancelado {
   cancelled_at: string;
   cancelled_by: string | null;
   reason: string | null;
-  /** Mantido por um ciclo; o `resumo` traz todas as devoluções. */
-  devolucao: {
-    id: number;
-    amount: number;
-    payee_name: string;
-    payment_status: string;
-  } | null;
   /** Feature 306 — opcional (backend antigo). */
   resumo?: ResumoCancelado | null;
 }
 
-/** Fila do Superadmin: solicitações pendentes + eventos já cancelados. */
-export function useCancelamentos() {
-  return useQuery<{ pendentes: CancelamentoPendente[]; cancelados: EventoCancelado[] }>({
-    queryKey: ["cancelamentos"],
-    queryFn: () =>
-      apiFetch<{ pendentes: CancelamentoPendente[]; cancelados: EventoCancelado[] }>(
-        "/api/events/cancelamentos",
-      ),
+/** Situação da devolução para o filtro da página (feature 312). */
+export type FiltroDevolucao = "nao_pago" | "no_banco" | "pago" | "sem";
+
+export interface CancelamentosResposta {
+  pendentes: CancelamentoPendente[];
+  cancelados: EventoCancelado[];
+  /** Feature 312 — opcionais (backend antigo). Soma por evento, nunca por devolução. */
+  total_retido?: number;
+  /** `periodo` com `mes`; `listados` sem ele (os 200 mais recentes). */
+  total_retido_escopo?: "periodo" | "listados";
+  filtros?: { mes: string | null; devolucao: FiltroDevolucao | null };
+}
+
+/**
+ * A página de Cancelamentos (Superadmin e Financeiro, feature 312): pedidos pendentes e os
+ * cancelados, filtráveis por mês do cancelamento e situação da devolução. Os dois filtros entram
+ * na chave — e `["cancelamentos"]` continua sendo o prefixo que as mutações invalidam.
+ */
+export function useCancelamentos(filtros: { mes?: string | null; devolucao?: FiltroDevolucao | null } = {}) {
+  const params = new URLSearchParams();
+  if (filtros.mes) params.set("mes", filtros.mes);
+  if (filtros.devolucao) params.set("devolucao", filtros.devolucao);
+  const qs = params.toString();
+  return useQuery<CancelamentosResposta>({
+    queryKey: ["cancelamentos", filtros.mes ?? null, filtros.devolucao ?? null],
+    queryFn: () => apiFetch<CancelamentosResposta>(`/api/events/cancelamentos${qs ? `?${qs}` : ""}`),
   });
 }
 

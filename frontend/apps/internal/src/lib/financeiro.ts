@@ -67,7 +67,12 @@ export interface MonthlyTrendItem {
   retido?: number;
 }
 
-/** O painel dos cancelamentos do período (feature 306, contracts §19). */
+/**
+ * O painel dos cancelamentos do período (feature 306, contracts §19) — o dado do card
+ * "Cancelamentos do período" (feature 312), igual na DRE e no Dashboard Comercial. `imposto` e
+ * `efeito_resultado` só chegam a Superadmin e Financeiro (Q1 = B); os campos novos dos itens são
+ * opcionais (backend antigo).
+ */
 export interface CancelamentosDoPeriodo {
   quantidade: number;
   pago: number;
@@ -76,9 +81,21 @@ export interface CancelamentosDoPeriodo {
   retido: number;
   comissao_retido: number;
   bv_retido: number;
-  imposto: number;
-  efeito_resultado: number;
-  itens: { event_id: number; titulo: string; cancelado_em: string | null; retido: number; status?: EventoStatus }[];
+  imposto?: number;
+  efeito_resultado?: number;
+  itens: {
+    event_id: number;
+    titulo: string;
+    cancelado_em: string | null;
+    retido: number;
+    status?: EventoStatus;
+    event_date?: string | null;
+    seller_name?: string | null;
+    pago?: number;
+    devolvido?: number;
+    devolucao_a_pagar?: number;
+    comissao_retido?: number;
+  }[];
 }
 
 export interface AuditoriaItem {

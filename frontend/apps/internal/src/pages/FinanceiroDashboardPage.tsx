@@ -9,6 +9,7 @@ import {
   type FinanceiroDashboard,
   type PeriodFilter,
 } from "../lib/financeiro";
+import { CardCancelamentosDoPeriodo } from "../components/CardCancelamentosDoPeriodo";
 
 const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
   { value: "este_mes", label: "Este mês" },
@@ -723,6 +724,14 @@ export function FinanceiroDashboardPage() {
               </Card>
             </div>
           </div>
+
+          {/* Feature 312: os cancelados do mês ficam fora da tabela abaixo; o card mostra o que
+              entrou na Receita pela linha "Retido de cancelamentos". */}
+          <CardCancelamentosDoPeriodo
+            painel={data.paineis.cancelamentos}
+            inicio={data.start}
+            fim={data.end}
+          />
 
           {/* ══ EVENTOS DO PERÍODO (largura total) ══ */}
           <Card>

@@ -216,29 +216,29 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-023–FR-026. **Teste independente**: cenário 15 verde.
 
-- [ ] T046 [US3] `cancel_ops`: extrair `elenco_dos_dias(ids)` (lista vazia → `[]`) de `elenco_do_ato`
+- [X] T046 [US3] `cancel_ops`: extrair `elenco_dos_dias(ids)` (lista vazia → `[]`) de `elenco_do_ato`
       (`app/calendar/cancel_ops.py:2109-2120`), que passa a delegar a ela; é o predicado "a avisar" sobre as vagas
       de hoje, em lote (research R5)
-- [ ] T047 [US3] `casting.cancelados_a_avisar` em `compute_casting_tasks` (`app/api/dashboard_service.py:53`),
+- [X] T047 [US3] `casting.cancelados_a_avisar` em `compute_casting_tasks` (`app/api/dashboard_service.py:53`),
       itens no molde de `serialize_unconfirmed_ref` (`:277-295`), corte `dashboard_cutoff`, ordem pela data; a chave
       também em `_painel_casting` (`:473-480`) e no tipo `CastingSummary` (`frontend/apps/internal/src/lib/types.ts:48-54`)
-- [ ] T048 [US3] `api_assign_role` (`app/api/agenda_write.py:206-236`) no cancelado: `_can_casting()` (`:59`) com
+- [X] T048 [US3] `api_assign_role` (`app/api/agenda_write.py:206-236`) no cancelado: `_can_casting()` (`:59`) com
       403 "Evento cancelado: quem tira da escala é o Casting."; só `talent_id` nulo sem cachê nem transporte; o
       resto → trava; a view repassa `cache_value=role.cache_value` (o `assign_role` grava `parse_brl(cache_value)` e
       zeraria o cachê). Dentro de `assign_role` (`app/calendar/casting_ops.py`, antes do commit de `:161`), no
       cancelado com o talento saindo e sem ninguém a avisar no dia (`elenco_dos_dias`) →
       `marcar_lidas_por_entidade("calendar_event", dia.id, KIND_EVENTO_CANCELADO_ESCALA)`
       (`app/notificacoes/notificacoes_ops.py:458`) na mesma transação
-- [ ] T049 [US3] Tela: `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx` (`CastingSection :633`,
+- [X] T049 [US3] Tela: `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx` (`CastingSection :633`,
       `RoleCard :169` — edição `:318-365`, "Remover vaga" `:445-457`; `AddRoleForm` usado em `:686/:695`) no
       cancelado — só um botão novo "Tirar da escala" (manda só `{talent_id: null}`; o "Salvar" de hoje manda
       `cache_value`, `:347`) e o WhatsApp (`:417-425`) para `show_casting`, com a frase "Evento cancelado: exclua os
       escalados e avise cada um pelo WhatsApp."; os outros só leem
-- [ ] T050 [US3] Home: bloco "Eventos cancelados — excluir e avisar" em
+- [X] T050 [US3] Home: bloco "Eventos cancelados — excluir e avisar" em
       `frontend/apps/internal/src/pages/DashboardPage.tsx` (molde `UnconfirmedRow`, `:153`), agrupado por evento,
       com "Avisar no WhatsApp" (mensagem da FR-026; sem WhatsApp → "sem WhatsApp no cadastro") e "Tirar da escala"
       com confirmação; tipo opcional irmão de `UnconfirmedInviteRef` em `frontend/apps/internal/src/lib/types.ts:37`
-- [ ] T051 [US3] Rodada: cenário 15 verde; typecheck; ruff; commit `feat(312): história 3 — o Casting tira os
+- [X] T051 [US3] Rodada: cenário 15 verde; typecheck; ruff; commit `feat(312): história 3 — o Casting tira os
       escalados do cancelado e avisa`
 
 ---
@@ -247,22 +247,22 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-027–FR-031. **Teste independente**: cenários 16–17 verdes.
 
-- [ ] T052 [US4] Gate `_can_read_cancelamentos()` (SUPERADMIN ou FINANCEIRO pelo papel real) em
+- [X] T052 [US4] Gate `_can_read_cancelamentos()` (SUPERADMIN ou FINANCEIRO pelo papel real) em
       `app/api/agenda_write.py` ao lado de `_can_delete` (`:114-118`, intocado); a rota `:870-881` passa a usá-lo;
       validação de `mes` (`AAAA-MM`) e `devolucao` com 400 `fields`
-- [ ] T053 [US4] `listar_cancelamentos(*, flags, mes=None, devolucao=None)` (`app/calendar/cancel_ops.py:3397-3468`):
+- [X] T053 [US4] `listar_cancelamentos(*, flags, mes=None, devolucao=None)` (`app/calendar/cancel_ops.py:3397-3468`):
       mês em São Paulo sem limite; `EXISTS`/`NOT EXISTS` por `filtro_devolucao` (`:233-243`) antes do limite;
       `total_retido`, `total_retido_escopo`, `filtros`; sai `_devolucao` (`:3420-3434`)
-- [ ] T054 [US4] Tela `frontend/apps/internal/src/pages/EventosCancelamentosPage.tsx`: filtros na URL (inválido
+- [X] T054 [US4] Tela `frontend/apps/internal/src/pages/EventosCancelamentosPage.tsx`: filtros na URL (inválido
       volta ao padrão), Buscar (título ou motivo), colunas Venda · Pago · Devoluções · Retido · Comissão · BV ·
       Imposto, total no cabeçalho ("nos N listados" sem mês), vazio com "Limpar filtros", erro com a mensagem do
       servidor (`:58-62`), dia cortado e "a venda passou para DD/MM" (`resumo.venda_passou_para`); tira a leitura
       do `devolucao` legado (`:148-149`, `:229`)
-- [ ] T055 [US4] `useCancelamentos({mes, devolucao})` com os dois na chave (`frontend/apps/internal/src/lib/eventOps.ts:546-554`)
-- [ ] T056 [US4] Menu: "Exclusões e cancelamentos" para FINANCEIRO, duplicado na seção Financeiro (`:361`) com `key` própria
+- [X] T055 [US4] `useCancelamentos({mes, devolucao})` com os dois na chave (`frontend/apps/internal/src/lib/eventOps.ts:546-554`)
+- [X] T056 [US4] Menu: "Exclusões e cancelamentos" para FINANCEIRO, duplicado na seção Financeiro (`:361`) com `key` própria
       (`frontend/apps/internal/src/lib/navigation.tsx:494-504`); o comentário "a porta principal…" (`:494-496`) é
       reescrito
-- [ ] T057 [US4] Rodada: cenários 16–17 verdes; typecheck; ruff; commit `feat(312): história 4 — a página de
+- [X] T057 [US4] Rodada: cenários 16–17 verdes; typecheck; ruff; commit `feat(312): história 4 — a página de
       Cancelamentos para o Superadmin e o Financeiro`
 
 ---
@@ -271,22 +271,22 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-032–FR-035. **Teste independente**: cenários 18–19 verdes.
 
-- [ ] T058 [US5] `painel_de_cancelamentos(inicio, fim, *, seller_id=None, educamanto_only=False,
+- [X] T058 [US5] `painel_de_cancelamentos(inicio, fim, *, seller_id=None, educamanto_only=False,
       commission_target_id=None, com_imposto)` em `app/calendar/cancel_ops.py` sobre
       `cancelados_do_periodo`/`totais_cancelamentos` (`:586`, `:627-655`, totais pelo nome do módulo), comissão pela
       regra do KPI com o alvo de `_resolve_vendas_scope` (`app/financeiro/vendas_ops.py:311-327`); `seller_name` por
       busca em lote; itens com `event_date`,
       `seller_name`, `pago`, `devolvido`, `devolucao_a_pagar`, `comissao_retido`
-- [ ] T059 [US5] DRE: `paineis.cancelamentos` (`app/api/financeiro_read.py:538-563`) passa a sair da função; os
+- [X] T059 [US5] DRE: `paineis.cancelamentos` (`app/api/financeiro_read.py:538-563`) passa a sair da função; os
       números de hoje iguais (cenário 19 compara com a `main` por `_sob_mutacao`)
-- [ ] T060 [US5] Pipeline: `cancelamentos` sempre presente em `GET /api/vendas/pipeline`
+- [X] T060 [US5] Pipeline: `cancelamentos` sempre presente em `GET /api/vendas/pipeline`
       (`app/api/financeiro_read.py:122-183`, escopo de `:160-164`), imposto e efeito só com a flag de SA/FIN
-- [ ] T061 [US5] Componente do card (no molde do card da loja, `VendasPipelinePage.tsx:325`) usado em
+- [X] T061 [US5] Componente do card (no molde do card da loja, `VendasPipelinePage.tsx:325`) usado em
       `VendasPipelinePage.tsx` e em `FinanceiroDashboardPage.tsx` acima de "📋 Eventos no Período" (`:730`): só com
       `quantidade > 0`, números, lista com link de cada evento, "Ver na página de Cancelamentos" (`?mes=`) só para
       quem abre a página; tipo `CancelamentosDoPeriodo` (`frontend/apps/internal/src/lib/financeiro.ts:71-82`)
       reaproveitado e o do pipeline opcional
-- [ ] T062 [US5] Rodada: cenários 18–19 verdes; typecheck; ruff; commit `feat(312): história 5 — o card
+- [X] T062 [US5] Rodada: cenários 18–19 verdes; typecheck; ruff; commit `feat(312): história 5 — o card
       "Cancelamentos do período"`
 
 ---
@@ -295,24 +295,24 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-036–FR-039. **Teste independente**: cenários 20–21 verdes.
 
-- [ ] T063 [P] [US6] `event_situacao` em `serialize_tag` (`app/impressoes3d/nfc_ops.py:341-368`),
+- [X] T063 [P] [US6] `event_situacao` em `serialize_tag` (`app/impressoes3d/nfc_ops.py:341-368`),
       `app/api/formularios_admin_read.py:89` (`_response_detail`; a lista `_response_summary` `:53-82` não precisa), no
       pedido de figurino (`serialize_producao`, `app/figurino/producao_ops.py:533`, `:553`) — o `form_history` da
       ficha da cliente já sai na T020
-- [ ] T064 [US6] `SeloSituacao.tsx` (`frontend/apps/internal/src/components/SeloSituacao.tsx:24-30`) ganha o ramo
+- [X] T064 [US6] `SeloSituacao.tsx` (`frontend/apps/internal/src/components/SeloSituacao.tsx:24-30`) ganha o ramo
       `cancelado` (Badge vermelho "Cancelado", ícone `Ban`, compacto com `aria-label`); o tooltip ganha o irmão de `textoDoSumico` para o
       cancelado; o componente também desenha na agenda (`AgendaListView.tsx:59`, `CalendarGrid.tsx:128`,
       `DayTimelineView.tsx:83/146/150`) — lá o cancelado não chega do servidor, nada a mudar. Usado em Gastos Extras
       (célula do evento `GastosExtrasPage.tsx:692`, pelo `event_cancelled` de `lib/gastos.ts:46`), `/3d/tags`, `FormulariosAdminPage.tsx:490`,
       `FigurinoProducaoListPage.tsx:497-499`, `FigurinoProducaoDetailPage.tsx:617-619` e no histórico de formulários
       da ficha da cliente; tipos opcionais em `lib/nfc.ts` e afins
-- [ ] T065 [US6] Select `EventoVincular` (`GastosExtrasPage.tsx:101-136`): o evento atual (`expense.event_title`)
+- [X] T065 [US6] Select `EventoVincular` (`GastosExtrasPage.tsx:101-136`): o evento atual (`expense.event_title`)
       como opção fixa quando não está na lista do dia — o `EventoFields` (`:301-348`) já faz isso
       (`vinculoAtual`/`faltaNaLista`, `:311-319`, `:339`)
-- [ ] T066 [P] [US6] Portal: `app/api/portal_figurino.py:36-39` recusa o cancelado com 400 "Este evento foi
+- [X] T066 [P] [US6] Portal: `app/api/portal_figurino.py:36-39` recusa o cancelado com 400 "Este evento foi
       cancelado." depois do 403 e do 404 (`event` só carrega em `:39`); `frontend/apps/portal/src/pages/PortalFigurinoPage.tsx:39-43` mostra a frase do
       servidor
-- [ ] T067 [US6] Rodada: cenários 20–21 verdes; typecheck; ruff; commit `feat(312): história 6 — o selo nas coisas
+- [X] T067 [US6] Rodada: cenários 20–21 verdes; typecheck; ruff; commit `feat(312): história 6 — o selo nas coisas
       ligadas e o portal`
 
 ---

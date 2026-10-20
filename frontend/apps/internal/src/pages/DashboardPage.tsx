@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { apiFetch } from "@manto/api-client";
 import {
@@ -18,8 +18,9 @@ import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useFaixaSumidosVisivel } from "../lib/sumidosGoogle";
 import { useCurrentUser } from "../lib/useAuth";
-import { useAcaoNoCargoDaHome } from "../lib/casting";
+import { useAcaoNoCargoDaHome, useAssignRole } from "../lib/casting";
 import type {
+  CanceladoAAvisarRef,
   ComercialSummary,
   DashboardSummary,
   DashboardTaskRef,
@@ -200,6 +201,67 @@ function UnconfirmedRow({ item }: { item: UnconfirmedInviteRef }) {
         )}
         <Button asChild variant={nuncaEnviado ? "default" : "outline"} size="sm">
           <Link to={`/events/${item.event_id}`}>{nuncaEnviado ? "Enviar convite" : "Abrir"}</Link>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Linha de "Eventos cancelados — excluir e avisar" (feature 312, Q10 do dono: "pede para o
+ * casting excluir e avisar por WhatsApp"). A mensagem não leva link do portal (o portal não mostra
+ * o cancelado) nem nome do aniversariante. "Tirar da escala" manda só `{talent_id: null}`; a linha
+ * some com a resposta, e o bloco some com a lista vazia.
+ */
+function CanceladoAAvisarRow({ item }: { item: CanceladoAAvisarRef }) {
+  const queryClient = useQueryClient();
+  const tirar = useAssignRole(item.event_id);
+  const data = item.start_at ? new Date(item.start_at).toLocaleDateString("pt-BR") : "";
+  const zap = item.whatsapp
+    ? `https://wa.me/${item.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(
+        `Oi, ${item.talent_name}! O evento "${item.event_title}"${data ? ` de ${data}` : ""}, em que você faria ${
+          item.character_name ?? "o seu papel"
+        }, foi cancelado. Qualquer dúvida, fale com a gente.`,
+      )}`
+    : null;
+
+  return (
+    <div className="-mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-sm last:border-b-0">
+      <div className="min-w-0">
+        <div className="font-medium text-ink">{item.talent_name}</div>
+        <Link to={`/events/${item.event_id}?aba=producao`} className="text-muted hover:underline">
+          {item.character_name} · {item.event_title}
+          {data && ` — ${data}`}
+        </Link>
+        {tirar.isError && (
+          <p className="text-xs text-red" role="alert">
+            {tirar.error?.message || "Não foi possível tirar da escala."}
+          </p>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {zap ? (
+          <Button asChild variant="outline" size="sm">
+            <a href={zap} target="_blank" rel="noopener">
+              Avisar no WhatsApp
+            </a>
+          </Button>
+        ) : (
+          <span className="text-xs text-muted">sem WhatsApp no cadastro</span>
+        )}
+        <Button
+          size="sm"
+          loading={tirar.isPending}
+          onClick={() => {
+            if (window.confirm(`Tirar ${item.talent_name} da escala de "${item.event_title}"?`)) {
+              tirar.mutate(
+                { roleId: item.role_id, talent_id: null },
+                { onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["dashboard"] }) },
+              );
+            }
+          }}
+        >
+          Tirar da escala
         </Button>
       </div>
     </div>
@@ -1200,6 +1262,23 @@ export function DashboardPage() {
                   )}
                 </SectorPanel>
               </div>
+            )}
+
+            {(data.casting?.cancelados_a_avisar?.length ?? 0) > 0 && (
+              <SectorPanel
+                title="🚫 Eventos cancelados — excluir e avisar"
+                count={data.casting?.cancelados_a_avisar?.length ?? 0}
+              >
+                <p className="py-2 text-xs text-muted">
+                  Estes eventos foram cancelados. Tire cada pessoa da escala e avise pelo WhatsApp —
+                  o e-mail automático do cancelamento já saiu.
+                </p>
+                <ListaTruncada>
+                  {(data.casting?.cancelados_a_avisar ?? []).map((item) => (
+                    <CanceladoAAvisarRow key={item.role_id} item={item} />
+                  ))}
+                </ListaTruncada>
+              </SectorPanel>
             )}
 
             {data.casting && (

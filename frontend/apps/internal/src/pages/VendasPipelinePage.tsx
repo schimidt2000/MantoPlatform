@@ -22,6 +22,7 @@ import {
   type VendaFechada,
 } from "../lib/vendas";
 import type { PeriodFilter } from "../lib/financeiro";
+import { CardCancelamentosDoPeriodo } from "../components/CardCancelamentosDoPeriodo";
 
 /** Períodos oferecidos no Dashboard Comercial — subconjunto do que `_resolve_period` aceita. */
 const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
@@ -320,6 +321,9 @@ export function VendasPipelinePage() {
           className="space-y-4"
         >
           <KpiGrid kpis={data.kpis} periodLabel={data.period_label} comissaoSub={comissaoSub} />
+
+          {/* Feature 312: o cancelado não é linha da lista de vendas; aqui se acha o do mês. */}
+          <CardCancelamentosDoPeriodo painel={data.cancelamentos} inicio={data.start} fim={data.end} />
 
           {/* Consolidação do canal — só para gestor, e sempre separada do funil da equipe. */}
           {isGestor && data.loja_virtual && data.loja_virtual.vendas > 0 && (

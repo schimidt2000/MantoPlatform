@@ -45,6 +45,7 @@ import {
   type ProducaoLog,
   type ProducaoStatus,
 } from "../lib/figurinoProducao";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 const INPUT_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -616,7 +617,8 @@ export function FigurinoProducaoDetailPage() {
         subtitle={
           p.event_title ? (
             <span>
-              para <span className="text-ink">{p.event_title}</span>
+              para <span className="text-ink">{p.event_title}</span>{" "}
+              <SeloSituacao situacao={p.event_situacao} />
             </span>
           ) : (
             "sem evento vinculado"

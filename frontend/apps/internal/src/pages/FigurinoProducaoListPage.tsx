@@ -37,6 +37,7 @@ import {
   type ProducaoStatus,
 } from "../lib/figurinoProducao";
 import { useCurrentUser } from "../lib/useAuth";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 const INPUT_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -496,6 +497,7 @@ function LinhaPedido({ p }: { p: Producao }) {
         )}
         {p.event_title && !p.figurino_sheet_name && (
           <p className="mt-0.5 truncate text-xs text-muted" title={p.event_title}>
+            <SeloSituacao situacao={p.event_situacao} compacto />
             {p.event_title}
           </p>
         )}

@@ -111,6 +111,12 @@ def _can_confirm() -> bool:
     )
 
 
+def _can_read_cancelamentos() -> bool:
+    """Feature 312: a página de Cancelamentos abre para Superadmin e Financeiro pelo papel REAL.
+    Não amplia `_CAN_DELETE` — isso daria ao Financeiro excluir e cancelar."""
+    return any(r.name.upper() in (RoleName.SUPERADMIN, RoleName.FINANCEIRO) for r in current_user.roles)
+
+
 def _can_delete() -> bool:
     """Gate de excluir/cancelar o evento (`_CAN_DELETE` = só Superadmin, feature 224)."""
     from app.calendar.routes import _CAN_DELETE
@@ -127,6 +133,17 @@ def _recusa_do_cancelado(exc: Any) -> Any:
 
 
 REMOVER_NO_CANCELADO = "Evento cancelado: quem tira da escala é o Casting."
+
+
+def _muda_valor(data: dict, chave: str, atual: Any) -> bool:
+    """O corpo tenta MUDAR o valor (feature 312)? Ausente, vazio ou igual ao gravado não muda —
+    o "Salvar" de hoje sempre manda o cachê, e tirar alguém da escala não pode virar 409 por isso."""
+    from app.money import parse_brl
+
+    if data.get(chave) in (None, ""):
+        return False
+    novo = parse_brl(data[chave])
+    return novo is not None and novo != (atual if atual is None else parse_brl(atual))
 EXCLUIR_CANCELADO = (
     "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, recrie o evento."
 )
@@ -224,7 +241,9 @@ def api_assign_role(role_id: int) -> Any:
     if cancelado:
         if not _can_casting():
             return json_error(REMOVER_NO_CANCELADO, 403)
-        if data.get("talent_id") or "cache_value" in data or "travel_cache" in data:
+        if data.get("talent_id") or _muda_valor(data, "cache_value", role.cache_value) or _muda_valor(
+            data, "travel_cache", role.travel_cache
+        ):
             return trava_do_cancelado(event)
     elif not _can_edit_event():
         return json_error("Sem permissão", 403)
@@ -928,15 +947,33 @@ def api_recusar_solicitacao(event_id: int) -> Any:
 @api_bp.route("/events/cancelamentos")
 @api_login_required
 def api_listar_cancelamentos() -> Any:
-    """Fila do Superadmin: solicitações pendentes + eventos cancelados (feature 224)."""
-    if not _can_delete():
+    """A página de Cancelamentos: pedidos pendentes + eventos cancelados (features 224 e 312).
+
+    RBAC: Superadmin ou Financeiro pelo papel real (feature 312 — a leitura; excluir, cancelar e
+    alterar devolução continuam só do Superadmin, `_can_delete`). Filtros `?mes=AAAA-MM` e
+    `?devolucao=nao_pago|no_banco|pago|sem`; valor inválido → 400 no campo.
+    """
+    if not _can_read_cancelamentos():
         return json_error("Sem permissão", 403)
 
     from app.api.agenda_read import _role_flags
-    from app.calendar.cancel_ops import listar_cancelamentos
+    from app.calendar.cancel_ops import FILTROS_DEVOLUCAO, listar_cancelamentos
 
+    erros: dict[str, str] = {}
+    mes = None
+    raw_mes = (request.args.get("mes") or "").strip()
+    if raw_mes:
+        try:
+            mes = datetime.strptime(raw_mes, "%Y-%m").date()
+        except ValueError:
+            erros["mes"] = "Use o mês no formato AAAA-MM."
+    devolucao = (request.args.get("devolucao") or "").strip() or None
+    if devolucao and devolucao not in FILTROS_DEVOLUCAO:
+        erros["devolucao"] = "Situação da devolução desconhecida."
+    if erros:
+        return json_error("Corrija os filtros.", 400, fields=erros)
     flags = _role_flags(current_user, session.get("impersonate_role"))
-    return jsonify(listar_cancelamentos(flags=flags))
+    return jsonify(listar_cancelamentos(flags=flags, mes=mes, devolucao=devolucao))
 
 
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])

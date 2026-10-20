@@ -19,6 +19,7 @@ import {
   useUpdateClient,
 } from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -236,9 +237,12 @@ export function ClientDetailPage() {
                           {f.event_date ? formatDate(f.event_date) : "sem data"}
                         </span>{" "}
                         {f.event_id && f.event_title ? (
-                          <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
-                            {f.event_title}
-                          </Link>
+                          <>
+                            <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
+                              {f.event_title}
+                            </Link>{" "}
+                            <SeloSituacao situacao={f.event_situacao} />
+                          </>
                         ) : (
                           <Link
                             to={`/formularios?resposta=${f.id}`}

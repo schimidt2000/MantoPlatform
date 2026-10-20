@@ -551,6 +551,7 @@ def serialize_producao(
         "quantity": producao.quantity,
         "event_id": producao.event_id,
         "event_title": producao.event.title if producao.event else None,
+        "event_situacao": producao.event.situacao if producao.event else None,  # feature 312: o selo
         "event_start_at": (
             producao.event.start_at.isoformat()
             if producao.event and producao.event.start_at

@@ -37,10 +37,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -88,7 +87,10 @@ def _ids(obj) -> set[int]:
 
 def _get(apelido: str, url: str) -> dict:
     r = _cliente(apelido).get(url)
-    _garante(r.status_code == 200, f"GET {url} como {apelido} → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        r.status_code == 200,
+        f"GET {url} como {apelido} → {r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     return r.get_json()
 
 
@@ -107,7 +109,11 @@ def _data(event_id: int) -> date:
 
 
 def _e_trava(r) -> bool:
-    return r.status_code == 409 and _codigo(r) == "cancelado" and TRAVA_FRASE in (_erro(r).get("message") or "")
+    return (
+        r.status_code == 409
+        and _codigo(r) == "cancelado"
+        and TRAVA_FRASE in (_erro(r).get("message") or "")
+    )
 
 
 def _e_recusa_cancelado(r, status: int) -> bool:
@@ -160,7 +166,9 @@ def _impersonar(apelido: str, papel: str):
 # ── semente ───────────────────────────────────────────────────────────────────────────────────
 def _cliente_crm(nome: str) -> int:
     with app.app_context():
-        c = Client(name=f"{v6.PREFIX}{nome}", phone=f"5511{uuid.uuid4().int % 10**9:09d}", source="manual")
+        c = Client(
+            name=f"{v6.PREFIX}{nome}", phone=f"5511{uuid.uuid4().int % 10**9:09d}", source="manual"
+        )
         db.session.add(c)
         db.session.commit()
         estado["clientes"].append(c.id)
@@ -174,7 +182,9 @@ def _ligar_cliente(event_id: int, client_id: int) -> None:
         e=event_id,
         c=client_id,
     )
-    _no_banco_escrever("UPDATE calendar_events SET client_id = :c WHERE id = :e", e=event_id, c=client_id)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET client_id = :c WHERE id = :e", e=event_id, c=client_id
+    )
 
 
 def _vaga_de_presenca(event_id: int) -> int | None:
@@ -205,9 +215,13 @@ def semente() -> None:
     S["r_vivo"] = v6._escalar(S["vivo"], estado["t"])
     S["dia"] = _data(S["canc"])
     # Marcado (303) e com pedido de exclusão, no mesmo dia.
-    S["marcado"] = v6._evento("312 marcado", inicio=v6._dias_a_frente(dias), titulo=f"(CORP) M{TOKEN} MARCADO")
+    S["marcado"] = v6._evento(
+        "312 marcado", inicio=v6._dias_a_frente(dias), titulo=f"(CORP) M{TOKEN} MARCADO"
+    )
     v6._marcar_sumido(S["marcado"])
-    S["pedido"] = v6._evento("312 pedido", inicio=v6._dias_a_frente(dias), titulo=f"(CORP) P{TOKEN} PEDIDO")
+    S["pedido"] = v6._evento(
+        "312 pedido", inicio=v6._dias_a_frente(dias), titulo=f"(CORP) P{TOKEN} PEDIDO"
+    )
     _no_banco_escrever(
         "UPDATE calendar_events SET deletion_requested_at = now(), deletion_requested_by_id = :u WHERE id = :i",
         u=estado["usuarios"]["com"]["id"],
@@ -225,15 +239,28 @@ def semente() -> None:
     S["tag"] = _emprestar_tag(S["canc"])
     S["token_avaliacao"] = _token(S["canc"])
     # Observação, contrato e material para as rotas da trava que pedem um id.
-    S["obs"] = _inserir("INSERT INTO event_observations (event_id, obs_type, content, created_at) "
-                        "VALUES (:e, 'text', 'v312 obs', now()) RETURNING id", e=S["canc"])
-    S["contrato"] = _inserir("INSERT INTO event_contracts (event_id, file_path, created_at, is_signed) "
-                             "VALUES (:e, :f, now(), false) RETURNING id", e=S["canc"], f=f"{v6.PREFIX}contrato.pdf")
-    S["material"] = _inserir("INSERT INTO ensaio_materials (event_id, material_type, label, url, created_at) "
-                             "VALUES (:e, 'link', 'v312', 'https://example.test/v312', now()) RETURNING id",
-                             e=S["canc"])
-    S["avaliacao"] = _inserir("INSERT INTO client_feedbacks (event_id, client_name, score, submitted_at) "
-                              "VALUES (:e, :n, 5, now()) RETURNING id", e=S["canc"], n=f"{v6.PREFIX}cliente")
+    S["obs"] = _inserir(
+        "INSERT INTO event_observations (event_id, obs_type, content, created_at) "
+        "VALUES (:e, 'text', 'v312 obs', now()) RETURNING id",
+        e=S["canc"],
+    )
+    S["contrato"] = _inserir(
+        "INSERT INTO event_contracts (event_id, file_path, created_at, is_signed) "
+        "VALUES (:e, :f, now(), false) RETURNING id",
+        e=S["canc"],
+        f=f"{v6.PREFIX}contrato.pdf",
+    )
+    S["material"] = _inserir(
+        "INSERT INTO ensaio_materials (event_id, material_type, label, url, created_at) "
+        "VALUES (:e, 'link', 'v312', 'https://example.test/v312', now()) RETURNING id",
+        e=S["canc"],
+    )
+    S["avaliacao"] = _inserir(
+        "INSERT INTO client_feedbacks (event_id, client_name, score, submitted_at) "
+        "VALUES (:e, :n, 5, now()) RETURNING id",
+        e=S["canc"],
+        n=f"{v6.PREFIX}cliente",
+    )
     # O ato da 306: cancela com devolução Parte de 600.
     v6._remocoes.clear()
     v6._cancelar_ok(S["canc"], v6._corpo_cancelar("parte", 600, motivo=f"Motivo sigiloso {TOKEN}"))
@@ -249,12 +276,19 @@ def semente() -> None:
     )
     # Ensaio legado: ensaio de um show vivo, cancelado sozinho por UPDATE.
     S["ensaio_legado"] = v6._ensaio(S["vivo"], v6._dias_a_frente(dias - 2))
-    _no_banco_escrever("UPDATE calendar_events SET cancelled_at = now() WHERE id = :i", i=S["ensaio_legado"])
+    _no_banco_escrever(
+        "UPDATE calendar_events SET cancelled_at = now() WHERE id = :i", i=S["ensaio_legado"]
+    )
     # Grupo: principal vivo + um dia cancelado + um vivo.
     g = v6._grupo("312 grupo", dias=2, comissao=None)
     S["g_principal"], (S["g_canc"], S["g_vivo"]) = g["principal"], g["dias"]
-    r = v6._cancelar(S["g_canc"], {"motivo": "verify 312 dia", "devolucao": {"modo": "nada"}, "venda_nova": 2000})
-    _garante(r.status_code == 200, f"semente: cancelar o dia do grupo → {r.status_code} {r.get_data(as_text=True)[:300]}")
+    r = v6._cancelar(
+        S["g_canc"], {"motivo": "verify 312 dia", "devolucao": {"modo": "nada"}, "venda_nova": 2000}
+    )
+    _garante(
+        r.status_code == 200,
+        f"semente: cancelar o dia do grupo → {r.status_code} {r.get_data(as_text=True)[:300]}",
+    )
     v6._esperar_threads()
 
 
@@ -293,9 +327,13 @@ def _presente(event_id: int) -> int:
 
 def _pedido_figurino(event_id: int) -> int:
     r = _cliente("sa").post(
-        "/api/figurino/producoes", json={"title": f"{v6.PREFIX}pedido 312", "kind": "producao", "event_id": event_id}
+        "/api/figurino/producoes",
+        json={"title": f"{v6.PREFIX}pedido 312", "kind": "producao", "event_id": event_id},
     )
-    _garante(r.status_code in (200, 201), f"semente: pedido de figurino → {r.status_code} {r.get_data(as_text=True)[:300]}")
+    _garante(
+        r.status_code in (200, 201),
+        f"semente: pedido de figurino → {r.status_code} {r.get_data(as_text=True)[:300]}",
+    )
     pid = (r.get_json() or {}).get("id") or ((r.get_json() or {}).get("producao") or {}).get("id")
     EXTRAS["producoes"].append(pid)
     return pid
@@ -303,7 +341,9 @@ def _pedido_figurino(event_id: int) -> int:
 
 def _emprestar_tag(event_id: int) -> dict:
     """Tag de ESTOQUE existente (tag não se apaga): liga ao evento e devolve no `limpar_312`."""
-    linhas = _no_banco("SELECT id, event_id FROM nfc_tags WHERE event_id IS NULL ORDER BY id LIMIT 1")
+    linhas = _no_banco(
+        "SELECT id, event_id FROM nfc_tags WHERE event_id IS NULL ORDER BY id LIMIT 1"
+    )
     _garante(bool(linhas), "o espelho não tem tag NFC de estoque")
     tag = {"id": linhas[0][0], "original": linhas[0][1]}
     EXTRAS["tag"] = tag
@@ -313,7 +353,9 @@ def _emprestar_tag(event_id: int) -> dict:
 
 def _token(event_id: int) -> str:
     tok = f"v312{uuid.uuid4().hex[:20]}"
-    _no_banco_escrever("UPDATE calendar_events SET feedback_token = :t WHERE id = :i", t=tok, i=event_id)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET feedback_token = :t WHERE id = :i", t=tok, i=event_id
+    )
     return tok
 
 
@@ -321,8 +363,15 @@ def limpar_312() -> None:
     """O que a 312 cria fora do prefixo da 306: tag de estoque, pedidos de figurino, dispensas 3D."""
     tag = EXTRAS.get("tag")
     if tag:
-        _no_banco_escrever("UPDATE nfc_tags SET event_id = :e WHERE id = :i", e=tag["original"], i=tag["id"])
-    ids = [r[0] for r in _no_banco("SELECT id FROM figurino_producoes WHERE title LIKE :p", p=f"{v6.PREFIX}%")]
+        _no_banco_escrever(
+            "UPDATE nfc_tags SET event_id = :e WHERE id = :i", e=tag["original"], i=tag["id"]
+        )
+    ids = [
+        r[0]
+        for r in _no_banco(
+            "SELECT id FROM figurino_producoes WHERE title LIKE :p", p=f"{v6.PREFIX}%"
+        )
+    ]
     for pid in ids:
         for sql in (
             "DELETE FROM figurino_producao_comentarios WHERE producao_id = :i",
@@ -358,12 +407,27 @@ def c1_agenda() -> None:
         ids = _ids(corpo)
         _garante(S["vivo"] in ids, f"1: {url} sem o vivo de controle")
         _garante(S["canc"] not in ids, f"1: {url} trouxe o cancelado")
-        _garante(S["marcado"] in ids and S["pedido"] in ids, f"1: {url} escondeu o marcado ou o pedido")
-    for termo, presente in ((f"C{TOKEN}A", False), (f"V{TOKEN}A", True), (f"M{TOKEN}", True), (f"P{TOKEN}", True)):
+        _garante(
+            S["marcado"] in ids and S["pedido"] in ids, f"1: {url} escondeu o marcado ou o pedido"
+        )
+    for termo, presente in (
+        (f"C{TOKEN}A", False),
+        (f"V{TOKEN}A", True),
+        (f"M{TOKEN}", True),
+        (f"P{TOKEN}", True),
+    ):
         for extra in ("", "&incluir_cancelados=1"):
             ids = _ids(_get("sa", f"/api/agenda/search?q={termo}{extra}"))
-            alvo = {f"C{TOKEN}A": S["canc"], f"V{TOKEN}A": S["vivo"], f"M{TOKEN}": S["marcado"], f"P{TOKEN}": S["pedido"]}[termo]
-            _garante((alvo in ids) == presente, f"1: busca {termo}{extra} → {alvo in ids} (esperado {presente})")
+            alvo = {
+                f"C{TOKEN}A": S["canc"],
+                f"V{TOKEN}A": S["vivo"],
+                f"M{TOKEN}": S["marcado"],
+                f"P{TOKEN}": S["pedido"],
+            }[termo]
+            _garante(
+                (alvo in ids) == presente,
+                f"1: busca {termo}{extra} → {alvo in ids} (esperado {presente})",
+            )
     html = _html("sa", f"/agenda/day/{dia}")
     _garante(f"V{TOKEN}A" in html, "1: Dia Jinja sem o vivo de controle")
     _garante(f"C{TOKEN}A" not in html, "1: Dia Jinja mostrou o cancelado")
@@ -373,19 +437,28 @@ def c2_ficha_talento() -> None:
     corpo = _get("sa", f"/api/talents/{estado['t']}")
     texto = json.dumps(corpo, ensure_ascii=False)
     _garante(f"V{TOKEN}A" in texto, "2: a ficha do talento não traz o vivo de controle")
-    _garante(f"C{TOKEN}" not in texto, "2: a ficha do talento traz o cancelado (histórico ou personagem)")
+    _garante(
+        f"C{TOKEN}" not in texto, "2: a ficha do talento traz o cancelado (histórico ou personagem)"
+    )
     hist = (corpo.get("history") or {}) if isinstance(corpo.get("history"), dict) else {}
     itens = hist.get("items") or corpo.get("history") or []
     ids = _ids(itens)
     _garante(S["canc"] not in ids, "2: o cancelado está no histórico")
     # Os números saem da mesma lista: o cachê de 300 do cancelado não entra no total.
-    total = corpo.get("total_earned") or hist.get("total_earned") or (corpo.get("stats") or {}).get("total_earned")
+    total = (
+        corpo.get("total_earned")
+        or hist.get("total_earned")
+        or (corpo.get("stats") or {}).get("total_earned")
+    )
     so_vivos = sum(
-        (Decimal(str(r[0])) for r in _no_banco(
-            "SELECT coalesce(r.cache_value, 0) FROM event_roles r JOIN calendar_events e ON e.id = r.event_id "
-            "WHERE r.talent_id = :t AND e.cancelled_at IS NULL AND e.start_at < now() AND r.invite_status = 'accepted'",
-            t=estado["t"],
-        )),
+        (
+            Decimal(str(r[0]))
+            for r in _no_banco(
+                "SELECT coalesce(r.cache_value, 0) FROM event_roles r JOIN calendar_events e ON e.id = r.event_id "
+                "WHERE r.talent_id = :t AND e.cancelled_at IS NULL AND e.start_at < now() AND r.invite_status = 'accepted'",
+                t=estado["t"],
+            )
+        ),
         Decimal("0"),
     )
     _ = so_vivos  # o espelho tem o passado do talento descartável vazio: o teste forte é o texto acima
@@ -422,7 +495,10 @@ def c4_seletores() -> None:
     _garante(S["vivo"] in cands, "4: candidatos automáticos do formulário sem o vivo")
     _garante(S["canc"] not in cands, "4: candidatos automáticos do formulário com o cancelado")
     html = _html("sa", f"/events/{S['ensaio_legado']}")
-    _garante(f"C{TOKEN}A" not in html, "4: a lista Jinja de shows do vínculo de ensaio ofereceu o cancelado")
+    _garante(
+        f"C{TOKEN}A" not in html,
+        "4: a lista Jinja de shows do vínculo de ensaio ofereceu o cancelado",
+    )
 
 
 def c5_filas_3d() -> None:
@@ -432,7 +508,10 @@ def c5_filas_3d() -> None:
     _garante(S["vivo"] in pend, "5: pendências de presente sem o show vivo de controle")
     _garante(S["canc"] not in pend, "5: o show cancelado nas pendências de presente")
     _garante(
-        all((x.get("event") or {}).get("id") != S["canc"] and x.get("event_id") != S["canc"] for x in fila),
+        all(
+            (x.get("event") or {}).get("id") != S["canc"] and x.get("event_id") != S["canc"]
+            for x in fila
+        ),
         "5: o presente do cancelado na Fila de Impressão",
     )
     _garante(
@@ -447,11 +526,15 @@ def c6_conflito() -> None:
     with app.app_context():
         vivo = db.session.get(CalendarEvent, S["vivo"])
         talento = db.session.get(Talent, estado["t"])
-        conflito = cal_routes._talent_time_conflict(talento.id, vivo.start_at, vivo.end_at, exclude_event_id=vivo.id)
+        conflito = cal_routes._talent_time_conflict(
+            talento.id, vivo.start_at, vivo.end_at, exclude_event_id=vivo.id
+        )
     texto = json.dumps(conflito, default=str, ensure_ascii=False) if conflito else ""
     _garante(f"C{TOKEN}" not in texto, f"6: conflito pelo cancelado: {texto[:200]}")
     html = _html("sa", f"/events/{S['vivo']}")
-    _garante(f"C{TOKEN}A" not in html, "6: a tela Jinja do vivo mostra o cancelado (disponibilidade)")
+    _garante(
+        f"C{TOKEN}A" not in html, "6: a tela Jinja do vivo mostra o cancelado (disponibilidade)"
+    )
 
 
 def c7_grupo_e_ensaio() -> None:
@@ -461,26 +544,42 @@ def c7_grupo_e_ensaio() -> None:
     _garante(S["g_vivo"] in sats, f"7: o dia vivo fora do painel do grupo ({sats})")
     _garante(S["g_canc"] not in sats, "7: o dia cancelado no painel do grupo do principal vivo")
     _garante(
-        _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=S["g_canc"])[0][0] == S["g_principal"],
+        _no_banco("SELECT group_leader_id FROM calendar_events WHERE id = :i", i=S["g_canc"])[0][0]
+        == S["g_principal"],
         "7: o dia cancelado saiu do grupo no banco",
     )
     corpo = _get("sa", f"/api/events/{S['vivo']}")
     ens = _ids(corpo.get("ensaios") or (corpo.get("event") or {}).get("ensaios") or [])
-    _garante(S["ensaio_legado"] not in ens, "7: o ensaio legado cancelado na lista de ensaios do show")
+    _garante(
+        S["ensaio_legado"] not in ens, "7: o ensaio legado cancelado na lista de ensaios do show"
+    )
 
 
 # ── H2: a tela do cancelado só para consulta ─────────────────────────────────────────────────
 def c8_q9() -> None:
-    for apelido, ve in (("cast", False), ("fig", False), ("ens", False), ("com", True), ("fin", True), ("sa", True)):
+    for apelido, ve in (
+        ("cast", False),
+        ("fig", False),
+        ("ens", False),
+        ("com", True),
+        ("fin", True),
+        ("sa", True),
+    ):
         ev = _get(apelido, f"/api/events/{S['canc']}").get("event") or {}
         _garante(ev.get("cancelled_at"), f"8: {apelido} sem cancelled_at")
         tem = bool(ev.get("cancellation_reason")) or bool(ev.get("cancelled_by"))
         _garante(tem == ve, f"8: {apelido} vê o motivo/autor = {tem} (esperado {ve})")
     c = _impersonar("sa", RoleName.CASTING)
     ev = c.get(f"/api/events/{S['canc']}").get_json().get("event") or {}
-    _garante(not ev.get("cancellation_reason") and not ev.get("cancelled_by"), "8: Ver como Casting viu o motivo")
+    _garante(
+        not ev.get("cancellation_reason") and not ev.get("cancelled_by"),
+        "8: Ver como Casting viu o motivo",
+    )
     html = _html("cast", f"/events/{S['canc']}")
-    _garante(f"Motivo sigiloso {TOKEN}" not in html, "8: a tela Jinja mostra o motivo ao Casting (Log de atividades)")
+    _garante(
+        f"Motivo sigiloso {TOKEN}" not in html,
+        "8: a tela Jinja mostra o motivo ao Casting (Log de atividades)",
+    )
 
 
 def _trava_api() -> list[tuple[str, str, dict | None]]:
@@ -529,7 +628,9 @@ def c9_trava() -> None:
         c = _cliente("sa")
         r = getattr(c, metodo)(url, json=corpo) if corpo is not None else getattr(c, metodo)(url)
         if not _e_trava(r):
-            falhas.append(f"{metodo.upper()} {url} → {r.status_code} {_erro(r).get('message', '')[:80]}")
+            falhas.append(
+                f"{metodo.upper()} {url} → {r.status_code} {_erro(r).get('message', '')[:80]}"
+            )
             continue
         try:
             _nada_mudou(antes, alvo, f"9 {url}")
@@ -545,12 +646,19 @@ def c9_trava() -> None:
         (f"/events/{e}/ensaio/link", {"url": "https://example.test/y", "label": "y"}),
         (f"/events/{e}/ensaio/material/{S['material']}/delete", {}),
         (f"/events/{e}/sync", {}),
-        (f"/events/{e}/create-ensaio", {"date": S["dia"].isoformat(), "start": "10:00", "end": "11:00"}),
+        (
+            f"/events/{e}/create-ensaio",
+            {"date": S["dia"].isoformat(), "start": "10:00", "end": "11:00"},
+        ),
         (f"/events/{S['ensaio_legado']}/edit-ensaio", {"description": "x"}),
         (f"/events/{S['ensaio_legado']}/delete-ensaio", {}),
         (f"/roles/{S['r_aceito']}/dismiss", {}),
     ):
-        alvo = S["ensaio_legado"] if "ensaio_legado" in url or f"/events/{S['ensaio_legado']}/" in url else e
+        alvo = (
+            S["ensaio_legado"]
+            if "ensaio_legado" in url or f"/events/{S['ensaio_legado']}/" in url
+            else e
+        )
         antes = _retrato(alvo)
         r = _cliente("sa").post(url, data=dados)
         try:
@@ -559,9 +667,16 @@ def c9_trava() -> None:
             falhas.append(str(exc))
         _ = r
     r = _cliente("sa").get(f"/figurinos/print-event/{e}")
-    if r.status_code == 200 and "print" in r.get_data(as_text=True).lower() and f"C{TOKEN}" in r.get_data(as_text=True):
+    if (
+        r.status_code == 200
+        and "print" in r.get_data(as_text=True).lower()
+        and f"C{TOKEN}" in r.get_data(as_text=True)
+    ):
         falhas.append("Imprimir fichas imprimiu o cancelado")
-    _garante(not falhas, "9: " + " | ".join(falhas[:12]) + (f" (+{len(falhas) - 12})" if len(falhas) > 12 else ""))
+    _garante(
+        not falhas,
+        "9: " + " | ".join(falhas[:12]) + (f" (+{len(falhas) - 12})" if len(falhas) > 12 else ""),
+    )
 
 
 # A classificação de toda rota de escrita que toca um evento (cenário 9b). Rota nova sem lugar aqui
@@ -624,7 +739,8 @@ def c9b_inventario() -> None:
         if regra.rule.startswith("/api/3d/nfc/<int:tag_id>/"):
             continue  # entregas e recados da tag: não ligam a tag a evento
         if regra.rule.startswith("/api/figurino/producoes/<int:producao_id>/") or (
-            regra.rule.startswith("/api/formularios/respostas/") and regra.endpoint not in classificadas
+            regra.rule.startswith("/api/formularios/respostas/")
+            and regra.endpoint not in classificadas
             and not regra.rule.endswith(("vincular-evento", "desvincular-evento"))
         ):
             continue  # anexos/comentários do pedido e o resto da fila de formulários: não tocam o evento
@@ -640,12 +756,31 @@ def c9b_inventario() -> None:
 def c10_portas_livres() -> None:
     e = S["canc"]
     r = v6._patch_comercial(e, "sa")
-    _garante(r.status_code == 200 and TRAVA_FRASE not in str(_erro(r)), f"10: comercial SA → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 200 and TRAVA_FRASE not in str(_erro(r)),
+        f"10: comercial SA → {r.status_code} {_erro(r)}",
+    )
     r = _cliente("sa").put(f"/api/events/{e}/acrescimos", json={"acrescimos": None})
     _garante(TRAVA_FRASE not in str(_erro(r)), f"10: acréscimos SA caiu na trava {r.status_code}")
     r = v6._post_comprovante("sa", e, 10)
-    _garante(r.status_code in (200, 201) and not _e_trava(r), f"10: comprovante SA → {r.status_code} {_erro(r)}")
-    r = _cliente("com").patch(f"/api/events/{e}/motivo-cancelamento", json={"motivo": f"Motivo sigiloso {TOKEN}"})
+    _garante(
+        r.status_code in (200, 201) and not _e_trava(r),
+        f"10: comprovante SA → {r.status_code} {_erro(r)}",
+    )
+    # Apagar também é porta de venda livre — e devolve o pago do exemplo aos 1.000 dos cenários seguintes.
+    pid = _no_banco(
+        "SELECT id FROM event_payments WHERE event_id = :e AND amount = 10 ORDER BY id DESC LIMIT 1",
+        e=e,
+    )
+    _garante(bool(pid), "10: o comprovante de 10 não ficou no banco")
+    r = _cliente("sa").delete(f"/api/payments/{pid[0][0]}")
+    _garante(
+        r.status_code in (200, 204) and not _e_trava(r),
+        f"10: apagar comprovante SA → {r.status_code} {_erro(r)}",
+    )
+    r = _cliente("com").patch(
+        f"/api/events/{e}/motivo-cancelamento", json={"motivo": f"Motivo sigiloso {TOKEN}"}
+    )
     _garante(r.status_code == 200, f"10: motivo pela Comercial → {r.status_code} {_erro(r)}")
     r = v6._patch_comercial(e, "com")
     _garante(
@@ -669,7 +804,14 @@ def c11_q5() -> None:
         ("post", f"/api/events/{e}/feedback-link", {}, 409),
     ]
     if vaga_vazia:
-        tentativas.append(("post", f"/api/roles/{vaga_vazia[0][0]}/assign", {"talent_id": S["t3"], "cache_value": "300"}, 409))
+        tentativas.append(
+            (
+                "post",
+                f"/api/roles/{vaga_vazia[0][0]}/assign",
+                {"talent_id": S["t3"], "cache_value": "300"},
+                409,
+            )
+        )
     for metodo, url, corpo, status in tentativas:
         r = getattr(_cliente("sa"), metodo)(url, json=corpo)
         if not _e_recusa_cancelado(r, status):
@@ -683,7 +825,9 @@ def c11_q5() -> None:
         falhas.append(str(exc))
     anon = app.test_client()
     for metodo in ("get", "post"):
-        r = getattr(anon, metodo)(f"/api/avaliar/{S['token_avaliacao']}", json={"client_name": "x", "score": 5})
+        r = getattr(anon, metodo)(
+            f"/api/avaliar/{S['token_avaliacao']}", json={"client_name": "x", "score": 5}
+        )
         if r.status_code != 410:
             falhas.append(f"avaliar {metodo} → {r.status_code}")
         elif f"C{TOKEN}" in r.get_data(as_text=True):
@@ -691,13 +835,18 @@ def c11_q5() -> None:
     n = _no_banco("SELECT count(*) FROM client_feedbacks WHERE event_id = :e", e=e)[0][0]
     if n != 1:
         falhas.append(f"avaliação gravada no cancelado ({n})")
-    r = _cliente("sa").post("/api/figurino/producoes", json={"title": f"{v6.PREFIX}novo", "kind": "producao", "event_id": e})
+    r = _cliente("sa").post(
+        "/api/figurino/producoes",
+        json={"title": f"{v6.PREFIX}novo", "kind": "producao", "event_id": e},
+    )
     if not _e_recusa_cancelado(r, 400) or "event_id" not in (_erro(r).get("fields") or {}):
         falhas.append(f"pedido de figurino novo → {r.status_code} {_erro(r)}")
         pid = (r.get_json() or {}).get("id")
         if pid:
             EXTRAS["producoes"].append(pid)
-    r = _cliente("sa").patch(f"/api/figurino/producoes/{S['pedido_fig']}", json={"notes": "x", "event_id": e})
+    r = _cliente("sa").patch(
+        f"/api/figurino/producoes/{S['pedido_fig']}", json={"notes": "x", "event_id": e}
+    )
     if r.status_code not in (200, 201):
         falhas.append(f"editar pedido sem trocar o evento → {r.status_code} {_erro(r)}")
     _garante(not falhas, "11: " + " | ".join(falhas))
@@ -707,7 +856,10 @@ def c12_q2() -> None:
     e = S["canc"]
     falhas = []
     marco = v6.google.marco()
-    r = _cliente("sa").post(f"/api/events/{e}/ensaios", json={"date": S["dia"].isoformat(), "start": "10:00", "end": "11:00"})
+    r = _cliente("sa").post(
+        f"/api/events/{e}/ensaios",
+        json={"date": S["dia"].isoformat(), "start": "10:00", "end": "11:00"},
+    )
     if not _e_recusa_cancelado(r, 409):
         falhas.append(f"agendar ensaio → {r.status_code} {_codigo(r)}")
     if any(v == "insert" for v, _ in v6.google.chamadas[marco:]):
@@ -717,18 +869,29 @@ def c12_q2() -> None:
     r = _cliente("sa").post(f"/api/ensaios/{orfao}/vincular", json={"parent_event_id": e})
     if not _e_recusa_cancelado(r, 400) or "parent_event_id" not in (_erro(r).get("fields") or {}):
         falhas.append(f"vincular ensaio → {r.status_code} {_erro(r)}")
-    if _no_banco("SELECT parent_event_id FROM calendar_events WHERE id = :i", i=orfao)[0][0] is not None:
+    if (
+        _no_banco("SELECT parent_event_id FROM calendar_events WHERE id = :i", i=orfao)[0][0]
+        is not None
+    ):
         falhas.append("o ensaio foi vinculado ao cancelado")
-    r = _cliente("sa").post(f"/api/events/{e}/3d-gifts", json={"item_id": _acervo_id(), "quantity": 1})
+    r = _cliente("sa").post(
+        f"/api/events/{e}/3d-gifts", json={"item_id": _acervo_id(), "quantity": 1}
+    )
     if not _e_recusa_cancelado(r, 409):
         falhas.append(f"presente novo → {r.status_code} {_codigo(r)}")
     # Tag: vínculo NOVO recusa; o mesmo id passa.
-    outra = _no_banco("SELECT id FROM nfc_tags WHERE event_id IS NULL AND id <> :i ORDER BY id LIMIT 1", i=S["tag"]["id"])
+    outra = _no_banco(
+        "SELECT id FROM nfc_tags WHERE event_id IS NULL AND id <> :i ORDER BY id LIMIT 1",
+        i=S["tag"]["id"],
+    )
     if outra:
         r = _cliente("sa").patch(f"/api/3d/nfc/{outra[0][0]}", json={"event_id": e})
         if not _e_recusa_cancelado(r, 400):
             falhas.append(f"tag nova no cancelado → {r.status_code} {_erro(r)}")
-        if _no_banco("SELECT event_id FROM nfc_tags WHERE id = :i", i=outra[0][0])[0][0] is not None:
+        if (
+            _no_banco("SELECT event_id FROM nfc_tags WHERE id = :i", i=outra[0][0])[0][0]
+            is not None
+        ):
             _no_banco_escrever("UPDATE nfc_tags SET event_id = NULL WHERE id = :i", i=outra[0][0])
             falhas.append("a tag nova foi ligada ao cancelado")
     r = _cliente("sa").patch(f"/api/3d/nfc/{S['tag']['id']}", json={"event_id": e})
@@ -739,10 +902,15 @@ def c12_q2() -> None:
     r = _cliente("sa").patch(f"/api/events/{e}/form-response", json={"form_response_id": novo_form})
     if not _e_recusa_cancelado(r, 409):
         falhas.append(f"ligar formulário (painel) → {r.status_code} {_codigo(r)}")
-    r = _cliente("sa").post(f"/api/formularios/respostas/{novo_form}/vincular-evento", json={"event_id": e})
+    r = _cliente("sa").post(
+        f"/api/formularios/respostas/{novo_form}/vincular-evento", json={"event_id": e}
+    )
     if not _e_recusa_cancelado(r, 409):
         falhas.append(f"ligar formulário (/formularios) → {r.status_code} {_codigo(r)}")
-    if _no_banco("SELECT event_id FROM form_responses WHERE id = :i", i=novo_form)[0][0] is not None:
+    if (
+        _no_banco("SELECT event_id FROM form_responses WHERE id = :i", i=novo_form)[0][0]
+        is not None
+    ):
         falhas.append("o formulário foi ligado ao cancelado")
     r = _cliente("sa").patch(f"/api/events/{e}/form-response", json={"form_response_id": None})
     if r.status_code != 200:
@@ -755,8 +923,18 @@ def c12_q2() -> None:
 
 def c13_flags() -> None:
     flags = _get("sa", f"/api/events/{S['canc']}").get("flags") or {}
-    _garante(flags.get("somente_consulta") is True, f"13: somente_consulta {flags.get('somente_consulta')}")
-    for f in ("can_edit_event", "can_edit_core", "can_confirm", "can_group", "can_manage_3d", "can_request_delete"):
+    _garante(
+        flags.get("somente_consulta") is True,
+        f"13: somente_consulta {flags.get('somente_consulta')}",
+    )
+    for f in (
+        "can_edit_event",
+        "can_edit_core",
+        "can_confirm",
+        "can_group",
+        "can_manage_3d",
+        "can_request_delete",
+    ):
         _garante(not flags.get(f), f"13: {f} verdadeira no cancelado")
     _garante(
         flags.get("desfazer_presente_3d") is True and flags.get("desfazer_formulario") is True,
@@ -764,7 +942,10 @@ def c13_flags() -> None:
     )
     _garante(flags.get("can_edit_venda_cancelado") is True, "13: a flag de venda da 306 sumiu")
     vivo = _get("sa", f"/api/events/{S['vivo']}").get("flags") or {}
-    _garante("somente_consulta" not in vivo or not vivo["somente_consulta"], "13: somente_consulta no vivo")
+    _garante(
+        "somente_consulta" not in vivo or not vivo["somente_consulta"],
+        "13: somente_consulta no vivo",
+    )
     _garante(vivo.get("can_edit_event") and vivo.get("can_confirm"), "13: o vivo perdeu as flags")
 
 
@@ -789,38 +970,74 @@ def c15_casting() -> None:
     home = _get("cast", "/api/dashboard")
     pend = ((home.get("casting") or {}).get("cancelados_a_avisar")) or []
     roles = {p.get("role_id") for p in pend}
-    _garante(roles >= {S["r_aceito"], S["r_pendente"]}, f"15: pendência sem os dois escalados ({roles})")
-    _garante(S["r_recusou"] not in roles and S["r_presenca"] not in roles, "15: quem recusou ou a presença na pendência")
+    _garante(
+        roles >= {S["r_aceito"], S["r_pendente"]}, f"15: pendência sem os dois escalados ({roles})"
+    )
+    _garante(
+        S["r_recusou"] not in roles and S["r_presenca"] not in roles,
+        "15: quem recusou ou a presença na pendência",
+    )
     _garante(S["r_vivo"] not in roles, "15: escalado do vivo na pendência")
     home_fig = _get("fig", "/api/dashboard")
-    _garante(not (home_fig.get("casting") or {}).get("cancelados_a_avisar"), "15: o Figurino recebe a pendência")
+    _garante(
+        not (home_fig.get("casting") or {}).get("cancelados_a_avisar"),
+        "15: o Figurino recebe a pendência",
+    )
     for apelido in ("fig", "com"):
         r = _cliente(apelido).post(f"/api/roles/{S['r_aceito']}/assign", json={"talent_id": None})
-        _garante(r.status_code == 403 and CASTING_403 in (_erro(r).get("message") or ""), f"15: {apelido} tirou → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 403 and CASTING_403 in (_erro(r).get("message") or ""),
+            f"15: {apelido} tirou → {r.status_code} {_erro(r)}",
+        )
     r = _cliente("cast").post(f"/api/roles/{S['r_aceito']}/assign", json={"talent_id": S["t3"]})
-    _garante(_e_trava(r), f"15: escalar outro pelo Casting no cancelado → {r.status_code} {_erro(r)}")
+    _garante(
+        _e_trava(r), f"15: escalar outro pelo Casting no cancelado → {r.status_code} {_erro(r)}"
+    )
+    r = _cliente("cast").post(
+        f"/api/roles/{S['r_aceito']}/assign", json={"talent_id": None, "cache_value": "999"}
+    )
+    _garante(_e_trava(r), f"15: mudar o cachê ao tirar → {r.status_code} {_erro(r)}")
     v6._remocoes.clear()
-    cache_antes = _no_banco("SELECT cache_value FROM event_roles WHERE id = :i", i=S["r_aceito"])[0][0]
+    cache_antes = _no_banco("SELECT cache_value FROM event_roles WHERE id = :i", i=S["r_aceito"])[
+        0
+    ][0]
     r = _cliente("cast").post(f"/api/roles/{S['r_aceito']}/assign", json={"talent_id": None})
     _garante(r.status_code == 200, f"15: Casting tira → {r.status_code} {_erro(r)}")
-    linha = _no_banco("SELECT talent_id, cache_value FROM event_roles WHERE id = :i", i=S["r_aceito"])
+    linha = _no_banco(
+        "SELECT talent_id, cache_value FROM event_roles WHERE id = :i", i=S["r_aceito"]
+    )
     _garante(linha and linha[0][0] is None, "15: a vaga sumiu ou o talento ficou")
-    _garante(linha[0][1] == cache_antes, f"15: o cachê da vaga mudou ({cache_antes} → {linha[0][1]})")
-    lidas = _no_banco("SELECT count(*) FROM notifications WHERE kind = 'evento.cancelado_escala' AND entity_id = :e "
-                      "AND read_at IS NOT NULL", e=e)[0][0]
+    _garante(
+        linha[0][1] == cache_antes, f"15: o cachê da vaga mudou ({cache_antes} → {linha[0][1]})"
+    )
+    lidas = _no_banco(
+        "SELECT count(*) FROM notifications WHERE kind = 'evento.cancelado_escala' AND entity_id = :e "
+        "AND read_at IS NOT NULL",
+        e=e,
+    )[0][0]
     _garante(lidas == 0, "15: o sino ficou lido antes de esvaziar")
     r = _cliente("cast2").post(f"/api/roles/{S['r_pendente']}/assign", json={"talent_id": None})
     _garante(r.status_code == 200, f"15: Casting tira o 2º → {r.status_code} {_erro(r)}")
     v6._esperar_threads()
-    _garante(not v6._remocoes_por_talento(), f"15: e-mail de remoção no cancelado {v6._remocoes_por_talento()}")
+    _garante(
+        not v6._remocoes_por_talento(),
+        f"15: e-mail de remoção no cancelado {v6._remocoes_por_talento()}",
+    )
     pend = (_get("cast", "/api/dashboard").get("casting") or {}).get("cancelados_a_avisar") or []
     _garante(not [p for p in pend if p.get("event_id") == e], "15: a pendência não esvaziou")
-    nao_lidas = _no_banco("SELECT count(*) FROM notifications WHERE kind = 'evento.cancelado_escala' AND entity_id = :e "
-                          "AND read_at IS NULL", e=e)[0][0]
-    _garante(S["sinos_escala"] and nao_lidas == 0, f"15: o sino não ficou lido ({nao_lidas} não lidas)")
+    nao_lidas = _no_banco(
+        "SELECT count(*) FROM notifications WHERE kind = 'evento.cancelado_escala' AND entity_id = :e "
+        "AND read_at IS NULL",
+        e=e,
+    )[0][0]
+    _garante(
+        S["sinos_escala"] and nao_lidas == 0, f"15: o sino não ficou lido ({nao_lidas} não lidas)"
+    )
     # Controle: no vivo a remoção manda o e-mail como hoje.
     v6._remocoes.clear()
-    r = _cliente("cast").post(f"/api/roles/{S['r_vivo']}/assign", json={"talent_id": None, "cache_value": "300"})
+    r = _cliente("cast").post(
+        f"/api/roles/{S['r_vivo']}/assign", json={"talent_id": None, "cache_value": "300"}
+    )
     _garante(r.status_code == 200, f"15: tirar no vivo → {r.status_code}")
     v6._esperar_threads()
     _garante(estado["t"] in v6._remocoes_por_talento(), "15: no vivo a remoção não mandou o e-mail")
@@ -837,24 +1054,45 @@ def c16_pagina() -> None:
     v6._igual(resumo.get("pago"), 1000, "16: pago")
     v6._igual(resumo.get("retido"), 400, "16: retido")
     _garante("devolucao" not in linhas[S["canc"]], "16: o objeto `devolucao` legado ficou")
-    _garante(corpo.get("total_retido_escopo") == "listados", f"16: escopo {corpo.get('total_retido_escopo')}")
+    _garante(
+        corpo.get("total_retido_escopo") == "listados",
+        f"16: escopo {corpo.get('total_retido_escopo')}",
+    )
     _garante(S["legado"] in linhas, "16: o cancelado legado derrubou ou sumiu da lista")
     mes = v6._mes(v6._hoje_sp())
     seg = v6._mes(v6._mes_seguinte(v6._hoje_sp()))
     no_mes = _get("fin", f"/api/events/cancelamentos?mes={mes}")
-    _garante(S["canc"] in {c.get("id") for c in no_mes.get("cancelados") or []}, "16: filtro do mês sem o cancelado")
+    _garante(
+        S["canc"] in {c.get("id") for c in no_mes.get("cancelados") or []},
+        "16: filtro do mês sem o cancelado",
+    )
     _garante(no_mes.get("total_retido_escopo") == "periodo", "16: com mês o escopo não é o período")
     _garante(no_mes.get("filtros", {}).get("mes") == mes, f"16: filtros {no_mes.get('filtros')}")
     fora = _get("fin", f"/api/events/cancelamentos?mes={seg}")
-    _garante(S["canc"] not in {c.get("id") for c in fora.get("cancelados") or []}, "16: mês seguinte trouxe")
+    _garante(
+        S["canc"] not in {c.get("id") for c in fora.get("cancelados") or []},
+        "16: mês seguinte trouxe",
+    )
     for estado_dev, vem in (("nao_pago", True), ("pago", False), ("sem", False)):
-        ids = {c.get("id") for c in _get("fin", f"/api/events/cancelamentos?devolucao={estado_dev}").get("cancelados") or []}
+        ids = {
+            c.get("id")
+            for c in _get("fin", f"/api/events/cancelamentos?devolucao={estado_dev}").get(
+                "cancelados"
+            )
+            or []
+        }
         _garante((S["canc"] in ids) == vem, f"16: devolucao={estado_dev} → {S['canc'] in ids}")
-    ids_sem = {c.get("id") for c in _get("fin", "/api/events/cancelamentos?devolucao=sem").get("cancelados") or []}
+    ids_sem = {
+        c.get("id")
+        for c in _get("fin", "/api/events/cancelamentos?devolucao=sem").get("cancelados") or []
+    }
     _garante(S["legado"] in ids_sem, "16: o legado sem devolução fora de devolucao=sem")
     for url, campo in (("?mes=2026-13", "mes"), ("?devolucao=xyz", "devolucao")):
         r = _cliente("fin").get(f"/api/events/cancelamentos{url}")
-        _garante(r.status_code == 400 and campo in (_erro(r).get("fields") or {}), f"16: {url} → {r.status_code} {_erro(r)}")
+        _garante(
+            r.status_code == 400 and campo in (_erro(r).get("fields") or {}),
+            f"16: {url} → {r.status_code} {_erro(r)}",
+        )
 
 
 def c17_rbac_pagina() -> None:
@@ -870,7 +1108,9 @@ def c17_rbac_pagina() -> None:
 # ── H5: o card ───────────────────────────────────────────────────────────────────────────────
 def _pipeline(apelido: str, extra: str = "") -> dict:
     inicio, fim = v6._mes_corrente()
-    return _get(apelido, v6.ROTAS["pipeline"].format(a=inicio.isoformat(), b=fim.isoformat()) + extra)
+    return _get(
+        apelido, v6.ROTAS["pipeline"].format(a=inicio.isoformat(), b=fim.isoformat()) + extra
+    )
 
 
 def c18_card_comercial() -> None:
@@ -879,19 +1119,31 @@ def c18_card_comercial() -> None:
     _garante(isinstance(card, dict), f"18: pipeline sem `cancelamentos` ({type(card).__name__})")
     itens = {i.get("event_id"): i for i in card.get("itens") or []}
     _garante(S["canc"] in itens, "18: a vendedora não acha o próprio cancelado no card")
-    _garante("imposto" not in card and "efeito_resultado" not in card, "18: a vendedora recebe imposto/efeito")
+    _garante(
+        "imposto" not in card and "efeito_resultado" not in card,
+        "18: a vendedora recebe imposto/efeito",
+    )
     v6._igual(itens[S["canc"]].get("retido"), 400, "18: retido do item")
     kpis = corpo.get("kpis") or {}
     v6._igual(card.get("retido"), kpis.get("retido_cancelamentos"), "18: retido do card = KPI")
     for apelido in ("sa", "fin"):
         card = _pipeline(apelido).get("cancelamentos") or {}
-        _garante("imposto" in card and "efeito_resultado" in card, f"18: {apelido} sem imposto/efeito")
+        _garante(
+            "imposto" in card and "efeito_resultado" in card, f"18: {apelido} sem imposto/efeito"
+        )
     outra = _pipeline("vend2").get("cancelamentos") or {}
-    _garante(S["canc"] not in {i.get("event_id") for i in outra.get("itens") or []}, "18: outra vendedora vê o cancelado")
+    _garante(
+        S["canc"] not in {i.get("event_id") for i in outra.get("itens") or []},
+        "18: outra vendedora vê o cancelado",
+    )
     inicio = v6._mes_seguinte(v6._hoje_sp())
     fim = v6._mes_seguinte(inicio) - timedelta(days=1)
-    vazio = _get("vend", v6.ROTAS["pipeline"].format(a=inicio.isoformat(), b=fim.isoformat())).get("cancelamentos")
-    _garante(isinstance(vazio, dict) and vazio.get("quantidade") == 0, f"18: mês sem cancelado → {vazio}")
+    vazio = _get("vend", v6.ROTAS["pipeline"].format(a=inicio.isoformat(), b=fim.isoformat())).get(
+        "cancelamentos"
+    )
+    _garante(
+        isinstance(vazio, dict) and vazio.get("quantidade") == 0, f"18: mês sem cancelado → {vazio}"
+    )
 
 
 def c19_card_dre() -> None:
@@ -901,11 +1153,22 @@ def c19_card_dre() -> None:
     itens = {i.get("event_id"): i for i in painel.get("itens") or []}
     _garante(S["canc"] in itens, "19: o card da DRE sem o cancelado")
     item = itens[S["canc"]]
-    for campo in ("devolvido", "comissao_retido", "pago", "devolucao_a_pagar", "event_date", "seller_name"):
+    for campo in (
+        "devolvido",
+        "comissao_retido",
+        "pago",
+        "devolucao_a_pagar",
+        "event_date",
+        "seller_name",
+    ):
         _garante(campo in item, f"19: item sem `{campo}`")
     v6._igual(item.get("devolvido"), 600, "19: devolvido do item")
     realizado = (dre.get("dre") or {}).get("realizado") or {}
-    v6._igual(painel.get("retido"), realizado.get("retido_cancelamentos"), "19: retido do card = linha da DRE")
+    v6._igual(
+        painel.get("retido"),
+        realizado.get("retido_cancelamentos"),
+        "19: retido do card = linha da DRE",
+    )
 
 
 # ── H6: coisas ligadas e portal ──────────────────────────────────────────────────────────────
@@ -916,22 +1179,29 @@ def c20_ligadas() -> None:
     g = next((x for x in lista if x.get("id") == S["gasto"]), None)
     if not g or not g.get("event_cancelled"):
         falhas.append("gasto ligado sem o selo da 306")
-    r = _cliente("sa").post(f"/api/gastos/{S['gasto']}/vincular-evento", json={"event_id": S["canc"]})
+    r = _cliente("sa").post(
+        f"/api/gastos/{S['gasto']}/vincular-evento", json={"event_id": S["canc"]}
+    )
     if r.status_code != 200:
         falhas.append(f"gasto reenviando o mesmo evento → {r.status_code} {_erro(r)}")
     novo = v6._gasto_comum(None, 10)
     r = _cliente("sa").post(f"/api/gastos/{novo}/vincular-evento", json={"event_id": S["canc"]})
     if r.status_code != 200:
-        falhas.append(f"gasto novo ligado ao cancelado por chamada direta → {r.status_code} {_erro(r)}")
+        falhas.append(
+            f"gasto novo ligado ao cancelado por chamada direta → {r.status_code} {_erro(r)}"
+        )
     with app.app_context():
         from app.impressoes3d import nfc_ops
-
         from app.models import NfcTag
 
         tag = db.session.get(NfcTag, S["tag"]["id"])
         ser = nfc_ops.serialize_tag(tag) if tag else {}
     if json.dumps(ser, default=str).find('"cancelado"') < 0:
         falhas.append("tag sem a situação do evento")
+    # O 12 desliga o formulário do painel (desfazer); aqui ele volta a ser "coisa já ligada".
+    _no_banco_escrever(
+        "UPDATE form_responses SET event_id = :e WHERE id = :i", e=S["canc"], i=S["form"]
+    )
     det = _get("sa", f"/api/formularios/respostas/{S['form']}")
     if "cancelado" not in json.dumps(det, ensure_ascii=False):
         falhas.append("formulário ligado sem event_situacao")
@@ -947,26 +1217,40 @@ def _portal(talento_id: int):
     email = _no_banco("SELECT email_contact FROM talents WHERE id = :i", i=talento_id)[0][0]
     c = app.test_client()
     r = c.post("/api/portal/auth/login", json={"login": email, "password": v6.SENHA})
-    _garante(r.status_code == 200, f"login do portal → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        r.status_code == 200, f"login do portal → {r.status_code} {r.get_data(as_text=True)[:200]}"
+    )
     return c
 
 
 def c21_portal() -> None:
     # o t2 continua escalado? no 15 ele saiu: usa o recusou (t_sem_pix) re-escalado por ORM só para a leitura.
-    _no_banco_escrever("UPDATE event_roles SET talent_id = :t, invite_status = 'accepted' WHERE id = :r",
-                       t=S["t3"], r=S["r_presenca"] or S["r_recusou"])
+    _no_banco_escrever(
+        "UPDATE event_roles SET talent_id = :t, invite_status = 'accepted' WHERE id = :r",
+        t=S["t3"],
+        r=S["r_presenca"] or S["r_recusou"],
+    )
     c = _portal(S["t3"])
     r = c.get(f"/api/portal/events/{S['canc']}/figurino")
-    _garante(r.status_code == 400 and PORTAL_FRASE in (_erro(r).get("message") or ""), f"21: ficha do cancelado → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 400 and PORTAL_FRASE in (_erro(r).get("message") or ""),
+        f"21: ficha do cancelado → {r.status_code} {_erro(r)}",
+    )
     _garante(f"C{TOKEN}" not in r.get_data(as_text=True), "21: a recusa trouxe o título")
     r = _portal(estado["t2"]).get(f"/api/portal/events/{S['vivo']}/figurino")
     _garante(r.status_code == 403, f"21: não escalado → {r.status_code}")
     r = _portal(estado["t"]).get(f"/api/portal/events/{S['vivo']}/figurino")
     _garante(r.status_code == 200, f"21: escalado no vivo → {r.status_code}")
-    _no_banco_escrever("UPDATE event_roles SET talent_id = :t, invite_status = 'pending' WHERE id = :r",
-                       t=S["t3"], r=S["r_recusou"])
+    _no_banco_escrever(
+        "UPDATE event_roles SET talent_id = :t, invite_status = 'pending' WHERE id = :r",
+        t=S["t3"],
+        r=S["r_recusou"],
+    )
     r = c.post(f"/api/portal/invites/{S['r_recusou']}/accept", json={})
-    _garante(r.status_code == 400 and PORTAL_FRASE in (_erro(r).get("message") or ""), f"21: aceitar convite do cancelado → {r.status_code} {_erro(r)}")
+    _garante(
+        r.status_code == 400 and PORTAL_FRASE in (_erro(r).get("message") or ""),
+        f"21: aceitar convite do cancelado → {r.status_code} {_erro(r)}",
+    )
 
 
 # ── regressão ────────────────────────────────────────────────────────────────────────────────
@@ -977,11 +1261,17 @@ def c22_regressao() -> None:
     ev = v6._show_com_dinheiro("312 limpo", [f"R{TOKEN}A"], 40)
     v6._escalar(ev, t_limpo)
     corpo = _get("sa", f"/api/talents/{t_limpo}")
-    _garante(f"R{TOKEN}A" in json.dumps(corpo, ensure_ascii=False), "22: talento sem cancelado perdeu o evento")
+    _garante(
+        f"R{TOKEN}A" in json.dumps(corpo, ensure_ascii=False),
+        "22: talento sem cancelado perdeu o evento",
+    )
     cli = _cliente_crm("cliente limpa 312")
     _ligar_cliente(ev, cli)
     corpo = _get("sa", f"/api/clientes/{cli}")
-    _garante(corpo.get("event_count") == 1, f"22: cliente sem cancelado event_count {corpo.get('event_count')}")
+    _garante(
+        corpo.get("event_count") == 1,
+        f"22: cliente sem cancelado event_count {corpo.get('event_count')}",
+    )
     canc = corpo.get("cancelamentos")
     _garante(canc is None or canc.get("quantidade") == 0, f"22: cancelamentos {canc}")
     ids = _ids(_get("sa", f"/api/agenda/day/{_data(ev).isoformat()}"))
@@ -1016,9 +1306,18 @@ CENARIOS = [
 
 
 def semear_tela() -> int:
-    print(json.dumps({"semente": {k: v for k, v in S.items() if k != "sinos_escala"},
-                      "usuarios": {k: v["email"] for k, v in estado["usuarios"].items()}, "senha": v6.SENHA},
-                     ensure_ascii=False, indent=1, default=str))
+    print(
+        json.dumps(
+            {
+                "semente": {k: v for k, v in S.items() if k != "sinos_escala"},
+                "usuarios": {k: v["email"] for k, v in estado["usuarios"].items()},
+                "senha": v6.SENHA,
+            },
+            ensure_ascii=False,
+            indent=1,
+            default=str,
+        )
+    )
     return 0
 
 
@@ -1057,8 +1356,13 @@ def main() -> int:
                 limpar_312()
                 v6.limpar()
                 sobras = v6._sobras_do_verify()
-                sobras_312 = _no_banco("SELECT count(*) FROM figurino_producoes WHERE title LIKE :p", p=f"{v6.PREFIX}%")[0][0]
-                _garante(not sobras and not sobras_312, f"a limpeza deixou: {sobras} pedidos={sobras_312}")
+                sobras_312 = _no_banco(
+                    "SELECT count(*) FROM figurino_producoes WHERE title LIKE :p", p=f"{v6.PREFIX}%"
+                )[0][0]
+                _garante(
+                    not sobras and not sobras_312,
+                    f"a limpeza deixou: {sobras} pedidos={sobras_312}",
+                )
                 _garante(not v6.rede_bloqueada, f"conexões externas tentadas: {v6.rede_bloqueada}")
                 v6.resultados.append(("L", "23 · limpeza e nenhuma rede", "OK", ""))
                 print("  OK         23 · limpeza e nenhuma rede")
@@ -1075,5 +1379,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    re.compile("")  # (mantém o import usado pelos filtros de texto)
     sys.exit(main())

@@ -87,6 +87,8 @@ def _response_detail(r: FormResponse, corte: datetime) -> dict:
         **_response_summary(r, corte),
         "data_sections": r.data_sections,
         "event_title": r.event.title if r.event else None,
+        # Feature 312: o formulário ligado a um cancelado leva o selo no detalhe.
+        "event_situacao": r.event.situacao if r.event else None,
     }
 
 

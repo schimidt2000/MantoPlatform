@@ -393,8 +393,8 @@ foi cancelado." em vez da ficha.
   tarefas —, cada um com artista, personagem, evento, data e WhatsApp; a lista some sozinha quando a escala do
   cancelado esvazia.
 - **FR-024**: Num cancelado, tirar artista da vaga DEVE ser permitido só a Casting e Superadmin (os outros recebem
-  403 com "Evento cancelado: quem tira da escala é o Casting."), DEVE aceitar só a remoção (talento, cachê ou
-  transporte no pedido → 409 `cancelado`), DEVE manter a vaga e NÃO DEVE mandar e-mail de remoção.
+  403 com "Evento cancelado: quem tira da escala é o Casting."), DEVE aceitar só a remoção (talento no pedido, ou
+  cachê ou transporte diferentes dos gravados → 409 `cancelado`; o mesmo valor ou vazio não conta), DEVE manter a vaga e NÃO DEVE mandar e-mail de remoção.
 - **FR-025**: Quando sai o último escalado a avisar de um dia cancelado, o sino do pedido ao Casting daquele dia
   DEVE ficar lido para todos, na mesma transação.
 - **FR-026**: A Home DEVE mostrar o bloco "Eventos cancelados — excluir e avisar" com "Avisar no WhatsApp"

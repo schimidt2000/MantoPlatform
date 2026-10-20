@@ -19,6 +19,7 @@ import {
   type GastosTotals,
   type GastoMarketingBatch,
 } from "../lib/gastos";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -118,6 +119,15 @@ function EventoVincular({ expense }: { expense: GastoExtra }) {
         disabled={link.isPending}
       >
         <option value="">Sem evento vinculado</option>
+        {/* Feature 312: a lista do dia não oferece o cancelado; o vínculo que já existe (a devolução,
+            a multa) aparece como opção fixa, em vez de o select dizer "Sem evento vinculado". */}
+        {expense.event_id != null &&
+          !eventos.data?.events.some((ev) => ev.id === expense.event_id) && (
+            <option value={expense.event_id}>
+              {expense.event_title ?? `Evento #${expense.event_id}`}
+              {expense.event_cancelled ? " (cancelado)" : ""}
+            </option>
+          )}
         {eventos.data?.events.map((ev) => (
           <option key={ev.id} value={ev.id}>
             {ev.label}
@@ -689,7 +699,15 @@ function GastoRow({
             <span className="text-muted">—</span>
           )}
         </td>
-        <td className={TD}>{expense.event_title ?? <span className="text-muted">—</span>}</td>
+        <td className={TD}>
+          {expense.event_title ?? <span className="text-muted">—</span>}
+          {/* Feature 312: o gasto ligado a um evento cancelado (a devolução, a multa) leva o selo. */}
+          {expense.event_cancelled && (
+            <span className="ml-1">
+              <SeloSituacao situacao="cancelado" compacto />
+            </span>
+          )}
+        </td>
         {canManage && <td className={TD}>{expense.created_by_name ?? "—"}</td>}
         <td className={TD}>
           {expense.receipt_url ? (

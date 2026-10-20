@@ -38,7 +38,9 @@ export function PortalFigurinoPage() {
 
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Você não está escalado neste evento.
+          {/* Feature 312: a frase é do servidor ("Este evento foi cancelado." ou "Você não está
+              escalado neste evento."); sem ela (falha de rede), a de antes. */}
+          {query.error?.message || "Você não está escalado neste evento."}
         </div>
       )}
 

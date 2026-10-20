@@ -155,6 +155,8 @@ interface RoleCardProps {
   role: RoleItem;
   data: EventoDetalhe;
   canEdit: boolean;
+  /** Feature 312 (Q10): no cancelado, Casting e Superadmin só tiram o artista da escala. */
+  podeTirar?: boolean;
 }
 
 /**
@@ -166,7 +168,7 @@ interface RoleCardProps {
  * talento ocupa a largura toda e o cachê fica ao lado do botão Salvar — nada de campo de
  * 40px espremido entre botões.
  */
-function RoleCard({ role, data, canEdit }: RoleCardProps) {
+function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
   const eventId = data.event.id;
   const assign = useAssignRole(eventId);
   const remove = useDeleteRole(eventId);
@@ -425,6 +427,25 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
             </a>
           </Button>
         )}
+        {podeTirar && role.talent && (
+          <Button
+            variant="outline"
+            size="sm"
+            loading={assign.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  `Tirar ${role.talent?.name ?? "o artista"} da escala de "${role.character_name}"? ` +
+                    "Avise a pessoa pelo WhatsApp.",
+                )
+              ) {
+                assign.mutate({ roleId: role.role_id, talent_id: null });
+              }
+            }}
+          >
+            Tirar da escala
+          </Button>
+        )}
         {canEdit && data.flags.is_superadmin && !role.talent && (
           <Button
             variant="ghost"
@@ -459,7 +480,9 @@ function RoleCard({ role, data, canEdit }: RoleCardProps) {
       </div>
 
       {assign.isError && (
-        <p className="mt-1 text-sm text-red">Não foi possível salvar. Tente novamente.</p>
+        <p className="mt-1 text-sm text-red">
+          {assign.error?.message || "Não foi possível salvar. Tente novamente."}
+        </p>
       )}
       {transporte.isError && (
         <p className="mt-1 text-sm text-red">
@@ -631,8 +654,15 @@ export interface CastingSectionProps {
  * (`extra` — coordenação, técnico de som, maquiagem).
  */
 export function CastingSection({ data }: CastingSectionProps) {
-  const canEdit = Boolean(data.flags.show_casting);
+  // Feature 312 (Q7 e Q10): no cancelado a escala é só consulta; Casting e Superadmin (a mesma
+  // `show_casting`) ainda tiram cada artista e o avisam pelo WhatsApp, a pedido do sistema.
+  const consulta = Boolean(data.flags.somente_consulta);
+  const canEdit = Boolean(data.flags.show_casting) && !consulta;
+  const podeTirar = Boolean(data.flags.show_casting) && consulta;
   const roles = data.elenco ?? [];
+  const aAvisar = roles.filter(
+    (r) => r.talent && !ehPresenca(r) && r.invite_status !== "rejected",
+  ).length;
   const personagens = roles.filter((r) => r.role_type !== "extra");
   const apoio = roles.filter((r) => r.role_type === "extra");
   const comAlerta = roles.filter((r) => r.availability && r.availability.status !== "free");
@@ -650,7 +680,13 @@ export function CastingSection({ data }: CastingSectionProps) {
           ehPresenca(role) ? (
             <PresencaCard key={role.role_id} role={role} />
           ) : (
-            <RoleCard key={role.role_id} role={role} data={data} canEdit={canEdit} />
+            <RoleCard
+              key={role.role_id}
+              role={role}
+              data={data}
+              canEdit={canEdit}
+              podeTirar={podeTirar}
+            />
           ),
         )}
       </ul>
@@ -680,6 +716,11 @@ export function CastingSection({ data }: CastingSectionProps) {
           ) : null
         }
       >
+        {podeTirar && aAvisar > 0 && (
+          <p className="mb-2 rounded-md bg-red-soft px-3 py-2 text-sm text-red" role="note">
+            Evento cancelado: exclua os escalados e avise cada um pelo WhatsApp.
+          </p>
+        )}
         {renderList(personagens)}
         {canEdit && (
           <AddRoleForm
