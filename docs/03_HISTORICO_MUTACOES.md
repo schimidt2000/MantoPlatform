@@ -389,7 +389,24 @@ implement: régua com NF/BV, vagas congeladas, um Maquiador, divergência de for
 capturado no HEAD `6356b80`) → `verify_309.py --regressao` 20/20 (encadeia 307 e 305) → typecheck
 das três SPAs limpo → telas no Browser pane (calculadora em 20/12 e 24/12, boneco junto, aviso do
 avulso, botão travado simulando `quote.produtos` ausente, `/orcamento/:id`, prefill 600/270/250/250,
-configuração com 400 apontando o campo e `ConfirmDialog`).
+configuração com 400 apontando o campo e `ConfirmDialog`) → converge (5 leitores por história + 2
+céticos; 23 achados, todos confirmados contra o código, aplicados em `fix(309): converge` — tasks
+T036–T052). Os que mexiam em dinheiro mostrado/gravado: a mensagem só-produto com NF/transporte/BV
+mostrava só o preço do produto (agora "Total da visita" com VALOR TOTAL e logística); o vínculo 273
+criava e aplicava coordenadores a partir do MESMO prefixo da lista (o do produto, 250, ia para duas
+vagas e o da fórmula com show nunca era gravado); as linhas de acréscimo do evento acima de 4h usavam
+um fator único (fixa para baixo, BV para cima — agora linha a linha, fechando com a régua); o
+personalizado "valor final" gravava `produtos_total` 2.500 e a régua do evento dava 3.250 em vez de
+4.500 (agora 0 e linear; multiplicador sem reaplicar % e NF); Maquiador do produto sem make contada
+dava teto 0 (agora a 1ª maquiagem, e cachê fixo da vaga honrado); o script dos tetos não pegava 762
+(712 + noturno) nem 2h–4h (agora pela base da nota da 239, rebaixando pela diferença da coluna);
+`vagas` escalar derrubava `_migrar_309` (e `load()` inteiro para DEFAULTS). Nas telas: `valor_unico`
+vem do servidor (o rótulo "Preço de tabela" não é mais inferido pelos `show_*`), card de produtos
+visível mesmo com a tabela vazia (para remover o fantasma), "não calculado" em vez de "calculando…"
+com 400 persistente, contador de coordenadores desconta os do produto removido, `errosDeSalvar`
+memoizado (o efeito de foco roubava o foco a cada tecla — valia também para o card da 307), erros
+`produtos.<chave>`/`produtos_estimativa` visíveis. Verify 20/20 com regressão depois do converge
+(cenários 6, 7, 9, 11 e 18 ganharam as provas dos achados).
 
 ### 307 — Papai Noel em data especial: a tabela de preços tem os valores de 24 e 25/12 e a calculadora os aplica pela data do evento   (307-natal-papai-noel-calculadora · 2026-10-15 · sem migration)
 

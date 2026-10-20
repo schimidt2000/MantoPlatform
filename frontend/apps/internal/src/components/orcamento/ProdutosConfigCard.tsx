@@ -43,6 +43,7 @@ function produtoNovo(): ProdutoDeTabela {
 /** Rótulo legível de um campo (`preco`, `vagas.2.label`, `por_faixa.natal.preco`) na lista de erros. */
 function rotuloDoCampo(campo: string, faixas: Record<string, FaixaEspecial>): string {
   if (campo === "preco") return "Preço";
+  if (campo === "produto") return "Produto";
   if (campo === "rotulo") return "Rótulo";
   if (campo === "descricao") return "Descrição";
   if (campo === "vagas") return "Vagas";
@@ -156,9 +157,10 @@ export function ProdutosConfigCard({
 
         {Object.entries(produtos).map(([chave, produto]) => {
           const erro = (campo: string) => erros[`produtos.${chave}.${campo}`];
+          // Inclui a chave exata `produtos.<chave>` ("produto inválido"), além dos campos.
           const errosDoProduto = Object.entries(erros)
-            .filter(([k]) => k.startsWith(`produtos.${chave}.`))
-            .map(([k, msg]) => [k.replace(`produtos.${chave}.`, ""), msg] as const);
+            .filter(([k]) => k === `produtos.${chave}` || k.startsWith(`produtos.${chave}.`))
+            .map(([k, msg]) => [k === `produtos.${chave}` ? "produto" : k.replace(`produtos.${chave}.`, ""), msg] as const);
           return (
             <div key={chave} className="space-y-3 rounded-md border border-line p-3">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -383,6 +385,11 @@ export function ProdutosConfigCard({
 
         <div className="rounded-md border border-line p-3">
           <p className="mb-2 text-xs font-semibold text-ink">Estimativa (produto sem preço numa data especial)</p>
+          {erros.produtos_estimativa && (
+            <p className="mb-2 text-xs text-red" role="alert">
+              {erros.produtos_estimativa}
+            </p>
+          )}
           <p className="mb-2 text-xs text-muted">
             Preço estimado = Σ cachês das vagas na data × fator × markup. O orçamento sai marcado
             "estimativa" para a vendedora conferir.

@@ -58,8 +58,9 @@
 | `produtos_estimativa.markup` | float | em [1, 6]; padrão 3,0 |
 
 **Normalização na carga (`_migrar_309`, dentro do `try` de `load()`)**: `setdefault("produtos",
-deepcopy(DEFAULTS["produtos"]))` e `setdefault("produtos_estimativa", …)` só quando a chave está
-AUSENTE; com a chave presente, cada produto é normalizado na defensiva (`isinstance` em tudo; produto
+deepcopy(DEFAULTS["produtos"]))` e `setdefault("produtos_estimativa", …)` quando a chave está AUSENTE
+ou o bloco NÃO é um dicionário (`null`, lista, texto); com um dicionário (mesmo vazio), cada produto é
+normalizado na defensiva (`isinstance` em tudo; produto
 sem `rotulo`/`preco` válido ou sem `vagas` é DESCARTADO; vaga malformada é descartada; `por_faixa` com
 faixa inexistente é descartada; labels de coordenador/maquiador forçados) — nunca preço 0, nunca
 exceção. Também aqui: `especiais["Papai Noel"] == [712, 800, 850, 900]` → `[600, 650, 675, 700]` e
@@ -154,17 +155,22 @@ e conta de hoje.
 ## 6. Régua >4h (`produtos.total_na_duracao`)
 
 ```text
-total_na_duracao(subtotal_4h_pre, produtos_total, horas, acrescimos, nota_fiscal):
-    base = (subtotal_4h_pre − produtos_total) ÷ 4 × horas + produtos_total      # parte líquida do produto fixa
-    base = base + Σ fixos + base × Σ%/100                                         # acréscimos como nas colunas
-    return Q(base ÷ 0,84) se nota_fiscal senão Q(base)
+total_na_duracao(total_4h, produtos_total, horas, acrescimos, nota_fiscal):     # total FINAL de 4h
+    fixo  = produtos_total × (1 + Σ%/100) ÷ (0,84 se nota_fiscal)                 # o produto como está dentro do total
+    return Q((total_4h − fixo) ÷ 4 × horas + fixo)                                # o resto escala (fixos inclusos)
+
+base_na_duracao(base_4h, produtos_total, horas) = (base_4h − produtos_total) ÷ 4 × horas + produtos_total
 ```
 
-`subtotal_4h_pre` = total de 4h ANTES de acréscimos e NF: a venda tem o valor; prefill e
-`_total_da_duracao` o derivam de `entry.total_4h` pela conta inversa já existente (`_conta_inversa`:
-`(líquido − fixos) ÷ (1 + Σ%)`), lendo `acrescimos`/`nota_fiscal`/`produtos_total` do snapshot. O BV da
-duração custom (305, `acrescimos_do_orcamento`) usa a mesma base em vez de escalar o BV de 4h por h/4
-quando há produto. Sem produto (`produtos_total = 0`) a conta reproduz exatamente `total_4h ÷ 4 × h`.
+Entrada = `totals[3]` na venda, `entry.total_4h` no prefill e em `_total_da_duracao` (mesma função, mesmo
+float). Os acréscimos FIXOS escalam `÷ 4 × h` como a régua de sempre (sem produto a conta reproduz
+exatamente `total_4h ÷ 4 × h`). As linhas de acréscimo do evento acima de 4h (305,
+`acrescimos_do_orcamento`) são refeitas linha a linha por `_linhas_na_duracao`: base de 4h pela conta
+inversa (`(líquido − fixos) ÷ (1 + Σ%)`), `base_h = base_na_duracao(base_4h, produtos_total, h)`, linha %
+= `base_h × %`, fixa = `valor × h ÷ 4` — Σ linhas + base_h (÷ 0,84 com nota) = `total_na_duracao`. Um
+fator único `total_h ÷ total_4h` (a 1ª versão) errava a fixa para baixo e a % para cima. Personalizado:
+multiplicador → `total_na_duracao` sem acréscimos e sem NF (nada disso entrou no total); valor final →
+`produtos_total = 0` no quote/snapshot, régua linear.
 
 ## 7. Item do teto (`_compute_performer_caches` → `caches[]`)
 

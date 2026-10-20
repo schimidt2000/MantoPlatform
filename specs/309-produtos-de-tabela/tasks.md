@@ -349,7 +349,7 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
       orcamento_write, educamanto), `feat(309): teto e script` (routes, orcamento_evento_ops,
       specs/309-…/rebaixar_tetos_noel_309.py), `feat(309): telas` (frontend), `docs(309): …` (specs +
       docs); nunca `git add -A`
-- [ ] T035 `/speckit-converge` (workflow: leitores por história + cético) e aplicar os achados como
+- [x] T035 `/speckit-converge` (workflow: leitores por história + cético) e aplicar os achados como
       `fix(309): converge`. Depois, **só quando o dono pedir**: merge `--no-ff` na `main` + `git push
       origin main` a partir das ~19h (a partir do worktree; `git -C` no principal só se ele estiver limpo
       e na `main`); antes de "em produção": `git status --short` limpo, `git log -1` = cabeçalho do
@@ -384,3 +384,27 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
 - **Incremental**: cada história deixa o verify mais verde sem quebrar a anterior; commit por grupo
   lógico (`feat(309):`), sempre por caminho, no worktree
 - Deploy só quando o dono pedir, fora do horário da equipe
+
+## Phase 11: Convergence
+
+> `/speckit-converge` de 20/10/2026 — 5 leitores por história + 2 céticos (todos os 23 achados confirmados
+> contra o código). Nenhum achado em dinheiro COBRADO ao cliente na conta padrão; três mudam dinheiro
+> mostrado/gravado (T036, T041, T045). Aplicar como `fix(309): converge` e rerodar `verify_309 --regressao`.
+
+- [x] T036 `app/orcamento/quote_ops.py` ramo `so_produto`: a mensagem só imprime o preço do produto — com NF, transporte, BV ou `inclui_noturno: false` o `totals[0]` é outro e o cliente não vê o total nem a logística; dois exemplares = duas linhas e nenhum total. Anexar o bloco de VALOR TOTAL (com logística) quando `totals[0] ≠ produtos_total` ou há mais de um exemplar per FR-009/FR-020 (partial)
+- [x] T037 `app/orcamento/quote_ops.py` + `app/calendar/routes.py` prefill + `app/calendar/orcamento_evento_ops.py`: personalizado "valor final" grava `produtos_total` 2.500 e a régua >4h do evento/prefill aplica `total_na_duracao` (3.250 em vez de 4.500 linear; reaplica % e NF que o personalizado não somou); multiplicador só-produto cai em "Informe valores válidos". `produtos_total` 0 no valor final; régua linear quando `personalizado_ativo`; validação do multiplicador aceita produto per FR-008/FR-004 (contradicts)
+- [x] T038 `app/orcamento/produtos.py::avisos_para`: deduplicar os avisos (dois exemplares estimados repetem o aviso e a chave React) per FR-019 (partial)
+- [x] T039 `app/orcamento/pdf.py`: com só produto a linha do investimento sai "1 entrada de 30 min"/"1 hora" — rotular "Preço de tabela" como a tela per FR-009 (partial)
+- [x] T040 `app/orcamento/settings.py`: descrição digitada com parênteses vira "(…(até 1h))" na mensagem/PDF — tirar parênteses externos na normalização/validação per FR-009 (partial)
+- [x] T041 `app/calendar/orcamento_evento_ops.py::aplicar_equipe_do_orcamento`: criação e aplicação de coordenadores consomem o MESMO prefixo de `coord_itens` (o do produto, 250, vai para duas vagas; o da fórmula, 350/400 com show, nunca é gravado). Aplicar `coord_itens[:len(existentes)]` aos existentes e criar das sobras per H2/FR-011 (contradicts)
+- [x] T042 `app/calendar/routes.py::_compute_performer_caches` Maquiador: só `tem_maquiador` (produto sem `needs_makeup`) → `calcular_maquiador(0,0)` = teto 0; `cache` fixo da vaga maquiador ignorado. Honrar o fixo e nunca emitir 0 per FR-011 (contradicts)
+- [x] T043 `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py`: seleciona só cap exatamente 712/423 — Visita às 20h (762/473), fora de SP e 2h–4h (800/850/900, 480/510/540) ficam de fora. Selecionar pelo nome + nota do teto ("base Nh R$ <valor da lista 712/423>") e rebaixar pela diferença da coluna per H6/FR-018 (partial)
+- [x] T044 `app/orcamento/produtos.py::resolver_produtos`: com `tolerar_ausente` ainda levanta quando o item do snapshot não traz vagas (derruba prefill/criação depois do insert no Google) — fantasma sem vagas, nunca exceção per FR-011 (partial)
+- [x] T045 `app/calendar/orcamento_evento_ops.py::acrescimos_do_orcamento`: um `fator_regua` escalar para TODAS as linhas acima de 4h com produto — linha fixa abaixo de h/4 e BV % acima; Σ linhas ≠ o que o total somou. Escalar por linha (fixa × h/4; % sobre a base da duração com o produto fixo) per FR-004/FR-020 (contradicts)
+- [x] T046 `app/orcamento/settings.py::_normalizar_produto`: itera `vagas` antes do `isinstance(list)` — `"vagas": 5` levanta dentro de `_migrar_309` e `load()` devolve DEFAULTS para a tabela inteira per Casos de borda (contradicts)
+- [x] T047 `app/orcamento/settings.py::_validar_vaga/_validar_produto`: preço acima de 100.000 recusado como "maior que zero"; `needs_makeup` validado como bool em coordenador/maquiador (contrato: só especial/ator) per FR-013/contrato (partial)
+- [x] T048 `app/orcamento/quote_ops.py` + `frontend/.../lib/orcamento.ts` + `OrcamentoCalculadoraPage.tsx` + `OrcamentoResultadoPage.tsx`: o rótulo "Preço de tabela" é inferido pelos `show_*` (produto + avulso com 2h–4h desmarcadas rotula errado) — `quote.valor_unico` vindo do servidor per FR-009 (contradicts)
+- [x] T049 `frontend/.../pages/OrcamentoCalculadoraPage.tsx` + `components/orcamento/ProdutosCard.tsx`: card some quando a tabela está sem produtos e o recalcular traz um (sem botão Remover); linhas em "calculando…" para sempre com 400 persistente; "Remover" sem `aria-label`; ao remover um produto o `coordenadorQty` não desconta os coordenadores dele (excedente vira fórmula) per H1/H5/FR-006 (partial)
+- [x] T050 `frontend/.../pages/OrcamentoConfigPrecosPage.tsx` + `ProdutosConfigCard.tsx`: `errosDeSalvar` é `{}` novo a cada render e o efeito de foco rouba o foco a cada tecla depois de um erro local de chave (vale também para o `DatasEspeciaisCard`); erros `produtos.<chave>` e `produtos_estimativa` não aparecem em lugar nenhum per FR-014 (partial)
+- [x] T051 `specs/309-produtos-de-tabela/spec.md` + `data-model.md`: FR-004/§6 descrevem `total_na_duracao(subtotal_pré…)` com fixos que não escalam e FR-006 `split_coordenadores(qty, min, produtos)` — o código recebe o total final de 4h, fixos escalam h/4 e a assinatura é `(qty, produtos)`; DEFAULTS entram também quando `produtos` não é dict (não só ausente) per FR-004/FR-006/Casos de borda (partial, documento)
+- [x] T052 `docs/05`: registrar como dívida pré-existente (main) o `num_colaboradores` vazio — a venda usa `num_going`, o snapshot grava `""` e o prefill lê 1 (transport_value do Novo evento difere da venda); a 309 só alarga a diferença (unrequested, registro)

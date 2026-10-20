@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import {
@@ -27,6 +27,7 @@ import {
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = INPUT_PRECOS;
+const SEM_ERROS: Record<string, string> = {};
 
 export function OrcamentoConfigPrecosPage() {
   const query = useOrcamentoSettings();
@@ -37,9 +38,13 @@ export function OrcamentoConfigPrecosPage() {
   const [settings, setSettings] = useState<PricingSettings | null>(null);
   const [novoEspecialNome, setNovoEspecialNome] = useState("");
   const [novoAcrescimo, setNovoAcrescimo] = useState("");
-  // Feature 307: os `fields` do 400 do servidor (`datas_especiais.<faixa>.<campo>`) vão ao card.
-  const errosDeSalvar: Record<string, string> =
-    save.error instanceof ApiRequestError && save.error.fields ? save.error.fields : {};
+  // Feature 307: os `fields` do 400 do servidor (`datas_especiais.<faixa>.<campo>`) vão aos cards.
+  // Referência ESTÁVEL (useMemo): os cards levam o foco ao primeiro `aria-invalid` quando `erros`
+  // muda — um `{}` novo a cada render roubava o foco a cada tecla depois de um erro local.
+  const errosDeSalvar: Record<string, string> = useMemo(
+    () => (save.error instanceof ApiRequestError && save.error.fields ? save.error.fields : SEM_ERROS),
+    [save.error],
+  );
 
   useEffect(() => {
     if (query.data && !settings) setSettings(query.data.settings);

@@ -176,12 +176,15 @@ def _total_da_duracao(entry: OrcamentoHistory, duracao: int) -> Decimal | None:
             snap = snapshot_do_orcamento(entry)
             produtos_total = float(snap.get("produtos_total") or 0)
             if produtos_total:
-                # Feature 309: o produto de tabela fica fixo na régua (fonte única em `produtos`).
+                # Feature 309: o produto de tabela fica fixo na régua (fonte única em `produtos`). No
+                # personalizado (multiplicador) nem acréscimos nem NF entraram no total — não reaplicar.
                 from app.orcamento.produtos import total_na_duracao
 
+                personalizado = bool(snap.get("personalizado_ativo"))
                 total = _dec(total_na_duracao(
                     float(quatro), produtos_total, duracao,
-                    snap.get("acrescimos") or [], bool(snap.get("nota_fiscal")),
+                    [] if personalizado else (snap.get("acrescimos") or []),
+                    False if personalizado else bool(snap.get("nota_fiscal")),
                 ))
             else:
                 total = _dec(round(float(quatro) / 4 * duracao, 2))
@@ -248,6 +251,35 @@ def _conta_inversa(linhas: list[dict], total: Decimal, nota: bool) -> list[Decim
     return [_q(base * linha["value"] / 100) if linha["is_percent"] else _q(linha["value"]) for linha in linhas]
 
 
+def _linhas_na_duracao(
+    linhas: list[dict], total_4h: Decimal, nota: bool, produtos_total: float, duracao: int
+) -> list[Decimal | None]:
+    """Cada acréscimo na duração >4h COM produto de tabela (feature 309, converge).
+
+    A base pré-acréscimos de 4h vem da conta inversa (a mesma de `_conta_inversa`); na duração, o que
+    não é produto escala ``÷ 4 × h`` e o produto fica fixo (`produtos.base_na_duracao`). Linha em % =
+    base da duração × %; fixa = digitado × h ÷ 4. Fecha com `produtos.total_na_duracao`: Σ linhas +
+    base da duração (÷ 0,84 com nota) = total da duração.
+    """
+    from app.orcamento.produtos import base_na_duracao
+
+    liquido = total_4h * divisor_da_nota() if nota else total_4h
+    fixos = sum((linha["value"] for linha in linhas if not linha["is_percent"]), Decimal("0"))
+    percentuais = sum((linha["value"] for linha in linhas if linha["is_percent"]), Decimal("0"))
+    divisor = Decimal("1") + percentuais / 100
+    if divisor <= 0:
+        return [None] * len(linhas)
+    base_4h = _q((liquido - fixos) / divisor)
+    if base_4h <= 0:
+        return [None] * len(linhas)
+    base_h = base_na_duracao(base_4h, produtos_total, duracao)
+    escala = Decimal(int(duracao)) / 4
+    return [
+        _q(base_h * linha["value"] / 100) if linha["is_percent"] else _q(linha["value"] * escala)
+        for linha in linhas
+    ]
+
+
 def acrescimos_do_orcamento(entry: OrcamentoHistory | None, duracao: int) -> dict:
     """O que o orçamento somou ao preço, linha a linha, na duração (B1 da feature 305). Pura.
 
@@ -279,21 +311,23 @@ def acrescimos_do_orcamento(entry: OrcamentoHistory | None, duracao: int) -> dic
         indice = min(duracao, 4) - 1
         fator = Decimal("1") if duracao <= 4 else Decimal(duracao) / 4
         produtos_total = float(snap.get("produtos_total") or 0)
+        por_linha: list[Decimal | None] | None = None
         if duracao > 4 and produtos_total:
-            # Feature 309: com produto de tabela a régua não é h ÷ 4 — o produto (e o BV sobre ele)
-            # fica fixo; o fator é o da mesma função que dá o total da duração.
-            from app.orcamento.produtos import fator_regua
-
-            fator = fator_regua(float(total_tabela), produtos_total, duracao, linhas, nota)
+            # Feature 309: com produto de tabela a régua não é h ÷ 4 — o produto fica fixo. Linha a
+            # linha (converge): a fixa escala h ÷ 4; a % é refeita sobre a BASE da duração (o que não
+            # é produto × h ÷ 4 + o produto) — um fator único para todas errava as duas.
+            por_linha = _linhas_na_duracao(linhas, total_tabela, nota, produtos_total, duracao)
         inversa = _conta_inversa(linhas, total_tabela, nota)
         saida = []
-        for linha, alternativa in zip(linhas, inversa, strict=True):
+        for k, (linha, alternativa) in enumerate(zip(linhas, inversa, strict=True)):
             cheio = _valor_gravado(linha, indice, total_tabela)
             if cheio is None:
                 cheio = alternativa
             if cheio is None:
                 continue
-            cheio = _q(cheio * fator)
+            cheio = por_linha[k] if por_linha is not None else _q(cheio * fator)
+            if cheio is None:
+                continue
             if cheio <= 0:
                 continue
             saida.append({
@@ -737,19 +771,21 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
     # Coordenadores: até a quantidade vendida (o `_ensure_coordinator` da criação garante 1).
     coord_itens = [i for i in extras if _chave(i.get("label")).startswith("coordenador")]
     coord_existentes = [r for r in apoio if _chave(r.character_name).startswith("coordenador")]
-    faltam = len(coord_itens) - len(coord_existentes)
-    for item in coord_itens[:max(faltam, 0)]:
+    # Os itens são consumidos EM SEQUÊNCIA: os primeiros vão às vagas que já existem, as sobras viram
+    # vagas novas. Desde a 309 eles podem diferir (o do produto é 250 flat; o da fórmula segue show e
+    # régua) — criar e aplicar a partir do mesmo prefixo gravava o do produto duas vezes.
+    for item, role in zip(coord_itens, coord_existentes, strict=False):
+        cap, nota = _cap_e_nota(item, chave)
+        if cap is not None and role.cache_cap is None:
+            role.cache_cap, role.cache_cap_note = cap, nota
+            relatorio["tetos_aplicados"] += 1
+    for item in coord_itens[len(coord_existentes):]:
         cap, nota = _cap_e_nota(item, chave)
         db.session.add(EventRole(
             event_id=event.id, character_name="Coordenador", role_type="extra",
             cache_cap=cap, cache_cap_note=nota,
         ))
         relatorio["coordenadores_criados"] += 1
-    for item, role in zip(coord_itens, coord_existentes, strict=False):
-        cap, nota = _cap_e_nota(item, chave)
-        if cap is not None and role.cache_cap is None:
-            role.cache_cap, role.cache_cap_note = cap, nota
-            relatorio["tetos_aplicados"] += 1
 
     # Técnico de som e maquiador: uma vaga cada, só se o orçamento vendeu e o evento não tem.
     for rotulo, marcador, chave_relatorio in (

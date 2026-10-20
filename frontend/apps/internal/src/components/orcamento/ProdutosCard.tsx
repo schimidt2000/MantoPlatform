@@ -25,11 +25,14 @@ export function ProdutosCard({
   produtos,
   selecionados,
   aplicados,
+  calculando = false,
   onChange,
 }: {
   produtos: Record<string, ProdutoDeTabela>;
   selecionados: ProdutoSelecionado[];
   aplicados: ProdutoAplicado[] | undefined;
+  /** Recálculo em voo: a linha sem resposta diz "calculando…"; parado (erro), diz "não calculado". */
+  calculando?: boolean;
   onChange: (selecionados: ProdutoSelecionado[]) => void;
 }) {
   const reduzir = useReducedMotion();
@@ -88,8 +91,15 @@ export function ProdutosCard({
             const aplicado = aplicados?.[i];
             const tabela = produtos[sel.chave];
             const casado = aplicado && aplicado.chave === sel.chave ? aplicado : null;
+            const nome = tabela?.rotulo ?? sel.chave;
             const botao = (
-              <Button type="button" size="sm" variant="ghost" onClick={() => remover(i)}>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                aria-label={`Remover ${nome} (item ${i + 1})`}
+                onClick={() => remover(i)}
+              >
                 Remover
               </Button>
             );
@@ -115,9 +125,13 @@ export function ProdutosCard({
                 ) : (
                   <div className="flex items-center justify-between gap-2 rounded-md border border-line bg-surface-2 px-3 py-2 text-sm">
                     <p className="text-ink">
-                      📦 <span className="font-medium">{tabela?.rotulo ?? sel.chave}</span>
+                      📦 <span className="font-medium">{nome}</span>
                       <span className="text-muted">
-                        {tabela ? " — calculando…" : " — não está mais na tabela de preços"}
+                        {!tabela
+                          ? " — não está mais na tabela de preços"
+                          : calculando
+                            ? " — calculando…"
+                            : " — não calculado (veja o erro abaixo)"}
                       </span>
                     </p>
                     {botao}

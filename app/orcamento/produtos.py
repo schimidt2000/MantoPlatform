@@ -98,7 +98,9 @@ def resolver_produtos(selecao: Any, cfg: dict, *, tolerar_ausente: bool = False)
         definicao = tabela.get(chave)
         congeladas = item.get("vagas") if isinstance(item.get("vagas"), list) else None
         if definicao is None:
-            if not tolerar_ausente or not congeladas:
+            # Na venda o produto sumido é erro; no teto NUNCA levanta (roda depois do insert no Google —
+            # uma exceção deixaria evento órfão): fantasma com as vagas congeladas que houver.
+            if not tolerar_ausente:
                 raise ProdutoDesconhecido(chave)
             resolvidos.append({
                 "chave": chave,
@@ -107,7 +109,7 @@ def resolver_produtos(selecao: Any, cfg: dict, *, tolerar_ausente: bool = False)
                 "ativo": False,
                 "preco": float(item.get("preco_aplicado") or 0),
                 "por_faixa": {},
-                "vagas": [v for v in congeladas if isinstance(v, dict) and v.get("label")],
+                "vagas": [v for v in congeladas or [] if isinstance(v, dict) and v.get("label")],
                 "inclui_noturno": True,
                 "existe": False,
             })
@@ -290,12 +292,25 @@ def total_na_duracao(total_4h: float, produtos_total: float, horas: int, acresci
     return _q((total - fixo) / 4 * Decimal(int(horas)) + fixo)
 
 
-def fator_regua(total_4h: float, produtos_total: float, horas: int, acrescimos: list[dict] | None, nota_fiscal: bool) -> Decimal:
-    """``total_na_duracao ÷ total_4h`` — o fator que o BV da duração custom usa no lugar de ``h ÷ 4``."""
-    total = Decimal(str(total_4h or 0))
-    if total <= 0:
-        return Decimal(int(horas)) / 4
-    return Decimal(str(total_na_duracao(total_4h, produtos_total, horas, acrescimos, nota_fiscal))) / total
+def base_na_duracao(base_4h: Decimal, produtos_total: float, horas: int) -> Decimal:
+    """A base pré-acréscimos na duração: o que não é produto escala ``÷ 4 × h``; o produto fica fixo.
+
+    É sobre ela que as linhas em % do evento (BV) são refeitas acima de 4h — um fator único para todas
+    as linhas (`total_h ÷ total_4h`) errava a fixa para baixo e a % para cima.
+    """
+    pt = Decimal(str(produtos_total or 0))
+    return (base_4h - pt) / 4 * Decimal(int(horas)) + pt
+
+
+def cache_fixo_maquiador(produtos: list[dict]) -> float | None:
+    """O maior cachê FIXO digitado numa vaga `maquiador` dos produtos (``None`` = todas pela tabela)."""
+    fixos = [
+        float(v["cache"])
+        for p in produtos
+        for v in p.get("vagas") or []
+        if v.get("tipo") == "maquiador" and v.get("cache") is not None and float(v["cache"]) > 0
+    ]
+    return max(fixos) if fixos else None
 
 
 # ── memória e avisos ────────────────────────────────────────────────────────────────────────────
@@ -329,7 +344,8 @@ def avisos_para(performers: list[dict], aplicados: list[dict]) -> list[str]:
         avisos.append(AVISO_NOEL_AVULSO)
     for p in aplicados:
         avisos.extend(p.get("avisos") or [])
-    return avisos
+    # Dois exemplares do mesmo produto estimado repetiriam o aviso (e a chave React).
+    return list(dict.fromkeys(avisos))
 
 
 def bloco_da_mensagem(aplicados: list[dict]) -> str:

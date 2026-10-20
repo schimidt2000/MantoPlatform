@@ -615,6 +615,15 @@ def _normalizar_vaga(vaga) -> dict | None:
     }
 
 
+def _descricao_limpa(raw) -> str:
+    """Descrição ao cliente numa linha, SEM parênteses externos: mensagem, PDF e tela já a põem entre
+    parênteses — "(visita padrão (até 1h))" era o resultado de digitar com eles."""
+    texto = _nota_limpa(raw)
+    if len(texto) >= 2 and texto.startswith("(") and texto.endswith(")"):
+        texto = texto[1:-1].strip()
+    return texto
+
+
 def _normalizar_produto(produto, faixas: set[str]) -> dict | None:
     """Produto normalizado na defensiva, ou ``None`` (descartado: sem rótulo, sem preço > 0 ou sem vaga).
 
@@ -626,8 +635,9 @@ def _normalizar_produto(produto, faixas: set[str]) -> dict | None:
     preco = _dinheiro(produto.get("preco"))
     if not rotulo or preco is None or preco <= 0:
         return None
-    vagas = [v for v in (_normalizar_vaga(x) for x in (produto.get("vagas") or [])) if v is not None]
-    vagas = vagas[:PRODUTO_VAGAS_MAX] if isinstance(produto.get("vagas"), list) else []
+    # Converge 309: conferir o tipo ANTES de iterar — `"vagas": 5` levantava dentro de `load()`.
+    vagas_brutas = produto.get("vagas") if isinstance(produto.get("vagas"), list) else []
+    vagas = [v for v in (_normalizar_vaga(x) for x in vagas_brutas) if v is not None][:PRODUTO_VAGAS_MAX]
     if not vagas:
         return None
     por_faixa: dict = {}
@@ -640,7 +650,7 @@ def _normalizar_produto(produto, faixas: set[str]) -> dict | None:
             por_faixa[str(chave)] = {"preco": preco_faixa}
     return {
         "rotulo": rotulo,
-        "descricao": _nota_limpa(produto.get("descricao"))[:PRODUTO_DESCRICAO_MAX],
+        "descricao": _descricao_limpa(produto.get("descricao"))[:PRODUTO_DESCRICAO_MAX],
         "ativo": bool(produto.get("ativo", True)),
         "preco": preco,
         "por_faixa": por_faixa,
@@ -718,8 +728,9 @@ def _validar_vaga(pref: str, vaga, especiais: dict, erros: dict, avisos: list[st
     if vaga.get("cache") is not None:
         cache = _dinheiro(vaga.get("cache"))
         if cache is None or cache <= 0:
-            erros[f"{pref}.cache"] = "cachê em R$ maior que zero, ou vazio para usar a tabela"
-    make = vaga.get("needs_makeup", False)
+            erros[f"{pref}.cache"] = f"cachê em R$ maior que zero e até {_DINHEIRO_MAX:,.0f}, ou vazio para usar a tabela".replace(",", ".")
+    # `needs_makeup` só existe para especial/ator; nos demais o valor é ignorado (contrato).
+    make = vaga.get("needs_makeup", False) if tipo in ("especial", "ator") else False
     if not isinstance(make, bool):
         erros[f"{pref}.needs_makeup"] = "verdadeiro ou falso"
         make = False
@@ -743,15 +754,16 @@ def _validar_produto(chave: str, produto, especiais: dict, faixas: set[str], err
         erros[f"{pref}.rotulo"] = "informe o rótulo"
     elif len(rotulo) > PRODUTO_ROTULO_MAX:
         erros[f"{pref}.rotulo"] = f"rótulo com mais de {PRODUTO_ROTULO_MAX} caracteres"
-    descricao = _nota_limpa(produto.get("descricao"))
+    descricao = _descricao_limpa(produto.get("descricao"))
     if len(descricao) > PRODUTO_DESCRICAO_MAX:
         erros[f"{pref}.descricao"] = f"descrição com mais de {PRODUTO_DESCRICAO_MAX} caracteres"
     for campo in ("ativo", "inclui_noturno"):
         if not isinstance(produto.get(campo, True), bool):
             erros[f"{pref}.{campo}"] = "verdadeiro ou falso"
+    msg_preco = f"preço em R$ maior que zero e até {_DINHEIRO_MAX:,.0f}".replace(",", ".")
     preco = _dinheiro(produto.get("preco"))
     if preco is None or preco <= 0:
-        erros[f"{pref}.preco"] = "preço em R$ maior que zero"
+        erros[f"{pref}.preco"] = msg_preco
     por_faixa: dict = {}
     bruto = produto.get("por_faixa")
     if bruto is not None and not isinstance(bruto, dict):
@@ -762,7 +774,7 @@ def _validar_produto(chave: str, produto, especiais: dict, faixas: set[str], err
             continue
         preco_faixa = _dinheiro(val.get("preco")) if isinstance(val, dict) else None
         if preco_faixa is None or preco_faixa <= 0:
-            erros[f"{pref}.por_faixa.{faixa_chave}.preco"] = "preço em R$ maior que zero"
+            erros[f"{pref}.por_faixa.{faixa_chave}.preco"] = msg_preco
         else:
             por_faixa[str(faixa_chave)] = {"preco": preco_faixa}
     vagas_brutas = produto.get("vagas")

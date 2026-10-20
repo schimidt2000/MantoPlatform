@@ -172,10 +172,16 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         quote.get("show_4h", True),
     ]
 
+    # Feature 309: só produto no orçamento = um valor, que não é "1 hora" — é o preço de tabela. O
+    # servidor decide (`valor_unico`); quote antigo sem a chave cai na inferência pelos `show_*`.
+    valor_unico = quote.get("valor_unico")
+    if valor_unico is None:
+        valor_unico = bool(produtos) and show[0] and not any(show[1:])
     for i, total in enumerate(totals):
         if not show[i]:
             continue
-        y = _price_row(c, y, _dur_label(i), _fmt_brl(total), highlight=(i == 3))
+        rotulo = "Preço de tabela" if valor_unico and i == 0 else _dur_label(i)
+        y = _price_row(c, y, rotulo, _fmt_brl(total), highlight=(i == 3))
         y -= 2
 
     if total_custom:

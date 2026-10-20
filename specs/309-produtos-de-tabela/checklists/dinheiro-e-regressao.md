@@ -21,7 +21,7 @@ paridade de quem não usa produto e a janela de deploy. Portão de release; púb
 - [x] CHK006 `scripts/validar_startcommand.py` verde se tocou o `startCommand` do `render.yaml` (não toca)
 - [x] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
 - [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps (pendente — próximo passo)
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps (20/10: 23 achados confirmados e aplicados em fix(309): converge)
 - [ ] CHK010 (no merge/deploy) Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
 
 ## Números do produto (completude e clareza)

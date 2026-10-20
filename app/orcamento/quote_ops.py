@@ -519,10 +519,19 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         incluir_chk = payload.get("incluir_duracao") or ["1h", "2h", "3h", "4h"]
         idx = {"1h": 0, "2h": 1, "3h": 2, "4h": 3}
         conferidos = base_validacao if base_validacao is not None else totals
-        if all(conferidos[idx[d]] <= 0 for d in incluir_chk if d in idx):
+        # Converge 309: só produto + multiplicador tem base zero (o coordenador está no produto) —
+        # o produto é um valor válido por si. Com base (avulsos), multiplicador zerado continua erro.
+        tem_produto_no_total = (
+            criterio_pers == "multiplicador" and produtos_total > 0 and all(b <= 0 for b in cache_base)
+        )
+        if not tem_produto_no_total and all(conferidos[idx[d]] <= 0 for d in incluir_chk if d in idx):
             raise QuoteValidationError(
                 "personalizado", "Informe valores válidos para o orçamento personalizado."
             )
+        if criterio_pers != "multiplicador":
+            # Converge 309: no valor final o produto NÃO está dentro do total digitado — `produtos_total`
+            # zero no quote/snapshot para a régua do evento (prefill, `_total_da_duracao`) ser a linear.
+            produtos_total = 0.0
 
     _linha("TOTAL FINAL AO CLIENTE", totals, "total")
 
@@ -576,6 +585,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     if so_produto:
         investimento = bloco_produto
+        # Converge 309: com NF, transporte, BV, noturno por fora ou dois exemplares o total NÃO é o
+        # preço do produto — o cliente precisa ver o VALOR TOTAL (e a logística), como nas durações.
+        if len(produtos) > 1 or abs(totals[0] - produtos_total) >= 0.005:
+            investimento += f"\n\n{_dur_block('🎅 *Total da visita*', totals[0])}"
     else:
         investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i])
         if bloco_produto:
@@ -670,6 +683,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "produtos_total": produtos_total,
         "coordenadores_inclusos": coord_inclusos,
         "avisos": _produtos.avisos_para(performers, produtos),
+        # Converge 309: "um valor só" é decisão do servidor — a tela rotula "Preço de tabela" por ela,
+        # não pelos `show_*` (produto + avulso com 2h–4h desmarcadas também mostra só 1h).
+        "valor_unico": so_produto,
         "total_1h": totals[0],
         "total_2h": totals[1],
         "total_3h": totals[2],

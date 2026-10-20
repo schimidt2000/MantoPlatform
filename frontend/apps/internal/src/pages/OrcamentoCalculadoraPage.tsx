@@ -403,14 +403,22 @@ export function OrcamentoCalculadoraPage() {
   // o servidor NÃO aplicou o produto — gerar gravaria um orçamento sem a Visita. Trava o botão.
   const produtoSemBackend = produtos.length > 0 && !!result && result.quote.produtos === undefined;
   const produtosAplicados = result?.quote.produtos ?? [];
-  // Só produto no orçamento: o servidor devolve `show_1h` apenas — UM valor, rotulado como tabela.
-  const valorUnico =
-    produtosAplicados.length > 0 &&
-    !!result &&
-    result.quote.show_1h &&
-    !result.quote.show_2h &&
-    !result.quote.show_3h &&
-    !result.quote.show_4h;
+  // Só produto no orçamento = UM valor rotulado "Preço de tabela" — decisão do SERVIDOR
+  // (`quote.valor_unico`); inferir pelos `show_*` rotulava errado produto + avulso com 2h–4h desmarcadas.
+  const valorUnico = result?.quote.valor_unico === true;
+  // Coordenadores que a seleção traz pela tabela (para descontar do contador ao remover um produto).
+  const coordenadoresDaSelecao = (selecao: ProdutoSelecionado[]) =>
+    selecao.reduce(
+      (n, sel) => n + (tabelaDeProdutos[sel.chave]?.vagas ?? []).filter((v) => v.tipo === "coordenador").length,
+      0,
+    );
+  // Ao remover um produto, o contador desconta os coordenadores que ele trazia — senão o "+" dado
+  // com o produto na tela viraria coordenador da fórmula cobrado sem a vendedora ter pedido.
+  const handleProdutosChange = (next: ProdutoSelecionado[]) => {
+    const retirados = coordenadoresDaSelecao(produtos) - coordenadoresDaSelecao(next);
+    if (retirados > 0) setCoordenadorQty((q) => Math.max(1, q - retirados));
+    setProdutos(next);
+  };
   const diasEspeciais = useMemo(
     () =>
       listaEmPortugues(
@@ -653,12 +661,15 @@ export function OrcamentoCalculadoraPage() {
           <div className="space-y-4 lg:col-span-2">
             {/* Feature 309: o pacote fechado vem ANTES da equipe — é por onde a Visita Mágica se vende;
                 sem produtos na tabela (ou backend velho) o card não existe. */}
-            {Object.keys(tabelaDeProdutos).length > 0 && (
+            {/* `produtos.length > 0` cobre o recalcular de um orçamento cujo produto sumiu da tabela:
+                sem o card não haveria como removê-lo. */}
+            {(Object.keys(tabelaDeProdutos).length > 0 || produtos.length > 0) && (
               <ProdutosCard
                 produtos={tabelaDeProdutos}
                 selecionados={produtos}
                 aplicados={resultadoVivo ? result?.quote.produtos : undefined}
-                onChange={setProdutos}
+                calculando={calcPendente || calcular.isPending}
+                onChange={handleProdutosChange}
               />
             )}
 

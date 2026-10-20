@@ -1092,33 +1092,47 @@ prefill e em `_total_da_duracao`/`fator_regua`); o coordenador do produto não �
 Maquiador por orçamento (`incremento_make`); noturno só com `inclui_noturno: false`; personalizado
 "valor final" vence tudo e "multiplicador" não multiplica o produto. O `quote` traz SEMPRE
 `produtos: [{chave, rotulo, descricao, preco_aplicado, faixa_chave, estimado, vagas[labels]}]`,
-`produtos_total`, `coordenadores_inclusos` e `avisos: [str]` (vazios sem produto — a presença da
-chave é o sinal de backend novo para o React), linhas `tipo: "produto"` + "= Após produtos" na
+`produtos_total`, `coordenadores_inclusos`, `avisos: [str]` (deduplicados) e `valor_unico: bool` (só
+produto, sem avulso e sem coordenador da fórmula — a tela e o PDF rotulam "Preço de tabela" por ela;
+vazios/false sem produto — a presença das chaves é o sinal de backend novo para o React), linhas
+`tipo: "produto"` + "= Após produtos" na
 `memoria`, os personagens do produto em `team_lines`, o bloco "🎅 *rótulo* (descrição): *R$ X*" na
-`message` (só produto = UM valor: `show_1h` apenas, `total_custom` null, PIX único); o `snapshot`
-grava `produtos` com preço E vagas congelados e `produtos_total`. Sem produto a conta é byte a byte a
+`message` (só produto = UM valor: `show_1h` apenas, `total_custom` null, PIX único — e, quando NF,
+transporte, BV ou noturno por fora mudam o total, ou há dois exemplares, o bloco "Total da visita" com
+VALOR TOTAL e logística); o `snapshot` grava `produtos` com preço E vagas congelados e `produtos_total`
+(0 no personalizado "valor final": o produto não está dentro do digitado — régua do evento linear; no
+multiplicador a régua não reaplica % nem NF). Acima de 4h, `acrescimos_do_orcamento` refaz as linhas
+UMA a uma (fixa × h ÷ 4; % sobre a base da duração com o produto fixo — `produtos.base_na_duracao`). Sem produto a conta é byte a byte a
 de antes (gabarito `specs/309-…/verify_309_golden.json`). `GET /orcamento/opcoes` e `GET
 /orcamento/settings` devolvem `produtos` e `produtos_estimativa` já migrados (**não enxugar**).
 `POST /settings` aceita `produtos` e `produtos_estimativa` (ramo DEPOIS de `datas_especiais`;
 `settings.validar_produtos` → 400 `"Produtos de tabela inválidos."` com `fields`): `produtos` →
 "bloco inválido"; `produtos.<chave>` → "produto inválido" (`^[a-z0-9_]{1,30}$`); `.rotulo` →
 "informe o rótulo" / "rótulo com mais de 60 caracteres"; `.descricao` → "descrição com mais de 120
-caracteres"; `.preco` → "preço em R$ maior que zero"; `.por_faixa.<faixa>.preco` → idem (faixa
-inexistente é DESCARTADA com aviso em `avisos` do 200, não 400); `.vagas` → "lista de 1 a 10 vagas";
-`.vagas.<i>.label` → "informe o personagem"; `.vagas.<i>.tipo` → "tipo de vaga desconhecido: <tipo>";
-`.vagas.<i>.cache` → "cachê em R$ maior que zero (ou vazio = pela tabela)"; label de especial fora
+caracteres" (parênteses externos são tirados — mensagem, PDF e tela já os põem); `.preco` → "preço
+em R$ maior que zero e até 100.000"; `.por_faixa.<faixa>.preco` → idem (faixa inexistente é
+DESCARTADA com aviso em `avisos` do 200, não 400); `.vagas` → "de 1 a 10 vagas"; `.vagas.<i>.label`
+→ "informe o nome da vaga"; `.vagas.<i>.tipo` → "tipo de vaga desconhecido: <tipo>"; `.vagas.<i>.cache`
+→ "cachê em R$ maior que zero e até 100.000, ou vazio para usar a tabela"; `.vagas.<i>.needs_makeup`
+→ "verdadeiro ou falso" (só em especial/ator; nos demais o campo é ignorado); label de especial fora
 da tabela → aviso (a vaga nasce sem teto); `produtos_estimativa.fator_cache` → "fator maior que
 zero"; `.markup` → "markup entre 1 e 6 (coeficiente)". Chave `produtos` AUSENTE no corpo = mantém o
 salvo; corpo inválido não grava nada. Teto das vagas: `_compute_performer_caches` emite primeiro as
 vagas `character` dos produtos a partir das vagas CONGELADAS do snapshot (flat nas 4 colunas, cachê
 pela tabela vigente na data do evento — 600 / 270 / 250 / 250; 1.000 / 650 / 500 / 250 na faixa —,
 `cap_notes` "cachê da tabela · produto …", `origem: "produto"`; produto apagado ou especial fora da
-tabela → `cache_Nh: null` com nota, nunca 0), depois `performers`, depois extras (coordenadores do
-produto → da fórmula → Técnico → UM Maquiador); prefill = criação (pareamento posicional) e o
-vínculo 273 casa por nome. `resumo_do_orcamento` conta os personagens e as makes do produto. O
+tabela → `cache_Nh: null` com nota, nunca 0; snapshot sem vagas congeladas de um produto apagado →
+fantasma sem vagas, nunca exceção), depois `performers`, depois extras (coordenadores do produto → da
+fórmula → Técnico → UM Maquiador — nunca 0: a vaga do produto sem make contada vale a 1ª maquiagem, e um
+cachê FIXO digitado na vaga maquiador do produto é honrado); prefill = criação (pareamento posicional) e
+o vínculo 273 casa por nome — os itens de coordenador são consumidos em sequência (os primeiros às
+vagas existentes, as sobras viram vagas novas), porque desde a 309 o do produto (250 flat) e o da
+fórmula (show/régua) diferem. `resumo_do_orcamento` conta os personagens e as makes do produto. O
 EducaManto remove `produtos` em `_totais_contratacao`. CLI pós-deploy:
-`specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (dry-run; `--execute` rebaixa 712→600 /
-423→270 só em "Papai Noel"/"Ajudante do Noel" sem cachê e sem artista, em eventos desde 16/10/2026).
+`specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (dry-run; `--execute` rebaixa pela
+DIFERENÇA da coluna — 712→600, 800→650, 423→270… — lendo a base na nota do teto da 239 (cobre 762 =
+712 + noturno, fora de SP e 2h–4h) só em "Papai Noel"/"Ajudante do Noel" sem cachê e sem artista, em
+eventos desde 16/10/2026; nome diferente ou base fora da lista só no relatório).
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a

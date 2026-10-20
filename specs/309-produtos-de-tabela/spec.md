@@ -302,8 +302,10 @@ selecionado e a resposta veio sem `quote.produtos`.
   faixa = estimativa marcada (acima). Superadmin que remove uma faixa de `datas_especiais` enquanto um
   produto tem `por_faixa.<faixa>`: a entrada órfã é descartada no salvar, com aviso no card — não 400.
 - `_migrar_309` recebe bloco malformado (`produtos: null`, produto sem `vagas`, preço string): produto
-  inválido é descartado na carga (nunca preço 0), os DEFAULTS entram só quando a chave está ausente —
-  e nada disso derruba o `load()` (exceção ali devolveria os DEFAULTS para a tabela inteira).
+  inválido é descartado na carga (nunca preço 0), os DEFAULTS entram quando a chave está ausente OU o
+  bloco não é um dicionário (`null`, lista, texto); dicionário, mesmo vazio, é normalizado item a item —
+  e nada disso derruba o `load()` (exceção ali devolveria os DEFAULTS para a tabela inteira; `vagas` que
+  não é lista conta como sem vagas).
 - Orçamento salvo com produto cujo preço o dono mudou depois: congelado (regra 020) — o teto do evento,
   porém, é recalculado da tabela viva na criação/vínculo, como hoje; vendido pelo preço normal e
   vinculado a evento em 24/25 → teto da faixa sobre preço normal (risco aceito, `docs/05`).
@@ -331,19 +333,23 @@ selecionado e a resposta veio sem `quote.produtos`.
   fallback 🎅), podendo repetir e remover; a chave `produtos: [{chave}]` vai no payload ao lado de
   `performers`.
 - **FR-004**: O preço do produto DEVE entrar na conta DEPOIS do markup e ANTES de brinde, noturno,
-  técnico, maquiador, transporte, acréscimos e NF; DEVE ser o mesmo nas quatro durações. Régua >4h: a
-  parte líquida do produto não escala — `produtos.total_na_duracao(subtotal_4h_pré_acréscimos,
-  produtos_total, horas, acréscimos, nota_fiscal)` calcula `((subtotal − produtos_total) ÷ 4 × h +
-  produtos_total)` e reaplica % / fixos e NF; a MESMA função é usada pela venda (`total_custom`), pelo
-  prefill de "Novo evento", por `_total_da_duracao` e pelo BV da duração custom (305), que derivam o
-  subtotal pré-acréscimos do `total_4h` pela conta inversa já existente.
+  técnico, maquiador, transporte, acréscimos e NF; DEVE ser o mesmo nas quatro durações. Régua >4h: o
+  produto não escala — `produtos.total_na_duracao(total_4h, produtos_total, horas, acréscimos,
+  nota_fiscal)` recebe o total FINAL de 4h, subtrai a parte do produto como ela está dentro dele (com os
+  % dos acréscimos e a NF por cima: `fixo = produtos_total × (1 + Σ%) ÷ 0,84`), escala o resto `÷ 4 × h`
+  (inclusive os acréscimos fixos — a régua de sempre os escala) e devolve o fixo; a MESMA função é usada
+  pela venda (`total_custom`), pelo prefill de "Novo evento" e por `_total_da_duracao`. As linhas de
+  acréscimo do evento acima de 4h (305, `acrescimos_do_orcamento`) são refeitas LINHA A LINHA: fixa ×
+  h ÷ 4; % sobre a base da duração (`base_na_duracao`: o que não é produto × h ÷ 4 + o produto) — fecham
+  com o total da duração. No personalizado (multiplicador) a régua não reaplica % nem NF (nada disso
+  entrou no total); no valor final `produtos_total` grava 0 e a régua é a linear.
 - **FR-005**: O produto com `inclui_noturno: true` NÃO soma o adicional noturno nem na venda nem no
   teto das vagas dele; com `false`, cada vaga `especial`/`ator`/`coordenador` dele soma +50 na venda e
   no teto (Maquiador não). Avulsos continuam somando.
 - **FR-006**: O coordenador incluído no produto NÃO pode ser cobrado em dobro: uma função única
-  `produtos.split_coordenadores(coordenador_qty, min_coordenadores_dos_avulsos, produtos) → (total,
-  da_formula, inclusos)` com `total = max(qty, min_coordenadores, inclusos)` e `da_formula = total −
-  inclusos` é usada pela venda e pelo teto; o `quote` traz `coordenadores_inclusos` e a tela mostra "N
+  `produtos.split_coordenadores(coordenador_qty, produtos) → (total, da_formula, inclusos)` — com
+  `coordenador_qty` já elevado ao `min_coordenadores` dos avulsos pela conta de hoje —, `total =
+  max(qty, inclusos)` e `da_formula = total − inclusos`, é usada pela venda e pelo teto; o `quote` traz `coordenadores_inclusos` e a tela mostra "N
   incluído(s) no produto"; o total nunca fica abaixo do dos produtos.
 - **FR-007**: Há UMA vaga Maquiador por orçamento: teto = `calcular_maquiador(makes dos produtos +
   makes comuns dos avulsos, makes especiais dos avulsos)`; o preço do produto NÃO cobra make à parte e

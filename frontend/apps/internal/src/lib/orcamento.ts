@@ -251,6 +251,11 @@ export interface Quote {
   coordenadores_inclusos?: number;
   /** Avisos da conta em pt-BR (Noel avulso sem produto, preço estimado, vaga sem cachê). */
   avisos?: string[];
+  /**
+   * Só produto no orçamento (sem avulso e sem coordenador da fórmula): UM valor, rotulado "Preço de
+   * tabela". Decisão do servidor — a tela não infere pelos `show_*`. Ausente em quotes antigos.
+   */
+  valor_unico?: boolean;
   total_1h: number;
   total_2h: number;
   total_3h: number;

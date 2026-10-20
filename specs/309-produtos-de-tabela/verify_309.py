@@ -67,7 +67,7 @@ NOEL_712 = [712, 800, 850, 900]
 AJUDANTE_423 = [423, 480, 510, 540]
 NOEL_600 = [600, 650, 675, 700]
 AJUDANTE_270 = [270, 320, 345, 370]
-CHAVES_NOVAS = ("produtos", "produtos_total", "coordenadores_inclusos", "avisos")
+CHAVES_NOVAS = ("produtos", "produtos_total", "coordenadores_inclusos", "avisos", "valor_unico")
 MARCA_PRODUTO = "cachê da tabela · produto"
 VISITA = "visita_magica"
 VISITA_AJ = "visita_magica_ajudante"
@@ -702,6 +702,17 @@ def cen_06_fora_sp_nf_bv_pix() -> None:
     )
     q = _calcular(_payload("2026-12-20", [], [PROD_NOEL], nota_fiscal=True))["quote"]
     _iguais(q["total_1h"], round(2500 / 0.84, 2), "NF sobre o produto")
+    # Converge: com NF o total NÃO é o preço do produto — a mensagem mostra o VALOR TOTAL (antes só 2.500).
+    _garante(
+        "VALOR TOTAL: R$ 2.976,19" in q["message"] and "Total da visita" in q["message"],
+        "mensagem só-produto com NF traz o valor total",
+    )
+    _garante(
+        "VALOR TOTAL" not in _calcular(_payload("2026-12-20", [], [PROD_NOEL]))["quote"]["message"],
+        "sem parcela por fora a mensagem só-produto continua com a linha do produto apenas",
+    )
+    dois = _calcular(_payload("2026-12-20", [], [PROD_NOEL, PROD_NOEL]))["quote"]
+    _garante("VALOR TOTAL: R$ 5.000,00" in dois["message"], "dois exemplares: a mensagem soma")
     res = _calcular(
         _payload(
             "2026-12-20",
@@ -749,6 +760,29 @@ def cen_07_regua_e_personalizado() -> None:
         3938.00,
         "6h com BV 10%",
     )
+    # Converge: acréscimos do EVENTO acima de 4h, linha a linha — BV % sobre a base da duração (boneco
+    # 720 ÷ 4 × 6 + 2.500 = 3.580 → 358) e fixo × h ÷ 4 (200 → 300); total 4.238 fecha com a régua.
+    from app.calendar.orcamento_evento_ops import acrescimos_do_orcamento
+
+    res = _calcular(
+        _payload(
+            "2026-12-20",
+            [BONECO],
+            [PROD_NOEL],
+            duracao_custom=6,
+            acrescimos=[
+                {"tipo": "BV", "value": 10, "is_percent": True},
+                {"tipo": "Outro", "value": 200, "is_percent": False},
+            ],
+        )
+    )
+    _iguais(res["quote"]["total_custom"], 4238.00, "6h com BV 10% + fixo 200: venda")
+    oid = _salvar(res)
+    with app.app_context():
+        entry = db.session.get(OrcamentoHistory, oid)
+        linhas = acrescimos_do_orcamento(entry, 6)["linhas"]
+    valores_linhas = [float(linha["amount_brl"]) for linha in linhas]
+    _garante(valores_linhas == [358.00, 300.00], f"linhas do evento em 6h: {valores_linhas}")
 
     q = _calcular(
         _payload(
@@ -777,6 +811,39 @@ def cen_07_regua_e_personalizado() -> None:
         q["produtos"] and q["produtos"][0]["chave"] == VISITA,
         "quote.produtos continua no personalizado (afirma o produto para o teto)",
     )
+    # Converge: no valor final o produto não está dentro do total digitado — a régua do evento é a linear.
+    _iguais(q["produtos_total"], 0.0, "valor final: produtos_total zero")
+    res_vf = _calcular(
+        _payload(
+            "2026-12-20",
+            [BONECO],
+            [PROD_NOEL],
+            personalizado=True,
+            personalizado_criterio="valor_final",
+            cust_valor_1h="3000",
+            cust_valor_2h="3000",
+            cust_valor_3h="3000",
+            cust_valor_4h="3000",
+        )
+    )
+    with app.app_context():
+        entry = db.session.get(OrcamentoHistory, _salvar(res_vf))
+        _iguais(float(_total_da_duracao(entry, 6)), 4500.00, "valor final: 6h pela régua linear")
+    # Converge: só produto + multiplicador (base zero) é válido — o produto é o valor.
+    q = _calcular(
+        _payload(
+            "2026-12-20",
+            [],
+            [PROD_NOEL],
+            personalizado=True,
+            personalizado_criterio="multiplicador",
+            cust_mult_1h="2",
+            cust_mult_2h="2",
+            cust_mult_3h="2",
+            cust_mult_4h="2",
+        )
+    )["quote"]
+    _iguais(q["total_1h"], 2500.00, "só produto + multiplicador = o produto")
 
     q = _calcular(
         _payload(
@@ -956,6 +1023,24 @@ def cen_09_prefill_criacao_vinculo() -> None:
         "vínculo cria Maquiador 250",
     )
 
+    # Converge: evento com Coordenador já criado + orçamento com produto E coordenador da fórmula (com
+    # show): o existente leva o 1º item (produto, 250) e o 2º (fórmula com show, 300) vira vaga nova —
+    # antes os dois laços liam o mesmo prefixo e o 300 nunca era gravado.
+    boneco_show = {**BONECO, "show": True}
+    oid4 = _salvar(_calcular(_payload("2026-12-20", [boneco_show], [PROD_NOEL], coordenador_qty=2)))
+    eid4 = _evento_direto(
+        "vinculo2",
+        "2026-12-20",
+        roles=[("Papai Noel", "character", None), ("Coordenador", "extra", None)],
+    )
+    r = _cliente("com").patch(f"/api/events/{eid4}/orcamento", json={"orcamento_history_id": oid4})
+    _garante(r.status_code == 200, f"vínculo 2 → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    caps_coord = sorted(c["cap"] for c in _por_nome(_roles(eid4), "Coordenador"))
+    _garante(
+        caps_coord == [250, 300],
+        f"vínculo: coordenador do produto 250 e o da fórmula com show 300: {caps_coord}",
+    )
+
 
 def cen_10_casting_rebaixa() -> None:
     rid = estado.get("role_noel")
@@ -1043,9 +1128,13 @@ def cen_11_migracao() -> None:
             "inclui_noturno": True,
         },
     }
+    # Converge: `vagas` que não é lista (escalar truthy) NÃO pode levantar dentro do `try` de `load()`.
+    cfg["produtos"]["vagas_escalar"] = {"rotulo": "X", "preco": 10, "vagas": 5}
     m = _cfg._migrate(cfg)
     _garante(
-        "sem_vagas" not in m["produtos"] and "preco_texto" not in m["produtos"],
+        "sem_vagas" not in m["produtos"]
+        and "preco_texto" not in m["produtos"]
+        and "vagas_escalar" not in m["produtos"],
         f"produtos malformados sobraram: {list(m['produtos'])}",
     )
     ok = m["produtos"]["ok309"]
@@ -1372,13 +1461,19 @@ def cen_18_script_tetos() -> None:
             ("Noel 2", "character", 712),
             ("Papai Noel", "character", 712),
             ("Coordenador", "extra", 250),
+            ("Papai Noel", "character", 762),
         ],
     )
     roles = _roles(eid)
     com_valor = [r for r in roles if r["nome"] == "Papai Noel"][1]["id"]
+    noturno_id = [r for r in roles if r["nome"] == "Papai Noel" and r["cap"] == 762][0]["id"]
     with app.app_context():
         role = db.session.get(EventRole, com_valor)
         role.cache_value = Decimal("712")
+        # Converge: Visita às 20h nasceu com 712 + noturno — a base está na nota do teto (239).
+        db.session.get(
+            EventRole, noturno_id
+        ).cache_cap_note = "Especial Papai Noel: base 1h R$ 712 + noturno R$ 50 = R$ 762"
         db.session.commit()
     saida = _rodar_script()
     _garante(
@@ -1396,6 +1491,11 @@ def cen_18_script_tetos() -> None:
         f"Noel sem cachê rebaixado: {sem_valor}",
     )
     _garante(com_valor_r["cap"] == 712, f"Noel com cachê digitado intocado: {com_valor_r}")
+    noturno_r = [r for r in depois if r["id"] == noturno_id][0]
+    _garante(
+        noturno_r["cap"] == 650 and "762 → 650" in noturno_r["nota"],
+        f"Noel com noturno (762) rebaixado pela diferença da base: {noturno_r}",
+    )
     aju = _por_nome(depois, "Ajudante do Noel")[0]
     _garante(aju["cap"] == 270 and "423 → 270" in aju["nota"], f"Ajudante rebaixado: {aju}")
     _garante(_por_nome(depois, "Noel 2")[0]["cap"] == 712, "nome diferente não é tocado")
@@ -1421,8 +1521,10 @@ def cen_19_regressao() -> None:
         env={**os.environ, "PYTHONUTF8": "1"},
         timeout=2400,
     )
-    ultima = (r.stdout.strip().splitlines() or ["?"])[-1]
-    _garante(r.returncode == 0, f"verify_307 --regressao: {ultima}")
+    linhas_saida = r.stdout.strip().splitlines() or ["?"]
+    ultima = linhas_saida[-1]
+    falhas = [linha.strip() for linha in linhas_saida if "FALHA" in linha][:6]
+    _garante(r.returncode == 0, f"verify_307 --regressao: {ultima} · {' | '.join(falhas)}")
 
 
 # ── 20 · limpeza ────────────────────────────────────────────────────────────────────────────────

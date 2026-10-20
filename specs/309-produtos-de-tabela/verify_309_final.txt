@@ -1,4 +1,4 @@
-verify_309.py --regressao — rodada final no manto_local, 19/10/2026 22:38 (worktree C:\tmp\mp309, branch 309-produtos-de-tabela)
+verify_309.py --regressao — rodada final no manto_local, 20/10/2026 02:02 (worktree C:\tmp\mp309, branch 309-produtos-de-tabela, depois do converge)
 
 Feature 309 — Produtos de tabela (Visita Mágica)
   OK     1. paridade sem `produtos`: quote, mensagem e PDF iguais ao gabarito do HEAD 6356b80

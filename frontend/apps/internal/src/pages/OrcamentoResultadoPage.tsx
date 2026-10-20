@@ -36,9 +36,11 @@ function brl(v: number): string {
 
 /** Durações marcadas no orçamento + a duração personalizada, quando houver. */
 function duracoesVisiveis(quote: Quote): { label: string; total: number; destaque?: boolean }[] {
-  // Feature 309: só produto no orçamento = um valor, que não é "1 hora" — é o preço da tabela.
+  // Feature 309: só produto no orçamento = um valor, que não é "1 hora" — é o preço da tabela. O
+  // servidor decide (`valor_unico`); quote salvo antes da chave cai na inferência pelos `show_*`.
   const valorUnico =
-    (quote.produtos?.length ?? 0) > 0 && quote.show_1h && !quote.show_2h && !quote.show_3h && !quote.show_4h;
+    quote.valor_unico ??
+    ((quote.produtos?.length ?? 0) > 0 && quote.show_1h && !quote.show_2h && !quote.show_3h && !quote.show_4h);
   const linhas: { label: string; total: number; destaque?: boolean }[] = [
     { label: valorUnico ? "Preço de tabela" : "1 hora", total: quote.total_1h, mostrar: quote.show_1h },
     { label: "2 horas", total: quote.total_2h, mostrar: quote.show_2h },

@@ -3097,6 +3097,13 @@ def _compute_performer_caches(
     if num_makes_regular > 0 or num_makes_especial > 0 or makes_produtos > 0 or _produtos.tem_maquiador(produtos):
         num_makes_regular += makes_produtos
         mq_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
+        # Converge 309: a vaga Maquiador do produto sem nenhuma make contada vale ao menos a 1ª
+        # maquiagem (nunca teto 0); um cachê FIXO digitado na vaga do produto é honrado (o maior).
+        mq_fixo = _produtos.cache_fixo_maquiador(produtos)
+        if mq_cost <= 0:
+            mq_cost = mq_fixo or calcular_maquiador(1, 0)
+        elif mq_fixo:
+            mq_cost = max(mq_cost, mq_fixo)
         item = {
             "label":       "Maquiador",
             "cache_1h":    int(mq_cost),
@@ -3270,9 +3277,12 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         if produtos_total:
             from app.orcamento.produtos import total_na_duracao
 
+            # Personalizado (multiplicador): acréscimos e NF não entraram no total — não reaplicar.
+            personalizado = bool(snap.get("personalizado_ativo"))
             total_custom = total_na_duracao(
                 total_4h_val, produtos_total, duracao_custom,
-                snap.get("acrescimos") or [], bool(snap.get("nota_fiscal")),
+                [] if personalizado else (snap.get("acrescimos") or []),
+                False if personalizado else bool(snap.get("nota_fiscal")),
             )
         else:
             total_custom = round(total_4h_val / 4 * duracao_custom, 2)
