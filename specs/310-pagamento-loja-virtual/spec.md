@@ -39,6 +39,19 @@ Comparação com fontes oficiais, checada por um segundo agente independente
   incomum" — um pico de Natal numa conta com histórico de maquininha se encaixa. Mitigação:
   ligar e testar cedo, e o Pix como meio principal.
 
+## Teste 0 em produção (20/10/2026, madrugada — com o dono)
+
+- Configuração: InfiniteTag `prime-dreams` (conta logada no painel do dono; Checkout Integrado já
+  ligado, "Etapa de endereço" ligada) e segredo gerado pelo servidor; campanha 2 `teste-pagamento`
+  a R$ 1, publicada, 3 horários em 20/10 07:00–07:20.
+- **POST /links aceitou** o pacote atual (telefone só com dígitos, `customer.name` etc.) e devolveu
+  `https://checkout.infinitepay.io/prime-dreams?lenc=…`.
+- **payment_check de pedido não pago, só com `handle` + `order_nsu` (ou com tx/slug vazios),
+  responde `200 {"success":false}` — sem o campo `paid`.** O cliente trata como "não sei"; a
+  varredura reteve 3 vezes e liberou com `expired_unverified=True`. Confirma o achado 2: sem os
+  identificadores do aviso/retorno, a reconsulta não distingue "não pago" de "não achei". FR-011
+  passa a tratar `success:false` sem `paid` explicitamente.
+
 ## Causa — o que a auditoria achou no código *(conferido contra `98192e8`)*
 
 Cada achado foi refutado por um verificador cético contra o código
