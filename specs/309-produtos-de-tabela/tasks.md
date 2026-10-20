@@ -40,7 +40,7 @@ script` · `feat(309): telas` · `docs(309): …` — nunca `git add -A`.
 
 ## Phase 1: Setup
 
-- [ ] T001 Conferir o estado de partida e registrar em `specs/309-produtos-de-tabela/research.md` (seção
+- [x] T001 Conferir o estado de partida e registrar em `specs/309-produtos-de-tabela/research.md` (seção
       "Estado de partida"): no `manto_local`, `pricing_config` cru (especiais Papai Noel/Ajudante, há
       `produtos`?), markup receptivo 1h, coordenador 1h (false/true), `maquiador.make_1`/`make_especial`,
       faixa `natal`; `git log -1` do worktree; junções de `node_modules` no worktree funcionando
@@ -52,7 +52,7 @@ script` · `feat(309): telas` · `docs(309): …` — nunca `git add -A`.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T002 **`specs/309-produtos-de-tabela/verify_309.py`** — os 20 cenários da tabela "Verificação" da
+- [x] T002 **`specs/309-produtos-de-tabela/verify_309.py`** — os 20 cenários da tabela "Verificação" da
       spec, no molde de `verify_307.py` + dublês do Google de `verify_305.py`: config real salva/restaurada
       por conexão separada; config de teste determinística (markup 2,6/2,5/2,45/2,4, coordenador
       250/300/325/350 e 300/350/375/400, `make_1` 250, `make_especial` 300, especiais Papai Noel
@@ -71,11 +71,11 @@ script` · `feat(309): telas` · `docs(309): …` — nunca `git add -A`.
       FALHAR (COMERCIAL 403); cenário 18 inclui vaga 712 de nome diferente ("conferir à mão"); cenário 19
       (`--regressao`) roda SÓ `verify_307.py --regressao` em subprocesso (ele encadeia a 305); cenário 20
       limpa e confere a restauração; `--so=…`
-- [ ] T003 Rodar o verify ANTES do núcleo (grava o gabarito do cenário 1 no HEAD `6356b80`) e guardar a
+- [x] T003 Rodar o verify ANTES do núcleo (grava o gabarito do cenário 1 no HEAD `6356b80`) e guardar a
       saída em `specs/309-produtos-de-tabela/verify_309_primeira_falha.txt` — esperado: 2–15 e 18 FALHAM
       pelos motivos certos (chave `produtos` ignorada → 2.210; sem `quote.produtos`; carga ainda entrega
       712; script inexistente), 1 (gabarito gravado) e 17 passam; commitar o gabarito
-- [ ] T004 `app/orcamento/settings.py`: DEFAULTS — `especiais["Papai Noel"] = [600, 650, 675, 700]`,
+- [x] T004 `app/orcamento/settings.py`: DEFAULTS — `especiais["Papai Noel"] = [600, 650, 675, 700]`,
       `especiais["Ajudante do Noel"] = [270, 320, 345, 370]`; bloco `produtos` com os dois padrão
       (`visita_magica`, `visita_magica_ajudante` conforme `data-model.md` §1, Noel com `needs_makeup`) e
       `produtos_estimativa = {"fator_cache": 2.0, "markup": 3.0}`; constantes `TIPOS_DE_VAGA`,
@@ -84,19 +84,19 @@ script` · `feat(309): telas` · `docs(309): …` — nunca `git add -A`.
       [712, 800, 850, 900]`, `AJUDANTE_423 = [423, 480, 510, 540]`; apagar `PAPAI_NOEL_CACHE_ANTIGO` e o
       bloco de troca 600→712 de `_migrar_307`; REESCREVER os comentários que justificavam 712 (:16-18,
       :93-96) e acrescentar em :39-44 que a Visita Mágica agora é produto (`produtos`)
-- [ ] T005 `app/orcamento/settings.py`: `_migrar_309(data)` — `setdefault` de `produtos` e
+- [x] T005 `app/orcamento/settings.py`: `_migrar_309(data)` — `setdefault` de `produtos` e
       `produtos_estimativa` só com chave AUSENTE; `_normalizar_produto` defensivo (descarta produto/vaga
       malformados e `por_faixa` de faixa inexistente; força labels por tipo; `needs_makeup` só
       especial/ator; nunca preço 0; `isinstance` em tudo); troca inversa guardada (`== NOEL_712` → 600…,
       `== AJUDANTE_423` → 270…); chamado por `_migrate` depois de `_migrar_307`; docstring: roda dentro do
       `try` de `load()`
-- [ ] T006 `app/orcamento/settings.py`: `validar_produtos(bloco, estimativa, especiais, datas_especiais)
+- [x] T006 `app/orcamento/settings.py`: `validar_produtos(bloco, estimativa, especiais, datas_especiais)
       -> tuple[dict, dict, list[str]]` (produtos limpos, estimativa limpa, avisos) levantando
       `SettingsValidationError` com `fields` `produtos.<chave>.<campo>` / `produtos.<chave>.vagas.<i>.<campo>`
       / `produtos_estimativa.<campo>` (regras e mensagens da tabela de `contracts/api.md`; labels de
       coordenador/maquiador forçados; `needs_makeup` bool só especial/ator; `por_faixa` de faixa
       inexistente DESCARTADA com aviso, não erro); label de especial desconhecido NÃO é erro
-- [ ] T007 `app/orcamento/produtos.py` (NOVO, puro, docstring do porquê, type hints, constantes
+- [x] T007 `app/orcamento/produtos.py` (NOVO, puro, docstring do porquê, type hints, constantes
       `MARCA_PRODUTO = "cachê da tabela · produto"`, textos dos avisos como templates):
       `resolver_produtos(selecao, cfg, faixa) -> list[ProdutoResolvido]` (chave desconhecida →
       `ProdutoDesconhecido(chave)`; aceita também a forma congelada do snapshot — com `vagas` — para o
@@ -127,7 +127,7 @@ memória, mensagem e PDF com a linha do produto (bloco único quando só produto
 **Verificação da história (obrigatória)**: cenários 2, 3, 4 e 12 (parte do avulso) em PASS; tela
 `/orcamento` e `/orcamento/:id` abertas.
 
-- [ ] T008 [US1] `app/orcamento/quote_ops.py` — `calculate_quote` só por chamadas a `produtos.py`: ler
+- [x] T008 [US1] `app/orcamento/quote_ops.py` — `calculate_quote` só por chamadas a `produtos.py`: ler
       `payload.get("produtos")`, `produtos = resolver_produtos(...)` com `cfg_precos`/`faixa` já
       carregados (erro → `QuoteValidationError("produtos", …)`); `total, da_formula, inclusos =
       split_coordenadores(...)` substituindo `coordenador_qty` nos usos de venda (coordenador da fórmula,
@@ -142,33 +142,33 @@ memória, mensagem e PDF com a linha do produto (bloco único quando só produto
       subtotal de 4h capturado antes dos acréscimos; personalizado: `valor_final` filtra `produto` e a
       subtotal; `multiplicador` → `totals = cache_base × mult + produtos_total` (validação sobre
       `cache_base × mult`)
-- [ ] T009 [US1] `app/orcamento/quote_ops.py` — mensagem WhatsApp: bloco do produto ("Visita Mágica —
+- [x] T009 [US1] `app/orcamento/quote_ops.py` — mensagem WhatsApp: bloco do produto ("Visita Mágica —
       Papai Noel (visita padrão (até 1h)): R$ 2.500,00"; "(estimativa)" quando `estimado`) antes dos
       blocos de duração; com `so_produto` só o bloco do produto e um PIX; `_rotulo_da_faixa` reusado
-- [ ] T010 [P] [US1] `app/orcamento/pdf.py`: linha do produto (rótulo, descrição, preço aplicado,
+- [x] T010 [P] [US1] `app/orcamento/pdf.py`: linha do produto (rótulo, descrição, preço aplicado,
       "(estimativa)") logo abaixo da lista da equipe, antes de "Investimento"; com `show_1h` só, uma
       `_price_row` e um PIX; lê `quote.get("produtos") or []` (legado sem a chave)
-- [ ] T011 [P] [US1] `frontend/apps/internal/src/lib/orcamento.ts`: tipos `VagaDoProduto`,
+- [x] T011 [P] [US1] `frontend/apps/internal/src/lib/orcamento.ts`: tipos `VagaDoProduto`,
       `ProdutoDeTabela`, `ProdutosEstimativa`, `ProdutoAplicado`; `PricingSettings.produtos?`/
       `produtos_estimativa?`; `CalcularOrcamentoInput.produtos?`; `Quote.produtos?`/`produtos_total?`/
       `coordenadores_inclusos?`/`avisos?`; `OrcamentoFormSnapshot.produtos?`; `MemoriaLinha.tipo` (linha
       :173) ganha `"produto"`; `frontend/apps/internal/src/components/MemoriaDeCalculo.tsx`:
       `FUNDO["produto"]` (fundo próprio) e `FUNDO[linha.tipo] ?? ""`
-- [ ] T012 [US1] `frontend/apps/internal/src/components/orcamento/ProdutoLinha.tsx` (NOVO, fonte única
+- [x] T012 [US1] `frontend/apps/internal/src/components/orcamento/ProdutoLinha.tsx` (NOVO, fonte única
       da linha "📦 <rótulo> — preço de tabela R$ X" / "estimativa", com `brl`) e
       `frontend/apps/internal/src/components/orcamento/ProdutosCard.tsx` (NOVO): `Combobox` de `@manto/ui`
       (options com `description = brl(preco)`, `fallbackIcon` 🎅 por opção, `badge` "inativo" fora da
       lista), botão Adicionar, lista de selecionados com `AnimatePresence` + `useReducedMotion` (usa
       `ProdutoLinha` a partir de `quote.produtos`, vagas incluídas, Remover); props `{produtos,
       selecionados, aplicados, onChange}`
-- [ ] T013 [US1] `frontend/apps/internal/src/pages/OrcamentoCalculadoraPage.tsx`: estado `produtos` nos
+- [x] T013 [US1] `frontend/apps/internal/src/pages/OrcamentoCalculadoraPage.tsx`: estado `produtos` nos
       cinco lugares (`INITIAL_STATE`, `useState`, `resetAll`, payload/deps, rehydrate
       `snap.produtos?.map(p => ({chave: p.chave})) ?? []`); card `ProdutosCard` no topo da coluna
       direita antes de Equipe; `quote.avisos` em bloco `role="alert"` dourado com borda abaixo da Data (ao
       lado do `DataEspecialAlert`); painel de resultado: quando `quote.produtos.length > 0` e só `show_1h`
       é verdadeiro, mostrar um tile só com o rótulo "preço de tabela"; `ProdutoLinha` junto da nota da
       data especial
-- [ ] T014 [P] [US1] `frontend/apps/internal/src/pages/OrcamentoResultadoPage.tsx`: `ProdutoLinha` para
+- [x] T014 [P] [US1] `frontend/apps/internal/src/pages/OrcamentoResultadoPage.tsx`: `ProdutoLinha` para
       cada `quote.produtos ?? []`, junto das notas de NF e de data especial; `duracoesVisiveis` já
       respeita `show_Nh`
 
@@ -186,7 +186,7 @@ rebaixa a 600.
 **Verificação da história (obrigatória)**: cenários 8, 9 e 10 em PASS; `/events/new?orcamento_id=`
 aberto com o produto Noel + Ajudante.
 
-- [ ] T015 [US2] `app/calendar/routes.py` — `_compute_performer_caches`: `produtos =
+- [x] T015 [US2] `app/calendar/routes.py` — `_compute_performer_caches`: `produtos =
       resolver_produtos(snapshot.get("produtos"), …)` a partir das vagas CONGELADAS (chave desconhecida →
       itens com `cache_Nh: None` e nota "produto X não está mais na tabela — teto não aplicado"); emitir
       PRIMEIRO `itens_do_teto(...)` (flat; `has_show=False`; sem `noturno_add` quando `inclui_noturno`;
@@ -194,12 +194,12 @@ aberto com o produto Noel + Ajudante.
       produtos (`coordenadores_do_teto`, pela tabela/faixa com `MARCA_PRODUTO`) → `da_formula`
       genéricos (via `split_coordenadores`, mesmo `min_coordenadores`) → Técnico → UM Maquiador quando há
       make em produto ou avulso, teto `calcular_maquiador(mp + ra, ea)` via `makes_para_maquiador`
-- [ ] T016 [US2] `app/calendar/routes.py` — `_build_orcamento_prefill` e
+- [x] T016 [US2] `app/calendar/routes.py` — `_build_orcamento_prefill` e
       `app/calendar/orcamento_evento_ops.py` — `_total_da_duracao` (passa a ler `snapshot_do_orcamento
       (entry)`) e `acrescimos_do_orcamento` (duração custom com produto): régua por
       `produtos.total_na_duracao(subtotal_pre_acrescimos(total_4h, …), produtos_total, h, …)`; sem
       `produtos` no snapshot a conta reproduz `total_4h ÷ 4 × h` ao centavo (cenário 7 e regressão 305)
-- [ ] T017 [US2] Conferir (sem mudar comportamento) que `_create_roles_from_input`,
+- [x] T017 [US2] Conferir (sem mudar comportamento) que `_create_roles_from_input`,
       `_create_extra_roles_from_orcamento` e `aplicar_equipe_do_orcamento` toleram `cap None` (sem nota,
       como hoje) e usam a ordem emitida; registrar em `research.md` (D6/D14) o que foi conferido com
       `arquivo:linha`
@@ -215,10 +215,10 @@ UM Maquiador 300; casting 900 → 600; superadmin 900 → 900).
 
 **Verificação da história (obrigatória)**: cenários 11 e 12 em PASS.
 
-- [ ] T018 [US3] `app/orcamento/quote_ops.py`: `quote["avisos"] = avisos_para(performers, produtos)`
+- [x] T018 [US3] `app/orcamento/quote_ops.py`: `quote["avisos"] = avisos_para(performers, produtos)`
       (aviso do Noel avulso sem produto; aviso de estimativa; aviso de vaga sem cachê) — textos em
       `produtos.py`
-- [ ] T019 [US3] Conferir no `manto_local` (só leitura) e registrar em `research.md` (D9) o estado cru da
+- [x] T019 [US3] Conferir no `manto_local` (só leitura) e registrar em `research.md` (D9) o estado cru da
       tabela depois de T004/T005: `load()` devolve Noel 600 e Ajudante 270; tabela salva com 712 vira 600;
       tabela com 650 fica 650
 
@@ -234,12 +234,12 @@ removido tratados; remoção com `ConfirmDialog`.
 **Verificação da história (obrigatória)**: cenários 13, 14 e 17 (DEVE FALHAR) em PASS;
 `/orcamento/configuracoes` aberta.
 
-- [ ] T020 [US4] `app/api/orcamento_write.py` — `api_orcamento_settings_save`: ramo `produtos`/
+- [x] T020 [US4] `app/api/orcamento_write.py` — `api_orcamento_settings_save`: ramo `produtos`/
       `produtos_estimativa` DEPOIS do ramo `datas_especiais` (chave AUSENTE no corpo = mantém o salvo) →
       `validar_produtos(..., s["datas_especiais"])` → `json_error("Produtos de tabela inválidos.", 400,
       fields=…)`; `avisos` da validação devolvidos na resposta 200; comentário `RBAC:` inalterado
       (`_require_superadmin`)
-- [ ] T021 [US4] `frontend/apps/internal/src/components/orcamento/ProdutosConfigCard.tsx` (NOVO, molde do
+- [x] T021 [US4] `frontend/apps/internal/src/components/orcamento/ProdutosConfigCard.tsx` (NOVO, molde do
       `DatasEspeciaisCard`): por produto — rótulo, descrição, ativo, preço (`MoneyInput`), uma linha de
       preço por faixa existente em `datas_especiais` (vazia = "estimativa na data"), vagas como chips
       (label, tipo via botões, cachê "pela tabela"/valor, maquiagem para especial/ator), `inclui_noturno`,
@@ -247,7 +247,7 @@ removido tratados; remoção com `ConfirmDialog`.
       erros `produtos.<chave>.<campo>` / `vagas.<i>.<campo>` → `aria-invalid` + foco + rótulo legível;
       aviso amarelo para label de especial desconhecido e para faixa órfã; card pequeno "Estimativa"
       para `produtos_estimativa`
-- [ ] T022 [US4] `frontend/apps/internal/src/pages/OrcamentoConfigPrecosPage.tsx`: renderizar o
+- [x] T022 [US4] `frontend/apps/internal/src/pages/OrcamentoConfigPrecosPage.tsx`: renderizar o
       `ProdutosConfigCard` com `settings.produtos ?? {}`/`produtos_estimativa`; `errosDeSalvar` já cobre;
       rodapé filtra `produtos.*` e `produtos_estimativa.*`; mostrar `avisos` da resposta do save
 
@@ -262,11 +262,11 @@ fora de SP, NF, BV, PIX; régua; personalizado.
 
 **Verificação da história (obrigatória)**: cenários 5, 6 e 7 em PASS.
 
-- [ ] T023 [US5] `app/orcamento/quote_ops.py` + `app/calendar/orcamento_evento_ops.py`: fechar o que a
+- [x] T023 [US5] `app/orcamento/quote_ops.py` + `app/calendar/orcamento_evento_ops.py`: fechar o que a
       T008/T016 deixaram pendente — `resumo_do_orcamento` inclui personagens e makes do produto; conferir
       com o verify que venda, prefill e `_total_da_duracao` dão o MESMO `total_custom` com NF e BV (cenário
       7) e que o BV da duração custom (305) usa a base de `total_na_duracao` quando há produto
-- [ ] T024 [US5] `frontend/apps/internal/src/components/orcamento/PerformersEditor.tsx`: prop OPCIONAL
+- [x] T024 [US5] `frontend/apps/internal/src/components/orcamento/PerformersEditor.tsx`: prop OPCIONAL
       `coordenadoresInclusos?: number` → texto "N incluído(s) no produto" sob o contador e mínimo do
       contador = inclusos; `OrcamentoCalculadoraPage.tsx` passa `result?.quote.coordenadores_inclusos ??
       0`; EducaManto não passa (neutro)
@@ -282,7 +282,7 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
 
 **Verificação da história (obrigatória)**: cenário 18 em PASS.
 
-- [ ] T025 [US6] `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (NOVO; `scripts/oneoff/` é
+- [x] T025 [US6] `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (NOVO; `scripts/oneoff/` é
       gitignored — molde `specs/239b-hotfix-carrinho-fora-de-sp/reclassificar_fora_de_sp.py`): relatório
       de `EventRole` com `cache_cap` exatamente 712/423 em eventos `start_at >= 2026-10-16` (qualquer
       nome); `--execute` rebaixa só "Papai Noel"/"Ajudante do Noel" com `cache_value IS NULL AND talent_id
@@ -301,20 +301,20 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
 
 **Verificação da história (obrigatória)**: cenários 1, 15, 16 e 19 em PASS.
 
-- [ ] T026 [P] [US7] `app/educamanto/quote_ops.py` — `_totais_contratacao`: `payload.pop("produtos",
+- [x] T026 [P] [US7] `app/educamanto/quote_ops.py` — `_totais_contratacao`: `payload.pop("produtos",
       None)` ao lado de `event_date` (comentário: FR-016 da 309; o `inputs` do snapshot pode carregar a
       chave, ignorada)
-- [ ] T027 [US7] `frontend/apps/internal/src/pages/OrcamentoCalculadoraPage.tsx`: "Gerar Orçamento"
+- [x] T027 [US7] `frontend/apps/internal/src/pages/OrcamentoCalculadoraPage.tsx`: "Gerar Orçamento"
       desabilitado com aviso "O servidor não aplicou o produto — recarregue a página" quando
       `produtos.length > 0` e `result.quote.produtos` é `undefined` (backend velho); integrado ao
       `calcPendente`/`seq` da 307
-- [ ] T028 [US7] `specs/307-natal-papai-noel-calculadora/verify_307.py`: config de teste grava Noel
+- [x] T028 [US7] `specs/307-natal-papai-noel-calculadora/verify_307.py`: config de teste grava Noel
       `[600, 650, 675, 700]` e Ajudante `[270, 320, 345, 370]` e passa a afirmar que a carga NÃO troca para
       712; cenário 1 (:253) → 2.210,00; cenário 2 (:263) → 2.912,00; cenário 10 (:428) → 2.210,00; cenário
       11 (:507-508) tetos 600/270; cenário 12 (:574-578, :652) → Noel 600, Ajudante [270, 320, 345, 370] e a
       inversa 712→600/423→270 age; cenário 15 (:792) → 2.210,00; docstring e `NOEL_ANTIGO` reescritos com
       a mudança de regra (309); rodar `--regressao` verde
-- [ ] T029 [US7] Rodar `verify_309.py --regressao` completo → 20/20; guardar a saída final em
+- [x] T029 [US7] Rodar `verify_309.py --regressao` completo → 20/20; guardar a saída final em
       `specs/309-produtos-de-tabela/verify_309_final.txt`
 
 **Checkpoint**: 20/20 com regressão; `verify_307 --regressao` (e a 305 dentro dele) verde.
@@ -323,18 +323,18 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
 
 ## Phase 10: Polimento e transversais
 
-- [ ] T030 `cd frontend && npm run typecheck` limpo (três SPAs, pelas junções do worktree) e `ruff check`
+- [x] T030 `cd frontend && npm run typecheck` limpo (três SPAs, pelas junções do worktree) e `ruff check`
       em `app/orcamento/`, `app/api/orcamento_write.py`, `app/calendar/routes.py`,
       `app/calendar/orcamento_evento_ops.py`, `app/educamanto/quote_ops.py`,
       `specs/309-…/rebaixar_tetos_noel_309.py`, `specs/309-…/verify_309.py`, `specs/307-…/verify_307.py`; `ruff
       format` só nos arquivos novos
-- [ ] T031 Telas abertas no Browser pane (skill `manto-conferir-tela`, `launch.json` `manto-internal` +
+- [x] T031 Telas abertas no Browser pane (skill `manto-conferir-tela`, `launch.json` `manto-internal` +
       `manto-backend-sem-google`): `/orcamento` (produto em 20/12 e 24/12, valor único, boneco junto,
       aviso do avulso, botão travado simulando `quote.produtos` ausente), `/orcamento/:id`,
       `/orcamento/configuracoes` (400 com foco; `ConfirmDialog` ao remover), `/events/new?orcamento_id=`
       com o produto Noel + Ajudante (tetos 600/270/250/250); restaurar a tabela do `manto_local` se algum
       Salvar persistiu dados de teste
-- [ ] T032 Docs por fonte única: `docs/01` (§2.10 `produtos`/`produtos_estimativa`; §3.13 payload
+- [x] T032 Docs por fonte única: `docs/01` (§2.10 `produtos`/`produtos_estimativa`; §3.13 payload
       `produtos`, `quote.produtos`/`produtos_total`/`coordenadores_inclusos`/`avisos`, snapshot com vagas,
       `POST /settings`, memória `produto` + invariante, régua por `total_na_duracao`, especiais 600/270;
       §4.3 as cinco linhas), `docs/02` (`/orcamento`, `/orcamento/:id`, `/orcamento/configuracoes`,
@@ -343,9 +343,9 @@ de SP; NF; BV; PIX; 6h com e sem NF/BV; personalizado nos dois critérios).
       invariantes; `verify_307` com regra mudada), `docs/05` (quitar #107 pelo script; #103 continua;
       dívidas: cachês visíveis no `/opcoes`, risco aceito preço congelado × teto da faixa,
       `num_colaboradores` vazio → 1 no prefill; #106 com `produtos.py` extraído)
-- [ ] T033 `quickstart.md` executado de ponta a ponta; `spec.md` com Status "Implementada em <data>";
+- [x] T033 `quickstart.md` executado de ponta a ponta; `spec.md` com Status "Implementada em <data>";
       `checklists/dinheiro-e-regressao.md` marcado
-- [ ] T034 Commits por caminho no worktree: `feat(309): núcleo` (settings, produtos.py, quote_ops, pdf,
+- [x] T034 Commits por caminho no worktree: `feat(309): núcleo` (settings, produtos.py, quote_ops, pdf,
       orcamento_write, educamanto), `feat(309): teto e script` (routes, orcamento_evento_ops,
       specs/309-…/rebaixar_tetos_noel_309.py), `feat(309): telas` (frontend), `docs(309): …` (specs +
       docs); nunca `git add -A`

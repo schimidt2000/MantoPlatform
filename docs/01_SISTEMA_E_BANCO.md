@@ -7,7 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-16** · **307-natal-papai-noel-calculadora** (EM PRODUÇÃO desde
+> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (em branch; sem migration — head
+> continua `a7c3e91f4d28`; blocos `produtos` e `produtos_estimativa` no `pricing_config` e "Papai Noel"/
+> "Ajudante do Noel" de volta a 600/270, §2.10; `produtos` no payload, `quote` e `snapshot` de
+> `/orcamento/calcular`, validação do bloco em `/orcamento/settings`, teto das vagas do produto no
+> prefill/criação/vínculo, §3.13). Antes: **2026-10-16** · **307-natal-papai-noel-calculadora** (EM PRODUÇÃO desde
 > 16/10/2026 ~01:25; sem migration — head continua `a7c3e91f4d28`; bloco `datas_especiais` no `pricing_config`, §2.10;
 > `data_especial` no quote de `/orcamento/calcular` e validação do bloco em `/orcamento/settings`,
 > §3.13; gate de `orcamento_write` na tabela, §4.3). Antes: **2026-10-14/15** · **305-bv-do-orcamento-no-evento**
@@ -608,10 +612,20 @@ nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `ta
 (JSON da calculadora — schema em `app/orcamento/settings.py`; desde a **307** tem o bloco
 `datas_especiais` `{<chave>: {rotulo, dias["MM-DD"], markup[4], cache{especial: [4]},
 coordenador[4], piso[4], nota_mensagem}}`, com a faixa `natal` (24 e 25/12) garantida na carga;
-`_migrate` também troca "Papai Noel" de `[600, 650, 675, 700]` para `[712, 800, 850, 900]`, injeta
-"Ajudante do Noel" `[423, 480, 510, 540]` salvo se estiver em `especiais_excluidos`, e descarta
-sobrescrita de especial que não existe na tabela), `calendar_sync_cache`, `calendar_auto_sync_at`,
-`whatsapp_form_number`.
+`_migrate` injeta "Ajudante do Noel" salvo se estiver em `especiais_excluidos` e descarta
+sobrescrita de especial que não existe na tabela. Desde a **309** tem o bloco `produtos`
+`{<chave>: {rotulo, descricao, ativo, preco, por_faixa{<faixa>: {preco}}, vagas[{label, tipo
+especial|ator|coordenador|maquiador, cache: null|R$, needs_makeup}], inclui_noturno}}` (preço FIXO
+por visita, fora do markup; `cache: null` = pela tabela vigente na data do evento; labels de
+coordenador/maquiador forçados a "Coordenador"/"Maquiador") e `produtos_estimativa {fator_cache,
+markup}` (produto sem preço numa faixa: Σ cachês × fator × markup, marcado "estimativa"); os dois
+produtos padrão "Visita Mágica — Papai Noel" (2.500; natal 5.000; vagas Papai Noel com make,
+Coordenador, Maquiador) e "… + Ajudante" (3.600; natal 6.500; + Ajudante do Noel) entram pelo
+`setdefault` só quando a chave está AUSENTE; `_migrar_309` normaliza o bloco na defensiva e DESFAZ a
+engenharia reversa da 307 — "Papai Noel" `[712, 800, 850, 900]` → `[600, 650, 675, 700]` e "Ajudante
+do Noel" `[423, 480, 510, 540]` → `[270, 320, 345, 370]`, só quando estiverem exatamente nesses
+valores; a troca 600→712 de `_migrar_307` foi removida: cachê é cachê, o preço da Visita vem do
+produto), `calendar_sync_cache`, `calendar_auto_sync_at`, `whatsapp_form_number`.
 
 ### 2.11 Migrations
 
@@ -1066,6 +1080,45 @@ especial que não existe na tabela (excluído ou renomeado) é descartada na car
 (`_compute_performer_caches(snapshot, horas_extra, data_evento)`) honra a faixa pela data do
 **evento** na criação (`_create_event_core`) e no vínculo 273 (`orcamento_evento_ops.data_do_evento`)
 e pela data do orçamento no prefill.
+**Feature 309 (sem migration) — produtos de tabela.** `POST /calcular` aceita `produtos: [{chave}]`
+ao lado de `performers` (lista, repetição permitida, ausente = conta de hoje; chave desconhecida ou
+produto apagado → 400 `fields.produtos` 'O produto "X" não está mais na tabela de preços…'). Fonte
+única `app/orcamento/produtos.py`: o preço do produto (`preco` ou `por_faixa.<faixa>.preco` pela
+faixa da 307; sem preço na faixa → estimativa `Σ cachês das vagas × fator_cache × markup`, marcada)
+entra DEPOIS de "= Após markup" e ANTES de brinde, noturno, técnico, maquiador, transporte,
+acréscimos e NF — igual nas 4 colunas e fixo na régua >4h (`produtos.total_na_duracao`, também no
+prefill e em `_total_da_duracao`/`fator_regua`); o coordenador do produto não é cobrado em dobro
+(`split_coordenadores`: `total = max(qty, inclusos)`, só `total − inclusos` na fórmula); UM
+Maquiador por orçamento (`incremento_make`); noturno só com `inclui_noturno: false`; personalizado
+"valor final" vence tudo e "multiplicador" não multiplica o produto. O `quote` traz SEMPRE
+`produtos: [{chave, rotulo, descricao, preco_aplicado, faixa_chave, estimado, vagas[labels]}]`,
+`produtos_total`, `coordenadores_inclusos` e `avisos: [str]` (vazios sem produto — a presença da
+chave é o sinal de backend novo para o React), linhas `tipo: "produto"` + "= Após produtos" na
+`memoria`, os personagens do produto em `team_lines`, o bloco "🎅 *rótulo* (descrição): *R$ X*" na
+`message` (só produto = UM valor: `show_1h` apenas, `total_custom` null, PIX único); o `snapshot`
+grava `produtos` com preço E vagas congelados e `produtos_total`. Sem produto a conta é byte a byte a
+de antes (gabarito `specs/309-…/verify_309_golden.json`). `GET /orcamento/opcoes` e `GET
+/orcamento/settings` devolvem `produtos` e `produtos_estimativa` já migrados (**não enxugar**).
+`POST /settings` aceita `produtos` e `produtos_estimativa` (ramo DEPOIS de `datas_especiais`;
+`settings.validar_produtos` → 400 `"Produtos de tabela inválidos."` com `fields`): `produtos` →
+"bloco inválido"; `produtos.<chave>` → "produto inválido" (`^[a-z0-9_]{1,30}$`); `.rotulo` →
+"informe o rótulo" / "rótulo com mais de 60 caracteres"; `.descricao` → "descrição com mais de 120
+caracteres"; `.preco` → "preço em R$ maior que zero"; `.por_faixa.<faixa>.preco` → idem (faixa
+inexistente é DESCARTADA com aviso em `avisos` do 200, não 400); `.vagas` → "lista de 1 a 10 vagas";
+`.vagas.<i>.label` → "informe o personagem"; `.vagas.<i>.tipo` → "tipo de vaga desconhecido: <tipo>";
+`.vagas.<i>.cache` → "cachê em R$ maior que zero (ou vazio = pela tabela)"; label de especial fora
+da tabela → aviso (a vaga nasce sem teto); `produtos_estimativa.fator_cache` → "fator maior que
+zero"; `.markup` → "markup entre 1 e 6 (coeficiente)". Chave `produtos` AUSENTE no corpo = mantém o
+salvo; corpo inválido não grava nada. Teto das vagas: `_compute_performer_caches` emite primeiro as
+vagas `character` dos produtos a partir das vagas CONGELADAS do snapshot (flat nas 4 colunas, cachê
+pela tabela vigente na data do evento — 600 / 270 / 250 / 250; 1.000 / 650 / 500 / 250 na faixa —,
+`cap_notes` "cachê da tabela · produto …", `origem: "produto"`; produto apagado ou especial fora da
+tabela → `cache_Nh: null` com nota, nunca 0), depois `performers`, depois extras (coordenadores do
+produto → da fórmula → Técnico → UM Maquiador); prefill = criação (pareamento posicional) e o
+vínculo 273 casa por nome. `resumo_do_orcamento` conta os personagens e as makes do produto. O
+EducaManto remove `produtos` em `_totais_contratacao`. CLI pós-deploy:
+`specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` (dry-run; `--execute` rebaixa 712→600 /
+423→270 só em "Papai Noel"/"Ajudante do Noel" sem cachê e sem artista, em eventos desde 16/10/2026).
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
@@ -1648,7 +1701,7 @@ Gates por módulo (todos em `app/api/`):
 
 | Gate | Onde | Papéis aceitos |
 |---|---|---|
-| `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
+| `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
 | `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar, recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404 | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |

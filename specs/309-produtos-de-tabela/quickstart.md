@@ -3,6 +3,15 @@
 > Como provar a feature de ponta a ponta. Tudo roda no worktree `C:\tmp\mp309` (a árvore principal está
 > com a 308 de outro chat). `.venv` e `node_modules` são os do repositório principal, por caminho
 > absoluto; `.local-db-url` já foi copiado para o worktree.
+>
+> **Executado em 20/10/2026**: `verify_309.py --regressao` 20/20 (`verify_309_final.txt`); `npm run
+> typecheck` limpo nas três SPAs; telas conferidas no Browser pane com o Flask do worktree em
+> `127.0.0.1:5001` e o Vite em `127.0.0.1:5183` (a 5000/5173 eram do outro chat) — calculadora em
+> 20/12 (R$ 2.500, tile "Preço de tabela", "1 incluído no produto") e 24/12 (R$ 5.000 + aviso da 307),
+> boneco junto (4 colunas), "Papai Noel" avulso → aviso "use o produto", `quote.produtos` ausente
+> simulado por `fetch` → botão travado, `/orcamento/:id` (linha, memória, mensagem), prefill de
+> `/events/new?orcamento_id=` com tetos 600/270/250/250, `/orcamento/configuracoes` com preço 0 → 400
+> no campo com foco e `ConfirmDialog` ao remover.
 
 ## Pré-requisitos
 

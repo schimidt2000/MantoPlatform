@@ -1,7 +1,9 @@
 # Feature 309 — Produtos de tabela: a Visita Mágica do Papai Noel vendida pelo preço da tabela de venda, com os cachês das vagas definidos pela tabela de preços
 
 **Branch**: `309-produtos-de-tabela` (da `main` `6356b80`, em worktree `C:\tmp\mp309` — a árvore
-principal está ocupada pela 308 de outro chat) · **Created**: 2026-10-19 · **Status**: Rascunho
+principal está ocupada pela 308 de outro chat) · **Created**: 2026-10-19 · **Status**: Implementada em
+2026-10-20 (branch; `verify_309.py --regressao` 20/20, typecheck limpo, telas conferidas — aguarda
+converge, merge e deploy)
 (analyze aplicado em 19/10) · **Migration**: nenhuma (bloco novo no JSON `pricing_config` + chave
 nova no snapshot do orçamento; chave ausente = comportamento de hoje) · **Nível**: 1 (feature —
 orçamento + teto das vagas no calendário; EducaManto neutro) — constituição, Princípio VI
