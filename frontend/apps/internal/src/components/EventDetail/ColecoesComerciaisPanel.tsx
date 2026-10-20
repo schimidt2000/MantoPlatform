@@ -67,9 +67,10 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
   // Feature 306: no cancelado, só o Superadmin corrige (o servidor dá 409 aos outros); a lista grava
   // no lugar e a comissão e o BV do retido se refazem na mesma hora.
   const cancelado = Boolean(data.event.cancelled_at);
-  const canEdit = cancelado
-    ? Boolean(data.flags.can_edit_venda_cancelado)
-    : Boolean(data.flags.show_comercial) && !data.event.is_satellite;
+  // O satélite nunca edita (o servidor dá 409 "satélite"), cancelado ou não (converge, T118).
+  const canEdit =
+    !data.event.is_satellite &&
+    (cancelado ? Boolean(data.flags.can_edit_venda_cancelado) : Boolean(data.flags.show_comercial));
   const pendente = data.venda?.bv_do_orcamento_pendente ?? null;
   const [searchParams, setSearchParams] = useSearchParams();
   const [editando, setEditando] = useState(false);

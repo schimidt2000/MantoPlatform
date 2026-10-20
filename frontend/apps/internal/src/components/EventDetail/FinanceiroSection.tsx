@@ -555,7 +555,9 @@ function CollectForm({ reimbursementId, eventId }: { reimbursementId: number; ev
         Marcar cobrado
       </Button>
       {collect.isError && (
-        <p className="w-full text-sm text-red">Informe o valor e anexe o comprovante.</p>
+        <p className="w-full text-sm text-red" role="alert">
+          {collect.error?.message || "Informe o valor e anexe o comprovante."}
+        </p>
       )}
     </div>
   );

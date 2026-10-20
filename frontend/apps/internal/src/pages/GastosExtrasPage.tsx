@@ -27,6 +27,18 @@ const TD = "px-3 py-2 align-top";
 
 type DisplayStatus = "pendente" | "aprovado" | "aprovado_com_edicoes" | "rejeitado";
 
+/** As chaves de `fields` que o formulário mostra no próprio campo; as outras vão ao rodapé. */
+const CAMPOS_COM_LUGAR = new Set([
+  "description",
+  "amount",
+  "receipt",
+  "supplier_name",
+  "reimburse_user_id",
+  "category",
+  "expense_date",
+  "event_id",
+]);
+
 function displayStatus(expense: GastoExtra): DisplayStatus {
   if (expense.status === "aprovado" && expense.approved_with_edits) return "aprovado_com_edicoes";
   return expense.status;
@@ -422,9 +434,16 @@ function GastoFormModal({
 
   const busy = create.isPending || update.isPending;
   const erroDoServidor = (create.error ?? update.error) as Error | null;
+  // Toda recusa do servidor aparece: no campo que a tela tem, ou no rodapé quando a chave não tem
+  // lugar (Constituição V — o 409 `devolucao_travada` vinha só com `fields` e sumia calado).
+  const semLugar = Object.keys(fieldErrors).some((k) => !CAMPOS_COM_LUGAR.has(k));
   const genericError =
-    (create.isError || update.isError) && !Object.keys(fieldErrors).length
+    (create.isError || update.isError) && (semLugar || !Object.keys(fieldErrors).length)
       ? erroDoServidor?.message || "Não foi possível salvar o gasto."
+      : null;
+  const eventoDaTrava =
+    erroDoServidor instanceof ApiRequestError && erroDoServidor.details.codigo === "devolucao_travada"
+      ? Number(erroDoServidor.details.event_id) || null
       : null;
   // Feature 306: a devolução de um evento cancelado — valor, data, categoria e vínculo só mudam pelo
   // "Alterar devolução" na tela do evento; nome, PIX e descrição ficam livres.
@@ -466,6 +485,11 @@ function GastoFormModal({
                 </option>
               ))}
             </select>
+            {fieldErrors.category && (
+              <p className="mt-1 text-xs text-red" role="alert">
+                {fieldErrors.category}
+              </p>
+            )}
           </div>
           <div>
             <label className={LABEL}>Valor (R$)</label>
@@ -487,6 +511,11 @@ function GastoFormModal({
             disabled={travado}
             onChange={(e) => patch({ expenseDate: e.target.value })}
           />
+          {fieldErrors.expense_date && (
+            <p className="mt-1 text-xs text-red" role="alert">
+              {fieldErrors.expense_date}
+            </p>
+          )}
         </div>
         <DesembolsoFields values={values} onChange={patch} fieldErrors={fieldErrors} />
         <EventoFields
@@ -499,6 +528,19 @@ function GastoFormModal({
               : null
           }
         />
+        {fieldErrors.event_id && (
+          <p className="-mt-1 text-xs text-red" role="alert">
+            {fieldErrors.event_id}
+            {eventoDaTrava && (
+              <>
+                {" "}
+                <Link to={`/events/${eventoDaTrava}?aba=comercial`} className="text-blue underline">
+                  Abrir o evento
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         {mode === "create" && (
           <>
             <div>

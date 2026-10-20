@@ -42,7 +42,7 @@ igual.
 ```
 
 **Esperado**
-- **Total**: a rodada termina em `59/59 OK` (os 57 da spec, mais 37b e 38c). As variantes rodam dentro
+- **Total**: a rodada termina em `69/69 OK` (os 57 da spec, mais 37b e 38c, mais os 46 a 55 do converge, bloco B7). As variantes rodam dentro
   do seu cenário e não mudam a contagem. A saída é 1 quando algo falha e 2 pela guarda de ambiente.
 - **"Deve falhar?"**:
   - 20 são "sim": 3, 4, 5, 6, 15, 16, 16b, 16c, 16d, 18, 19, 28, 29, 33, 34, 38, 40, 42d, 45b e 45c. Verde
@@ -137,6 +137,7 @@ escritos e nenhuma linha de núcleo:
 | B4 | História 4 | 16b (sem o satélite, e com a variante 16b cheia 0 pela API), 16c, 16d e 16e. O `verify_305` tem de estar verde antes (§5) |
 | B5 | História 5 | a variante 5-grupo; 29, 35, 37 (+ 37-devolução), 37b, 38 (+ 38-comprovante), 38c, 39 (+ a variante 39 devolução do dia depois do principal cancelado) e 41. 42 (sem aviso e ensaio), 42b (sem a multa), 42c e 42d (sem o cachê pago). A parte de satélite e de corte do 4 (inclusive o piso da devolução do corte), do 16b, do 17 e do 21. Do 40, desagrupar e agrupar |
 | B6 | História 6 | 33, 40, 42e, 43, 44 (+ 44 dois sinos), 45, 45b e 45c; o que faltava do 2b, do 4, do 42, do 42b e do 42d. A rodada chega a `59/59 OK` |
+| B7 | Convergência (T101) | 46 a 55, um por achado confirmado do converge, rodados vermelhos antes da correção. A rodada chega a `69/69 OK` |
 | B9 | limpeza | 27 (roda sempre) |
 
 Os dois cenários novos:
@@ -360,7 +361,7 @@ $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim() -replace '^postgresq
 **Esperado**
 - O `Compare-Object` lista o que o build da noite vai trocar, além do `tzdata`. Uma versão maior nova de
   dependência transitiva é fixada no `requirements.txt` antes do push.
-- Migration, seed e `59/59 OK` passam nesse venv.
+- Migration, seed e `69/69 OK` passam nesse venv.
 - Depois, volte o `DATABASE_URL` ao valor dos pré-requisitos.
 
 ## 8. Tela aberta (desktop; app interno)
@@ -401,6 +402,9 @@ cd C:\tmp\mp306\frontend; npm run dev:internal
   proxy (`npm run dev -- --config <config>`, em `127.0.0.1:5183`). O `127.0.0.1` não divide o cookie
   `session` com o `localhost` do outro checkout; a DRE antiga fica em `http://127.0.0.1:5001/financeiro/…`.
   A config temporária sai do repositório no fim.
+- Outro worktree pode estar em `127.0.0.1` (a 309 usou a 5001 e a 5183 em 20/10): confira o dono da porta antes de
+  subir (`Get-NetTCPConnection` + `Win32_Process`), e sirva o app num host próprio (`127.0.0.2`), para o cookie não
+  cruzar com o dele.
 - **Não use**:
   - as entradas `manto-backend-sem-google` e `manto-internal` do `launch.json` do usuário: elas servem o
     repositório principal, isto é, o código da `main`;

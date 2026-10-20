@@ -1270,7 +1270,8 @@ def update_event_comercial(
 
     # Antes do commit: `_sync_commission_payment` não commita, então as duas escritas saem juntas.
     if sincronizar_comissao is not None:
-        sincronizar_comissao(event)
+        # A cortesia de antes: o recongelamento do cancelado só relê o portão quando ela mudou.
+        sincronizar_comissao(event, cortesia_antes=antes[2])
 
     db.session.add(EventLog(
         event_id=event.id,

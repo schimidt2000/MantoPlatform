@@ -4,6 +4,7 @@ import { Button } from "@manto/ui";
 import type { EstadoPagamento, EventoDetalhe, ResumoCancelado } from "../../lib/agenda";
 import { AlterarDevolucaoDialog } from "./AlterarDevolucaoDialog";
 import { LancarMultaDialog } from "./LancarMultaDialog";
+import { GastosVinculados } from "./GastosVinculados";
 import { brl, Panel } from "./parts";
 
 const ESTADO: Record<EstadoPagamento, string> = {
@@ -118,6 +119,9 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
           ))}
         </ul>
       )}
+
+      {/* Converge (T112, FR-061): a devolução, as multas e os outros gastos dos dias do ato. */}
+      <GastosVinculados gastos={data.gastos ?? []} />
 
       {doGrupo && resumo.principal && !resumo.venda_passou_para && (
         <p className="mt-3 text-sm text-ink">

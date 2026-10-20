@@ -342,10 +342,12 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
         previa.error?.message ||
         (corta ? "Não foi possível conferir a devolução mínima." : "Não foi possível conferir a prévia.")
       );
+    // A prévia na tela tem de ser a dos valores de agora, em qualquer modo: confirmar sobre a de antes
+    // gravaria números que a tela não mostrou (converge, T120; FR-011).
+    if (!previa.emDia || previa.isFetching || previa.isPlaceholderData || efeito === undefined)
+      return corta ? "Conferindo a devolução mínima…" : "Conferindo a prévia…";
     if (corta) {
-      // A mínima é a da prévia dos valores de agora: a de antes (ou a que está chegando) não vale.
-      if (!previa.emDia || previa.isFetching || previa.isPlaceholderData || efeito?.devolucao_minima === undefined)
-        return "Conferindo a devolução mínima…";
+      if (efeito.devolucao_minima === undefined) return "Conferindo a devolução mínima…";
       const minima = efeito.devolucao_minima;
       return (devolve ?? 0) < minima
         ? `Devolva pelo menos ${brl(minima)} ou aumente o novo valor da venda.`

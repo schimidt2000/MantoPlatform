@@ -127,13 +127,14 @@ EXCLUIR_CANCELADO = (
 ORCAMENTO_DO_CANCELADO = "O orçamento de um evento cancelado não se aplica nem se troca."
 
 
-def _recusa_se_cancelado(event: CalendarEvent) -> Any | None:
+def _recusa_se_cancelado(event: CalendarEvent, *, grupo: bool = False) -> Any | None:
     """A regra única das portas (a)–(h) (FR-047): trava, relê e recusa o cancelado para quem não é
-    Superadmin real. `None` = segue o caminho de hoje (no vivo, já sob a trava)."""
+    Superadmin real. `None` = segue o caminho de hoje (no vivo, já sob a trava). `grupo=True` toma
+    a T1 do grupo (a aba Comercial, que recongela)."""
     from app.calendar.cancel_ops import CancelValidationError, recusar_se_cancelado
 
     try:
-        recusar_se_cancelado(event, current_user)
+        recusar_se_cancelado(event, current_user, grupo=grupo)
     except CancelValidationError as exc:
         db.session.rollback()
         return _recusa_do_cancelado(exc)
@@ -1382,7 +1383,7 @@ def api_update_event_comercial(event_id: int) -> Any:
             409,
             leader_id=event.group_leader_id,
         )
-    recusa = _recusa_se_cancelado(event)
+    recusa = _recusa_se_cancelado(event, grupo=True)
     if recusa is not None:
         return recusa
 
@@ -1424,11 +1425,11 @@ def api_update_event_comercial(event_id: int) -> Any:
 
     from app.calendar import cancel_ops
 
-    def comissao_da_aba(ev: CalendarEvent) -> None:
+    def comissao_da_aba(ev: CalendarEvent, *, cortesia_antes: bool | None = None) -> None:
         """Feature 306 — o despachante: o cancelado (só o Superadmin chega aqui) recongela e
         reconcilia na mesma transação; o vivo segue com o sync de sempre."""
         if ev.is_cancelled:
-            cancel_ops.recongelar_do_comercial(ev, actor=current_user)
+            cancel_ops.recongelar_do_comercial(ev, actor=current_user, cortesia_antes=cortesia_antes)
         else:
             _sync_commission_payment(ev)
 
@@ -2060,9 +2061,12 @@ def api_delete_payment(payment_id: int) -> Any:
 
     from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
-    _log_anexo(payment.event_id, f"Excluiu comprovante de R$ {payment.amount or 0}")
+    # O histórico depois do núcleo, como no POST e no PATCH: inserido antes, o flush da T1 tomava o
+    # KEY SHARE do dia fora da ordem do grupo (plan §Travas; converge, T116).
+    evento_do_comprovante, valor = payment.event_id, payment.amount or 0
     try:
         gravar_comprovante_no_grupo(event, "excluir", actor=current_user, comprovante=payment)
+        _log_anexo(evento_do_comprovante, f"Excluiu comprovante de R$ {valor}")
     except CancelValidationError as exc:
         db.session.rollback()
         return _recusa_do_cancelado(exc)

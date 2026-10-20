@@ -613,6 +613,18 @@ def nf_emitir(invoice_id: int):
     inv = EventInvoice.query.get_or_404(invoice_id)
     back = redirect(request.referrer or url_for("financeiro.dashboard"))
 
+    # Feature 306 (FR-047, FR-053; converge, T114): a regra única do cancelado também aqui — o
+    # Financeiro não emite nota de evento cancelado (a API já recusa); o Superadmin segue.
+    if inv.event is not None:
+        from app.calendar.cancel_ops import EventoCanceladoError, recusar_se_cancelado
+
+        try:
+            recusar_se_cancelado(inv.event, current_user)
+        except EventoCanceladoError as exc:
+            db.session.rollback()
+            flash(exc.message, "error")
+            return back
+
     # data de emissão (opcional) — usa a informada ou mantém a existente
     _draw = (request.form.get("issue_date", "") or "").strip()
     if _draw:

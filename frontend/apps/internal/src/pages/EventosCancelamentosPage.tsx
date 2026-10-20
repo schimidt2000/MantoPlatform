@@ -154,7 +154,12 @@ export function EventosCancelamentosPage() {
                           <TableCell className="text-ink">{c.title}</TableCell>
                           <TableCell className="tabular-nums">{data(c.start_at)}</TableCell>
                           <TableCell align="right" className="tabular-nums">
-                            {brl(c.sale_value)}
+                            {/* O satélite e o dia cortado não têm venda própria: ela mora no 1º dia. */}
+                            {c.resumo?.regime === "satelite" || c.resumo?.regime === "dia" ? (
+                              <span className="text-muted">no 1º dia</span>
+                            ) : (
+                              brl(c.sale_value)
+                            )}
                           </TableCell>
                           <TableCell>
                             {c.cancelled_by ?? "—"}
@@ -166,7 +171,21 @@ export function EventosCancelamentosPage() {
                           <TableCell>
                             {/* Feature 306 (FR-025): o resumo traz todas as devoluções e o retido; o PIX
                                 só vem para quem vê o financeiro. Sem ele (backend antigo), a primeira. */}
-                            {c.resumo ? (
+                            {c.resumo?.regime === "satelite" ? (
+                              // Converge (T111): o dinheiro do "todos" está no 1º dia; repetir aqui a
+                              // devolução e o pago do grupo contava a mesma devolução N vezes.
+                              <span className="text-xs text-muted">
+                                dinheiro no 1º dia do grupo
+                                {c.resumo.principal && (
+                                  <>
+                                    {": "}
+                                    <Link to={`/events/${c.resumo.principal.id}`} className="text-blue underline">
+                                      {c.resumo.principal.titulo}
+                                    </Link>
+                                  </>
+                                )}
+                              </span>
+                            ) : c.resumo ? (
                               <>
                                 {c.resumo.devolucoes.length === 0 && (
                                   <span className="text-muted">nada a devolver</span>
@@ -187,7 +206,24 @@ export function EventosCancelamentosPage() {
                                   );
                                 })}
                                 <span className="mt-1 block text-xs text-muted">
-                                  pago {brl(c.resumo.pago)} · retido {brl(c.resumo.retido)}
+                                  {c.resumo.regime === "dia" ? (
+                                    <>
+                                      pago no grupo {brl(c.resumo.pago)}
+                                      {c.resumo.principal && (
+                                        <>
+                                          {" · venda no "}
+                                          <Link
+                                            to={`/events/${c.resumo.principal.id}`}
+                                            className="text-blue underline"
+                                          >
+                                            1º dia
+                                          </Link>
+                                        </>
+                                      )}
+                                    </>
+                                  ) : (
+                                    `pago ${brl(c.resumo.pago)} · retido ${brl(c.resumo.retido)}`
+                                  )}
                                 </span>
                               </>
                             ) : c.devolucao && situacao ? (

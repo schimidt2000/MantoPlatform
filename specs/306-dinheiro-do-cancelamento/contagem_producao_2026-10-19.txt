@@ -1,0 +1,39 @@
+eventos cancelados | 1
+cancelados sem venda nem comprovante | 0
+marcados pela 303 | 1
+grupos (principais) | 8
+grupos com dia futuro | 0
+grupos com o principal fora do 1º dia | 3
+grupos cruzando o mês | 0
+satélites com comissão própria (ids) | 287
+ensaios futuros ligados | 17
+shows futuros com ensaio | 17
+escalados de shows futuros com ensaio | 54
+eventos futuros com cachê pago | 0
+escalados sem e-mail (eventos futuros) | 0
+talentos escalados sem PIX (eventos futuros) | 0
+comprovantes sem valor | 22
+eventos com pago maior que a venda | 23
+comissões no_banco | 0
+comissões no_banco por mês | -
+comissões a_pagar negativas com evento | 0
+estornos órfãos a_pagar | 0
+linhas vivas de evento cancelado | 0
+linhas que o resync alcança | 52
+comissões pagas | 188
+comissões pagas de evento futuro | 47
+comissões com original_id | 2
+ciclos abertos de soma zero com linha de valor (vendedor:ciclo) | -
+gastos aprovados com evento | 112
+devoluções com tipo nulo | 0
+devoluções pendentes ligadas a evento | 0
+devoluções ligadas a evento vivo (vendas vivas com devolução à mão) | 0
+gasto aprovado com categoria fora de CATEGORIES | 0
+BV em satélite | 0
+BV não pago de cancelado legado | 0
+BV não pago sem recebedor ou PIX | 1
+usuários ativos por papel (FINANCEIRO, ENSAIO, CASTING, SUPERADMIN) | CASTING:2, ENSAIO:2, SUPERADMIN:3
+alembic_version | a7c3e91f4d28
+event_cancellations | (não existe)
+event_cancellation_bvs | (não existe)
+event_cancellation_elenco | (não existe)

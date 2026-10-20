@@ -282,14 +282,16 @@ TIPO_ESTORNO = "estorno"
 def tipo_da_linha(cp: CommissionPayment) -> tuple[str, str | None]:
     """O que a linha é — comissão, ajuste ou estorno — e o motivo pelo prefixo da nota (FR-033).
 
-    Estorno é o órfão; ajuste é a linha ligada a uma paga (`original_id`) que continua no evento;
-    o resto é comissão. O motivo é o código de `MOTIVOS_AJUSTE_COMISSAO` cujo prefixo abre a nota.
+    Pelo vínculo (data-model §7.3): estorno é a linha sem evento ligada a uma paga, em qualquer
+    status e sinal (o resgate do mês é que olha só o órfão a pagar); ajuste é a ligada a uma paga
+    que continua no evento; o resto é comissão. O motivo é o código de `MOTIVOS_AJUSTE_COMISSAO`
+    cujo prefixo abre a nota.
     """
     from app.constants import MOTIVOS_AJUSTE_COMISSAO
 
     nota = cp.notes or ""
     motivo = next((cod for pref, cod in MOTIVOS_AJUSTE_COMISSAO.items() if nota.startswith(pref)), None)
-    if _e_estorno_orfao(cp):
+    if cp.event_id is None and cp.original_id is not None:
         return TIPO_ESTORNO, motivo
     if cp.original_id is not None:
         return TIPO_AJUSTE, motivo
@@ -1060,6 +1062,25 @@ def comissao_cheia_do_evento(
     return cheia, beneficiario.id, taxa_usada
 
 
+def cheia_do_congelado(event, *, venda, taxa, bv_total, custo) -> Decimal:
+    """A cheia do cancelado pelos insumos congelados, sem reler o portão vivo (feature 306, FR-049).
+
+    É a `_base_da_comissao` com tudo congelado: a venda, a taxa, o BV das linhas e o custo do ato.
+    A fórmula EducaManto (sobre o lucro) vale quando o ato congelou o custo (`custo` não nulo, o
+    EducaManto com responsável no ato) — nunca pelo responsável de hoje — e o `receives_commission`
+    de hoje não é relido: quem recebe é o beneficiário congelado. A cortesia fica com quem chama.
+    """
+    venda_d = Decimal(str(venda or 0))
+    if venda_d <= 0:
+        return Decimal("0.00")
+    base = venda_d - Decimal(str(bv_total or 0))
+    if custo is not None:
+        base -= Decimal(str(custo))
+    if base < 0:
+        base = Decimal("0")
+    return (base * Decimal(str(taxa or 0)) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
 def comissao_do_retido(cheia, retido, venda) -> Decimal:
     """A comissão na proporção do que a Manto reteve: `cheia × retido ÷ venda` (FR-028).
 
@@ -1360,7 +1381,8 @@ def reconciliar_comissao_do_cancelado(
     - falta ≠ 0 → a `a_pagar` mais antiga recebe a falta no lugar, com a data intacta (FR-032), e
       as outras são canceladas;
     - sem `a_pagar` → linha nova (±) ligada à liquidada mais recente (`original_id`), datada no
-      primeiro repasse aberto; a EducaManto positiva nova nasce no dia do evento, se ele não passou.
+      primeiro repasse aberto; a EducaManto positiva nova só LIBERA no dia do evento, se ele não
+      passou (data-model §7.3): a data da venda é a do repasse, nunca herdada da venda (FR-031).
 
     Só as linhas do próprio evento, fora a comissão própria marcada (P-51). Com `simular=False`
     supõe a T4 tomada e não faz commit; com `simular=True` não toca o ORM. Devolve o plano, uma
@@ -1429,7 +1451,8 @@ def reconciliar_comissao_do_cancelado(
                 and event.start_at is not None
                 and event.start_at.date() >= hoje
             ):
-                venda_em, liberacao = event.sale_date, event.start_at.date()
+                venda_em = primeiro_repasse_aberto(sid, hoje, excluir_event_id=event.id)
+                liberacao = event.start_at.date()
             else:
                 venda_em = liberacao = primeiro_repasse_aberto(sid, hoje, excluir_event_id=event.id)
             detalhe = f"acerta a linha #{original.id}" if original is not None else None

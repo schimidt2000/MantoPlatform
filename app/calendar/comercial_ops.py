@@ -632,7 +632,9 @@ def alterar_acrescimos_do_cancelado(event: Any, itens: list, *, actor: Any) -> l
         _sincronizar_bvs_congelados(canc, gravados, removidos)
     db.session.flush()
     db.session.expire(event, ["acrescimos"])
-    cancel_ops.recongelar_do_comercial(event, actor=actor, motivo=MOTIVO_AJUSTE_CORRECAO_VENDA)  # T4 dentro
+    cancel_ops.recongelar_do_comercial(
+        event, actor=actor, motivo=MOTIVO_AJUSTE_CORRECAO_VENDA, cortesia_antes=event.is_cortesia_permuta
+    )  # T4 dentro
     return trocas
 
 

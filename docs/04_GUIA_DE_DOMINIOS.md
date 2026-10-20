@@ -305,7 +305,9 @@ Modelo e transições: `specs/306-dinheiro-do-cancelamento/data-model.md` §5 a 
     `group_ops.dias_vivos`: o custo de cachês (`_group_cost`, base da EducaManto e CPV), o KPI e os
     gastos do principal vivo não contam o dia cancelado.
 20. **A passagem muda o dono, não o valor nem a data** (`group_ops.passar_venda`). O novo principal é o
-    dia vivo mais cedo (início, depois id; se mudou enquanto o diálogo estava aberto, 409
+    dia vivo mais cedo que **não** é compromisso interno (🟧/🟠, que a cobrança da Home não lista; só
+    compromisso interno vivo → 409 `sem_outro_dia_vivo`) (início, depois id; se mudou enquanto o diálogo
+    estava aberto, 409
     `grupo_mudou`). Passam as mesmas linhas, só com o `event_id` trocado — nunca apagar e recriar:
     comprovantes, parcelas, notas, contratos, reembolsos, acréscimos (com o estado do BV), formulários e
     **todas** as linhas de comissão, pagas e no banco inclusive (`TABELAS_DA_PASSAGEM`), mais a devolução
@@ -568,7 +570,8 @@ assinatura) nunca vira pendência (`:1075-1081`).
    em lote `resumos_cancelados`; nenhuma tela refaz a conta. Só o regime `venda` e o `legado` (cancelado
    de antes da 306: comissão 0, imposto 0, BV só o pago) trazem dinheiro; `satelite` e `dia` entram com
    zero e não contam em `n_cancelados`, que conta vendas, não dias — o que a Manto retém do dia cortado
-   já está na venda nova do principal, no mês do evento. Cancelado sem pago nem devolvido fica fora. O
+   já está na venda nova do principal, no mês do evento. Cancelado sem venda, sem pago e sem devolvido
+   fica fora; o de venda sem pagamento conta (na contagem, no painel e no BV pago do custo). O
    retido conta como venda do **vendedor congelado** (total vendido, Top Vendedores, desempenho, ficha
    da cliente) e a comissão do retido na comissão prevista do **beneficiário congelado**; ticket médio,
    eventos fechados e desconto concedido contam só venda viva.

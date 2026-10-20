@@ -322,7 +322,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 > backlog de setembro (2ª das três entregas da 303; absorve a **224g**). Commits: `8ba8358`…`70211db`
 > (spec, clarify, plano, checklists, tasks, analyze), `9ab4d49` verify antes do núcleo, `d43c961`
 > fundação, `f8969f5` H1, `10faded` H2, `d777463` H3, `5e6103f` H4, `7c11364` H5, `daa4c17` H6 e o
-> polimento. `verify_306.py` 59/59 cenários (86/86 linhas) com todas as variantes e mutações
+> polimento e o converge. `verify_306.py` 69/69 cenários (96/96 linhas) com todas as variantes e mutações
 > quebrando; `--regressao` com os 17 verifies antigos iguais à base (266 7/9 e 273 8/15 já vermelhos
 > na base). Sem script nem variável de ambiente nova para o dono (SC-014).
 
@@ -383,8 +383,10 @@ Superadmin inclusive. Detalhe por porta: `docs/00` §4 e `docs/01` §4.3.
 `kpi`), as portas de venda, Gastos Extras, Planilha (`set-status`), Comissões, DRE e relatórios
 comerciais. Contratos: `specs/306-dinheiro-do-cancelamento/contracts/api.md`.
 
-**Mudanças de comportamento intencionais** (plan H3): o ticket médio Jinja e o `sale_count` passam
-a contar o retido; a ficha da cliente mantém o cancelado (marcado, fora do `event_count`); o item
+**Mudanças de comportamento intencionais** (plan H3): o ticket médio Jinja passa a dividir pela venda
+dos eventos com venda, como a API, e não pela Receita Bruta da DRE (o retido fica fora dele, FR-043, e o
+número segue o da `main`); o `sale_count` de Comissões não conta ajuste nem estorno (`original_id IS
+NULL`); a ficha da cliente mantém o cancelado (marcado, fora do `event_count`); o item
 aberto de comissão de soma zero com linha de valor aparece na Planilha também em mês sem
 cancelamento; o cancelado `legado` sem dinheiro, que hoje se exclui (inclusive pelo sync), passa a
 dar 409 e a ficar; nos `legado`, a DRE do mês perde a devolução dos gastos e a Tendência do mês do
@@ -410,6 +412,16 @@ descontá-la. A contagem do dia (`contagem_pre_deploy.py`) mede esses casos ante
   registrado no `docs/05`.
 - Revisões adversariais antes dos commits das histórias 5 e 6 (23 e 25 achados; 21 confirmados em
   cada, corrigidos e reconferidos), cada defeito travado por uma variante do verify.
+- **Converge** (T101, 19–20/10; oito revisores por frente e um cético por achado): 27 achados, 21
+  confirmados (2 repetidos). Os de servidor viraram os cenários 46 a 55 (bloco B7), rodados vermelhos
+  antes da correção: a linha nova positiva da EducaManto herdava a data da venda; a correção da aba
+  Comercial relia o portão vivo (vendedor que deixou de comissionar, responsável EducaManto trocado) e
+  mexia na comissão do retido; o cancelado com venda e sem pagamento ficava fora da DRE (e o BV pago,
+  fora do custo); a passagem levava a venda a um compromisso interno (🟧), que some das Cobranças; a
+  devolução rejeitada aparecia "a pagar" no resumo; o histórico da multa não dizia vaga nem dia; a
+  rota Jinja de emitir nota aceitava o Financeiro no cancelado; o estorno liquidado virava "Ajuste";
+  a aba Comercial e o excluir comprovante travavam fora da ordem do grupo; a referência do imposto
+  arredondava meio centavo para o par. Os de tela foram corrigidos e conferidos na tela aberta.
 
 ### 309 — Produtos de tabela: a Visita Mágica vendida pelo preço da tabela, com os cachês das vagas definidos pela tabela de preços   (309-produtos-de-tabela · 2026-10-19 · sem migration)
 

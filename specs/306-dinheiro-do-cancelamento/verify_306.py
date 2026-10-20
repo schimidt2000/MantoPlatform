@@ -7033,17 +7033,20 @@ def _c16e_taxa(rotulo: str) -> None:
 def c16e_mutacao() -> None:
     from app.financeiro import comissoes_ops
 
-    def sem_taxa(original):
-        def mutante(event, settings, **k):
-            k.pop("taxa", None)
-            return original(event, settings, **k)
+    # Desde o converge (T106) o recongelamento sem troca de vendedor faz a cheia em
+    # `cheia_do_congelado`: a mutação troca ali a taxa congelada pela de hoje.
+    def taxa_de_hoje(original):
+        def mutante(event, **k):
+            # Já dentro da requisição: a mesma sessão do app.
+            k["taxa"] = comissoes_ops._taxa_da_comissao(event, SiteSetting.query.get(1))
+            return original(event, **k)
 
         return mutante
 
     _sob_mutacao(
         comissoes_ops,
-        "comissao_cheia_do_evento",
-        sem_taxa,
+        "cheia_do_congelado",
+        taxa_de_hoje,
         lambda: _c16e_taxa("16e mutação"),
         "taxa de hoje",
     )
@@ -7264,6 +7267,322 @@ def c45c_mutacoes() -> None:
 
 
 # ── registro dos cenários, regressão e main ────────────────────────────────────────────────────
+# ── B7 · Convergência (T101; Phase 10 do tasks.md) ─────────────────────────────────────────────
+# Cada um nasceu de um achado confirmado da revisão adversarial e rodou VERMELHO antes da correção.
+
+
+def c46_educamanto_linha_nova_no_repasse() -> None:
+    """46 (T105; FR-031, FR-032, data-model §7.3): a linha nova positiva da EducaManto nasce no
+    primeiro repasse aberto e só libera no dia do evento — nunca com a data da venda."""
+    from app.financeiro import comissoes_ops
+
+    _configurar_educamanto()
+    try:
+        vend2 = estado["usuarios"]["vend2"]["id"]
+        m2 = _mes_anterior(_mes_anterior(_hoje_sp()))
+        antiga = date(m2.year, m2.month, 10)
+        inicio = _dias_a_frente(45)
+        ev = _evento("46 edu sem linha", titulo="(EDU) V306 46 SEM LINHA", inicio=inicio, venda_em=antiga)
+        _bv(ev, 200)
+        _comprovante(ev, 1000)
+        _ato(ev, hoje=_dia(10))
+        nova = _linhas_comissao(ev)
+        _garante(len(nova) == 1 and nova[0]["seller"] == vend2, f"46: a linha nova {nova}")
+        _garante(nova[0]["liberacao"] == inicio.date(), f"46: liberação {nova[0]['liberacao']}")
+        _garante(
+            (nova[0]["venda_em"].year, nova[0]["venda_em"].month) == (_dia(10).year, _dia(10).month),
+            f"46: a linha nova herdou a data da venda ({nova[0]['venda_em']}, venda em {antiga})",
+        )
+        # o mesmo ramo pelo corte de um dia, com a base paga (a variante "41 edu paga")
+        e2 = _grupo("46 edu paga", comissao=None)
+        _no_banco_escrever(
+            "UPDATE calendar_events SET title = :t, commission_rate = NULL, sale_date = :d WHERE id = :i",
+            t="(EDU) V306 46 PAGA",
+            d=antiga,
+            i=e2["principal"],
+        )
+        dia_pago = _evento_com_elenco("46 edu paga dia", ["X"], inicio=_data_isolada())
+        _agrupar(e2["principal"], dia_pago)
+        _escalar(dia_pago, estado["t"])
+        with app.app_context():
+            base = comissoes_ops._event_commission(
+                db.session.get(CalendarEvent, e2["principal"]), db.session.get(SiteSetting, 1)
+            )
+        paga = _linha_comissao(e2["principal"], float(base), status="pago", vendedor="vend2", venda_em=antiga)
+        with _com_hoje(_dia(10)):
+            rc = _corte(dia_pago, 3000, modo="nada", valor=None)
+        _garante(rc.status_code == 200, f"46 corte → {rc.status_code} {_erro(rc)}")
+        ajustes = [x for x in _linhas_comissao(e2["principal"]) if x["original_id"] == paga]
+        _garante(len(ajustes) == 1, f"46: o ajuste do corte {ajustes}")
+        _garante(
+            (ajustes[0]["venda_em"].year, ajustes[0]["venda_em"].month) == (_dia(10).year, _dia(10).month),
+            f"46: o ajuste herdou a data da venda ({ajustes[0]['venda_em']})",
+        )
+    finally:
+        _restaurar_config()
+
+
+def _retrato_47(ev: int) -> tuple:
+    c = _cancelamento(ev)
+    linhas = [(x["id"], q(Decimal(str(x["valor"]))), x["status"], x["seller"]) for x in _linhas_comissao(ev, vivas=False)]
+    return q(Decimal(str(c["cheia"]))), c["beneficiario"], linhas
+
+
+def c47_recongelar_sem_portao_vivo() -> None:
+    """47 (T106; FR-049, FR-051): a correção que não mexe na comissão não relê o portão vivo — o
+    vendedor que deixou de comissionar e o responsável EducaManto trocado não mudam o congelado."""
+    vend = _vendedor_proprio("vend47")
+    ex = _exemplo_padrao("47 portão", comissao="pago", vendedor="vend47")
+    _ato(ex["ev"], hoje=_dia(10))
+    antes = _retrato_47(ex["ev"])
+    _no_banco_escrever("UPDATE users SET receives_commission = false WHERE id = :i", i=vend)
+    try:
+        with _com_hoje(_dia(10)):
+            r = _patch_comercial(ex["ev"], payment_method="avista")
+        _garante(r.status_code == 200, f"47 A → {r.status_code} {_erro(r)}")
+        _garante(_retrato_47(ex["ev"]) == antes, f"47 A: o congelado/as linhas mudaram {antes} → {_retrato_47(ex['ev'])}")
+    finally:
+        _no_banco_escrever("UPDATE users SET receives_commission = true WHERE id = :i", i=vend)
+    _configurar_educamanto()
+    try:
+        ev = _evento("47 edu", titulo="(EDU) V306 47 EDU", inicio=_dias_a_frente(50))
+        _bv(ev, 200)
+        _comprovante(ev, 1000)
+        _linha_comissao(ev, 90, status="pago", vendedor="vend2")
+        _ato(ev, hoje=_dia(10))
+        antes = _retrato_47(ev)
+        _no_banco_escrever(
+            "UPDATE site_settings SET educamanto_seller_id = :u WHERE id = 1", u=estado["usuarios"]["vend"]["id"]
+        )
+        with _com_hoje(_dia(10)):
+            r = _patch_comercial(ev, payment_method="avista")
+        _garante(r.status_code == 200, f"47 B → {r.status_code} {_erro(r)}")
+        _garante(_retrato_47(ev) == antes, f"47 B: o congelado/as linhas mudaram {antes} → {_retrato_47(ev)}")
+    finally:
+        _restaurar_config()
+
+
+def c48_venda_sem_pago_na_dre() -> None:
+    """48 (T107; FR-044, FR-041): cancelado com venda e sem pagamento conta (sem venda e sem pago, não)."""
+    inicio, fim = _mes_corrente()
+    _vendedor_proprio("vend48")
+
+    def foto() -> tuple:
+        d = _dre(inicio, fim)
+        painel = d["paineis"]["cancelamentos"]
+        return (
+            d["dre"]["realizado"]["n_cancelados"],
+            q(Decimal(str(d["dre"]["realizado"]["cpv"]))),
+            painel["quantidade"],
+            {i["event_id"] for i in painel.get("itens") or []},
+        )
+
+    ev = _evento("48 venda sem pago", vendedor="vend48")
+    _bv(ev, 200, status="pago")
+    antes = foto()
+    _cancelar_ok(ev, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
+    depois = foto()
+    _garante(depois[0] == antes[0] + 1, f"48: n_cancelados {antes[0]} → {depois[0]}")
+    _igual(depois[1] - antes[1], 200, "48: o BV pago no custo")
+    _garante(depois[2] == antes[2] + 1 and ev in depois[3], f"48: o painel {antes[2]} → {depois[2]}")
+    vazio = _evento("48 sem venda", venda=None, vendedor=None)
+    _comprovante(vazio, None)
+    antes = foto()
+    r = _cancelar(vazio, {"motivo": "verify 306", "devolucao": {"modo": "nada"}})
+    _garante(r.status_code == 200, f"48 vazio → {r.status_code} {_erro(r)}")
+    _garante(foto()[0] == antes[0], "48: o cancelado sem venda e sem pago entrou na DRE")
+
+
+def c49_passagem_sem_compromisso_interno() -> None:
+    """49 (T108; FR-058, SC-008): a venda passa ao dia vivo mais cedo que não é compromisso interno."""
+    g = _grupo("49", dias=2, pagos=(1000, 500), comissao=None)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET title = :t WHERE id = :i", t="🟧 VISITA V306 49", i=g["dias"][0]
+    )
+    imp = _cliente("sa").get(ROTAS["impacto"].format(id=g["principal"])).get_json()
+    prox = (imp.get("grupo") or {}).get("proximo_principal") or {}
+    _garante(prox.get("id") == g["dias"][1], f"49: o próximo principal {prox} (a visita não recebe a venda)")
+    r = _cancelar(
+        g["principal"],
+        {
+            "motivo": "verify 306",
+            "devolucao": {"modo": "nada"},
+            "alcance": "so_este_dia",
+            "novo_principal_id": g["dias"][1],
+            "venda_nova": 3000,
+        },
+    )
+    _garante(r.status_code == 200, f"49 passagem → {r.status_code} {_erro(r)}")
+    passou = r.get_json().get("venda_passou_para")
+    passou = passou.get("id") if isinstance(passou, dict) else passou
+    _garante(passou == g["dias"][1], f"49: a venda passou para {passou}")
+    lider = _no_banco("SELECT group_leader_id, cancelled_at FROM calendar_events WHERE id = :i", i=g["dias"][0])[0]
+    _garante(lider[0] == g["dias"][1] and lider[1] is None, f"49: a visita {lider}")
+
+
+def c50_devolucao_rejeitada_fora_do_resumo() -> None:
+    """50 (T109; FR-025, data-model §5): o resumo lista só as devoluções aprovadas."""
+    ev = _evento("50 rejeitada")
+    _comprovante(ev, 1000)
+    rej = _devolucao_avulsa(ev, 300, status="pendente")
+    r = _cancelar(ev, _corpo_cancelar("parte", 600))
+    _garante(r.status_code == 409 and _codigo(r) == "devolucao_pendente", f"50: {r.status_code} {_codigo(r)}")
+    rr = _cliente("fin").post(ROTAS["gasto_rejeitar"].format(id=rej), json={"motivo": "verify 306"})
+    _garante(rr.status_code == 200, f"50 rejeitar → {rr.status_code}")
+    _cancelar_ok(ev, _corpo_cancelar("parte", 600))
+    resumo = _resumo_api(ev)
+    soma = sum((Decimal(str(d["valor"])) for d in resumo["devolucoes"]), Decimal("0"))
+    _garante(
+        len(resumo["devolucoes"]) == 1 and q(soma) == q(Decimal(str(resumo["devolvido"]))) == q(600),
+        f"50: devoluções do resumo {resumo['devolucoes']} (devolvido {resumo['devolvido']})",
+    )
+    lista = _cliente("sa").get(ROTAS["cancelamentos"]).get_json()
+    itens = lista.get("cancelados") or lista.get("items") or lista.get("cancelamentos") or []
+    item = [c for c in itens if c.get("id") == ev or c.get("event_id") == ev]
+    _garante(item and len(item[0]["resumo"]["devolucoes"]) == 1, f"50: a página de Cancelamentos {item}")
+
+
+def c51_historico_da_multa() -> None:
+    """51 (T113; FR-016): o histórico do ato traz cada multa com artista, vaga e dia."""
+    d1 = _evento_com_elenco("51 dia 1", ["A"], inicio=_dias_a_frente(80))
+    d2 = _evento_com_elenco("51 dia 2", ["B"], inicio=_dias_a_frente(81))
+    _agrupar(d1, d2)
+    v1, v2 = _escalar(d1, estado["t"]), _escalar(d2, estado["t"])
+    _cancelar_ok(
+        d1,
+        {
+            "motivo": "verify 306",
+            "devolucao": {"modo": "nada"},
+            "alcance": "todos",
+            "multas": [{"role_id": v1, "valor": 100}, {"role_id": v2, "valor": 120}],
+        },
+    )
+    msg = next((m for m, _ in _historico(d1) if "multa ao elenco" in m), "")
+    for vaga, dia, valor in ((v1, d1, "100,00"), (v2, d2, "120,00")):
+        nome = _no_banco("SELECT character_name FROM event_roles WHERE id = :i", i=vaga)[0][0]
+        quando = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=dia)[0][0].strftime("%d/%m")
+        _garante(nome in msg and quando in msg and valor in msg, f"51: falta vaga/dia/valor ({nome}, {quando}) em {msg!r}")
+
+
+def c52_nota_jinja_no_cancelado() -> None:
+    """52 (T114; FR-047, FR-053): a rota Jinja de emitir nota recusa o cancelado a quem não é
+    Superadmin real; o Superadmin e o evento vivo seguem."""
+    from app.models import EventInvoice
+
+    def nota(ev: int) -> int:
+        with app.app_context():
+            inv = EventInvoice(event_id=ev, amount=Decimal("100"), issue_date=_hoje_sp(), status="a_emitir")
+            db.session.add(inv)
+            db.session.commit()
+            return inv.id
+
+    def status(inv: int) -> str:
+        return _no_banco("SELECT status FROM event_invoices WHERE id = :i", i=inv)[0][0]
+
+    canc = _evento("52 cancelado", nota=True)
+    _comprovante(canc, 500)
+    n1 = nota(canc)
+    _cancelar_ok(canc, {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "imposto_retido": 0})
+    _cliente("fin").post(f"/financeiro/nf/{n1}/emitir", data={"issue_date": _hoje_sp().isoformat()})
+    _garante(status(n1) == "a_emitir", "52: o Financeiro emitiu nota de evento cancelado pela tela antiga")
+    _cliente("sa").post(f"/financeiro/nf/{n1}/emitir", data={"issue_date": _hoje_sp().isoformat()})
+    _garante(status(n1) == "emitida", "52: o Superadmin não emitiu a nota do cancelado")
+    vivo = _evento("52 vivo", nota=True)
+    n2 = nota(vivo)
+    _cliente("fin").post(f"/financeiro/nf/{n2}/emitir", data={"issue_date": _hoje_sp().isoformat()})
+    _garante(status(n2) == "emitida", "52: o Financeiro não emitiu a nota do evento vivo")
+
+
+def c53_tipo_do_estorno_liquidado() -> None:
+    """53 (T115; FR-037, data-model §7.3): o estorno é estorno pelo vínculo, em qualquer status."""
+    from app.financeiro import comissoes_ops
+    from app.models import CommissionPayment
+
+    vend = _vendedor_proprio("vend53")
+    ev = _evento("53 estorno", venda=None, vendedor="vend53")
+    _linha_comissao(ev, 100, status="pago", vendedor="vend53")
+    r = _cliente("sa").delete(ROTAS["excluir"].format(id=ev))
+    _garante(r.status_code == 200, f"53 excluir → {r.status_code}")
+    est = _no_banco(
+        "SELECT id FROM commission_payments WHERE event_id IS NULL AND original_id IS NOT NULL "
+        "AND seller_id = :s ORDER BY id DESC LIMIT 1",
+        s=vend,
+    )[0][0]
+
+    def tipo() -> str:
+        with app.app_context():
+            return comissoes_ops.tipo_da_linha(db.session.get(CommissionPayment, est))[0]
+
+    _garante(tipo() == "estorno", f"53: a pagar {tipo()}")
+    for st in ("no_banco", "pago"):
+        _no_banco_escrever("UPDATE commission_payments SET status = :s WHERE id = :i", s=st, i=est)
+        _garante(tipo() == "estorno", f"53: {st} virou {tipo()}")
+
+
+def c54_travas_em_ordem() -> None:
+    """54 (T116; plan §Travas, data-model §8 inv. 10): na T1 do grupo, a requisição ainda não segura
+    nenhuma linha do grupo — nem a do principal (aba Comercial) nem o KEY SHARE do histórico
+    (excluir comprovante). Sonda: FOR UPDATE NOWAIT por fora, na primeira T1."""
+    from app.calendar import cancel_ops
+
+    fora: list[str] = []
+
+    def fabrica(real):
+        vezes = {"n": 0}
+
+        def sonda(event):
+            db.session.flush()
+            vezes["n"] += 1
+            if vezes["n"] == 1:
+                principal = event.group_leader_id or event.id
+                ids = sorted({*cancel_ops.ids_do_grupo([principal])[principal], event.id})
+                lista = ",".join(str(i) for i in ids)
+                try:
+                    with _externo.connect() as c:
+                        c.execute(text(f"SELECT id FROM calendar_events WHERE id IN ({lista}) FOR UPDATE NOWAIT"))
+                        c.rollback()
+                except Exception as exc:  # noqa: BLE001 — 55P03: já travada fora de ordem
+                    fora.append(f"{event.id}: {type(exc).__name__}")
+            return real(event)
+
+        return sonda
+
+    g = _grupo("54 cancelado", dias=2)
+    _cancelar_ok(g["principal"], {"motivo": "verify 306", "devolucao": {"modo": "nada"}, "alcance": "todos"})
+    with _mutando(cancel_ops, "travar_grupo", fabrica):
+        r = _patch_comercial(g["principal"], payment_method="avista")
+    _garante(r.status_code == 200, f"54 comercial → {r.status_code} {_erro(r)}")
+    _garante(not fora, f"54: a aba Comercial travou fora de ordem {fora}")
+    g2 = _grupo("54 vivo", dias=2)
+    pg = _comprovante(g2["dias"][0], 200)
+    with _mutando(cancel_ops, "travar_grupo", fabrica):
+        r = _cliente("sa").delete(ROTAS["comprovante_um"].format(id=pg))
+    _garante(r.status_code == 200, f"54 excluir comprovante → {r.status_code} {_erro(r)}")
+    _garante(not fora, f"54: excluir comprovante travou fora de ordem {fora}")
+    _garante(
+        any("Excluiu comprovante" in m for m, _ in _historico(g2["dias"][0])),
+        "54: o histórico do comprovante excluído sumiu",
+    )
+
+
+def c55_imposto_referencia_half_up() -> None:
+    """55 (T104; Constituição V, FR-009): a referência do imposto em ROUND_HALF_UP."""
+    with app.app_context():
+        original = db.session.get(SiteSetting, 1).tax_rate
+    _no_banco_escrever("UPDATE site_settings SET tax_rate = 15 WHERE id = 1")
+    try:
+        ev = _evento("55 imposto", venda=1500, nota=True)
+        _comprovante(ev, 1500)
+        r = _previa(ev, 499.70)
+        _garante(r.status_code == 200, f"55 prévia → {r.status_code} {_erro(r)}")
+        efeito = r.get_json()["efeito"]
+        _igual(efeito["retido"], Decimal("1000.30"), "55: retido")
+        _igual(efeito["imposto_referencia"], Decimal("150.05"), "55: imposto de referência (HALF_UP)")
+    finally:
+        _no_banco_escrever("UPDATE site_settings SET tax_rate = :t WHERE id = 1", t=original)
+
+
+
 CENARIOS: list[tuple[str, str, str, Callable[[], None]]] = [
     ("B0", "1", "chão e a casca da comissão (main × branch)", c1_chao_e_casca),
     ("B0", "16b", "cheia 0 no núcleo (cortesia e sem vendedor)", c16b_cheia_zero_nucleo),
@@ -7359,6 +7678,16 @@ CENARIOS: list[tuple[str, str, str, Callable[[], None]]] = [
     ("B6", "45b", "multa depois do ato", c45b_multa_depois),
     ("B6", "45c", "multa a quem saiu da escala", c45c_tirado_da_vaga),
     ("B6", "45c", "mutações: lista da escala de hoje, remoção sem a condição", c45c_mutacoes),
+    ("B7", "46", "EducaManto: linha nova no primeiro repasse aberto", c46_educamanto_linha_nova_no_repasse),
+    ("B7", "47", "correção sem reler o portão vivo", c47_recongelar_sem_portao_vivo),
+    ("B7", "48", "cancelado com venda e sem pago na DRE", c48_venda_sem_pago_na_dre),
+    ("B7", "49", "passagem pula o compromisso interno", c49_passagem_sem_compromisso_interno),
+    ("B7", "50", "devolução rejeitada fora do resumo", c50_devolucao_rejeitada_fora_do_resumo),
+    ("B7", "51", "histórico da multa com vaga e dia", c51_historico_da_multa),
+    ("B7", "52", "nota pela tela antiga no cancelado", c52_nota_jinja_no_cancelado),
+    ("B7", "53", "tipo do estorno liquidado", c53_tipo_do_estorno_liquidado),
+    ("B7", "54", "travas em ordem (comercial e comprovante)", c54_travas_em_ordem),
+    ("B7", "55", "imposto de referência em HALF_UP", c55_imposto_referencia_half_up),
 ]
 # O 26 roda por último (antes da limpeza): "antes e depois do verify inteiro".
 FINAIS = [("B0", "26", "passado quieto e contagem só leitura", c26_passado_quieto)]

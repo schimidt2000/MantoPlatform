@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Pencil } from "lucide-react";
 import { Badge, Button, ConfirmDialog } from "@manto/ui";
-import { ApiRequestError, assetUrl } from "@manto/api-client";
+import { ApiRequestError } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe, RelatorioOrcamento } from "../../lib/agenda";
 import { useEventCreateOptions, useOrcamentoPrefill } from "../../lib/eventCreate";
@@ -25,6 +25,7 @@ import { dataBr, OrcamentoPicker } from "../OrcamentoPicker";
 import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
+import { GastosVinculados } from "./GastosVinculados";
 import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
 import { ResultadoCancelamento } from "./ResultadoCancelamento";
 
@@ -141,39 +142,7 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
         />
       </div>
 
-      {gastos.length > 0 && (
-        <div className="mt-3">
-          <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-muted">
-            Gastos extras vinculados (aprovados)
-          </div>
-          <ul className="divide-y divide-line text-sm">
-            {gastos.map((gasto) => (
-              <li key={gasto.id} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="min-w-0 truncate text-ink">
-                  {gasto.description}
-                  <span className="ml-2 text-xs text-muted">{gasto.category}</span>
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <span className="text-xs text-muted tabular-nums">
-                    {formatDay(gasto.expense_date)}
-                  </span>
-                  <span className="tabular-nums text-ink">{brl(gasto.amount)}</span>
-                  {gasto.receipt_path && (
-                    <a
-                      href={assetUrl(gasto.receipt_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue underline"
-                    >
-                      Ver
-                    </a>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <GastosVinculados gastos={gastos} />
     </Panel>
   );
 }

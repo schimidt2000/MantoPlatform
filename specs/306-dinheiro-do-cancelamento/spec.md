@@ -1722,7 +1722,9 @@ ensaio do 42, a multa do 4 e do 42b, e o cachê pago do 42d. Os dois primeiros c
   - depois do corte, nova mudança da venda viva segue a regra de hoje (o acerto é da 1e).
 - **FR-058**: "Cancelar só este dia" **no principal** que tem outro dia vivo DEVE passar a venda e cancelar o
   antigo 1º dia (Q5 = B; L1273-1287, L1553-1558):
-  - **Para quem vai**: ao dia vivo mais cedo, sem contar o antigo 1º dia (por data e hora; no empate, pelo id). O
+  - **Para quem vai**: ao dia vivo mais cedo, sem contar o antigo 1º dia (por data e hora; no empate, pelo id). *Converge
+    (T108)*: nunca a um compromisso interno (🟧/🟠), que a cobrança da Home não lista (regra da 299); só compromisso
+    interno vivo → 409 `sem_outro_dia_vivo`. O
     diálogo mostra antes de confirmar: "A venda, os comprovantes, a comissão, o BV, as parcelas, a nota e o
     contrato passam para DD/MM — título".
   - **O antigo 1º dia**: cancela como um dia qualquer (regime `dia`, com a venda nova informada).
