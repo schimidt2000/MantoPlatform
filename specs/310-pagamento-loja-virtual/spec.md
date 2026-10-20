@@ -340,8 +340,8 @@ real e de um Pix de verdade); resultado registrado na spec.
   terminam o trabalho.
 - QR Pix pago depois de a reserva expirar com o horário ainda livre e futuro → vira venda (como hoje).
 - QR Pix pago depois de o horário passar → devolução.
-- Troca do segredo com pedidos abertos → os avisos do segredo antigo continuam aceitos por um tempo
-  ou caem na reconsulta pelo retorno/varredura (o plano decide); nunca dinheiro sem dono.
+- Troca do segredo com pedidos abertos → o segredo anterior continua aceito por 24 h (R-12); nunca
+  dinheiro sem dono.
 - Família reserva para dois irmãos na mesma aba → dois pedidos distintos.
 
 ## Requisitos *(obrigatório)*

@@ -39,7 +39,9 @@ conexão separada; limpeza no `finally`.
       backfill `state='decidido'` onde `outcome` não é nulo; downgrade completo); aplicar no
       `manto_local`; ida e volta
 - [ ] T005 [P] Trava `_suppress_infinitepay()` + config `INFINITEPAY_SUPPRESS_CALLS` e
-      `INFINITEPAY_API_KEY` (default `""`) em `app/config.py` (R5, R12; molde da 303)
+      `INFINITEPAY_API_KEY` (default `""`) em `app/config.py` (R5, R12; molde da 303); o
+      `create_app` registra uma linha no log da subida quando a chave está ausente ("link sem
+      validade — fluxo legado", constituição XIV)
 - [ ] T006 Cliente `app/integracoes/infinitepay_client.py`: resultado de reconsulta em 4 valores
       (`pago`/`nao_pago`/`nao_encontrado`/`nao_sei`, R4) com `success:false` = `nao_encontrado`;
       `InfinitePayRecusou` carrega `code` (`body.error` ou `message`) e status; `InfinitePayTravada`
@@ -105,7 +107,7 @@ conexão separada; limpeza no `finally`.
       (contrato; R-08; limite 20/min por IP do cliente) chamando `registrar_retorno` em `virtuais_ops.py`
 - [ ] T021 [P] [US2] `PedidoVirtualPage.tsx` lê a query do retorno uma vez, chama o endpoint e limpa a
       URL (`history.replaceState`); hook em `frontend/apps/public/src/lib/virtuais.ts`
-- [ ] T022 [US2] Rodar cenários 8–15 até verde; mutação: gravar identificadores antes da prova →
+- [ ] T022 [US2] Rodar cenários 8–15 até verde (o 8 mede o tempo do retorno até "pago", SC-003); mutação: gravar identificadores antes da prova →
       cenário 15 acusa
 
 ---
@@ -167,13 +169,14 @@ conexão separada; limpeza no `finally`.
 - [ ] T038 [US6] `GET /api/virtuais/pagamentos-a-conferir` em `virtuais_read.py` e `PATCH …/<tipo>/<id>`
       em `virtuais_write.py` (COMERCIAL, SUPERADMIN; função de RBAC no início da view)
 - [ ] T039 [US6] `cancelar_pedido_pago(order, motivo)` em `virtuais_ops.py` (R15, R-19: travas,
-      horário, evento local e Google, entrega, presente via `delete_event_gift`, devolução
+      horário, evento local e Google, entrega, presente via `delete_event_gift` se a impressão não
+      começou — se começou, fica e entra em "a conferir" (R-04) —, devolução
       `desistencia`, e-mail) + `POST /api/virtuais/pedidos/<id>/cancelar` em `virtuais_write.py`
 - [ ] T040 [P] [US6] `VirtuaisDevolucoesPage.tsx`: aba "Pagamentos a conferir" (NSU, slug, recibo,
       data, valor) com "marcar como resolvido"; mostrar `order_nsu` e data nas devoluções
-- [ ] T041 [P] [US6] Botão "Cancelar e abrir devolução" com confirmação e motivo na tela de gestão
-      do pedido (`VirtuaisCampanhaFormPage.tsx` ou a fila de produção que lista pedidos pagos — conferir
-      onde o pedido pago aparece hoje antes de escolher)
+- [ ] T041 [P] [US6] Botão "Cancelar e abrir devolução" com confirmação e motivo na linha do pedido
+      pago da Fila de Produção (`frontend/apps/internal/src/pages/FilaProducaoMidiaPage.tsx`, rota
+      `/virtuais/producao`) + hook em `frontend/apps/internal/src/lib/virtuais.ts`
 - [ ] T042 [US6] Sino na devolução nova e no "a conferir" novo (dedupe por item)
 - [ ] T043 [US6] Rodar cenários 30–32 e 36
 
@@ -236,8 +239,8 @@ conexão separada; limpeza no `finally`.
 - [ ] T059 Revisão adversarial por workflow (finders por dimensão + um cético por achado) do diff
       inteiro antes do commit final
 - [ ] T060 Docs: `docs/01` (§4.3 RBAC, contratos, variáveis), `docs/02` (telas), `docs/03` (entrada
-      no topo + índice), `docs/04` (máquina de estados e invariantes), `docs/05` (risca 88? não —
-      registra limitador em memória; risca o que quitou), `DEVELOPMENT.md` (§Operar a produção:
+      no topo + índice), `docs/04` (máquina de estados e invariantes), `docs/05` (registra o limitador em
+      memória por processo e "História 9 desligada até a API Key"; não mexe no item 88), `DEVELOPMENT.md` (§Operar a produção:
       ligar/desligar a loja, teste de R$ 1, trava local, regra R-20), skill `manto-deploy` (R-20)
 - [ ] T061 `/speckit-converge` até não sobrar tarefa nova
 - [ ] T062 Pré-merge: rebase na `main` do dia; reencadear `down_revision`; ensaio de
