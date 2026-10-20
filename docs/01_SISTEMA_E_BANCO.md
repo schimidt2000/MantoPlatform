@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · Em branch: **306-dinheiro-do-cancelamento** (migration
+> Última atualização: **2026-10-20** · **306-dinheiro-do-cancelamento** (EM PRODUÇÃO desde 20/10/2026 ~09:30; migration
 > **`c5d2f7a9e306`** — head: as tabelas `event_cancellations`, `event_cancellation_bvs` e
 > `event_cancellation_elenco`, §2.2; o ajuste e o `no_banco` das comissões, a categoria "Multa de
 > cancelamento" e a devolução de cancelado travada, §2.6; a cobrança desconta a devolução, §3.2;
