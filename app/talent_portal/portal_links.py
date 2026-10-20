@@ -26,6 +26,10 @@ LEGACY_RESET_PATH = "/portal/reset-password"
 #: sem ele o link cai na agenda, e a pessoa que veio consertar a foto não acha onde fazer isso.
 FOTOS_PATH = "/fotos-documentos"
 
+#: Tela do portal com o Termo de Consentimento (leitura para quem já aceitou; o `OnboardingGate`
+#: pede o aceite antes para quem não aceitou). Destino do aviso de prazo de pagamento (311).
+TERMOS_PATH = "/termos"
+
 
 def portal_base_url() -> str:
     """Base absoluta do Portal do Artista, sem barra final.

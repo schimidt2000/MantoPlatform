@@ -1678,7 +1678,8 @@ aceita um id de talento vindo do cliente. Não há papéis dentro do portal.
 
 **Autenticação e conta**
 `POST /api/portal/auth/login`, `/logout` · `GET /api/portal/auth/me` (devolve
-`must_change_password`, `terms_accepted` e `pending_steps`) ·
+`must_change_password`, `terms_accepted`, `terms_accepted_at` — horário de parede de São Paulo em
+ISO ingênuo, `null` sem aceite, desde a 311 — e `pending_steps`) ·
 
 > `must_redirect_to_classic` **saiu do payload do login na 206**. Virou sempre `false` na 191
 > (troca de senha e aceite de termos passaram a ser telas React, guiadas por `pending_steps`) e
@@ -1804,6 +1805,11 @@ Rotas legadas que **ainda têm uso real** (não são só resíduo):
   do que se perdeu (293). Dry-run por padrão; dedup no `AuditLog` (`action="campanha_fotos_292"`);
   pula devolução permanente em aberto e entrega essas pessoas como lista de WhatsApp; uma conexão
   SMTP para o lote.
+- `flask campanha-prazo-pagamento [--enviar] [--limite N] [--pausa S] [--id N]` — avisa os
+  talentos ativos de que o cachê sai em até 3 dias úteis (311). Mesmo molde do `campanha-fotos`
+  (dedup em `action="campanha_prazo_pagamento_311"`). Duas versões: quem aceitou o termo recebe a
+  data do aceite e o link `/termos`; quem não aceitou recebe o link de criar senha de 7 dias com
+  `?destino=/termos` (sem senha, ou só a temporária) ou o `/termos` (com senha própria).
 - ⚠️ **`MANTO_SEM_THREADS=1`** na frente de qualquer `flask <comando>` no Shell do Render: sem
   isso, `create_app()` sobe o auto-import de talentos (que **escreve no banco** a partir da
   planilha), o sync da agenda e o backup para o Drive.

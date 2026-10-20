@@ -832,6 +832,192 @@ def register_commands(app):
         click.echo(f"  Para mandar à mão (WhatsApp): {len(com_bounce)}")
         click.echo("")
 
+    @app.cli.command("campanha-prazo-pagamento")
+    @click.option("--enviar", is_flag=True, help="envia de verdade (padrão: só mostra)")
+    @click.option("--limite", type=int, default=None, help="manda só para os N primeiros")
+    @click.option("--pausa", type=float, default=3.0, help="segundos entre um envio e o próximo")
+    @click.option(
+        "--id",
+        "ids",
+        type=int,
+        multiple=True,
+        help="restringe a estes talentos (repetível) — para testar ou reenviar a uma pessoa só",
+    )
+    def campanha_prazo_pagamento(
+        enviar: bool, limite: int | None, pausa: float, ids: tuple[int, ...]
+    ):
+        """Avisa o banco de talentos de que o cachê sai em até 3 dias úteis (311).
+
+        **Dry-run por padrão**: lista quem receberia, em qual versão, quem é pulado e por quê, e
+        mostra um exemplo de cada versão. Só com `--enviar` sai mensagem. Mesmos cuidados do
+        `campanha-fotos` (dedup no `AuditLog`, uma conexão SMTP, `--pausa`, `--limite`, e-mail
+        morto vai para a lista de WhatsApp).
+
+        Duas versões, porque nem todo mundo aceitou o termo:
+
+        - **aceitou** — diz a data do aceite e leva a `/termos`;
+        - **não aceitou** — leva ao primeiro acesso. Quem não tem senha própria (sem senha, ou só a
+          temporária) recebe um link de criar senha de 7 dias com `?destino=/termos`; quem tem
+          senha recebe o link de `/termos`, que passa pelo login.
+
+        No Shell do Render, use `MANTO_SEM_THREADS=1` na frente.
+        """
+        import time
+
+        from app import db
+        from app.email_service import mail, send_prazo_pagamento_email
+        from app.models import AuditLog, EmailBounce, Talent
+        from app.talent_portal.portal_account_ops import (
+            CAMPANHA_RESET_TTL,
+            aceite_do_termo_para_exibir,
+            emitir_token_de_reset,
+        )
+        from app.talent_portal.portal_links import TERMOS_PATH, portal_base_url, portal_reset_url
+        from app.utils import audit
+
+        ACAO = "campanha_prazo_pagamento_311"
+        validade_dias = CAMPANHA_RESET_TTL.days
+
+        def precisa_criar_senha(talento) -> bool:
+            # Senha temporária é a que o casting gerou e a pessoa nunca usou: mandar para o login
+            # seria mandar para uma senha que ela não sabe.
+            return not talento.password_hash or bool(talento.must_change_password)
+
+        def versao(talento) -> str:
+            if talento.terms_accepted_at:
+                return "aceitou"
+            return "nao aceitou, criar senha" if precisa_criar_senha(talento) else "nao aceitou, tem senha"
+
+        consulta = Talent.query.filter_by(status="active")
+        if ids:
+            consulta = consulta.filter(Talent.id.in_(ids))
+        ativos = consulta.order_by(Talent.full_name).all()
+
+        emails = [(t.email_contact or "").strip().lower() for t in ativos]
+        mortos = {
+            b.email.lower()
+            for b in EmailBounce.query.filter(
+                EmailBounce.is_permanent.is_(True),
+                EmailBounce.resolved_at.is_(None),
+                db.func.lower(EmailBounce.email).in_([e for e in emails if e]),
+            ).all()
+        }
+        ja_recebeu = {
+            linha.entity_id
+            for linha in AuditLog.query.filter_by(entity_type="Talent", action=ACAO).all()
+        }
+
+        vao_receber, sem_email, com_bounce, repetidos = [], [], [], []
+        for talento in ativos:
+            endereco = (talento.email_contact or "").strip()
+            if not endereco:
+                sem_email.append(talento)
+            elif endereco.lower() in mortos:
+                com_bounce.append(talento)
+            elif talento.id in ja_recebeu:
+                repetidos.append(talento)
+            else:
+                vao_receber.append(talento)
+
+        if limite is not None:
+            vao_receber = vao_receber[:limite]
+
+        def bloco(titulo: str, itens: list, extra=None) -> None:
+            click.echo("")
+            click.echo(f"  {titulo} ({len(itens)})")
+            click.echo(f"  {'-' * 70}")
+            for talento in itens:
+                click.echo(f"  #{talento.id:<5} {(talento.full_name or '')[:34]:<34} {versao(talento)}")
+                click.echo(f"        {talento.email_contact or '(sem e-mail)'}")
+                if extra:
+                    click.echo(f"        {extra(talento)}")
+
+        bloco("VÃO RECEBER", vao_receber)
+        bloco(
+            "PULADOS — devolução permanente, MANDAR POR WHATSAPP",
+            com_bounce,
+            lambda t: f"WhatsApp: https://wa.me/{t.whatsapp_number or '(sem telefone)'}",
+        )
+        bloco("PULADOS — já receberam nesta campanha", repetidos)
+        bloco("PULADOS — sem e-mail no cadastro", sem_email)
+
+        contagem: dict[str, int] = {}
+        for talento in vao_receber:
+            contagem[versao(talento)] = contagem.get(versao(talento), 0) + 1
+        click.echo("")
+        click.echo("  Por versão: " + ", ".join(f"{k} = {v}" for k, v in sorted(contagem.items())))
+
+        termos_url = f"{portal_base_url()}{TERMOS_PATH}"
+
+        def link_do_botao(talento) -> tuple[str, int | None]:
+            """Link do botão e, quando é o de criar senha, a validade dele (grava token, sem commit)."""
+            if talento.terms_accepted_at or not precisa_criar_senha(talento):
+                return termos_url, None
+            token = emitir_token_de_reset(talento, CAMPANHA_RESET_TTL)
+            return portal_reset_url(token, TERMOS_PATH), validade_dias
+
+        if not enviar:
+            exemplos = {}
+            for talento in vao_receber:
+                exemplos.setdefault(versao(talento), talento)
+            for nome, talento in sorted(exemplos.items()):
+                url, _ = link_do_botao(talento)
+                db.session.rollback()  # dry-run não grava token nenhum
+                aceite = aceite_do_termo_para_exibir(talento)
+                click.echo("")
+                click.echo(f"  {'=' * 70}")
+                click.echo(f"  EXEMPLO ({nome}) — o que {talento.full_name} receberia:")
+                click.echo(f"  {'=' * 70}")
+                click.echo("  Assunto: Prazo de pagamento: até 3 dias úteis")
+                click.echo(f"  Para:    {talento.email_contact}")
+                click.echo(f"  Aceite:  {aceite.strftime('%d/%m/%Y %H:%M') if aceite else '(não aceitou)'}")
+                click.echo(f"  Botão:   {url}")
+            click.echo("")
+            click.echo("  DRY-RUN — nenhum e-mail saiu. Repita com --enviar para disparar.")
+            click.echo("")
+            return
+
+        enviados = falhou = 0
+        with mail.connect():
+            for indice, talento in enumerate(vao_receber):
+                try:
+                    url, validade = link_do_botao(talento)
+                    db.session.commit()
+                    ok = send_prazo_pagamento_email(
+                        talento,
+                        aceite=aceite_do_termo_para_exibir(talento),
+                        acao_url=url,
+                        validade_dias=validade,
+                    )
+                except Exception as exc:  # noqa: BLE001 — uma falha não pode parar a fila
+                    db.session.rollback()
+                    click.echo(f"  ERRO   #{talento.id} {talento.full_name}: {exc}")
+                    falhou += 1
+                    continue
+
+                if ok:
+                    # Marca DEPOIS do envio dar certo: e-mail que não saiu não gasta a vez.
+                    audit(
+                        action=ACAO,
+                        entity_type="Talent",
+                        entity_id=talento.id,
+                        entity_name=talento.full_name,
+                        detail=f"Aviso do prazo de pagamento ({versao(talento)})",
+                    )
+                    db.session.commit()
+                    enviados += 1
+                    click.echo(f"  enviado  #{talento.id} {talento.email_contact}")
+                else:
+                    falhou += 1
+                    click.echo(f"  NAO SAIU #{talento.id} {talento.email_contact}")
+                if pausa and indice < len(vao_receber) - 1:
+                    time.sleep(pausa)
+
+        click.echo("")
+        click.echo(f"  Enviados: {enviados}   Falhas: {falhou}")
+        click.echo(f"  Para mandar à mão (WhatsApp): {len(com_bounce)}")
+        click.echo("")
+
     @app.cli.command("notificacoes-limpar")
     @click.option("--execute", is_flag=True, help="apaga de verdade (padrão: só conta)")
     def notificacoes_limpar(execute: bool):

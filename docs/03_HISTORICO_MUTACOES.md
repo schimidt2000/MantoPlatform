@@ -143,6 +143,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **311-aviso-prazo-pagamento** | *(pronta na branch, aguardando deploy)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
 | **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
@@ -320,6 +321,46 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
+
+> **Pronta na branch, aguardando deploy.** Nível 2: um comando de manutenção, um campo a mais no
+> `/api/portal/auth/me` e uma frase na tela do termo. Spec: `specs/311-aviso-prazo-pagamento/spec.md`.
+
+**O pedido.** A equipe costuma pagar o cachê em 2 dias úteis, e a base se acostumou. Quando o
+banco atrasa para o terceiro dia, alguém sai mandando mensagem. O termo do portal diz "em até 3
+(três) dias úteis após a realização do evento" desde a primeira versão (`terms.html`, commit
+`37b61267`, 06/04/2026). O primeiro aceite registrado é de 30/04/2026. O dono quis avisar todo
+mundo por e-mail, dizendo onde cada um vê o termo aceito, e pediu também a data do aceite na tela.
+
+**A pegadinha.** "Todo mundo aceitou" não é verdade. No backup de 20/10 02:00, 181 dos 309 ativos
+tinham aceitado e 128 não. Desses, 122 nunca criaram senha, e 30 já tinham trabalhado em evento sem
+o aceite (dívida 132). Por isso o e-mail tem duas versões e nunca diz "você aceitou" a quem não
+aceitou.
+
+**O que mudou.**
+- `flask campanha-prazo-pagamento` (`app/cli.py`), no molde do `campanha-fotos`: dry-run por
+  padrão, dedup no `AuditLog`, devolução permanente vira lista de WhatsApp e uma conexão SMTP por
+  lote.
+- `send_prazo_pagamento_email` (`app/email_service.py`). O link de criar senha vai para quem não
+  tem senha ou só tem a temporária: `must_change_password` nasce `True` no modelo, então a pessoa
+  não sabe a senha que tem.
+- `portal_account_ops.aceite_do_termo_para_exibir`: a coluna fica em UTC, só a exibição converte
+  para São Paulo. Um aceite às 22h30 sairia com a data do dia seguinte.
+- `terms_accepted_at` no `_talent_to_dict` (login, me, aceite). Na tela: "Você aceitou este termo
+  em 12 de junho de 2026.". O campo é opcional no tipo, para o bundle novo não quebrar com o
+  backend antigo durante o deploy.
+- `TERMOS_PATH` em `portal_links`. O host `portal.*` redireciona `/termos` para `/portal/termos`
+  mantendo a query.
+
+**Verificação.** `verify_311.py` deu 8/8. Na prova de mutação (a coluna crua no lugar da conversão)
+caem 3 cenários: 03, 05 e 06b. A tela `/termos` foi aberta a 375px com um aceite às 22h30 e mostra
+o dia certo, sem rolagem horizontal. O typecheck passou. O `ruff` só acusa os dois avisos antigos
+da `main` (`cli.py:325` F841, `portal_auth.py` I001). O dry-run no `manto_local` deu 288 a receber
+(165 aceitaram, 123 sem senha própria) e 9 com devolução.
+
+**Como rodar em produção** (Shell do Render, `manto-backend`), depois do deploy:
+`MANTO_SEM_THREADS=1 flask campanha-prazo-pagamento` (confira) → `--enviar --limite 20` → `--enviar`.
 
 ### 306b — O motivo do cancelamento editável por Superadmin e Comercial   (306b-motivo-editavel · 2026-10-20 · sem migration)
 

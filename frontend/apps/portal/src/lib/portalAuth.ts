@@ -16,6 +16,11 @@ export interface PortalTalent {
   photo_full_url: string | null;
   must_change_password: boolean;
   terms_accepted: boolean;
+  /**
+   * Quando aceitou o termo, em ISO naïve no horário de Brasília. `null` = ainda não aceitou.
+   * Opcional porque, nos minutos de um deploy, o bundle novo pode falar com o backend antigo.
+   */
+  terms_accepted_at?: string | null;
   /** Etapas pendentes, na ordem em que devem ser feitas. Vazia = conta em dia. */
   pending_steps: PortalPendingStep[];
 }

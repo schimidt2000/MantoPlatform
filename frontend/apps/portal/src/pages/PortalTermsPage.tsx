@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@manto/ui";
 import { FormError } from "../components/FormField";
+import { formatLongDate } from "../lib/format";
 import { useAcceptTerms } from "../lib/portalAccount";
 import { useCurrentTalent } from "../lib/portalAuth";
 import {
@@ -90,7 +91,11 @@ export function PortalTermsPage({ viewOnly = false }: { viewOnly?: boolean }) {
       {alreadyAccepted ? (
         <div className="flex items-center justify-center gap-2 rounded-md bg-green-soft px-3 py-3 text-sm text-green">
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden="true" />
-          <span>Você já aceitou este termo.</span>
+          <span>
+            {talent?.terms_accepted_at
+              ? `Você aceitou este termo em ${formatLongDate(talent.terms_accepted_at)}.`
+              : "Você já aceitou este termo."}
+          </span>
         </div>
       ) : (
         <div className="space-y-3">
