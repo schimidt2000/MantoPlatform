@@ -122,7 +122,7 @@ esperando a mesma chamada.
    ele não foi pago, **Então** o pedido termina pago e o horário vendido — nunca "expirado".
 4. **Dado** dois pagamentos atrasados de pedidos expirados no mesmo horário, **Quando** os avisos
    chegam, **Então** o primeiro vira venda e o segundo vira devolução.
-5. **Dado** um horário que já começou (ou está dentro da antecedência mínima), **Quando** chega o
+5. **Dado** um horário que já começou (ou começa em menos de 30 minutos), **Quando** chega o
    pagamento de um pedido dele, **Então** o pedido vai para devolução e a família recebe o e-mail
    de cancelamento.
 6. **Dado** vídeo gravado com 1 vaga e duas famílias pagando, **Quando** os dois pagamentos
@@ -352,7 +352,8 @@ real e de um Pix de verdade); resultado registrado na spec.
 
 - **FR-001**: Uma única regra decide se um pagamento vira venda, usada pelo aviso **e** pela
   varredura: pedido relido com trava; pago com valor conferido; horário ainda deste pedido; horário
-  no futuro além da antecedência mínima; vaga de vídeo disponível. Falhou qualquer item →
+  começando a mais de 30 minutos (folga de preparo no pagamento — a antecedência de 2 h do FR-006 vale
+  para reservar; research R1.6); vaga de vídeo disponível. Falhou qualquer item →
   devolução (se houve pagamento) ou alerta (se não há prova).
 - **FR-002**: A venda grava o dono do horário; um horário vendido nunca volta à vitrine por
   liberação de outro pedido.
