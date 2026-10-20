@@ -1,7 +1,7 @@
 # 306b — O motivo do cancelamento editável por Superadmin e Comercial
 
-**Branch**: `306b-motivo-editavel` · **Created**: 2026-10-20 · **Status**: Implementada (aguarda o push
-do dono) · **Migration**: nenhuma
+**Branch**: `306b-motivo-editavel` · **Created**: 2026-10-20 · **Status**: EM PRODUÇÃO desde
+20/10/2026 ~12:00 · **Migration**: nenhuma
 
 ## O pedido
 
