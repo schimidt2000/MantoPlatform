@@ -5,6 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **306b-motivo-editavel** (sem migration; **pronta para o merge, ainda NÃO publicada** — o motivo do
+> cancelamento editável por Superadmin e Comercial, no ato inteiro e no histórico; `verify_306b.py` 8/8)
+> — antes dela pós-feature
 > **306-dinheiro-do-cancelamento** (migration `c5d2f7a9e306`, três tabelas novas; **EM PRODUÇÃO desde
 > 20/10/2026 ~09:30** pelo merge `merge: 306 — …` sobre a `main` `8b0860d`, a pedido do dono, em
 > horário comercial — cancelar devolvendo o dinheiro: o retido entra na DRE, na comissão
@@ -140,6 +143,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **306b-motivo-editavel** | *(pronta para o merge, ainda NÃO publicada)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
 | **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
 | **308-casting-sem-compromisso-interno** | *(EM PRODUÇÃO 19/10 ~22:15)* Os painéis Casting e Figurino da Home deixam de listar evento marcado com 🟧/🟠 (compromisso interno — a mesma marca da 299), o que tira também o `🟧 - ENSAIO` que escapava do filtro de ensaio pelo hífen. O SUPERADMIN ganha **Dispensar** na linha e **Restaurar** na lista de dispensados, direto da Home; Casting não dispensa (decisão do dono) | 2026-10-19 | `—` | (aqui) | — |
@@ -285,7 +289,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
@@ -316,6 +320,47 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 306b — O motivo do cancelamento editável por Superadmin e Comercial   (306b-motivo-editavel · 2026-10-20 · sem migration)
+
+> **Pronta para o merge, ainda NÃO publicada** — o merge e o push são do pedido do dono. Nível 2
+> (hotfix da 306), com um endpoint pequeno: o dono pediu como correção do que acabara de subir.
+
+**O pedido.** Às 09:39 de 20/10, sete minutos depois do deploy da 306, uma Superadmin cancelou um
+evento escrevendo no motivo o que a cliente tinha dito, e quis tirar o texto: o motivo aparece no
+banner do evento para todo usuário interno, e o cancelamento não tem volta. O dono: "Faça com que
+o motivo do cancelamento seja editável por superadmin e comercial"; sobre o histórico, "trocar no
+histórico também".
+
+**O que mudou.**
+- `cancel_ops.editar_motivo_do_cancelado` (T1 `travar_grupo` → 409 `nao_cancelado` → 400
+  `fields.motivo`) troca o motivo do evento e dos dias do mesmo grupo cancelados com o **mesmo**
+  texto, que é o ato de "todos os dias".
+- No `EventLog` e no `AuditLog` `event_cancelled` desses dias, o texto antigo vira o novo só logo
+  depois dos prefixos que o ato grava (`Evento cancelado: `, `Dia cancelado: ` e
+  `Evento cancelado com todos os dias do grupo de "…": `) e seguido de ` | ` ou do fim da linha.
+- Cada dia ganha "Editou o motivo do cancelamento", sem o texto antigo.
+- O gate é `pode_editar_motivo_do_cancelado`: Superadmin ou Comercial pelo papel real. A flag
+  `can_edit_motivo_cancelado` segue o "Ver como".
+- Na tela, o botão "Editar motivo" no banner abre o `EditarMotivoDialog`, e o campo do motivo no
+  diálogo de cancelar ganhou "Aparece para quem abre o evento.".
+- O dinheiro, a comissão, os avisos e o Google não mudam. O e-mail aos artistas e o sino do
+  Casting nunca levaram o motivo.
+
+**Verificação.** `verify_306b.py` 0/8 antes do núcleo (rota inexistente, flag ausente) e 8/8
+depois:
+- Comercial e Superadmin editam (o "Ver como" não muda o papel real);
+- Financeiro e Casting levam 403; o vivo leva 409; o vazio leva 400, com o banco intacto;
+- o grupo muda inteiro, e o dia cortado com outro motivo não;
+- a troca é exata (motivo mais longo e texto solto ficam);
+- a flag acompanha o papel.
+
+Também: `verify_306.py` inteiro, que dá 67/69. Os dois vermelhos (14b e 20) são provas de
+mutação que exigem a `main` de antes da 306, e a `main` agora já a contém. Typecheck, build e `ruff`. Tela aberta como Comercial
+(desktop e 375px, sem rolagem lateral) e como Financeiro (sem o botão, 403 no servidor).
+
+**Fora de escopo.** Esconder o motivo de algum papel (o histórico, "Log de atividades", já é só
+do Superadmin), desfazer o cancelamento, e o motivo da solicitação de exclusão.
 
 ### 306 — Cancelar devolvendo o dinheiro: o que a Manto retém entra na DRE, na comissão e no BV na mesma proporção   (306-dinheiro-do-cancelamento · 2026-10-19 · migration `c5d2f7a9e306`)
 

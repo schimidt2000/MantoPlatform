@@ -586,6 +586,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                     placeholder="Ex.: cliente desistiu do evento"
                     aria-invalid={Boolean(erros.motivo)}
                   />
+                  <p className="mt-1 text-xs text-muted">Aparece para quem abre o evento.</p>
                   {erros.motivo && (
                     <p className="mt-1 text-xs text-red" role="alert">
                       {erros.motivo}

@@ -10,6 +10,9 @@ Os do evento vivem aqui: `_is_superadmin()` (dispensar/restaurar cargo), `_can_m
 declarados junto das suas views mais abaixo. A tabela completa fica em `docs/01` §4.3.
 `POST /events/<id>/devolver-ao-google` (feature 303) usa `_can_delete()`: devolver um evento
 marcado ao Google é decisão do Superadmin, como excluir e cancelar.
+`PATCH /events/<id>/motivo-cancelamento` (feature 306b) usa `pode_editar_motivo_do_cancelado`
+(Superadmin ou Comercial pelo papel real): só o texto do motivo do cancelado; o dinheiro dele
+segue com o Superadmin.
 
 Autoria, desde a feature 301, em `PATCH /events/<id>/orcamento`: **vincular** um orçamento a
 evento que ainda não tem é livre para quem tem o módulo de Orçamento (COMERCIAL ou SUPERADMIN) —
@@ -715,6 +718,40 @@ def api_alterar_devolucao(event_id: int) -> Any:
     except DBAPIError as exc:
         return _recusa_do_banco(exc)
     return jsonify({"ok": True, "resumo": _resumo_do_cancelado(event)})
+
+
+@api_bp.route("/events/<int:event_id>/motivo-cancelamento", methods=["PATCH"])
+@api_login_required
+def api_editar_motivo_cancelamento(event_id: int) -> Any:
+    """Troca o texto do motivo de um cancelado, no ato inteiro e no histórico (feature 306b).
+
+    RBAC: `pode_editar_motivo_do_cancelado` (Superadmin ou Comercial pelo papel real), depois do
+    404. Corpo `{motivo}`. Responde `{ok, motivo, eventos}` (os dias que receberam o texto).
+    """
+    event = CalendarEvent.query.get(event_id)
+    if event is None:
+        return json_error("Evento não encontrado", 404)
+
+    from sqlalchemy.exc import DBAPIError
+
+    from app.calendar.cancel_ops import (
+        CancelValidationError,
+        editar_motivo_do_cancelado,
+        pode_editar_motivo_do_cancelado,
+    )
+
+    if not pode_editar_motivo_do_cancelado(current_user):
+        return json_error("Sem permissão", 403)
+    body = request.get_json(silent=True) or {}
+    try:
+        eventos = editar_motivo_do_cancelado(event, corpo=body, actor=current_user)
+        db.session.commit()
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    except DBAPIError as exc:
+        return _recusa_do_banco(exc)
+    return jsonify({"ok": True, "motivo": event.cancellation_reason, "eventos": eventos})
 
 
 @api_bp.route("/events/<int:event_id>/multas", methods=["POST"])

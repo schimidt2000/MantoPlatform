@@ -27,6 +27,7 @@ import {
   useToggleConfirm,
 } from "../../lib/eventOps";
 import { KebabMenu, type KebabMenuItem } from "../KebabMenu";
+import { EditarMotivoDialog } from "./EditarMotivoDialog";
 import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
 import { SolicitarExclusaoDialog } from "./SolicitarExclusaoDialog";
 import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBanner";
@@ -224,6 +225,7 @@ export function EventHeader({ data }: EventHeaderProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
   const [devolverOpen, setDevolverOpen] = useState(false);
+  const [motivoOpen, setMotivoOpen] = useState(false);
   const [aviso, setAviso] = useState("");
   const cancelado = Boolean(event.cancelled_at);
   const marcado = Boolean(event.sumiu_do_google);
@@ -406,12 +408,21 @@ export function EventHeader({ data }: EventHeaderProps) {
 
       {cancelado && (
         <div className="mt-3 rounded-md border border-red bg-red-soft p-3 text-sm" role="alert">
-          <p className="font-semibold text-red">Evento cancelado</p>
-          <p className="mt-0.5 text-ink">
-            {event.cancellation_reason || "Sem motivo registrado."}
-            {event.cancelled_by ? ` — por ${event.cancelled_by}` : ""}
-            {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
-          </p>
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="font-semibold text-red">Evento cancelado</p>
+              <p className="mt-0.5 text-ink">
+                {event.cancellation_reason || "Sem motivo registrado."}
+                {event.cancelled_by ? ` — por ${event.cancelled_by}` : ""}
+                {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
+              </p>
+            </div>
+            {data.flags.can_edit_motivo_cancelado && (
+              <Button variant="outline" size="sm" onClick={() => setMotivoOpen(true)}>
+                Editar motivo
+              </Button>
+            )}
+          </div>
           <p className="mt-1 text-muted">
             Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
             marcado, na ficha da cliente. Os dados abaixo ficam para consulta.
@@ -492,6 +503,14 @@ export function EventHeader({ data }: EventHeaderProps) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
       />
+      {cancelado && data.flags.can_edit_motivo_cancelado && (
+        <EditarMotivoDialog
+          eventId={event.id}
+          motivo={event.cancellation_reason ?? ""}
+          open={motivoOpen}
+          onOpenChange={setMotivoOpen}
+        />
+      )}
       <SolicitarExclusaoDialog
         eventId={event.id}
         eventTitle={event.title}

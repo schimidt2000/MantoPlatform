@@ -6,7 +6,9 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-20** · **306-dinheiro-do-cancelamento**: o diálogo de cancelar
+> Última atualização: **2026-10-20** · **306b-motivo-editavel**: o banner "Evento cancelado" do
+> detalhe ganha "Editar motivo" (Superadmin e Comercial), e o campo do motivo no diálogo de cancelar
+> avisa que ele aparece para quem abre o evento. Antes: **2026-10-20** · **306-dinheiro-do-cancelamento**: o diálogo de cancelar
 > ganha a devolução em três modos (nenhum vem marcado), a prévia do servidor, o BV, o imposto, os
 > dias do grupo, a recusa por cachê pago, a multa ao elenco e os avisos; o evento cancelado troca o
 > *Resultado* pelo "Resultado do cancelamento", com "Alterar devolução" e "Lançar multa ao
@@ -653,6 +655,12 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     servidor confere o papel real; aos demais, 409 `cancelado` ("Este evento está cancelado: só o
     Superadmin corrige os dados de venda."), mostrado no painel. O bloco `event.cancelamento` vem
     para quem vê o comercial; PIX, comissão, BV, imposto e taxa, só para quem vê o financeiro.
+    - **Editar motivo** (feature 306b; `EditarMotivoDialog`, `PATCH …/motivo-cancelamento`): botão no
+      banner "Evento cancelado", pela flag `can_edit_motivo_cancelado` (Superadmin ou Comercial;
+      some no "Ver como" de outro papel). O diálogo abre com o texto atual e avisa que o motivo
+      aparece para quem abre o evento, e que o texto novo substitui o antigo no histórico e nos
+      outros dias do grupo cancelados junto. O vazio volta no campo ("Explique o motivo do
+      cancelamento."). O dinheiro e os avisos não mudam.
     - **Resultado do cancelamento** (`ResultadoCancelamento`, no lugar do *Resultado*, que contaria
       a devolução como custo e o BV cheio; o `kpi` nem vem no payload): *Pago pela cliente*,
       *Devolvido* (cada devolução com o estado: a pagar, no banco, paga), *Retido pela Manto*,
