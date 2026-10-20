@@ -1,7 +1,7 @@
 # 308 — Compromisso interno não vira pendência de casting; dispensar direto da Home
 
 **Branch**: `308-casting-sem-compromisso-interno` (da `main`) · **Created**: 2026-10-19
-**Status**: Pronto, aguardando push · **Migration**: nenhuma
+**Status**: EM PRODUÇÃO desde 19/10/2026 ~22:15 · **Migration**: nenhuma
 
 ## O pedido, nas palavras do dono
 
