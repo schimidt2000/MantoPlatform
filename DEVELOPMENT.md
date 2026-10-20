@@ -154,7 +154,10 @@ O `.env` local (nunca commitado) carrega via `python-dotenv` **apenas em `run.py
 | `MANTO_SEM_THREADS` | `1` em todo script e no preview | só em comando de manutenção no Shell/SSH |
 | `SECRET_KEY` | qualquer valor | chave segura (`sync: false`) |
 | `MAIL_*` | supressão automática (banco em localhost); `MAIL_ALLOW_LOCAL_SEND=true` só de propósito | reais (`sync: false`) |
-| `CALENDAR_SUPPRESS_EVENT_WRITES` / `CALENDAR_ALLOW_LOCAL_EVENT_WRITES` | (ausentes) — a devolução ao Google e a remoção do Google no cancelamento nascem **travadas** (banco em localhost); `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true` só de propósito | **não definir** — destravadas por padrão; `CALENDAR_SUPPRESS_EVENT_WRITES=true` trava as duas em qualquer ambiente (features 303 e 306) |
+| `CALENDAR_SUPPRESS_EVENT_WRITES` / `CALENDAR_ALLOW_LOCAL_EVENT_WRITES` | (ausentes) — a devolução ao Google, a remoção do Google no cancelamento e o evento de venda da loja virtual nascem **travados** (banco em localhost); `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true` só de propósito | **não definir** — destravadas por padrão; `CALENDAR_SUPPRESS_EVENT_WRITES=true` trava todas em qualquer ambiente (features 303, 306 e 310) |
+| `INFINITEPAY_SUPPRESS_CALLS` / `INFINITEPAY_ALLOW_LOCAL_CALLS` | (ausentes) — a InfinitePay nasce **travada** (banco em localhost): reservar responde "Pagamento travado neste ambiente (cópia de teste)" e a reconsulta não sai, mesmo com a tag e o segredo reais do espelho. `INFINITEPAY_ALLOW_LOCAL_CALLS=true` **cobra de verdade** e o aviso iria para a produção — não use | **não definir** — destravada; `INFINITEPAY_SUPPRESS_CALLS=true` trava em qualquer ambiente (feature 310) |
+| `INFINITEPAY_API_KEY` | (ausente) | opcional, `sync: false`, segredo — o dono cola no painel, nunca pelo chat. Com ela o link da loja vence junto com a reserva e aceita um pagamento só; sem ela, o link sem validade (`docs/05` 134). O log do deploy diz `[infinitepay] travada=… api_key=…` |
+| `MANTO_PROXY_SECRET` | (ausente) | `sync: false`, segredo, o **mesmo** valor no `manto-backend` e no `manto-frontend` (feature 310). O Node manda em `X-Manto-Proxy-Secret`; o Flask só aceita o `X-Manto-Client-Ip` com essa prova. Ausente no backend = IP aceito sem prova e o boot avisa `[proxy] MANTO_PROXY_SECRET ausente`. Ordem segura: frontend primeiro, backend depois |
 | `PORTAL_URL` | `http://localhost:5000` (opcional) | **não definir** — o default é `PORTAL_BASE_URL` (`https://portal.mantoproducoes.com.br`); valor local é ignorado por quem envia e-mail de verdade (269b) |
 | `PUBLIC_BASE_URL` | (ausente) | **não definir** — default `PLATFORM_BASE_URL` |
 | `GOOGLE_OAUTH_REDIRECT_URI` | `http://localhost:5000/google/callback` | URL pública registrada no Google Cloud Console + `/google/callback` (`sync: false`) — nunca copiar o valor local |
@@ -301,6 +304,37 @@ ensaios.
   direto no ORM; gunicorn no ar; caminho público com cookie assinado) antes de culpá-lo — na 294 o
   defeito era o portal engolir o motivo.
 - **Env nova**: o dono preenche o painel; mudar env redeploya (janela de 502).
+
+### Loja de Interações Virtuais — pagamento (feature 310)
+
+- **Ligar e desligar a loja**: `/admin/configuracoes` → card "Pagamento da Loja de Interações
+  Virtuais" → caixa **"Pagamento da loja ligado"** → Salvar (Superadmin; fica no `AuditLog`). Nasce
+  desligada — depois do deploy da 310 a loja fica fechada até alguém ligar. Desligada, a campanha
+  publicada continua visível, reservar responde "As reservas estão fechadas por enquanto." sem travar
+  horário, e publicar é recusado; aviso, retorno e reconsulta dos pedidos já abertos continuam
+  fechando, então desligar não perde pagamento. "Gerar segredo novo" só se o segredo vazou: a tela
+  mostra quantos pedidos aguardam pagamento, e o anterior vale 24 h.
+- **Teste de R$ 1** (à noite, com o dono — o Pix sai da conta dele): roteiro em
+  `specs/310-pagamento-loja-virtual/quickstart.md` §2. Campanha de teste publicada com **"Aparece na
+  vitrine" desmarcada** e horários a mais de 2 h; o dono paga e devolve pelo app da InfinitePay. A
+  limpeza (spec R-21) é um script com simulação, no Shell do `manto-backend`, com OK do dono:
+  ```bash
+  cd /opt/render/project/src && MANTO_SEM_THREADS=1 PYTHONPATH=$PWD \
+    .venv/bin/python specs/310-pagamento-loja-virtual/limpar_venda_teste.py --pedido N            # confira
+  # … e então o mesmo comando com --execute
+  ```
+  O pedido fica `cancelado` (histórico e avisos ficam), o horário volta a livre, saem evento,
+  escala, entrega, presente 3D e o evento do Google, e a venda sai de vendas, comissão e DRE. Recusa
+  pedido de campanha listada na vitrine sem `--forcar`. Depois, pausar a campanha de teste.
+- **Trava local**: `INFINITEPAY_SUPPRESS_CALLS` nasce verdadeira com o banco em localhost — no
+  `manto_local` nenhum link nasce e nenhuma reconsulta sai, mesmo com a tag e o segredo reais do
+  espelho (o aviso local apontaria para a produção). Para testar o fluxo, os verifies usam dublês;
+  não ligue `INFINITEPAY_ALLOW_LOCAL_CALLS`.
+- **Deploy durante a campanha (spec 310, R-20)**: de **1º/11 a 25/12**, nenhum deploy entre **9h e
+  23h** (BRT) — cada deploy abre ~1 min de 502, e um aviso de pagamento perdido nessa janela, com a
+  família que não voltou pelo "Continuar", só aparece no app da InfinitePay. Depois de **cada**
+  deploy, conferir a aba **"Pagamentos a conferir"** (`/virtuais/devolucoes`) e o painel "Seus
+  Checkouts" da InfinitePay.
 
 ---
 

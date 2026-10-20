@@ -1,5 +1,8 @@
 # 05 — Dívida Técnica
 
+> **2026-10-20 (feature 310, pronta e aguardando deploy)**: itens 133 (limitador em memória por
+> processo) e 134 (História 9 desligada até a `INFINITEPAY_API_KEY`), na baixa da 310 ao fim.
+>
 > **2026-09-08 (feature 296)**: §10 resolvida; pendências operacionais 21-33 registradas ao fim do §10.
 >
 > Achados de uma auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript,
@@ -643,3 +646,16 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 132 | **P3** | escalação e pagamento × `Talent.terms_accepted_at` | o termo (prazo de pagamento, uso de imagem) só é exigido para usar o portal; escalar e pagar não olham o aceite. No backup de 20/10, 128 de 309 ativos não tinham aceitado, e 30 deles já tinham trabalhado em evento | decisão do dono: avisar o casting ao escalar quem não aceitou, ou exigir o aceite antes do primeiro evento |
+
+## Baixa da feature 310-pagamento-loja-virtual (2026-10-20, branch)
+
+**Quitada.** O limite anti-abuso deixou de valer para a loja inteira: o limitador lia o IP da
+infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do_cliente()`, `docs/01`
+§3.13.4). A 88 ("Nova campanha") continua aberta, fora do escopo da 310.
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 133 | **P4** | `app/__init__.py` (`Limiter(key_func=ip_do_cliente, default_limits=[])`, sem `storage_uri`) | o Flask-Limiter guarda as contagens **em memória, por processo**: cada um dos 3 workers do gunicorn conta separado, e o limite efetivo de cada família fica até ~3× o nominal (reservar 20/min vira até ~60/min; o aviso, 60 → ~180). O próprio Flask-Limiter avisa no start ("in-memory storage… not recommended for production"). Aceito pela 310: a 310 corrigiu de quem é o balde (o cliente, não a loja inteira), não o tamanho | backend compartilhado (`storage_uri` num Redis, ou no Postgres) — serviço novo no Render, decisão do dono |
+| 134 | **P3** | `INFINITEPAY_API_KEY` no painel do `manto-backend` (Render) | a **História 9 da 310** (link que vence junto com a reserva e aceita um pagamento só) está **desligada** até o dono colar a chave: sem ela o link nasce sem validade e a família ainda pode pagar um horário que já voltou para a vitrine — o pagamento atrasado vira venda ou devolução pela regra única, mas a devolução é trabalho manual no app. O código já suporta (`render.yaml` declara a chave com `sync: false`); o log do deploy diz `[infinitepay] … api_key=ausente (link sem validade)` | o dono cria a chave na InfinitePay e cola no painel do Render (nunca pelo chat); mudar env redeploya, então fora do horário |

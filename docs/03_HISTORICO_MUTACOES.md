@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-20** · Na branch, **pronta e aguardando deploy**:
+> **310-pagamento-loja-virtual** (migration `e8b4a1c7d310`, aditiva, sobre a `c5d2f7a9e306` — o
+> pagamento da loja pela InfinitePay ligado com segurança: uma regra só decide se pagamento vira
+> venda, o aviso grava e responde, o retorno do checkout prova o pagamento, interruptor que nasce
+> desligado, "pagamentos a conferir" e cancelar pedido pago). Estado do repositório (`main`): pós-feature
 > **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
 > dono, em horário comercial — `flask campanha-prazo-pagamento` avisa "até 3 dias úteis" ao banco de
 > talentos, e `/portal/termos` volta a mostrar a data do aceite; `verify_311.py` 8/8) — antes dela
@@ -147,6 +151,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **310-pagamento-loja-virtual** | *(pronta, aguardando deploy)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
@@ -295,7 +300,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Assunto | Features |
 |---|---|
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
-| Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
+| Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
 | Catálogo e vitrine | 211, 209, 186, 185 |
@@ -325,6 +330,114 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
+
+> **Pronta, aguardando deploy** (branch `310-pagamento-loja-virtual`, worktree `C:\tmp\mp310`). Nível 1.
+> Spec, plano, contratos e roteiro em `specs/310-pagamento-loja-virtual/`. Migration aditiva
+> `e8b4a1c7d310` sobre a `c5d2f7a9e306` (306); quem mergear por último reencadeia o `down_revision`.
+
+**O pedido.** O dono, em 19/10: "Precisamos andar com a parte do pagamento. Como devemos fazer? Um
+abacatepay da vida? Ou usamos o infinitepay que já uso e tenho conta?". Decisão: a InfinitePay, que
+já existe (Pix grátis, conta da maquininha com o Checkout Integrado ligado no app). Até ali nenhuma
+chamada real à operadora tinha sido feita: a tag e o segredo estavam vazios, e o `verify_205` usava
+dublês.
+
+**Teste 0 e teste A em produção (20/10, com o dono).** Configuração `prime-dreams`. O `POST /links`
+aceitou o pacote atual. A reconsulta de pedido não pago só com `handle` + `order_nsu` responde
+`200 {"success": false}`, sem `paid`: sem os identificadores do aviso ou do retorno, a operadora não
+distingue "não pago" de "não achei". Teste A (Pix de R$ 1): pedido pago em ~1,5 min, aviso em centavos
+sem `paid`, reconsulta `paid: true`, evento com Meet e e-mail `compra_confirmada`.
+
+**A causa** (auditoria do código em `98192e8`, cada achado refutado por um verificador cético):
+- o mesmo horário podia ser vendido duas vezes: a varredura confirmava sem travar o horário nem
+  conferir valor, a venda não gravava o dono do horário, e um pedido pago podia voltar a "expirado";
+- pagamento sem aviso virava dinheiro sem dono: esgotadas as 3 tentativas, o horário era liberado
+  sem devolução, e a página de retorno descartava os identificadores da URL;
+- fora da produção nada impedia cobrar de verdade (o espelho traz a tag e o segredo reais);
+- o limitador via o IP do balanceador: o limite valia para a loja inteira;
+- salvar a tag ligava a venda de toda campanha publicada, a caixa "gerar segredo novo" trocava o
+  segredo a cada Salvar, e subir o logo desligava todos os e-mails;
+- o segredo do aviso aparecia nos logs, e o nome da criança ia à operadora como comprador.
+
+**O que mudou.**
+- **Uma regra decide** (`virtuais_ops.decidir_pagamento`), chamada pelo aviso, pelo retorno e pela
+  varredura: relê o pedido com trava; pago com a mesma cobrança = duplicado, com outra = devolução
+  `pagamento_em_dobro`; cancelado = devolução `pagamento_sem_pedido_ativo`; valor por `paid_amount`
+  (ausente ou menor = `divergente`, sem venda e sem devolução automática); dono do horário; folga de
+  30 min (`horario_passou`); vaga de vídeo (`sem_vaga_de_video`). Ordem de travas pedido → horário →
+  campanha. A venda grava no banco primeiro (horário vendido **com dono**, evento com id local) e o
+  Google e o e-mail vêm depois, fora das travas.
+- **A varredura não efetiva mais sozinha**: reconsulta e decide pela mesma regra; "não sei" retém o
+  horário de fato; esgotado vira `unverified_reason='nao_sei'` ("a conferir"); abandono expira na
+  primeira consulta sem ir para "a conferir".
+- **Aviso**: a rota grava `pendente` e responde em seguida; o processamento roda numa thread e a
+  varredura reprocessa (0/1/2 min, depois a cada 10 min, até 48 h); token atual ou anterior por
+  24 h em tempo constante; segredo errado não grava o NSU; 60/min e 64 KB.
+- **Retorno do checkout** (`POST /api/virtuais/pedidos/<token>/retorno`, 20/min) como segunda prova.
+- **Ligar e desligar**: interruptor `virtuais_pagamento_ativo` (nasce desligado; desligado = reserva
+  503 e publicar recusado); tag validada e auditada; segredo anterior por 24 h com diálogo que mostra
+  os pedidos aguardando; configurações só mudam o que veio no envio; recusa da operadora gravada em
+  `payment_link_error`, fora do teto por origem e no sino.
+- **Trava** `INFINITEPAY_SUPPRESS_CALLS` (banco local = travado; escape
+  `INFINITEPAY_ALLOW_LOCAL_CALLS`) e `CALENDAR_SUPPRESS_EVENT_WRITES` no evento de venda;
+  `INFINITEPAY_API_KEY` opcional (link com validade e pagamento único).
+- **Limite por família**: `X-Manto-Client-Ip` no `server.js` e `ip_do_cliente()` como chave do
+  `Limiter` e da origem da reserva — todo `@limiter.limit` do sistema (login, portal, cadastro,
+  NFC) passa a contar por cliente, não pela infraestrutura.
+- **Privacidade e logs**: pacote só com e-mail e telefone; descrição "<título> — pedido <nsu>";
+  máscara do segredo no `gunicorn.access`, no `werkzeug` e no proxy Node.
+- **Equipe**: aba "Pagamentos a conferir" nas Devoluções (aviso divergente/órfão/esgotado, pedido
+  liberado sem prova, recusa de link agrupada), sino `virtual.atencao` para Comercial e Superadmin,
+  "Cancelar e abrir devolução" (motivo `desistencia`) na Fila de Produção.
+- **Família**: horários só a mais de 2 h; contagem por `seconds_left`; token novo depois de cada
+  reserva; três textos de espera; e-mail de cancelamento com o motivo real.
+- **Sala**: retentada a cada 10 min até o horário, alerta com menos de 6 h; evento da loja marcado
+  no Google (`manto_virtual_nsu`) e pulado pela sincronização.
+- **Teste**: campanha "fora da vitrine" (`listada`) e `limpar_venda_teste.py --pedido N [--execute]`.
+
+**Banco.** `site_settings`: `virtuais_pagamento_ativo`, `infinitepay_webhook_token_anterior`,
+`…_anterior_ate`. `virtual_orders`: `unverified_reason`, `payment_link_error`, `receipt_url`,
+`conferido_em`, `conferido_por`. `virtual_payment_notifications`: `state`, `attempts`,
+`last_attempt_at`, `resolvido_em`, `resolvido_por` (backfill `state='decidido'` onde há `outcome`).
+`virtual_campaigns`: `listada`. Detalhe em `docs/01` §2.10 e §2.10.1.
+
+**RBAC.** Nenhum papel novo. `GET`/`PATCH /api/virtuais/pagamentos-a-conferir*` e
+`POST /api/virtuais/pedidos/<id>/cancelar`: `COMERCIAL`, `SUPERADMIN` (`require_virtuais_access`).
+Retorno público por token. `PATCH /api/admin/settings` segue só do Superadmin.
+
+**Revisão adversarial (T059).** Cinco dimensões e um cético por achado; 18 sobreviveram (13
+distintos), todos corrigidos: o IP do cliente agora só vale com a prova `X-Manto-Proxy-Secret`
+(`MANTO_PROXY_SECRET`, o backend tem URL pública) e é lido antes do `xfwd` do http-proxy, que
+acrescentava o próprio socket; aviso parado em "processando" volta à varredura e o esgotado em 48 h
+vira "retido" com sino; "a conferir" só lista pedido sem prova enquanto ele segue expirado; vídeo
+gravado conta as reservas vivas dos outros na decisão, a retenção estende a trava do pedido e a
+landing usa a mesma conta; o pós-venda marca a primeira tentativa de sala (a varredura criava um
+segundo evento no Google); a sincronização sinaliza a divergência antes de pular a marca da loja;
+cancelar trava a campanha antes do `-1` do vídeo e avisa se o evento não sair do Google; segredo
+mascarado também no `app.logger` e no `[slow]`; corpo chunked acima de 64 KB → 413; segredo
+anterior pelo relógio de São Paulo (valia 27 h); "Salvar" só manda o interruptor quando mudou;
+botão de cancelar só para Comercial/Superadmin; `efetivar_pedido()` (sem chamador) saiu.
+
+**Verificação.** `verify_310.py` 195/195 (B1–B11, prova por mutação do dono do horário, da releitura
+com trava, do identificador antes da prova, do IP do cliente e de quatro correções da revisão; R-22
+em rodadas repetidas);
+regressão `verify_205.py` 138/138 e `verify_304.py` 27/27, com as mudanças intencionais; `ruff`
+limpo; tela aberta contra o `manto_local` (cartão de pagamento, a conferir, cancelar na fila,
+"Aparece na vitrine", loja pública em 375 px), que achou e corrigiu dois defeitos (a volta do
+checkout presa em "Confirmando…" e o diálogo do segredo abrindo com o erro anterior).
+
+**Pegadinhas.**
+- **Depois do deploy a loja fica fechada** até o dono ligar o interruptor em Configurações, mesmo com
+  a `prime-dreams` já gravada: a coluna nasce falsa.
+- `listada` nasce verdadeira: a campanha de teste aparece na vitrine até alguém desmarcar "Aparece
+  na vitrine".
+- A História 9 (link que vence com a reserva) só liga quando o dono colar `INFINITEPAY_API_KEY` no
+  Render (`docs/05`).
+- Durante a campanha, nada de deploy entre 9h e 23h de 1º/11 a 25/12 (R-20, `DEVELOPMENT.md`).
+
+**Fora de escopo.** Trocar de operadora, devolução por API (a InfinitePay não tem), o botão "Nova
+campanha" (`docs/05` 88), o limitador em memória por processo (`docs/05`).
 
 ### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
 

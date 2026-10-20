@@ -9,7 +9,9 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
+> Última revisão: **2026-10-20** (feature 310, pronta e aguardando deploy: o pagamento da Loja
+> Virtual — a máquina de estados do pedido e do aviso, a regra única `decidir_pagamento` e as
+> invariantes do §4). Antes: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
 > 6 a 10 do Financeiro, e as correções no lugar da exclusão, do grupo, da cobrança, da regra de
 > comissão, do estorno, da cascata da DRE e da comissão exibida). Antes: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
 > vagas congeladas e teto pela tabela — na linha Orçamento do §5). Antes: **2026-10-15** (feature 307: data especial pela data do evento na linha Orçamento
@@ -643,9 +645,9 @@ pendente (o re-export de `ensure_recurring_entries`).
 
 ---
 
-## 4. Loja de Interações Virtuais (feature 205)
+## 4. Loja de Interações Virtuais (features 205 e 310)
 
-`app/marketing/virtuais_ops.py` (2.325 linhas, 9 seções). **É o melhor código documentado do
+`app/marketing/virtuais_ops.py` (2.325 linhas na auditoria; ~3.290 depois da 310). **É o melhor código documentado do
 repositório** — os docstrings explicam consistentemente o *porquê*. É também um balde por camada: ~6
 responsabilidades técnicas distintas num arquivo (ver `docs/05`).
 
@@ -656,49 +658,142 @@ pedido existente) → valida ficha → confere limites anti-abuso → **trava o 
 `:747`, `SELECT … FOR UPDATE`) → grava o pedido → **commit** → **só então** fala com a InfinitePay
 (`_gerar_link_pagamento`, `:898`). Falar com a operadora antes de travar deixaria a janela aberta
 durante a chamada HTTP; travar durante a chamada seguraria uma linha do banco por segundos. Se a
-operadora falhar, a reserva é desfeita e o horário volta (`:889-893`).
+operadora falhar, a reserva é desfeita e o horário volta (`:889-893`). Desde a 310: com o pagamento
+desligado ou sem configuração, `reservar` levanta `VirtuaisPagamentoFechadoError` (503) **antes** de
+qualquer trava; o `client_token` só devolve o pedido anterior se horário, formato, presente e criança
+forem os mesmos (`_mesma_reserva`); o horário precisa começar a mais de 2 h; e o vídeo gravado trava
+a campanha e conta as reservas ativas como vagas ocupadas.
 
 **Anti-abuso (`_checar_limites`, `:705`):** (a) um telefone não pode ter duas reservas ativas — mas o
 erro carrega `existing_order_token` para a família **retomar** o próprio pedido, não bater numa
 parede; (b) teto por `origin_hash` (hash de IP+UA, nunca persistido cru, `hash_origem`, `:610`).
+Desde a 310 o IP é o de `ip_do_cliente()` (o que a borda do Render viu, informado pelo Node), não o
+`X-Forwarded-For` cru, e pedido que morreu por recusa da operadora (`payment_link_error`) não conta
+no teto — a família não é barrada por culpa nossa.
 
 **Soft lock de 15 min** (`VIRTUAL_SOFT_LOCK_MINUTES`), contado da criação, dentro da transação que
 trava o slot.
 
-**Webhook (`processar_notificacao_pagamento`, `:1513`) — a invariante mais importante da feature: o
-corpo do aviso não decide nada.** A InfinitePay **não assina webhooks**, então o payload só identifica
-o pedido; quem autoriza é a reconsulta em `ipc.consultar_pagamento`. Sequência: grava
-`VirtualPaymentNotification` (a UNIQUE em `transaction_nsu` barra reentrega) → reconsulta → confere
-valor (pago < total → recusado) → trava o slot e confere se ainda é desta família → efetiva ou abre
-devolução. **Responde 200 sempre**: 400 faria a operadora reenviar em loop, e reenviar não conserta
-duplicata nem conflito.
+**Aviso de pagamento — a invariante mais importante da feature: o corpo do aviso não decide nada.**
+A InfinitePay **não assina webhooks**, então o payload só identifica o pedido; quem autoriza é a
+reconsulta em `ipc.consultar_pagamento` **com os identificadores deste aviso**. Desde a 310 a rota
+só grava e responde: `registrar_aviso` grava a linha `pendente` (a reentrega de aviso **sem**
+desfecho final volta para a fila; com desfecho final é ignorada) e uma thread curta chama
+`processar_aviso`, que reivindica a linha (`_reivindicar_aviso`, UPDATE condicional no molde do
+`claim_sweep`), reconsulta e entrega a `decidir_pagamento`. Segredo errado responde 404 e grava o
+resumo **sem** `transaction_nsu`. Todo o resto responde 200: 400 faria a operadora reenviar em loop.
 
-**`efetivar_pedido()` (`:1218`)** — idempotente na entrada (`:1231`). Cria `CalendarEvent`, pré-escala
-talento+figurino (`_pre_escalar`, `:1194`), marca o slot como vendido, baixa estoque de gravado, cria
-`VirtualMediaDelivery` com prazo, injeta o presente 3D **na mesma fila que a equipe já opera**
-(`_injetar_presente_3d`, `:1316` → `impressoes3d_ops.add_event_gift`) e dispara o aviso. Se o Google
-falhar, o evento nasce com `google_event_id = 'virtual-local-<nsu>'` (`GOOGLE_ID_LOCAL_PREFIX`,
-`:535`) para a venda existir na agenda mesmo assim.
+**`decidir_pagamento()` — a única regra que transforma pagamento provado em venda ou devolução**
+(feature 310, spec R-01). Aviso, retorno do checkout e varredura chamam a mesma função; a reconsulta
+acontece antes, fora de qualquer trava (HTTP nunca segura linha do banco). Dentro dela, em ordem:
+(1) trava e relê o pedido (`_travar_pedido`, `populate_existing` — sem ele a decisão saía sobre
+leitura velha e um pedido pago voltava a expirado); (2) estado: pago com a mesma cobrança =
+`duplicado`, pago com outra = devolução `pagamento_em_dobro`, cancelado = devolução
+`pagamento_sem_pedido_ativo` (as duas sem mexer no pedido); (3) valor por `paid_amount` — ausente ou
+menor que o total = `divergente`, sem venda e sem devolução automática; sobrepagamento vale; (4) só
+então grava `transaction_nsu`/`invoice_slug`/`receipt_url` no pedido; (5) trava o horário: de outro
+pedido, travado ou vendido = devolução de conflito; começa em menos de 30 min = `horario_passou`;
+(6) vídeo: trava a campanha, `recorded_sold >= capacidade` = `sem_vaga_de_video`; (7)
+`_efetivar_no_banco` e commit; (8) `_pos_venda`: Google e e-mail, fora das travas.
 
-**`expirar_reservas()` (`:1031`) — antes de liberar um horário vencido, reconsulta a cobrança.** "Não
-sei" (operadora indisponível) nunca vira "não pago": o horário fica retido por 3 tentativas (minutos
-0, 1, 2). Esgotadas, libera e marca `expired_unverified=True` — e esse flag muda o motivo da devolução
-depois (`_abrir_devolucao`, `:1341`), porque quem liga reclamando precisa ouvir "a operadora não
-confirmou a tempo", não "sua reserva venceu".
+**Efetivação (`_efetivar_no_banco` + `_pos_venda`)** — a venda nasce inteira no banco num commit:
+`CalendarEvent` com `google_event_id = 'virtual-local-<nsu>'` (`GOOGLE_ID_LOCAL_PREFIX`), pré-escala
+talento+figurino (`_pre_escalar`), slot `vendido` **com `order_id` do dono**, baixa de estoque de
+gravado, `VirtualMediaDelivery` com prazo, presente 3D **na mesma fila que a equipe já opera**
+(`_injetar_presente_3d` → `impressoes3d_ops.add_event_gift`). Depois do commit, `regerar_sala` cria o
+evento no Google (marcado com `manto_virtual_nsu`) e o e-mail sai. Falha do Google não desfaz nada:
+`meet_pending` e a varredura retenta a cada 10 min até o horário (alerta com menos de 6 h).
+O antigo `efetivar_pedido()` saiu na 310: a única entrada da venda é `decidir_pagamento` → `_efetivar_no_banco` + `_pos_venda`.
+
+**`expirar_reservas()` — antes de liberar um horário vencido, reconsulta a cobrança** (desde a 310
+com os identificadores do pedido ou, na falta, os do aviso mais recente com o segredo certo para o
+mesmo `order_nsu`). Pedido sem link libera direto. Pago → `decidir_pagamento` (`origem=varredura`);
+pago com valor errado → libera com `unverified_reason='divergente'`. "Não sei" (operadora fora,
+travada) **retém o horário de fato** (`_reter_horario` estica o `locked_until` do slot) por 3
+tentativas (minutos 0, 1, 2); esgotadas, libera com `expired_unverified=True` e
+`unverified_reason='nao_sei'` — o pedido entra em "a conferir", e o flag muda o motivo de uma
+devolução posterior (`conflito_sem_confirmacao`), porque quem liga reclamando precisa ouvir "a
+operadora não confirmou a tempo". `nao_pago` ou `nao_encontrado` liberam na hora. Cada pedido é
+isolado: erro num não aborta o lote.
 
 **`claim_sweep()` (`:971`)** — UPDATE condicional atômico em `site_settings.virtual_sweep_at`: só um
-worker do gunicorn ganha o ciclo. `ciclo_de_varredura()` (`:1000`) roda as 3 rotinas com try/except
-**por rotina**, para uma caída não esconder as outras duas.
+worker do gunicorn ganha o ciclo. `ciclo_de_varredura()` roda as rotinas — desde a 310 quatro:
+reservas, avisos (`reprocessar_avisos`), salas e prazos de vídeo — com try/except **por rotina**,
+para uma caída não esconder as outras.
 
-**Avisos (`_enviar_aviso`, `:1381`):** a trava de "no máximo um por pedido e tipo" é o **banco** —
+**Avisos à família (`_enviar_aviso`):** a trava de "no máximo um por pedido e tipo" é o **banco** —
 grava `VirtualOrderNotification` antes de disparar e deixa a `UNIQUE(order_id, kind)` decidir.
+
+### Máquina de estados do pedido (feature 310)
+
+```text
+reservado ──link ok──▶ aguardando ──decidir_pagamento: paga + confere + horário ok──▶ pago
+   │                       │                  └─ horário tomado / passou / sem vaga ─▶ cancelado (+ devolução)
+   │ link recusado         │ trava venceu; reconsulta nao_pago ou nao_encontrado ─▶ expirado
+   ▼                       │ trava venceu; "não sei" esgotado ─▶ expirado (unverified_reason=nao_sei → a conferir)
+expirado ◀─────────────────┘
+expirado  ──pagamento atrasado provado──▶ decidir_pagamento (mesma regra: pago OU cancelado + devolução)
+pago      ──"Cancelar e abrir devolução" (equipe)──▶ cancelado (+ devolução desistencia)
+pago      ──segunda cobrança provada──▶ pago (+ devolução pagamento_em_dobro)
+cancelado ──pagamento provado──▶ cancelado (+ devolução pagamento_sem_pedido_ativo)
+```
+
+Com o interruptor desligado nenhum pedido nasce (`reservar` → 503 antes de travar); os que já
+existem seguem a máquina normalmente.
+
+### Máquina de estados do aviso de pagamento (feature 310)
+
+`state`: `pendente` → `processando` (claim de `_reivindicar_aviso`, `attempts + 1`) → `decidido`.
+Desfecho final (`efetivado`, `devolucao_aberta`, `conflito`, `duplicado`, `divergente`, `orfao`,
+`token_invalido`) fecha a linha; não final (`retido` = operadora fora ou erro na decisão;
+`pendente_prova` = reconsulta não disse "pago", pode ser atraso de propagação) devolve a linha a
+`pendente`. `reprocessar_avisos` retenta nos minutos 0/1/2 e depois a cada 10 min; com 48 h de idade
+a linha vira `decidido` com o desfecho não final e aparece em "Pagamentos a conferir". `divergente`
+e `orfao` também aparecem lá e tocam o sino.
+
+### Invariantes do pagamento (feature 310 — o `verify_310` confere)
+
+1. **Uma só função decide** se pagamento vira venda: `decidir_pagamento`. Aviso, retorno e varredura
+   chamam a mesma; nenhum caminho efetiva por conta própria (era na varredura que nascia a venda
+   dupla).
+2. **Ordem de travas: pedido → horário → campanha**, em reserva, liberação, varredura, aviso,
+   retorno e cancelamento pela equipe. Nenhuma chamada externa (InfinitePay, Google, e-mail) dentro
+   de trava de linha.
+3. **No máximo um pedido `pago` por horário**, e horário `vendido` aponta (`order_id`) para o pedido
+   pago dele. Liberar outro pedido nunca solta horário vendido.
+4. **A venda grava no banco antes do Google e do e-mail.** A disputa se decide no commit; quem perde
+   não deixa evento órfão no Google, e a falha do Google não desfaz a venda.
+5. **`nao_encontrado` ≠ "não pago".** É o `200 {"success": false}` da operadora (ou 404): ela não
+   achou cobrança paga com aqueles dados. No aviso volta para a fila como `pendente_prova`; na
+   varredura, sem identificadores, é abandono de checkout e libera. Só `paid: false` com a cobrança
+   identificada é "não pago".
+6. **Indisponível retém.** "Não sei" (timeout, 5xx, resposta ilegível, trava local) nunca libera nem
+   cancela na hora: o horário fica travado e o aviso fica `retido`; só depois das tentativas o pedido
+   sai como `nao_sei` — para "a conferir", nunca em silêncio.
+7. **"A conferir" nunca é abandono de checkout.** Entram só aviso divergente, órfão ou esgotado,
+   pedido liberado por operadora fora ou por valor divergente e recusa de link. Pedido que expirou
+   sem aviso nem retorno expira como na 205 e não entra.
+8. **Pago nunca regride.** `_liberar_reserva` relê com trava e só mexe em `reservado`/`aguardando`;
+   pagamento novo de pedido pago vira devolução sem tocar no pedido; sair de `pago` só pelo
+   "Cancelar e abrir devolução" da equipe.
+9. **Todo pagamento provado termina em `pago` ou numa `VirtualRefundRequest`** — exceto o valor
+   divergente, que fica em "a conferir" para uma pessoa decidir.
+10. **Identificador só depois da prova.** `transaction_nsu`, `invoice_slug` e `receipt_url` vindos do
+    aviso ou do retorno só vão para o pedido depois de a reconsulta com eles provar o pagamento: um
+    aviso forjado não contamina a reconsulta do verdadeiro.
+11. **`recorded_sold <= recorded_capacity`**: reserva ativa de vídeo ocupa vaga enquanto a trava vale,
+    e a efetivação confere o teto com a campanha travada.
 
 ### Regras de ouro do módulo
 
 - Tudo em `Decimal` de reais aqui dentro; **centavos só existem em
   `app/integracoes/infinitepay_client.py`**, que distingue `InfinitePayIndisponivel` ("não sei") de
   `InfinitePayError` ("falhou") — é essa distinção que permite tratar "não sei" como "segura o
-  horário".
+  horário". Desde a 310 a reconsulta devolve `resultado` (`pago`, `nao_pago`, `nao_encontrado`), e
+  `InfinitePayTravada` é subclasse de "não sei": travado, nada é efetivado nem cancelado.
+- O cliente da operadora não importa Flask: a trava (`INFINITEPAY_SUPPRESS_CALLS`) e a
+  `INFINITEPAY_API_KEY` são lidas em `_ipc_cfg()` a cada chamada e passadas por parâmetro; o default
+  do cliente é travado.
 - A feature usa **exclusivamente `now_sp()`** (importado como `agora`). Misturar com `utcnow()` faria
   sumir os horários das próximas 3h da lista.
 

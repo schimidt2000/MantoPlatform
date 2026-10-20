@@ -6,7 +6,13 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-20** · **306b-motivo-editavel**: o banner "Evento cancelado" do
+> Última atualização: **2026-10-20** · **310-pagamento-loja-virtual** (pronta, aguardando deploy):
+> card de pagamento em `/admin/configuracoes` com o interruptor "Pagamento da loja ligado", diálogo
+> com a contagem de pedidos antes de gerar segredo novo e o erro da InfiniteTag no campo; aba
+> "Pagamentos a conferir" em `/virtuais/devolucoes`; "Cancelar e abrir devolução" na Fila de
+> Produção; "Aparece na vitrine" na campanha; a página do pedido com três esperas, contagem do
+> servidor e o retorno do checkout lido uma vez — A.4.2 (Interações Virtuais) e A.8. Antes:
+> **2026-10-20** · **306b-motivo-editavel**: o banner "Evento cancelado" do
 > detalhe ganha "Editar motivo" (Superadmin e Comercial), e o campo do motivo no diálogo de cancelar
 > avisa que ele aparece para quem abre o evento. Antes: **2026-10-20** · **306-dinheiro-do-cancelamento**: o diálogo de cancelar
 > ganha a devolução em três modos (nenhum vem marcado), a prévia do servidor, o BV, o imposto, os
@@ -1420,8 +1426,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     (Princípio XII.2); as peças já liberadas viram chips removíveis.
   - Publicar/Pausar no cabeçalho, ao lado de Salvar. Todo botão mostra estado de carregamento
     (Princípio V).
+  - **"Aparece na vitrine"** (feature 310, caixa marcada por padrão): desmarcada, a campanha
+    publicada some de `/v` e só é achada por quem tem o link — é como se faz o teste real de R$ 1
+    sem o público ver. Vai no Salvar como `listada`.
 - **Regra de negócio visível na tela**: publicar exige preços, capa, prazo e termos — faltando
-  qualquer um, o erro aparece **no campo culpado** e nada do que foi digitado se perde. Alterar
+  qualquer um, o erro aparece **no campo culpado** e nada do que foi digitado se perde. Desde a 310
+  também exige o pagamento da loja ligado em Configurações (InfiniteTag, segredo e interruptor):
+  sem isso a publicação é recusada com o motivo (campo `pagamento`). Alterar
   preço **não** afeta pedidos já criados (os valores ficam congelados na reserva).
 - **API**: `GET /api/virtuais/campanhas/<id>/admin` · `PATCH /api/virtuais/campanhas/<id>` ·
   `POST .../publicar` · `PUT .../acervo` · `POST .../horarios` · `DELETE /api/virtuais/horarios/<id>`.
@@ -1475,6 +1486,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Regras visíveis na tela**: erro de validação destaca o campo, leva o foco e **não apaga nada**
   do que foi digitado; `409` mostra aviso e recarrega os horários; `429` explica o limite; `502`
   avisa que o pagamento não abriu — e o horário já voltou ao estoque. O botão nunca fica "morto".
+- **Feature 310**: só aparecem horários que começam a mais de 2 h (reservar em cima da hora dá 409
+  "Este horário fecha 2 horas antes. Escolha outro."); com o pagamento desligado a campanha continua
+  visível e reservar mostra no topo "As reservas estão fechadas por enquanto." (`503`, tratado como
+  o `502`); a contagem dos 15 minutos parte de `seconds_left` do servidor (`useContagemDeSegundos`),
+  não do relógio do aparelho; depois de cada reserva criada a aba ganha `client_token` novo
+  (`renovarClientToken`) — a reserva seguinte na mesma aba (outro horário, o irmão) é um pedido novo,
+  nunca o link do anterior.
 - **Conferido** em 375px e 320px: sem rolagem horizontal, alvos ≥ 44px, nada abaixo de 12px.
 - **API**: `GET /api/virtuais/campanhas/<slug>` · `GET .../horarios` · `POST .../reservar` ·
   `GET /api/virtuais/enderecos/autocomplete`.
@@ -1486,7 +1504,22 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   assíncrona, mostra "aguardando" e **vira "confirmado" sozinha** (FR-035a).
 - **Detalhe que importa**: a consulta continua rodando com a aba em segundo plano e revalida ao
   voltar o foco — a família vai pagar em outra aba, e sem isso voltaria a uma tela congelada.
-- **API**: `GET /api/virtuais/pedidos/<public_token>`.
+- **Três esperas, três textos (feature 310)** — antes, quem voltava do checkout **sem** pagar lia
+  "aguardando a confirmação do pagamento" e achava que tinha pago (`chaveDoRotulo`):
+  - **"Gerando o pagamento…"** — pedido `reservado` ainda sem link; "Seu horário está guardado";
+  - **"Ainda não identificamos o pagamento"** — link gerado e nenhum aviso; "se você já pagou, esta
+    página atualiza sozinha… se ainda não, é só tocar em 'Ir para o pagamento'";
+  - **"Confirmando o pagamento…"** — o servidor diz `confirming` (há aviso esperando decisão) ou a
+    página está mandando o retorno do checkout.
+  A página se atualiza a cada 5 s em `reservado` e `aguardando`.
+- **Contagem pelo servidor**: o tempo restante vem de `seconds_left`; `locked_until` é hora de
+  Brasília sem fuso e um aparelho em Manaus contava 75 minutos.
+- **Retorno do checkout**: a InfinitePay devolve a família com `order_nsu`, `slug`,
+  `transaction_nsu`, `capture_method` e `receipt_url` na URL. A página lê esses parâmetros **uma
+  vez**, manda ao servidor (`POST …/retorno`), põe o resumo que voltar no cache e **limpa a URL** na
+  hora (`replace`) — o link compartilhado depois não carrega identificador nenhum. Falha do envio
+  não trava a tela; a varredura termina o trabalho.
+- **API**: `GET /api/virtuais/pedidos/<public_token>` · `POST /api/virtuais/pedidos/<public_token>/retorno`.
 
 #### `/virtuais/devolucoes` — Devoluções pendentes *(feature 205 US3)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`.
@@ -1495,7 +1528,20 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   a devolução aqui e cobra até alguém marcar como concluída.
 - **UX**: tabela com família, valor em BRL, `invoice_slug` e `transaction_nsu` (o que a equipe usa
   para achar a cobrança no painel da operadora), contato e o botão "Já devolvi" com confirmação em
-  duas etapas.
+  duas etapas. Desde a 310 cada devolução mostra também o código do pedido (`order_nsu`) e a data e
+  hora, para casar com o extrato da operadora, e o motivo em frase (motivos novos: pagamento em
+  dobro, pedido já cancelado, horário que já tinha começado, vídeos esgotados, desistência).
+- **Aba "Pagamentos a conferir"** (feature 310; a tela vira duas abas, "Devoluções (N)" e
+  "Pagamentos a conferir (N)"): o que precisa de alguém no app da InfinitePay sem ser devolução —
+  valor pago diferente do pedido, pagamento sem pedido correspondente, aviso que ficou sem decisão,
+  reserva liberada sem resposta da operadora ("pode ter sido paga") e recusa da operadora ao gerar o
+  link (agrupada: "N pedidos com o mesmo erro"). Colunas: o que aconteceu (com a campanha), pedido e
+  data/hora, valor do pedido e o pago (em vermelho quando difere), cobrança na operadora (slug, NSU e
+  o link "comprovante") e "Marcar como resolvido", que pede "Confirmar" na própria linha —
+  irreversível e auditado. Vazio: "Nada a conferir nos últimos 30 dias." Abandono de checkout nunca
+  aparece aqui. O sino de Comercial e Superadmin avisa quando nasce devolução ou item a conferir.
+- **API**: `GET /api/virtuais/devolucoes` · `PATCH /api/virtuais/devolucoes/<id>` ·
+  `GET /api/virtuais/pagamentos-a-conferir` · `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>`.
 
 #### Detalhe do evento — seção **Interação virtual** *(feature 205 US3)*
 - Aparece só em evento `event_type='VIRTUAL'` (mesmo padrão de `Presente3DSection`).
@@ -1512,6 +1558,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   fica visível enquanto a nova chega).
 - **Ações na própria linha**: entrar na sala (ao vivo), enviar/substituir o vídeo (gravado) e o
   atalho de WhatsApp com a mensagem pronta.
+- **"Cancelar e abrir devolução"** (feature 310; ícone vermelho na linha de entrega não
+  finalizada): para a família que desistiu. O `ConfirmDialog` destrutivo diz que o pedido sai da
+  agenda, da fila e dos relatórios, que a devolução abre em Devoluções e que o Pix é devolvido pela
+  equipe no painel da InfinitePay, e pede o **motivo** (obrigatório). O horário volta à vitrine só se
+  ainda faltar mais de 2 h; a família recebe o e-mail de cancelamento. Presente 3D que já entrou em
+  impressão recusa o cancelamento ("combine com a produção antes"). O servidor aceita só Comercial e
+  Superadmin.
 - **Regra visível**: só existem `pendente`, `gravando` e `finalizado`. Finalizar uma entrega
   gravada sem vídeo é recusado, com o motivo no campo.
 
@@ -2028,7 +2081,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`). **Feature 218**: a lista virou tabela com busca, filtros combináveis (papel · situação · frequência), ordenação e resumo de folha do mês; a ficha virou duas colunas e cada faixa do histórico salarial tem **corrigir/excluir inline (só SUPERADMIN)**, que realinha a planilha de pagamentos |
-| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários |
+| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários. **Feature 310** — card **"Pagamento da Loja de Interações Virtuais"**: caixa **"Pagamento da loja ligado"** (vale no Salvar da tela; nasce desligada; a ajuda diz que desligada nenhuma família reserva — a campanha mostra "reservas fechadas" —, nenhuma campanha se publica, e os pedidos já abertos continuam sendo confirmados); a InfiniteTag com o erro do servidor **no campo** (`aria-invalid`, URL colada ou espaço são recusados); "gerar segredo novo" marcado faz o Salvar abrir um `ConfirmDialog` "Gerar um segredo novo?" com **"Há N pedido(s) aguardando pagamento"** e o aviso de que o anterior vale 24 h — a caixa desmarca depois de salvar (antes cada Salvar trocava o segredo de novo). O erro geral do Salvar mostra a mensagem do servidor. Subir só o logo não mexe em mais nada (antes desligava os e-mails, o WhatsApp e a data de corte) |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
 | `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período; **feature 306**: o cancelado sai do total do vendedor, e o retido do período aparece à parte, "+ R$ X retidos de N cancelamento(s)" |

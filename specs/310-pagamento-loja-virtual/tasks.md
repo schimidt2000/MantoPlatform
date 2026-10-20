@@ -144,7 +144,7 @@ conexão separada; limpeza no `finally`.
       `req.socket.remoteAddress`) nas requisições repassadas a `/api`
 - [x] T032 [US4] `ip_do_cliente()` em `app/api_utils.py`; `key_func` do `Limiter` em `app/__init__.py`
       e `origin_ip` da reserva em `virtuais_public.py` passam a usá-lo; log de uma linha
-      `[virtuais] origem: xff_itens=N publico=sim|nao` (sem o IP)
+      `[virtuais] origem: hash=<8> publico=sim|nao` (sem o IP)
 - [x] T033 [US4] Rodar cenários 25–26; `node --check frontend/server.js`
 
 ---
@@ -236,9 +236,9 @@ conexão separada; limpeza no `finally`.
 - [x] T057 `cd frontend && npm run typecheck`; `ruff check` nos tocados; `ruff format` só nos novos
 - [x] T058 Tela aberta (Flask do worktree em 127.0.0.1:5001, Vite em 127.0.0.1:5183): roteiro do
       quickstart §1
-- [ ] T059 Revisão adversarial por workflow (finders por dimensão + um cético por achado) do diff
+- [x] T059 Revisão adversarial por workflow (finders por dimensão + um cético por achado) do diff
       inteiro antes do commit final
-- [ ] T060 Docs: `docs/01` (§4.3 RBAC, contratos, variáveis), `docs/02` (telas), `docs/03` (entrada
+- [x] T060 Docs: `docs/01` (§4.3 RBAC, contratos, variáveis), `docs/02` (telas), `docs/03` (entrada
       no topo + índice), `docs/04` (máquina de estados e invariantes), `docs/05` (registra o limitador em
       memória por processo e "História 9 desligada até a API Key"; não mexe no item 88), `DEVELOPMENT.md` (§Operar a produção:
       ligar/desligar a loja, teste de R$ 1, trava local, regra R-20), skill `manto-deploy` (R-20)
