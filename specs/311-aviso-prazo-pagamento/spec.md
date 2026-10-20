@@ -1,6 +1,6 @@
 # 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo
 
-**Branch**: `311-aviso-prazo-pagamento` · **Created**: 2026-10-20 · **Status**: pronta na branch (verify 8/8), aguardando deploy ·
+**Branch**: `311-aviso-prazo-pagamento` · **Created**: 2026-10-20 · **Status**: EM PRODUÇÃO desde 20/10/2026 ~17:40 (verify 8/8) ·
 **Migration**: nenhuma
 
 ## O pedido

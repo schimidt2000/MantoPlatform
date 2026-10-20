@@ -5,6 +5,10 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
+> dono, em horário comercial — `flask campanha-prazo-pagamento` avisa "até 3 dias úteis" ao banco de
+> talentos, e `/portal/termos` volta a mostrar a data do aceite; `verify_311.py` 8/8) — antes dela
+> pós-feature
 > **306b-motivo-editavel** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~12:00**, a pedido do dono — o motivo do
 > cancelamento editável por Superadmin e Comercial, no ato inteiro e no histórico; `verify_306b.py` 8/8)
 > — antes dela pós-feature
@@ -143,7 +147,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **311-aviso-prazo-pagamento** | *(pronta na branch, aguardando deploy)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
+| **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
 | **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
@@ -324,7 +328,9 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
 
-> **Pronta na branch, aguardando deploy.** Nível 2: um comando de manutenção, um campo a mais no
+> **EM PRODUÇÃO desde 20/10/2026 ~17:40** (merge `merge: 311 — …` sobre a `main` `55bf437`, a
+> pedido do dono, em horário comercial). Os e-mails só saem quando o comando rodar com `--enviar`.
+> Nível 2: um comando de manutenção, um campo a mais no
 > `/api/portal/auth/me` e uma frase na tela do termo. Spec: `specs/311-aviso-prazo-pagamento/spec.md`.
 
 **O pedido.** A equipe costuma pagar o cachê em 2 dias úteis, e a base se acostumou. Quando o
