@@ -2863,6 +2863,7 @@ def _compute_performer_caches(
         get_coordenador_prices, get_tecnico_prices, calcular_maquiador,
         compute_show_pricing,
     )
+    from app.orcamento import produtos as _produtos
     from app.orcamento import settings as _orc_cfg
 
     performers     = snapshot.get("performers", [])
@@ -2873,6 +2874,12 @@ def _compute_performer_caches(
     cfg_precos = _orc_cfg.load()
     faixa = _orc_cfg.faixa_especial(data_evento or snapshot.get("event_date") or "", cfg_precos)
     sufixo_faixa = f" · {faixa['rotulo']}" if faixa is not None else ""
+    # Feature 309: produtos de tabela — as vagas vêm CONGELADAS no snapshot (o que foi vendido) e só o
+    # valor do cachê vem da tabela na data; produto que sumiu da tabela vira vaga sem teto, nunca 0.
+    # O coordenador do produto não pode nascer em dobro: a mesma regra de split da venda.
+    produtos = _produtos.resolver_produtos(snapshot.get("produtos"), cfg_precos, tolerar_ausente=True)
+    coordenador_qty, coord_formula, _coord_inclusos = _produtos.split_coordenadores(coordenador_qty, produtos)
+    makes_produtos = _produtos.makes_dos_produtos(produtos)
 
     # Adicional noturno (+R$50 por performer/coord se horário >= 19h)
     event_time_str = (snapshot.get("event_time") or "").strip()
@@ -2897,7 +2904,11 @@ def _compute_performer_caches(
         """Régua >4h (feature 236): base de 4h ÷ 4 × horas + adicionais fixos, sem escalar."""
         return round(base_4h / 4 * extra + adicionais_fixos)
 
-    result = []
+    # Vagas dos produtos PRIMEIRO (flat, pela tabela na data): a criação pareia personagens por posição
+    # com o prefill, e os dois saem desta mesma função.
+    result = _produtos.itens_do_teto(
+        produtos, faixa, cfg_precos, transport_add=transport_add, noturno_add=noturno_add
+    )
     num_makes_regular  = 0
     num_makes_especial = 0
 
@@ -3011,12 +3022,15 @@ def _compute_performer_caches(
             )
         result.append(item)
 
-    # Coordenadores
-    coord_prices = get_coordenador_prices(has_show, coordenador_qty, faixa=faixa)
-    per_coord    = [coord_prices[i] // max(coordenador_qty, 1) for i in range(4)]
+    # Coordenadores — os dos produtos primeiro (pela tabela na data, sem show), depois os da fórmula.
+    result.extend(_produtos.coordenadores_do_teto(
+        produtos, faixa, cfg_precos, transport_add=transport_add, noturno_add=noturno_add
+    ))
+    coord_prices = get_coordenador_prices(has_show, coord_formula, faixa=faixa)
+    per_coord    = [coord_prices[i] // max(coord_formula, 1) for i in range(4)]
     coord_desc = ("Coordenador (show)" if has_show else "Coordenador") + sufixo_faixa
     coord_adicionais = [("noturno", float(noturno_add)), ("fora-SP", float(transport_add))]
-    for _ in range(coordenador_qty):
+    for _ in range(coord_formula):
         item = {
             "label":       "Coordenador",
             "cache_1h":    round(int(per_coord[0]) + noturno_add + transport_add),
@@ -3078,8 +3092,10 @@ def _compute_performer_caches(
             )
         result.append(item)
 
-    # Maquiador (se necessário)
-    if num_makes_regular > 0 or num_makes_especial > 0:
+    # Maquiador (se necessário) — UMA vaga por evento: as makes dos produtos (feature 309) somam às dos
+    # avulsos na mesma tabela (2 Noéis = make_1 + make_2_adicional, não 2 × make_1).
+    if num_makes_regular > 0 or num_makes_especial > 0 or makes_produtos > 0 or _produtos.tem_maquiador(produtos):
+        num_makes_regular += makes_produtos
         mq_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
         item = {
             "label":       "Maquiador",
@@ -3246,11 +3262,20 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         snap, horas_extra=duracao_custom if duracao_custom > 4 else None
     )
     total_4h_val = float(entry.total_4h or 0)
-    total_custom = (
-        round(total_4h_val / 4 * duracao_custom, 2)
-        if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4)
-        else None
-    )
+    total_custom = None
+    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
+        # Feature 309: com produto de tabela o produto fica fixo na régua — a MESMA função da
+        # calculadora e de `_total_da_duracao`; sem produto, a conta de sempre.
+        produtos_total = float(snap.get("produtos_total") or 0)
+        if produtos_total:
+            from app.orcamento.produtos import total_na_duracao
+
+            total_custom = total_na_duracao(
+                total_4h_val, produtos_total, duracao_custom,
+                snap.get("acrescimos") or [], bool(snap.get("nota_fiscal")),
+            )
+        else:
+            total_custom = round(total_4h_val / 4 * duracao_custom, 2)
 
     return {
         "orcamento_id": entry.id,

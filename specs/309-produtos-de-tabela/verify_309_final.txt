@@ -1,0 +1,24 @@
+verify_309.py --regressao — rodada final no manto_local, 19/10/2026 22:38 (worktree C:\tmp\mp309, branch 309-produtos-de-tabela)
+
+Feature 309 — Produtos de tabela (Visita Mágica)
+  OK     1. paridade sem `produtos`: quote, mensagem e PDF iguais ao gabarito do HEAD 6356b80
+  OK     2. Visita Noel 20/12 = 2.500 nas 4 colunas; memória (invariante); bloco único na mensagem e no PDF; snapshot congelado
+  OK     3. 24/12 = 5.000; Noel + Ajudante = 3.600 / 6.500
+  OK     4. noturno embutido no produto; boneco avulso soma só o dele
+  OK     5. produto + boneco 4h; dois produtos = 2 Noéis, 2 coords, UM Maquiador 300; show avulso; make especial
+  OK     6. fora de SP, NF, BV 10% e PIX sobre o total com produto
+  OK     7. régua 6h (com NF e BV) igual na venda, no prefill e em _total_da_duracao; personalizado
+  OK     8. teto: ordem produto → avulsos → extras; flat; faixa pela data do evento; MARCA_PRODUTO; label desconhecido
+  OK     9. prefill, criação por API e vínculo 273 com os tetos do produto
+  OK     10. casting 900 → 600; superadmin 900 → 900
+  OK     11. migração: 712→600 e 423→270 guardadas; 600 não vira 712; produtos padrão; bloco malformado
+  OK     12. avulsos: Noel 20/12 = 2.210 com aviso; 24/12 = 5.010; chaves novas sempre presentes
+  OK     13. superadmin salva produtos; 7 corpos inválidos → 400 por campo; faixa órfã → aviso
+  OK     14. produto inativo recalcula; apagado → 400 na venda e vaga congelada sem teto
+  OK     15. produto sem preço de 24/25 → estimativa 6.600 marcada; teto pela faixa
+  OK     16. EducaManto ignora `produtos` (com o produto provadamente ativo)
+  OK     17. DEVE FALHAR: COMERCIAL não edita a configuração
+  OK     18. script rebaixa tetos 712/423 só sem cachê e sem artista; nome diferente só no relatório
+  OK     19. regressão (--regressao): verify_307 reescrito (encadeia a 305)
+  OK     20. limpeza e restauração da configuração real
+20/20 OK

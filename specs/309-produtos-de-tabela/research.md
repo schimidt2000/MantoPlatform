@@ -4,6 +4,16 @@
 > em 19/10 — Clarifications); este arquivo registra as decisões técnicas, com alternativas, a partir do
 > plano de análise (3 desenhos × 3 céticos, `wf_21e30e2c-5fe`) e dos mapas de código (HEAD `6356b80`).
 
+## Estado de partida (T001, 19/10/2026)
+
+- `manto_local` (espelho): `especiais."Papai Noel"` cru = `[600.0, 650.0, 675.0, 700.0]`, SEM "Ajudante
+  do Noel", SEM `produtos` e SEM `datas_especiais` (a 307 só migra em memória; ninguém salvou a tabela
+  migrada); markup receptivo `[2.6, 2.5, 2.45, 2.4]`; coordenador `false [250, 300, 325, 350]` / `true
+  [300, 350, 375, 400]`; `maquiador.make_1` 250, `make_especial` 300; `especiais_excluidos` `["Ajudante
+  Especial"]`. Logo a inversa 712→600 é no-op no espelho e em produção (idem em 16/10).
+- Worktree `C:\tmp\mp309` em `1ff1e3c` (artefatos da 309), base `main 6356b80`; junções de
+  `node_modules` (4) funcionando — `cd frontend && npm run typecheck` roda nas três SPAs.
+
 ## D1 — Produto é chave própria do payload, não um tipo de performer
 
 - **Decisão**: `payload["produtos"] = [{"chave": "visita_magica"}]`, ao lado de `performers`;
@@ -73,14 +83,19 @@
 
 ## D6 — Ordem de emissão: produtos → avulsos → extras; prefill = criação
 
-- **Decisão**: `_compute_performer_caches` emite primeiro as vagas `character` dos produtos (na ordem da
-  seleção e da composição), depois os `performers` como hoje (`routes.py:2905-3011`), depois os extras
-  (coordenadores dos produtos, coordenadores genéricos, Técnico, Maquiador) — mesma função para o
-  prefill (`:3245-3247`) e para a criação (`:3802-3816`), então o pareamento posicional
-  `characters[i] ↔ orc_chars[i]` (`:3508-3523`) continua válido. Vínculo 273 casa por nome
-  (`orcamento_evento_ops.py:685-689`).
+- **Decisão**: `_compute_performer_caches` emite primeiro as vagas `character` dos produtos **a partir
+  das vagas congeladas no snapshot** (ordem da seleção e da composição vendida), depois os `performers`
+  como hoje (`routes.py:2905-3011`), depois os extras (coordenadores dos produtos, coordenadores da
+  fórmula, Técnico, UM Maquiador por orçamento) — mesma função para o prefill (`:3245-3247`) e para a
+  criação (`:3802-3816`), então o pareamento posicional `characters[i] ↔ orc_chars[i]` (`:3508-3523`)
+  continua válido. Vínculo 273 casa por nome (`orcamento_evento_ops.py:685-689`); labels de coordenador
+  e maquiador são forçados a "Coordenador"/"Maquiador" na validação porque `_ensure_coordinator`
+  (`:2080-2092`) e o 273 (`:712-713`, `:729-733`) casam por esses nomes.
 - **Razão**: o React do `EventCreatePage` mapeia `caches` com `role_type "character"` na ordem recebida
-  (`:218-229`); qualquer ordem diferente entre prefill e criação herdaria o teto de outra vaga.
+  (`:218-229`); qualquer ordem diferente entre prefill e criação herdaria o teto de outra vaga. **Achado
+  do analyze**: se a lista viesse da tabela VIVA, uma edição do produto entre abrir "Novo evento" e
+  clicar Criar deslocaria os tetos — e um produto apagado não produziria vaga nenhuma (o Noel sumiria do
+  elenco). Congelar `vagas` no snapshot resolve os dois; a tabela viva dá só o VALOR do cachê.
 - **Alternativas**: casar por nome também na criação (rejeitada: mudança no fluxo da 236/273 fora de
   escopo).
 

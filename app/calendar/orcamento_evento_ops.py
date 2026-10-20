@@ -93,6 +93,11 @@ def resumo_do_orcamento(entry: OrcamentoHistory) -> dict:
     """O que o orçamento vendeu, na forma que a aba Comercial mostra (chips) e o vínculo aplica."""
     snap = snapshot_do_orcamento(entry)
     performers = snap.get("performers", []) or []
+    # Feature 309: os personagens e as makes do produto de tabela também são "o que o orçamento diz".
+    vagas_produto = [
+        v for p in (snap.get("produtos") or []) if isinstance(p, dict)
+        for v in (p.get("vagas") or []) if isinstance(v, dict) and v.get("tipo") in ("especial", "ator")
+    ]
     return {
         "id": entry.id,
         # feature 301 — quem fez o orçamento. Chama-se `autor`, e não `vendedor`, porque o mesmo
@@ -106,12 +111,12 @@ def resumo_do_orcamento(entry: OrcamentoHistory) -> dict:
         "km_ida": _km_ida(snap) if snap.get("fora_sp") else 0,
         "deslocamento_cliente": snap.get("deslocamento_responsavel") == "cliente",
         "coordenador_qty": max(int(snap.get("coordenador_qty", 1) or 1), 0),
-        "maquiagens": sum(1 for p in performers if p.get("makeup")),
+        "maquiagens": sum(1 for p in performers if p.get("makeup")) + sum(1 for v in vagas_produto if v.get("needs_makeup")),
         "cantores": sum(
             1 for p in performers
             if p.get("type") == "cantor" or p.get("subtipo") == "cantor" or p.get("cantor")
         ),
-        "personagens": [
+        "personagens": [str(v.get("label") or "").strip() for v in vagas_produto] + [
             ((p.get("nome") or p.get("personagem") or "").strip()) for p in performers
         ],
         "has_show": bool(entry.has_show),
@@ -165,7 +170,21 @@ def _total_da_duracao(entry: OrcamentoHistory, duracao: int) -> Decimal | None:
         quatro = _dec(entry.total_4h)
         # A MESMA conta do prefill (`routes._build_orcamento_prefill`) e da calculadora, em float:
         # recalcular em Decimal diferiria um centavo do que a tela mostrou.
-        total = _dec(round(float(quatro) / 4 * duracao, 2)) if quatro is not None else None
+        if quatro is None:
+            total = None
+        else:
+            snap = snapshot_do_orcamento(entry)
+            produtos_total = float(snap.get("produtos_total") or 0)
+            if produtos_total:
+                # Feature 309: o produto de tabela fica fixo na régua (fonte única em `produtos`).
+                from app.orcamento.produtos import total_na_duracao
+
+                total = _dec(total_na_duracao(
+                    float(quatro), produtos_total, duracao,
+                    snap.get("acrescimos") or [], bool(snap.get("nota_fiscal")),
+                ))
+            else:
+                total = _dec(round(float(quatro) / 4 * duracao, 2))
     return total if total is not None and total > 0 else None
 
 
@@ -259,6 +278,13 @@ def acrescimos_do_orcamento(entry: OrcamentoHistory | None, duracao: int) -> dic
         nota = bool(snap.get("nota_fiscal"))
         indice = min(duracao, 4) - 1
         fator = Decimal("1") if duracao <= 4 else Decimal(duracao) / 4
+        produtos_total = float(snap.get("produtos_total") or 0)
+        if duracao > 4 and produtos_total:
+            # Feature 309: com produto de tabela a régua não é h ÷ 4 — o produto (e o BV sobre ele)
+            # fica fixo; o fator é o da mesma função que dá o total da duração.
+            from app.orcamento.produtos import fator_regua
+
+            fator = fator_regua(float(total_tabela), produtos_total, duracao, linhas, nota)
         inversa = _conta_inversa(linhas, total_tabela, nota)
         saida = []
         for linha, alternativa in zip(linhas, inversa, strict=True):
