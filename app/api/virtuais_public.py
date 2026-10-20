@@ -128,6 +128,8 @@ def api_virtuais_reservar(slug: str) -> Any:
         if exc.existing_order_token:
             body["error"]["existing_order_token"] = exc.existing_order_token
         return jsonify(body), 429
+    except ops.VirtuaisPagamentoFechadoError as exc:
+        return json_error(str(exc), 503)
     except ops.VirtuaisOperadoraError as exc:
         return json_error(str(exc), 502)
 
@@ -155,6 +157,25 @@ def api_virtuais_pedido_publico(public_token: str) -> Any:
     order = VirtualOrder.query.filter_by(public_token=public_token).first()
     if order is None:
         return json_error("Pedido não encontrado", 404)
+    return jsonify(ops.serialize_order_summary(order))
+
+
+@api_bp.route("/virtuais/pedidos/<public_token>/retorno", methods=["POST"])
+@limiter.limit("20 per minute")
+def api_virtuais_pedido_retorno(public_token: str) -> Any:
+    """Volta do checkout com os identificadores da cobrança (feature 310, R3).
+
+    A InfinitePay põe ``order_nsu``, ``slug`` e ``transaction_nsu`` na URL de retorno. É a segunda
+    prova de pagamento além do aviso: sem esses identificadores a reconsulta não distingue "não
+    pago" de "não achei" (teste 0 em produção). Quem decide continua sendo a reconsulta na
+    operadora — os identificadores só apontam para a cobrança.
+    """
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    data = request.get_json(silent=True) or {}
+    if order is None or (data.get("order_nsu") or "") != order.order_nsu:
+        return json_error("Pedido não encontrado.", 404)
+    ops.registrar_retorno(order, data)
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
     return jsonify(ops.serialize_order_summary(order))
 
 
