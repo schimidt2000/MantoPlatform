@@ -154,3 +154,25 @@ export function useDismissRole(eventId: number) {
 export function useRestoreRole(eventId: number) {
   return useRoleAction(eventId, (roleId) => `/api/roles/${roleId}/restore`);
 }
+
+interface CargoDaHome {
+  roleId: number;
+  eventId: number;
+}
+
+/**
+ * Dispensar/restaurar direto da linha da Home (feature 308) — mesmos endpoints da página do evento
+ * (só SUPERADMIN). A Home lista cargos de vários eventos, então o evento vem na chamada, e o que
+ * precisa atualizar é o dashboard (a linha sai de "A escalar" e entra em "Dispensados").
+ */
+export function useAcaoNoCargoDaHome(acao: "dismiss" | "restore") {
+  const queryClient = useQueryClient();
+  return useMutation<EventoDetalhe, Error, CargoDaHome>({
+    mutationFn: ({ roleId }) =>
+      apiFetch<EventoDetalhe>(`/api/roles/${roleId}/${acao}`, { method: "POST" }),
+    onSuccess: (updated, { eventId }) => {
+      queryClient.setQueryData(["event", eventId], updated);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+    },
+  });
+}

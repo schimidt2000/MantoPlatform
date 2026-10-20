@@ -9,10 +9,10 @@ from datetime import date, datetime, timedelta
 from typing import Any
 
 from flask import current_app
-from sqlalchemy import and_, func, not_
+from sqlalchemy import and_, func, not_, or_
 
 from app import db
-from app.constants import EVENT_TYPE_SHOW, RoleName, now_sp
+from app.constants import EVENT_TYPE_SHOW, MARCADORES_COMPROMISSO_INTERNO, RoleName, now_sp
 from app.models import CalendarEvent, EventRole, SiteSetting
 
 
@@ -35,30 +35,49 @@ def _base_filters(cutoff: datetime) -> dict[str, Any]:
         # Evento cancelado (feature 224) não gera tarefa nenhuma: escalar, cobrar ou fechar
         # figurino de um evento que não vai acontecer é trabalho jogado fora.
         "not_cancelled": CalendarEvent.cancelled_at.is_(None),
+        # Compromisso interno (🟧/🟠 no começo do título — gravação, visita técnica, troca de
+        # figurino com parceira) é marcação de agenda: a vaga de Coordenador que todo evento ganha
+        # não é pendência de casting, nem quem foi escalado ali precisa de figurino separado
+        # (feature 308). Pega também o "🟧 - ENSAIO", que escapa do `exclude_ensaios` pelo hífen.
+        "not_compromisso_interno": not_(
+            or_(
+                *(
+                    func.ltrim(func.coalesce(CalendarEvent.title, "")).like(f"{marcador}%")
+                    for marcador in MARCADORES_COMPROMISSO_INTERNO
+                )
+            )
+        ),
     }
 
 
 def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
-    """Pendências, convites recusados e contagens de casting (exclui presença/dispensados)."""
+    """Pendências, convites recusados e contagens de casting (exclui presença/dispensados e
+    compromisso interno)."""
     f = _base_filters(cutoff)
+    eventos = (
+        f["exclude_ensaios"],
+        f["future_events"],
+        f["not_cancelled"],
+        f["not_compromisso_interno"],
+    )
     pending = (
         EventRole.query.filter(EventRole.talent_id.is_(None), f["not_presence"], f["not_dismissed"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
     rejected_invites = (
         EventRole.query.filter(EventRole.invite_status == "rejected")
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
     total = (
         EventRole.query.filter(f["not_presence"], f["not_dismissed"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .count()
     )
     done = (
@@ -69,7 +88,7 @@ def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
             f["not_dismissed"],
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .count()
     )
     return {
@@ -94,8 +113,15 @@ def compute_unconfirmed_invites() -> list[EventRole]:
 
 
 def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
-    """Pendências e contagens de figurino (roles com talento, sem figurino, exceto extras)."""
+    """Pendências e contagens de figurino (roles com talento, sem figurino, exceto extras e
+    compromisso interno)."""
     f = _base_filters(cutoff)
+    eventos = (
+        f["exclude_ensaios"],
+        f["future_events"],
+        f["not_cancelled"],
+        f["not_compromisso_interno"],
+    )
     pending = (
         EventRole.query.filter(
             EventRole.talent_id.isnot(None),
@@ -104,7 +130,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
@@ -115,7 +141,7 @@ def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
             EventRole.role_type != "extra",
         )
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(*eventos)
         .count()
     )
     return {"pending": pending, "total": total, "done": total - len(pending)}
@@ -127,7 +153,12 @@ def compute_dismissed_casting_tasks(cutoff: datetime) -> list[EventRole]:
     return (
         EventRole.query.filter(EventRole.dismissed_at.isnot(None), f["not_presence"])
         .join(CalendarEvent)
-        .filter(f["exclude_ensaios"], f["future_events"], f["not_cancelled"])
+        .filter(
+            f["exclude_ensaios"],
+            f["future_events"],
+            f["not_cancelled"],
+            f["not_compromisso_interno"],
+        )
         .order_by(EventRole.dismissed_at.desc())
         .all()
     )
