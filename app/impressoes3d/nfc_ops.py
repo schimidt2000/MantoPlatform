@@ -312,6 +312,14 @@ def update_tag(
             event = CalendarEvent.query.get(event_id)
             if event is None:
                 raise NfcValidationError("event_id", "Evento não encontrado.")
+            if tag.event_id != event.id:
+                # Feature 312 (Q2): tag nova não se liga a evento cancelado; a tag que já era dele
+                # (reenvio do mesmo id) continua editável.
+                from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+                recusar_se_cancelado_para_ligar(
+                    event, "Este evento foi cancelado — não dá para ligar uma tag a ele.", campo="event_id"
+                )
             tag.event_id = event.id
     if client_id is not ...:
         if client_id is None:

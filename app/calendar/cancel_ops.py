@@ -2109,9 +2109,20 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
 def elenco_do_ato(event: CalendarEvent, dias: list[int] | None = None) -> list[EventRole]:
     """A régua única das escalações do ato (R18): com talento, sem quem recusou o convite e sem
     a vaga de presença do som. O impacto mostra esta lista; a H6 a grava no congelado."""
+    return elenco_dos_dias(dias or [event.id])
+
+
+def elenco_dos_dias(ids: list[int]) -> list[EventRole]:
+    """A régua de `elenco_do_ato` para uma lista de dias, em uma consulta (feature 312).
+
+    É também a de "quem o Casting ainda tem de tirar e avisar" num cancelado: as vagas de HOJE —
+    quem já saiu da escala sai daqui. Lista vazia devolve vazio (em `elenco_do_ato` ela caía no
+    próprio evento).
+    """
     from app.calendar.casting_ops import e_vaga_de_presenca
 
-    ids = dias or [event.id]
+    if not ids:
+        return []
     papeis = (
         EventRole.query.filter(EventRole.event_id.in_(ids), EventRole.talent_id.isnot(None))
         .order_by(EventRole.event_id, EventRole.id)
@@ -3016,6 +3027,18 @@ class EventoCanceladoVinculoError(CancelValidationError):
         super().__init__(
             message, field=campo, status=400 if campo else 409, codigo=CODIGO_EVENTO_CANCELADO
         )
+
+
+def fechar_pedido_ao_casting_se_vazio(dia: CalendarEvent) -> int:
+    """Feature 312 (Q10): sem ninguém mais a tirar e avisar no dia cancelado, o sino do pedido ao
+    Casting daquele dia fica lido para todos (o "aviso some sozinho" da 298). Sem commit: roda na
+    transação da remoção. Devolve quantos avisos ficaram lidos."""
+    from app.notificacoes import notificacoes_ops as nops
+
+    db.session.flush()
+    if elenco_dos_dias([dia.id]):
+        return 0
+    return nops.marcar_lidas_por_entidade("calendar_event", dia.id, nops.KIND_EVENTO_CANCELADO_ESCALA)
 
 
 def exigir_evento_vivo(event: CalendarEvent | None) -> None:

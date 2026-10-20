@@ -648,6 +648,10 @@ def create_producao(
     e_manutencao = tipo == FIGURINO_KIND_MANUTENCAO
 
     evento = _resolver_evento(event_id)
+    # Feature 312 (Q5): pedido novo não se liga a evento cancelado.
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(evento, "Este evento foi cancelado — não dá para abrir pedido de figurino para ele.", campo="event_id")
     ficha = _resolver_ficha(figurino_sheet_id)
     gravidade = (severity or "").strip() or None
 
@@ -740,6 +744,10 @@ def update_producao(
         ev = _resolver_evento(campos["event_id"])
         novo = ev.id if ev else None
         if novo != producao.event_id:
+            # Feature 312 (Q5): trocar para um cancelado recusa; manter o evento (mesmo cancelado) passa.
+            from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+            recusar_se_cancelado_para_ligar(ev, "Este evento foi cancelado — não dá para abrir pedido de figurino para ele.", campo="event_id")
             mudancas.append(f"evento → {ev.title if ev else 'nenhum'}")
             producao.event_id = novo
 

@@ -316,6 +316,8 @@ export function EventHeader({ data }: EventHeaderProps) {
           copiar(buildCobrancaReembolsoMsg(mensagens), "Mensagem de reembolso copiada."),
       });
     }
+    // Feature 312: no cancelado não se confirma nem se pede avaliação (o servidor recusa).
+    if (!cancelado) {
     items.push({
       label: event.confirmed ? "✓ Evento confirmado — desfazer" : "☐ Marcar evento como confirmado",
       onClick: () => confirm.mutate(),
@@ -333,6 +335,7 @@ export function EventHeader({ data }: EventHeaderProps) {
           onError: () => anunciar("Não foi possível gerar o link."),
         }),
     });
+    }
   }
   // Desde a 210 os dados do evento são editados na própria aba onde aparecem; o formulário em
   // bloco continua aqui para quem quer mexer em elenco, clientes e valores de uma vez só —
@@ -410,12 +413,18 @@ export function EventHeader({ data }: EventHeaderProps) {
         <div className="mt-3 rounded-md border border-red bg-red-soft p-3 text-sm" role="alert">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-semibold text-red">Evento cancelado</p>
-              <p className="mt-0.5 text-ink">
-                {event.cancellation_reason || "Sem motivo registrado."}
-                {event.cancelled_by ? ` — por ${event.cancelled_by}` : ""}
+              <p className="font-semibold text-red">
+                Evento cancelado
                 {event.cancelled_at ? ` em ${formatDataCurta(event.cancelled_at)}` : ""}
               </p>
+              {/* Feature 312 (Q9): motivo e autor só chegam a Comercial, Financeiro e Superadmin;
+                  para os outros a linha não existe (nunca "Sem motivo registrado"). */}
+              {(event.cancellation_reason || event.cancelled_by) && (
+                <p className="mt-0.5 text-ink">
+                  {event.cancellation_reason || "Sem motivo registrado."}
+                  {event.cancelled_by ? ` — por ${event.cancelled_by}` : ""}
+                </p>
+              )}
             </div>
             {data.flags.can_edit_motivo_cancelado && (
               <Button variant="outline" size="sm" onClick={() => setMotivoOpen(true)}>
@@ -424,8 +433,9 @@ export function EventHeader({ data }: EventHeaderProps) {
             )}
           </div>
           <p className="mt-1 text-muted">
-            Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
-            marcado, na ficha da cliente. Os dados abaixo ficam para consulta.
+            Saiu da agenda e das listas do sistema; fica na página de Cancelamentos e no card
+            "Cancelamentos do período". A tela fica só para consulta; só os dados de venda
+            (valores, comprovantes, devolução, multas) continuam editáveis, pelo Superadmin.
           </p>
         </div>
       )}

@@ -53,8 +53,9 @@ Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 
 `GET /api/events/<id>` do cancelado:
 - `flags.somente_consulta: true` (ausente no vivo); `can_edit_event`, `can_edit_core`, `can_confirm`,
-  `can_group`, `can_manage_3d`, `can_request_delete` falsas; `flags.desfazer?: {presente_3d: bool, formulario: bool}`
-  com o que `can_manage_3d` e `can_edit_core` seriam (o soltar e o desligar); `can_edit_venda_cancelado` e `can_edit_motivo_cancelado` (306/306b)
+  `can_group`, `can_manage_3d`, `can_request_delete` falsas; `flags.desfazer_presente_3d?` e
+  `flags.desfazer_formulario?` com o que `can_manage_3d` e `can_edit_core` seriam (o soltar e o desligar; flags
+  booleanas porque o tipo das flags na tela é `Record<string, boolean>`); `can_edit_venda_cancelado` e `can_edit_motivo_cancelado` (306/306b)
   inalteradas.
 - `cancellation_reason` e `cancelled_by` só com `show_comercial` (COMERCIAL, FINANCEIRO, SUPERADMIN, pela flag);
   os outros recebem `null`; `cancelled_at` para todos.

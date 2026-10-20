@@ -11,7 +11,7 @@ from flask import jsonify, request
 from flask_login import current_user
 
 from app.api import api_bp
-from app.api_utils import api_login_required, json_error
+from app.api_utils import api_login_required, json_error, trava_do_cancelado
 from app.clientes import client_ops
 from app.constants import RoleName
 from app.models import ClientFeedback
@@ -115,5 +115,8 @@ def api_clientes_avaliacao_delete(feedback_id: int) -> Any:
     feedback = ClientFeedback.query.get(feedback_id)
     if feedback is None:
         return json_error("Avaliação não encontrada", 404)
+    negado = trava_do_cancelado(feedback.event)
+    if negado:
+        return negado
     client_ops.delete_feedback(feedback)
     return "", 204

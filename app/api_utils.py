@@ -20,6 +20,19 @@ def json_recusa_do_cancelado(exc: Any) -> tuple[Response, int]:
     return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
 
 
+def trava_do_cancelado(event: Any) -> tuple[Response, int] | None:
+    """A trava da tela do cancelado (feature 312, FR-011) na porta da API: 409 `cancelado` ou
+    `None` para seguir. Chamada depois do 404 e do 403 de cada rota e antes de qualquer escrita.
+    A regra mora no núcleo (`cancel_ops.exigir_evento_vivo`); aqui só se traduz."""
+    from app.calendar.cancel_ops import CancelValidationError, exigir_evento_vivo
+
+    try:
+        exigir_evento_vivo(event)
+    except CancelValidationError as exc:
+        return json_recusa_do_cancelado(exc)
+    return None
+
+
 def json_error(
     message: str,
     status: int,

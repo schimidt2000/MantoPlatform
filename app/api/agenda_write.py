@@ -32,7 +32,7 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
-from app.api_utils import api_login_required, json_error
+from app.api_utils import api_login_required, json_error, trava_do_cancelado
 from app.constants import CLIENT_RELATION_TIPOS, RoleName
 from app.models import (
     CalendarEvent,
@@ -126,6 +126,7 @@ def _recusa_do_cancelado(exc: Any) -> Any:
     return json_recusa_do_cancelado(exc)
 
 
+REMOVER_NO_CANCELADO = "Evento cancelado: quem tira da escala é o Casting."
 EXCLUIR_CANCELADO = (
     "Evento cancelado não se exclui: o cancelamento não tem volta. Se foi por engano, recrie o evento."
 )
@@ -208,32 +209,49 @@ def _decimal_from_form(raw: str | None) -> Decimal | None:
 @api_bp.route("/roles/<int:role_id>/assign", methods=["POST"])
 @api_login_required
 def api_assign_role(role_id: int) -> Any:
-    """Escala/atualiza/desescala o talento de um cargo (data-model.md)."""
+    """Escala/atualiza/desescala o talento de um cargo (data-model.md).
+
+    Feature 312 (Q10 do dono: "pede para o casting excluir"): no evento cancelado, só Casting e
+    Superadmin mexem na vaga, e só para TIRAR o artista — talento, cachê ou transporte no corpo
+    caem na trava. A vaga fica, vazia, com o cachê de antes (registro do elenco do cancelado).
+    """
     role = EventRole.query.get(role_id)
     if role is None:
         return json_error("Cargo não encontrado", 404)
-    if not _can_edit_event():
-        return json_error("Sem permissão", 403)
-
     event = CalendarEvent.query.get(role.event_id)
     data = request.get_json(silent=True) or {}
+    cancelado = event is not None and event.is_cancelled
+    if cancelado:
+        if not _can_casting():
+            return json_error(REMOVER_NO_CANCELADO, 403)
+        if data.get("talent_id") or "cache_value" in data or "travel_cache" in data:
+            return trava_do_cancelado(event)
+    elif not _can_edit_event():
+        return json_error("Sem permissão", 403)
+
     is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.casting_ops import _UNSET, assign_role
 
-    assign_role(
-        event,
-        role,
-        talent_id=data.get("talent_id"),
-        cache_value=data.get("cache_value"),
-        # Repasse CONDICIONAL (feature 239): esta tela não edita o adicional de transporte e
-        # nunca manda a chave. Passar `data.get(...)` = None fazia o `assign_role` gravar NULL
-        # por cima do valor existente a cada "Salvar" — o `_UNSET` é o "não mexe nisso".
-        travel_cache=data["travel_cache"] if "travel_cache" in data else _UNSET,
-        actor_name=current_user.name,
-        is_superadmin=is_superadmin,
-        tz=_TZ_SP,
-    )
+    try:
+        assign_role(
+            event,
+            role,
+            talent_id=data.get("talent_id"),
+            # No cancelado o corpo é só `{talent_id: null}`: o cachê gravado fica como está.
+            cache_value=role.cache_value if cancelado else data.get("cache_value"),
+            # Repasse CONDICIONAL (feature 239): esta tela não edita o adicional de transporte e
+            # nunca manda a chave. Passar `data.get(...)` = None fazia o `assign_role` gravar NULL
+            # por cima do valor existente a cada "Salvar" — o `_UNSET` é o "não mexe nisso".
+            travel_cache=data["travel_cache"] if "travel_cache" in data else _UNSET,
+            actor_name=current_user.name,
+            is_superadmin=is_superadmin,
+            tz=_TZ_SP,
+        )
+    except CancelValidationError as exc:
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     return _event_detail_json(event)
 
 
@@ -246,6 +264,9 @@ def api_add_role(event_id: int) -> Any:
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     data = request.get_json(silent=True) or {}
     character_name = (data.get("character_name") or "").strip()
     if not character_name:
@@ -277,6 +298,9 @@ def api_delete_role(role_id: int) -> Any:
     event = CalendarEvent.query.get(role.event_id)
     is_superadmin = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.casting_ops import delete_role
 
     removed = delete_role(
@@ -298,9 +322,14 @@ def api_send_invite(role_id: int) -> Any:
         return json_error("Sem permissão", 403)
     event = CalendarEvent.query.get(role.event_id)
 
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.casting_ops import send_invite
 
-    send_invite(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    try:
+        send_invite(event, role, actor_name=current_user.name, tz=_TZ_SP)
+    except CancelValidationError as exc:  # feature 312 (Q5): o cancelado não convida
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     return _event_detail_json(event)
 
 
@@ -319,6 +348,9 @@ def api_figurino_done(role_id: int) -> Any:
         return json_error("Sem permissão", 403)
     event = CalendarEvent.query.get(role.event_id)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.casting_ops import set_figurino_done
 
     set_figurino_done(event, role, actor_name=current_user.name, tz=_TZ_SP)
@@ -342,6 +374,9 @@ def api_marcar_transporte(role_id: int) -> Any:
     event = CalendarEvent.query.get(role.event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     if event.is_outside_sp is False:
         return json_error("O transporte só vale para evento fora de São Paulo.", 400)
     if event.is_outside_sp is None:
@@ -381,6 +416,9 @@ def api_desmarcar_transporte(role_id: int) -> Any:
     if event is None:
         return json_error("Evento não encontrado", 404)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.casting_ops import set_transporte
 
     set_transporte(
@@ -399,6 +437,9 @@ def api_dismiss_role(role_id: int) -> Any:
     if not _is_superadmin():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(CalendarEvent.query.get(role.event_id))
+    if negado:
+        return negado
     from app.calendar.casting_ops import dismiss_role
 
     ok = dismiss_role(role, actor_name=current_user.name, dismissed_by=current_user.id)
@@ -418,6 +459,9 @@ def api_restore_role(role_id: int) -> Any:
     if not _is_superadmin():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(CalendarEvent.query.get(role.event_id))
+    if negado:
+        return negado
     from app.calendar.casting_ops import restore_role
 
     restore_role(role, actor_name=current_user.name)
@@ -438,6 +482,9 @@ def api_toggle_confirm(event_id: int) -> Any:
     if not _can_confirm():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import toggle_confirmed
 
     toggle_confirmed(event, actor_name=current_user.name, actor_id=current_user.id, tz=_TZ_SP)
@@ -455,6 +502,9 @@ def api_save_logistics(event_id: int) -> Any:
         return json_error("Sem permissão", 403)
     data = request.get_json(silent=True) or {}
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import resolve_makeup_location, save_logistics
 
     save_logistics(
@@ -488,6 +538,9 @@ def api_add_observation(event_id: int) -> Any:
     if event is None:
         return json_error("Evento não encontrado", 404)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     is_multipart = bool(request.content_type) and request.content_type.startswith("multipart/")
     file_storage = None
     if is_multipart:
@@ -548,6 +601,9 @@ def api_delete_observation(obs_id: int) -> Any:
         return json_error("Observação não encontrada", 404)
     event = CalendarEvent.query.get(obs.event_id)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.observation_ops import delete_observation
 
     if not delete_observation(event, obs_id):
@@ -895,6 +951,9 @@ def api_sync_event(event_id: int) -> Any:
     if event is None:
         return json_error("Evento não encontrado", 404)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.routes import _sync_single_event_flow
 
     # O ator vai para o histórico quando o "Sincronizar" retira a marca de um evento que voltou
@@ -1258,6 +1317,9 @@ def api_update_event(event_id: int) -> Any:
     if not _can_create_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     body = request.get_json(silent=True) or {}
     data = _build_update_event_data(body)
 
@@ -1360,6 +1422,9 @@ def api_update_event_basics(event_id: int) -> Any:
     if not _can_create_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     body = request.get_json(silent=True) or {}
     data = {
         "title": (body.get("title") or "").strip(),
@@ -1508,6 +1573,9 @@ def api_set_event_clients(event_id: int) -> Any:
     body = request.get_json(silent=True) or {}
     pairs = _client_pairs_from_json(body.get("clients") or [])
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import set_event_clients
 
     set_event_clients(event, pairs)
@@ -1533,6 +1601,7 @@ def api_set_event_form_response(event_id: int) -> Any:
     if raw is not None and not isinstance(raw, int):
         return json_error("form_response_id inválido", 400)
 
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.event_ops import set_event_form_response
     from app.formularios.formularios_ops import FormularioJaTemDestino
 
@@ -1544,6 +1613,11 @@ def api_set_event_form_response(event_id: int) -> Any:
 
         db.session.rollback()
         return json_error(exc.message, 409)
+    except CancelValidationError as exc:  # feature 312: o cancelado não recebe formulário
+        from app import db
+
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     if not vinculou and raw is not None:
         return json_error("Pré-contrato não encontrado", 404)
     return _event_detail_json(event)
@@ -1957,6 +2031,9 @@ def api_add_contract(event_id: int) -> Any:
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     file_storage = request.files.get("file")
     is_signed = request.form.get("is_signed", "false").lower() == "true"
 
@@ -1985,6 +2062,9 @@ def api_delete_contract(contract_id: int) -> Any:
         return json_error("Apenas o super admin pode excluir contratos", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.routes import _delete_contract_record
 
     _log_anexo(contract.event_id, "Excluiu contrato enviado")
@@ -2005,6 +2085,9 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
         return json_error("Apenas o super admin pode alterar o status do contrato", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.routes import _toggle_contract_signed
 
     _toggle_contract_signed(contract)
@@ -2256,6 +2339,9 @@ def api_set_role_payment_status(role_id: int) -> Any:
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import set_payment_status
 
     status = (request.get_json(silent=True) or {}).get("payment_status", "")
@@ -2281,6 +2367,9 @@ def api_link_figurino_sheet(role_id: int) -> Any:
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import link_figurino_sheet
 
     raw = (request.get_json(silent=True) or {}).get("sheet_id")
@@ -2307,6 +2396,9 @@ def api_clear_figurino_done(role_id: int) -> Any:
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import clear_figurino_done
 
     clear_figurino_done(event, role, actor_name=current_user.name, tz=_TZ_SP)
@@ -2326,6 +2418,9 @@ def api_travel_estimate(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     if not _can_edit_event():
         return json_error("Sem permissão", 403)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     if not event.location:
         return json_error("Evento sem endereço de destino.", 400, {"location": "Obrigatório"})
 
@@ -2360,6 +2455,9 @@ def api_add_material(event_id: int) -> Any:
     if not _can_ensaio_material():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import add_ensaio_file, add_ensaio_link
 
     is_multipart = bool(request.content_type) and request.content_type.startswith("multipart/")
@@ -2400,6 +2498,9 @@ def api_delete_material(material_id: int) -> Any:
         return json_error("Sem permissão", 403)
     event = CalendarEvent.query.get(material.event_id)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     from app.calendar.event_ops import delete_ensaio_material
 
     delete_ensaio_material(material)
@@ -2424,6 +2525,7 @@ def api_create_ensaio(event_id: int) -> Any:
     Corpo JSON: `{"date": "YYYY-MM-DD", "start": "HH:MM", "end": "HH:MM", "description",
     "location_type": "manto"|"outro", "location"}`.
     """
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.event_ops import (
         EnsaioValidationError,
         create_ensaio,
@@ -2452,6 +2554,8 @@ def api_create_ensaio(event_id: int) -> Any:
         )
     except EnsaioValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312: show cancelado não ganha ensaio
+        return _recusa_do_cancelado(exc)
     except RuntimeError as exc:
         return json_error(f"Erro ao criar no Google Calendar: {exc}", 502)
     return _event_detail_json(event), 201
@@ -2469,6 +2573,9 @@ def api_update_ensaio(ensaio_id: int) -> Any:
     if not _can_ensaio():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(ensaio)
+    if negado:
+        return negado
     body = request.get_json(silent=True) or {}
     try:
         warning = update_ensaio(
@@ -2502,6 +2609,9 @@ def api_delete_ensaio(ensaio_id: int) -> Any:
     if not _can_ensaio():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(ensaio)
+    if negado:
+        return negado
     parent = ensaio.parent
     warning = delete_ensaio(ensaio)
     if parent is not None:
@@ -2532,7 +2642,13 @@ def api_link_ensaio(ensaio_id: int) -> Any:
             "Show inválido para vínculo.", 400, fields={"parent_event_id": "Selecione um show"}
         )
 
-    link_ensaio_to_show(ensaio, parent, actor_name=current_user.name)
+    from app.calendar.cancel_ops import CancelValidationError
+
+    try:
+        link_ensaio_to_show(ensaio, parent, actor_name=current_user.name)
+    except CancelValidationError as exc:  # feature 312: 400 no campo do show cancelado
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
     return _event_detail_json(ensaio)
 
 
@@ -2554,6 +2670,9 @@ def api_assign_presence(event_id: int) -> Any:
     if not _can_ensaio():
         return json_error("Sem permissão", 403)
 
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     body = request.get_json(silent=True) or {}
     raw = body.get("talent_id")
     talent_id = int(raw) if isinstance(raw, int) or (isinstance(raw, str) and raw.isdigit()) else None
@@ -2576,9 +2695,13 @@ def api_feedback_link(event_id: int) -> Any:
     if not _can_confirm():
         return json_error("Sem permissão", 403)
 
+    from app.calendar.cancel_ops import CancelValidationError
     from app.calendar.event_ops import ensure_feedback_token
 
-    token = ensure_feedback_token(event)
+    try:
+        token = ensure_feedback_token(event)
+    except CancelValidationError as exc:  # feature 312 (Q5)
+        return _recusa_do_cancelado(exc)
     # PUBLIC_BASE_URL, não request.url_root: atrás do proxy reverso (206) o Host que chega
     # aqui é o do serviço backend (changeOrigin) — url_root geraria um link com o domínio
     # interno da Railway em vez do endereço público da plataforma.
@@ -2811,6 +2934,9 @@ def api_renomear_grupo(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     if not _can_group():
         return json_error("Sem permissão", 403)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     if not event.is_group_leader:
         return json_error("Apenas o evento principal de um grupo pode ser renomeado.", 409)
 

@@ -37,6 +37,8 @@ def api_portal_accept_invite(role_id: int) -> Any:
     role = portal_ops.accept_invite(talent, role_id)
     if role is None:
         return json_error("Convite não encontrado.", 404)
+    if role.event is not None and role.event.is_cancelled:  # feature 312
+        return json_error("Este evento foi cancelado.", 400)
     return jsonify({"role_id": role.id, "invite_status": role.invite_status})
 
 

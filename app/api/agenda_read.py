@@ -205,12 +205,15 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
 
 
 def flags_do_detalhe(event: CalendarEvent, user: Any, impersonate: str | None) -> dict[str, bool]:
-    """As flags do detalhe: as de `_role_flags` mais as três do cancelado (features 306 e 306b).
+    """As flags do detalhe: as de `_role_flags` mais as do cancelado (features 306, 306b e 312).
 
     - `can_edit_venda_cancelado`: cancelado e Superadmin (segue a impersonação, como `can_group`;
       o servidor confere o papel real);
     - `can_edit_pagamentos`: no vivo, `can_edit_event`; no cancelado, `can_edit_venda_cancelado`.
     - `can_edit_motivo_cancelado` (306b): cancelado e Superadmin ou Comercial.
+    - Feature 312 (Q7 do dono): no cancelado, `somente_consulta` e as permissões de escrita da
+      tela desligadas — a tela esconde o que grava em vez de mostrar e recusar; `desfazer` guarda
+      o que o soltar presente e o desligar formulário precisam (`desfazer_*`) (a opção A da Q7 os deixa livres).
 
     Ficam fora de `_role_flags` porque ela também serve à agenda, que não tem evento.
     """
@@ -225,6 +228,19 @@ def flags_do_detalhe(event: CalendarEvent, user: Any, impersonate: str | None) -
     flags["can_edit_motivo_cancelado"] = bool(
         cancelado and (flags["is_superadmin"] or flags["is_comercial"])
     )
+    if cancelado:
+        flags["somente_consulta"] = True
+        flags["desfazer_presente_3d"] = flags["can_manage_3d"]
+        flags["desfazer_formulario"] = flags["can_edit_core"]
+        for nome in (
+            "can_edit_event",
+            "can_edit_core",
+            "can_confirm",
+            "can_group",
+            "can_manage_3d",
+            "can_request_delete",
+        ):
+            flags[nome] = False
     return flags
 
 
@@ -831,8 +847,10 @@ def serialize_event_detail(
             # Cancelamento e solicitação de exclusão (feature 224). O evento cancelado continua
             # abrível pelo link direto — é onde se consulta o que foi vendido e devolvido.
             "cancelled_at": event.cancelled_at.isoformat() if event.cancelled_at else None,
-            "cancelled_by": _nome_usuario(event.cancelled_by_id),
-            "cancellation_reason": event.cancellation_reason or None,
+            # Feature 312 (Q9 do dono: "apenas para os comercial, financeiro e admin"): quem cancelou
+            # e por quê só com `show_comercial` (segue o "Ver como"); os outros veem só a data.
+            "cancelled_by": _nome_usuario(event.cancelled_by_id) if flags["show_comercial"] else None,
+            "cancellation_reason": (event.cancellation_reason or None) if flags["show_comercial"] else None,
             "deletion_request": (
                 {
                     "requested_at": event.deletion_requested_at.isoformat(),

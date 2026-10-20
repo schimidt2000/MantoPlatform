@@ -488,6 +488,12 @@ def apply_event_link(
     Returns:
         ``VinculoResultado`` com a divergência de cliente, quando houver.
     """
+    # Feature 312 (Q2): pré-contrato não se liga a evento cancelado — o núcleo único cobre o painel
+    # do evento, a associação em /formularios e a edição em bloco. Import tardio: este módulo é
+    # folha (`event_ops.py:14-18`).
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para ligar um formulário a ele.")
     limpar_encerramento(response)
     response.event_id = event.id
     response.event_link_source = source

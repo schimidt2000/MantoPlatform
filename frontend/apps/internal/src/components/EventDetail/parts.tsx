@@ -115,6 +115,20 @@ export function Stars({ score }: { score: number }) {
 }
 
 /** Estado vazio padrão das seções. */
+/**
+ * Feature 312 (Q7/Q8 do dono): no cancelado, os dados de venda só o Superadmin altera. Para os
+ * outros papéis os controles somem (flag `can_edit_venda_cancelado` da 306) e esta frase diz por
+ * quê, uma vez no topo da aba, em vez de um botão morto.
+ */
+export function AvisoVendaDoCancelado({ flags }: { flags: Record<string, boolean> }) {
+  if (!flags.somente_consulta || flags.can_edit_venda_cancelado) return null;
+  return (
+    <p className="rounded-md border border-line bg-surface-2 px-3 py-2 text-sm text-muted" role="note">
+      Evento cancelado: só o Superadmin altera os dados de venda.
+    </p>
+  );
+}
+
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="text-sm text-muted">{children}</p>;
 }

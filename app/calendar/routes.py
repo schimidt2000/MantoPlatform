@@ -1650,12 +1650,22 @@ _EVENT_ACTIONS = {
     "rename_group":         _handle_rename_group,
 }
 
-# Feature 306 (contracts §21): o Jinja não refaz o cancelado (não tem `reaplicar_cancelado`), então
-# estas ações recusam o evento cancelado para todo papel, o Superadmin inclusive.
-_ACOES_RECUSADAS_NO_CANCELADO = frozenset({
-    "update_comercial", "update_sale", "add_payment", "edit_payment", "delete_payment",
-    "add_reembolso", "collect_reembolso", "delete_reembolso",
-})
+# Feature 306 (contracts §21) e 312 (Q7 do dono): no Jinja o evento cancelado é só consulta — toda
+# ação é recusada, para todo papel, o Superadmin inclusive. As correções de venda do cancelado (que o
+# Jinja não sabe refazer, sem `reaplicar_cancelado`) são pela tela nova.
+CANCELADO_NO_JINJA = (
+    "Este evento foi cancelado — a tela fica só para consulta. Os dados de venda se corrigem pela "
+    "tela nova, só pelo Superadmin."
+)
+
+
+def _recusa_jinja_do_cancelado(event: CalendarEvent):
+    """`flash` + volta para a tela do evento quando ele está cancelado; `None` para seguir."""
+    if event is None or not event.is_cancelled:
+        return None
+    db.session.rollback()
+    flash(CANCELADO_NO_JINJA, "error")
+    return redirect(url_for("calendar.event_detail", event_id=event.id))
 
 
 @calendar_bp.route("/events/<int:event_id>", methods=["GET", "POST"])
@@ -1691,17 +1701,14 @@ def event_detail(event_id: int):
             abort(403)
         handler = _EVENT_ACTIONS.get(action)
         eid = event.id  # capture before commit+thread expire the ORM object
-        if handler and action in _ACOES_RECUSADAS_NO_CANCELADO:
+        if handler:
             from app.calendar.orcamento_evento_ops import travar_evento
 
+            # Trava e relê antes de decidir (a mesma corrida que a 306 fechou nas ações de venda).
             travar_evento(event)
-            if event.is_cancelled:
-                db.session.rollback()
-                flash(
-                    "Evento cancelado: os dados de venda se corrigem pela tela nova, só pelo Superadmin.",
-                    "error",
-                )
-                return redirect(url_for("calendar.event_detail", event_id=eid))
+            recusa = _recusa_jinja_do_cancelado(event)
+            if recusa is not None:
+                return recusa
         if handler:
             handler(event, tz_sp)
         return redirect(url_for("calendar.event_detail", event_id=eid))
@@ -1959,7 +1966,9 @@ def event_detail(event_id: int):
         cobranca_amount=cobranca_amount,
         cobranca_due_line=cobranca_due_line,
         talents=talents,
-        logs=logs,
+        # Feature 312 (Q9): o log do ato traz "Evento cancelado: <motivo>"; no cancelado, o
+        # histórico só vai a quem pode ver o motivo (Comercial, Financeiro, Superadmin).
+        logs=logs if (show_comercial or not event.is_cancelled) else [],
         contracts=contracts,
         payments=payments,
         received_total=sum(p.amount or 0 for p in payments),
@@ -2632,6 +2641,9 @@ def create_ensaio(event_id: int):
     if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
         abort(403)
 
+    recusa = _recusa_jinja_do_cancelado(event)
+    if recusa is not None:
+        return recusa
     date_str      = request.form.get("ensaio_date", "").strip()
     start_str     = request.form.get("ensaio_start", "").strip()
     end_str       = request.form.get("ensaio_end", "").strip()
@@ -2704,6 +2716,9 @@ def edit_ensaio(ensaio_id: int):
     if ensaio.event_type != "ENSAIO":
         abort(400)
 
+    recusa = _recusa_jinja_do_cancelado(ensaio)
+    if recusa is not None:
+        return recusa
     date_str    = request.form.get("ensaio_date", "").strip()
     start_str   = request.form.get("ensaio_start", "").strip()
     end_str     = request.form.get("ensaio_end", "").strip()
@@ -2775,6 +2790,9 @@ def delete_ensaio(ensaio_id: int):
 
     parent_id = ensaio.parent_event_id
 
+    recusa = _recusa_jinja_do_cancelado(ensaio)
+    if recusa is not None:
+        return recusa
     if ensaio.google_event_id:
         try:
             delete_event(CALENDAR_ID, ensaio.google_event_id)
@@ -2815,6 +2833,11 @@ def link_ensaio_parent(ensaio_id: int):
     parent = CalendarEvent.query.get(int(raw))
     if parent is None or parent.event_type == "ENSAIO" or parent.id == ensaio.id:
         flash("Show inválido para vínculo.", "error")
+        return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
+    if parent.is_cancelled:  # feature 312 (Q2): o gêmeo de `link_ensaio_to_show`
+        from app.calendar.event_ops import ENSAIO_VINCULO_CANCELADO
+
+        flash(ENSAIO_VINCULO_CANCELADO, "error")
         return redirect(url_for("calendar.event_detail", event_id=ensaio.id))
 
     ensaio.parent_event_id = parent.id
@@ -4310,7 +4333,10 @@ def _can_ensaio(user) -> bool:
 def ensaio_upload_material(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
+    ev = CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
+    recusa = _recusa_jinja_do_cancelado(ev)
+    if recusa is not None:
+        return recusa
 
     file = request.files.get("material_file")
     label = request.form.get("label", "").strip()
@@ -4360,7 +4386,10 @@ def ensaio_upload_material(event_id: int):
 def ensaio_add_link(event_id: int):
     if not _can_ensaio(current_user):
         abort(403)
-    CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
+    ev = CalendarEvent.query.get_or_404(event_id)  # 404 se o evento não existe
+    recusa = _recusa_jinja_do_cancelado(ev)
+    if recusa is not None:
+        return recusa
 
     url   = request.form.get("link_url", "").strip()
     label = request.form.get("link_label", "").strip()
@@ -4389,6 +4418,9 @@ def ensaio_delete_material(event_id: int, material_id: int):
     material = EnsaioMaterial.query.get_or_404(material_id)
     if material.event_id != event_id:
         abort(404)
+    recusa = _recusa_jinja_do_cancelado(CalendarEvent.query.get(event_id))
+    if recusa is not None:
+        return recusa
     # remove arquivo físico se existir
     if material.file_path:
         full = os.path.join(current_app.config["UPLOAD_FOLDER"], material.file_path)
@@ -4497,6 +4529,9 @@ def sync_single_event(event_id: int):
     """Sincroniza um único evento com o Google Calendar (wrapper fino sobre
     `_sync_single_event_flow`, feature 151)."""
     event = CalendarEvent.query.get_or_404(event_id)
+    recusa = _recusa_jinja_do_cancelado(event)
+    if recusa is not None:
+        return recusa
     status = _sync_single_event_flow(
         event,
         actor_name=current_user.name,
@@ -4526,6 +4561,9 @@ def add_observation(event_id: int):
 
     event = CalendarEvent.query.get_or_404(event_id)
 
+    recusa = _recusa_jinja_do_cancelado(event)
+    if recusa is not None:
+        return recusa
     obs_types    = request.form.getlist("obs_type[]")
     obs_contents = request.form.getlist("obs_content[]")
     obs_labels   = request.form.getlist("obs_label[]")
@@ -4566,6 +4604,9 @@ def delete_observation(event_id: int, obs_id: int):
     from app.calendar.observation_ops import delete_observation as _delete_observation
 
     event = CalendarEvent.query.get_or_404(event_id)
+    recusa = _recusa_jinja_do_cancelado(event)
+    if recusa is not None:
+        return recusa
     if not _delete_observation(event, obs_id):
         abort(404)
     return redirect(url_for("calendar.event_detail", event_id=event_id))
@@ -4629,6 +4670,9 @@ def dismiss_role(role_id: int):
     if not _is_superadmin():
         abort(403)
     role = EventRole.query.get_or_404(role_id)
+    recusa = _recusa_jinja_do_cancelado(CalendarEvent.query.get(role.event_id))
+    if recusa is not None:
+        return recusa
     from app.calendar.casting_ops import dismiss_role as _dismiss_role
     ok = _dismiss_role(role, actor_name=current_user.name, dismissed_by=current_user.id)
     if not ok:
@@ -4646,6 +4690,9 @@ def restore_role(role_id: int):
     if not _is_superadmin():
         abort(403)
     role = EventRole.query.get_or_404(role_id)
+    recusa = _recusa_jinja_do_cancelado(CalendarEvent.query.get(role.event_id))
+    if recusa is not None:
+        return recusa
     was_dismissed = role.dismissed_at is not None
     from app.calendar.casting_ops import restore_role as _restore_role
     _restore_role(role, actor_name=current_user.name)

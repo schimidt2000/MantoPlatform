@@ -417,6 +417,10 @@ def accept_invite(talent: Talent, role_id: int) -> EventRole | None:
     role = _owned_role(talent, role_id)
     if role is None:
         return None
+    if role.event is not None and role.event.is_cancelled:
+        # Feature 312: o portal já não mostra o convite do cancelado; a chamada direta não o aceita
+        # (nada é gravado — a rota responde que o evento foi cancelado).
+        return role
     role.invite_status = "accepted"
     db.session.commit()
     return role

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { ApiRequestError } from "@manto/api-client";
 import { useFeedbackEvent, useSubmitFeedback } from "../lib/feedback";
 import { StarRating } from "../components/feedback/StarRating";
 import { TagChips } from "../components/feedback/TagChips";
@@ -41,6 +42,22 @@ export function AvaliarPage() {
       <div className="mx-auto max-w-md space-y-4 px-4 py-10">
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-40 w-full" />
+      </div>
+    );
+  }
+
+  // Feature 312: o link enviado antes do cancelamento responde 410 — a cliente lê que não há o que
+  // avaliar, sem formulário (e sem título nem data do evento, que o servidor não manda).
+  if (feedbackEvent.isError && feedbackEvent.error instanceof ApiRequestError && feedbackEvent.error.status === 410) {
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-md items-center px-4 py-10">
+        <Card className="w-full p-4 text-center">
+          <CardContent className="flex flex-col items-center gap-3 pt-4">
+            <div className="text-4xl">🗓️</div>
+            <h1 className="font-display text-xl text-ink">Este evento foi cancelado</h1>
+            <p className="text-sm text-muted">Não há avaliação a fazer. Qualquer dúvida, fale com a gente.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }

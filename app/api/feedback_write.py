@@ -42,12 +42,19 @@ def google_review_url() -> str:
     return DEFAULT_GOOGLE_REVIEW_URL
 
 
+# Feature 312 (Q5 do dono): o link enviado antes do cancelamento diz à cliente que não há o que
+# avaliar — sem título nem data do evento (o recurso existiu e deixou de valer: 410).
+AVALIACAO_DO_CANCELADO = "Este evento foi cancelado — não há avaliação a fazer."
+
+
 @api_bp.route("/avaliar/<token>")
 def api_feedback_event(token: str) -> Any:
     """Dados do evento associado ao token (paridade com `feedback_bp.avaliar`)."""
     event = _event_by_token(token)
     if not event:
         return json_error("Link não encontrado", 404)
+    if event.is_cancelled:
+        return json_error(AVALIACAO_DO_CANCELADO, 410)
 
     return jsonify(
         {
@@ -68,6 +75,8 @@ def api_feedback_submit(token: str) -> Any:
     event = _event_by_token(token)
     if not event:
         return json_error("Link não encontrado", 404)
+    if event.is_cancelled:
+        return json_error(AVALIACAO_DO_CANCELADO, 410)
 
     body = request.get_json(silent=True) or {}
     client_name = (body.get("client_name") or "").strip()[:200]

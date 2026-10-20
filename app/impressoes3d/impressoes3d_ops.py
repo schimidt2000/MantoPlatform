@@ -330,6 +330,10 @@ def add_event_gift(
     Raises:
         Impressao3DValidationError: Peça inexistente/inativa, quantidade ou prazo inválidos.
     """
+    # Feature 312 (Q2): evento cancelado não ganha presente; o que já estava ligado fica.
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para vincular presente a ele.")
     item = Acervo3DItem.query.get(item_id) if item_id else None
     if item is None:
         raise Impressao3DValidationError("item_id", "Selecione uma peça do Acervo 3D.")

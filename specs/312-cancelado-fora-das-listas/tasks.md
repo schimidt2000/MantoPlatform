@@ -69,11 +69,11 @@ o `ruff check` nos tocados. Sem migration.
       `specs/312-cancelado-fora-das-listas/verify_312_primeira_falha.txt`. Esperado: 22 e 23 verdes; 1–21 e 9b
       vermelhos **pelo motivo certo** (o cancelado vem; a escrita grava; o motivo vem; o FINANCEIRO recebe 403;
       falta `cancelamentos`). Vermelho por erro do harness não conta — corrigir o harness antes de seguir
-- [ ] T012 Núcleo em `app/calendar/cancel_ops.py`, sem chamadores: `EventoSomenteConsultaError` (409,
+- [X] T012 Núcleo em `app/calendar/cancel_ops.py`, sem chamadores: `EventoSomenteConsultaError` (409,
       `CODIGO_EVENTO_CANCELADO`, "Este evento foi cancelado — a tela fica só para consulta.") e
       `exigir_evento_vivo(event)`; `EventoCanceladoVinculoError` e `recusar_se_cancelado_para_ligar(event, *,
       campo=None, mensagem)` (400 com `fields` quando há campo, 409 sem); docstrings com o porquê (research R2, R3)
-- [ ] T013 `app/api_utils.py`: `json_recusa_do_cancelado(exc)` (a tradução que hoje é
+- [X] T013 `app/api_utils.py`: `json_recusa_do_cancelado(exc)` (a tradução que hoje é
       `_recusa_do_cancelado`, `agenda_write.py:121-125`); `_recusa_do_cancelado` passa a delegar a ela. Rodar o
       `verify_306.py` (base 67/69) e o `verify_306b.py` (8/8) para provar que nada mudou
 
@@ -124,16 +124,17 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-011–FR-022. **Teste independente**: cenários 8–14 e 9b verdes.
 
-- [ ] T027 [US2] Q9 no detalhe: `cancellation_reason` e `cancelled_by` só com `show_comercial`
+- [X] T027 [US2] Q9 no detalhe: `cancellation_reason` e `cancelled_by` só com `show_comercial`
       (`app/api/agenda_read.py:830-831`). *[analyze]* No Jinja, o "Log de atividades" (`event_detail.html:2201-2212`)
       aparece a qualquer logado e o log do ato traz "Evento cancelado: <motivo>" (`cancel_ops.py:1720`, `:2028`):
       na view `event_detail` (`app/calendar/routes.py:1656`), no cancelado, os logs só vão ao template com a
       `show_comercial` (sem tocar o template)
-- [ ] T028 [US2] Flags: `flags_do_detalhe` (`app/api/agenda_read.py:207-228`) — `somente_consulta: true` e
+- [X] T028 [US2] Flags: `flags_do_detalhe` (`app/api/agenda_read.py:207-228`) — `somente_consulta: true` e
       `can_edit_event`, `can_edit_core`, `can_confirm`, `can_group`, `can_manage_3d` e `can_request_delete` falsas no
-      cancelado, e `desfazer: {presente_3d, formulario}` com os valores que `can_manage_3d` e `can_edit_core` teriam
+      cancelado, e `desfazer_presente_3d` / `desfazer_formulario` (booleanas — o tipo das flags na tela é
+      `Record<string, boolean>`) com os valores que `can_manage_3d` e `can_edit_core` teriam
       (o "soltar presente" e o "desligar formulário" leem esses, não as flags zeradas)
-- [ ] T029 [US2] Ajudante `_trava_do_cancelado(event)` em `app/api/agenda_write.py` (irmão de `_recusa_se_cancelado`,
+- [X] T029 [US2] Ajudante `_trava_do_cancelado(event)` em `app/api/agenda_write.py` (irmão de `_recusa_se_cancelado`,
       `:132-145`) e a chamada, depois do 404/403, em: `PATCH /events/<id>` (`:1246`, todo corpo), `…/basico`
       (`:1346`), confirm (`:429`), logistics (`:445`), observações (`:476`, `:540`), clients (`:1492`), contratos
       (`:1945`, `:1975`, `:1994`), travel-estimate (`:2314`), materiais (`:2346`, `:2388`), presença (`:2537`),
@@ -142,46 +143,46 @@ o `ruff check` nos tocados. Sem migration.
       `DELETE /ensaios/<id>` de ensaio cancelado (`:2458`, `:2491`); fora de `agenda_write`: `POST`/`DELETE
       /events/<id>/3d-dismissal` (`app/api/impressoes3d_write.py:198`, `:214`) e `DELETE
       /clientes/avaliacoes/<feedback_id>` de avaliação de cancelado (`app/api/clientes_write.py:108`)
-- [ ] T030 [US2] A trava nas vagas: `DELETE /roles/<id>` (`:266`), figurino feito (`:305`, `:2294`), transporte
+- [X] T030 [US2] A trava nas vagas: `DELETE /roles/<id>` (`:266`), figurino feito (`:305`, `:2294`), transporte
       (`:326`, `:365`), dismiss/restore (`:390`, `:409` — hoje o evento é buscado depois do núcleo, `:401`, `:419`: buscar antes),
       payment-status (`:2243`), figurino-sheet (`:2267`)
-- [ ] T031 [P] [US2] A trava no `PATCH` do presente 3D (`app/api/impressoes3d_write.py:154`), pelo `gift.event` (a
+- [X] T031 [P] [US2] A trava no `PATCH` do presente 3D (`app/api/impressoes3d_write.py:154`), pelo `gift.event` (a
       rota só carrega o presente, `_load_gift`)
-- [ ] T032 [US2] Recusas Q5 no núcleo, antes de qualquer e-mail: `assign_role` com talento
+- [X] T032 [US2] Recusas Q5 no núcleo, antes de qualquer e-mail: `assign_role` com talento
       (`app/calendar/casting_ops.py:67`), `add_role` com talento (`:421`), `send_invite` (`:501`),
       e `convidar_recem_escalados` (`:525`) como defesa (`return 0`, sem levantar: os dois chamadores são
       `update_event_core`, depois do commit `event_ops.py:1009/1016`, e a criação `routes.py:3987` — quem segura o
       PATCH é a trava da T029); tradução 409 com `codigo` nas rotas `:206`, `:238`, `:288`
-- [ ] T033 [US2] Recusas Q2 de ensaio: `create_ensaio` (`app/calendar/event_ops.py:1761`, antes do Google) → 409 na
+- [X] T033 [US2] Recusas Q2 de ensaio: `create_ensaio` (`app/calendar/event_ops.py:1761`, antes do Google) → 409 na
       rota `:2417`; `link_ensaio_to_show` (`:1871`) → 400 `fields.parent_event_id` na rota `:2513`. A recusa é a 1ª linha de
       `create_ensaio` (o Google vem em `:1785`). Jinja: `create-ensaio` (`routes.py:2615`) tem o próprio
       `insert_event` (`~:2663`) — a recusa entra entre o 403 (`:2620`) e ele; `link-parent` (`:2787`) grava à mão
       (`:2812-2819`) — conferir o `parent` do formulário (`:2805`), não o ensaio; `edit-ensaio` (`:2683`) e
       `delete-ensaio` (`:2752`) de ensaio cancelado caem na trava
-- [ ] T034 [P] [US2] Tag NFC: `update_tag` (`app/impressoes3d/nfc_ops.py:289`) recusa vínculo novo a cancelado →
+- [X] T034 [P] [US2] Tag NFC: `update_tag` (`app/impressoes3d/nfc_ops.py:289`) recusa vínculo novo a cancelado →
       400 `fields.event_id` (`app/api/nfc_write.py:52`, que hoje só traduz `NfcValidationError` sem `codigo`: novo
       `except` pela `json_recusa_do_cancelado`); o mesmo id e `null` passam
-- [ ] T035 [P] [US2] Presente 3D novo: `add_event_gift` (`app/impressoes3d/impressoes3d_ops.py:319`) → 409 com `codigo` na
+- [X] T035 [P] [US2] Presente 3D novo: `add_event_gift` (`app/impressoes3d/impressoes3d_ops.py:319`) → 409 com `codigo` na
       rota `app/api/impressoes3d_write.py:126` (novo `except`; hoje só `Impressao3DValidationError` → 400)
-- [ ] T036 [P] [US2] Formulário: `apply_event_link` (`app/formularios/formularios_ops.py:465`) recusa ligar a
+- [X] T036 [P] [US2] Formulário: `apply_event_link` (`app/formularios/formularios_ops.py:465`) recusa ligar a
       cancelado → 409 em `PATCH …/form-response` (`agenda_write.py:1515`), `vincular-evento`
       (`app/api/formularios_admin_write.py:220`); a "edição em bloco" é o `PATCH /events/<id>`
       (`vincular_formulario_ao_evento`, `formularios_ops.py:542`), já na trava da T029; o automático (`:903`) e o
       `destino_ops.py:282` não chegam ao cancelado (T018 e `destino_ops.py:273`); desligar passa. A rota
       `…/sugestao/<event_id>/confirmar` (`formularios_admin_write.py:91`) já recusa o cancelado (404
       `SugestaoIndisponivel`, 298) — fica como está, classificada no 9b
-- [ ] T037 [P] [US2] Pedido de figurino: a recusa NÃO mora em `_resolver_evento` (`app/figurino/producao_ops.py:595`,
+- [X] T037 [P] [US2] Pedido de figurino: a recusa NÃO mora em `_resolver_evento` (`app/figurino/producao_ops.py:595`,
       chamado também no update com o mesmo id, `:740-743`), e sim nos chamadores — create (`:650`) e update só quando
       `novo != producao.event_id` (`:742`) → 400 `fields.event_id` (`app/api/figurino_producao_write.py:78`, `:111`, `:156`)
-- [ ] T038 [P] [US2] Avaliação: `ensure_feedback_token` (`app/calendar/event_ops.py:1527`) → 409 na rota `:2563`;
+- [X] T038 [P] [US2] Avaliação: `ensure_feedback_token` (`app/calendar/event_ops.py:1527`) → 409 na rota `:2563`;
       `GET`/`POST /api/avaliar/<token>` (`app/api/feedback_write.py:45`, `:64`) → 410 sem título nem data
-- [ ] T039 [US2] Jinja: no despachante `event_detail` (`app/calendar/routes.py:1658`, `_EVENT_ACTIONS` `:1621`) uma
+- [X] T039 [US2] Jinja: no despachante `event_detail` (`app/calendar/routes.py:1658`, `_EVENT_ACTIONS` `:1621`) uma
       checagem antes do `handler` para todas as ações no cancelado (`flash` + `redirect`), que substitui o bloco
       `_ACOES_RECUSADAS_NO_CANCELADO` da 306 (`:1649-1652`, `:1681-1688`, com `travar_evento`) e cobre o
       `assign_casting` (está dentro do despachante, `:1622`); `POST /events/<id>/sync` Jinja (`:4482`); a mesma linha em
       observações (`:4504`, `:4546`), materiais (`:4296-4372`), dismiss/restore (`:4607`, `:4629`),
       `create-ensaio` (`:2615`), `link-parent` (`:2787`), e "Imprimir fichas" (`app/figurino/routes.py:36`)
-- [ ] T040 [US2] Tela — `frontend/apps/internal/src/components/EventDetail/`: com `flags.somente_consulta`,
+- [X] T040 [US2] Tela — `frontend/apps/internal/src/components/EventDetail/`: com `flags.somente_consulta`,
       esconder o que grava em `EventHeader.tsx` (confirmar `:320`, "Pedir feedback" `:324`), `ResumoSection.tsx`
       (`:267`, `:275`), `ComercialSection.tsx` (Clientes `:504`, Pré-contrato `:917` — fica o desligar, renomear
       grupo `~:1177`), `FinanceiroSection.tsx` (contratos `:24`, `:72-100`), `LogisticaSection.tsx` (`:56`,
@@ -189,23 +190,23 @@ o `ruff check` nos tocados. Sem migration.
       `:163-170`), `EnsaioSection.tsx` (`:148`, `:340`, `:374`), `Presente3DSection.tsx` (`:106`, `:126` — fica o
       soltar, `:46/:71`, por `flags.desfazer.presente_3d`; o desligar do Pré-contrato, `ComercialSection.tsx:917-920`,
       por `flags.desfazer.formulario`), `FeedbackSection.tsx` (`:84-85`); `CastingSection.tsx` fica para a T049
-- [ ] T041 [US2] Painéis de venda para quem não é Superadmin: a frase "Evento cancelado: só o Superadmin altera os
+- [X] T041 [US2] Painéis de venda para quem não é Superadmin: a frase "Evento cancelado: só o Superadmin altera os
       dados de venda." onde os controles somem (`ComercialSection.tsx:980-983`, `ColecoesComerciaisPanel.tsx:69-73`,
       `FinanceiroSection.tsx:335`, `:423`, `:579`)
-- [ ] T042 [US2] Caixa do cancelado (`EventHeader.tsx:409-430`): frase "Saiu da agenda e das listas do sistema;
+- [X] T042 [US2] Caixa do cancelado (`EventHeader.tsx:409-430`): frase "Saiu da agenda e das listas do sistema;
       fica na página de Cancelamentos e no card 'Cancelamentos do período'. A tela fica só para consulta; só os
       dados de venda continuam editáveis, pelo Superadmin."; sem motivo do servidor → "Evento cancelado em DD/MM",
       sem linha (some o "Sem motivo registrado." para quem não pode ver); "Editar motivo" (306b) intocado
-- [ ] T043 [US2] Recarregar ao receber `cancelado`: utilitário em `frontend/apps/internal/src/lib/eventOps.ts`
+- [X] T043 [US2] Recarregar ao receber `cancelado`: utilitário em `frontend/apps/internal/src/lib/eventOps.ts`
       (invalida `["event", id]`) no `onError` das mutações da tela; `EnsaioSection.tsx` passa a mostrar
       `vincular.error?.message`
-- [ ] T044b [P] [US2] Portal: `accept_invite` (`app/talent_portal/portal_ops.py:415`, rota
+- [X] T044b [P] [US2] Portal: `accept_invite` (`app/talent_portal/portal_ops.py:415`, rota
       `app/api/portal_agenda.py:33`) recusa convite de evento cancelado com 400 "Este evento foi cancelado." (o
       portal já não o mostra; a chamada direta aceitaria). Recusar convite (`:43`) e o "Ciente" (`:53`) ficam
       livres (não ligam nada novo)
-- [ ] T044 [P] [US2] Avaliação pública: `frontend/apps/public/src/pages/AvaliarPage.tsx` mostra "Este evento foi
+- [X] T044 [P] [US2] Avaliação pública: `frontend/apps/public/src/pages/AvaliarPage.tsx` mostra "Este evento foi
       cancelado — não há avaliação a fazer." no 410, sem formulário
-- [ ] T045 [US2] Rodada: cenários 8–14 e 9b verdes (9b lista toda rota de escrita; nenhuma sem classificação);
+- [X] T045 [US2] Rodada: cenários 8–14 e 9b verdes (9b lista toda rota de escrita; nenhuma sem classificação);
       `verify_306`/`306b` na base; typecheck; ruff; commit `feat(312): história 2 — a tela do cancelado só para
       consulta e o motivo só para quem trata dele`
 

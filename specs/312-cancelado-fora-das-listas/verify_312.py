@@ -748,7 +748,7 @@ def c12_q2() -> None:
     if r.status_code != 200:
         falhas.append(f"desligar formulário → {r.status_code} {_erro(r)}")
     r = _cliente("sa").delete(f"/api/events/{e}/3d-gifts/{S['presente']}")
-    if r.status_code != 200:
+    if r.status_code not in (200, 204):
         falhas.append(f"soltar presente → {r.status_code} {_erro(r)}")
     _garante(not falhas, "12: " + " | ".join(falhas))
 
@@ -758,8 +758,10 @@ def c13_flags() -> None:
     _garante(flags.get("somente_consulta") is True, f"13: somente_consulta {flags.get('somente_consulta')}")
     for f in ("can_edit_event", "can_edit_core", "can_confirm", "can_group", "can_manage_3d", "can_request_delete"):
         _garante(not flags.get(f), f"13: {f} verdadeira no cancelado")
-    des = flags.get("desfazer") or {}
-    _garante(des.get("presente_3d") is True and des.get("formulario") is True, f"13: desfazer {des}")
+    _garante(
+        flags.get("desfazer_presente_3d") is True and flags.get("desfazer_formulario") is True,
+        f"13: desfazer {flags.get('desfazer_presente_3d')} {flags.get('desfazer_formulario')}",
+    )
     _garante(flags.get("can_edit_venda_cancelado") is True, "13: a flag de venda da 306 sumiu")
     vivo = _get("sa", f"/api/events/{S['vivo']}").get("flags") or {}
     _garante("somente_consulta" not in vivo or not vivo["somente_consulta"], "13: somente_consulta no vivo")

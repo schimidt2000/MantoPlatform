@@ -17,10 +17,12 @@ import { Empty, INPUT_CLASS, Panel } from "./parts";
 interface GiftRowProps {
   gift: Event3DGift;
   canManage: boolean;
+  /** Feature 312: no cancelado, soltar o presente (desfazer) continua para quem o gerencia. */
+  podeSoltar: boolean;
 }
 
 /** Linha de um presente já vinculado: miniatura, quantidade, prazo, status e remoção. */
-function GiftRow({ gift, canManage }: GiftRowProps) {
+function GiftRow({ gift, canManage, podeSoltar }: GiftRowProps) {
   const update = useUpdateEvent3DGift();
   const remove = useDeleteEvent3DGift();
 
@@ -68,7 +70,7 @@ function GiftRow({ gift, canManage }: GiftRowProps) {
           {GIFT_3D_STATUS_LABELS[gift.status]}
         </Badge>
       )}
-      {canManage && (
+      {podeSoltar && (
         <Button
           variant="ghost"
           size="sm"
@@ -104,6 +106,8 @@ export function Presente3DSection({ data }: Presente3DSectionProps) {
   if (gifts === undefined || data.event.event_type !== "SHOW") return null;
 
   const canManage = Boolean(data.flags.can_manage_3d);
+  // Feature 312: no cancelado `can_manage_3d` vem falsa (só consulta), mas soltar continua livre.
+  const podeSoltar = canManage || Boolean(data.flags.desfazer_presente_3d);
 
   return (
     <Panel
@@ -119,7 +123,7 @@ export function Presente3DSection({ data }: Presente3DSectionProps) {
       ) : (
         <ul className="divide-y divide-line">
           {gifts.map((gift) => (
-            <GiftRow key={gift.id} gift={gift} canManage={canManage} />
+            <GiftRow key={gift.id} gift={gift} canManage={canManage} podeSoltar={podeSoltar} />
           ))}
         </ul>
       )}
