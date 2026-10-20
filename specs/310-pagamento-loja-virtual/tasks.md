@@ -22,9 +22,9 @@ conexão separada; limpeza no `finally`.
 
 ## Phase 1: Setup
 
-- [ ] T001 Rebase do worktree na `origin/main` do dia (a 306 já entrou na main) e conferir a cabeça
+- [x] T001 Rebase do worktree na `origin/main` do dia (a 306 já entrou na main) e conferir a cabeça
       das migrations; anotar em `data-model.md` o `down_revision` real
-- [ ] T002 [P] Constantes em `app/constants.py`: `VIRTUAL_ANTECEDENCIA_RESERVA_HORAS=2`,
+- [x] T002 [P] Constantes em `app/constants.py`: `VIRTUAL_ANTECEDENCIA_RESERVA_HORAS=2`,
       `VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO=30`, `VIRTUAL_SALA_ALERTA_HORAS=6`,
       `VIRTUAL_SALA_RETRY_LONGO_MIN=10`, `VIRTUAL_AVISO_REPROCESSA_HORAS=48`, motivos de devolução
       novos (+ rótulos em `VIRTUAL_REFUND_REASON_LABELS`), desfechos do aviso (finais/não finais, R-06)
@@ -33,26 +33,26 @@ conexão separada; limpeza no `finally`.
 
 ## Phase 2: Foundational (bloqueia todas as histórias)
 
-- [ ] T003 Colunas novas em `app/models.py` conforme `data-model.md` (SiteSetting, VirtualOrder,
+- [x] T003 Colunas novas em `app/models.py` conforme `data-model.md` (SiteSetting, VirtualOrder,
       VirtualPaymentNotification, VirtualCampaign), com docstring do porquê
-- [ ] T004 Migration manual `migrations/versions/<rev>_pagamento_loja_virtual_310.py` (aditiva +
+- [x] T004 Migration manual `migrations/versions/<rev>_pagamento_loja_virtual_310.py` (aditiva +
       backfill `state='decidido'` onde `outcome` não é nulo; downgrade completo); aplicar no
       `manto_local`; ida e volta
-- [ ] T005 [P] Trava `_suppress_infinitepay()` + config `INFINITEPAY_SUPPRESS_CALLS` e
+- [x] T005 [P] Trava `_suppress_infinitepay()` + config `INFINITEPAY_SUPPRESS_CALLS` e
       `INFINITEPAY_API_KEY` (default `""`) em `app/config.py` (R5, R12; molde da 303); o
       `create_app` registra uma linha no log da subida quando a chave está ausente ("link sem
       validade — fluxo legado", constituição XIV)
-- [ ] T006 Cliente `app/integracoes/infinitepay_client.py`: resultado de reconsulta em 4 valores
+- [x] T006 Cliente `app/integracoes/infinitepay_client.py`: resultado de reconsulta em 4 valores
       (`pago`/`nao_pago`/`nao_encontrado`/`nao_sei`, R4) com `success:false` = `nao_encontrado`;
       `InfinitePayRecusou` carrega `code` (`body.error` ou `message`) e status; `InfinitePayTravada`
       (subclasse de Indisponível) quando a config injetada manda travar; header `X-Api-Key` e
       `options{valid_until, single_payment}` só com chave; descrição/`customer` como R-15 (sem
       `import flask` no topo — config por parâmetro)
-- [ ] T007 **`specs/310-pagamento-loja-virtual/verify_310.py`** — os 44 cenários da seção
+- [x] T007 **`specs/310-pagamento-loja-virtual/verify_310.py`** — os 44 cenários da seção
       "Verificação" da spec + R-22 (20 rodadas de concorrência); dublês de InfinitePay (por resultado e
       por identificadores) e de Google (conta chamadas, falha fechado); cenários por bloco (`--ate`),
       registro de qual caminho decidiu; escrito AGORA
-- [ ] T008 Rodar `verify_310.py` contra o núcleo de `98192e8` (só fundação aplicada): cenários
+- [x] T008 Rodar `verify_310.py` contra o núcleo de `98192e8` (só fundação aplicada): cenários
       1–6, 13, 15, 18, 26, 29 FALHAM pelo motivo descrito; registrar a saída em
       `specs/310-pagamento-loja-virtual/verify_baseline.txt`
 

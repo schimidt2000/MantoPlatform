@@ -557,6 +557,14 @@ def create_app():
         "[links externos] portal=%s plataforma=%s",
         app.config.get("PORTAL_URL"), app.config.get("PUBLIC_BASE_URL"),
     )
+    # Feature 310 (constituição XIV): estado da InfinitePay no log do deploy. A API Key ausente é
+    # estado válido (fluxo legado), mas precisa ser visível — foi o silêncio que fez tokens sumirem
+    # na migração para o Render.
+    app.logger.info(
+        "[infinitepay] travada=%s api_key=%s",
+        app.config.get("INFINITEPAY_SUPPRESS_CALLS"),
+        "configurada" if app.config.get("INFINITEPAY_API_KEY") else "ausente (link sem validade)",
+    )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl

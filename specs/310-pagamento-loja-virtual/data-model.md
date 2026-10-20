@@ -1,6 +1,6 @@
 # Modelo de dados — 310
 
-Migration **aditiva**, escrita à mão, `down_revision = 'a7c3e91f4d28'` (head da `main` em `98192e8`).
+Migration **aditiva**, escrita à mão, `down_revision = 'c5d2f7a9e306'` (head da `main` depois da 306, rebase de 20/10).
 **Atenção ao merge**: a 306 (`C:\tmp\mp306`) e a 309 (`C:\tmp\mp309`) também penduram migration nesse
 head; quem mergear por último ajusta o `down_revision` para a cabeça vigente (sem `flask db merge`
 automático — o `startCommand` roda `flask db upgrade` e duas cabeças derrubam o deploy).

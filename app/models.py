@@ -910,6 +910,16 @@ class SiteSetting(db.Model):
     # token é a única barreira de entrada — e fica no banco justamente para ser revogável sem
     # deploy: trocar a linha invalida o endereço antigo na hora.
     infinitepay_webhook_token = db.Column(db.String(64), nullable=True)
+    # Feature 310 (R-12): regerar o segredo derrubava o aviso de todo link já aberto. O anterior
+    # continua aceito por `VIRTUAL_TOKEN_ANTERIOR_HORAS`, e então deixa de valer sozinho.
+    infinitepay_webhook_token_anterior = db.Column(db.String(64), nullable=True)
+    infinitepay_webhook_token_anterior_ate = db.Column(db.DateTime, nullable=True)
+    # Feature 310 (R-18): salvar a InfiniteTag ligava a venda de toda campanha publicada. O
+    # interruptor nasce DESLIGADO; desligado, não nasce link novo, mas aviso, retorno e reconsulta
+    # de pedidos já abertos seguem — pedido aberto precisa fechar.
+    virtuais_pagamento_ativo = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="0"
+    )
     # Marcador do último ciclo da varredura de reservas virtuais. Serve de "lock" de execução única
     # entre os workers do gunicorn — mesmo papel de `calendar_auto_sync_at` (FR-057a): dois
     # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
@@ -3152,6 +3162,9 @@ class VirtualCampaign(db.Model):
 
     max_reservations_per_origin = db.Column(db.Integer, nullable=False, server_default="5")
     reservation_window_minutes  = db.Column(db.Integer, nullable=False, server_default="60")
+    # Feature 310 (R14): campanha publicada fora da vitrine, acessível só pelo link — para o teste
+    # real de baixo valor não aparecer para o público, e para ofertas fechadas.
+    listada = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
 
     created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
     updated_at = db.Column(
@@ -3311,6 +3324,17 @@ class VirtualOrder(db.Model):
     expired_unverified = db.Column(
         db.Boolean, nullable=False, default=False, server_default="0"
     )
+    # Feature 310. Por que o liberado sem prova foi liberado: `nao_sei` = operadora fora (entra em
+    # "a conferir"); nulo com `expired_unverified` = legado da 205. Abandono não marca nada (R-07).
+    unverified_reason = db.Column(db.String(24), nullable=True)
+    # Código da recusa da operadora ao criar o link (`external_checkout_not_enabled`…): é o que a
+    # equipe precisa ver, e o que tira o pedido do teto por origem (FR-026).
+    payment_link_error = db.Column(db.String(200), nullable=True)
+    # Comprovante da operadora, quando chega por aviso ou retorno (FR-033).
+    receipt_url = db.Column(db.String(500), nullable=True)
+    # "A conferir" resolvido pela equipe (R-07): irreversível e auditado.
+    conferido_em  = db.Column(db.DateTime, nullable=True)
+    conferido_por = db.Column(db.String(120), nullable=True)
     # Tentativas de telefone na página do pedido (FR-044b).
     access_attempts      = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     access_blocked_until = db.Column(db.DateTime, nullable=True)
@@ -3353,9 +3377,18 @@ class VirtualPaymentNotification(db.Model):
     # 'paid' | 'unpaid' | 'divergent' | 'unavailable' | 'error'
     recheck_result  = db.Column(db.String(20), nullable=True)
     recheck_payload = db.Column(db.Text, nullable=True)
-    # 'efetivado' | 'duplicado' | 'recusado' | 'conflito' | 'retido' | 'orfao'
+    # Desfechos em `constants.VIRTUAL_AVISO_*` (feature 310; os da 205 continuam nas linhas antigas).
     outcome         = db.Column(db.String(24), nullable=True)
     message         = db.Column(db.Text, nullable=True)
+    # Feature 310 (R2): a rota só grava e responde; o processamento roda fora da requisição. `state`
+    # é o claim por linha (pendente → processando → decidido) e o par attempts/last_attempt_at é a
+    # política de reprocessamento (R-06).
+    state           = db.Column(db.String(12), nullable=False, default="pendente",
+                                server_default="pendente")
+    attempts        = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    last_attempt_at = db.Column(db.DateTime, nullable=True)
+    resolvido_em    = db.Column(db.DateTime, nullable=True)
+    resolvido_por   = db.Column(db.String(120), nullable=True)
     created_at      = db.Column(db.DateTime, default=now_sp, nullable=False)
 
     order = db.relationship(

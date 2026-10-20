@@ -170,6 +170,26 @@ def _suppress_calendar_event_writes() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_infinitepay() -> bool:
+    """Decide se este processo está proibido de falar com a InfinitePay (feature 310, XIV).
+
+    O `manto_local` é espelho da produção e traz a InfiniteTag e o segredo do aviso reais; o
+    `PUBLIC_BASE_URL` local resolve para a produção. Sem esta trava, reservar na cópia local criava
+    um link de pagamento de verdade, com o aviso apontando para a produção, e a varredura local
+    reconsultava e efetivava pedidos reais. Cobre criar link e reconsultar; o cliente lê a chave a
+    cada chamada (chave ausente = travado).
+
+    ``INFINITEPAY_SUPPRESS_CALLS=true`` trava em qualquer ambiente;
+    ``INFINITEPAY_ALLOW_LOCAL_CALLS=true`` libera o local — e então cobra de verdade.
+    """
+    if os.getenv("INFINITEPAY_SUPPRESS_CALLS", "").lower() == "true":
+        return True
+    if os.getenv("INFINITEPAY_ALLOW_LOCAL_CALLS", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -317,6 +337,14 @@ class Config:
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
+
+    # Trava da InfinitePay fora da produção (feature 310). Ver `_suppress_infinitepay`.
+    INFINITEPAY_SUPPRESS_CALLS = _suppress_infinitepay()
+    # API Key da InfinitePay (feature 310, R12). Opcional e SEGREDO: só por variável de ambiente
+    # (`render.yaml` com `sync: false`), nunca no SiteSetting, que vai para o backup e para o
+    # espelho. Vazia = fluxo legado provado em produção (link sem validade); com valor, o link vence
+    # junto com a reserva e aceita um pagamento só.
+    INFINITEPAY_API_KEY = os.getenv("INFINITEPAY_API_KEY", "").strip()
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.
