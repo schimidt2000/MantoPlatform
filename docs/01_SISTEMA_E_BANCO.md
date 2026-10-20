@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (em branch; sem migration — head
+> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (EM PRODUÇÃO desde 20/10/2026 ~09:15, a pedido do dono; sem migration — head
 > continua `a7c3e91f4d28`; blocos `produtos` e `produtos_estimativa` no `pricing_config` e "Papai Noel"/
 > "Ajudante do Noel" de volta a 600/270, §2.10; `produtos` no payload, `quote` e `snapshot` de
 > `/orcamento/calcular`, validação do bloco em `/orcamento/settings`, teto das vagas do produto no

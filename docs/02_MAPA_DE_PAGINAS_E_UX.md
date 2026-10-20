@@ -6,7 +6,7 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (em branch): card "Produtos de
+> Última atualização: **2026-10-20** · **309-produtos-de-tabela** (em produção desde 20/10 ~09:15): card "Produtos de
 > tabela" (`Combobox`) na calculadora com valor único "Preço de tabela", avisos da conta, "N
 > incluído(s) no produto" no coordenador e "Gerar Orçamento" travado sem `quote.produtos`; linha do
 > produto em `/orcamento/:id`; card "Produtos de tabela" + "Estimativa" em `/orcamento/configuracoes`

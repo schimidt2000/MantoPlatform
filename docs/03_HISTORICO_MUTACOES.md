@@ -4,10 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-20** · Estado do repositório: em branch
-> **309-produtos-de-tabela** (sem migration; worktree próprio — a Visita Mágica vira produto de
-> tabela com preço fixo fora do markup e os cachês de "Papai Noel"/"Ajudante do Noel" voltam a
-> 600/270; `verify_309.py --regressao` 20/20) — antes dela pós-feature
+> Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **309-produtos-de-tabela** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~09:15** pelo merge
+> `merge: 309 — …` sobre a `main` `98192e8`, a pedido do dono, em horário comercial — a Visita Mágica
+> vira produto de tabela com preço fixo fora do markup e os cachês de "Papai Noel"/"Ajudante do Noel"
+> voltam a 600/270; `verify_309.py --regressao` 20/20 depois do converge) — antes dela pós-feature
 > **307-natal-papai-noel-calculadora** (sem migration; **EM PRODUÇÃO desde 16/10/2026 ~01:25** pelo
 > merge `merge: 307 — …` — a tabela de preços ganha a faixa de 24 e 25/12 e a calculadora a aplica
 > pela data do evento, com o teto das vagas junto; `verify_307.py --regressao` 18/18) — antes dela
@@ -132,7 +133,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **309-produtos-de-tabela** | *(em branch)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
+| **309-produtos-de-tabela** | *(EM PRODUÇÃO 20/10 ~09:15)* A Visita Mágica do Papai Noel passa a ser vendida como **produto de tabela**: bloco `produtos` no `pricing_config` (preço FIXO por visita — 2.500 / 3.600; 5.000 / 6.500 em 24 e 25/12 —, composição de vagas com cachê "pela tabela", noturno e maquiagem embutidos), card com `Combobox` na calculadora, preço somado DEPOIS do markup e fixo nas 4 colunas e na régua, coordenador do produto não cobrado em dobro, UM maquiador por orçamento, mensagem/PDF com o bloco do produto e UM valor quando só há produto. As vagas do evento nascem das vagas congeladas do produto com teto = cachê da tabela na data do evento (Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250; 1.000 / 650 / 500 na faixa) no prefill, na criação e no vínculo 273. "Papai Noel" volta a 600 e "Ajudante do Noel" a 270 (a 307 tinha posto 712/423 por engenharia reversa e o casting pagava o teto) por migração inversa guardada; script `rebaixar_tetos_noel_309.py` para os tetos já gravados. Faixa sem preço → estimativa marcada; validação por campo no `POST /settings`; EducaManto neutro | 2026-10-19 | `—` | (aqui) | — |
 | **307-natal-papai-noel-calculadora** | *(EM PRODUÇÃO 16/10 ~01:25)* A tabela de preços ganha o bloco **datas especiais** (faixa "Véspera e Natal": 24 e 25/12, markup 3,34, cachês Noel 1.000 / Ajudante do Noel 650 / coordenador 500, piso 650 para os demais, nota da mensagem) e a calculadora passa a aplicá-lo **pela data do evento**: Noel sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181, sem o acréscimo "Outro" que a comercial somava à mão em 65 % dos orçamentos de Noel. A tabela normal ganha "Papai Noel" 712 e "Ajudante do Noel" 423 (→ R$ 2.501 / R$ 3.601 até 23/12) por migração guardada. O **teto de cachê das vagas** segue a mesma faixa pela data do evento (criação e vínculo 273) — antes o acréscimo manual não chegava ao artista e o casting ficava preso em 600. Card novo na Config. de Preços (validado no núcleo, 400 apontando o campo), aviso dourado e dica na calculadora, "Gerar Orçamento" travado durante o recálculo, PDF com a nota em itálico; EducaManto neutro | 2026-10-15 | `—` | (aqui) | — |
 | **305-bv-do-orcamento-no-evento** | *(EM PRODUÇÃO 15/10 ~02:49)* O BV do orçamento passa a chegar ao evento no valor certo — **em reais, na proporção da venda** (R$ 100,00 no exemplo da D2, não R$ 130,95) — com **quem recebe e o PIX obrigatórios**, na criação e no "Vincular e aplicar"; a venda digitada à mão acende um alerta com "Lançar o BV"; o BV a pagar acompanha a venda que muda depois; o editor de Acréscimos deixa de apagar o PIX, "despagar" BV, descartar valor com vírgula e calcular a comissão com o BV velho. O passado fica como está (corte pelo momento do deploy) | 2026-10-14 | `—` | (aqui) | — |
 | **298b-sinonimos-do-formulario** | *(EM PRODUÇÃO 14/10 ~19:28, merge `f1fbd46`)* A idade do aniversariante (70 respostas desde 01/06) e o telefone da assessoria (36) das respostas do WhatsForm não chegavam ao cadastro do evento: a 298 adivinhou o slug da idade (`idade_do_aniversariante`, que nunca existiu) e não tinha o da assessoria. Duas tuplas em `SINONIMOS`; pergunta criada no editor continua só nas respostas do formulário (decisão do dono) | 2026-10-14 | `—` | (aqui) | — |
@@ -309,9 +310,10 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 309 — Produtos de tabela: a Visita Mágica vendida pelo preço da tabela, com os cachês das vagas definidos pela tabela de preços   (309-produtos-de-tabela · 2026-10-19 · sem migration)
 
-> **Em branch** (worktree `C:\tmp\mp309`, base `main 6356b80`; commits `0d57112` verify vermelho +
-> gabarito, `e84ba0c` núcleo, `0419b64` teto e script, `a6bdb99` telas, docs e converge a seguir).
-> Pós-deploy a fazer pelo dono: rodar `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` no
+> **EM PRODUÇÃO desde 20/10/2026 ~09:15** (merge `merge: 309 — …` sobre a `main` `98192e8`, a pedido
+> do dono, em horário comercial; feita no worktree `C:\tmp\mp309` sobre a base `6356b80`; commits
+> `0d57112` verify vermelho + gabarito, `e84ba0c` núcleo, `0419b64` teto e script, `a6bdb99` telas,
+> `bc0e534` docs, `254c1fb` converge). Pós-deploy a fazer pelo dono: rodar `specs/309-produtos-de-tabela/rebaixar_tetos_noel_309.py` no
 > Shell do Render (relatório; depois `--execute`) para rebaixar os tetos 712/423 gravados desde 16/10,
 > conferir `/orcamento/configuracoes` (Papai Noel 600 / Ajudante do Noel 270 / card "Produtos de
 > tabela" com os dois produtos) e avisar a equipe: a Visita Mágica se vende pelo card de produtos,
