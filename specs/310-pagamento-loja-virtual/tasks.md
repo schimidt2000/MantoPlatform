@@ -243,7 +243,7 @@ conexão separada; limpeza no `finally`.
       memória por processo e "História 9 desligada até a API Key"; não mexe no item 88), `DEVELOPMENT.md` (§Operar a produção:
       ligar/desligar a loja, teste de R$ 1, trava local, regra R-20), skill `manto-deploy` (R-20)
 - [x] T061 `/speckit-converge` até não sobrar tarefa nova
-- [ ] T062 Pré-merge: rebase na `main` do dia; reencadear `down_revision`; ensaio de
+- [x] T062 Pré-merge: rebase na `main` do dia; reencadear `down_revision`; ensaio de
       upgrade/downgrade num banco descartável com o dump do dia; venv 3.11 com `requirements.txt`;
       relatório ao dono. **Sem push** até ele pedir.
 
