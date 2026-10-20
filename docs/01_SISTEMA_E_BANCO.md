@@ -7,7 +7,8 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **306-dinheiro-do-cancelamento** (EM PRODUÇÃO desde 20/10/2026 ~09:30; migration
+> Última atualização: **2026-10-20** · **306b-motivo-editavel** (sem migration; `PATCH /api/events/<id>/motivo-cancelamento`, §3.3; `pode_editar_motivo_do_cancelado` e a flag
+> `can_edit_motivo_cancelado`, §4.3). Antes: **2026-10-20** · **306-dinheiro-do-cancelamento** (EM PRODUÇÃO desde 20/10/2026 ~09:30; migration
 > **`c5d2f7a9e306`** — head: as tabelas `event_cancellations`, `event_cancellation_bvs` e
 > `event_cancellation_elenco`, §2.2; o ajuste e o `no_banco` das comissões, a categoria "Multa de
 > cancelamento" e a devolução de cancelado travada, §2.6; a cobrança desconta a devolução, §3.2;
@@ -750,6 +751,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | POST | `/api/events/<id>/cancelar` *(feature 224; corpo, resposta e recusas reescritos na 306 — ver "Feature 306" abaixo)* |
 | GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado)* |
 | PATCH | `/api/events/<id>/devolucao` *(feature 306 — "Alterar devolução" do cancelado; só Superadmin real; responde `{ok, resumo}`)* |
+| PATCH | `/api/events/<id>/motivo-cancelamento` *(feature 306b — "Editar motivo" do cancelado; Superadmin ou Comercial pelo papel real; corpo `{motivo}`; o texto vale para os dias do grupo cancelados com o mesmo motivo e troca o antigo no `EventLog` e no `AuditLog` `event_cancelled`; 409 `nao_cancelado`, 400 `fields.motivo`; responde `{ok, motivo, eventos}`)* |
 | POST | `/api/events/<id>/multas` *(feature 306 — multa ao elenco depois do ato; só Superadmin real; responde `{ok, resumo, gastos}`)* |
 | POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
@@ -1878,6 +1880,7 @@ Gates por módulo (todos em `app/api/`):
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
 | `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação, `GET /api/events/cancelamentos` e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
 | `cancel_ops.pode_editar_venda_do_cancelado(user)` — **a regra única do cancelado** (feature 306) | gate de `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, depois do 404 (os demais → 403); nas portas de dinheiro do evento, a recusa **depois** do gate de hoje — quem passa nele e não passa na regra leva **409 `codigo: "cancelado"`** (`EventoCanceladoError`), em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê antes de decidir. Porta a porta em "RBAC do evento cancelado", abaixo | `SUPERADMIN` pelo **papel real** (`user.roles`; o "Ver como" não conta) — a régua de `_can_delete()` e `_is_superadmin()` |
+| `cancel_ops.pode_editar_motivo_do_cancelado(user)` (feature 306b) | gate de `PATCH /api/events/<id>/motivo-cancelamento`, depois do 404 (os demais → 403): só o **texto** do motivo; o dinheiro do cancelado segue com a regra acima. A flag `can_edit_motivo_cancelado` do detalhe segue o "Ver como" | `SUPERADMIN` ou `COMERCIAL` pelo **papel real** |
 | `_ve_faixa_sumidos()` | `agenda.py`, `GET /api/events/sumidos-google` (feature 303) | `SUPERADMIN` ou `COMERCIAL` pelo **papel efetivo** (respeita o "Ver como"); os demais recebem **200** com `pode_ver: false` e a lista vazia — nunca 403 |
 | — (sem gate de papel) | `POST /api/events/<id>/sync` | qualquer usuário interno logado, como sempre; desde a 303 ele confere o evento no Google antes de mexer e pode **retirar a marca** "Sumiu do Google Agenda" de um evento que voltou |
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |

@@ -205,11 +205,12 @@ def _role_flags(user: Any, impersonate: str | None) -> dict[str, bool]:
 
 
 def flags_do_detalhe(event: CalendarEvent, user: Any, impersonate: str | None) -> dict[str, bool]:
-    """As flags do detalhe: as de `_role_flags` mais as duas do cancelado (feature 306, contracts §5).
+    """As flags do detalhe: as de `_role_flags` mais as três do cancelado (features 306 e 306b).
 
     - `can_edit_venda_cancelado`: cancelado e Superadmin (segue a impersonação, como `can_group`;
       o servidor confere o papel real);
     - `can_edit_pagamentos`: no vivo, `can_edit_event`; no cancelado, `can_edit_venda_cancelado`.
+    - `can_edit_motivo_cancelado` (306b): cancelado e Superadmin ou Comercial.
 
     Ficam fora de `_role_flags` porque ela também serve à agenda, que não tem evento.
     """
@@ -218,6 +219,11 @@ def flags_do_detalhe(event: CalendarEvent, user: Any, impersonate: str | None) -
     flags["can_edit_venda_cancelado"] = bool(cancelado and flags["is_superadmin"])
     flags["can_edit_pagamentos"] = (
         flags["can_edit_venda_cancelado"] if cancelado else flags["can_edit_event"]
+    )
+    # Feature 306b: o texto do motivo, Superadmin ou Comercial (segue o "Ver como", como as outras
+    # flags; o servidor confere o papel real em `pode_editar_motivo_do_cancelado`).
+    flags["can_edit_motivo_cancelado"] = bool(
+        cancelado and (flags["is_superadmin"] or flags["is_comercial"])
     )
     return flags
 

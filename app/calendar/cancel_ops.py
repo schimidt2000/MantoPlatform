@@ -130,6 +130,85 @@ def pode_editar_venda_do_cancelado(user: User | None) -> bool:
     return bool(user) and any(r.name.upper() == RoleName.SUPERADMIN for r in user.roles)
 
 
+def pode_editar_motivo_do_cancelado(user: User | None) -> bool:
+    """Feature 306b: o texto do motivo, Superadmin ou Comercial pelo papel REAL ("Ver como" não conta)."""
+    from app.constants import RoleName
+
+    papeis = {RoleName.SUPERADMIN, RoleName.COMERCIAL}
+    return bool(user) and any(r.name.upper() in papeis for r in user.roles)
+
+
+# Os prefixos que o ato grava antes do motivo no `EventLog` e no `AuditLog` (224, 306: o ato, o dia
+# satélite do "todos os dias" e o corte de um dia). O motivo só é trocado logo depois de um deles e
+# seguido de " | " ou do fim da linha — nunca solto no meio de outro texto.
+_PREFIXOS_DO_MOTIVO = (r"Evento cancelado: ", r"Dia cancelado: ", r'Evento cancelado com todos os dias do grupo de "[^"\n]*": ')
+
+
+def _trocar_motivo_no_texto(texto: str, antigo: str, novo: str) -> str:
+    """O texto com `antigo` trocado por `novo` onde ele é o motivo de uma linha do ato."""
+    import re
+
+    for prefixo in _PREFIXOS_DO_MOTIVO:
+        padrao = re.compile(f"({prefixo}){re.escape(antigo)}(?= \\| |$)")
+        texto = padrao.sub(lambda m: m.group(1) + novo, texto)
+    return texto
+
+
+def editar_motivo_do_cancelado(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor: User) -> list[int]:
+    """Troca o motivo do cancelamento (feature 306b). Sem commit.
+
+    O motivo é do ato: vale para o evento e para os dias do mesmo grupo cancelados com o mesmo
+    texto. Nas linhas do histórico desses dias (`EventLog` e o `event_cancelled` do `AuditLog`), o
+    motivo antigo vira o novo; cada dia ganha "Editou o motivo do cancelamento", sem o texto antigo
+    (o dono, 20/10: o motivo antigo some de toda tela). Dinheiro, avisos e Google não mudam.
+    T1 → 409 `nao_cancelado` → 400 `fields.motivo`.
+
+    Returns:
+        Os ids dos dias que receberam o motivo novo, em ordem.
+    """
+    from app.calendar.routes import _log_sync
+    from app.constants import CODIGO_NAO_CANCELADO
+    from app.models import AuditLog
+
+    corpo = corpo if isinstance(corpo, dict) else {}
+    eventos = travar_grupo(event)  # T1
+    if not event.is_cancelled:
+        raise CancelValidationError("Este evento não está cancelado.", status=409, codigo=CODIGO_NAO_CANCELADO)
+    novo = _texto(corpo.get("motivo"))
+    if not novo:
+        raise CancelValidationError("Explique o motivo do cancelamento.", field="motivo")
+    antigo = event.cancellation_reason or ""
+    dias = [
+        e for e in eventos if e.id == event.id or (antigo and e.is_cancelled and e.cancellation_reason == antigo)
+    ]
+    if novo == antigo:
+        return sorted(e.id for e in dias)
+
+    ids = sorted(e.id for e in dias)
+    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    if antigo:
+        for linha in EventLog.query.filter(EventLog.event_id.in_(ids)).all():
+            trocado = _trocar_motivo_no_texto(linha.message, antigo, novo)
+            if trocado != linha.message:
+                linha.message = trocado
+        auditoria = AuditLog.query.filter(
+            AuditLog.entity_type == "agenda",
+            AuditLog.entity_id.in_(ids),
+            AuditLog.action == "event_cancelled",
+        ).all()
+        for linha in auditoria:
+            trocado = _trocar_motivo_no_texto(linha.detail or "", antigo, novo)
+            if trocado != (linha.detail or ""):
+                linha.detail = trocado
+    for dia in dias:
+        dia.cancellation_reason = novo
+        db.session.add(
+            EventLog(event_id=dia.id, actor_name=actor.name, actor_role=papel, message="Editou o motivo do cancelamento")
+        )
+        _log_sync("event_cancel_reason_edited", dia, details="Editou o motivo do cancelamento", actor=actor.name, actor_role=papel)
+    return ids
+
+
 _CENTAVO = Decimal("0.01")
 
 

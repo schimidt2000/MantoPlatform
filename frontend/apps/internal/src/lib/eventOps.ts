@@ -399,6 +399,23 @@ export function useAlterarDevolucao(eventId: number) {
   });
 }
 
+/** "Editar motivo" do cancelado (feature 306b): Superadmin ou Comercial; o ato inteiro e o histórico. */
+export function useEditarMotivoCancelamento(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<{ ok: true; motivo: string; eventos: number[] }, ApiRequestError, { motivo: string }>({
+    mutationFn: (input) =>
+      apiFetch<{ ok: true; motivo: string; eventos: number[] }>(`/api/events/${eventId}/motivo-cancelamento`, {
+        method: "PATCH",
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["event"] });
+      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+      queryClient.invalidateQueries({ queryKey: ["clientes-detail"] });
+    },
+  });
+}
+
 export interface LancarMultasInput {
   multas: { elenco_id: number; valor: number }[];
 }
