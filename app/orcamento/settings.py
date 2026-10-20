@@ -14,11 +14,20 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 logger = logging.getLogger(__name__)
 
 # Feature 307: limites do markup de uma faixa de data especial (um 33,4 digitado no lugar de 3,34
-# multiplicaria o Natal por 10 ao vivo na calculadora) e o cachê ANTIGO do Papai Noel, que a
-# migração troca pela tabela de 2026 só enquanto ainda estiver exatamente assim.
+# multiplicaria o Natal por 10 ao vivo na calculadora).
 MARKUP_FAIXA_MIN = 1.0
 MARKUP_FAIXA_MAX = 6.0
-PAPAI_NOEL_CACHE_ANTIGO = [600, 650, 675, 700]
+# Feature 309: a 307 tinha posto "Papai Noel" em 712 e "Ajudante do Noel" em 423 para o preço da
+# Visita Mágica (R$ 2.500 / R$ 3.600) sair do markup — e esse número virava o TETO da vaga. Com o
+# produto de tabela o preço vem da tabela de venda e cachê volta a ser cachê (600 / 270): a troca
+# INVERSA só age sobre quem ainda estiver exatamente nesses valores (padrão "Transformer → BGE").
+NOEL_712 = [712, 800, 850, 900]
+AJUDANTE_423 = [423, 480, 510, 540]
+TIPOS_DE_VAGA = ("especial", "ator", "coordenador", "maquiador")
+LABEL_FIXO_POR_TIPO = {"coordenador": "Coordenador", "maquiador": "Maquiador"}
+PRODUTO_ROTULO_MAX = 60
+PRODUTO_DESCRICAO_MAX = 120
+PRODUTO_VAGAS_MAX = 10
 NOTA_FAIXA_MAX_CHARS = 200
 ROTULO_FAIXA_MAX_CHARS = 60
 CHAVE_FAIXA_RE = re.compile(r"^[a-z0-9_]{1,30}$")
@@ -38,10 +47,12 @@ class SettingsValidationError(Exception):
 
 # Feature 307: faixa de data especial. Em 24 e 25/12 o markup e os cachês de Papai Noel, Ajudante do
 # Noel e Coordenador vêm daqui (cachês reais pagos no Natal de 2025: Noel 1.000, ajudante 650,
-# coordenador 500 por casa; markup 3,34 escolhido pelo dono em 15/10/2026 → Noel sozinho ≈ R$ 5.010,
-# Noel + ajudante ≈ R$ 7.181). `piso` eleva qualquer outro performer ao cachê do ajudante — sem ele
-# Noel + boneco (200) sairia mais barato que Noel + ajudante e com teto de 200. Os valores de 2h–4h
-# são lineares (cada hora = preço cheio): na véspera o tempo do Noel é o recurso escasso.
+# coordenador 500 por casa; markup 3,34 escolhido pelo dono em 15/10/2026 → para o Noel AVULSO
+# sozinho ≈ R$ 5.010, Noel + ajudante ≈ R$ 7.181). `piso` eleva qualquer outro performer ao cachê do
+# ajudante — sem ele Noel + boneco (200) sairia mais barato que Noel + ajudante e com teto de 200. Os
+# valores de 2h–4h são lineares (cada hora = preço cheio): na véspera o tempo do Noel é o recurso
+# escasso. Desde a 309 a Visita Mágica em si é vendida pelo PRODUTO (`produtos`, 5.000 / 6.500 na
+# faixa); esta faixa continua valendo para os avulsos na data e é a fonte do cachê das vagas do produto.
 _FAIXA_NATAL_PADRAO: dict = {
     "rotulo": "Véspera e Natal",
     "dias": ["12-24", "12-25"],
@@ -54,6 +65,44 @@ _FAIXA_NATAL_PADRAO: dict = {
     "piso": [650, 1300, 1950, 2600],
     "nota_mensagem": "Valores especiais de 24 e 25 de dezembro.",
 }
+
+# Feature 309: produtos de tabela. O preço ao cliente é o da tabela de venda (fixo por visita; por
+# faixa de data especial quando houver) e as vagas vêm com o cachê "pela tabela vigente na data"
+# (`cache: null`) — Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250 normal, 1.000 / 650 /
+# 500 / 250 na faixa natal. Markup não entra; noturno embutido. Tipo `coordenador`/`maquiador` tem o
+# label fixo porque `_ensure_coordinator` e o vínculo 273 casam por esses nomes.
+_PRODUTOS_PADRAO: dict = {
+    "visita_magica": {
+        "rotulo": "Visita Mágica — Papai Noel",
+        "descricao": "visita padrão (até 1h)",
+        "ativo": True,
+        "preco": 2500,
+        "por_faixa": {"natal": {"preco": 5000}},
+        "vagas": [
+            {"label": "Papai Noel", "tipo": "especial", "cache": None, "needs_makeup": True},
+            {"label": "Coordenador", "tipo": "coordenador", "cache": None, "needs_makeup": False},
+            {"label": "Maquiador", "tipo": "maquiador", "cache": None, "needs_makeup": False},
+        ],
+        "inclui_noturno": True,
+    },
+    "visita_magica_ajudante": {
+        "rotulo": "Visita Mágica — Papai Noel + Ajudante",
+        "descricao": "visita padrão (até 1h)",
+        "ativo": True,
+        "preco": 3600,
+        "por_faixa": {"natal": {"preco": 6500}},
+        "vagas": [
+            {"label": "Papai Noel", "tipo": "especial", "cache": None, "needs_makeup": True},
+            {"label": "Ajudante do Noel", "tipo": "especial", "cache": None, "needs_makeup": False},
+            {"label": "Coordenador", "tipo": "coordenador", "cache": None, "needs_makeup": False},
+            {"label": "Maquiador", "tipo": "maquiador", "cache": None, "needs_makeup": False},
+        ],
+        "inclui_noturno": True,
+    },
+}
+# Produto sem preço para a faixa da data: "custo de cachê dobrado e markup um pouco mais alto que o
+# padrão" (dono, 19/10/2026) — Σ cachês 1h das vagas pela tabela normal × fator_cache × markup.
+_ESTIMATIVA_PADRAO: dict = {"fator_cache": 2.0, "markup": 3.0}
 
 DEFAULTS: dict = {
     # Cada tabela é uma lista de 4 valores por duração, na ordem [1h, 2h, 3h, 4h] (feature 098).
@@ -90,10 +139,12 @@ DEFAULTS: dict = {
         "Sósia":                  {"none": [350, 400, 425, 450], "show": [450, 500, 525, 550], "cantor": [500, 550, 575, 600]},
         "Bailarino":              [400, 450, 475, 500],
         "DJ":                     [200, 300, 350, 400],
-        # Feature 307: tabela "até 23/12" do Noel (2.500 / 3.600 em 2025) com o markup real de
-        # produção (2,6 em 1h) e coordenador 250: (712 + 250) × 2,6 = R$ 2.501; + 423 × 2,6 = R$ 3.601.
-        "Papai Noel":             [712, 800, 850, 900],
-        "Ajudante do Noel":       [423, 480, 510, 540],
+        # Feature 309: cachê é cachê — o pago real de 2025 (600) e o do ajudante (270, cara limpa);
+        # 2h–4h na progressão da tabela antiga do Noel e no degrau do ator. A Visita Mágica em si é
+        # vendida pelo produto (`produtos`); estas linhas valem para o Noel AVULSO (festa grande) e
+        # são a fonte do cachê das vagas do produto fora de 24/25.
+        "Papai Noel":             [600, 650, 675, 700],
+        "Ajudante do Noel":       [270, 320, 345, 370],
     },
     "especiais_regras": {
         "Boneco Grande Especial": {
@@ -142,6 +193,9 @@ DEFAULTS: dict = {
     "datas_especiais": {
         "natal": copy.deepcopy(_FAIXA_NATAL_PADRAO),
     },
+    # Feature 309: produtos de tabela (preço de venda fixo + vagas com cachê pela tabela).
+    "produtos": copy.deepcopy(_PRODUTOS_PADRAO),
+    "produtos_estimativa": copy.deepcopy(_ESTIMATIVA_PADRAO),
 }
 
 # Especiais que têm checkbox de show (técnico de som é adicionado se marcado)
@@ -279,6 +333,7 @@ def _migrate(data: dict) -> dict:
     data.setdefault("educamanto_som_luz", copy.deepcopy(DEFAULTS["educamanto_som_luz"]))
 
     _migrar_307(data)
+    _migrar_309(data)
 
     return data
 
@@ -509,13 +564,13 @@ def remover_especial_das_faixas(data: dict, nome: str) -> None:
 
 
 def _migrar_307(data: dict) -> None:
-    """Feature 307: garante `datas_especiais` e a tabela "até 23/12" do Noel em configs antigas.
+    """Feature 307: garante `datas_especiais` em configs antigas.
 
     Roda DENTRO do ``try`` de `load()`: qualquer exceção aqui devolveria os DEFAULTS do código para a
     tabela inteira (markup 3,0 no lugar do 2,6 real, e sem o "Papai Noel" salvo) — por isso nada
     aqui indexa sem conferir o tipo, e bloco ou faixa malformados viram o padrão em silêncio.
-    O "Papai Noel" só é trocado enquanto estiver exatamente no cachê antigo: valor já editado pelo
-    time não é tocado (mesmo padrão do "Transformer → BGE").
+    A troca automática do "Papai Noel" 600 → 712 que morava aqui saiu na 309 (cachê é cachê; a
+    Visita Mágica virou produto) — `_migrar_309` faz a inversa, guardada.
     """
     bloco = data.get("datas_especiais")
     limpo: dict = {}
@@ -533,9 +588,243 @@ def _migrar_307(data: dict) -> None:
         faixa["cache"] = {n: v for n, v in faixa["cache"].items() if n in especiais_vivos}
     data["datas_especiais"] = limpo
 
+
+# ── feature 309: produtos de tabela ────────────────────────────────────────────────────────────
+def _normalizar_vaga(vaga) -> dict | None:
+    """Vaga do produto normalizada, ou ``None`` se não dá para aproveitar (tipo ou nome inválidos).
+
+    Cachê fixo malformado vira ``None`` = "pela tabela" (descartar a vaga por isso tiraria o Noel do
+    produto); maquiagem só existe em especial/ator; coordenador e maquiador têm o label fixo.
+    """
+    if not isinstance(vaga, dict):
+        return None
+    tipo = vaga.get("tipo")
+    if tipo not in TIPOS_DE_VAGA:
+        return None
+    label = LABEL_FIXO_POR_TIPO.get(tipo) or str(vaga.get("label") or "").strip()[:120]
+    if not label:
+        return None
+    cache = _dinheiro(vaga.get("cache")) if vaga.get("cache") is not None else None
+    if cache is not None and cache <= 0:
+        cache = None
+    return {
+        "label": label,
+        "tipo": tipo,
+        "cache": cache,
+        "needs_makeup": bool(vaga.get("needs_makeup")) if tipo in ("especial", "ator") else False,
+    }
+
+
+def _normalizar_produto(produto, faixas: set[str]) -> dict | None:
+    """Produto normalizado na defensiva, ou ``None`` (descartado: sem rótulo, sem preço > 0 ou sem vaga).
+
+    Nunca produz preço 0; `por_faixa` só com faixas que existem (as outras são descartadas).
+    """
+    if not isinstance(produto, dict):
+        return None
+    rotulo = str(produto.get("rotulo") or "").strip()[:PRODUTO_ROTULO_MAX]
+    preco = _dinheiro(produto.get("preco"))
+    if not rotulo or preco is None or preco <= 0:
+        return None
+    vagas = [v for v in (_normalizar_vaga(x) for x in (produto.get("vagas") or [])) if v is not None]
+    vagas = vagas[:PRODUTO_VAGAS_MAX] if isinstance(produto.get("vagas"), list) else []
+    if not vagas:
+        return None
+    por_faixa: dict = {}
+    bruto = produto.get("por_faixa") if isinstance(produto.get("por_faixa"), dict) else {}
+    for chave, val in bruto.items():
+        if str(chave) not in faixas or not isinstance(val, dict):
+            continue
+        preco_faixa = _dinheiro(val.get("preco"))
+        if preco_faixa is not None and preco_faixa > 0:
+            por_faixa[str(chave)] = {"preco": preco_faixa}
+    return {
+        "rotulo": rotulo,
+        "descricao": _nota_limpa(produto.get("descricao"))[:PRODUTO_DESCRICAO_MAX],
+        "ativo": bool(produto.get("ativo", True)),
+        "preco": preco,
+        "por_faixa": por_faixa,
+        "vagas": vagas,
+        "inclui_noturno": bool(produto.get("inclui_noturno", True)),
+    }
+
+
+def _normalizar_estimativa(raw) -> dict:
+    """Fatores da estimativa com defaults por campo (fator > 0 finito; markup dentro dos limites)."""
+    limpo = copy.deepcopy(_ESTIMATIVA_PADRAO)
+    if not isinstance(raw, dict):
+        return limpo
+    fator = raw.get("fator_cache")
+    if isinstance(fator, (int, float)) and not isinstance(fator, bool) and math.isfinite(fator) and fator > 0:
+        limpo["fator_cache"] = float(fator)
+    markup = raw.get("markup")
+    if (
+        isinstance(markup, (int, float))
+        and not isinstance(markup, bool)
+        and math.isfinite(markup)
+        and MARKUP_FAIXA_MIN <= markup <= MARKUP_FAIXA_MAX
+    ):
+        limpo["markup"] = float(markup)
+    return limpo
+
+
+def _migrar_309(data: dict) -> None:
+    """Feature 309: garante `produtos` e `produtos_estimativa` e desfaz a troca 600 → 712 da 307.
+
+    Roda DENTRO do ``try`` de `load()` (ver `_migrar_307`): nada indexa sem conferir o tipo. Os
+    padrões só entram quando o bloco está ausente ou não é um dicionário; produto ou vaga malformados
+    são descartados em silêncio — nunca viram preço 0. A inversa do Noel/Ajudante age só sobre quem
+    ainda está EXATAMENTE em 712/423: valor editado pelo time não é tocado.
+    """
+    faixas = set((data.get("datas_especiais") or {}).keys())
+    bloco = data.get("produtos")
+    if not isinstance(bloco, dict):
+        data["produtos"] = copy.deepcopy(DEFAULTS["produtos"])
+    else:
+        limpo: dict = {}
+        for chave, produto in bloco.items():
+            normalizado = _normalizar_produto(produto, faixas)
+            if normalizado is not None and CHAVE_FAIXA_RE.fullmatch(str(chave)):
+                limpo[str(chave)] = normalizado
+        data["produtos"] = limpo
+    data["produtos_estimativa"] = _normalizar_estimativa(data.get("produtos_estimativa"))
+
     especiais = data.get("especiais")
-    if isinstance(especiais, dict) and especiais.get("Papai Noel") == PAPAI_NOEL_CACHE_ANTIGO:
-        especiais["Papai Noel"] = copy.deepcopy(DEFAULTS["especiais"]["Papai Noel"])
+    if isinstance(especiais, dict):
+        if especiais.get("Papai Noel") == NOEL_712:
+            especiais["Papai Noel"] = copy.deepcopy(DEFAULTS["especiais"]["Papai Noel"])
+        if especiais.get("Ajudante do Noel") == AJUDANTE_423:
+            especiais["Ajudante do Noel"] = copy.deepcopy(DEFAULTS["especiais"]["Ajudante do Noel"])
+
+
+def _validar_vaga(pref: str, vaga, especiais: dict, erros: dict, avisos: list[str], rotulo_produto: str) -> dict | None:
+    """Uma vaga limpa, ou ``None`` com os erros registrados (``<pref>.<campo>``)."""
+    if not isinstance(vaga, dict):
+        erros[pref] = "vaga inválida"
+        return None
+    tipo = vaga.get("tipo")
+    if tipo not in TIPOS_DE_VAGA:
+        erros[f"{pref}.tipo"] = f"tipo de vaga desconhecido: {tipo}"
+        return None
+    if tipo in LABEL_FIXO_POR_TIPO:
+        label = LABEL_FIXO_POR_TIPO[tipo]
+    else:
+        label = str(vaga.get("label") or "").strip()
+        if not label:
+            erros[f"{pref}.label"] = "informe o nome da vaga"
+        elif len(label) > 120:
+            erros[f"{pref}.label"] = "nome com mais de 120 caracteres"
+    cache = None
+    if vaga.get("cache") is not None:
+        cache = _dinheiro(vaga.get("cache"))
+        if cache is None or cache <= 0:
+            erros[f"{pref}.cache"] = "cachê em R$ maior que zero, ou vazio para usar a tabela"
+    make = vaga.get("needs_makeup", False)
+    if not isinstance(make, bool):
+        erros[f"{pref}.needs_makeup"] = "verdadeiro ou falso"
+        make = False
+    if tipo == "especial" and label and label not in especiais:
+        avisos.append(f'"{rotulo_produto}": a vaga "{label}" não está na tabela de preços e nasce sem teto.')
+    return {
+        "label": label,
+        "tipo": tipo,
+        "cache": cache,
+        "needs_makeup": make if tipo in ("especial", "ator") else False,
+    }
+
+
+def _validar_produto(chave: str, produto, especiais: dict, faixas: set[str], erros: dict, avisos: list[str]) -> dict | None:
+    pref = f"produtos.{chave}"
+    if not CHAVE_FAIXA_RE.fullmatch(chave) or not isinstance(produto, dict):
+        erros[pref] = "produto inválido"
+        return None
+    rotulo = str(produto.get("rotulo") or "").strip()
+    if not rotulo:
+        erros[f"{pref}.rotulo"] = "informe o rótulo"
+    elif len(rotulo) > PRODUTO_ROTULO_MAX:
+        erros[f"{pref}.rotulo"] = f"rótulo com mais de {PRODUTO_ROTULO_MAX} caracteres"
+    descricao = _nota_limpa(produto.get("descricao"))
+    if len(descricao) > PRODUTO_DESCRICAO_MAX:
+        erros[f"{pref}.descricao"] = f"descrição com mais de {PRODUTO_DESCRICAO_MAX} caracteres"
+    for campo in ("ativo", "inclui_noturno"):
+        if not isinstance(produto.get(campo, True), bool):
+            erros[f"{pref}.{campo}"] = "verdadeiro ou falso"
+    preco = _dinheiro(produto.get("preco"))
+    if preco is None or preco <= 0:
+        erros[f"{pref}.preco"] = "preço em R$ maior que zero"
+    por_faixa: dict = {}
+    bruto = produto.get("por_faixa")
+    if bruto is not None and not isinstance(bruto, dict):
+        erros[f"{pref}.por_faixa"] = "faixas inválidas"
+    for faixa_chave, val in (bruto or {}).items() if isinstance(bruto, dict) else []:
+        if str(faixa_chave) not in faixas:
+            avisos.append(f'"{rotulo or chave}": a faixa "{faixa_chave}" não existe mais — o preço dela foi descartado.')
+            continue
+        preco_faixa = _dinheiro(val.get("preco")) if isinstance(val, dict) else None
+        if preco_faixa is None or preco_faixa <= 0:
+            erros[f"{pref}.por_faixa.{faixa_chave}.preco"] = "preço em R$ maior que zero"
+        else:
+            por_faixa[str(faixa_chave)] = {"preco": preco_faixa}
+    vagas_brutas = produto.get("vagas")
+    vagas: list[dict] = []
+    if not isinstance(vagas_brutas, list) or not 1 <= len(vagas_brutas) <= PRODUTO_VAGAS_MAX:
+        erros[f"{pref}.vagas"] = f"de 1 a {PRODUTO_VAGAS_MAX} vagas"
+    else:
+        for i, vaga in enumerate(vagas_brutas):
+            limpa = _validar_vaga(f"{pref}.vagas.{i}", vaga, especiais, erros, avisos, rotulo or chave)
+            if limpa is not None:
+                vagas.append(limpa)
+    return {
+        "rotulo": rotulo,
+        "descricao": descricao,
+        "ativo": bool(produto.get("ativo", True)),
+        "preco": preco,
+        "por_faixa": por_faixa,
+        "vagas": vagas,
+        "inclui_noturno": bool(produto.get("inclui_noturno", True)),
+    }
+
+
+def validar_produtos(bloco, estimativa, especiais: dict, datas_especiais: dict) -> tuple[dict, dict | None, list[str]]:
+    """Valida `produtos` (e `produtos_estimativa`, se vier) da tela; devolve as cópias limpas e avisos.
+
+    Preço fixo errado é dinheiro ao vivo na calculadora — por isso cada campo tem regra e o erro nomeia
+    o campo (``produtos.<chave>.<campo>`` / ``produtos.<chave>.vagas.<i>.<campo>`` /
+    ``produtos_estimativa.<campo>``). Faixa que não existe mais em `por_faixa` NÃO é erro: é descartada
+    com aviso (senão remover uma faixa travaria o Salvar). Label de especial fora da tabela também só
+    avisa (a vaga nasce sem teto). ``estimativa`` ``None`` = não veio no corpo = manter a salva.
+
+    Raises:
+        SettingsValidationError: com ``fields`` por campo.
+    """
+    if not isinstance(bloco, dict):
+        raise SettingsValidationError("Produtos de tabela inválidos.", {"produtos": "bloco inválido"})
+    erros: dict = {}
+    avisos: list[str] = []
+    faixas = set((datas_especiais or {}).keys())
+    limpo: dict = {}
+    for chave, produto in bloco.items():
+        limpa = _validar_produto(str(chave), produto, especiais, faixas, erros, avisos)
+        if limpa is not None:
+            limpo[str(chave)] = limpa
+    estimativa_limpa = None
+    if estimativa is not None:
+        if not isinstance(estimativa, dict):
+            erros["produtos_estimativa"] = "bloco inválido"
+        else:
+            fator = _dinheiro(estimativa.get("fator_cache"))
+            if fator is None or fator <= 0:
+                erros["produtos_estimativa.fator_cache"] = "fator maior que zero"
+            markup = _markup_de_4([estimativa.get("markup")] * 4)
+            if markup is None:
+                erros["produtos_estimativa.markup"] = (
+                    f"markup entre {MARKUP_FAIXA_MIN:g} e {MARKUP_FAIXA_MAX:g} (coeficiente)"
+                )
+            if not erros:
+                estimativa_limpa = {"fator_cache": fator, "markup": markup[0]}
+    if erros:
+        raise SettingsValidationError("Produtos de tabela inválidos.", erros)
+    return limpo, estimativa_limpa, avisos
 
 
 def faixa_especial(event_date: str | None, settings: dict | None = None) -> dict | None:

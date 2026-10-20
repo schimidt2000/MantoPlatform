@@ -124,6 +124,23 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
             y -= 13
         y -= 4
 
+    # Feature 309: produtos de tabela (a Visita Mágica pelo preço de venda) — linha própria logo abaixo
+    # da equipe, antes do investimento. `.get`: orçamentos antigos não têm a chave. "(estimativa)" quando
+    # o produto não tinha preço para a faixa da data.
+    produtos = quote.get("produtos") or []
+    if produtos:
+        c.setFont(_FONT_NORMAL, 8.5)
+        c.setFillColor(_GRAY)
+        for produto in produtos:
+            descricao = f" ({produto['descricao']})" if produto.get("descricao") else ""
+            marca = " (estimativa)" if produto.get("estimado") else ""
+            c.drawString(
+                _LEFT + 8, y,
+                f"• {produto['rotulo']}{descricao}: {_fmt_brl(float(produto.get('preco_aplicado') or 0))}{marca}",
+            )
+            y -= 13
+        y -= 4
+
     # ── Investimento ───────────────────────────────────────────────────────
     y = _section_title(c, y, "Investimento")
 

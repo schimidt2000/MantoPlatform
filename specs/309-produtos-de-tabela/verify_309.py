@@ -928,13 +928,15 @@ def cen_09_prefill_criacao_vinculo() -> None:
     maq2 = _por_nome(roles2, "Maquiador")
     _garante(len(maq2) == 1 and maq2[0]["cap"] == 300, f"UM Maquiador 300: {maq2}")
 
-    # 24/12: a data do EVENTO manda (orçamento de 20/12 vinculado a evento de 24/12).
+    # 24/12: a data do EVENTO manda (orçamento de 20/12 vinculado a evento de 24/12). Orçamento NOVO:
+    # o `oid` já está preso ao evento da criação e a 273 recusa o segundo vínculo com 409.
+    oid3 = _salvar(_calcular(_payload("2026-12-20", [], [PROD_NOEL_AJ])))
     eid3 = _evento_direto(
         "vinculo",
         "2026-12-24",
         roles=[("Papai Noel", "character", None), ("Ajudante do Noel", "character", None)],
     )
-    r = _cliente("com").patch(f"/api/events/{eid3}/orcamento", json={"orcamento_history_id": oid})
+    r = _cliente("com").patch(f"/api/events/{eid3}/orcamento", json={"orcamento_history_id": oid3})
     _garante(
         r.status_code == 200, f"vínculo 273 → {r.status_code} {r.get_data(as_text=True)[:200]}"
     )

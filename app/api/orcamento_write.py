@@ -281,8 +281,26 @@ def api_orcamento_settings_save() -> Any:
         except _cfg.SettingsValidationError as exc:
             return json_error(exc.message, 400, fields=exc.fields)
 
+    # Feature 309: produtos de tabela — validados no núcleo DEPOIS das faixas (`por_faixa` confere contra
+    # as faixas já atualizadas neste mesmo corpo). Chave ausente mantém o salvo (tela aberta desde antes
+    # do deploy não apaga os produtos); corpo inválido não grava NADA; faixa órfã vira aviso, não 400.
+    avisos: list[str] = []
+    if "produtos" in body or "produtos_estimativa" in body:
+        try:
+            produtos, estimativa, avisos = _cfg.validar_produtos(
+                body.get("produtos", s.get("produtos") or {}),
+                body.get("produtos_estimativa"),
+                s["especiais"],
+                s.get("datas_especiais") or {},
+            )
+        except _cfg.SettingsValidationError as exc:
+            return json_error(exc.message, 400, fields=exc.fields)
+        s["produtos"] = produtos
+        if estimativa is not None:
+            s["produtos_estimativa"] = estimativa
+
     _cfg.save(s)
-    return jsonify({"settings": s})
+    return jsonify({"settings": s, "avisos": avisos})
 
 
 @api_bp.route("/orcamento/settings/especiais", methods=["POST"])

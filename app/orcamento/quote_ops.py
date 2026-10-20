@@ -19,6 +19,7 @@ from app.educamanto.pricing_ops import NF_DIVISOR
 from app.models import OrcamentoHistory, User
 from app.money import format_brl
 
+from . import produtos as _produtos
 from . import settings as _cfg
 from .pricing import (
     MARCA_CACHE_FAIXA,
@@ -146,6 +147,23 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     raw_date = payload.get("event_date") or ""
     faixa = _cfg.faixa_especial(raw_date, cfg_precos)
 
+    # Feature 309: produtos de tabela (a Visita Mágica) — preço fixo por visita, fora do markup; as
+    # vagas deles contam para coordenador, maquiagem e van. Chave ausente = conta de hoje. Produto que
+    # sumiu da tabela recusa a venda (molde do personagem removido, feature 254).
+    try:
+        produtos = _produtos.aplicar(payload.get("produtos"), cfg_precos, faixa)
+    except _produtos.ProdutoDesconhecido as exc:
+        raise QuoteValidationError(
+            "produtos",
+            f'O produto "{exc.chave}" não está mais na tabela de preços — remova-o do orçamento ou '
+            "peça ao superadmin para recriá-lo.",
+        ) from exc
+    # O coordenador do produto não é cobrado em dobro: `coordenador_qty` passa a ser o total vendido
+    # (vai ao snapshot e ao teto) e só `coord_formula` entra na fórmula.
+    coordenador_qty, coord_formula, coord_inclusos = _produtos.split_coordenadores(coordenador_qty, produtos)
+    makes_produtos = _produtos.makes_dos_produtos(produtos)
+    produtos_total = _produtos.somar_produtos(produtos)
+
     acrescimos: list[dict] = []
     for a in payload.get("acrescimos") or []:
         tipo = (a.get("tipo") or "").strip()
@@ -182,8 +200,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                 num_makes_regular += 1
 
     cache_totals = [0.0, 0.0, 0.0, 0.0]
-    team_lines: list[str] = []
-    num_going = coordenador_qty
+    # Personagens do produto antes dos avulsos — a mesma ordem que o teto das vagas emite.
+    team_lines: list[str] = _produtos.labels_de_personagem(produtos)
+    num_going = coordenador_qty + len(team_lines)
 
     # Memória de cálculo: uma linha por parcela que entra na conta, na ordem em que entra.
     # Existe só para exibição — nenhum valor daqui volta para o cálculo. O `tipo` diz ao React
@@ -282,13 +301,14 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             f"{len(performers)} artista(s) × {_fmt_brl(sosia_custom_add_per_artist)}",
         )
 
-    coord_prices = get_coordenador_prices(event_has_show, coordenador_qty, faixa=faixa)
+    coord_prices = get_coordenador_prices(event_has_show, coord_formula, faixa=faixa)
     for i in range(4):
         cache_totals[i] += coord_prices[i]
     _linha(
         f"Coordenador(es) ({coordenador_qty})", coord_prices, "cache",
         ("com show" if event_has_show else "sem show")
-        + (f", {MARCA_CACHE_FAIXA}" if faixa is not None else ""),
+        + (f", {MARCA_CACHE_FAIXA}" if faixa is not None else "")
+        + (f", {coord_inclusos} no produto" if coord_inclusos else ""),
     )
 
     cache_base = [round(v, 2) for v in cache_totals]
@@ -312,19 +332,31 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     )
     _linha("= Após markup", totals, "subtotal")
 
+    # Feature 309: o produto entra DEPOIS do markup e ANTES de brinde/noturno/técnico/maquiador/
+    # transporte/acréscimos/NF — assim o BV % e a NF incidem sobre ele (conta inversa da 305 intacta)
+    # e o markup nunca o multiplica. Igual nas quatro durações.
+    if produtos:
+        for i in range(4):
+            totals[i] = round(totals[i] + produtos_total, 2)
+        memoria.extend(_produtos.linhas_da_memoria(produtos, faixa))
+        _linha("= Após produtos", totals, "subtotal")
+
     if brinde:
         for i in range(4):
             totals[i] = round(totals[i] + brinde, 2)
         _linha_fixa("Brinde do show", brinde, "pos")
 
     if noturno:
-        adicional_noturno = (len(performers) + coordenador_qty) * _ADICIONAL_NOTURNO
-        for i in range(4):
-            totals[i] = round(totals[i] + adicional_noturno, 2)
-        _linha_fixa(
-            "Adicional noturno", adicional_noturno, "pos",
-            f"{len(performers) + coordenador_qty} pessoa(s) × {_fmt_brl(_ADICIONAL_NOTURNO)}",
-        )
+        # O produto embute o noturno (`inclui_noturno`); só avulsos e coordenadores da fórmula somam.
+        pessoas_noturno = len(performers) + coord_formula + _produtos.noturno_do_produto(produtos)
+        adicional_noturno = pessoas_noturno * _ADICIONAL_NOTURNO
+        if adicional_noturno:
+            for i in range(4):
+                totals[i] = round(totals[i] + adicional_noturno, 2)
+            _linha_fixa(
+                "Adicional noturno", adicional_noturno, "pos",
+                f"{pessoas_noturno} pessoa(s) × {_fmt_brl(_ADICIONAL_NOTURNO)}",
+            )
 
     if event_has_show:
         tecnico = get_tecnico_prices()
@@ -334,13 +366,19 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         _linha("Técnico de som", tecnico_com_markup, "pos", f"markup de serviço {_MARKUP_SERVICE}×")
 
     if event_has_makeup:
-        maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
+        # Feature 309: a make do Noel do produto já está no preço do produto — o avulso maquiado paga só
+        # o degrau seguinte da tabela (incremento), não o make_1 de novo.
+        if produtos:
+            maquiador_cost = _produtos.incremento_make(makes_produtos, num_makes_regular, num_makes_especial)
+        else:
+            maquiador_cost = calcular_maquiador(num_makes_regular, num_makes_especial)
         maq_with_markup = round(maquiador_cost * _MARKUP_SERVICE, 2)
         for i in range(4):
             totals[i] = round(totals[i] + maq_with_markup, 2)
         _linha_fixa(
             "Maquiador", maq_with_markup, "pos",
-            f"{num_makes_regular + num_makes_especial} make(s), markup de serviço {_MARKUP_SERVICE}×",
+            f"{num_makes_regular + num_makes_especial} make(s), markup de serviço {_MARKUP_SERVICE}×"
+            + (f" (incremento sobre {makes_produtos} make(s) do produto)" if produtos else ""),
         )
 
     transport_total = 0.0
@@ -443,12 +481,20 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     total_custom = None
     if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
-        total_custom = round(totals[3] / 4 * duracao_custom, 2)
+        if produtos:
+            # Feature 309: o produto fica fixo na régua — a mesma função do prefill e do evento.
+            total_custom = _produtos.total_na_duracao(totals[3], produtos_total, duracao_custom, acrescimos, nota_fiscal)
+        else:
+            total_custom = round(totals[3] / 4 * duracao_custom, 2)
 
+    # No personalizado "multiplicador" o produto NÃO é multiplicado: soma por fora. A validação de
+    # "valores válidos" olha a base × multiplicador, como hoje — senão um multiplicador zerado passaria.
+    base_validacao = None
     if personalizado:
         if criterio_pers == "multiplicador":
             cust_mult = [float(payload.get(f"cust_mult_{d}") or 0) for d in ("1h", "2h", "3h", "4h")]
-            totals = [round(cache_base[i] * cust_mult[i], 2) for i in range(4)]
+            base_validacao = [round(cache_base[i] * cust_mult[i], 2) for i in range(4)]
+            totals = [round(base_validacao[i] + produtos_total, 2) for i in range(4)]
         else:
             totals = [float(payload.get(f"cust_valor_{d}") or 0) for d in ("1h", "2h", "3h", "4h")]
         transport_breakdown = None
@@ -465,12 +511,15 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         _linha("Subtotal cachê (base)", cache_base, "subtotal")
         if criterio_pers == "multiplicador":
             _linha("× Multiplicador personalizado", cust_mult, "markup")
+            # Feature 309: o produto volta à memória depois do multiplicador (Σcache × mult + Σproduto).
+            memoria.extend(_produtos.linhas_da_memoria(produtos, faixa))
         else:
             _linha("Valor final digitado", totals, "markup")
 
         incluir_chk = payload.get("incluir_duracao") or ["1h", "2h", "3h", "4h"]
         idx = {"1h": 0, "2h": 1, "3h": 2, "4h": 3}
-        if all(totals[idx[d]] <= 0 for d in incluir_chk if d in idx):
+        conferidos = base_validacao if base_validacao is not None else totals
+        if all(conferidos[idx[d]] <= 0 for d in incluir_chk if d in idx):
             raise QuoteValidationError(
                 "personalizado", "Informe valores válidos para o orçamento personalizado."
             )
@@ -516,7 +565,21 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     incluir = payload.get("incluir_duracao") or ["1h", "2h", "3h", "4h"]
     show = [("1h" in incluir), ("2h" in incluir), ("3h" in incluir), ("4h" in incluir)]
 
-    investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i])
+    # Feature 309: só produto no orçamento (sem avulso e sem coordenador da fórmula) = UM valor — a
+    # Visita é "visita padrão (até 1h)"; listar 2h–4h diria ao cliente que 4 horas de Noel custam o
+    # mesmo que 1. Com avulsos, o bloco do produto vem antes das durações.
+    so_produto = bool(produtos) and not performers and coord_formula == 0
+    if so_produto:
+        show = [True, False, False, False]
+        total_custom = None
+    bloco_produto = _produtos.bloco_da_mensagem(produtos)
+
+    if so_produto:
+        investimento = bloco_produto
+    else:
+        investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i])
+        if bloco_produto:
+            investimento = f"{bloco_produto}\n\n{investimento}"
 
     if total_custom:
         if modo_duracao == "entradas":
@@ -527,9 +590,12 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
 
     pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("3h", totals[2]), ("4h", totals[3])]
-    pix_vista = "\n".join(
-        f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*" for i, (lbl, tot) in enumerate(pix_durs) if show[i]
-    )
+    if so_produto:
+        pix_vista = f"  • *{_fmt_brl(round(totals[0] * 0.95, 2))}*"
+    else:
+        pix_vista = "\n".join(
+            f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*" for i, (lbl, tot) in enumerate(pix_durs) if show[i]
+        )
     if total_custom:
         pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
 
@@ -598,6 +664,12 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             if faixa is not None
             else None
         ),
+        # Feature 309: produtos de tabela aplicados — SEMPRE presentes (vazios sem produto): é a
+        # presença da chave que diz ao React que o backend conhece produtos (janela de deploy).
+        "produtos": _produtos.para_quote(produtos),
+        "produtos_total": produtos_total,
+        "coordenadores_inclusos": coord_inclusos,
+        "avisos": _produtos.avisos_para(performers, produtos),
         "total_1h": totals[0],
         "total_2h": totals[1],
         "total_3h": totals[2],
@@ -654,6 +726,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         "cust_valor_3h": str(payload.get("cust_valor_3h") or ""),
         "cust_valor_4h": str(payload.get("cust_valor_4h") or ""),
         "event_has_show": event_has_show,
+        # Feature 309: preço E composição congelados — o teto das vagas emite a partir daqui (só o
+        # valor do cachê vem da tabela viva na data do evento); a régua do prefill lê `produtos_total`.
+        "produtos": _produtos.para_snapshot(produtos),
+        "produtos_total": produtos_total,
     }
 
     return {"quote": quote, "snapshot": snapshot}
