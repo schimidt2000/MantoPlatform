@@ -26,8 +26,11 @@ mensagem "Este evento foi cancelado — a tela fica só para consulta.". Olha s�
 exclusão e a marca da 303 não travam). Não olha papel: vale para o Superadmin.
 
 - Mora em `app/calendar/cancel_ops.py`, ao lado de `EventoCanceladoError` e de `recusar_se_cancelado`: é a casa
-  das regras do cancelado, e as rotas já importam dali. `event_ops` seria o lugar do plano 1c, mas importaria
-  `cancel_ops` (que já importa `event_ops`) — ciclo.
+  das regras do cancelado, e as rotas já importam dali. *[analyze]* Não há ciclo de carga hoje: `cancel_ops` e
+  `event_ops` só se importam dentro de função (`event_ops.py:1235/1244`, `cancel_ops.py:2222/2797`). Quem chama a
+  trava (`event_ops`, `casting_ops`, `nfc_ops`, `impressoes3d_ops`, `formularios_ops`, `producao_ops`) importa
+  dentro da função, no molde de `event_ops.py:1244` — no `formularios_ops` é obrigatório, para manter a invariante
+  "folha" de `event_ops.py:14-18`.
 - A tradução é a que já existe: `_recusa_do_cancelado(exc)` (`agenda_write.py:121-125`). Para os módulos fora de
   `agenda_write` (3D, NFC, figurino, formulários, portal, avaliação) a tradução sobe para `app/api_utils.py` como
   `json_recusa_do_cancelado(exc)`, e `_recusa_do_cancelado` passa a delegar a ela (uma fonte, Princípio I; sem
@@ -76,23 +79,34 @@ lugar de `_can_edit_event()`, com 403 "Evento cancelado: quem tira da escala é 
 cachê ou transporte → 409 da trava; só `talent_id` nulo segue para `assign_role`, que já não manda o e-mail de
 remoção no cancelado (`casting_ops.py:61-64`, 306). Depois da remoção, se não sobra escalado a avisar naquele
 dia, `notificacoes_ops.marcar_lidas_por_entidade("calendar_event", dia.id, KIND_EVENTO_CANCELADO_ESCALA)`
-(`:458`) na mesma transação. "A avisar" = a mesma régua da pendência (R5).
+(`:458`) na mesma transação. "A avisar" = a mesma régua da pendência (R5). *[analyze]* `assign_role` comita sozinho
+(`casting_ops.py:161`): o "marca lido" tem de rodar **dentro** dele, antes do commit, quando `event.is_cancelled` e
+o talento sai. E `assign_role` grava `role.cache_value = parse_brl(cache_value)` — a view repassa
+`cache_value=role.cache_value` na remoção para não zerar o cachê (a vaga vazia guarda o valor como registro). O
+"Salvar" de hoje manda sempre `cache_value` (`CastingSection.tsx:347`): a tela ganha um botão "Tirar da escala" que
+manda só `{talent_id: null}`.
 
 ## R5 — A pendência do Casting na Home
 
 **Decisão**: `dashboard_service.compute_casting_tasks` (`:53`) ganha `cancelados_a_avisar`: vagas com
 `talent_id` de evento com `cancelled_at`, fora a vaga de presença e quem recusou o convite, com `start_at >=
 dashboard_cutoff`, ordenadas pela data do evento; item no molde de `serialize_unconfirmed_ref` (`:277-295`). A
-régua "quem está a avisar" é **a mesma** que a 306 usa para escolher quem o ato avisa: `elenco_do_ato`
-(`cancel_ops`, usada por `_escalados_do_ato`, `:2272-2279`), aplicada às vagas de **hoje** (quem o Casting já tirou
-sai). Um predicado só, usado pela pendência e pelo "marca lido" de R4; se `elenco_do_ato` for por dia, a pendência
-ganha a versão em lote (uma consulta para todos os cancelados futuros, sem N+1).
+régua "quem está a avisar" é **a mesma** que a 306 usa para escolher quem o ato avisa: `elenco_do_ato(event,
+dias=None)` (`cancel_ops.py:2109-2120`: uma consulta `event_id IN ids` e `talent_id IS NOT NULL`, depois em Python
+`invite_status != "rejected"` — o `None` entra — e `not e_vaga_de_presenca(r)`, `casting_ops.py:39-57`), sobre as
+vagas de **hoje** (quem o Casting já tirou sai). *[analyze]* Já aceita vários dias; armadilha: `ids = dias or
+[event.id]` — lista vazia cai no próprio evento. Extrair `elenco_dos_dias(ids)` (com `ids` vazio → `[]`) e fazer
+`elenco_do_ato` delegar a ela; a pendência e o "marca lido" de R4 usam `elenco_dos_dias`. Não reescrever a régua
+em SQL: o `!= "rejected"` do SQL descarta o NULL e o `not_presence` do dashboard (`dashboard_service.py:31`) é outra
+régua.
 
 ## R6 — Ficha da cliente e painel do grupo
 
-**Decisão**: `clientes_read.py:80-93` passa a filtrar o cancelado da lista (`events`) e sai o
-`"cancelado": e.is_cancelled`; a chave `cancelamentos: {quantidade, retido}` vem de `resumos_cancelados` em lote
-(só os com dinheiro somam no retido; `quantidade` conta todos os cancelados da cliente). `ClientDetailPage.tsx:183-208`
+**Decisão**: `get_client_detail` (`client_ops.py:135-172`) já soma o retido ao `total_sales` com
+`resumos_cancelados(cancelados)` (`:164-171`) e precisa do cancelado em `events` para isso. Ele passa a devolver
+também `cancelamentos: {quantidade, retido}` saído da **mesma** chamada (sem rodar o lote duas vezes); o
+serializador (`clientes_read.py:80-93`) tira o cancelado da lista e o `"cancelado": e.is_cancelled` (`:87`). O retido
+fora de `venda`/`legado` já é zero (`cancel_ops.py:444`); `quantidade` conta todos os cancelados da cliente. `ClientDetailPage.tsx:183-208`
 perde o ramo do cancelado e ganha a sublinha. `_group_block` (`agenda_read.py:715-724`): no principal vivo, a
 lista usa `group_ops.dias_vivos`; no principal cancelado, fica como está. O `cancelado` de `satellites[]` continua
 no contrato (a tela do principal cancelado o usa) e só deixa de aparecer no vivo; o badge em
@@ -101,12 +115,18 @@ no contrato (a tela do principal cancelado o usa) e só deixa de aparecer no viv
 ## R7 — O bloco do card no Dashboard Comercial
 
 **Decisão**: `financeiro_read` (pipeline, `:122-183`) ganha `cancelamentos`, montado por uma função nova em
-`cancel_ops` — `painel_de_cancelamentos(inicio, fim, *, seller_id=None, educamanto_only=False, com_imposto: bool)` —
+`cancel_ops` — `painel_de_cancelamentos(inicio, fim, *, seller_id=None, educamanto_only=False,
+commission_target_id=None, com_imposto: bool)` —
 que a DRE também passa a usar no `paineis.cancelamentos` (`financeiro_read.py:538-563`), para a mesma forma e os
 mesmos nomes nas duas telas (`quantidade, pago, devolvido, devolucao_a_pagar, retido, comissao_retido, bv_retido,
 imposto?, efeito_resultado?, itens[]`). A comissão do retido segue a regra de beneficiário do KPI
-(`vendas_ops.py:314-321`) quando há `seller_id`; sem ele, a soma de hoje. Cada item: `event_id, titulo,
-event_date, cancelado_em, seller_name, pago, devolvido, devolucao_a_pagar, retido, comissao_retido, status`.
+(`vendas_ops.py:311-327`): com `commission_target_id`, só os resumos com `beneficiario.id == commission_target_id`;
+sem ele (a DRE), a soma de `totais_cancelamentos`. *[analyze]* O alvo vem de `_resolve_vendas_scope`
+(`financeiro_read.py:82-106`), não do `seller_id`: no EducaManto vendido pelo Comercial X com responsável Y, e no
+usuário só de EducaManto (sem `seller_id`, com alvo), inferir do vendedor divergiria do KPI. Os totais continuam
+saindo de `totais_cancelamentos` chamada pelo nome do módulo (a cascata da DRE e a mutação do verify dependem dele,
+`financeiro_read.py:255`). Cada item: `event_id, titulo, event_date, cancelado_em, seller_name` (busca em lote: o
+resumo só tem `seller_id`, `:494`), `pago, devolvido, devolucao_a_pagar, retido, comissao_retido, status`.
 
 **Alternativas**: montar o bloco do pipeline à parte (dois somadores para o mesmo número — rejeitada, divergência
 3 do plano 1c).
@@ -115,8 +135,12 @@ event_date, cancelado_em, seller_name, pago, devolvido, devolucao_a_pagar, retid
 
 **Decisão**: `listar_cancelamentos(*, flags, mes: date | None = None, devolucao: str | None = None)`: com `mes`,
 `cancelled_at` no mês em São Paulo (a coluna é naive SP), sem limite; sem `mes`, os 200 mais recentes. `devolucao`
-∈ {`nao_pago`, `no_banco`, `pago`, `sem`} por `EXISTS`/`NOT EXISTS` sobre a devolução do evento com o estado,
-reusando `filtro_devolucao` (`cancel_ops.py:233-243`), aplicado antes do limite. Resposta ganha `total_retido`,
+∈ {`nao_pago`, `no_banco`, `pago`, `sem`}. *[analyze]* O `resumo` do regime `venda` soma as devoluções do **grupo**
+(`do_grupo`, `cancel_ops.py:440`), e a passagem da venda move a devolução de evento (`group_ops.py:446-451`): um
+`EXISTS` por `event_id` divergiria da coluna "Devoluções". O filtro olha as **devoluções do resumo** de cada
+cancelado (o que a tela mostra): com `devolucao`, a consulta traz os cancelados (do mês, se houver), o lote de
+resumos roda e o filtro se aplica sobre `resumo.devolucoes[].estado` antes do corte de 200 — volume de dezenas
+(2 em produção em 20/10); a régua do `filtro_devolucao` (`:233-243`) já está dentro do resumo. Resposta ganha `total_retido`,
 `total_retido_escopo` (`periodo` | `listados`) e `filtros`; sai `devolucao` (objeto legado). Validação na view:
 `mes` fora de `AAAA-MM` ou `devolucao` fora do vocabulário → 400 com `fields`.
 

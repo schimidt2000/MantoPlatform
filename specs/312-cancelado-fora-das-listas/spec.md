@@ -373,12 +373,14 @@ foi cancelado." em vez da ficha.
 - **FR-018**: Toda recusa desta entrega DEVE levar o código `cancelado` (a constante da 306) e uma frase que diz
   o motivo.
 - **FR-019**: O detalhe do evento cancelado DEVE informar "somente consulta" e desligar as permissões de editar o
-  evento, os dados principais, confirmar, agrupar e mexer no 3D; a tela DEVE esconder o que grava e mostrar só o
+  evento, os dados principais, confirmar, agrupar, mexer no 3D e pedir exclusão, mantendo à parte o que o desfazer
+  precisa (soltar presente, desligar formulário); a tela DEVE esconder o que grava e mostrar só o
   desfazer, e os painéis de venda DEVEM seguir a permissão da 306, com a frase "Evento cancelado: só o Superadmin
   altera os dados de venda." para quem não pode.
 - **FR-020**: O motivo e o autor do cancelamento DEVEM sair no detalhe só para Comercial, Financeiro e Superadmin
   (seguindo o "Ver como"); os outros papéis recebem os dois vazios e a caixa diz "Evento cancelado em DD/MM",
-  sem linha de motivo.
+  sem linha de motivo. A tela Jinja do evento cancelado NÃO DEVE mostrar o "Log de atividades" (que traz o motivo)
+  a quem não tem a flag comercial.
 - **FR-021**: A caixa do cancelado DEVE dizer onde ele está agora (página de Cancelamentos e card do período) e o
   que se faz ali (só consulta; dados de venda pelo Superadmin).
 - **FR-022**: Ao receber o código `cancelado`, a tela DEVE recarregar o evento e mostrar a frase do servidor onde
@@ -438,7 +440,8 @@ foi cancelado." em vez da ficha.
 - **FR-037**: Os selects de evento de Gastos Extras DEVEM mostrar o evento atual quando ele não está na lista do
   dia (com o selo, se cancelado), em vez de "Sem evento vinculado".
 - **FR-038**: A ficha de figurino do portal DEVE recusar o evento cancelado, depois da checagem de escalado, com
-  "Este evento foi cancelado.", e a tela DEVE mostrar a frase do servidor.
+  "Este evento foi cancelado.", e a tela DEVE mostrar a frase do servidor. Aceitar pelo portal o convite de um
+  evento cancelado DEVE ser recusado com a mesma frase.
 - **FR-039**: Ligar Gasto Extra a evento cancelado por chamada direta DEVE continuar permitido (a 306 liga ali a
   devolução e a multa); só não é oferecido na lista.
 

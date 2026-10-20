@@ -53,7 +53,8 @@ Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 
 `GET /api/events/<id>` do cancelado:
 - `flags.somente_consulta: true` (ausente no vivo); `can_edit_event`, `can_edit_core`, `can_confirm`,
-  `can_group`, `can_manage_3d` falsas; `can_edit_venda_cancelado` e `can_edit_motivo_cancelado` (306/306b)
+  `can_group`, `can_manage_3d`, `can_request_delete` falsas; `flags.desfazer?: {presente_3d: bool, formulario: bool}`
+  com o que `can_manage_3d` e `can_edit_core` seriam (o soltar e o desligar); `can_edit_venda_cancelado` e `can_edit_motivo_cancelado` (306/306b)
   inalteradas.
 - `cancellation_reason` e `cancelled_by` só com `show_comercial` (COMERCIAL, FINANCEIRO, SUPERADMIN, pela flag);
   os outros recebem `null`; `cancelled_at` para todos.
@@ -63,12 +64,16 @@ Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 
 - `PATCH /api/events/<id>`, `…/basico`, `POST …/confirm`, `PATCH …/logistics`, observações (`POST …/observations`,
   `DELETE /observations/<id>`), `PUT …/clients`, contratos (as três rotas), `…/travel-estimate`, materiais (as
-  rotas), `…/presenca`, `PATCH …/grupo` (renomear);
+  rotas), `…/presenca`, `PATCH …/grupo` (renomear), `POST …/sync`, `POST …/roles` com ou sem talento, `PATCH`/`DELETE
+  /ensaios/<id>` de ensaio cancelado, `POST`/`DELETE …/3d-dismissal`, `DELETE /clientes/avaliacoes/<id>` de avaliação
+  de cancelado;
 - vagas: `DELETE /roles/<id>`, `…/transporte` (as duas), figurino feito e ficha, dismiss/restore, `…/payment-status`,
   `POST /roles/<id>/assign` com talento, cachê ou transporte;
 - `PATCH /api/events/<id>/3d-gifts/<gift>` (editar presente);
-- Jinja: toda ação do despachante `POST /events/<id>` e as rotas fora dele que escrevem no evento → `flash` com a
-  frase e `redirect`; `GET /figurinos/print-event/<id>` idem.
+- Jinja: toda ação do despachante `POST /events/<id>` e as rotas fora dele que escrevem no evento (observações,
+  materiais, dismiss/restore, `create-ensaio`, `link-parent`, `edit-ensaio`, `delete-ensaio`, `sync`) → `flash` com a
+  frase e `redirect`; `GET /figurinos/print-event/<id>` idem; no cancelado, o "Log de atividades" do Jinja só vai
+  ao template com a `show_comercial` (Q9).
 
 **Livre** (regra própria, intocada): dados de venda (`pode_editar_venda_do_cancelado`, 306), `PATCH
 …/motivo-cancelamento` (306b), `PATCH …/devolucao`, `POST …/multas`; desfazer: `PATCH …/form-response` com
@@ -87,7 +92,8 @@ Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 | `POST /api/events/<id>/roles` com talento; `POST /roles/<id>/assign` com talento; `POST /roles/<id>/invite` | **409**, sem e-mail |
 | `POST /api/events/<id>/feedback-link` | **409** |
 | `GET`/`POST /api/avaliar/<token>` (público) | **410** "Este evento foi cancelado — não há avaliação a fazer."; nada gravado |
-| `GET /api/portal/events/<id>/figurino` (portal) | depois do 403 "não escalado": **400** "Este evento foi cancelado." |
+| `GET /api/portal/events/<id>/figurino` (portal) | depois do 403 "não escalado" e do 404: **400** "Este evento foi cancelado." |
+| `POST /api/portal/invites/<role_id>/accept` (portal) | **400** "Este evento foi cancelado." (recusar e "Ciente" ficam livres) |
 
 Evento com pedido de exclusão pendente ou marcado pela 303: nenhuma das recusas acima.
 
