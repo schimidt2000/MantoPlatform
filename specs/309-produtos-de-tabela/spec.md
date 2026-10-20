@@ -322,7 +322,7 @@ selecionado e a resposta veio sem `quote.produtos`.
   padrão 3,0). Chave ausente = sem produtos = conta de hoje.
 - **FR-002**: Os produtos padrão DEVEM ser "Visita Mágica — Papai Noel" (2.500; natal 5.000; vagas
   Papai Noel com maquiagem · Coordenador · Maquiador, todas pela tabela) e "Visita Mágica — Papai Noel +
-  Ajudante" (3.600; natal 6.500; + Ajudante do Noel pela tabela), descrição "visita padrão (até 1h)",
+  Ajudante" (3.600; natal 6.500; + Ajudante do Noel pela tabela), descrição "visita padrão, até 1h",
   ativos.
 - **FR-003**: A vendedora DEVE selecionar produtos na calculadora num card próprio ("Produtos de
   tabela") com `Combobox` (nunca `<select>` nativo; opções com descrição = preço normal e ícone de
@@ -528,7 +528,8 @@ no `/opcoes`, o risco aceito do preço congelado × teto da faixa, `num_colabora
 - Fatores da estimativa (produto sem preço na faixa): `fator_cache` 2,0 e `markup` 3,0 ("um pouco
   mais alto que o padrão 2,6") — editáveis pelo superadmin; a estimativa é sempre marcada como tal.
 - Label fixo "Ajudante do Noel" mesmo quando o personagem é duende/elfo/Rubi/Esmeralda.
-- Descrição ao cliente "visita padrão (até 1h)"; sem a frase de presentes (veto da 307).
+- Descrição ao cliente "visita padrão, até 1h" (sem parênteses: a mensagem e a tela já a põem entre
+  parênteses); sem a frase de presentes (veto da 307).
 - Um Maquiador por orçamento; o preço do produto não cobra maquiagem à parte.
 - A tabela de venda é "sem nota" e "antes do PIX" (NF ÷ 0,84 e −5 % incidem como nos demais).
 - A faixa `natal` da 307 continua em produção (markup 3,34, cachês 1.000/650/500, piso 650) e é a fonte

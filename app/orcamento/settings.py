@@ -74,7 +74,7 @@ _FAIXA_NATAL_PADRAO: dict = {
 _PRODUTOS_PADRAO: dict = {
     "visita_magica": {
         "rotulo": "Visita Mágica — Papai Noel",
-        "descricao": "visita padrão (até 1h)",
+        "descricao": "visita padrão, até 1h",
         "ativo": True,
         "preco": 2500,
         "por_faixa": {"natal": {"preco": 5000}},
@@ -87,7 +87,7 @@ _PRODUTOS_PADRAO: dict = {
     },
     "visita_magica_ajudante": {
         "rotulo": "Visita Mágica — Papai Noel + Ajudante",
-        "descricao": "visita padrão (até 1h)",
+        "descricao": "visita padrão, até 1h",
         "ativo": True,
         "preco": 3600,
         "por_faixa": {"natal": {"preco": 6500}},

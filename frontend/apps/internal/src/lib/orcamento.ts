@@ -22,6 +22,51 @@ export interface FaixaEspecial {
   nota_mensagem: string;
 }
 
+/**
+ * Feature 309 — uma vaga da composição de um produto de tabela. `cache: null` = cachê pela tabela de
+ * preços vigente na data do evento (teto da vaga); número = cachê fixo. `coordenador`/`maquiador`
+ * têm label forçado pelo servidor ("Coordenador"/"Maquiador").
+ */
+export interface VagaDoProduto {
+  label: string;
+  tipo: "especial" | "ator" | "coordenador" | "maquiador";
+  cache: number | null;
+  needs_makeup: boolean;
+}
+
+/**
+ * Feature 309 — produto de tabela (pacote fechado, ex.: Visita Mágica do Papai Noel): preço FIXO por
+ * visita (não por duração), entra depois do markup; `por_faixa` dá o preço nas datas especiais da 307
+ * (faixa sem preço = estimativa marcada); `inclui_noturno` = o +R$ 50/pessoa já está no preço.
+ */
+export interface ProdutoDeTabela {
+  rotulo: string;
+  descricao: string;
+  ativo: boolean;
+  preco: number;
+  por_faixa: Record<string, { preco: number }>;
+  vagas: VagaDoProduto[];
+  inclui_noturno: boolean;
+}
+
+/** Feature 309 — como estimar o produto numa faixa sem preço: Σ cachês × fator × markup. */
+export interface ProdutosEstimativa {
+  fator_cache: number;
+  markup: number;
+}
+
+/** Feature 309 — um exemplar de produto aplicado ao orçamento (`quote.produtos`), já com o preço resolvido. */
+export interface ProdutoAplicado {
+  chave: string;
+  rotulo: string;
+  descricao: string;
+  preco_aplicado: number;
+  faixa_chave: string | null;
+  estimado: boolean;
+  /** Labels das vagas vendidas (personagens, coordenador, maquiador), na ordem da composição. */
+  vagas: string[];
+}
+
 /** "MM-DD" (como a tabela guarda) → "DD/MM" (como o time lê) — feature 307. */
 export const diaParaTela = (mmdd: string) => `${mmdd.slice(3, 5)}/${mmdd.slice(0, 2)}`;
 
@@ -73,6 +118,12 @@ export interface PricingSettings {
    * Opcional no React: bundle novo pode falar com backend velho durante o deploy — ler com `?? {}`.
    */
   datas_especiais?: Record<string, FaixaEspecial>;
+  /**
+   * Feature 309: produtos de tabela por chave e o bloco de estimativa. Opcionais pelo mesmo motivo
+   * (backend velho na janela de deploy): sem `produtos`, a calculadora não mostra o card.
+   */
+  produtos?: Record<string, ProdutoDeTabela>;
+  produtos_estimativa?: ProdutosEstimativa;
 }
 
 export interface OrcamentoOpcoes {
@@ -117,6 +168,8 @@ export interface Acrescimo {
 
 export interface CalcularOrcamentoInput {
   performers: Performer[];
+  /** Feature 309: produtos de tabela selecionados (repetição permitida); ausente = conta de hoje. */
+  produtos?: { chave: string }[];
   coordenador_qty?: number;
   fora_sp?: boolean;
   /** Só relevante com `fora_sp` — ausente/undefined equivale a "manto". */
@@ -164,13 +217,14 @@ export interface TransportBreakdown {
  * - `subtotal` soma acumulada (subtotal do cachê, valor após markup)
  * - `markup`   multiplicador aplicado — `valores` são fatores, não reais
  * - `pos`      parcela somada DEPOIS do markup (técnico, maquiador, transporte, NF, acréscimo)
+ * - `produto`  preço de tabela de um produto (feature 309) — somado depois do markup, fora dele
  * - `total`    total final ao cliente
  */
 export interface MemoriaLinha {
   label: string;
   detalhe: string;
   valores: number[];
-  tipo: "cache" | "subtotal" | "markup" | "pos" | "total";
+  tipo: "cache" | "subtotal" | "markup" | "pos" | "produto" | "total";
 }
 
 export interface Quote {
@@ -187,6 +241,16 @@ export interface Quote {
    * orçamentos salvos antes da feature. A nota vem junto porque o orçamento congelado não relê a tabela.
    */
   data_especial?: { chave: string; rotulo: string; markup: number[]; nota_mensagem: string } | null;
+  /**
+   * Feature 309 — produtos de tabela aplicados. O servidor novo manda SEMPRE as quatro chaves (vazias
+   * sem produto); `produtos === undefined` quer dizer backend velho: com produto selecionado, a tela
+   * trava o "Gerar Orçamento" em vez de gravar um preço sem o produto.
+   */
+  produtos?: ProdutoAplicado[];
+  produtos_total?: number;
+  coordenadores_inclusos?: number;
+  /** Avisos da conta em pt-BR (Noel avulso sem produto, preço estimado, vaga sem cachê). */
+  avisos?: string[];
   total_1h: number;
   total_2h: number;
   total_3h: number;
@@ -286,7 +350,8 @@ export function useSaveOrcamentoSettings() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (input: Partial<PricingSettings>) =>
-      apiFetch<{ settings: PricingSettings }>("/api/orcamento/settings", {
+      // Feature 309: `avisos` (faixa órfã descartada etc.) voltam no 200 — a tela mostra sem bloquear.
+      apiFetch<{ settings: PricingSettings; avisos?: string[] }>("/api/orcamento/settings", {
         method: "POST",
         body: JSON.stringify(input),
       }),
@@ -402,6 +467,15 @@ export interface OrcamentoFormSnapshot {
   modo_duracao: "horas" | "entradas";
   duracao_custom: string;
   personalizado_ativo: boolean;
+  /** Feature 309: produtos vendidos, com preço e composição congelados; ausente em snapshots antigos. */
+  produtos?: {
+    chave: string;
+    rotulo: string;
+    preco_aplicado: number;
+    faixa_chave: string | null;
+    estimado: boolean;
+    vagas: VagaDoProduto[];
+  }[];
 }
 
 /** Detalhe congelado de um orçamento salvo, incluindo o estado bruto para "Recalcular". */

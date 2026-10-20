@@ -16,6 +16,7 @@ import {
 import { MoneyInput } from "@manto/money";
 import { DatasEspeciaisCard } from "../components/orcamento/DatasEspeciaisCard";
 import { DUR_LABELS, INPUT_PRECOS, PriceTable } from "../components/orcamento/PriceTable";
+import { ProdutosConfigCard } from "../components/orcamento/ProdutosConfigCard";
 import {
   useAddEspecial,
   useOrcamentoSettings,
@@ -476,6 +477,20 @@ export function OrcamentoConfigPrecosPage() {
           }
         />
       ))}
+      {/* Feature 309: produtos de tabela (a Visita Mágica). Sem o bloco (backend velho) o card não
+          existe — e o "Salvar" não manda `produtos`, então o servidor novo mantém o que tem. */}
+      {settings.produtos && (
+        <ProdutosConfigCard
+          produtos={settings.produtos}
+          estimativa={settings.produtos_estimativa ?? { fator_cache: 2, markup: 3 }}
+          faixas={settings.datas_especiais ?? {}}
+          especiais={Object.keys(settings.especiais)}
+          erros={errosDeSalvar}
+          avisos={save.data?.avisos ?? []}
+          onChange={(produtos) => setSettings({ ...settings, produtos })}
+          onEstimativaChange={(produtos_estimativa) => setSettings({ ...settings, produtos_estimativa })}
+        />
+      )}
       </div>
 
       <Button loading={save.isPending} onClick={handleSave}>
@@ -485,9 +500,10 @@ export function OrcamentoConfigPrecosPage() {
       {save.isError && (
         <div className="space-y-1" role="alert">
           <p className="text-sm text-red">Não foi possível salvar as configurações.</p>
-          {/* Os erros das datas especiais aparecem no próprio card (campo destacado); aqui só o resto. */}
+          {/* Os erros das datas especiais e dos produtos aparecem no próprio card (campo
+              destacado); aqui só o resto. `produtos` cobre também `produtos_estimativa`. */}
           {Object.entries(errosDeSalvar)
-            .filter(([campo]) => !campo.startsWith("datas_especiais"))
+            .filter(([campo]) => !campo.startsWith("datas_especiais") && !campo.startsWith("produtos"))
             .map(([campo, msg]) => (
               <p key={campo} className="text-xs text-red">
                 {campo}: {msg}

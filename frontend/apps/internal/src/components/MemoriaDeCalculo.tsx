@@ -21,6 +21,9 @@ const FUNDO: Record<MemoriaLinha["tipo"], string> = {
   subtotal: "bg-surface-2 font-semibold",
   markup: "bg-gold-soft",
   pos: "bg-accent-soft",
+  // Feature 309: o produto de tabela tem fundo próprio — não é cachê (não leva markup) nem pós
+  // (não é serviço): é o preço fechado somado por fora.
+  produto: "bg-blue-soft",
   total: "bg-green-soft font-bold",
 };
 
@@ -57,7 +60,8 @@ export function MemoriaDeCalculo({ linhas }: { linhas: MemoriaLinha[] | undefine
         </thead>
         <tbody>
           {linhas.map((linha, i) => (
-            <tr key={`${linha.label}-${i}`} className={`border-b border-line/60 ${FUNDO[linha.tipo]}`}>
+            // `?? ""`: um tipo que este bundle não conhece (backend mais novo) cai sem fundo, não em `undefined`.
+            <tr key={`${linha.label}-${i}`} className={`border-b border-line/60 ${FUNDO[linha.tipo] ?? ""}`}>
               <td className="py-2 pr-3 text-ink">
                 {linha.label}
                 {linha.detalhe && (
