@@ -30,7 +30,7 @@ Semente de tela: `verify_312.py --semear-tela` (cancelado do exemplo com dois es
 dia cancelado, um gasto e uma tag ligados) e `--limpar-tela`. Backend `127.0.0.1:5011` (`t097_flask.py` do
 scratchpad) e Vite `127.0.0.2:5193` (config temporária, fora do repo). Conferir, nos dois temas:
 
-1. Agenda Dia/Semana/Mês/Lista e busca no dia do cancelado — ele não aparece; o marcado aparece.
+1. Agenda Dia/Mês/Lista e busca no dia do cancelado — ele não aparece; o marcado aparece.
 2. Tela do cancelado como Superadmin (só consulta + painéis de venda), Comercial (motivo + frase "só o
    Superadmin altera") e Casting (sem motivo; escala com "Tirar da escala").
 3. Home como Casting — "Eventos cancelados — excluir e avisar"; o WhatsApp abre com a mensagem; tirar some a

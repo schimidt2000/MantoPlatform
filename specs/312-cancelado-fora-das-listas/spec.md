@@ -99,7 +99,8 @@ Cada uma vale como premissa; o dono pode contestar.
    já manda na DRE (`devolucao_a_pagar`, `bv_retido`), não os do plano (`falta_devolver`, `bv`): um vocabulário
    para o mesmo número nas duas telas.
 7. **`devolucao` legado da página** — o objeto único que a 306 manteve "por um ciclo" sai; o `resumo` com todas
-   as devoluções fica.
+   as devoluções fica. O bundle da 306 só o lê como reserva quando falta o `resumo`
+   (`EventosCancelamentosPage.tsx:148-149`, `:229`), então tirá-lo não quebra a tela velha na janela do deploy.
 8. **Cancelado pela regra velha** — o 1358 (SHOW de 17/10, cancelado em 02/10, antes da 306) existe em produção.
    A página, o card e a tela dele mostram o que houver; número que o resumo não sabe montar sai vazio, nunca
    derruba a lista.
@@ -117,7 +118,7 @@ mesma consulta.
 
 ### História 1 — O cancelado some de toda lista (Prioridade: P1)
 
-Quem abre a agenda (Dia, Semana, Mês, Lista), a busca, as fichas, as listas de escolha e as filas de trabalho não
+Quem abre a agenda (Dia, Mês, Lista — não há visão Semana), a busca, as fichas, as listas de escolha e as filas de trabalho não
 vê mais o evento cancelado. A equipe deixa de ver "TIMAO + PUMBA" no Dia de 22/10 e na busca; a ficha do talento
 deixa de contar o cachê de um show que não aconteceu; o seletor de evento do ensaio, da tag NFC, do grupo, do
 Gasto Extra, do pedido de figurino e do formulário não oferece mais o cancelado.
@@ -331,7 +332,8 @@ foi cancelado." em vez da ficha.
 - **FR-002**: A busca DEVE filtrar o cancelado antes do limite de resultados, para que ele não ocupe vaga; por ela
   o cancelado sai do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
 - **FR-003**: O seletor de evento por data (Gastos Extras, pedido de figurino, associação de formulário) e os
-  candidatos automáticos do formulário DEVEM deixar de oferecer o cancelado.
+  candidatos automáticos do formulário DEVEM deixar de oferecer o cancelado; a lista Jinja de shows candidatos
+  do vínculo de ensaio também.
 - **FR-004**: A ficha do talento DEVE ignorar o cancelado no histórico e nos quatro números do cabeçalho.
 - **FR-005**: A ficha da cliente DEVE deixar de listar o cancelado e de contá-lo, e DEVE informar à parte a
   quantidade de cancelamentos da cliente e o retido deles, lidos do resumo da 306.
@@ -365,7 +367,7 @@ foi cancelado." em vez da ficha.
   ligar formulário a um cancelado (painel do evento, `/formularios` e edição em bloco) DEVEM ser recusados no
   núcleo; desligar continua livre.
 - **FR-016**: Gerar link de avaliação de um cancelado DEVE ser recusado; a página pública do link antigo DEVE
-  responder que o evento foi cancelado e não aceitar nota.
+  responder que o evento foi cancelado (sem título nem data do evento) e não aceitar nota.
 - **FR-017**: Abrir pedido de figurino ou trocar o evento de um pedido para um cancelado DEVE ser recusado;
   editar um pedido já ligado sem trocar o evento continua livre.
 - **FR-018**: Toda recusa desta entrega DEVE levar o código `cancelado` (a constante da 306) e uma frase que diz
@@ -418,11 +420,13 @@ foi cancelado." em vez da ficha.
 
 - **FR-032**: O Dashboard Comercial DEVE receber sempre o bloco de cancelamentos do mês do cancelamento, no
   escopo de vendedor que o servidor já decide, com os mesmos números do `paineis.cancelamentos` da DRE e a lista
-  dos cancelados; imposto e efeito no resultado só para Superadmin e Financeiro.
+  dos cancelados; imposto e efeito no resultado só para Superadmin e Financeiro, pela flag (segue o "Ver como",
+  como os outros números de dinheiro da tela).
 - **FR-033**: A comissão do retido no card do Comercial DEVE seguir a mesma regra de beneficiário do KPI, e o
   retido do card DEVE ser o mesmo do KPI.
 - **FR-034**: Os itens do `paineis.cancelamentos` da DRE DEVEM trazer também devolvido, comissão do retido, pago,
-  o que falta devolver, data do evento e vendedor.
+  o que falta devolver, data do evento e vendedor; os números que o painel já manda hoje NÃO DEVEM mudar
+  (trocar a fonte do painel pela função única é aditivo).
 - **FR-035**: O card DEVE aparecer nas duas telas só com quantidade maior que zero, com a lista e o link de cada
   evento, e "Ver na página de Cancelamentos" filtrada no mês só para quem abre a página.
 
@@ -479,7 +483,8 @@ conexão separada.
 | 11 | Q5: escalar, vaga com talento, convidar, reenviar convite; `feedback-link`; `GET/POST /api/avaliar/<token>`; pedido de figurino novo e editar sem trocar | 409/410/400 conforme o vizinho; `_send_falso` sem chamada; banco igual; editar sem trocar passa | **sim** |
 | 12 | Q2: agendar ensaio (API e Jinja), vincular ensaio, presente 3D, tag NFC nova (e o mesmo id), formulário (painel, `/formularios`, bloco), desligar formulário, soltar presente | recusas sem escrita nem Google; desfazer e mesmo vínculo passam | **sim** |
 | 13 | Flags do detalhe do cancelado e do vivo | `somente_consulta` e as cinco flags falsas no cancelado; vivo igual à `main` | não |
-| 14 | Controle: as escritas de 9, 11 e 12 num evento com pedido de cancelamento pendente | passam como num vivo | não |
+| 9b | Inventário das rotas de escrita: toda rota `POST`/`PUT`/`PATCH`/`DELETE` do `url_map` que recebe id de evento, vaga, presente, observação, ensaio ou grupo está classificada como "trava" ou "livre" (lista no verify) | rota nova sem classificação faz o cenário falhar — a trava não tem furo silencioso | **sim** (rota não classificada) |
+| 14 | Controle: as escritas de 9, 11 e 12 num evento com pedido de cancelamento pendente e num evento marcado pela 303 | passam como num vivo | não |
 | 15 | Q10: Home do CASTING e do FIGURINO; `assign` sem talento como FIGURINO, COMERCIAL, CASTING; com talento/cachê; sino lido; e-mail de remoção; controle vivo | pendência com os dois certos; 403 dos outros; 200 e vaga vazia pelo Casting; 409 com talento; sino lido ao esvaziar; zero e-mail no cancelado e um no vivo | **sim** (403 e 409) |
 | 16 | Página como FINANCEIRO: exemplo, duas devoluções, `mes`, `devolucao`, `sem`, sem `mes` (rótulo "listados"), `mes=2026-13` e `devolucao=xyz` → 400, cancelado pela regra velha | números do resumo; filtros antes do limite; total sem dobrar; legado não derruba | não |
 | 17 | RBAC da página: anônimo 401; COMERCIAL, FIGURINO, CASTING, revendedor 403; FINANCEIRO alterando devolução 403 | a leitura não abriu a escrita | **sim** |
@@ -495,7 +500,7 @@ de `scripts/db/` que passam pelos mesmos caminhos (`verify_cancelamento_evento.p
 o Dia, `verify_196_dashboard_comercial.py`, `verify_205.py`).
 
 Conferência de tela (skill `manto-conferir-tela`), nos dois temas:
-- agenda (Dia, Semana, Mês, Lista) e busca num mês com um cancelado e um marcado;
+- agenda (Dia, Mês, Lista) e busca num mês com um cancelado e um marcado;
 - Dashboard Comercial como Superadmin e como Comercial (card, lista, links);
 - DRE (card e linha do retido);
 - página de Cancelamentos como Financeiro (menu, filtros na URL, busca, vazio, 1024 px);
