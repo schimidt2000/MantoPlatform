@@ -1262,10 +1262,14 @@ def _motivo_do_cancelamento_virtual(order) -> str:
     )
     from app.models import VirtualRefundRequest
 
+    # Pedido sem id (pré-visualização do e-mail com objeto montado na mão) cai na frase padrão.
+    order_id = getattr(order, "id", None)
     devolucao = (
-        VirtualRefundRequest.query.filter_by(order_id=order.id)
+        VirtualRefundRequest.query.filter_by(order_id=order_id)
         .order_by(VirtualRefundRequest.id.desc())
         .first()
+        if order_id
+        else None
     )
     motivo = devolucao.reason if devolucao else None
     if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:

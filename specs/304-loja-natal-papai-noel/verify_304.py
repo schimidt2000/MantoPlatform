@@ -151,6 +151,19 @@ check(
 # ── V3 — publicar com preço zero é recusado ──────────────────────────────────
 
 descartavel_id = None
+# Feature 310: publicar também exige o pagamento da loja ligado. Liga só para este bloco e
+# devolve o estado do banco local logo depois do V3.4.
+PAGAMENTO_CAMPOS = ("infinitepay_handle", "infinitepay_webhook_token", "virtuais_pagamento_ativo")
+with app.app_context():
+    from app.models import SiteSetting
+
+    _cfg = db.session.get(SiteSetting, 1)
+    pagamento_original = {c: getattr(_cfg, c) for c in PAGAMENTO_CAMPOS}
+    _cfg.infinitepay_handle = _cfg.infinitepay_handle or "verify304"
+    _cfg.infinitepay_webhook_token = _cfg.infinitepay_webhook_token or "verify304-token"
+    _cfg.virtuais_pagamento_ativo = True
+    db.session.commit()
+
 with app.app_context():
     personagem_id = VirtualCampaign.query.filter_by(slug="papai-noel").first().catalog_character_id
     descartavel = ops.criar_campanha(
@@ -205,6 +218,10 @@ check(
 
 with app.app_context():
     db.session.delete(db.session.get(VirtualCampaign, descartavel_id))
+    db.session.commit()
+    _cfg = db.session.get(SiteSetting, 1)
+    for _campo, _valor in pagamento_original.items():
+        setattr(_cfg, _campo, _valor)
     db.session.commit()
 sobrou = no_banco("select count(*) from virtual_campaigns where id = :i", i=descartavel_id)[0][0]
 check("V3.4 limpeza da campanha descartável", sobrou == 0, str(sobrou))

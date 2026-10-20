@@ -94,7 +94,6 @@ from app.models import (  # noqa: E402
     User,
     VirtualCampaign,
     VirtualCampaignSlot,
-    VirtualOrder,
 )
 
 AQUI = Path(__file__).resolve().parent
@@ -332,7 +331,7 @@ def pedido(nsu: str) -> dict:
     if not linha:
         return {}
     k = ["id", "status", "slot_id", "event_id", "tx", "slug", "total", "unverified"]
-    return dict(zip(k, linha[0]))
+    return dict(zip(k, linha[0], strict=True))
 
 
 def vencer(nsu: str) -> None:

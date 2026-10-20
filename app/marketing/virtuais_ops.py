@@ -2334,9 +2334,10 @@ def retentar_salas(*, limite: int = 50) -> dict[str, int]:
     **queda longa** do Google, com o intervalo de 1 minuto e o progresso em banco — porque entre um
     ciclo e o seguinte o processo pode reiniciar, ou outro worker pode assumir.
 
-    Esgotadas as 3 tentativas, o pedido para de ser retentado e passa a contar como falha
-    definitiva: ``meet_pending`` continua ``True`` e o painel mostra que o sistema desistiu
-    (FR-056a). Silêncio seria o único desfecho inaceitável.
+    Esgotadas as 3 tentativas, o painel mostra a sala como falha (FR-056a) e a varredura passa a
+    tentar a cada 10 min até o horário da chamada (feature 310, R11 — antes desistia em ~2 min);
+    só conta como ``esgotada`` depois que o horário passou. Faltando menos de 6 h sem sala, a
+    equipe recebe o alerta "a conferir". Silêncio seria o único desfecho inaceitável.
 
     Returns:
         ``{"resolvidas": int, "retidas": int, "esgotadas": int}``.
