@@ -24,10 +24,10 @@ o `ruff check` nos tocados. Sem migration.
 
 ## Phase 1: Setup
 
-- [ ] T001 Conferir o ambiente: `.specify/feature.json` → `specs/312-cancelado-fora-das-listas`; `DATABASE_URL` de
+- [X] T001 Conferir o ambiente: `.specify/feature.json` → `specs/312-cancelado-fora-das-listas`; `DATABASE_URL` de
       `C:\Users\schim\Desktop\Manto_Platform\.local-db-url`; venv com as dependências do `requirements.txt`;
       `alembic heads` do `manto_local` = head da `main` (sem migration nova)
-- [ ] T002 [P] Ler `specs/306-dinheiro-do-cancelamento/verify_306.py` nos ajudantes listados na reconferência
+- [X] T002 [P] Ler `specs/306-dinheiro-do-cancelamento/verify_306.py` nos ajudantes listados na reconferência
       (§"Verify da 306 para reusar") e decidir o que importar dele × copiar (importar mantém uma fonte; o verify da
       306 é módulo com `if __name__ == "__main__"`)
 
@@ -37,19 +37,19 @@ o `ruff check` nos tocados. Sem migration.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T003 **`specs/312-cancelado-fora-das-listas/verify_312.py`** — esqueleto no molde do `verify_306.py`:
+- [X] T003 **`specs/312-cancelado-fora-das-listas/verify_312.py`** — esqueleto no molde do `verify_306.py`:
       guarda de ambiente (banco em `localhost`, `FLASK_ENV=development`, `MANTO_SEM_THREADS=1`), disjuntor de rede,
       `_send_falso` como dublê de e-mail, `GoogleFalso`, `cenario(bloco, nome, fn)`, `_no_banco` por conexão
       separada, `_sob_mutacao` (sonda limpa antes da mutada), `--so=`, `--limpar`, `--semear-tela`,
       `--limpar-tela`, `limpar()` no `finally`; PREFIX `__v312_`, marcador "[TESTE verify 312] pode apagar"
-- [ ] T004 `verify_312.py` — semente comum: usuários de papel único (SUPERADMIN, COMERCIAL dona da venda, COMERCIAL
+- [X] T004 `verify_312.py` — semente comum: usuários de papel único (SUPERADMIN, COMERCIAL dona da venda, COMERCIAL
       2, FINANCEIRO, CASTING ×2, FIGURINO, ENSAIO, REVENDEDOR_EDUCAMANTO), talentos e cliente descartáveis, o
       exemplo-padrão (venda 2.000, pago 1.000, devolução 600, retido 400, comissão 18, BV 40) com dois escalados
       (aceito, pendente), um que recusou e a presença, cancelado pelo `POST …/cancelar` da 306; evento vivo de
       controle no mesmo dia; marcado (303) e com pedido de exclusão; "cancelado legado" (UPDATE de `cancelled_at`
       sem `event_cancellations`, conexão separada) para o R1; ensaio legado cancelado por UPDATE
-- [ ] T005 `verify_312.py` — cenários 1–7 (História 1) com controle vivo em cada consulta e prova por mutação
-- [ ] T006 `verify_312.py` — cenários 8–14 e 9b (História 2): Q9 por papel e "Ver como"; trava em uma rota de
+- [X] T005 `verify_312.py` — cenários 1–7 (História 1) com controle vivo em cada consulta e prova por mutação
+- [X] T006 `verify_312.py` — cenários 8–14 e 9b (História 2): Q9 por papel e "Ver como"; trava em uma rota de
       cada linha como SUPERADMIN real (API e Jinja, "Imprimir fichas"); portas livres; recusas Q5 e Q2; flags;
       controle com pedido pendente e marcado. 9b: percorrer `app.url_map` — toda regra com método de escrita
       dos blueprints `api` (menos `/api/auth`), `calendar`, `figurino` e portal que tenha qualquer parâmetro de id
@@ -57,15 +57,15 @@ o `ruff check` nos tocados. Sem migration.
       da 306/306b)", "desfazer" ou "fora da tela do evento" (com o porquê). Casar pela regra completa, não pelo
       nome do parâmetro (`<obs_id>`, `<material_id>`, `<contract_id>`, `<payment_id>`, `<invoice_id>`,
       `<reimbursement_id>`, `<leader_id>/<sat_id>`, `<feedback_id>` existem)
-- [ ] T007 `verify_312.py` — cenário 15 (História 3): pendência, gate do `assign`, 409 com talento, sino lido,
+- [X] T007 `verify_312.py` — cenário 15 (História 3): pendência, gate do `assign`, 409 com talento, sino lido,
       zero e-mail no cancelado e um no vivo
-- [ ] T008 `verify_312.py` — cenários 16–17 (História 4): página como FINANCEIRO, filtros, 400, legado; RBAC
-- [ ] T009 `verify_312.py` — cenários 18–19 (História 5): card do pipeline e da DRE, escopo, corte Q1, retido =
+- [X] T008 `verify_312.py` — cenários 16–17 (História 4): página como FINANCEIRO, filtros, 400, legado; RBAC
+- [X] T009 `verify_312.py` — cenários 18–19 (História 5): card do pipeline e da DRE, escopo, corte Q1, retido =
       KPI = linha da DRE, mês vazio, "Tudo" devolvido
-- [ ] T010 `verify_312.py` — cenários 20–23 (História 6, regressão, limpeza): `event_situacao` nas ligadas, gasto
+- [X] T010 `verify_312.py` — cenários 20–23 (História 6, regressão, limpeza): `event_situacao` nas ligadas, gasto
       com o mesmo evento e gasto novo por chamada direta, portal, payload igual à `main` num mês sem cancelado,
       limpeza com zero sobra
-- [ ] T011 Rodar o `verify_312.py` contra a `main` (antes de qualquer código) e guardar a saída em
+- [X] T011 Rodar o `verify_312.py` contra a `main` (antes de qualquer código) e guardar a saída em
       `specs/312-cancelado-fora-das-listas/verify_312_primeira_falha.txt`. Esperado: 22 e 23 verdes; 1–21 e 9b
       vermelhos **pelo motivo certo** (o cancelado vem; a escrita grava; o motivo vem; o FINANCEIRO recebe 403;
       falta `cancelamentos`). Vermelho por erro do harness não conta — corrigir o harness antes de seguir
@@ -363,7 +363,7 @@ o `ruff check` nos tocados. Sem migration.
 
 | Fase | Verdes | Vermelhos |
 |---|---|---|
-| Foundational (T011) | 22, 23 | 1–21, 9b |
+| Foundational (T011) | 9b, 10, 14, 17, 22, 23 (guardas que já valem na `main`) | 1–9, 11–13, 15, 16, 18–21 |
 | H1 | 1–7, 22, 23 | 8–21, 9b |
 | H2 | 1–14, 9b, 22, 23 | 15–21 |
 | H3 | + 15 | 16–21 |
