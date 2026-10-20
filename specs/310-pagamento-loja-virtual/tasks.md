@@ -234,7 +234,7 @@ conexão separada; limpeza no `finally`.
 
 - [x] T056 Regressão: `verify_205.py` e `verify_304.py` verdes; `verify_310.py` 44/44 + R-22
 - [x] T057 `cd frontend && npm run typecheck`; `ruff check` nos tocados; `ruff format` só nos novos
-- [ ] T058 Tela aberta (Flask do worktree em 127.0.0.1:5001, Vite em 127.0.0.1:5183): roteiro do
+- [x] T058 Tela aberta (Flask do worktree em 127.0.0.1:5001, Vite em 127.0.0.1:5183): roteiro do
       quickstart §1
 - [ ] T059 Revisão adversarial por workflow (finders por dimensão + um cético por achado) do diff
       inteiro antes do commit final

@@ -334,7 +334,12 @@ export function AdminSettingsPage() {
 
           <Button
             loading={update.isPending}
-            onClick={() => (regenerarToken ? setConfirmarSegredo(true) : salvar())}
+            onClick={() => {
+              if (!regenerarToken) return salvar();
+              // O diálogo mostra o erro da mutação: sem limpar, abriria com o erro do Salvar anterior.
+              update.reset();
+              setConfirmarSegredo(true);
+            }}
           >
             Salvar configurações
           </Button>

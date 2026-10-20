@@ -102,22 +102,29 @@ function chaveDoRotulo(pedido: VirtualOrderSummary, confirmando: boolean): strin
  */
 function useRetornoDoCheckout(token: string | undefined): boolean {
   const [params, setParams] = useSearchParams();
-  const retorno = useRetornoCheckout(token);
+  const { mutateAsync } = useRetornoCheckout(token);
   const enviado = useRef(false);
+  // `isPending` da mutação não serve aqui: disparada num efeito, um remonte (StrictMode, ou a
+  // troca da URL) solta o observador e o estado ficava em "Confirmando…" para sempre. A promessa
+  // de `mutateAsync` resolve de qualquer jeito.
+  const [conferindo, setConferindo] = useState(false);
   useEffect(() => {
     const orderNsu = params.get("order_nsu");
     if (!token || !orderNsu || enviado.current) return;
     enviado.current = true;
-    retorno.mutate({
+    setConferindo(true);
+    mutateAsync({
       order_nsu: orderNsu,
       slug: params.get("slug"),
       transaction_nsu: params.get("transaction_nsu"),
       capture_method: params.get("capture_method"),
       receipt_url: params.get("receipt_url"),
-    });
+    })
+      .catch(() => undefined)
+      .finally(() => setConferindo(false));
     setParams({}, { replace: true });
-  }, [params, setParams, token, retorno]);
-  return retorno.isPending;
+  }, [params, setParams, token, mutateAsync]);
+  return conferindo;
 }
 
 export function PedidoVirtualPage() {
