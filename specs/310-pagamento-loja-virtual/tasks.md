@@ -65,24 +65,24 @@ conexão separada; limpeza no `finally`.
 **Objetivo**: nenhuma combinação de atraso/concorrência vende o mesmo horário duas vezes.
 **Teste independente**: cenários 1–7 e R-22 do verify.
 
-- [ ] T009 [US1] `decidir_pagamento(order_id, consulta, *, identificadores, origem)` em
+- [x] T009 [US1] `decidir_pagamento(order_id, consulta, *, identificadores, origem)` em
       `app/marketing/virtuais_ops.py` com a ordem de R-01 e travas pedido → horário → campanha
       (`with_for_update` + `populate_existing`); `_pagamento_confere` (R-02); retorna o desfecho
-- [ ] T010 [US1] `efetivar_pedido` reescrito para gravar tudo no banco primeiro (pedido pago, horário
+- [x] T010 [US1] `efetivar_pedido` reescrito para gravar tudo no banco primeiro (pedido pago, horário
       vendido com `order_id`, evento com id local e `meet_pending`, entrega, presente) e só depois,
       fora das travas, criar o evento Google pelo caminho de `regerar_sala` e enviar o e-mail
-- [ ] T011 [US1] `_liberar_reserva` trava o pedido antes do horário, relê o status (só libera ATIVOS)
+- [x] T011 [US1] `_liberar_reserva` trava o pedido antes do horário, relê o status (só libera ATIVOS)
       e nunca solta horário `vendido`
-- [ ] T012 [US1] `expirar_reservas` usa `decidir_pagamento`; `try/rollback` por pedido; contador de
+- [x] T012 [US1] `expirar_reservas` usa `decidir_pagamento`; `try/rollback` por pedido; contador de
       reconsulta separado; `nao_encontrado` sem identificadores = libera numa consulta; `nao_sei`
       retém o horário de fato (estende `slot.locked_until`) e, esgotado, marca
       `unverified_reason='nao_sei'`; usa identificadores de avisos com token certo do mesmo
       `order_nsu` (R-09)
-- [ ] T013 [US1] Vaga de vídeo: reservas ativas de vídeo ocupam vaga durante a trava em
+- [x] T013 [US1] Vaga de vídeo: reservas ativas de vídeo ocupam vaga durante a trava em
       `reservar`/`recorded_available`; conferência na efetivação (R-03)
-- [ ] T014 [US1] Antecedência de 2 h em `listar_slots_disponiveis` e `_travar_slot` (409 com a frase
+- [x] T014 [US1] Antecedência de 2 h em `listar_slots_disponiveis` e `_travar_slot` (409 com a frase
       do contrato) e folga de 30 min em `decidir_pagamento`
-- [ ] T015 [US1] Rodar cenários 1–7 + R-22 (20×) até verde; prova por mutação: desligar a checagem de
+- [x] T015 [US1] Rodar cenários 1–7 + R-22 (20×) até verde; prova por mutação: desligar a checagem de
       dono e a trava do pedido e ver os cenários 1–3 acusarem
 
 ---
@@ -91,23 +91,23 @@ conexão separada; limpeza no `finally`.
 
 **Objetivo**: pagamento provado nunca fica sem dono. **Teste**: cenários 8–15.
 
-- [ ] T016 [US2] Rota do aviso `app/api/virtuais_webhook.py`: corpo > 64 KB → 413; token atual ou
+- [x] T016 [US2] Rota do aviso `app/api/virtuais_webhook.py`: corpo > 64 KB → 413; token atual ou
       anterior (24 h) por `hmac.compare_digest`; grava `pendente` e responde 200; dispara thread com
       `app_context` para `processar_aviso(id)`; token inválido → 404 com `transaction_nsu=NULL` e
       resumo de 2 KB; `@limiter.limit("60 per minute")`
-- [ ] T017 [US2] `processar_aviso(id)` em `virtuais_ops.py`: claim por linha (`pendente→processando`),
+- [x] T017 [US2] `processar_aviso(id)` em `virtuais_ops.py`: claim por linha (`pendente→processando`),
       reconsulta com os identificadores DO AVISO, `decidir_pagamento`, grava identificadores e recibo
       só depois da prova (FR-017); reentrega de aviso não final é reprocessada
-- [ ] T018 [US2] Reprocessamento na varredura (`ciclo_de_varredura` ganha a rotina "avisos"):
+- [x] T018 [US2] Reprocessamento na varredura (`ciclo_de_varredura` ganha a rotina "avisos"):
       política 0/1/2 min e depois 10 em 10 até 48 h; esgotou → "a conferir" (R-06)
-- [ ] T019 [US2] Pagamento em dobro (`pagamento_em_dobro`, pedido segue pago) e pagamento de pedido
+- [x] T019 [US2] Pagamento em dobro (`pagamento_em_dobro`, pedido segue pago) e pagamento de pedido
       cancelado (`pagamento_sem_pedido_ativo`) em `decidir_pagamento` + devolução com o valor da
       reconsulta da cobrança nova
-- [ ] T020 [US2] Endpoint `POST /api/virtuais/pedidos/<token>/retorno` em `app/api/virtuais_public.py`
+- [x] T020 [US2] Endpoint `POST /api/virtuais/pedidos/<token>/retorno` em `app/api/virtuais_public.py`
       (contrato; R-08; limite 20/min por IP do cliente) chamando `registrar_retorno` em `virtuais_ops.py`
 - [ ] T021 [P] [US2] `PedidoVirtualPage.tsx` lê a query do retorno uma vez, chama o endpoint e limpa a
       URL (`history.replaceState`); hook em `frontend/apps/public/src/lib/virtuais.ts`
-- [ ] T022 [US2] Rodar cenários 8–15 até verde (o 8 mede o tempo do retorno até "pago", SC-003); mutação: gravar identificadores antes da prova →
+- [x] T022 [US2] Rodar cenários 8–15 até verde (o 8 mede o tempo do retorno até "pago", SC-003); mutação: gravar identificadores antes da prova →
       cenário 15 acusa
 
 ---
@@ -116,23 +116,23 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 16–24.
 
-- [ ] T023 [US3] `_gerar_link_pagamento`: confere interruptor e config (R-18, 503 "reservas
+- [x] T023 [US3] `_gerar_link_pagamento`: confere interruptor e config (R-18, 503 "reservas
       fechadas"); `InfinitePayRecusou` não é repetido; grava `payment_link_error`; mensagem do
       contrato; travado → "Pagamento travado neste ambiente (cópia de teste)"; pedido com falha de
       link fora do teto por origem
-- [ ] T024 [US3] `_criar_evento_google` e o apagamento de evento da loja respeitam
+- [x] T024 [US3] `_criar_evento_google` e o apagamento de evento da loja respeitam
       `CALENDAR_SUPPRESS_EVENT_WRITES` (docstring em `app/config.py` atualizado)
-- [ ] T025 [US3] `_campos_faltantes_para_publicar` recusa sem handle, sem token ou interruptor
+- [x] T025 [US3] `_campos_faltantes_para_publicar` recusa sem handle, sem token ou interruptor
       desligado (campo `pagamento`)
-- [ ] T026 [US3] `app/admin/config_ops.py`: e-mail/WhatsApp/data de corte só se a chave vier; tag
+- [x] T026 [US3] `app/admin/config_ops.py`: e-mail/WhatsApp/data de corte só se a chave vier; tag
       validada (regex de R7) e audit antigo→novo; regerar guarda o anterior por 24 h; interruptor
-- [ ] T027 [P] [US3] `app/api/admin_config_read.py`: `virtuais_pagamento_ativo` e
+- [x] T027 [P] [US3] `app/api/admin_config_read.py`: `virtuais_pagamento_ativo` e
       `virtuais_pedidos_aguardando`
 - [ ] T028 [P] [US3] `AdminSettingsPage.tsx` + `lib/adminConfig.ts`: interruptor; confirmação com a
       contagem antes de regerar; caixa volta a desmarcada no `onSuccess`; erro de tag no campo
-- [ ] T029 [US3] Sino `KIND_VIRTUAL_ATENCAO` em `app/notificacoes/notificacoes_ops.py` (COMERCIAL,
+- [x] T029 [US3] Sino `KIND_VIRTUAL_ATENCAO` em `app/notificacoes/notificacoes_ops.py` (COMERCIAL,
       SUPERADMIN) e disparo na falha de link (dedupe por código/hora, R-19)
-- [ ] T030 [US3] Rodar cenários 16–24 até verde
+- [x] T030 [US3] Rodar cenários 16–24 até verde
 
 ---
 

@@ -104,6 +104,8 @@ RUN = secrets.token_hex(3)
 
 app = create_app()
 app.config["VIRTUAIS_AVISO_SINCRONO"] = True  # costura do verify: aviso processado na requisição
+# O Google é dublê (abaixo): a trava de escrita de evento pode ser aberta neste processo.
+app.config["CALENDAR_SUPPRESS_EVENT_WRITES"] = False
 _engine = create_engine(os.environ["DATABASE_URL"])
 
 

@@ -39,6 +39,10 @@ def _settings_summary(settings: SiteSetting) -> dict:
         # segredo que autentica o aviso de pagamento; a tela só precisa saber se já existe.
         "infinitepay_handle": settings.infinitepay_handle or "",
         "infinitepay_webhook_configured": bool(settings.infinitepay_webhook_token),
+        # Feature 310: interruptor e quantos pedidos aguardam pagamento — a tela mostra o número
+        # antes de regerar o segredo (o anterior vale 24 h, mas a decisão é de quem clica).
+        "virtuais_pagamento_ativo": bool(getattr(settings, "virtuais_pagamento_ativo", False)),
+        "virtuais_pedidos_aguardando": _pedidos_aguardando(),
         "tax_rate": settings.tax_rate,
         "fator_r_threshold": settings.fator_r_threshold,
         "manto_address": settings.manto_address or "",
@@ -305,3 +309,13 @@ def api_admin_importar_catalogo_status() -> Any:
     status["started_at"] = status["started_at"].isoformat() if status["started_at"] else None
     status["finished_at"] = status["finished_at"].isoformat() if status["finished_at"] else None
     return jsonify({"total_items": CatalogItem.query.count(), "status": status})
+
+
+def _pedidos_aguardando() -> int:
+    """Pedidos da loja virtual com link aberto (feature 310, R-12)."""
+    from app.constants import VIRTUAL_ORDER_STATUS_AGUARDANDO, VIRTUAL_ORDER_STATUS_RESERVADO
+    from app.models import VirtualOrder
+
+    return VirtualOrder.query.filter(
+        VirtualOrder.status.in_((VIRTUAL_ORDER_STATUS_RESERVADO, VIRTUAL_ORDER_STATUS_AGUARDANDO))
+    ).count()

@@ -440,6 +440,14 @@ def _campos_faltantes_para_publicar(campaign: VirtualCampaign) -> tuple[str, str
         )
     if not campaign.tolerance_terms:
         return ("tolerance_terms", "Escreva os termos de tolerância antes de publicar.")
+    # Feature 310 (FR-022): publicar com o pagamento desligado ou sem configuração punha no ar uma
+    # campanha em que toda família preenchia a ficha para receber um erro no fim.
+    if not _pagamento_ligado():
+        return (
+            "pagamento",
+            "Ligue o pagamento da loja em Configurações (InfiniteTag, segredo e interruptor) "
+            "antes de publicar.",
+        )
     return None
 
 
@@ -1414,6 +1422,11 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
     """
     from app.calendar.routes import CALENDAR_ID
     from app.calendar.service import insert_event
+
+    # Feature 310 (constituição XIV): a cópia local traz o token real do Google — sem esta trava,
+    # uma venda de teste criava evento e sala na agenda da empresa. Chave ausente = travado.
+    if current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True):
+        raise RuntimeError("Escrita na agenda travada neste ambiente (cópia de teste).")
 
     campanha = order.campaign
     inicio = order.slot.start_at if order.slot else agora()

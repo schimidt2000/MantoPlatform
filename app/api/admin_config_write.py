@@ -84,7 +84,11 @@ def api_admin_settings_update() -> Any:
     is_multipart = request.content_type and "multipart/form-data" in request.content_type
     fields = request.form if is_multipart else (request.get_json(silent=True) or {})
     logo_file = request.files.get("logo") if is_multipart else None
-    config_ops.update_settings(settings, fields, logo_file=logo_file)
+    try:
+        config_ops.update_settings(settings, fields, logo_file=logo_file)
+    except config_ops.ConfigValidationError as exc:
+        db.session.rollback()
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
     return jsonify({"ok": True})
 
 

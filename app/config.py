@@ -151,7 +151,9 @@ def _suppress_calendar_event_writes() -> bool:
     produção o importaria 5 minutos depois.
 
     Cobre a devolução e, desde a feature 306, a remoção do cancelamento (os dias e os ensaios do
-    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). A sincronização, a
+    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). Desde a 310, também
+    a criação e a remoção do evento de venda da loja virtual (``virtuais_ops._criar_evento_google``
+    e o cancelamento de pedido pago): travado, a venda existe com id local e sala pendente. A sincronização, a
     limpeza e o "Sincronizar" de um evento continuam lendo o Google real no ambiente local, e
     criar, editar e excluir evento continuam escrevendo sem trava (dívida registrada no
     ``docs/05``). O núcleo lê a chave de

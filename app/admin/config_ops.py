@@ -6,7 +6,8 @@ Funções puras (sem `request`/`render_template`), reusadas tanto pela view Jinj
 
 from __future__ import annotations
 
-from datetime import date, datetime
+import re
+from datetime import date, datetime, timedelta
 from typing import Any
 
 from app import db
@@ -17,6 +18,19 @@ from app.utils import audit
 #: com `X-Content-Type-Options: nosniff` — o navegador se recusa a desenhá-lo num `<img>`. Aceitar
 #: aqui só produziria um logo que não aparece. Servi-lo inline traria de volta o XSS armazenado.
 _ALLOWED_LOGO_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp"}
+
+#: InfiniteTag válida (feature 310, R7): o nome de usuário do app, sem `$`, sem espaço e sem URL.
+#: Uma URL colada aqui era gravada como está, e toda cobrança ia para uma conta inexistente.
+_INFINITETAG = re.compile(r"^[a-z0-9][a-z0-9_.-]{1,62}$")
+
+
+class ConfigValidationError(Exception):
+    """Campo da tela de configurações inválido (feature 310). Vira 400 com o campo."""
+
+    def __init__(self, field: str, message: str) -> None:
+        super().__init__(message)
+        self.field = field
+        self.message = message
 
 
 def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=None) -> SiteSetting:
@@ -37,8 +51,12 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     except ValueError:
         pass
 
-    edu_raw = str(fields.get("educamanto_seller_id") or "").strip()
-    settings.educamanto_seller_id = int(edu_raw) if edu_raw.isdigit() else None
+    # Feature 310 (FR-025): só muda o que veio no envio. O upload do logo manda SÓ o arquivo, e as
+    # atribuições incondicionais zeravam de carona o vendedor do EducaManto, os e-mails (inclusive a
+    # confirmação de compra da loja), o WhatsApp e a data de corte.
+    if "educamanto_seller_id" in fields:
+        edu_raw = str(fields.get("educamanto_seller_id") or "").strip()
+        settings.educamanto_seller_id = int(edu_raw) if edu_raw.isdigit() else None
 
     edu_rate_raw = str(fields.get("educamanto_commission_rate") or "").strip()
     try:
@@ -53,13 +71,42 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     handle_raw = str(fields.get("infinitepay_handle") or "").strip()
     if handle_raw:
         # A InfiniteTag é divulgada com `$` na frente; o cliente da operadora espera sem.
-        settings.infinitepay_handle = handle_raw.lstrip("$")
+        novo_handle = handle_raw.lstrip("$").lower()
+        if not _INFINITETAG.match(novo_handle):
+            raise ConfigValidationError(
+                "infinitepay_handle",
+                "InfiniteTag inválida: use só o nome de usuário do app (letras, números, . _ -), "
+                "sem $ e sem endereço.",
+            )
+        if novo_handle != (settings.infinitepay_handle or ""):
+            # É a conta que recebe o dinheiro: a troca fica registrada com o antes e o depois.
+            audit(
+                "edit", "settings", 1, "Pagamento da loja virtual",
+                f"InfiniteTag: {settings.infinitepay_handle or '(vazia)'!r} → {novo_handle!r}",
+            )
+            settings.infinitepay_handle = novo_handle
     # O token do webhook é SEGREDO e não se digita: é ele que autentica o aviso de pagamento.
-    # A tela só pede "gerar" — e gerar de novo invalida o endereço antigo de propósito.
+    # Feature 310 (R-12): o anterior continua aceito por 24 h — gerar de novo derrubava o aviso de
+    # todo link já aberto.
     if str(fields.get("infinitepay_regenerate_token") or "").lower() in ("1", "true", "on"):
         import secrets
 
+        from app.constants import VIRTUAL_TOKEN_ANTERIOR_HORAS
+
+        if settings.infinitepay_webhook_token:
+            settings.infinitepay_webhook_token_anterior = settings.infinitepay_webhook_token
+            settings.infinitepay_webhook_token_anterior_ate = datetime.now() + timedelta(
+                hours=VIRTUAL_TOKEN_ANTERIOR_HORAS
+            )
         settings.infinitepay_webhook_token = secrets.token_urlsafe(32)
+        audit("edit", "settings", 1, "Pagamento da loja virtual",
+              "Segredo do aviso de pagamento regerado (o anterior vale por 24 h)")
+    if "virtuais_pagamento_ativo" in fields:
+        ativo = str(fields.get("virtuais_pagamento_ativo")).lower() in ("1", "true", "on")
+        if ativo != bool(settings.virtuais_pagamento_ativo):
+            audit("edit", "settings", 1, "Pagamento da loja virtual",
+                  "Pagamento da loja LIGADO" if ativo else "Pagamento da loja DESLIGADO")
+        settings.virtuais_pagamento_ativo = ativo
 
     tax_raw = str(fields.get("tax_rate") or "").strip()
     try:
@@ -102,11 +149,16 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     if maps_key:
         settings.google_maps_api_key = maps_key
 
-    settings.email_notifications_enabled = bool(fields.get("email_notifications_enabled"))
+    if "email_notifications_enabled" in fields:
+        valor = fields.get("email_notifications_enabled")
+        settings.email_notifications_enabled = (
+            str(valor).lower() in ("1", "true", "on") if isinstance(valor, str) else bool(valor)
+        )
 
-    wa_form_raw = (fields.get("whatsapp_form_number") or "").strip()
-    wa_form_digits = "".join(c for c in wa_form_raw if c.isdigit())
-    settings.whatsapp_form_number = wa_form_digits or None
+    if "whatsapp_form_number" in fields:
+        wa_form_raw = (fields.get("whatsapp_form_number") or "").strip()
+        wa_form_digits = "".join(c for c in wa_form_raw if c.isdigit())
+        settings.whatsapp_form_number = wa_form_digits or None
 
     # Semântica do whatsapp_form_number (vazio limpa e volta ao default), NÃO a do
     # manto_address (que ignora vazio) — senão o superadmin nunca conseguiria restaurar o
@@ -121,14 +173,15 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
             review_url_raw = ""
         settings.google_review_url = review_url_raw or None
 
-    release_raw = (fields.get("release_date") or "").strip()
-    if release_raw:
-        try:
-            settings.release_date = date.fromisoformat(release_raw)
-        except ValueError:
-            pass
-    else:
-        settings.release_date = None
+    if "release_date" in fields:
+        release_raw = (fields.get("release_date") or "").strip()
+        if release_raw:
+            try:
+                settings.release_date = date.fromisoformat(release_raw)
+            except ValueError:
+                pass
+        else:
+            settings.release_date = None
 
     settings.updated_at = datetime.utcnow()
     audit("edit", "settings", 1, "Configurações", "Configurações do sistema atualizadas")

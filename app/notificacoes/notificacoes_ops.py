@@ -58,6 +58,7 @@ KIND_RECADO_NFC = "recado_nfc.novo"
 KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
 KIND_EVENTO_CANCELADO = "evento.cancelado"
 KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
+KIND_VIRTUAL_ATENCAO = "virtual.atencao"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -74,6 +75,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # Superadmin, que é quem cancela.
     KIND_EVENTO_CANCELADO: (RoleName.ENSAIO,),
     KIND_EVENTO_CANCELADO_ESCALA: (RoleName.CASTING,),
+    # Feature 310: dinheiro da loja virtual que precisa de mão humana (devolução a fazer, pagamento
+    # a conferir, link recusado, sala faltando perto da chamada) — os mesmos papéis que operam a
+    # tela de Devoluções.
+    KIND_VIRTUAL_ATENCAO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -558,3 +563,22 @@ def serializar(n: Notification) -> dict:
         "created_at": n.created_at.isoformat(timespec="seconds") if n.created_at else None,
         "read_at": n.read_at.isoformat(timespec="seconds") if n.read_at else None,
     }
+
+
+def notificar_virtual_atencao(*, titulo: str, corpo: str, dedupe_key: str,
+                              urgente: bool = False) -> int:
+    """Feature 310: algo da loja virtual pede ação de Comercial/Superadmin. Comita.
+
+    A chave de deduplicação é de quem chama (por item, ou por código e hora na falha de link): o
+    mesmo fato não vira uma pilha de avisos iguais.
+    """
+    gravadas = emitir(
+        KIND_VIRTUAL_ATENCAO,
+        title=titulo,
+        body=corpo,
+        link_path="/virtuais/devolucoes",
+        dedupe_key=dedupe_key[:120],
+        severity="urgent" if urgente else "info",
+    )
+    db.session.commit()
+    return gravadas
