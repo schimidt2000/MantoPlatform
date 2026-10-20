@@ -546,14 +546,82 @@ pagamento em Configurações; lista de pagamentos a conferir.
 
 - **SC-001**: Em nenhum cenário de concorrência, atraso ou falha da operadora duas famílias ficam com
   o mesmo horário (0 em 44 cenários e na rodada repetida 20×).
-- **SC-002**: 100% dos pagamentos provados terminam em venda ou devolução pendente; 100% dos não
-  provados aparecem na lista "a conferir" em até 20 minutos.
+- **SC-002**: 100% dos pagamentos provados terminam em venda ou devolução pendente; 100% dos casos
+  de R-07 (divergente, órfão, esgotado, operadora fora, falha de link) aparecem em "a conferir" em até
+  20 minutos.
 - **SC-003**: A família que pagou vê "pago" em até 1 minuto depois de voltar do checkout, mesmo sem
   aviso da operadora.
 - **SC-004**: O teste real de R$ 1 (A, B e C) passa com custo ≤ R$ 5, todos devolvidos, e deixa o
   formato real do aviso e da reconsulta registrado.
 - **SC-005**: Com o banco local, 0 requisição sai para a InfinitePay ou o Google.
 - **SC-006**: No lançamento, uma família só é limitada pelo que ela própria faz.
+
+## Regras complementares (fechadas pela checklist de 20/10/2026)
+
+**Dinheiro**
+- **R-01 Ordem da regra única** (FR-001): (1) relê o pedido com trava; (2) estado — `pago` com a
+  mesma cobrança = duplicado; `pago` com outra = devolução `pagamento_em_dobro`; `cancelado` =
+  devolução `pagamento_sem_pedido_ativo`; (3) valor; (4) dono do horário; (5) folga de 30 min;
+  (6) vaga do vídeo; (7) grava a venda; (8) Google e e-mail fora das travas.
+- **R-02 Valor**: `paid_amount >= total` vira venda; **sobrepagamento** (cartão com juros repassados)
+  também vira venda, sem devolução de diferença. `paid_amount` ausente ou menor = **divergente**:
+  sem venda e **sem devolução automática** — entra em "a conferir" (a equipe olha o app e decide).
+- **R-03 Vídeo**: reserva ativa de vídeo ocupa vaga enquanto a trava dela vale (15 min); a efetivação
+  confere `vendidos < capacidade`.
+- **R-04 Presente 3D**: devolução e cancelamento pela equipe tiram o presente da fila de impressão se
+  ainda não começou; se já começou, fica e entra em "a conferir".
+- **R-05 Ordem de travas** pedido → horário → campanha vale para reserva, liberação, varredura,
+  aviso, retorno e cancelamento pela equipe.
+- **R-06 Reprocessamento de aviso**: 3 tentativas nos minutos 0/1/2, depois a cada 10 min, por até
+  48 h; esgotou = "a conferir". Desfechos finais: `efetivado`, `devolucao_aberta`, `conflito`,
+  `duplicado`, `divergente`, `orfao`; não finais: `pendente`, `retido`, `pendente_prova`.
+- **R-07 "A conferir"** reúne só: aviso divergente, órfão ou esgotado; pedido liberado **por operadora
+  fora** (não por abandono); falha de link (agrupada por código e hora). Pedido abandonado sem aviso
+  nem retorno expira como hoje e **não** entra. Quem resolve: COMERCIAL e SUPERADMIN; resolver é
+  irreversível e auditado.
+
+**Prova de pagamento**
+- **R-08 Retorno**: antes do aviso → decide pela reconsulta com os identificadores do retorno; depois
+  do aviso → devolve o estado já decidido; sem identificadores → só devolve o estado.
+- **R-09 Varredura** usa, na falta de identificadores no pedido, os de avisos já registrados com o
+  token certo para o mesmo `order_nsu`.
+- **R-10 Risco aceito**: pagou + aviso perdido (ex.: 502 no deploy) + família não tocou "Continuar" =
+  pedido expira e o dinheiro só aparece no app da InfinitePay. Mitigação: regra de deploy (R-17) e
+  conferência no painel "Seus Checkouts" depois de cada deploy durante a campanha.
+
+**Segurança**
+- **R-11 Ameaça do aviso**: qualquer um que saiba o endereço pode chamar; o corpo nunca decide; só
+  a reconsulta na operadora com os identificadores do próprio aviso prova; identificadores só são
+  gravados depois da prova.
+- **R-12 Segredo anterior** vale 24 h depois de regerar (cobre links abertos; a trava de 15 min
+  torna mais que isso desnecessário). Regerar mostra a contagem de pedidos aguardando.
+- **R-13 Logs**: o segredo aparece mascarado no log de acesso do servidor, no log do proxy e em
+  qualquer mensagem de aplicação.
+- **R-14 Limites**: aviso 60/min por IP e corpo até 64 KB; retorno 20/min por IP do cliente.
+- **R-15 Pacote à operadora**: `handle`, `order_nsu`, `redirect_url`, `webhook_url`, item com
+  descrição "<título> — pedido <order_nsu>", valor em centavos, `customer` só com `email` e
+  `phone_number` (dígitos). Nada de nome, idade, dicas ou endereço.
+- **R-16 IP do cliente** vale enquanto o Node for o único caminho público de `/api`; quem chama o
+  backend direto só escolhe o próprio balde. Se o `BACKEND_URL` mudar para rede privada, revisar.
+
+**Trava e operação**
+- **R-17 Trava local**: InfinitePay (link e reconsulta) pela trava nova; criar e apagar evento no
+  Google pela `CALENDAR_SUPPRESS_EVENT_WRITES`; e-mail pela `_suppress_mail` existente. Travado, a
+  família lê "Pagamento travado neste ambiente (cópia de teste)". O `webhook_url` local apontaria
+  para a produção — por isso o link nem é criado.
+- **R-18 Interruptor**: nasce desligado; depois do deploy o dono liga no card. Desligado com campanha
+  publicada: a campanha continua visível e a reserva responde "As reservas estão fechadas por
+  enquanto" (nenhum horário é travado).
+- **R-19 Cancelar pago**: horário volta à vitrine só se faltar mais de 2 h; senão fica vendido sem
+  dono. A família recebe o e-mail de cancelamento com devolução em andamento. Sino deduplica por
+  item (devolução, aviso, pedido) e falha de link por código por hora.
+- **R-20 Deploy na campanha**: de 1º/11 a 25/12, nenhum deploy entre 9h e 23h (BRT); depois de cada
+  deploy, conferir "Pagamentos a conferir" e o painel da InfinitePay. Vai para `DEVELOPMENT.md` e a
+  skill `manto-deploy`.
+- **R-21 Limpeza de teste**: o pedido fica `cancelado` (histórico), avisos ficam, auditoria registra;
+  saem evento, escala, entrega, presente e o evento do Google; horário volta a livre.
+- **R-22 SC-001**: uma rodada = os 7 cenários de concorrência da H1 com duas conexões reais e barreira
+  entre threads; 20 rodadas seguidas sem dois pedidos pagos no mesmo horário.
 
 ## Fora de escopo
 
@@ -582,3 +650,6 @@ skill `manto-deploy` (deploy durante a campanha).
 - O número de saltos de proxy em produção é medido por leitura (SSH, só log), antes do código final.
 - O teste real é feito pelo dono (o Pix sai da conta dele) com a campanha fora da vitrine, à noite.
 - Nenhum deploy desta feature no horário de pico de vendas; ela sobe antes de a campanha reabrir.
+- A migration pendura em `a7c3e91f4d28`; 306 e 309 também — quem mergear por último reencadeia.
+- Só a operadora real responde: segundo pagamento no mesmo link legado e a reconsulta de um Pix pago
+  e devolvido — testados no teste C com o dono depois do deploy.
