@@ -188,9 +188,10 @@ venda não quebra o evento: as vagas congeladas nascem sem teto.
 
 1. **Dado** o superadmin salvando `produtos` válido, **Então** 200, persistido (conexão separada) e
    devolvido em `GET /orcamento/opcoes`; **Dado** cada um dos sete corpos inválidos — preço ≤ 0, chave
-   fora de `^[a-z0-9_]{1,30}$`, vaga sem label, tipo de vaga desconhecido, `por_faixa` com faixa
-   inexistente, descrição > 120, `produtos_estimativa.markup` fora de [1, 6] —, **Então** 400 com
-   `fields["produtos.<chave>.<campo>"]` (ou `produtos_estimativa.markup`) e nada gravado.
+   fora de `^[a-z0-9_]{1,30}$`, vaga sem label, tipo de vaga desconhecido, cachê fixo zero numa vaga,
+   descrição > 120, `produtos_estimativa.markup` fora de [1, 6] —, **Então** 400 com
+   `fields["produtos.<chave>.<campo>"]` (ou `produtos_estimativa.markup`) e nada gravado; **Dado**
+   `por_faixa` com uma faixa que não existe, **Então** 200 com a entrada órfã descartada e um aviso.
 2. **Dado** produto `ativo: false` citado num snapshot antigo, **Então** recalcula com o preço dele;
    **Dado** produto apagado citado num snapshot antigo, **Então** a venda responde erro de validação
    nomeando o produto e o teto das vagas congeladas sai `None` (prefill com `cap_notes` "produto não

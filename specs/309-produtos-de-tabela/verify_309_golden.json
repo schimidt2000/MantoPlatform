@@ -1,0 +1,727 @@
+{
+ "boneco_20_12": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n20/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Boneco\nINVESTIMENTO\n1 hora\nR$ 1.170,00\n2 horas\nR$ 1.375,00\n3 horas\nR$ 1.470,00\n4 horas\nR$ 1.560,00\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 1.111,50 | 2h R$ 1.306,25 | 3h R$ 1.396,50 | 4h R$ 1.482,00\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": null,
+   "deslocamento_responsavel": null,
+   "duracao_custom": 0,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "20/12/2026",
+   "fmt_time": "",
+   "fora_sp": false,
+   "markup_used": [
+    2.6,
+    2.5,
+    2.45,
+    2.4
+   ],
+   "memoria": [
+    {
+     "detalhe": "boneco",
+     "label": "Boneco",
+     "tipo": "cache",
+     "valores": [
+      200.0,
+      250.0,
+      275.0,
+      300.0
+     ]
+    },
+    {
+     "detalhe": "sem show",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      250.0,
+      300.0,
+      325.0,
+      350.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      450.0,
+      550.0,
+      600.0,
+      650.0
+     ]
+    },
+    {
+     "detalhe": "Receptivo / Interativo",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      2.6,
+      2.5,
+      2.45,
+      2.4
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      1170.0,
+      1375.0,
+      1470.0,
+      1560.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      1170.0,
+      1375.0,
+      1470.0,
+      1560.0
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 20/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Interação / Receptivo\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Boneco\n\n💰 *INVESTIMENTO*\n\n🕐 *1 hora*\n  • *VALOR TOTAL: R$ 1.170,00*\n\n🕑 *2 horas*\n  • *VALOR TOTAL: R$ 1.375,00*\n\n🕒 *3 horas*\n  • *VALOR TOTAL: R$ 1.470,00*\n\n🕓 *4 horas*\n  • *VALOR TOTAL: R$ 1.560,00*\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 1.111,50*\n  • 2h: *R$ 1.306,25*\n  • 3h: *R$ 1.396,50*\n  • 4h: *R$ 1.482,00*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": false,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Boneco"
+   ],
+   "total_1h": 1170.0,
+   "total_2h": 1375.0,
+   "total_3h": 1470.0,
+   "total_4h": 1560.0,
+   "total_custom": null,
+   "transport_breakdown": null
+  }
+ },
+ "boneco_24_12": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n24/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Boneco\nINVESTIMENTO\n1 hora\nR$ 3.841,00\n2 horas\nR$ 7.682,00\n3 horas\nR$ 11.523,00\n4 horas\nR$ 15.364,00\nValores especiais de 24 e 25 de dezembro.\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 3.648,95 | 2h R$ 7.297,90 | 3h R$ 10.946,85 | 4h R$ 14.595,80\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": {
+    "chave": "natal",
+    "markup": [
+     3.34,
+     3.34,
+     3.34,
+     3.34
+    ],
+    "nota_mensagem": "Valores especiais de 24 e 25 de dezembro.",
+    "rotulo": "Véspera e Natal"
+   },
+   "deslocamento_responsavel": null,
+   "duracao_custom": 0,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "24/12/2026",
+   "fmt_time": "",
+   "fora_sp": false,
+   "markup_used": [
+    3.34,
+    3.34,
+    3.34,
+    3.34
+   ],
+   "memoria": [
+    {
+     "detalhe": "boneco, piso da data especial",
+     "label": "Boneco",
+     "tipo": "cache",
+     "valores": [
+      650.0,
+      1300.0,
+      1950.0,
+      2600.0
+     ]
+    },
+    {
+     "detalhe": "sem show, cachê da data especial",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      500.0,
+      1000.0,
+      1500.0,
+      2000.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      1150.0,
+      2300.0,
+      3450.0,
+      4600.0
+     ]
+    },
+    {
+     "detalhe": "Véspera e Natal · 24/12",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      3.34,
+      3.34,
+      3.34,
+      3.34
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      3841.0,
+      7682.0,
+      11523.0,
+      15364.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      3841.0,
+      7682.0,
+      11523.0,
+      15364.0
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 24/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Interação / Receptivo\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Boneco\n\n💰 *INVESTIMENTO*\n\n🕐 *1 hora*\n  • *VALOR TOTAL: R$ 3.841,00*\n\n🕑 *2 horas*\n  • *VALOR TOTAL: R$ 7.682,00*\n\n🕒 *3 horas*\n  • *VALOR TOTAL: R$ 11.523,00*\n\n🕓 *4 horas*\n  • *VALOR TOTAL: R$ 15.364,00*\n\n_Valores especiais de 24 e 25 de dezembro._\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 3.648,95*\n  • 2h: *R$ 7.297,90*\n  • 3h: *R$ 10.946,85*\n  • 4h: *R$ 14.595,80*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": false,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Boneco"
+   ],
+   "total_1h": 3841.0,
+   "total_2h": 7682.0,
+   "total_3h": 11523.0,
+   "total_4h": 15364.0,
+   "total_custom": null,
+   "transport_breakdown": null
+  }
+ },
+ "boneco_bv": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n20/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Boneco\nINVESTIMENTO\n1 hora\nR$ 1.287,00\n2 horas\nR$ 1.512,50\n3 horas\nR$ 1.617,00\n4 horas\nR$ 1.716,00\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 1.222,65 | 2h R$ 1.436,88 | 3h R$ 1.536,15 | 4h R$ 1.630,20\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": null,
+   "deslocamento_responsavel": null,
+   "duracao_custom": 0,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "20/12/2026",
+   "fmt_time": "",
+   "fora_sp": false,
+   "markup_used": [
+    2.6,
+    2.5,
+    2.45,
+    2.4
+   ],
+   "memoria": [
+    {
+     "detalhe": "boneco",
+     "label": "Boneco",
+     "tipo": "cache",
+     "valores": [
+      200.0,
+      250.0,
+      275.0,
+      300.0
+     ]
+    },
+    {
+     "detalhe": "sem show",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      250.0,
+      300.0,
+      325.0,
+      350.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      450.0,
+      550.0,
+      600.0,
+      650.0
+     ]
+    },
+    {
+     "detalhe": "Receptivo / Interativo",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      2.6,
+      2.5,
+      2.45,
+      2.4
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      1170.0,
+      1375.0,
+      1470.0,
+      1560.0
+     ]
+    },
+    {
+     "detalhe": "10%",
+     "label": "Acréscimo: BV",
+     "tipo": "pos",
+     "valores": [
+      117.0,
+      137.5,
+      147.0,
+      156.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      1287.0,
+      1512.5,
+      1617.0,
+      1716.0
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 20/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Interação / Receptivo\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Boneco\n\n💰 *INVESTIMENTO*\n\n🕐 *1 hora*\n  • *VALOR TOTAL: R$ 1.287,00*\n\n🕑 *2 horas*\n  • *VALOR TOTAL: R$ 1.512,50*\n\n🕒 *3 horas*\n  • *VALOR TOTAL: R$ 1.617,00*\n\n🕓 *4 horas*\n  • *VALOR TOTAL: R$ 1.716,00*\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 1.222,65*\n  • 2h: *R$ 1.436,88*\n  • 3h: *R$ 1.536,15*\n  • 4h: *R$ 1.630,20*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": false,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Boneco"
+   ],
+   "total_1h": 1287.0,
+   "total_2h": 1512.5,
+   "total_3h": 1617.0,
+   "total_4h": 1716.0,
+   "total_custom": null,
+   "transport_breakdown": null
+  }
+ },
+ "boneco_fora_sp": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n20/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Boneco\nINVESTIMENTO\n1 hora\nR$ 1.786,67\n2 horas\nR$ 1.991,67\n3 horas\nR$ 2.086,67\n4 horas\nR$ 2.176,67\nEsse orçamento inclui deslocamento por responsabilidade da Manto Produções.\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 1.697,34 | 2h R$ 1.892,09 | 3h R$ 1.982,34 | 4h R$ 2.067,84\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": null,
+   "deslocamento_responsavel": "manto",
+   "duracao_custom": 0,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "20/12/2026",
+   "fmt_time": "",
+   "fora_sp": true,
+   "markup_used": [
+    2.6,
+    2.5,
+    2.45,
+    2.4
+   ],
+   "memoria": [
+    {
+     "detalhe": "boneco",
+     "label": "Boneco",
+     "tipo": "cache",
+     "valores": [
+      200.0,
+      250.0,
+      275.0,
+      300.0
+     ]
+    },
+    {
+     "detalhe": "sem show",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      250.0,
+      300.0,
+      325.0,
+      350.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      450.0,
+      550.0,
+      600.0,
+      650.0
+     ]
+    },
+    {
+     "detalhe": "Receptivo / Interativo",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      2.6,
+      2.5,
+      2.45,
+      2.4
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      1170.0,
+      1375.0,
+      1470.0,
+      1560.0
+     ]
+    },
+    {
+     "detalhe": "van · 2 pessoa(s) · 50 km (ida)",
+     "label": "Transporte fora de SP",
+     "tipo": "pos",
+     "valores": [
+      616.67,
+      616.67,
+      616.67,
+      616.67
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      1786.67,
+      1991.67,
+      2086.67,
+      2176.67
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 20/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Interação / Receptivo\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Boneco\n\n💰 *INVESTIMENTO*\n\n🕐 *1 hora*\n  • Valor da Apresentação: R$ 1.170,00\n  • Logística e Transporte: R$ 616,67\n  • *VALOR TOTAL: R$ 1.786,67*\n\n🕑 *2 horas*\n  • Valor da Apresentação: R$ 1.375,00\n  • Logística e Transporte: R$ 616,67\n  • *VALOR TOTAL: R$ 1.991,67*\n\n🕒 *3 horas*\n  • Valor da Apresentação: R$ 1.470,00\n  • Logística e Transporte: R$ 616,67\n  • *VALOR TOTAL: R$ 2.086,67*\n\n🕓 *4 horas*\n  • Valor da Apresentação: R$ 1.560,00\n  • Logística e Transporte: R$ 616,67\n  • *VALOR TOTAL: R$ 2.176,67*\n\n_Esse orçamento inclui deslocamento por responsabilidade da Manto Produções._\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 1.697,34*\n  • 2h: *R$ 1.892,09*\n  • 3h: *R$ 1.982,34*\n  • 4h: *R$ 2.067,84*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": false,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Boneco"
+   ],
+   "total_1h": 1786.67,
+   "total_2h": 1991.67,
+   "total_3h": 2086.67,
+   "total_4h": 2176.67,
+   "total_custom": null,
+   "transport_breakdown": {
+    "adicional_fora_sp": 66.67,
+    "adicional_show": 0,
+    "tarifa": 5.5,
+    "total": 616.67,
+    "transporte": 550.0
+   }
+  }
+ },
+ "boneco_nf": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n20/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Boneco\nINVESTIMENTO\n1 hora\nR$ 1.392,86\n2 horas\nR$ 1.636,90\n3 horas\nR$ 1.750,00\n4 horas\nR$ 1.857,14\n* Valores com Nota Fiscal inclusa\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 1.323,22 | 2h R$ 1.555,06 | 3h R$ 1.662,50 | 4h R$ 1.764,28\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": null,
+   "deslocamento_responsavel": null,
+   "duracao_custom": 0,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "20/12/2026",
+   "fmt_time": "",
+   "fora_sp": false,
+   "markup_used": [
+    2.6,
+    2.5,
+    2.45,
+    2.4
+   ],
+   "memoria": [
+    {
+     "detalhe": "boneco",
+     "label": "Boneco",
+     "tipo": "cache",
+     "valores": [
+      200.0,
+      250.0,
+      275.0,
+      300.0
+     ]
+    },
+    {
+     "detalhe": "sem show",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      250.0,
+      300.0,
+      325.0,
+      350.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      450.0,
+      550.0,
+      600.0,
+      650.0
+     ]
+    },
+    {
+     "detalhe": "Receptivo / Interativo",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      2.6,
+      2.5,
+      2.45,
+      2.4
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      1170.0,
+      1375.0,
+      1470.0,
+      1560.0
+     ]
+    },
+    {
+     "detalhe": "valor bruto = líquido ÷ 0,84",
+     "label": "Nota fiscal",
+     "tipo": "pos",
+     "valores": [
+      222.86,
+      261.9,
+      280.0,
+      297.14
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      1392.86,
+      1636.9,
+      1750.0,
+      1857.14
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 20/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Interação / Receptivo\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Boneco\n\n💰 *INVESTIMENTO*\n🧾 _Valores com Nota Fiscal inclusa_\n\n🕐 *1 hora*\n  • *VALOR TOTAL: R$ 1.392,86*\n\n🕑 *2 horas*\n  • *VALOR TOTAL: R$ 1.636,90*\n\n🕒 *3 horas*\n  • *VALOR TOTAL: R$ 1.750,00*\n\n🕓 *4 horas*\n  • *VALOR TOTAL: R$ 1.857,14*\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 1.323,22*\n  • 2h: *R$ 1.555,06*\n  • 3h: *R$ 1.662,50*\n  • 4h: *R$ 1.764,28*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": true,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Boneco"
+   ],
+   "total_1h": 1392.86,
+   "total_2h": 1636.9,
+   "total_3h": 1750.0,
+   "total_4h": 1857.14,
+   "total_custom": null,
+   "transport_breakdown": null
+  }
+ },
+ "perna_show_6h": {
+  "pdf": "+  5 5  ( 1 1 )  9 7 0 5 7 - 0 5 7 7\nc o n t a t o @ m a n t o p r o d u c o e s . c o m . b r\nO R Ç A M E N T O\nDADOS DO EVENTO\nCliente:\n__v309_Cliente\nData:\n20/12/2026\nLocal:\n__v309_Salão de festas\nEQUIPE\n Perna de Pau\n Ator\nINVESTIMENTO\n1 hora\nR$ 3.825,00\n2 horas\nR$ 4.175,00\n3 horas\nR$ 4.338,75\n4 horas\nR$ 4.495,00\n6 horas\nR$ 6.742,50\nFORMAS DE PAGAMENTO\nPIX à vista (5% desc.):\n1h R$ 3.633,75 | 2h R$ 3.966,25 | 3h R$ 4.121,81 | 4h R$ 4.270,25\nReserva programada:\n50% no ato + 50% até 2 dias antes\nCartão de crédito:\nParcelamento disponível (taxas repassadas)\nEsta proposta tem validade de 7 dias a contar da data de envio.\n",
+  "quote": {
+   "cache_base": null,
+   "client_name": "__v309_Cliente",
+   "custom_mult": null,
+   "data_especial": null,
+   "deslocamento_responsavel": null,
+   "duracao_custom": 6,
+   "event_location": "__v309_Salão de festas",
+   "fmt_date": "20/12/2026",
+   "fmt_time": "",
+   "fora_sp": false,
+   "markup_used": [
+    2.6,
+    2.5,
+    2.45,
+    2.4
+   ],
+   "memoria": [
+    {
+     "detalhe": "",
+     "label": "Perna de Pau",
+     "tipo": "cache",
+     "valores": [
+      400.0,
+      450.0,
+      475.0,
+      500.0
+     ]
+    },
+    {
+     "detalhe": "cara limpa, show",
+     "label": "Ator",
+     "tipo": "cache",
+     "valores": [
+      300.0,
+      350.0,
+      375.0,
+      400.0
+     ]
+    },
+    {
+     "detalhe": "com show",
+     "label": "Coordenador(es) (1)",
+     "tipo": "cache",
+     "valores": [
+      300.0,
+      350.0,
+      375.0,
+      400.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Subtotal cachê",
+     "tipo": "subtotal",
+     "valores": [
+      1000.0,
+      1150.0,
+      1225.0,
+      1300.0
+     ]
+    },
+    {
+     "detalhe": "Show",
+     "label": "× Markup",
+     "tipo": "markup",
+     "valores": [
+      2.6,
+      2.5,
+      2.45,
+      2.4
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "= Após markup",
+     "tipo": "subtotal",
+     "valores": [
+      2600.0,
+      2875.0,
+      3001.25,
+      3120.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "Brinde do show",
+     "tipo": "pos",
+     "valores": [
+      100.0,
+      100.0,
+      100.0,
+      100.0
+     ]
+    },
+    {
+     "detalhe": "markup de serviço 1.5×",
+     "label": "Técnico de som",
+     "tipo": "pos",
+     "valores": [
+      1125.0,
+      1200.0,
+      1237.5,
+      1275.0
+     ]
+    },
+    {
+     "detalhe": "",
+     "label": "TOTAL FINAL AO CLIENTE",
+     "tipo": "total",
+     "valores": [
+      3825.0,
+      4175.0,
+      4338.75,
+      4495.0
+     ]
+    }
+   ],
+   "message": "Olá, *__v309_Cliente*! ✨ É um prazer preparar a proposta para o seu evento.\n\nEstamos prontos para levar toda a magia da Manto Produções para o seu dia especial! Confira os detalhes abaixo:\n\n📍 *DETALHES DO EVENTO*\n• Data: 20/12/2026\n• Local: __v309_Salão de festas\n• Horário: \n• Modalidade: Show com Som\n\n🎭 *PERSONAGENS E EXPERIÊNCIA*\n• Perna de Pau\n• Ator\n\n💰 *INVESTIMENTO*\n\n🕐 *1 hora*\n  • *VALOR TOTAL: R$ 3.825,00*\n\n🕑 *2 horas*\n  • *VALOR TOTAL: R$ 4.175,00*\n\n🕒 *3 horas*\n  • *VALOR TOTAL: R$ 4.338,75*\n\n🕓 *4 horas*\n  • *VALOR TOTAL: R$ 4.495,00*\n\n🕐 *6 horas*\n  • *VALOR TOTAL: R$ 6.742,50*\n\n💳 *FORMAS DE PAGAMENTO*\n\n1️⃣ *À Vista (PIX):*\n  • 1h: *R$ 3.633,75*\n  • 2h: *R$ 3.966,25*\n  • 3h: *R$ 4.121,81*\n  • 4h: *R$ 4.270,25*\n  • 6h: *R$ 6.405,38*\n_(desconto especial de 5% aplicado)_\n\n2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n✨ Podemos seguir com a reserva da sua data? Aguardamos sua confirmação para enviarmos o link do contrato digital.",
+   "modo_duracao": "horas",
+   "nota_fiscal": false,
+   "personalizado": false,
+   "personalizado_criterio": null,
+   "show_1h": true,
+   "show_2h": true,
+   "show_3h": true,
+   "show_4h": true,
+   "team_lines": [
+    "Perna de Pau",
+    "Ator"
+   ],
+   "total_1h": 3825.0,
+   "total_2h": 4175.0,
+   "total_3h": 4338.75,
+   "total_4h": 4495.0,
+   "total_custom": 6742.5,
+   "transport_breakdown": null
+  }
+ }
+}

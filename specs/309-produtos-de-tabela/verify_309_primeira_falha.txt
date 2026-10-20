@@ -1,0 +1,47 @@
+[2026-10-19 22:19:28,535] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+[2026-10-19 22:19:30,259] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-19 22:19:31,719] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:32,151] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:32,344] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:32,562] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:32,769] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:32,971] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:33,175] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:33,332] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:33,491] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:33,671] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:33,825] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,001] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,159] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,320] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,488] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,670] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,824] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:34,980] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:35,142] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:35,282] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:35,425] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-19 22:19:35,572] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+Feature 309 — Produtos de tabela (Visita Mágica)
+         GABARITO GRAVADO em verify_309_golden.json (HEAD atual) — as próximas rodadas comparam com ele
+  OK     1. paridade sem `produtos`: quote, mensagem e PDF iguais ao gabarito do HEAD 6356b80
+  FALHA  2. Visita Noel 20/12 = 2.500 nas 4 colunas; memória (invariante); bloco único na mensagem e no PDF; snapshot congelado: Visita Noel 20/12 1h: 650.0 ≠ 2500.0
+  FALHA  3. 24/12 = 5.000; Noel + Ajudante = 3.600 / 6.500: Visita Noel 24/12: 1670.0 ≠ 5000.0
+  FALHA  4. noturno embutido no produto; boneco avulso soma só o dele: Visita às 20h não soma noturno: 700.0 ≠ 2500.0
+  FALHA  5. produto + boneco 4h; dois produtos = 2 Noéis, 2 coords, UM Maquiador 300; show avulso; make especial: 1h = boneco × markup + produto: 1170.0 ≠ 3020.0
+  FALHA  6. fora de SP, NF, BV 10% e PIX sobre o total com produto: fora de SP soma por cima do produto: 1233.33 ≠ 3116.67
+  FALHA  7. régua 6h (com NF e BV) igual na venda, no prefill e em _total_da_duracao; personalizado: 6h: venda: 2340.0 ≠ 3580.0
+  FALHA  8. teto: ordem produto → avulsos → extras; flat; faixa pela data do evento; MARCA_PRODUTO; label desconhecido: vagas do produto primeiro: ['Boneco', 'Coordenador']
+  FALHA  9. prefill, criação por API e vínculo 273 com os tetos do produto: prefill: ['Coordenador']
+  FALHA  10. casting 900 → 600; superadmin 900 → 900: cenário 9 não criou a vaga do Noel
+  FALHA  11. migração: 712→600 e 423→270 guardadas; 600 não vira 712; produtos padrão; bloco malformado: 712 → 600: [712, 800, 850, 900]
+  FALHA  12. avulsos: Noel 20/12 = 2.210 com aviso; 24/12 = 5.010; chaves novas sempre presentes: Noel avulso 20/12 = (600 + 250) × 2,6: 2501.2 ≠ 2210.0
+  FALHA  13. superadmin salva produtos; 7 corpos inválidos → 400 por campo; faixa órfã → aviso: 'produtos'
+  FALHA  14. produto inativo recalcula; apagado → 400 na venda e vaga congelada sem teto: 'produtos'
+  FALHA  15. produto sem preço de 24/25 → estimativa 6.600 marcada; teto pela faixa: 'produtos'
+  FALHA  16. EducaManto ignora `produtos` (com o produto provadamente ativo): o produto precisa estar ativo na venda para o cenário fazer sentido
+  FALHA  17. DEVE FALHAR: COMERCIAL não edita a configuração: 'produtos'
+  FALHA  18. script rebaixa tetos 712/423 só sem cachê e sem artista; nome diferente só no relatório: script inexistente: rebaixar_tetos_noel_309.py
+  PULADO 19. regressão (--regressao): verify_307 reescrito (encadeia a 305): rode com --regressao para o portão da feature
+  OK     20. limpeza e restauração da configuração real
+2/19 OK · 1 pulado(s) — fora da contagem
