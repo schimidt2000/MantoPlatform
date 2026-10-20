@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AvatarThumb, Combobox } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -10,6 +10,7 @@ import {
   fieldErrorsFrom,
   getClientToken,
   renovarClientToken,
+  useAbandonarReserva,
   useContagemDeSegundos,
   useCampanhaVirtual,
   useHorariosVirtuais,
@@ -97,6 +98,10 @@ export function CampanhaVirtualPage() {
   const [endereco, setEndereco] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
   const [avisoTopo, setAvisoTopo] = useState<string | null>(null);
+  // 429 do mesmo telefone: o servidor manda o token da reserva que já existe, para a família
+  // retomar ou abandonar (FR-020a da 205) — antes só lia "abandone-a" sem ter como.
+  const [reservaExistente, setReservaExistente] = useState<string | null>(null);
+  const abandonar = useAbandonarReserva();
 
   const refs = useRef<Record<string, HTMLElement | null>>({});
   const lockRestante = useContagemDeSegundos(reservar.data?.seconds_left);
@@ -125,6 +130,7 @@ export function CampanhaVirtualPage() {
   const enviar = () => {
     setErros({});
     setAvisoTopo(null);
+    setReservaExistente(null);
     reservar.mutate(
       {
         modality: modalidade,
@@ -169,6 +175,9 @@ export function CampanhaVirtualPage() {
             void recarregarHorarios();
           } else if (status === 429) {
             setAvisoTopo(erro.message);
+            const existente = (erro as { details?: Record<string, unknown> }).details
+              ?.existing_order_token;
+            setReservaExistente(typeof existente === "string" ? existente : null);
           } else if (status === 502 || status === 503) {
             setAvisoTopo(erro.message);
           }
@@ -262,6 +271,29 @@ export function CampanhaVirtualPage() {
             role="status"
           >
             {avisoTopo}
+            {reservaExistente && (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <Link to={`/v/pedido/${reservaExistente}`} className={BOTAO_SECUNDARIO}>
+                  Ver a reserva que já tenho
+                </Link>
+                <button
+                  type="button"
+                  className={BOTAO_SECUNDARIO}
+                  disabled={abandonar.isPending}
+                  onClick={() =>
+                    abandonar.mutate(reservaExistente, {
+                      onSuccess: () => enviar(),
+                      onError: (erro) => {
+                        setReservaExistente(null);
+                        setAvisoTopo(erro.message);
+                      },
+                    })
+                  }
+                >
+                  {abandonar.isPending ? "Abandonando…" : "Abandonar e reservar este"}
+                </button>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

@@ -182,6 +182,25 @@ def api_virtuais_pedido_retorno(public_token: str) -> Any:
     return jsonify(ops.serialize_order_summary(order))
 
 
+@api_bp.route("/virtuais/pedidos/<public_token>/abandonar", methods=["POST"])
+@limiter.limit("20 per minute")
+def api_virtuais_pedido_abandonar(public_token: str) -> Any:
+    """A família desiste da reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+
+    O token é o mesmo segredo que abre a página do pedido. Com sinal de pagamento → 409 (quem
+    decide é a operadora); pedido que já não está ativo → 200 com o resumo, sem efeito.
+    """
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    if order is None:
+        return json_error("Pedido não encontrado.", 404)
+    try:
+        ops.abandonar_reserva(order)
+    except ops.VirtuaisConflitoError as exc:
+        return json_error(str(exc), 409)
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    return jsonify(ops.serialize_order_summary(order))
+
+
 def _sessao_valida(order: VirtualOrder) -> bool:
     """True se esta sessão do navegador já validou o telefone deste pedido e não expirou.
 

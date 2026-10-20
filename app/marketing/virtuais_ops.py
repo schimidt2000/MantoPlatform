@@ -53,6 +53,7 @@ from app.constants import (  # feature 310
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_CAMPAIGN_STATUSES,
+    VIRTUAL_GOOGLE_TIMEOUT_S,
     VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO,
     VIRTUAL_MODALITIES,
     VIRTUAL_MODALITY_AO_VIVO,
@@ -1426,6 +1427,29 @@ def _expirar_um(order_id: int) -> str | None:
     return "liberadas"
 
 
+def abandonar_reserva(order: VirtualOrder) -> bool:
+    """A família desiste de uma reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+
+    A regra "uma reserva ativa por telefone" mandava a família "abandonar" a reserva antiga para
+    escolher outro horário ou reservar para o irmão — mas não havia como: ela ficava presa até a
+    trava vencer. Só libera sem sinal de pagamento (nenhum identificador provado e nenhum aviso ou
+    retorno esperando decisão); com sinal, a decisão é da operadora.
+
+    Returns:
+        True se liberou; False se o pedido já não estava ativo.
+
+    Raises:
+        VirtuaisConflitoError: Há sinal de pagamento deste pedido.
+    """
+    if order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return False
+    if order.transaction_nsu or _aviso_sem_decisao(order):
+        raise VirtuaisConflitoError(
+            "Já recebemos um sinal de pagamento deste pedido — aguarde a confirmação aqui."
+        )
+    return _liberar_reserva(order, motivo="abandonada pela família")
+
+
 def _aviso_sem_decisao(order: VirtualOrder) -> bool:
     """True se chegou aviso com o segredo certo para este pedido e ele ainda não teve desfecho."""
     return db.session.query(
@@ -1542,6 +1566,8 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
             # Feature 310 (R11): marca do evento da loja, para a sincronização da agenda nunca o
             # importar como evento comum (com venda, funil e DRE) se a gravação local falhar.
             private_props={"manto_virtual_nsu": order.order_nsu},
+            # FR-016: prazo curto — este caminho roda no aviso e no retorno da família.
+            timeout=VIRTUAL_GOOGLE_TIMEOUT_S,
         ),
         descricao=f"criar evento no Google do pedido {order.order_nsu}",
         exception_types=(Exception,),
@@ -2107,6 +2133,14 @@ def registrar_aviso(payload: dict) -> int | None:
     if existente is not None:
         if existente.outcome in VIRTUAL_AVISO_FINAIS:
             return None
+        if _veio_do_retorno(existente):
+            # O registro veio de um retorno (POST público, sem segredo): o aviso autenticado
+            # manda. Sem isto, um retorno forjado com o NSU de outra família fazia o aviso dela
+            # ser reconsultado com o pedido errado — e o pagamento ficava sem dono.
+            existente.order_nsu = order_nsu
+            existente.order_id = None
+            existente.raw_payload = json.dumps(payload or {}, ensure_ascii=False)[:20000]
+            existente.message = None
         existente.state = VIRTUAL_AVISO_STATE_PENDENTE
         existente.last_attempt_at = None
         db.session.commit()
@@ -2357,6 +2391,18 @@ def registrar_retorno(order: VirtualOrder, dados: dict) -> str | None:
     return desfecho
 
 
+#: Texto do registro de aviso que nasceu de um retorno do checkout (sem segredo). A marca que
+#: dura é ``"origem": "retorno"`` no corpo — a mensagem é trocada quando o registro decide.
+MENSAGEM_RETORNO_SEM_PROVA = "Retorno do checkout (identificadores ainda sem prova)."
+
+
+def _veio_do_retorno(registro: VirtualPaymentNotification) -> bool:
+    try:
+        return json.loads(registro.raw_payload or "{}").get("origem") == "retorno"
+    except (ValueError, AttributeError):
+        return False
+
+
 def _guardar_retorno_sem_prova(order: VirtualOrder, ids: dict, dados: dict, *,
                                desfecho: str | None = None) -> None:
     """Guarda os identificadores do retorno que ainda não provaram nada (feature 310, R-08).
@@ -2371,6 +2417,16 @@ def _guardar_retorno_sem_prova(order: VirtualOrder, ids: dict, dados: dict, *,
     """
     tx = ids.get("transaction_nsu")
     if not tx or VirtualPaymentNotification.query.filter_by(transaction_nsu=tx).first():
+        return
+    # Um por pedido enquanto não decide: o retorno é público (só o token do pedido), e repetir com
+    # NSUs inventados não pode encher a fila da varredura nem "a conferir".
+    if not desfecho and any(
+        _veio_do_retorno(r)
+        for r in VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.state != VIRTUAL_AVISO_STATE_DECIDIDO,
+        ).all()
+    ):
         return
     corpo = {
         "origem": "retorno",
@@ -2390,7 +2446,7 @@ def _guardar_retorno_sem_prova(order: VirtualOrder, ids: dict, dados: dict, *,
             # sendo SÓ a reconsulta na operadora; o retorno não decide nada sozinho.
             secret_ok=True,
             outcome=desfecho,
-            message="Retorno do checkout (identificadores ainda sem prova).",
+            message=MENSAGEM_RETORNO_SEM_PROVA,
             state=VIRTUAL_AVISO_STATE_DECIDIDO if desfecho else VIRTUAL_AVISO_STATE_PENDENTE,
             attempts=1,
             last_attempt_at=agora(),

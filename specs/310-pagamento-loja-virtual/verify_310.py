@@ -599,6 +599,120 @@ def _pago_em_paralelo(nsus: list[str], valor: Decimal) -> None:
         OP.forcar.pop(n, None)
 
 
+def _em_paralelo(*tarefas) -> None:
+    """Roda as tarefas em threads ao mesmo tempo (cada uma com a sua conexão) e espera todas."""
+    fios = [threading.Thread(target=t) for t in tarefas]
+    for t in fios:
+        t.start()
+    for t in fios:
+        t.join(60)
+
+
+def _segura_pago(barreira: threading.Barrier, valor: Decimal):
+    """Reconsulta do dublê que só responde "pago" quando a outra ponta chegou na barreira."""
+    def resposta(tx, slug_):
+        try:
+            barreira.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return {"resultado": "pago", "paid": True, "amount": valor, "paid_amount": valor,
+                "capture_method": "pix", "raw": {}}
+    return resposta
+
+
+@cenario("1b varredura acha A pago AO MESMO TEMPO em que B reserva o horário vencido")
+def c1b():
+    cid, slug = nova_campanha()
+    h = novo_horario(cid)
+    _, ra = reservar(slug, h, ip="198.51.100.71")
+    a = ra["order_nsu"]
+    vencer(a)
+    gravar_ids(a, OP.pagar(a, Decimal("100.00")))
+    barreira = threading.Barrier(2, timeout=30)
+    OP.forcar[a] = _segura_pago(barreira, Decimal("100.00"))
+
+    def b_reserva():
+        try:
+            barreira.wait()
+        except threading.BrokenBarrierError:
+            pass
+        app.test_client().post(
+            f"/api/virtuais/campanhas/{slug}/reservar",
+            json={"modality": "ao_vivo", "slot_id": h, "child_name": "B", "child_age": 5,
+                  "contact_phone": f"119{secrets.randbelow(10**8):08d}",
+                  "contact_email": f"v310-{RUN}@example.com", "client_token": secrets.token_hex(8)},
+            headers={"X-Manto-Client-Ip": "198.51.100.72", "User-Agent": "verify-310"})
+
+    try:
+        _em_paralelo(varrer, b_reserva)
+    finally:
+        OP.forcar.pop(a, None)
+    check("1b.1 no máximo 1 pago no horário", pagos_no_horario(h) <= 1, str(pagos_no_horario(h)))
+    check("1b.2 invariantes", not invariantes(cid), str(invariantes(cid)))
+
+
+@cenario("2b varredura confirma A AO MESMO TEMPO em que o aviso de B chega (mesmo horário)")
+def c2b():
+    cid, slug = nova_campanha()
+    h = novo_horario(cid)
+    _, ra = reservar(slug, h, ip="198.51.100.73")
+    a = ra["order_nsu"]
+    vencer(a)
+    _, rb = reservar(slug, h, ip="198.51.100.74")
+    b = rb["order_nsu"]
+    gravar_ids(a, OP.pagar(a, Decimal("100.00")))
+    cb = OP.pagar(b, Decimal("100.00"))
+    barreira = threading.Barrier(2, timeout=30)
+    OP.forcar[a] = _segura_pago(barreira, Decimal("100.00"))
+    OP.forcar[b] = _segura_pago(barreira, Decimal("100.00"))
+
+    def aviso_b():
+        app.test_client().post(f"/api/webhooks/infinitepay/{TOKEN}", json=OP.aviso(b, cb))
+
+    try:
+        _em_paralelo(varrer, aviso_b)
+    finally:
+        OP.forcar.pop(a, None)
+        OP.forcar.pop(b, None)
+    check("2b.1 exatamente 1 pago no horário", pagos_no_horario(h) == 1, str(pagos_no_horario(h)))
+    check("2b.2 o outro em devolução", bool(devolucoes(a) or devolucoes(b)),
+          f"{devolucoes(a)} {devolucoes(b)}")
+    check("2b.3 invariantes", not invariantes(cid), str(invariantes(cid)))
+
+
+@cenario("5b aviso decide AO MESMO TEMPO em que o horário passa a começar em 10 min")
+def c5b():
+    cid, slug = nova_campanha()
+    h = novo_horario(cid)
+    _, ra = reservar(slug, h, ip="198.51.100.75")
+    a = ra["order_nsu"]
+    c = OP.pagar(a, Decimal("100.00"))
+    barreira = threading.Barrier(2, timeout=30)
+    OP.forcar[a] = _segura_pago(barreira, Decimal("100.00"))
+
+    def aviso_a():
+        app.test_client().post(f"/api/webhooks/infinitepay/{TOKEN}", json=OP.aviso(a, c))
+
+    def adianta():
+        try:
+            barreira.wait()
+        except threading.BrokenBarrierError:
+            pass
+        with _engine.begin() as conn:
+            conn.execute(text("update virtual_campaign_slots set start_at=:t where id=:h"),
+                         {"t": now_sp() + timedelta(minutes=10), "h": h})
+
+    try:
+        _em_paralelo(aviso_a, adianta)
+    finally:
+        OP.forcar.pop(a, None)
+    pago = pedido(a)["status"] == "pago"
+    devolvido = "horario_passou" in devolucoes(a)
+    check("5b.1 termina em venda OU em devolução, nunca nos dois nem em nenhum",
+          pago != devolvido, f"{pedido(a)} {devolucoes(a)}")
+    check("5b.2 invariantes", not invariantes(cid), str(invariantes(cid)))
+
+
 @cenario("4b dois pagamentos atrasados no mesmo horário, AO MESMO TEMPO → 1 venda + 1 devolução")
 def c4b():
     cid, slug = nova_campanha()
@@ -634,7 +748,7 @@ def r22():
     falhas = 0
     for _ in range(ARGS.rodadas):
         antes = sum(1 for r in resultados if r[1] != "OK")
-        for fn in (c1, c2, c3, c4, c4b, c5, c6, c6b, c7):
+        for fn in (c1, c1b, c2, c2b, c3, c4, c4b, c5, c5b, c6, c6b, c7):
             fn()
         if sum(1 for r in resultados if r[1] != "OK") > antes:
             falhas += 1
@@ -1092,9 +1206,11 @@ def c28():
     log_acesso.addHandler(manipulador)
     log_acesso.setLevel(logging.INFO)
     try:
-        # Mesmo formato do access log do render.yaml: o caminho entra como argumento.
-        log_acesso.info("%s %s %s %s", "10.0.0.1", "POST",
-                        f"/api/webhooks/infinitepay/{TOKEN}", 200)
+        # Como o gunicorn grava: o formato do render.yaml com um dict de átomos (o ramo de dict da
+        # máscara é o que vale em produção).
+        log_acesso.info("%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s",
+                        {"h": "10.0.0.1", "m": "POST", "U": f"/api/webhooks/infinitepay/{TOKEN}",
+                         "s": "200", "b": "2", "D": "5"})
         logging.getLogger(app.logger.name).error("Exception on /api/webhooks/infinitepay/%s [POST]",
                                                  TOKEN)
     finally:
@@ -1186,7 +1302,14 @@ def c36():
                           "values (:e, 'verify', 'divergência de teste', now())"),
                      {"e": pa["event_id"]})
     login(RoleName.COMERCIAL)
-    r = client.post(f"/api/virtuais/pedidos/{pa['id']}/cancelar", json={"motivo": "doente"})
+    from app import email_service
+    enviados: list[dict] = []
+    envio_original = email_service._send
+    email_service._send = lambda **kw: enviados.append(kw) or True
+    try:
+        r = client.post(f"/api/virtuais/pedidos/{pa['id']}/cancelar", json={"motivo": "doente"})
+    finally:
+        email_service._send = envio_original
     check("36.1 200", r.status_code == 200, str(r.status_code))
     check("36.2 desistência pendente", "desistencia" in devolucoes(a), str(devolucoes(a)))
     st = _db("select status from virtual_campaign_slots where id=:h", h=h)[0][0]
@@ -1196,6 +1319,12 @@ def c36():
     sino = _db("select count(*) from notifications where dedupe_key=:k",
                k=f"virtual.devolucao:{pa['id']}:desistencia")[0][0]
     check("36.5 devolução da desistência toca o sino", sino >= 1, str(sino))
+    cancel = [e for e in enviados if "cancelado" in (e.get("subject") or "").lower()
+              or "remarcar" in (e.get("subject") or "").lower()]
+    check("36.6 e-mail da desistência não fala em 'outra família'",
+          bool(cancel) and cancel[0]["subject"] == "Seu pedido foi cancelado"
+          and "outra família" not in cancel[0].get("html", ""),
+          str([e.get("subject") for e in enviados]))
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
@@ -1536,9 +1665,61 @@ def c53():
           str(pedido(a)))
 
 
+@cenario("54 retorno forjado com o NSU de outra família não sequestra o aviso dela (deve falhar)")
+def c54():
+    cid, slug = nova_campanha()
+    _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.54")
+    _, rb = reservar(slug, novo_horario(cid), ip="198.51.100.55")
+    a, tok_a, b = ra["order_nsu"], ra["public_token"], rb["order_nsu"]
+    cb = OP.pagar(b, Decimal("100.00"))
+    client.post(f"/api/virtuais/pedidos/{tok_a}/retorno",
+                json={"order_nsu": a, "transaction_nsu": cb["tx"], "slug": cb["slug"]})
+    for i in range(3):  # repetir com NSUs inventados não enche a fila
+        client.post(f"/api/virtuais/pedidos/{tok_a}/retorno",
+                    json={"order_nsu": a, "transaction_nsu": f"forjado-{RUN}-{i}", "slug": "x"})
+    n_a = _db("select count(*) from virtual_payment_notifications where order_nsu=:n", n=a)[0][0]
+    check("54.1 no máximo um registro de retorno por pedido", n_a <= 1, str(n_a))
+    avisar(OP.aviso(b, cb))
+    check("54.2 o aviso autenticado de B confirma B", pedido(b)["status"] == "pago", str(pedido(b)))
+    check("54.3 A não ganhou nada", pedido(a)["status"] != "pago", str(pedido(a)))
+
+
+@cenario("55 mesmo telefone: 429 com a reserva existente; abandonar libera e a nova passa")
+def c55():
+    cid, slug = nova_campanha()
+    tel = f"119{secrets.randbelow(10**8):08d}"
+
+    def com_telefone(slot_id):
+        return client.post(
+            f"/api/virtuais/campanhas/{slug}/reservar",
+            json={"modality": "ao_vivo", "slot_id": slot_id, "child_name": "Irmã", "child_age": 4,
+                  "contact_phone": tel, "contact_email": f"v310-{RUN}@example.com",
+                  "client_token": secrets.token_hex(8)},
+            headers={"X-Manto-Client-Ip": "198.51.100.56", "User-Agent": "verify-310"},
+        )
+
+    r1 = com_telefone(novo_horario(cid))
+    h2 = novo_horario(cid)
+    r2 = com_telefone(h2)
+    existente = ((r2.get_json() or {}).get("error") or {}).get("existing_order_token")
+    check("55.1 segunda reserva do mesmo telefone → 429 com o token da primeira",
+          r2.status_code == 429 and existente == r1.get_json()["public_token"], str(r2.status_code))
+    ab = client.post(f"/api/virtuais/pedidos/{existente}/abandonar", json={})
+    check("55.2 abandonar libera", ab.status_code == 200
+          and pedido(r1.get_json()["order_nsu"])["status"] == "expirado", str(ab.get_json())[:120])
+    r3 = com_telefone(h2)
+    check("55.3 agora a nova reserva passa", r3.status_code == 201, str(r3.status_code))
+    # Com sinal de pagamento (aviso válido esperando decisão), abandonar é recusado.
+    n3 = r3.get_json()["order_nsu"]
+    avisar(OP.aviso(n3, {"tx": f"tx-{RUN}-55", "slug": f"sl-{RUN}-55",
+                         "amount": Decimal("100.00"), "paid_amount": Decimal("100.00")}))
+    ab2 = client.post(f"/api/virtuais/pedidos/{r3.get_json()['public_token']}/abandonar", json={})
+    check("55.4 com sinal de pagamento → 409", ab2.status_code == 409, str(ab2.status_code))
+
+
 # ════════════════════════════════════════════════════════════════════════════════════════════
 BLOCOS = {
-    1: [c1, c2, c3, c4, c4b, c5, c6, c6b, c7],
+    1: [c1, c1b, c2, c2b, c3, c4, c4b, c5, c5b, c6, c6b, c7],
     2: [c8, c9, c10, c11, c12, c13, c14, c15],
     3: [c16, c17, c18, c19, c20, c21, c22, c23, c24],
     4: [c25, c26],
@@ -1548,7 +1729,7 @@ BLOCOS = {
     8: [c37, c38],
     9: [c39, c40],
     10: [c41, c42],
-    11: [c45, c46, c47, c48, c49, c50, c51, c52, c53],
+    11: [c45, c46, c47, c48, c49, c50, c51, c52, c53, c54, c55],
 }
 
 

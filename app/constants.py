@@ -567,6 +567,9 @@ VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO = 30
 # menos de 6 h sem sala, a equipe é avisada (R11).
 VIRTUAL_SALA_RETRY_LONGO_MIN = 10
 VIRTUAL_SALA_ALERTA_HORAS = 6
+# Prazo (s) da criação do evento da venda no Google (feature 310, FR-016): o caminho do aviso e do
+# retorno não pode ficar 60 s × 3 tentativas pendurado com a família esperando.
+VIRTUAL_GOOGLE_TIMEOUT_S = 20
 # Aviso de pagamento sem desfecho: reprocessado por até 48 h, depois vira "a conferir" (R-06).
 VIRTUAL_AVISO_REPROCESSA_HORAS = 48
 VIRTUAL_AVISO_RETRY_LONGO_MIN = 10

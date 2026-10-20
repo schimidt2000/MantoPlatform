@@ -280,3 +280,12 @@ interruptor desligado; o dono liga depois dos testes A e C.
 - [x] T069 Registrar `MANTO_PROXY_SECRET` na spec (R-16, FR-027), no plano, no quickstart §2 (frontend primeiro, backend depois) e em `docs/05` como proteção desligada até o dono configurar os dois serviços per Constituição XIV, Princípio VII (missing)
 - [x] T070 `cancelar_pedido_pago` toca o sino da devolução nova (`_avisar_equipe_devolucao` depois do commit) per FR-032, H6 cenário 2, R-19 (partial)
 - [x] T071 Quickstart §2 ganha o roteiro de desligar a loja; spec H10 cenário 3 e SC-004 registram a decisão de provar o teste B no verify (dublê) per FR-043, SC-004 (contradicts)
+
+## Phase 15: Convergence
+
+- [x] T072 Registro do retorno sem prova: no máximo um pendente por pedido, marcado como origem "retorno" (não conta como aviso com segredo no sino de 48 h); `registrar_aviso` que reaproveita o registro de um retorno com outro `order_nsu` sobrescreve com o aviso autenticado; cenário de retorno forjado no verify per R-08, R-09, FR-010, FR-013 (contradicts)
+- [x] T073 "Abandonar a reserva" que a FR-020a promete: endpoint público por token que libera a reserva sem sinal de pagamento, e a página da campanha oferece "Retomar" / "Abandonar e reservar este" no 429 do mesmo telefone per FR-020a (205), FR-036, H7 cenário 2 (contradicts)
+- [x] T074 Versões concorrentes c1b, c2b e c5b (duas conexões + barreira) na rodada R-22 per R-22, SC-001, T068 (partial)
+- [x] T075 Assunto e preheader do e-mail de cancelamento seguem o motivo da devolução (desistência, horário passou, vídeo esgotado) per R-19 (contradicts)
+- [x] T076 Prazo explícito no `insert_event` da venda virtual (http com timeout curto) per FR-016, T066 (partial)
+- [x] T077 c28 grava a linha como o gunicorn (formato do `render.yaml` com dict) para exercitar o ramo de dict da máscara per R-13, T067 (partial)

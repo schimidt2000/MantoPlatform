@@ -574,7 +574,7 @@ try:
     eventos_criados = {"n": 0}
 
     def fake_insert_event(calendar_id, title, start_dt, end_dt, description="", location="",
-                          conference_request_id=None, private_props=None):
+                          conference_request_id=None, private_props=None, **_kw):
         eventos_criados["n"] += 1
         return {
             "id": f"gcal-{eventos_criados['n']}-{conference_request_id}",

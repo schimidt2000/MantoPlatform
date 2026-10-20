@@ -419,9 +419,18 @@ mascarado também no `app.logger` e no `[slow]`; corpo chunked acima de 64 KB �
 anterior pelo relógio de São Paulo (valia 27 h); "Salvar" só manda o interruptor quando mudou;
 botão de cancelar só para Comercial/Superadmin; `efetivar_pedido()` (sem chamador) saiu.
 
-**Verificação.** `verify_310.py` 195/195 (B1–B11, prova por mutação do dono do horário, da releitura
-com trava, do identificador antes da prova, do IP do cliente e de quatro correções da revisão; R-22
-em rodadas repetidas);
+**Convergência (T061, duas passadas).** Fase 14 (T063–T071): varredura retém o horário quando há
+aviso válido sem decisão; identificadores do retorno sem prova guardados num registro próprio que a
+varredura reconsulta; cancelar limpa as tabelas laterais do evento e toca o sino; SMTP com prazo de
+20 s; verify mais completo (travas de ponta a ponta, limite de 60/min, R-22 com os sete da H1);
+`MANTO_PROXY_SECRET` na spec e no roteiro. Fase 15 (T072–T077): retorno forjado não sequestra o
+aviso de outra família (o aviso autenticado sobrescreve; um registro por pedido); "Abandonar e
+reservar este" (`POST …/abandonar`) cumpre a FR-020a; assunto e preheader do cancelamento seguem o
+motivo; prazo de 20 s no `insert_event` da venda; c1b/c2b/c5b em paralelo.
+
+**Verificação.** `verify_310.py` 648/648 com a rodada R-22 20× (B1–B11; antes da convergência, 195/195; prova por mutação do dono do horário, da releitura
+com trava, do identificador antes da prova, do IP do cliente, de quatro correções da revisão e de
+três da convergência — cenários 52, 53 e 54);
 regressão `verify_205.py` 138/138 e `verify_304.py` 27/27, com as mudanças intencionais; `ruff`
 limpo; tela aberta contra o `manto_local` (cartão de pagamento, a conferir, cancelar na fila,
 "Aparece na vitrine", loja pública em 375 px), que achou e corrigiu dois defeitos (a volta do

@@ -1276,17 +1276,8 @@ def send_virtual_order_confirmed_email(order) -> bool:
     )
 
 
-def _motivo_do_cancelamento_virtual(order) -> str:
-    """A frase do porquê, pelo motivo da devolução mais recente (feature 310).
-
-    Antes havia uma frase só ("o horário foi confirmado para outra família"), e a 310 criou
-    cancelamentos por outros motivos — dizer à família um motivo falso é pior que não dizer.
-    """
-    from app.constants import (
-        VIRTUAL_REFUND_REASON_DESISTENCIA,
-        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
-        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
-    )
+def _motivo_da_devolucao_virtual(order) -> str | None:
+    """Motivo da devolução mais recente do pedido, ou ``None`` (fonte do corpo e do assunto)."""
     from app.models import VirtualRefundRequest
 
     # Pedido sem id (pré-visualização do e-mail com objeto montado na mão) cai na frase padrão.
@@ -1298,7 +1289,22 @@ def _motivo_do_cancelamento_virtual(order) -> str:
         if order_id
         else None
     )
-    motivo = devolucao.reason if devolucao else None
+    return devolucao.reason if devolucao else None
+
+
+def _motivo_do_cancelamento_virtual(order) -> str:
+    """A frase do porquê, pelo motivo da devolução mais recente (feature 310).
+
+    Antes havia uma frase só ("o horário foi confirmado para outra família"), e a 310 criou
+    cancelamentos por outros motivos — dizer à família um motivo falso é pior que não dizer.
+    """
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
     if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
         return "Seu pedido foi cancelado, como combinado com a nossa equipe."
     if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
@@ -1345,15 +1351,36 @@ def send_virtual_order_cancelled_email(order) -> bool:
         )
     )
 
+    # Assunto e preheader seguem o mesmo motivo do corpo (feature 310): a família que desistiu
+    # não pode ler na caixa de entrada que "o horário foi confirmado para outra família".
+    assunto, preheader = _cabecalho_do_cancelamento_virtual(order)
     return _send(
         to=order.contact_email,
-        subject="Sobre a sua reserva — precisamos remarcar",
-        html=_html_wrap(
-            content,
-            preheader="O horário foi confirmado para outra família; a devolução está em andamento.",
-            tema=TEMA_LOJA_VIRTUAL,
-        ),
+        subject=assunto,
+        html=_html_wrap(content, preheader=preheader, tema=TEMA_LOJA_VIRTUAL),
     )
+
+
+def _cabecalho_do_cancelamento_virtual(order) -> tuple[str, str]:
+    """(assunto, preheader) do e-mail de cancelamento, pelo motivo da devolução (feature 310)."""
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
+    andamento = "a devolução está em andamento."
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado", f"Cancelamos como combinado; {andamento}"
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return ("Sobre a sua reserva — precisamos remarcar",
+                f"O pagamento chegou em cima da hora da chamada; {andamento}")
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return ("Sobre o seu vídeo — a devolução está em andamento",
+                f"Os vídeos esgotaram antes de o seu pagamento chegar; {andamento}")
+    return ("Sobre a sua reserva — precisamos remarcar",
+            f"O horário foi confirmado para outra família; {andamento}")
 
 
 def send_virtual_video_ready_email(order) -> bool:

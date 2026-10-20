@@ -206,6 +206,23 @@ export function useRetornoCheckout(token: string | undefined) {
   });
 }
 
+/**
+ * Desiste de uma reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+ *
+ * A regra "uma reserva ativa por telefone" mandava abandonar a reserva antiga para escolher outro
+ * horário ou reservar para o irmão — sem este botão, a família ficava presa até a trava vencer.
+ * Com sinal de pagamento o servidor recusa (409): quem decide é a operadora.
+ */
+export function useAbandonarReserva() {
+  return useMutation<VirtualOrderSummary, ApiRequestError, string>({
+    mutationFn: (token) =>
+      apiFetch<VirtualOrderSummary>(`/api/virtuais/pedidos/${token}/abandonar`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      }),
+  });
+}
+
 /** Pedido completo — só chega depois da validação dupla (FR-044a). */
 export interface VirtualOrderFull extends VirtualOrderSummary {
   verified: true;

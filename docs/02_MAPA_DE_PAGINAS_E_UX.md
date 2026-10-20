@@ -1486,6 +1486,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Regras visíveis na tela**: erro de validação destaca o campo, leva o foco e **não apaga nada**
   do que foi digitado; `409` mostra aviso e recarrega os horários; `429` explica o limite; `502`
   avisa que o pagamento não abriu — e o horário já voltou ao estoque. O botão nunca fica "morto".
+- **Feature 310**: o `429` do mesmo telefone traz `existing_order_token` e o aviso do topo ganha
+  "Ver a reserva que já tenho" e "Abandonar e reservar este" (`POST …/abandonar` e reenvia o
+  formulário; com sinal de pagamento o servidor recusa com 409 e a frase aparece no topo) — antes o
+  texto mandava "abandonar" sem ter como, e a família ficava presa até a trava vencer.
 - **Feature 310**: só aparecem horários que começam a mais de 2 h (reservar em cima da hora dá 409
   "Este horário fecha 2 horas antes. Escolha outro."); com o pagamento desligado a campanha continua
   visível e reservar mostra no topo "As reservas estão fechadas por enquanto." (`503`, tratado como
