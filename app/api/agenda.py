@@ -88,9 +88,15 @@ def api_agenda_day(date_str: str) -> Any:
 
     day_start = datetime(day.year, day.month, day.day)
     day_end = datetime.fromordinal(day_start.toordinal() + 1)
+    # Feature 312: o cancelado não aparece em visão nenhuma da agenda (Q4/Q6 do dono); vê-se na
+    # página de Cancelamentos. Sem parâmetro que o traga de volta.
     events = (
         CalendarEvent.query
-        .filter(CalendarEvent.start_at >= day_start, CalendarEvent.start_at < day_end)
+        .filter(
+            CalendarEvent.start_at >= day_start,
+            CalendarEvent.start_at < day_end,
+            CalendarEvent.cancelled_at.is_(None),
+        )
         .order_by(CalendarEvent.start_at)
         .all()
     )

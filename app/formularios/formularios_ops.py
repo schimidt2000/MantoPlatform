@@ -854,6 +854,7 @@ def _real_event_candidates(event_date: date) -> list[CalendarEvent]:
             db.func.date(CalendarEvent.start_at) == event_date,
             not_(CalendarEvent.title.like("🟧 ENSAIO%")),
             CalendarEvent.group_leader_id.is_(None),
+            CalendarEvent.cancelled_at.is_(None),  # feature 312: o automático nunca chega ao cancelado
         )
         .all()
     )

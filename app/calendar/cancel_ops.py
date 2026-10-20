@@ -2982,6 +2982,61 @@ def recusar_se_cancelado(event: CalendarEvent, user: User, *, grupo: bool = Fals
         raise EventoCanceladoError()
 
 
+# ── Feature 312: a tela do cancelado só para consulta, e nada novo se liga a ele ─────────────
+
+
+class EventoSomenteConsultaError(CancelValidationError):
+    """A trava geral do cancelado (feature 312, FR-011; Q7 = A do dono).
+
+    Vale para TODO papel, o Superadmin inclusive: o que o Superadmin corrige no cancelado são os
+    dados de venda, e essas portas não passam por aqui (têm a regra própria da 306,
+    `recusar_se_cancelado`; o motivo tem a da 306b). Sai como 409 `cancelado`, o mesmo código das
+    outras recusas do cancelado, para a tela recarregar o evento ao recebê-lo.
+    """
+
+    MENSAGEM = "Este evento foi cancelado — a tela fica só para consulta."
+
+    def __init__(self, message: str = MENSAGEM) -> None:
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        super().__init__(message, status=409, codigo=CODIGO_EVENTO_CANCELADO)
+
+
+class EventoCanceladoVinculoError(CancelValidationError):
+    """Ligar algo novo a um evento cancelado (feature 312, FR-013–FR-017; Q2 e Q5 do dono).
+
+    Com `campo`, é 400 com o erro no campo (o vizinho de quem escolhe o evento num formulário:
+    vínculo de ensaio, tag NFC, pedido de figurino); sem campo, 409 (a ação é sobre o próprio
+    evento: agendar ensaio, presente, formulário, escalar, convidar, link de avaliação).
+    """
+
+    def __init__(self, message: str, *, campo: str | None = None) -> None:
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        super().__init__(
+            message, field=campo, status=400 if campo else 409, codigo=CODIGO_EVENTO_CANCELADO
+        )
+
+
+def exigir_evento_vivo(event: CalendarEvent | None) -> None:
+    """Recusa toda escrita na tela de um evento cancelado (FR-011). Só olha `cancelled_at`:
+    o pedido de exclusão e a marca "Sumiu do Google" não travam nada (FR-010)."""
+    if event is not None and event.is_cancelled:
+        raise EventoSomenteConsultaError()
+
+
+def recusar_se_cancelado_para_ligar(
+    event: CalendarEvent | None, mensagem: str, *, campo: str | None = None
+) -> None:
+    """Recusa ligar algo NOVO a um evento cancelado, antes de qualquer escrita, e-mail ou Google.
+
+    Quem chama decide o que é "novo" (reenviar o vínculo que já existe passa): a tag que já era do
+    evento, o pedido de figurino que não troca de evento, o formulário que se desliga.
+    """
+    if event is not None and event.is_cancelled:
+        raise EventoCanceladoVinculoError(mensagem, campo=campo)
+
+
 def _dono_das_aberta(aprovadas: list[SpecialExpense], dono_id: int) -> list[SpecialExpense]:
     """As devoluções ainda não pagas, a do dono primeiro e as outras por id (R12)."""
     abertas = [d for d in aprovadas if (d.payment_status or "nao_pago") == "nao_pago"]

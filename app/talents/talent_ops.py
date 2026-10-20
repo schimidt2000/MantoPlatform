@@ -222,10 +222,13 @@ def get_talent_profile(
     """
     from app.models import CalendarEvent
 
+    # Feature 312 (Q4 do dono, "e o histórico também"): o cancelado não conta nem aparece; como
+    # os quatro números saem desta mesma lista, Eventos, Personagens, Total faturado e Último
+    # evento também o ignoram.
     hist_q = (
         EventRole.query.filter(EventRole.talent_id == talent.id)
         .join(CalendarEvent)
-        .filter(EventRole.assigned_at.isnot(None))
+        .filter(EventRole.assigned_at.isnot(None), CalendarEvent.cancelled_at.is_(None))
         .order_by(CalendarEvent.start_at.desc())
     )
     if date_from:

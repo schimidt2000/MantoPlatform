@@ -1682,7 +1682,10 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
                 unaccent_lower_sql(CalendarEvent.title).like(like, escape="\\"),
                 CalendarEvent.event_clients.any(EventClient.client.has(client_match)),
                 CalendarEvent.client.has(client_match),
-            )
+            ),
+            # Feature 312: o cancelado sai da busca antes do limite (não ocupa vaga dos 30) e, com
+            # ela, do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .options(
             selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),

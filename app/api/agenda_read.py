@@ -717,10 +717,14 @@ def _group_block(event) -> dict:
                     "id": s.id,
                     "title": s.title,
                     "start_at": s.start_at.isoformat() if s.start_at else None,
-                    # Feature 306: o principal vivo esconde o "Remover" do dia cancelado.
+                    # Feature 306: o principal cancelado marca os dias que caíram junto.
                     "cancelado": s.is_cancelled,
                 }
                 for s in sorted(event.satellites, key=lambda s: (s.start_at or datetime.max))
+                # Feature 312: no principal VIVO o dia cancelado não é item do painel (continua no
+                # grupo, no banco, com a devolução dele; vê-se na página de Cancelamentos). Na tela
+                # do principal cancelado, a lista mostra os dias que caíram junto.
+                if event.is_cancelled or not s.is_cancelled
             ],
         }
     return {
@@ -896,6 +900,8 @@ def serialize_event_detail(
             "location": en.location or None,
         }
         for en in sorted(event.ensaios, key=lambda x: (x.start_at is None, x.start_at))
+        # Feature 312: o ensaio cancelado sozinho (legado, antes da 306) não é ensaio do show.
+        if en.cancelled_at is None
     ]
     from app.calendar.routes import PRESENCE_CHARACTER
 

@@ -134,18 +134,22 @@ def list_clients(query: str) -> tuple[list[Client], dict[int, int], int]:
 
 def get_client_detail(
     client_id: int,
-) -> tuple[Client, list[CalendarEvent], dict[int, str], Decimal]:
+) -> tuple[Client, list[CalendarEvent], dict[int, str], Decimal, dict]:
     """Ficha do cliente: eventos associados (dedup, mais recente primeiro) e total vendido.
 
-    Feature 306 (D33): o total vendido é a venda dos eventos vivos mais o retido dos cancelados —
-    o cancelado continua na lista (é histórico da cliente), mas a venda dele não aconteceu.
+    Feature 306 (D33): o total vendido é a venda dos eventos vivos mais o retido dos cancelados.
+    Feature 312: os eventos devolvidos são só os vivos — o cancelado sai da lista da ficha (Q4 do
+    dono: "não deve ser algo que fica poluindo") e vira `cancelamentos = {quantidade, retido}`,
+    saído do mesmo lote de resumos que soma o retido ao total.
 
     Returns:
-        Tupla (cliente, eventos, relação por evento, total vendido). `None` se não existir.
+        Tupla (cliente, eventos vivos, relação por evento, total vendido, cancelamentos). `None`
+        se não existir.
     """
+    vazio = {"quantidade": 0, "retido": Decimal("0.00")}
     client = Client.query.get(client_id)
     if client is None:
-        return None, [], {}, Decimal("0")
+        return None, [], {}, Decimal("0"), vazio
     assocs = (
         EventClient.query.filter_by(client_id=client.id)
         .join(CalendarEvent)
@@ -165,11 +169,15 @@ def get_client_detail(
         (Decimal(e.sale_value) for e in events if e.sale_value and not e.is_cancelled), Decimal("0")
     )
     cancelados = [e.id for e in events if e.is_cancelled]
+    cancelamentos = dict(vazio)
     if cancelados:
         from app.calendar.cancel_ops import resumos_cancelados
 
-        total_sales += sum((r.retido for r in resumos_cancelados(cancelados).values()), Decimal("0"))
-    return client, events, rel_by_event, total_sales
+        retido = sum((r.retido for r in resumos_cancelados(cancelados).values()), Decimal("0"))
+        total_sales += retido
+        cancelamentos = {"quantidade": len(cancelados), "retido": retido}
+    vivos = [e for e in events if not e.is_cancelled]
+    return client, vivos, rel_by_event, total_sales, cancelamentos
 
 
 def list_client_form_history(client_id: int, limit: int = 100) -> list[FormResponse]:

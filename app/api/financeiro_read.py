@@ -198,6 +198,7 @@ def api_financeiro_dashboard() -> Any:
     mês do cancelamento (`cancel_ops.cancelados_do_periodo`).
     """
     from app import db
+    from app.calendar import group_ops
     from app.financeiro import vendas_ops
     from app.financeiro.routes import (
         FATOR_R_RATE_HIGH,
@@ -413,7 +414,8 @@ def api_financeiro_dashboard() -> Any:
             "event_id": e.id,
             "title": e.title,
             "group_label": (
-                f"{e.group_display_name} ({len(e.satellites) + 1} eventos)"
+                # Feature 312: só os dias vivos (a régua do rótulo da lista de vendas).
+                f"{e.group_display_name} ({len(group_ops.dias_vivos(e))} eventos)"
                 if e.is_group_leader else None
             ),
             "start_at": e.start_at.isoformat() if e.start_at else None,

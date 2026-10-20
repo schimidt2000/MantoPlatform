@@ -85,36 +85,37 @@ o `ruff check` nos tocados. Sem migration.
 
 **Objetivo**: FR-001–FR-010. **Teste independente**: cenários 1–7 verdes; 22 continua verde.
 
-- [ ] T014 [P] [US1] Dia API: `cancelled_at.is_(None)` na consulta de `app/api/agenda.py:91-96`
-- [ ] T015 [P] [US1] Dia Jinja: o mesmo filtro em `agenda_day`, `app/calendar/routes.py:533-538`
-- [ ] T016 [US1] Busca: `cancelled_at.is_(None)` no `.filter(...)` de `:1679-1685`, antes do `.limit(limit)` de
+- [X] T014 [P] [US1] Dia API: `cancelled_at.is_(None)` na consulta de `app/api/agenda.py:91-96`
+- [X] T015 [P] [US1] Dia Jinja: o mesmo filtro em `agenda_day`, `app/calendar/routes.py:533-538`
+- [X] T016 [US1] Busca: `cancelled_at.is_(None)` no `.filter(...)` de `:1679-1685`, antes do `.limit(limit)` de
       `:1691` (`SEARCH_LIMIT = 30`, `:1633`), em `search_events`, `app/calendar/event_ops.py:1636-1694` (vale para
       `agenda.py:64` e `grupo/candidatos`, `agenda_write.py:2646`)
-- [ ] T017 [P] [US1] Seletor por data: filtro em `search_events_by_date`, `app/gastos/gastos_ops.py:205-219`
-- [ ] T018 [P] [US1] Formulário automático: filtro em `_real_event_candidates`,
+- [X] T017 [P] [US1] Seletor por data: filtro em `search_events_by_date`, `app/gastos/gastos_ops.py:205-219`
+- [X] T018 [P] [US1] Formulário automático: filtro em `_real_event_candidates`,
       `app/formularios/formularios_ops.py:849-859`; lista Jinja de shows candidatos do `link-parent`
-      (`routes.py:~1702`)
-- [ ] T019 [P] [US1] Ficha do talento: filtro em `hist_q`, `app/talents/talent_ops.py:225-235` (os quatro números
+      (`routes.py:~1702`). *[implement]* O cenário 6 achou mais uma lista Jinja de escolha: `groupable_events`
+      (`routes.py:~1900`, eventos para agrupar na tela Jinja do evento) — filtrada também
+- [X] T019 [P] [US1] Ficha do talento: filtro em `hist_q`, `app/talents/talent_ops.py:225-235` (os quatro números
       de `:286-317` saem da mesma lista `history = hist_q.all()`, `:235` — conferido no analyze)
-- [ ] T020 [US1] Ficha da cliente: `app/api/clientes_read.py:80-93` — lista e `event_count` sem o cancelado, sai
+- [X] T020 [US1] Ficha da cliente: `app/api/clientes_read.py:80-93` — lista e `event_count` sem o cancelado, sai
       `"cancelado": e.is_cancelled` (`:87-88`), nova chave `cancelamentos: {quantidade, retido}` por
       `resumos_cancelados` em lote (research R6); `form_history[].event_situacao` (`:96-104`). *[analyze]* A chave nasce em
       `get_client_detail` (`app/clientes/client_ops.py:135-172`) da mesma chamada de `resumos_cancelados` que já
       soma o retido ao `total_sales` (`:164-171`); o serializador só tira o cancelado da lista
-- [ ] T021 [P] [US1] Fila 3D e pendências: filtros em `list_print_queue` e `list_pending_events`,
+- [X] T021 [P] [US1] Fila 3D e pendências: filtros em `list_print_queue` e `list_pending_events`,
       `app/impressoes3d/impressoes3d_ops.py:428-431`, `:468-472`
-- [ ] T022 [P] [US1] Conflito de agenda: filtro em `_talent_time_conflict` (`app/calendar/routes.py:2104-2111`) e
+- [X] T022 [P] [US1] Conflito de agenda: filtro em `_talent_time_conflict` (`app/calendar/routes.py:2104-2111`) e
       na disponibilidade do `event_detail` (`:1759-1767`)
-- [ ] T023 [US1] Grupo: `_group_block` (`app/api/agenda_read.py:715-724`) usa `group_ops.dias_vivos` no principal
+- [X] T023 [US1] Grupo: `_group_block` (`app/api/agenda_read.py:715-724`) usa `group_ops.dias_vivos` no principal
       vivo; no principal cancelado fica como está. `group_label` só com vivos em `app/financeiro/vendas_ops.py:353`
       e `app/api/financeiro_read.py:416`
-- [ ] T024 [P] [US1] Ensaio legado: `ensaios[]` sem cancelado (`app/api/agenda_read.py:890-899`) e
+- [X] T024 [P] [US1] Ensaio legado: `ensaios[]` sem cancelado (`app/api/agenda_read.py:890-899`) e
       "agendado/falta agendar" (`app/api/dashboard_service.py:193-194`; o show cancelado já sai em `:188`, falta o
       ensaio cancelado dentro de `e.ensaios`)
-- [ ] T025 [US1] Tela — `frontend/apps/internal/src/pages/ClientDetailPage.tsx:183-208`: sai o ramo do cancelado;
+- [X] T025 [US1] Tela — `frontend/apps/internal/src/pages/ClientDetailPage.tsx:183-208`: sai o ramo do cancelado;
       sublinha "inclui R$ X retidos de N cancelamento(s)" quando `cancelamentos.quantidade > 0`; tipo
       `ClientDetail.cancelamentos?` e `event_situacao?` em `frontend/apps/internal/src/lib/clientes.ts`
-- [ ] T026 [US1] Rodada: cenários 1–7 e 22 verdes; `npm run typecheck`; `ruff check` nos tocados; commit
+- [X] T026 [US1] Rodada: cenários 1–7 e 22 verdes; `npm run typecheck`; `ruff check` nos tocados; commit
       `feat(312): história 1 — o cancelado sai de toda lista`
 
 ---

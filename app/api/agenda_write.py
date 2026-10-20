@@ -119,9 +119,11 @@ def _can_delete() -> bool:
 
 
 def _recusa_do_cancelado(exc: Any) -> Any:
-    """A tradução única da recusa do núcleo da 306 (`CancelValidationError`) em `json_error`."""
-    codigo = {"codigo": exc.codigo} if exc.codigo else {}
-    return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
+    """A tradução da recusa do núcleo do cancelado (`CancelValidationError`) — fonte única em
+    `api_utils.json_recusa_do_cancelado` (feature 312: os outros módulos da API também a usam)."""
+    from app.api_utils import json_recusa_do_cancelado
+
+    return json_recusa_do_cancelado(exc)
 
 
 EXCLUIR_CANCELADO = (

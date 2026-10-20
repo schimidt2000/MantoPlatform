@@ -530,9 +530,14 @@ def agenda_day(date_str: str):
     day_start = datetime(day_date.year, day_date.month, day_date.day)
     day_end   = day_start + timedelta(days=1)
 
+    # Gêmeo do Dia da API (feature 312): o cancelado não aparece.
     events = (
         CalendarEvent.query
-        .filter(CalendarEvent.start_at >= day_start, CalendarEvent.start_at < day_end)
+        .filter(
+            CalendarEvent.start_at >= day_start,
+            CalendarEvent.start_at < day_end,
+            CalendarEvent.cancelled_at.is_(None),
+        )
         .order_by(CalendarEvent.start_at)
         .all()
     )
@@ -1710,7 +1715,11 @@ def event_detail(event_id: int):
         if can_manage_ensaio:
             candidate_shows = (
                 CalendarEvent.query
-                .filter(~CalendarEvent.title.like("🟧 ENSAIO%"), CalendarEvent.id != event.id)
+                .filter(
+                    ~CalendarEvent.title.like("🟧 ENSAIO%"),
+                    CalendarEvent.id != event.id,
+                    CalendarEvent.cancelled_at.is_(None),  # feature 312: não se oferece o cancelado
+                )
                 .order_by(CalendarEvent.start_at.desc())
                 .all()
             )
@@ -1762,6 +1771,7 @@ def event_detail(event_id: int):
                     EventRole.talent_id == t.id,
                     CalendarEvent.id != event.id,
                     CalendarEvent.start_at >= _conflict_cutoff,
+                    CalendarEvent.cancelled_at.is_(None),  # feature 312
                 )
                 .all()
             )
@@ -1894,6 +1904,7 @@ def event_detail(event_id: int):
             .filter(
                 CalendarEvent.id != event.id,
                 CalendarEvent.event_type != "ENSAIO",
+                CalendarEvent.cancelled_at.is_(None),  # feature 312: não se oferece o cancelado
             )
             .order_by(CalendarEvent.start_at.desc())
             .all()
@@ -2107,6 +2118,7 @@ def _talent_time_conflict(talent_id: int, start, end, exclude_event_id: int | No
             EventRole.talent_id == talent_id,
             CalendarEvent.id != exclude_event_id,
             CalendarEvent.start_at >= cutoff,
+            CalendarEvent.cancelled_at.is_(None),  # feature 312: o cancelado não ocupa a agenda
         )
         .all()
     )

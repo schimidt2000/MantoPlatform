@@ -191,8 +191,9 @@ def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
-    pending = [e for e in future_shows if not e.ensaios]
-    scheduled = [e for e in future_shows if e.ensaios]
+    # Feature 312: ensaio cancelado (legado) não conta como "agendado".
+    pending = [e for e in future_shows if not any(en.cancelled_at is None for en in e.ensaios)]
+    scheduled = [e for e in future_shows if any(en.cancelled_at is None for en in e.ensaios)]
 
     # `parent is None` cobre FK nulo e FK apontando para show já removido (feature 057);
     # corte na data de início do sistema para não poluir com órfãos antigos (feature 060).

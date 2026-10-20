@@ -428,6 +428,8 @@ def list_print_queue() -> list[Event3DGift]:
         .filter(
             Event3DGift.status != GIFT_3D_STATUS_ENTREGUE,
             CalendarEvent.event_type == EVENT_TYPE_SHOW,
+            # Feature 312 (Q2 do dono): o presente do cancelado fica no evento, fora da fila.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .all()
     )
@@ -469,6 +471,7 @@ def list_pending_events(*, include_dismissed: bool = False) -> list[CalendarEven
             CalendarEvent.event_type == EVENT_TYPE_SHOW,
             CalendarEvent.start_at >= today_start,
             Event3DGift.id.is_(None),
+            CalendarEvent.cancelled_at.is_(None),  # feature 312: o cancelado não pede presente
         )
     )
     if not include_dismissed:

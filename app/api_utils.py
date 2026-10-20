@@ -13,6 +13,13 @@ from flask_login import current_user
 from werkzeug.wrappers import Response
 
 
+def json_recusa_do_cancelado(exc: Any) -> tuple[Response, int]:
+    """A tradução única de uma recusa do núcleo do cancelado (`CancelValidationError` da 306 e
+    da 312) em `json_error`, com o `codigo` para a tela agir (recarregar o evento)."""
+    codigo = {"codigo": exc.codigo} if exc.codigo else {}
+    return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
+
+
 def json_error(
     message: str,
     status: int,

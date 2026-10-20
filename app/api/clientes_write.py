@@ -72,7 +72,7 @@ def api_clientes_update(client_id: int) -> Any:
     denied = _require_vendas()
     if denied:
         return denied
-    client, _events, _rel, _total = client_ops.get_client_detail(client_id)
+    client, _events, _rel, _total, _cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
         return json_error("Cliente não encontrado", 404)
     body = request.get_json(silent=True) or {}
@@ -98,7 +98,7 @@ def api_clientes_delete(client_id: int) -> Any:
     """Exclui um cliente, desvinculando eventos associados (feature 165)."""
     if not _has_role(RoleName.SUPERADMIN, RoleName.FINANCEIRO):
         return json_error("Sem permissão", 403)
-    client, _events, _rel, _total = client_ops.get_client_detail(client_id)
+    client, _events, _rel, _total, _cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
         return json_error("Cliente não encontrado", 404)
     client_ops.delete_client(client)

@@ -340,6 +340,7 @@ def serialize_sale(
     Sem custo e sem lucro por decisão de negócio (feature 196): essas colunas pertencem ao
     Painel Financeiro. O foco aqui é a relação comercial — cliente, valor, contrato e cobrança.
     """
+    from app.calendar.group_ops import dias_vivos
     from app.financeiro.routes import _event_commission, _is_permuta
 
     sale_value = float(event.sale_value or 0)
@@ -350,7 +351,8 @@ def serialize_sale(
         "event_id": event.id,
         "title": event.title,
         "group_label": (
-            f"{event.group_display_name} ({len(event.satellites) + 1} eventos)"
+            # Feature 312: o rótulo conta só os dias vivos (o cancelado não é item de lista).
+            f"{event.group_display_name} ({len(dias_vivos(event))} eventos)"
             if event.is_group_leader
             else None
         ),
