@@ -480,7 +480,7 @@ real e de um Pix de verdade); resultado registrado na spec.
 
 - `POST /api/virtuais/pedidos/<token>/retorno` (novo) — público, por token não adivinhável; limite
   por IP do cliente; só identificadores do próprio pedido.
-- `GET /api/virtuais/pagamentos-a-conferir` + `PATCH .../<id>/resolver` (novos) — COMERCIAL,
+- `GET /api/virtuais/pagamentos-a-conferir` + `PATCH .../<tipo>/<id>` (novos) — COMERCIAL,
   SUPERADMIN (mesmo gate de `/virtuais/devolucoes`).
 - `PATCH /api/admin/settings` (alterado) — SUPERADMIN, como hoje.
 - `POST /api/virtuais/pedidos/<id>/cancelar` (novo, FR-034) — COMERCIAL, SUPERADMIN.
@@ -569,7 +569,8 @@ pagamento em Configurações; lista de pagamentos a conferir.
 - **R-03 Vídeo**: reserva ativa de vídeo ocupa vaga enquanto a trava dela vale (15 min); a efetivação
   confere `vendidos < capacidade`.
 - **R-04 Presente 3D**: devolução e cancelamento pela equipe tiram o presente da fila de impressão se
-  ainda não começou; se já começou, fica e entra em "a conferir".
+  ainda não começou; se já começou, o cancelamento pela equipe é **recusado (409)** com o motivo — a
+  peça existe e a decisão é da produção (implementação; antes dizia "fica e entra em a conferir").
 - **R-05 Ordem de travas** pedido → horário → campanha vale para reserva, liberação, varredura,
   aviso, retorno e cancelamento pela equipe.
 - **R-06 Reprocessamento de aviso**: 3 tentativas nos minutos 0/1/2, depois a cada 10 min, por até
@@ -650,6 +651,6 @@ skill `manto-deploy` (deploy durante a campanha).
 - O número de saltos de proxy em produção é medido por leitura (SSH, só log), antes do código final.
 - O teste real é feito pelo dono (o Pix sai da conta dele) com a campanha fora da vitrine, à noite.
 - Nenhum deploy desta feature no horário de pico de vendas; ela sobe antes de a campanha reabrir.
-- A migration pendura em `a7c3e91f4d28`; 306 e 309 também — quem mergear por último reencadeia.
+- A migration pendura em `c5d2f7a9e306` (a 306, já em produção); quem mergear por último reencadeia.
 - Só a operadora real responde: segundo pagamento no mesmo link legado e a reconsulta de um Pix pago
   e devolvido — testados no teste C com o dono depois do deploy.

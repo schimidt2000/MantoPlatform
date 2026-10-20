@@ -347,6 +347,11 @@ class Config:
     # espelho. Vazia = fluxo legado provado em produção (link sem validade); com valor, o link vence
     # junto com a reserva e aceita um pagamento só.
     INFINITEPAY_API_KEY = os.getenv("INFINITEPAY_API_KEY", "").strip()
+    # Segredo entre o Node e o Flask (feature 310, revisão): só a requisição que traz este valor
+    # em `X-Manto-Proxy-Secret` tem o `X-Manto-Client-Ip` aceito. O backend tem URL pública
+    # (*.onrender.com); sem a prova, quem chamasse direto trocava o cabeçalho a cada requisição e
+    # escapava de todo limite — o de login inclusive. Mesmo valor nos dois serviços do Render.
+    MANTO_PROXY_SECRET = os.getenv("MANTO_PROXY_SECRET", "").strip()
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

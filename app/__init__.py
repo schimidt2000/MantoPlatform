@@ -32,6 +32,7 @@ login_manager.login_message = None  # suprime mensagem automática de "faça log
 # Feature 310 (R8): a chave do limite é o IP do cliente informado pelo Node, não o
 # `remote_addr` (que atrás do proxy é o IP da infraestrutura — limite da loja inteira).
 from .api_utils import ip_do_cliente as _ip_do_cliente  # noqa: E402
+from .api_utils import mascarar_url_webhook  # noqa: E402
 
 limiter = Limiter(key_func=_ip_do_cliente, default_limits=[])
 
@@ -575,9 +576,11 @@ def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
     app.config.from_object(Config)
-    # Feature 310: máscara do segredo do aviso nos logs de acesso (gunicorn) e da aplicação.
-    for _nome in ("gunicorn.access", "werkzeug"):
-        _log = logging.getLogger(_nome)
+    # Feature 310: máscara do segredo do aviso nos logs de acesso (gunicorn) e da aplicação. O
+    # `app.logger` entra porque o "Exception on <caminho>" do Flask num 500 grava o caminho — e o
+    # caminho do aviso É o segredo.
+    for _log in (logging.getLogger("gunicorn.access"), logging.getLogger("gunicorn.error"),
+                 logging.getLogger("werkzeug"), app.logger):
         if not any(isinstance(f, _MascaraSegredoDoAviso) for f in _log.filters):
             _log.addFilter(_MascaraSegredoDoAviso())
     app.jinja_env.filters['urlencode'] = _url_quote
@@ -599,6 +602,11 @@ def create_app():
         app.config.get("INFINITEPAY_SUPPRESS_CALLS"),
         "configurada" if app.config.get("INFINITEPAY_API_KEY") else "ausente (link sem validade)",
     )
+    if not app.config.get("MANTO_PROXY_SECRET") and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar "
+            "o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend."
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl
@@ -690,7 +698,8 @@ def create_app():
             elapsed = time.monotonic() - started
             if elapsed >= _SLOW_REQUEST_S:
                 app.logger.warning(
-                    f"[slow] {elapsed:.1f}s {request.method} {request.path} -> {resp.status_code}"
+                    f"[slow] {elapsed:.1f}s {request.method} "
+                    f"{mascarar_url_webhook(request.path)} -> {resp.status_code}"
                 )
         return resp
 

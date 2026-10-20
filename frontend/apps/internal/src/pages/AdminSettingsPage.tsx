@@ -65,7 +65,10 @@ export function AdminSettingsPage() {
     educamanto_commission_rate: educamantoCommission ? Number(educamantoCommission) : undefined,
     infinitepay_handle: infinitepayHandle || undefined,
     infinitepay_regenerate_token: regenerarToken || undefined,
-    virtuais_pagamento_ativo: pagamentoAtivo,
+    // Só quando mudou: uma aba aberta antes de alguém desligar a loja religava tudo num Salvar
+    // qualquer de outro campo.
+    virtuais_pagamento_ativo:
+      pagamentoAtivo !== Boolean(query.data?.virtuais_pagamento_ativo) ? pagamentoAtivo : undefined,
     manto_address: address,
     departure_margin_minutes: margin ? Number(margin) : undefined,
     google_maps_api_key: mapsKey,

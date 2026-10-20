@@ -2299,7 +2299,7 @@ def sync_events(items: list[dict]) -> None:
 
         # Compromisso interno (prazo de figurino): a plataforma criou, a plataforma é dona, e ele
         # nunca vira CalendarEvent. Ver `_is_manto_task_item`.
-        if _is_manto_task_item(item) or _eh_evento_da_loja(item):
+        if _is_manto_task_item(item):
             continue
 
         # Evento de venda virtual: a sincronização não encosta nele em nenhum caminho —
@@ -2308,6 +2308,11 @@ def sync_events(items: list[dict]) -> None:
         existente = CalendarEvent.query.filter_by(google_event_id=google_id).first()
         if _is_virtual_event(existente):
             _sinalizar_divergencia_virtual(existente, item)
+            continue
+        # Marca da loja SEM evento local (a gravação local falhou): nunca importar — viraria
+        # evento comum, com venda, funil e DRE (feature 310). Vem depois do sinal acima para não
+        # calar a divergência dos eventos da loja que existem aqui.
+        if _eh_evento_da_loja(item):
             continue
 
         # Evento cancelado é intocável pelo sync (feature 224): se alguém recriar a linha no

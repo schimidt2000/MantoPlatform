@@ -91,11 +91,13 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
     if str(fields.get("infinitepay_regenerate_token") or "").lower() in ("1", "true", "on"):
         import secrets
 
-        from app.constants import VIRTUAL_TOKEN_ANTERIOR_HORAS
+        from app.constants import VIRTUAL_TOKEN_ANTERIOR_HORAS, now_sp
 
         if settings.infinitepay_webhook_token:
             settings.infinitepay_webhook_token_anterior = settings.infinitepay_webhook_token
-            settings.infinitepay_webhook_token_anterior_ate = datetime.now() + timedelta(
+            # Mesmo relógio da comparação (`now_sp`): `datetime.now()` do servidor é UTC no
+            # Render, e o anterior valia 27 h em vez das 24 h que a tela promete.
+            settings.infinitepay_webhook_token_anterior_ate = now_sp() + timedelta(
                 hours=VIRTUAL_TOKEN_ANTERIOR_HORAS
             )
         settings.infinitepay_webhook_token = secrets.token_urlsafe(32)

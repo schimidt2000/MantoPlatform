@@ -16,6 +16,7 @@ Regras que parecem estranhas até você saber o porquê:
    de acesso do servidor passa pela máscara de ``api_utils.mascarar_url_webhook``.
 """
 
+import json
 import logging
 import threading
 from typing import Any
@@ -55,7 +56,16 @@ def api_virtuais_webhook(token: str) -> Any:
 
     if (request.content_length or 0) > _CORPO_MAXIMO:
         return jsonify({"success": False, "message": "Payload too large"}), 413
-    payload = request.get_json(silent=True) or {}
+    # Lê com teto: corpo chunked (sem Content-Length) passava pela checagem acima inteiro.
+    corpo = request.stream.read(_CORPO_MAXIMO + 1)
+    if len(corpo) > _CORPO_MAXIMO:
+        return jsonify({"success": False, "message": "Payload too large"}), 413
+    try:
+        payload = json.loads(corpo or b"{}")
+    except ValueError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
 
     if not ops.token_do_aviso_valido(token):
         try:

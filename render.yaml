@@ -90,6 +90,10 @@ services:
       # reconsulta fica autenticada; sem ela a loja funciona do mesmo jeito. O dono cola no painel.
       - key: INFINITEPAY_API_KEY
         sync: false
+      # Feature 310: o MESMO valor no manto-frontend. Prova que a requisição veio do Node — sem
+      # ele, o IP do cliente informado pelo Node é aceito sem prova (o boot avisa no log).
+      - key: MANTO_PROXY_SECRET
+        sync: false
 
   # Ausência conhecida, não esquecimento: o frontend NÃO tem `healthCheckPath` nem
   # `watchPatterns`. Consequência: cada push troca o container e abre ~1 min de 502 na porta
@@ -109,3 +113,5 @@ services:
         value: "20"
       - key: BACKEND_URL
         sync: false           # preencher com a URL publica do manto-backend depois que ele existir
+      - key: MANTO_PROXY_SECRET
+        sync: false           # o mesmo valor do manto-backend (feature 310)

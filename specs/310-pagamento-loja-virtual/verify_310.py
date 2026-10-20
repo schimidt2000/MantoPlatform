@@ -1210,6 +1210,109 @@ def c42():
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
+# B11 — Achados da revisão adversarial (T059)
+# ════════════════════════════════════════════════════════════════════════════════════════════
+@cenario("45 IP do cliente só vale com a prova do Node (deve falhar sem ela)")
+def c45():
+    from app import api_utils
+    antes = app.config.get("MANTO_PROXY_SECRET")
+    app.config["MANTO_PROXY_SECRET"] = "segredo-verify"
+    try:
+        base = {"X-Manto-Client-Ip": "203.0.113.77"}
+        with app.test_request_context(headers=base, environ_base={"REMOTE_ADDR": "10.9.9.9"}):
+            check("45.1 sem a prova, vale o remote_addr", api_utils.ip_do_cliente() == "10.9.9.9",
+                  api_utils.ip_do_cliente())
+        with app.test_request_context(headers={**base, "X-Manto-Proxy-Secret": "errado"},
+                                      environ_base={"REMOTE_ADDR": "10.9.9.9"}):
+            check("45.2 prova errada também não", api_utils.ip_do_cliente() == "10.9.9.9",
+                  api_utils.ip_do_cliente())
+        with app.test_request_context(headers={**base, "X-Manto-Proxy-Secret": "segredo-verify"},
+                                      environ_base={"REMOTE_ADDR": "10.9.9.9"}):
+            check("45.3 com a prova, vale o IP do Node", api_utils.ip_do_cliente() == "203.0.113.77",
+                  api_utils.ip_do_cliente())
+    finally:
+        app.config["MANTO_PROXY_SECRET"] = antes
+
+
+@cenario("46 aviso parado em 'processando' (thread morreu) volta a ser decidido")
+def c46():
+    cid, slug = nova_campanha()
+    _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.46")
+    a = ra["order_nsu"]
+    payload = OP.aviso(a, OP.pagar(a, Decimal("100.00")))
+    with app.app_context():
+        rid = ops.registrar_aviso(payload)
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_payment_notifications set state='processando', "
+                          "attempts=1, last_attempt_at=:t where id=:i"),
+                     {"t": now_sp() - timedelta(minutes=10), "i": rid})
+    with app.app_context():
+        ops.reprocessar_avisos()
+    estado = _db("select state, outcome from virtual_payment_notifications where id=:i", i=rid)[0]
+    check("46.1 a varredura pegou o aviso preso e vendeu", pedido(a)["status"] == "pago",
+          f"{pedido(a)} aviso={tuple(estado)}")
+
+
+@cenario("47 pedido 'sem prova' que virou venda sai de 'a conferir'")
+def c47():
+    cid, slug = nova_campanha()
+    _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.47")
+    a = ra["order_nsu"]
+    pid = pedido(a)["id"]
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_orders set status='expirado', unverified_reason='nao_sei' "
+                          "where id=:i"), {"i": pid})
+
+    def listado() -> bool:
+        with app.app_context():
+            return any(i["tipo"] == "pedido" and i["id"] == pid for i in ops.listar_a_conferir())
+
+    check("47.1 expirado sem prova aparece", listado())
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_orders set status='pago' where id=:i"), {"i": pid})
+    check("47.2 depois de virar venda, some", not listado())
+
+
+@cenario("48 vídeo: pagamento atrasado não toma a vaga de quem ainda está na reserva")
+def c48():
+    cid, slug = nova_campanha(capacidade=1)
+    _, ra = reservar(slug, None, ip="198.51.100.48", modalidade="gravado")
+    a = ra["order_nsu"]
+    vencer(a)
+    cod_b, rb = reservar(slug, None, ip="198.51.100.49", modalidade="gravado")
+    b = rb.get("order_nsu")
+    check("48.0 B reservou a vaga que A deixou vencer", cod_b == 201, str((cod_b, rb)))
+    avisar(OP.aviso(a, OP.pagar(a, Decimal("60.00"))))
+    avisar(OP.aviso(b, OP.pagar(b, Decimal("60.00"))))
+    check("48.1 A (atrasado) é devolvido", pedido(a)["status"] == "cancelado", str(pedido(a)))
+    check("48.2 B (dentro da reserva) vira venda", pedido(b)["status"] == "pago", str(pedido(b)))
+
+
+@cenario("49 aviso com corpo chunked acima de 64 KB → 413")
+def c49():
+    import io
+    grande = b'{"x": "' + b"a" * (70 * 1024) + b'"}'
+    r = client.post(f"/api/webhooks/infinitepay/{TOKEN}", input_stream=io.BytesIO(grande),
+                    content_type="application/json",
+                    environ_overrides={"wsgi.input_terminated": True})
+    check("49.1 recusado pelo tamanho", r.status_code == 413, str(r.status_code))
+
+
+@cenario("50 segredo anterior vale 24 h no relógio de São Paulo")
+def c50():
+    from app.admin import config_ops
+    with app.app_context():
+        s = SiteSetting.query.get(1)
+        config_ops.update_settings(s, {"infinitepay_regenerate_token": "true"})
+        ate = s.infinitepay_webhook_token_anterior_ate
+        horas = (ate - now_sp()).total_seconds() / 3600 if ate else None
+        # Devolve o segredo desta execução: os cenários seguintes avisam com ele.
+        s.infinitepay_webhook_token = TOKEN
+        db.session.commit()
+    check("50.1 anterior vence em ~24 h", horas is not None and 23.9 <= horas <= 24.1, str(horas))
+
+
+# ════════════════════════════════════════════════════════════════════════════════════════════
 BLOCOS = {
     1: [c1, c2, c3, c4, c5, c6, c7],
     2: [c8, c9, c10, c11, c12, c13, c14, c15],
@@ -1221,6 +1324,7 @@ BLOCOS = {
     8: [c37, c38],
     9: [c39, c40],
     10: [c41, c42],
+    11: [c45, c46, c47, c48, c49, c50],
 }
 
 
@@ -1265,7 +1369,7 @@ def limpar() -> None:
 
 
 try:
-    for n in range(1, min(ATE, 10) + 1):
+    for n in range(1, min(ATE, max(BLOCOS)) + 1):
         print(f"\n── B{n} " + "─" * 60, flush=True)
         for fn in BLOCOS[n]:
             fn()

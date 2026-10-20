@@ -4,12 +4,13 @@ Fonte única do envelope de erro e do guard de autenticação para os endpoints 
 conforme `specs/144-migracao-react-spa/contracts/api-conventions.md`.
 """
 
+import hmac
 import re
 from collections.abc import Callable
 from functools import wraps
 from typing import Any
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from flask_login import current_user
 from werkzeug.wrappers import Response
 
@@ -61,6 +62,9 @@ def api_login_required(view: Callable[..., Any]) -> Callable[..., Any]:
 
 #: Cabeçalho que o `frontend/server.js` põe com o IP que a borda do Render viu (feature 310, R8).
 CABECALHO_IP_DO_CLIENTE = "X-Manto-Client-Ip"
+#: Prova de que a requisição passou pelo Node (``MANTO_PROXY_SECRET``) — sem ela o IP informado
+#: não vale.
+CABECALHO_SEGREDO_DO_PROXY = "X-Manto-Proxy-Secret"
 
 
 def ip_do_cliente() -> str:
@@ -69,13 +73,22 @@ def ip_do_cliente() -> str:
     Um lugar só para essa decisão, usado pelo limitador e pela origem anti-abuso da loja. Atrás do
     Node, o ``remote_addr`` é o IP da infraestrutura do Render (o ProxyFix confia em um salto e o
     caminho tem pelo menos dois): o limite valia para todo mundo junto. O Node — único caminho
-    público de ``/api`` — informa o IP real em ``X-Manto-Client-Ip``. Quem chamar o backend direto
-    e forjar o cabeçalho só escolhe o próprio balde, o que já conseguiria trocando de IP.
+    público de ``/api`` — informa o IP real em ``X-Manto-Client-Ip``.
+
+    Mas o backend também tem URL pública: quem chamasse direto trocava o cabeçalho a cada
+    requisição e caía num balde novo toda vez, sem limite nenhum. Por isso o IP informado só vale
+    junto com ``X-Manto-Proxy-Secret`` igual a ``MANTO_PROXY_SECRET``; sem a prova, vale o
+    ``remote_addr``. Sem o segredo configurado (transição do deploy), o cabeçalho é aceito como
+    antes e o boot avisa no log.
     """
     try:
         informado = (request.headers.get(CABECALHO_IP_DO_CLIENTE) or "").strip()
+        prova = request.headers.get(CABECALHO_SEGREDO_DO_PROXY) or ""
+        segredo = current_app.config.get("MANTO_PROXY_SECRET") or ""
     except RuntimeError:  # fora de requisição
         return "sem-ip"
+    if segredo and not hmac.compare_digest(prova.encode(), segredo.encode()):
+        informado = ""
     return informado[:64] or (request.remote_addr or "sem-ip")
 
 

@@ -136,7 +136,10 @@ let clientesQueSumiram = 0;
  * último item do `X-Forwarded-For` que ele recebe é o IP que a borda do Render viu conectar. Sem
  * isto o Flask enxergava o IP da infraestrutura e o limite "20 reservas por minuto" valia para a
  * loja INTEIRA (e o de login, para a empresa inteira). O cabeçalho que o cliente mandar com o
- * mesmo nome é sobrescrito aqui.
+ * mesmo nome é sobrescrito aqui. Precisa ser lido ANTES de `proxy.web`: com `xfwd`, o http-proxy
+ * acrescenta ao `X-Forwarded-For` o endereço do socket (a borda do Render) antes do `proxyReq`, e
+ * o último item passava a ser a infraestrutura de novo. O Flask só aceita o IP junto com `X-Manto-Proxy-Secret` igual a
+ * `MANTO_PROXY_SECRET` (mesmo valor nos dois serviços): o backend também tem URL pública.
  */
 function ipDoCliente(req) {
   const xff = String(req.headers["x-forwarded-for"] ?? "")
@@ -151,9 +154,13 @@ function mascararUrl(url) {
   return String(url ?? "").replace(/(\/webhooks\/infinitepay\/)[^/?#\s]+/g, "$1***");
 }
 
+const SEGREDO_DO_PROXY = (process.env.MANTO_PROXY_SECRET ?? "").trim();
+
 proxy.on("proxyReq", (proxyReq, req, res) => {
-  const ip = ipDoCliente(req);
+  const ip = req.mantoClientIp;
   if (ip) proxyReq.setHeader("X-Manto-Client-Ip", ip);
+  if (SEGREDO_DO_PROXY) proxyReq.setHeader("X-Manto-Proxy-Secret", SEGREDO_DO_PROXY);
+  else proxyReq.removeHeader("X-Manto-Proxy-Secret");
 
   const soltar = () => {
     if (res.writableFinished) return;
@@ -731,6 +738,7 @@ const server = http.createServer((req, res) => {
     // O try/catch não é decorativo: `proxy.web` estoura de forma SÍNCRONA para alvo malformado,
     // fora do callback de erro. Sem ele, a exceção sobe como uncaught e mata o servidor inteiro —
     // os três SPAs junto com o proxy.
+    req.mantoClientIp = ipDoCliente(req);
     try {
       proxy.web(
         req,

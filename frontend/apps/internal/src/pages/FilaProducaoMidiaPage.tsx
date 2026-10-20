@@ -15,6 +15,7 @@ import {
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { AvisosFalhosBanner } from "../components/AvisosFalhosBanner";
+import { useCurrentUser } from "../lib/useAuth";
 import {
   PRODUCAO_STATUSES,
   PRODUCAO_STATUS_LABELS,
@@ -62,6 +63,10 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
   // Feature 310 (FR-034): a família desistiu — cancelar tira o horário, o evento e a entrega, e
   // abre a devolução. Sem botão, isso era SQL na mão.
   const cancelar = useCancelarPedidoPago();
+  // A fila é de Comercial, Casting e Superadmin; cancelar é só de Comercial e Superadmin (o
+  // servidor recusa os outros com 403) — o botão só aparece para quem pode usar.
+  const { data: usuario } = useCurrentUser();
+  const podeCancelar = (usuario?.roles ?? []).some((r) => r === "COMERCIAL" || r === "SUPERADMIN");
   const [cancelando, setCancelando] = useState(false);
   const [motivo, setMotivo] = useState("");
 
@@ -224,7 +229,7 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
             </Button>
           )}
 
-          {delivery.status !== "finalizado" && (
+          {podeCancelar && delivery.status !== "finalizado" && (
             <Button
               size="sm"
               variant="ghost"

@@ -33,7 +33,7 @@ portas padrão são do outro checkout):
    sem sessão → 401 (rota nova = código novo no ar).
 2. Card de pagamento: InfiniteTag `prime-dreams` já gravada (teste 0); **ligar o interruptor**.
 3. IP do cliente (R8): reservar duas vezes de redes diferentes (Wi-Fi e 4G) na campanha de teste e ler
-   no log a linha `[virtuais] origem: xff_itens=N publico=sim` — os dois `origem_hash` devem diferir.
+   no log a linha `[virtuais] origem: hash=XXXXXXXX publico=sim` — os dois `hash` devem diferir.
 4. Campanha de teste: `listada=false`, publicada, horários a mais de 2 h.
 5. **Teste A de novo** (Pix R$ 1, caminho feliz) — regressão do contrato.
 6. **Teste B — aviso perdido**: provado no verify (dublê), porque bloquear o aviso real em produção

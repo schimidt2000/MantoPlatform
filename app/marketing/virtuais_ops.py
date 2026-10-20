@@ -15,6 +15,7 @@ entram nas fases seguintes.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import re
@@ -704,6 +705,15 @@ def _vagas_de_video_livres(campaign: VirtualCampaign, momento: datetime | None =
     return (campaign.recorded_capacity or 0) - (campaign.recorded_sold or 0) - ativas
 
 
+def _pedido_com_trava_viva(order: VirtualOrder) -> bool:
+    """O pedido ainda está dentro da própria reserva (a vaga dele já foi contada ao reservar)."""
+    return (
+        order.status in VIRTUAL_ORDER_STATUS_ATIVOS
+        and order.locked_until is not None
+        and order.locked_until > agora()
+    )
+
+
 def _mesma_reserva(anterior: VirtualOrder, modality: str, slot_id: Any, gift_item_id: Any,
                    child_name: Any) -> bool:
     def _id(valor: Any) -> int | None:
@@ -940,6 +950,14 @@ def reservar(
 
     dados = _validar_ficha(ficha, exige_endereco=peca is not None)
     origem = hash_origem(origin_ip, origin_user_agent)
+    # Uma linha, sem o IP: é como o teste de produção confere que duas redes dão duas origens
+    # (quickstart §2.3). `publico=nao` aqui em produção = o IP ainda é o da infraestrutura.
+    try:
+        publico = ipaddress.ip_address((origin_ip or "").strip()).is_global
+    except ValueError:
+        publico = False
+    logger.info("[virtuais] origem: hash=%s publico=%s", (origem or "")[:8],
+                "sim" if publico else "nao")
     _checar_limites(campaign, dados["contact_phone"], origem)
 
     momento = agora()
@@ -1409,6 +1427,12 @@ def _reter_horario(order: VirtualOrder) -> None:
     e outra família o reservava no meio das tentativas.
     """
     if not order.slot_id:
+        # Vídeo gravado não tem horário: a vaga é contada pelas reservas com trava viva
+        # (`_vagas_de_video_livres`). Sem estender a trava do pedido, a vaga voltava à venda no
+        # meio das tentativas e quem pagou em dia podia ser devolvido por "vídeos esgotados".
+        if order.modality == VIRTUAL_MODALITY_GRAVADO:
+            order.locked_until = agora() + timedelta(minutes=VIRTUAL_RETRY_INTERVAL_MIN + 1)
+            db.session.commit()
         return
     slot = _travar_horario(order.slot_id)
     if slot is not None and slot.order_id == order.id and slot.status == VIRTUAL_SLOT_STATUS_TRAVADO:
@@ -1529,25 +1553,14 @@ def _pre_escalar(event: CalendarEvent, campanha: VirtualCampaign) -> None:
     )
 
 
-def efetivar_pedido(order: VirtualOrder, *, consulta: dict | None = None) -> VirtualOrder:
-    """Converte uma reserva paga em operação (FR-029 a FR-033).
-
-    Feature 310: só ``decidir_pagamento`` chama isto, com o pedido e o horário já travados e todas
-    as condições conferidas. A venda nasce **no banco primeiro** — pedido pago, horário vendido
-    com dono, evento com id local e sala pendente, entrega, presente — num commit só; o Google e o
-    e-mail vêm depois, fora das travas (``_pos_venda``). Assim uma disputa é decidida no banco
-    antes de qualquer chamada externa, e o perdedor não deixa evento órfão na agenda do Google.
-
-    Idempotente: pedido já ``pago`` com evento vinculado é devolvido como está.
-    """
-    if order.status == VIRTUAL_ORDER_STATUS_PAGO and order.event_id:
-        return order
-    _efetivar_no_banco(order)
-    _pos_venda(order)
-    return order
-
-
 def _efetivar_no_banco(order: VirtualOrder) -> None:
+    """Converte uma reserva paga em operação (FR-029 a FR-033) — só pela ``decidir_pagamento``.
+
+    Feature 310: a venda nasce **no banco primeiro** — pedido pago, horário vendido com dono,
+    evento com id local e sala pendente, entrega, presente — num commit só; o Google e o e-mail vêm
+    depois, fora das travas (``_pos_venda``). Assim uma disputa é decidida no banco antes de
+    qualquer chamada externa, e o perdedor não deixa evento órfão na agenda do Google.
+    """
     campanha = order.campaign
     inicio = order.slot.start_at if order.slot else agora()
     evento = CalendarEvent(
@@ -1576,6 +1589,10 @@ def _efetivar_no_banco(order: VirtualOrder) -> None:
     # Toda venda nasce com o lado Google pendente; vídeo gravado não tem sala, então a pendência
     # de SALA só existe na chamada ao vivo (o id local é reconciliado pela varredura em ambos).
     order.meet_pending = order.modality == VIRTUAL_MODALITY_AO_VIVO
+    # Reserva a primeira tentativa para o `_pos_venda` desta mesma decisão: sem a marca, a
+    # varredura de salas via o pedido pendente com 0 tentativas e criava um SEGUNDO evento no
+    # Google enquanto o pós-venda ainda criava o primeiro. Assim ela espera o intervalo de 1 min.
+    order.meet_last_attempt_at = agora()
 
     if order.slot is not None:
         order.slot.status = VIRTUAL_SLOT_STATUS_VENDIDO
@@ -1851,7 +1868,17 @@ def decidir_pagamento(
             .with_for_update()
             .first()
         )
-        if (campanha.recorded_sold or 0) >= (campanha.recorded_capacity or 0):
+        # Conta também as reservas vivas dos OUTROS pedidos: um pagamento atrasado (pedido já
+        # expirado) não pode tomar a vaga de quem ainda está pagando dentro da própria reserva.
+        outras_ativas = VirtualOrder.query.filter(
+            VirtualOrder.campaign_id == campanha.id,
+            VirtualOrder.id != order.id,
+            VirtualOrder.modality == VIRTUAL_MODALITY_GRAVADO,
+            VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
+            VirtualOrder.locked_until > agora(),
+        ).count()
+        ocupadas = (campanha.recorded_sold or 0) + (0 if _pedido_com_trava_viva(order) else outras_ativas)
+        if ocupadas >= (campanha.recorded_capacity or 0):
             motivo = VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO
 
     if tomado or motivo:
@@ -2225,10 +2252,20 @@ def reprocessar_avisos(*, limite: int = 50) -> dict[str, int]:
     """
     momento = agora()
     limite_idade = momento - timedelta(hours=VIRTUAL_AVISO_REPROCESSA_HORAS)
+    # "processando" parado há mais de 5 min = a thread morreu no meio (deploy, reciclagem do
+    # worker, exceção). Só olhar "pendente" deixava essa linha fora de tudo para sempre: a página
+    # da família em "confirmando" e nada em "a conferir". É o mesmo critério do claim.
+    preso = momento - timedelta(minutes=5)
     candidatos = (
         VirtualPaymentNotification.query.filter(
             VirtualPaymentNotification.secret_ok.is_(True),
-            VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_PENDENTE,
+            db.or_(
+                VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_PENDENTE,
+                db.and_(
+                    VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_PROCESSANDO,
+                    VirtualPaymentNotification.last_attempt_at < preso,
+                ),
+            ),
         )
         .order_by(VirtualPaymentNotification.id.asc())
         .limit(limite)
@@ -2238,7 +2275,16 @@ def reprocessar_avisos(*, limite: int = 50) -> dict[str, int]:
     for aviso in candidatos:
         if aviso.created_at and aviso.created_at < limite_idade:
             aviso.state = VIRTUAL_AVISO_STATE_DECIDIDO
+            # Sem desfecho nenhum (nunca chegou a decidir) vira "retido": é o que o põe em
+            # "a conferir" — senão o aviso esgotado sumia sem ninguém ver.
+            aviso.outcome = aviso.outcome or VIRTUAL_AVISO_RETIDO
             db.session.commit()
+            _avisar_a_conferir(
+                f"virtual.aviso:{aviso.id}",
+                "Loja virtual: aviso de pagamento sem desfecho",
+                f"O aviso do pedido {aviso.order_nsu or '?'} passou 48 h sem ser decidido. "
+                "Confira na InfinitePay (Devoluções → Pagamentos a conferir).",
+            )
             resultado["esgotados"] += 1
             continue
         intervalo = (
@@ -2801,7 +2847,9 @@ def serialize_campaign(campaign: VirtualCampaign) -> dict[str, Any]:
         "price_live": _money(campaign.price_live),
         "price_recorded": _money(campaign.price_recorded),
         "price_gift": _money(campaign.price_gift),
-        "recorded_available": campaign.recorded_available,
+        # Mesma conta da reserva (descontando as reservas vivas): a landing dizia "tem vídeo" e a
+        # reserva recusava com "esgotaram" (feature 310).
+        "recorded_available": max(_vagas_de_video_livres(campaign), 0),
         "recorded_delivery_days": campaign.recorded_delivery_days,
         "gift_items": [
             {"id": item.id, "name": item.name, "photo_url": item.photo_url}
@@ -2839,7 +2887,7 @@ def listar_vitrine() -> list[dict[str, Any]]:
             "price_live": _money(campanha.price_live),
             "price_recorded": _money(campanha.price_recorded),
             "tem_horario": len(listar_slots_disponiveis(campanha)) > 0,
-            "tem_gravado": campanha.recorded_available > 0,
+            "tem_gravado": _vagas_de_video_livres(campanha) > 0,
         })
     return vitrine
 
@@ -3110,9 +3158,13 @@ def listar_a_conferir(*, dias: int = 30) -> list[dict[str, Any]]:
             "ocorrencias": 1,
         })
 
+    # Só enquanto o pedido continua expirado: se o aviso chegou depois e virou venda (ou virou
+    # cancelamento com devolução aberta), mostrar "pode ter sido paga" levaria a equipe a devolver
+    # o Pix de uma venda válida. A marca `unverified_reason` fica como histórico.
     pedidos = (
         VirtualOrder.query.filter(
             VirtualOrder.unverified_reason.isnot(None),
+            VirtualOrder.status == VIRTUAL_ORDER_STATUS_EXPIRADO,
             VirtualOrder.conferido_em.is_(None),
             VirtualOrder.updated_at >= desde,
         )
@@ -3250,8 +3302,20 @@ def cancelar_pedido_pago(order_id: int, *, motivo: str, quem: str) -> VirtualRef
         order.event_id = None
         db.session.flush()
         db.session.delete(evento)
-    if order.modality == VIRTUAL_MODALITY_GRAVADO and order.campaign:
-        order.campaign.recorded_sold = max(0, (order.campaign.recorded_sold or 0) - 1)
+    if order.modality == VIRTUAL_MODALITY_GRAVADO and order.campaign_id:
+        # Trava a campanha (ordem pedido → horário → campanha) e relê: sem isso, um pagamento de
+        # vídeo confirmado ao mesmo tempo tinha o seu +1 sobrescrito por este -1 calculado em cima
+        # do valor velho, e sobrava uma vaga fantasma.
+        campanha = (
+            db.session.query(VirtualCampaign)
+            .filter(VirtualCampaign.id == order.campaign_id)
+            .options(lazyload("*"))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if campanha is not None:
+            campanha.recorded_sold = max(0, (campanha.recorded_sold or 0) - 1)
 
     devolucao = VirtualRefundRequest(
         order_id=order.id,
@@ -3285,3 +3349,11 @@ def _apagar_evento_google(google_id: str) -> None:
         delete_event(CALENDAR_ID, google_id)
     except Exception as exc:  # noqa: BLE001 — o pedido já foi cancelado; o evento fica a conferir
         logger.warning("[virtuais] não consegui apagar o evento %s do Google: %s", google_id, exc)
+        # Sem o sino, o evento ficava na agenda do Google para sempre e o talento aparecia no
+        # horário de uma chamada cancelada.
+        _avisar_a_conferir(
+            f"virtual.google:{google_id}",
+            "Loja virtual: evento cancelado ficou no Google",
+            "Um pedido foi cancelado, mas o evento dele não saiu da agenda do Google. Apague à "
+            "mão na agenda da empresa para ninguém aparecer na chamada.",
+        )
