@@ -51,6 +51,12 @@ Comparação com fontes oficiais, checada por um segundo agente independente
   varredura reteve 3 vezes e liberou com `expired_unverified=True`. Confirma o achado 2: sem os
   identificadores do aviso/retorno, a reconsulta não distingue "não pago" de "não achei". FR-011
   passa a tratar `success:false` sem `paid` explicitamente.
+- **Teste A (Pix R$ 1, dono, 20/10 ~09:12–09:14 BRT): verde de ponta a ponta.** Pedido 4 pago em
+  ~1,5 min; aviso com token certo chegou com as chaves `amount, capture_method, installments,
+  invoice_slug, items, order_nsu, paid_amount, receipt_url, transaction_nsu` (sem `paid`), em
+  centavos, `amount == paid_amount == 100` no Pix; reconsulta com os 4 campos devolveu `success,
+  paid, amount, paid_amount, installments, capture_method` → `paid: true`; efetivado: evento 1399
+  com Meet, e-mail `compra_confirmada` enviado. O contrato do `research.md` R1 (205) vale.
 
 ## Causa — o que a auditoria achou no código *(conferido contra `98192e8`)*
 
