@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from flask import (
@@ -17,7 +18,6 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from datetime import datetime
 from .config import AVISOS_DE_URL, Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
 from .constants import RoleName
@@ -29,7 +29,36 @@ migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# Feature 310 (R8): a chave do limite é o IP do cliente informado pelo Node, não o
+# `remote_addr` (que atrás do proxy é o IP da infraestrutura — limite da loja inteira).
+from .api_utils import ip_do_cliente as _ip_do_cliente  # noqa: E402
+
+limiter = Limiter(key_func=_ip_do_cliente, default_limits=[])
+
+
+class _MascaraSegredoDoAviso(logging.Filter):
+    """Segredo do aviso de pagamento fora do log de acesso do gunicorn (feature 310, R-13).
+
+    O formato de acesso do `render.yaml` grava o caminho (`%(U)s`), e o caminho do aviso É o
+    segredo. Mexer no `startCommand` para tirar o caminho já derrubou a produção; o filtro age
+    dentro do processo, sem tocar no start.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        from .api_utils import mascarar_url_webhook
+
+        if isinstance(record.args, dict):
+            record.args = {
+                k: mascarar_url_webhook(v) if isinstance(v, str) else v
+                for k, v in record.args.items()
+            }
+        elif isinstance(record.args, tuple):
+            record.args = tuple(
+                mascarar_url_webhook(v) if isinstance(v, str) else v for v in record.args
+            )
+        if isinstance(record.msg, str):
+            record.msg = mascarar_url_webhook(record.msg)
+        return True
 
 
 def _is_revendedor_only(user) -> bool:
@@ -546,6 +575,11 @@ def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
     app.config.from_object(Config)
+    # Feature 310: máscara do segredo do aviso nos logs de acesso (gunicorn) e da aplicação.
+    for _nome in ("gunicorn.access", "werkzeug"):
+        _log = logging.getLogger(_nome)
+        if not any(isinstance(f, _MascaraSegredoDoAviso) for f in _log.filters):
+            _log.addFilter(_MascaraSegredoDoAviso())
     app.jinja_env.filters['urlencode'] = _url_quote
 
     # Hotfix 269b: os endereços que saem para gente de fora ficam registrados no log do deploy —

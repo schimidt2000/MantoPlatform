@@ -20,7 +20,7 @@ from flask import jsonify, request, send_file, session
 
 from app import limiter
 from app.api import api_bp
-from app.api_utils import json_error
+from app.api_utils import ip_do_cliente, json_error
 from app.constants import (
     VIRTUAL_ACCESS_SESSION_MINUTES,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
@@ -107,7 +107,9 @@ def api_virtuais_reservar(slug: str) -> Any:
             slot_id=data.get("slot_id"),
             gift_item_id=data.get("gift_item_id"),
             client_token=data.get("client_token"),
-            origin_ip=request.headers.get("X-Forwarded-For", request.remote_addr),
+            # Feature 310 (R8): o IP resolvido, nunca o X-Forwarded-For cru (que o cliente forja à
+            # esquerda e a infraestrutura alonga à direita).
+            origin_ip=ip_do_cliente(),
             origin_user_agent=request.headers.get("User-Agent"),
             child_name=data.get("child_name"),
             child_age=data.get("child_age"),

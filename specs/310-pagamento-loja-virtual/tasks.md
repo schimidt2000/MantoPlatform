@@ -140,12 +140,12 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 25–26.
 
-- [ ] T031 [US4] `frontend/server.js`: `X-Manto-Client-Ip` = último item do XFF recebido (ou
+- [x] T031 [US4] `frontend/server.js`: `X-Manto-Client-Ip` = último item do XFF recebido (ou
       `req.socket.remoteAddress`) nas requisições repassadas a `/api`
-- [ ] T032 [US4] `ip_do_cliente()` em `app/api_utils.py`; `key_func` do `Limiter` em `app/__init__.py`
+- [x] T032 [US4] `ip_do_cliente()` em `app/api_utils.py`; `key_func` do `Limiter` em `app/__init__.py`
       e `origin_ip` da reserva em `virtuais_public.py` passam a usá-lo; log de uma linha
       `[virtuais] origem: xff_itens=N publico=sim|nao` (sem o IP)
-- [ ] T033 [US4] Rodar cenários 25–26; `node --check frontend/server.js`
+- [x] T033 [US4] Rodar cenários 25–26; `node --check frontend/server.js`
 
 ---
 
@@ -153,11 +153,11 @@ conexão separada; limpeza no `finally`.
 
 **Teste**: cenários 27–29.
 
-- [ ] T034 [US5] Pacote à operadora como R-15 (já no cliente, T006) conferido no dublê pelo cenário 27
-- [ ] T035 [P] [US5] Filtro de log no `gunicorn.access` (registrado no `create_app`) mascarando
+- [x] T034 [US5] Pacote à operadora como R-15 (já no cliente, T006) conferido no dublê pelo cenário 27
+- [x] T035 [P] [US5] Filtro de log no `gunicorn.access` (registrado no `create_app`) mascarando
       `/webhooks/infinitepay/<…>`; mesma máscara nos `console.error` do proxy em `frontend/server.js`;
       `logger` da loja nunca imprime o token
-- [ ] T036 [US5] Rodar cenários 27–29
+- [x] T036 [US5] Rodar cenários 27–29
 
 ---
 

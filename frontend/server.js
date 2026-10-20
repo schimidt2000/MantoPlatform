@@ -131,7 +131,30 @@ const proxy = httpProxy.createProxyServer({ changeOrigin: true, xfwd: true });
  */
 let clientesQueSumiram = 0;
 
+/**
+ * IP do cliente para o Flask (feature 310, R8). O Node é o único caminho público de `/api`; o
+ * último item do `X-Forwarded-For` que ele recebe é o IP que a borda do Render viu conectar. Sem
+ * isto o Flask enxergava o IP da infraestrutura e o limite "20 reservas por minuto" valia para a
+ * loja INTEIRA (e o de login, para a empresa inteira). O cabeçalho que o cliente mandar com o
+ * mesmo nome é sobrescrito aqui.
+ */
+function ipDoCliente(req) {
+  const xff = String(req.headers["x-forwarded-for"] ?? "")
+    .split(",")
+    .map((parte) => parte.trim())
+    .filter(Boolean);
+  return xff.length ? xff[xff.length - 1] : req.socket?.remoteAddress ?? "";
+}
+
+/** Segredo do aviso de pagamento fora dos logs (feature 310, R-13). */
+function mascararUrl(url) {
+  return String(url ?? "").replace(/(\/webhooks\/infinitepay\/)[^/?#\s]+/g, "$1***");
+}
+
 proxy.on("proxyReq", (proxyReq, req, res) => {
+  const ip = ipDoCliente(req);
+  if (ip) proxyReq.setHeader("X-Manto-Client-Ip", ip);
+
   const soltar = () => {
     if (res.writableFinished) return;
     clientesQueSumiram += 1;
@@ -691,7 +714,7 @@ const server = http.createServer((req, res) => {
   if (req.url && isBackendRequest(req.url)) {
     /** Responde 502 sem derrubar o processo. `headersSent` cobre falha no meio do streaming. */
     const badGateway = (err) => {
-      console.error(`[proxy] ${req.method} ${req.url} → ${BACKEND_URL}: ${err.message}`);
+      console.error(`[proxy] ${req.method} ${mascararUrl(req.url)} → ${BACKEND_URL}: ${err.message}`);
       if (res.headersSent) {
         res.destroy();
         return;

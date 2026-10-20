@@ -906,10 +906,12 @@ def c25():
         cid, slug = nova_campanha()
         _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.27")
         tok = ra["public_token"]
-        cod = [client.post(f"/api/virtuais/pedidos/{tok}/verificar", json={"phone": "0"},
+        # O retorno (20/min por IP) e não a confirmação por telefone: esta tem um bloqueio POR
+        # PEDIDO depois de erros, que dá 429 para qualquer IP e mascararia o teste.
+        cod = [client.post(f"/api/virtuais/pedidos/{tok}/retorno", json={"order_nsu": "x"},
                            headers={"X-Manto-Client-Ip": "192.0.2.1"}).status_code
-               for _ in range(12)]
-        outra = client.post(f"/api/virtuais/pedidos/{tok}/verificar", json={"phone": "0"},
+               for _ in range(22)]
+        outra = client.post(f"/api/virtuais/pedidos/{tok}/retorno", json={"order_nsu": "x"},
                             headers={"X-Manto-Client-Ip": "192.0.2.2"}).status_code
         check("25.1 a primeira estourou", 429 in cod, str(cod))
         check("25.2 a outra não", outra != 429, str(outra))
@@ -978,7 +980,8 @@ def c28():
     linha = f"POST /api/webhooks/infinitepay/{TOKEN} 200"
     check("28.1 Python mascara", TOKEN not in fn(linha), fn(linha))
     js = (RAIZ / "frontend" / "server.js").read_text(encoding="utf-8")
-    check("28.2 proxy Node mascara", "webhooks/infinitepay" in js and "***" in js)
+    check("28.2 proxy Node mascara", "mascararUrl(req.url)" in js and "infinitepay" in js
+          and "$1***" in js)
 
 
 @cenario("29 aviso sem token não ocupa o NSU de um aviso real; 404 (deve falhar)")
