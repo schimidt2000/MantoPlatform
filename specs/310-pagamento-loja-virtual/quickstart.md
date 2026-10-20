@@ -31,7 +31,10 @@ portas padrão são do outro checkout):
 
 1. Sondar o backend novo: `GET /api/virtuais/vitrine` → JSON; `GET /api/virtuais/pagamentos-a-conferir`
    sem sessão → 401 (rota nova = código novo no ar).
-2. Card de pagamento: InfiniteTag `prime-dreams` já gravada (teste 0); **ligar o interruptor**.
+2. Render, ANTES de ligar: criar `MANTO_PROXY_SECRET` com o MESMO valor no `manto-frontend`
+   (primeiro) e no `manto-backend` (depois) — cada um reinicia. O log do backend não pode mais dizer
+   `[proxy] MANTO_PROXY_SECRET ausente`. Card de pagamento: InfiniteTag `prime-dreams` já gravada
+   (teste 0); **ligar o interruptor**.
 3. IP do cliente (R8): reservar duas vezes de redes diferentes (Wi-Fi e 4G) na campanha de teste e ler
    no log a linha `[virtuais] origem: hash=XXXXXXXX publico=sim` — os dois `hash` devem diferir.
 4. Campanha de teste: `listada=false`, publicada, horários a mais de 2 h.
@@ -45,6 +48,14 @@ portas padrão são do outro checkout):
    em Devoluções; executar no app ("Devolver este Pix"); marcar concluída.
 8. Limpeza: `limpar_venda_teste.py --pedido N --execute` (Shell, com OK); pausar a campanha de teste.
 9. Só então: preços e horários reais do Papai Noel; publicar.
+
+### Desligar a loja (qualquer hora, sem deploy)
+
+1. Configurações → Pagamento da Loja → desmarcar **Pagamento da loja ligado** → Salvar. A partir daí
+   nenhuma reserva nova passa (a campanha diz "reservas fechadas") e nenhuma campanha publica.
+2. Pedidos já abertos continuam fechando: o aviso e a varredura seguem decidindo venda ou devolução.
+3. Conferir em Devoluções → "Pagamentos a conferir" nas horas seguintes; para religar, marcar de novo.
+4. Pausar a campanha só se for para ela sumir da vitrine também.
 
 Regra durante a campanha (vai para a skill `manto-deploy`): nada de deploy entre 9h e 23h de
 1º/11 a 25/12; depois de cada deploy, olhar "Pagamentos a conferir".

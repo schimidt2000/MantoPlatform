@@ -7,9 +7,11 @@ from __future__ import annotations
 
 import logging
 import re
+import smtplib
 import threading
 from zoneinfo import ZoneInfo
 
+import flask_mail
 from flask import current_app
 from flask_mail import Mail, Message
 
@@ -18,6 +20,31 @@ from app.constants import DEPARTURE_DEFAULT_LOCATION
 
 log = logging.getLogger(__name__)
 mail = Mail()
+
+#: Prazo da conversa com o SMTP (feature 310, FR-016). O flask-mail 0.10 abre `smtplib.SMTP` sem
+#: timeout: um servidor de e-mail parado prendia para sempre quem esperava o envio — na loja, a
+#: thread do aviso de pagamento e o retorno do checkout, com a família olhando a tela.
+SMTP_TIMEOUT_S = 20
+
+
+class _ConexaoComPrazo(flask_mail.Connection):
+    def configure_host(self):  # noqa: ANN201 — mesma assinatura do flask-mail
+        state = self.mail
+        if state.use_ssl:
+            host = smtplib.SMTP_SSL(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        else:
+            host = smtplib.SMTP(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        host.set_debuglevel(int(state.debug))
+        if state.use_tls:
+            host.starttls()
+        if state.username and state.password:
+            host.login(state.username, state.password)
+        return host
+
+
+# `Mail.connect()` instancia `Connection` pelo nome do módulo do flask-mail: trocar o nome lá é o
+# que faz TODO envio (não só o da loja) ter prazo.
+flask_mail.Connection = _ConexaoComPrazo
 
 _TZ = ZoneInfo("America/Sao_Paulo")
 

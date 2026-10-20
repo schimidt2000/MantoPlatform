@@ -249,6 +249,8 @@ gcal.fetch_single_event = _g_fetch
 client = app.test_client()
 CRIADAS: list[int] = []
 SETTINGS_ORIGINAIS: dict = {}
+# Sinos da loja nascidos durante a execução saem na limpeza (o banco local não guarda resto).
+NOTIF_ANTES = _db("select coalesce(max(id), 0) from notifications")[0][0]
 TOKEN = f"tok-{RUN}-{secrets.token_hex(8)}"
 USUARIOS: dict[str, str] = {}
 
@@ -569,13 +571,71 @@ def c7():
     check("7.3 invariantes", not invariantes(cid), str(invariantes(cid)) + str(eventos))
 
 
+def _pago_em_paralelo(nsus: list[str], valor: Decimal) -> None:
+    """Dois avisos de pedidos diferentes, decididos ao mesmo tempo (duas conexões + barreira)."""
+    barreira = threading.Barrier(len(nsus), timeout=30)
+
+    def segura(tx, slug_):
+        try:
+            barreira.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return {"resultado": "pago", "paid": True, "amount": valor, "paid_amount": valor,
+                "capture_method": "pix", "raw": {}}
+
+    cobrancas = {n: OP.pagar(n, valor) for n in nsus}
+    for n in nsus:
+        OP.forcar[n] = segura
+
+    def manda(n):
+        app.test_client().post(f"/api/webhooks/infinitepay/{TOKEN}", json=OP.aviso(n, cobrancas[n]))
+
+    fios = [threading.Thread(target=manda, args=(n,)) for n in nsus]
+    for t in fios:
+        t.start()
+    for t in fios:
+        t.join(60)
+    for n in nsus:
+        OP.forcar.pop(n, None)
+
+
+@cenario("4b dois pagamentos atrasados no mesmo horário, AO MESMO TEMPO → 1 venda + 1 devolução")
+def c4b():
+    cid, slug = nova_campanha()
+    h = novo_horario(cid)
+    _, ra = reservar(slug, h, ip="198.51.100.64")
+    a = ra["order_nsu"]
+    vencer(a)
+    varrer()
+    _, rc = reservar(slug, h, ip="198.51.100.65")
+    c_ = rc["order_nsu"]
+    vencer(c_)
+    varrer()
+    _pago_em_paralelo([a, c_], Decimal("100.00"))
+    check("4b.1 1 pago no horário", pagos_no_horario(h) == 1, str(pagos_no_horario(h)))
+    check("4b.2 invariantes", not invariantes(cid), str(invariantes(cid)))
+
+
+@cenario("6b vídeo com 1 vaga, dois pagamentos AO MESMO TEMPO → nunca acima da capacidade")
+def c6b():
+    cid, slug = nova_campanha(capacidade=1)
+    _, r1 = reservar(slug, None, ip="198.51.100.66", modalidade="gravado")
+    vencer(r1["order_nsu"])
+    _, r2 = reservar(slug, None, ip="198.51.100.67", modalidade="gravado")
+    nsus = [r["order_nsu"] for r in (r1, r2) if r.get("order_nsu")]
+    _pago_em_paralelo(nsus, Decimal("60.00"))
+    vend, cap = _db("select recorded_sold, recorded_capacity from virtual_campaigns where id=:c",
+                    c=cid)[0]
+    check("6b.1 vendidos <= capacidade", vend <= cap, f"{vend}/{cap} ({len(nsus)} pagaram)")
+
+
 def r22():
-    """R-22: os cenários de concorrência da H1 repetidos N vezes."""
+    """R-22: os sete cenários de concorrência da H1 (e as versões em paralelo) repetidos N vezes."""
     falhas = 0
     for _ in range(ARGS.rodadas):
         antes = sum(1 for r in resultados if r[1] != "OK")
-        c3()
-        c7()
+        for fn in (c1, c2, c3, c4, c4b, c5, c6, c6b, c7):
+            fn()
         if sum(1 for r in resultados if r[1] != "OK") > antes:
             falhas += 1
     check(f"R-22 {ARGS.rodadas} rodadas de concorrência sem venda dupla", falhas == 0,
@@ -749,6 +809,41 @@ def c16():
         raise Bloqueado(f"cliente sem o parâmetro de trava: {exc}") from exc
     check("16.2 travado: nenhuma requisição", not saiu and len(_ESCAPES) == antes, str(_ESCAPES))
 
+    # De ponta a ponta, com o cliente REAL (os dublês saem só neste trecho).
+    cid, slug = nova_campanha()
+    _, rv = reservar(slug, novo_horario(cid), ip="198.51.100.161")  # com dublê: tem link
+    v = rv["order_nsu"]
+    ipc.criar_link_pagamento, ipc.consultar_pagamento = _ipc_criar_original, _ipc_consultar_original
+    try:
+        st, corpo = reservar(slug, novo_horario(cid), ip="198.51.100.162")
+        msg = str(corpo.get("error", {}).get("message") if isinstance(corpo.get("error"), dict)
+                  else corpo.get("error") or corpo)
+        check("16.3 reservar travado → 502 com a frase da trava",
+              st == 502 and "travado neste ambiente" in msg, f"{st} {msg[:120]}")
+        vencer(v)
+        res = varrer()
+        check("16.4 varredura com a operadora travada retém, não decide",
+              pedido(v)["status"] in ("reservado", "aguardando"), f"{res} {pedido(v)}")
+        avisar(OP.aviso(v, OP.pagar(v, Decimal("100.00"))))
+        check("16.5 aviso com a operadora travada não vira venda",
+              pedido(v)["status"] != "pago", str(pedido(v)))
+    finally:
+        ipc.criar_link_pagamento, ipc.consultar_pagamento = (OP.criar_link_pagamento,
+                                                             OP.consultar_pagamento)
+    check("16.6 nenhuma conexão saiu da máquina", len(_ESCAPES) == antes, str(_ESCAPES))
+    # Trava do Google ligada: a venda sai inteira no banco e o dublê do Google não é chamado.
+    app.config["CALENDAR_SUPPRESS_EVENT_WRITES"] = True
+    try:
+        _, rg = reservar(slug, novo_horario(cid), ip="198.51.100.163")
+        g = rg["order_nsu"]
+        n_google = len(GOOGLE["insert"])
+        avisar(OP.aviso(g, OP.pagar(g, Decimal("100.00"))))
+        check("16.7 com a trava do Google, venda feita e Google 0×",
+              pedido(g)["status"] == "pago" and len(GOOGLE["insert"]) == n_google,
+              f"{pedido(g)} google+{len(GOOGLE['insert']) - n_google}")
+    finally:
+        app.config["CALENDAR_SUPPRESS_EVENT_WRITES"] = False
+
 
 @cenario("17 interruptor desligado: sem link novo; aviso de pedido aberto segue")
 def c17():
@@ -863,6 +958,15 @@ def c22():
     check("22.2 código gravado", bool(erro) and "external_checkout_not_enabled" in (erro[0][0] or ""),
           str(erro))
     check("22.3 sem repetir a chamada recusada", len(OP.links) == n0)
+    sino = _db("select count(*) from notifications where dedupe_key=:k",
+               k=f"virtual.link:external_checkout_not_enabled:{now_sp():%Y%m%d%H}")[0][0]
+    check("22.4 a recusa toca o sino", sino >= 1, str(sino))
+    # A tentativa recusada não conta no teto por origem: com teto 1, a mesma família reserva.
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_campaigns set max_reservations_per_origin=1 where id=:c"),
+                     {"c": cid})
+    st2, _ = reservar(slug, novo_horario(cid), ip="198.51.100.25")
+    check("22.5 recusa fora do teto por origem", st2 == 201, str(st2))
 
 
 @cenario("23 aviso lento (Google parado) → resposta rápida; processamento conclui depois")
@@ -978,6 +1082,26 @@ def c28():
         raise Bloqueado("api_utils.mascarar_url_webhook ainda não existe")
     linha = f"POST /api/webhooks/infinitepay/{TOKEN} 200"
     check("28.1 Python mascara", TOKEN not in fn(linha), fn(linha))
+    import io
+    import logging
+
+    saida = io.StringIO()
+    manipulador = logging.StreamHandler(saida)
+    log_acesso = logging.getLogger("gunicorn.access")
+    nivel = log_acesso.level
+    log_acesso.addHandler(manipulador)
+    log_acesso.setLevel(logging.INFO)
+    try:
+        # Mesmo formato do access log do render.yaml: o caminho entra como argumento.
+        log_acesso.info("%s %s %s %s", "10.0.0.1", "POST",
+                        f"/api/webhooks/infinitepay/{TOKEN}", 200)
+        logging.getLogger(app.logger.name).error("Exception on /api/webhooks/infinitepay/%s [POST]",
+                                                 TOKEN)
+    finally:
+        log_acesso.removeHandler(manipulador)
+        log_acesso.setLevel(nivel)
+    check("28.3 linha real do gunicorn.access sem o segredo", TOKEN not in saida.getvalue()
+          and "infinitepay/***" in saida.getvalue(), saida.getvalue()[-160:])
     js = (RAIZ / "frontend" / "server.js").read_text(encoding="utf-8")
     check("28.2 proxy Node mascara", "mascararUrl(req.url)" in js and "infinitepay" in js
           and "$1***" in js)
@@ -993,6 +1117,15 @@ def c29():
     check("29.1 404", r.status_code == 404, str(r.status_code))
     avisar(OP.aviso(a, c))
     check("29.2 o aviso real ainda confirma", pedido(a).get("status") == "pago", str(pedido(a)))
+    limiter.enabled = True
+    limiter.reset()
+    try:
+        cods = [client.post("/api/webhooks/infinitepay/errado", json={"order_nsu": f"x{RUN}"},
+                            headers={"X-Manto-Client-Ip": "192.0.2.29"}).status_code
+                for _ in range(62)]
+    finally:
+        limiter.enabled = False
+    check("29.3 limite aplicado (60/min)", 429 in cods, str(sorted(set(cods))))
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
@@ -1047,6 +1180,11 @@ def c36():
     a = ra["order_nsu"]
     avisar(OP.aviso(a, OP.pagar(a, Decimal("100.00"))))
     pa = pedido(a)
+    # Histórico no evento (a divergência do Google grava EventLog): cancelar não pode estourar FK.
+    with _engine.begin() as conn:
+        conn.execute(text("insert into event_logs (event_id, actor_name, message, created_at) "
+                          "values (:e, 'verify', 'divergência de teste', now())"),
+                     {"e": pa["event_id"]})
     login(RoleName.COMERCIAL)
     r = client.post(f"/api/virtuais/pedidos/{pa['id']}/cancelar", json={"motivo": "doente"})
     check("36.1 200", r.status_code == 200, str(r.status_code))
@@ -1055,6 +1193,9 @@ def c36():
     check("36.3 horário de volta", st == "livre", st)
     ev = _db("select count(*) from calendar_events where id=:e", e=pa["event_id"] or -1)[0][0]
     check("36.4 evento apagado", ev == 0, str(ev))
+    sino = _db("select count(*) from notifications where dedupe_key=:k",
+               k=f"virtual.devolucao:{pa['id']}:desistencia")[0][0]
+    check("36.5 devolução da desistência toca o sino", sino >= 1, str(sino))
 
 
 # ════════════════════════════════════════════════════════════════════════════════════════════
@@ -1312,9 +1453,92 @@ def c50():
     check("50.1 anterior vence em ~24 h", horas is not None and 23.9 <= horas <= 24.1, str(horas))
 
 
+@cenario("51 SMTP parado não prende o envio (prazo do e-mail)")
+def c51():
+    import flask_mail
+    from flask import Flask
+
+    from app import email_service
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    presos: list = []
+
+    def aceitar():
+        conexao, _ = srv.accept()
+        presos.append(conexao)  # segura a conexão aberta e muda: o SMTP "parado"
+        time.sleep(30)
+
+    threading.Thread(target=aceitar, daemon=True).start()
+    antes = email_service.SMTP_TIMEOUT_S
+    email_service.SMTP_TIMEOUT_S = 2
+    try:
+        a = Flask("verify-310-smtp")
+        a.config.update(MAIL_SERVER="127.0.0.1", MAIL_PORT=srv.getsockname()[1],
+                        MAIL_USE_TLS=False, MAIL_DEFAULT_SENDER="v@example.com")
+        m = flask_mail.Mail(a)
+        t0 = time.monotonic()
+        with a.app_context():
+            try:
+                m.send(flask_mail.Message("x", recipients=["v@example.com"], body="x"))
+            except Exception:  # noqa: BLE001 — o que importa é o tempo
+                pass
+        gasto = time.monotonic() - t0
+    finally:
+        email_service.SMTP_TIMEOUT_S = antes
+        srv.close()
+    check("51.1 desiste no prazo", gasto < 5, f"{gasto:.1f}s")
+
+
+@cenario("52 aviso válido sem decisão: a varredura retém o horário, não libera (deve falhar)")
+def c52():
+    cid, slug = nova_campanha()
+    h = novo_horario(cid)
+    _, ra = reservar(slug, h, ip="198.51.100.52")
+    a = ra["order_nsu"]
+    # Aviso com o segredo certo de uma cobrança que a operadora ainda "não acha" (atraso dela).
+    cobranca = {"tx": f"tx-{RUN}-52", "slug": f"sl-{RUN}-52", "amount": Decimal("100.00"),
+                "paid_amount": Decimal("100.00")}
+    avisar(OP.aviso(a, cobranca))
+    vencer(a)
+    varrer()
+    st = _db("select status, order_id from virtual_campaign_slots where id=:h", h=h)[0]
+    check("52.1 pedido segue de pé", pedido(a)["status"] in ("reservado", "aguardando"),
+          str(pedido(a)))
+    check("52.2 horário retido com o dono", st[0] == "travado" and st[1] == pedido(a)["id"],
+          str(tuple(st)))
+
+
+@cenario("53 retorno com a operadora fora: identificadores guardados, a varredura conclui")
+def c53():
+    cid, slug = nova_campanha()
+    _, ra = reservar(slug, novo_horario(cid), ip="198.51.100.53")
+    a, tok = ra["order_nsu"], ra["public_token"]
+    c = OP.pagar(a, Decimal("100.00"))
+    OP.forcar[a] = ipc.InfinitePayIndisponivel("operadora fora (dublê)")
+    try:
+        client.post(f"/api/virtuais/pedidos/{tok}/retorno",
+                    json={"order_nsu": a, "transaction_nsu": c["tx"], "slug": c["slug"]})
+    finally:
+        OP.forcar.pop(a, None)
+    linha = _db("select state, order_id from virtual_payment_notifications where transaction_nsu=:t",
+                t=c["tx"])
+    check("53.1 identificadores do retorno guardados fora do pedido",
+          bool(linha) and linha[0][0] == "pendente" and pedido(a)["tx"] is None,
+          f"{linha} pedido.tx={pedido(a)['tx']}")
+    with _engine.begin() as conn:
+        conn.execute(text("update virtual_payment_notifications set last_attempt_at=:t "
+                          "where transaction_nsu=:x"),
+                     {"t": now_sp() - timedelta(minutes=5), "x": c["tx"]})
+    with app.app_context():
+        ops.reprocessar_avisos()
+    check("53.2 a varredura de avisos confirma a venda", pedido(a)["status"] == "pago",
+          str(pedido(a)))
+
+
 # ════════════════════════════════════════════════════════════════════════════════════════════
 BLOCOS = {
-    1: [c1, c2, c3, c4, c5, c6, c7],
+    1: [c1, c2, c3, c4, c4b, c5, c6, c6b, c7],
     2: [c8, c9, c10, c11, c12, c13, c14, c15],
     3: [c16, c17, c18, c19, c20, c21, c22, c23, c24],
     4: [c25, c26],
@@ -1324,7 +1548,7 @@ BLOCOS = {
     8: [c37, c38],
     9: [c39, c40],
     10: [c41, c42],
-    11: [c45, c46, c47, c48, c49, c50],
+    11: [c45, c46, c47, c48, c49, c50, c51, c52, c53],
 }
 
 
@@ -1360,6 +1584,8 @@ def limpar() -> None:
         conn.execute(text("delete from virtual_payment_notifications where order_id is null and "
                           "(transaction_nsu like :t or order_nsu = 'inexistente' or raw_payload like :r)"),
                      {"t": f"%{RUN}%", "r": f"%{RUN}%"})
+        conn.execute(text("delete from notifications where id > :n and kind like 'virtual.%'"),
+                     {"n": NOTIF_ANTES})
     with app.app_context():
         s = SiteSetting.query.get(1)
         for campo, valor in SETTINGS_ORIGINAIS.items():

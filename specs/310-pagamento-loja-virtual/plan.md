@@ -65,7 +65,7 @@ gestão; `server.js`; `infinitepay_client.py`; `calendar` (marca na criação + 
 | XII. Combobox / Maps | não se aplica (nenhuma lista > 10 nova) |
 | XIII. RBAC declarado | público por token (retorno); COMERCIAL/SUPERADMIN (a conferir, cancelar); SUPERADMIN (settings); linhas em `docs/01` §4.3 |
 | XIV. Config / efeito externo | `_suppress_infinitepay` + `INFINITEPAY_ALLOW_LOCAL_CALLS` no mesmo commit do cliente; `INFINITEPAY_API_KEY` default `""` (desligada = fluxo atual); criação de evento de venda respeita `CALENDAR_SUPPRESS_EVENT_WRITES` |
-| Stack | migration à mão, `down_revision='c5d2f7a9e306'` (ajustar no merge, ver data-model); sem Jinja; nenhum segredo no código nem no SiteSetting novo |
+| Stack | migration à mão, `down_revision='c5d2f7a9e306'` (ajustar no merge, ver data-model); `MANTO_PROXY_SECRET` (env, `sync: false`, nos dois serviços) prova que o IP do cliente veio do Node (R-16, revisão T059); sem Jinja; nenhum segredo no código nem no SiteSetting novo |
 | Operação e Deploy | não toca `startCommand`; migration aditiva (ensaio de upgrade/downgrade em dump fresco mesmo assim); deploy à noite; pós-deploy: ligar o interruptor (quickstart §2) |
 
 Sem violação a justificar.

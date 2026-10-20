@@ -326,7 +326,9 @@ real e de um Pix de verdade); resultado registrado na spec.
    e-mail chegou, o evento com sala existe, e o formato real do aviso e da reconsulta ficou
    registrado.
 3. **Dado** o teste B (aviso bloqueado de propósito), **Quando** a família volta pelo retorno,
-   **Então** a venda confirma pela reconsulta.
+   **Então** a venda confirma pela reconsulta. *Decisão (20/10): provado no verify com dublê
+   (cenários 8–15), porque bloquear o aviso real exigiria mexer no segredo com pedido aberto; em
+   produção os testes A e C registram qual caminho decidiu (`origem=aviso|retorno|varredura`).*
 4. **Dado** o teste C (conflito), **Quando** o segundo pagamento chega, **Então** nasce a devolução,
    ela é executada no app da InfinitePay e marcada como concluída.
 5. **Dado** o fim do teste, **Quando** a limpeza roda, **Então** as vendas de teste saem dos
@@ -415,7 +417,8 @@ real e de um Pix de verdade); resultado registrado na spec.
 
 - **FR-027**: Um único ponto define o IP do cliente a partir da cadeia de proxies confiáveis (número
   de saltos configurável e medido em produção); o limitador e a origem anti-abuso da loja usam esse
-  ponto, nunca o cabeçalho cru. Sem IP resolvível → balde nomeado e registro em log.
+  ponto, nunca o cabeçalho cru. Sem IP resolvível → balde nomeado e registro em log. O cabeçalho do
+  Node só vale com a prova do proxy (`MANTO_PROXY_SECRET`, R-16).
 
 **Privacidade e segredo (H5)**
 
@@ -551,8 +554,8 @@ pagamento em Configurações; lista de pagamentos a conferir.
   20 minutos.
 - **SC-003**: A família que pagou vê "pago" em até 1 minuto depois de voltar do checkout, mesmo sem
   aviso da operadora.
-- **SC-004**: O teste real de R$ 1 (A, B e C) passa com custo ≤ R$ 5, todos devolvidos, e deixa o
-  formato real do aviso e da reconsulta registrado.
+- **SC-004**: O teste real de R$ 1 (A e C; o B provado no verify — H10 cenário 3) passa com custo
+  ≤ R$ 5, todos devolvidos, e deixa o formato real do aviso e da reconsulta registrado.
 - **SC-005**: Com o banco local, 0 requisição sai para a InfinitePay ou o Google.
 - **SC-006**: No lançamento, uma família só é limitada pelo que ela própria faz.
 
@@ -602,8 +605,12 @@ pagamento em Configurações; lista de pagamentos a conferir.
 - **R-15 Pacote à operadora**: `handle`, `order_nsu`, `redirect_url`, `webhook_url`, item com
   descrição "<título> — pedido <order_nsu>", valor em centavos, `customer` só com `email` e
   `phone_number` (dígitos). Nada de nome, idade, dicas ou endereço.
-- **R-16 IP do cliente** vale enquanto o Node for o único caminho público de `/api`; quem chama o
-  backend direto só escolhe o próprio balde. Se o `BACKEND_URL` mudar para rede privada, revisar.
+- **R-16 IP do cliente**: o Node manda o IP em `X-Manto-Client-Ip` junto com a prova
+  `X-Manto-Proxy-Secret` = `MANTO_PROXY_SECRET` (mesmo valor nos dois serviços); o Flask só aceita o
+  IP com a prova certa, senão usa o `remote_addr`. A revisão adversarial (T059) mostrou que o backend
+  tem URL pública e que trocar o cabeçalho a cada requisição tirava todos os limites — "só escolhe o
+  próprio balde" era falso. Sem a variável no backend, o IP é aceito sem prova e o boot avisa no log
+  (proteção desligada até o dono configurar; `docs/05`).
 
 **Trava e operação**
 - **R-17 Trava local**: InfinitePay (link e reconsulta) pela trava nova; criar e apagar evento no

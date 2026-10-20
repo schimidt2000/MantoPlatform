@@ -1416,8 +1416,29 @@ def _expirar_um(order_id: int) -> str | None:
             return "liberadas"
         return "pagas"
 
+    if _aviso_sem_decisao(order):
+        # Há aviso com o segredo certo ainda sem desfecho: "não achei"/"não pago" agora pode ser
+        # só atraso da operadora (R-09). Liberar aqui vendia o horário de quem pagou; vale como
+        # "não sei" — retém, e esgotadas as tentativas libera marcado `nao_sei` (a conferir).
+        _reter_horario(order)
+        return "retidas"
     _liberar_reserva(order, motivo=f"lock vencido; reconsulta: {consulta['resultado']}")
     return "liberadas"
+
+
+def _aviso_sem_decisao(order: VirtualOrder) -> bool:
+    """True se chegou aviso com o segredo certo para este pedido e ele ainda não teve desfecho."""
+    return db.session.query(
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.resolvido_em.is_(None),
+            db.or_(
+                VirtualPaymentNotification.outcome.is_(None),
+                VirtualPaymentNotification.outcome.notin_(tuple(VIRTUAL_AVISO_FINAIS)),
+            ),
+        ).exists()
+    ).scalar()
 
 
 def _reter_horario(order: VirtualOrder) -> None:
@@ -2325,10 +2346,67 @@ def registrar_retorno(order: VirtualOrder, dados: dict) -> str | None:
     try:
         consulta = _reconsultar(order.order_nsu, ids)
     except ipc.InfinitePayError:
+        _guardar_retorno_sem_prova(order, ids, dados)
         return VIRTUAL_AVISO_RETIDO
     if consulta["resultado"] != "pago":
+        _guardar_retorno_sem_prova(order, ids, dados)
         return VIRTUAL_AVISO_PENDENTE_PROVA
-    return decidir_pagamento(order.id, consulta, identificadores=ids, origem="retorno")
+    desfecho = decidir_pagamento(order.id, consulta, identificadores=ids, origem="retorno")
+    if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+        _guardar_retorno_sem_prova(order, ids, dados, desfecho=VIRTUAL_AVISO_DIVERGENTE)
+    return desfecho
+
+
+def _guardar_retorno_sem_prova(order: VirtualOrder, ids: dict, dados: dict, *,
+                               desfecho: str | None = None) -> None:
+    """Guarda os identificadores do retorno que ainda não provaram nada (feature 310, R-08).
+
+    Vão para um registro de aviso PRÓPRIO, nunca para o pedido: o pedido só recebe
+    identificadores provados (um retorno forjado não contamina nada). Sem desfecho, o registro
+    fica ``pendente`` e a varredura de avisos o reconsulta como reconsulta qualquer aviso — antes
+    os identificadores eram descartados e, se o aviso da operadora não chegasse, ninguém mais os
+    tinha. Com ``divergente``, já nasce decidido e entra em "a conferir" com sino.
+
+    Se a operadora já mandou o aviso dessa transação, o registro dela basta: nada é criado.
+    """
+    tx = ids.get("transaction_nsu")
+    if not tx or VirtualPaymentNotification.query.filter_by(transaction_nsu=tx).first():
+        return
+    corpo = {
+        "origem": "retorno",
+        "order_nsu": order.order_nsu,
+        "transaction_nsu": tx,
+        "invoice_slug": ids.get("invoice_slug"),
+        "receipt_url": ids.get("receipt_url"),
+        "capture_method": (dados.get("capture_method") or "")[:40] or None,
+    }
+    db.session.add(
+        VirtualPaymentNotification(
+            order_id=order.id,
+            order_nsu=order.order_nsu,
+            transaction_nsu=tx,
+            raw_payload=json.dumps(corpo, ensure_ascii=False),
+            # "Segredo certo" aqui = registro que a varredura pode reconsultar. A prova continua
+            # sendo SÓ a reconsulta na operadora; o retorno não decide nada sozinho.
+            secret_ok=True,
+            outcome=desfecho,
+            message="Retorno do checkout (identificadores ainda sem prova).",
+            state=VIRTUAL_AVISO_STATE_DECIDIDO if desfecho else VIRTUAL_AVISO_STATE_PENDENTE,
+            attempts=1,
+            last_attempt_at=agora(),
+        )
+    )
+    try:
+        db.session.commit()
+    except Exception:  # noqa: BLE001 — corrida com o aviso da mesma transação: o dele basta
+        db.session.rollback()
+        return
+    if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+        _avisar_a_conferir(
+            f"virtual.retorno:{tx}",
+            "Loja virtual: pagamento com valor diferente do pedido",
+            f"Pedido {order.order_nsu}: a família pagou um valor diferente. Confira na InfinitePay.",
+        )
 
 
 def regerar_sala(order: VirtualOrder) -> VirtualOrder:
@@ -3298,6 +3376,12 @@ def cancelar_pedido_pago(order_id: int, *, motivo: str, quem: str) -> VirtualRef
         db.session.delete(presente)
     VirtualMediaDelivery.query.filter_by(order_id=order.id).delete()
     if evento is not None:
+        # Mesma limpeza da exclusão de evento (Princípio I): o evento da venda pode ter histórico
+        # (a divergência do Google grava EventLog), pagamento ou avaliação, e apagar só a escala
+        # estourava a chave estrangeira no meio do cancelamento.
+        from app.calendar.routes import _clear_event_side_tables
+
+        _clear_event_side_tables(evento.id)
         EventRole.query.filter_by(event_id=evento.id).delete()
         order.event_id = None
         db.session.flush()
@@ -3331,6 +3415,8 @@ def cancelar_pedido_pago(order_id: int, *, motivo: str, quem: str) -> VirtualRef
           f"Pedido pago cancelado por {quem}: {motivo.strip()[:200]} — devolução aberta")
     db.session.commit()
 
+    # Devolução nova é dinheiro a devolver: o sino toca como nas outras origens (FR-032).
+    _avisar_equipe_devolucao(order, VIRTUAL_REFUND_REASON_DESISTENCIA)
     if google_id and not google_id.startswith(GOOGLE_ID_LOCAL_PREFIX):
         _apagar_evento_google(google_id)
     _enviar_aviso(order, VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO)

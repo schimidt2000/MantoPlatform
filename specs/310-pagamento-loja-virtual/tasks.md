@@ -268,3 +268,15 @@ conexão separada; limpeza no `finally`.
 MVP = Fases 1–2 + US1 + US2 + US3 (sem elas não se liga a loja). US4 e US5 entram no mesmo deploy
 (baratas e de risco). US6–US10 completam a operação para o Natal. Um deploy só, à noite, com o
 interruptor desligado; o dono liga depois dos testes A e C.
+
+## Phase 14: Convergence
+
+- [x] T063 Na varredura, tratar `nao_encontrado`/`nao_pago` como "não sei" quando houver aviso com o segredo certo ainda sem decisão para o `order_nsu`: reter o horário (`_reter_horario`) até o aviso decidir ou a tolerância acabar, e só então liberar com `unverified_reason` (`_expirar_um`, `virtuais_ops.py`) per FR-004, FR-011, R-09 (contradicts)
+- [x] T064 `cancelar_pedido_pago` e `limpar_venda_teste.py` reaproveitam `_clear_event_side_tables` (`app/calendar/routes.py`) para apagar também EventLog, pagamentos, contratos, avaliações e reembolsos do evento; o c36 ganha um EventLog no evento antes de cancelar per FR-034, R15, Constituição I (partial)
+- [x] T065 Guardar os identificadores do retorno ainda não provados num registro que não toca o pedido (aviso de origem "retorno"), usá-lo na varredura e no reprocessamento, e mandar o retorno divergente para "a conferir" com sino per R-08, FR-010, FR-015, H2 cenários 1 e 5 (partial)
+- [x] T066 Prazo explícito no envio de e-mail da loja (SMTP com timeout) e no `insert_event` da venda virtual; conferir com dublê de SMTP parado per FR-016, SC-003 (missing)
+- [x] T067 Completar no `verify_310.py`: c16 de ponta a ponta com as travas ligadas (reservar → 502 com a frase da trava; varredura e aviso; 0 chamada nos dublês), c22 conferindo sino e teto por origem, c28 por uma linha real do `gunicorn.access`, c29 estourando 60/min com o limitador ligado per spec §Verificação, Constituição VIII (partial)
+- [x] T068 `r22` repete os 7 cenários de concorrência da H1; c1, c2, c4, c5 e c6 ganham versão com duas conexões e `threading.Barrier` per R-22, SC-001 (partial)
+- [x] T069 Registrar `MANTO_PROXY_SECRET` na spec (R-16, FR-027), no plano, no quickstart §2 (frontend primeiro, backend depois) e em `docs/05` como proteção desligada até o dono configurar os dois serviços per Constituição XIV, Princípio VII (missing)
+- [x] T070 `cancelar_pedido_pago` toca o sino da devolução nova (`_avisar_equipe_devolucao` depois do commit) per FR-032, H6 cenário 2, R-19 (partial)
+- [x] T071 Quickstart §2 ganha o roteiro de desligar a loja; spec H10 cenário 3 e SC-004 registram a decisão de provar o teste B no verify (dublê) per FR-043, SC-004 (contradicts)

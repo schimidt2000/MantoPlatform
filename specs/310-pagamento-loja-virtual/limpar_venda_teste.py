@@ -79,6 +79,9 @@ def main() -> int:
                 slot.locked_until = None
         VirtualMediaDelivery.query.filter_by(order_id=order.id).delete()
         if evento is not None:
+            from app.calendar.routes import _clear_event_side_tables
+
+            _clear_event_side_tables(evento.id)
             Event3DGift.query.filter_by(event_id=evento.id).delete()
             EventRole.query.filter_by(event_id=evento.id).delete()
             order.event_id = None
