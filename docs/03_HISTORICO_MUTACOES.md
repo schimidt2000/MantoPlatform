@@ -147,6 +147,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **185b-tags-por-virgula** | *(PRONTA na branch, não mergeada)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
@@ -298,7 +299,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
-| Catálogo e vitrine | 211, 209, 186, 185 |
+| Catálogo e vitrine | 185b, 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 306, 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 309, 307, 305, 262, 214, 191 (orçamento), 190 |
 | Portal do Artista | 303 (aviso "em confirmação"; cancelado fora da avaliação), 233, 232, 231, 230, 229, 227, 216, 191 (portal) |
@@ -325,6 +326,30 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 185b — As tags do catálogo se separam pela vírgula   (185b-tags-por-virgula · 2026-10-21 · sem migration)
+
+> **PRONTA na branch, não mergeada.** Nível 2 (hotfix da 185): só frontend, sem migration.
+
+**O pedido.** "As tags quando classifico algo no catálogo ficam tudo junto, não fica separado por
+vírgula."
+
+**A causa.** O `ChipInput` só separava quando o navegador avisava a tecla ",". O teclado do
+celular manda `key: "Unidentified"`, então a vírgula entrava no chip; colar uma lista dava um chip
+só; e o texto digitado sem Enter sumia ao salvar. O servidor sempre partiu por vírgula ao gravar,
+então não há tag antiga para consertar.
+
+**O que mudou.**
+- O separador (vírgula, ponto e vírgula, quebra de linha) é tratado no texto: o que vem antes da
+  última vírgula vira chip, e o resto continua no campo.
+- O `paste` é lido antes do `<input>` apagar as quebras de linha.
+- O texto pendente não vira chip no blur, porque o chip novo empurraria o Salvar no meio do clique.
+  O formulário chama `commitPending()` (ref) no `handleSubmit`.
+
+**Verificação.** O harness temporário no Browser pane usou o `ChipInput` real com um Salvar igual
+ao do formulário e passou nos cinco casos: teclado real, clique real no Salvar com texto pendente,
+vírgula sem tecla (celular), colar com `;` e quebra de linha, e clique em sugestão. Também
+passou o typecheck do `internal`. Não há `verify_185b.py`: não há regra no servidor.
 
 ### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
 
