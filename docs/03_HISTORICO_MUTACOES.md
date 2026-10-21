@@ -5,6 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-10-20** · Estado do repositório: pós-feature
+> **312-cancelado-fora-das-listas** (sem migration; **em branch, não publicada** — o cancelado sai de toda lista e
+> só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
+> 24/24) — antes dela pós-feature
 > **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
 > dono, em horário comercial — `flask campanha-prazo-pagamento` avisa "até 3 dias úteis" ao banco de
 > talentos, e `/portal/termos` volta a mostrar a data do aceite; `verify_311.py` 8/8) — antes dela
@@ -147,6 +150,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **312-cancelado-fora-das-listas** | *(em branch)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
@@ -294,7 +298,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 312, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
@@ -325,6 +329,62 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 312 — O cancelado sai de toda lista e só se vê onde se trata do cancelamento   (312-cancelado-fora-das-listas · 2026-10-20 · sem migration)
+
+> **Em branch** (`312-cancelado-fora-das-listas`, worktree `C:\tmp\mp312`, base `main` `5c298ac5`). Merge e push só
+> quando o dono pedir.
+
+**O pedido.** Item 1c do backlog de setembro, a terceira entrega da 303 (D34): "Evento cancelado não deve ficar mostrando
+para o talento. Ver esses eventos cancelados deve ser uma função apenas de uma parte específica do sistema, para filtrar
+cancelados e ver o que houve. Não deve ser algo que fica poluindo o calendário e outras coisas." Doze dúvidas respondidas
+em cinco rodadas (plano `docs/backlog/1c-sinalizar-e-filtrar-cancelados.md`, seção 7); spec em
+`specs/312-cancelado-fora-das-listas/spec.md`. O incidente de 20/10 de manhã (o motivo de um cancelamento à vista de
+todo interno, que levou à 306b) é o caso que a Q9 resolve.
+
+**O que mudou** (contratos em `docs/01` §4.3, "O cancelado fora das listas"; telas em `docs/02`; invariante e fluxo em
+`docs/04` §1, "Depois do ato"):
+- **Listas**: o Dia (API e Jinja) e a busca (antes do limite) passam a esconder o cancelado — Mês e Lista já escondiam;
+  saem também do seletor por data, dos candidatos do formulário, das listas Jinja de shows e de eventos para agrupar,
+  da ficha do talento (histórico e os quatro números), da ficha da cliente (lista; `cancelamentos {quantidade,
+  retido}` à parte), da Fila 3D e das pendências de presente, do conflito de agenda (três cópias) e do painel do grupo
+  do principal vivo; o rótulo "(N eventos)" conta só os vivos.
+- **A tela do cancelado** é só consulta: `cancel_ops.exigir_evento_vivo` (409 `cancelado` para todo papel) em toda
+  escrita da tela, no despachante Jinja inteiro e em "Imprimir fichas"; livres as portas da 306 e da 306b e os desfazer.
+  `cancel_ops.recusar_se_cancelado_para_ligar` recusa no núcleo, antes de e-mail ou Google, o que ligaria algo novo.
+  O detalhe manda `somente_consulta` e `desfazer_*`; a tela esconde o que grava e recarrega o evento na recusa
+  (`aoRecusarMutacao` no QueryClient). **Q9**: motivo e autor só com `show_comercial`, também no Log do Jinja.
+- **Casting (Q10)**: `casting.cancelados_a_avisar` na Home; no cancelado só Casting e Superadmin tiram da escala, e só
+  tiram; o último a sair marca o sino lido.
+- **Página de Cancelamentos**: Superadmin e Financeiro; `mes` e `devolucao`; total retido; sai o `devolucao` legado.
+- **Card "Cancelamentos do período"**: `cancel_ops.painel_de_cancelamentos`, a mesma forma na DRE e no pipeline.
+- **Coisas ligadas**: `situacao`/`event_situacao` em tags, formulários e pedidos de figurino; selo "Cancelado";
+  a avaliação pública responde 410 e a ficha de figurino do portal diz que o evento foi cancelado.
+
+**Decisões fixadas pela spec, não palavras do dono** (Session 2026-10-20 da spec, contestáveis): a ficha da cliente
+deixa de listar o cancelado (a 306 o mantinha marcado); a frase da spec da 306b "Financeiro e os demais veem o motivo"
+**fica superada pela Q9**; a trava não alcança rotas com regra própria (venda e motivo); o Jinja recusa toda ação no
+cancelado; o card usa os nomes de `paineis.cancelamentos` da 306; sai o `devolucao` legado.
+
+**Achados no caminho.** A reconferência do plano (`pesquisa/reconferencia-2026-10-20.md`) mostrou que a 306 já tinha
+feito metade do terreno e mudado premissas (booleanos `cancelado`, a ficha da cliente, a rota do motivo). O analyze,
+conferindo as tarefas contra o código, achou 30 correções antes do implement — as maiores: rotas de escrita sem trava
+(`POST …/sync`, que no cancelado puxaria do Google e mandaria e-mail de remoção; vaga vazia; ensaio legado; dispensa do
+3D; apagar avaliação), o Log do Jinja mostrando o motivo, o cachê zerado ao tirar da escala, e o filtro de devolução
+que precisa olhar o resumo (grupo), não o `event_id`. O cenário 6 do verify achou mais uma lista Jinja de escolha
+(`groupable_events`). A regressão da 306 mostrou que a primeira regra do `assign` (qualquer `cache_value` no corpo →
+409) quebrava a remoção legítima `{talent_id: null, cache_value: null}`: virou "cachê diferente do gravado".
+
+**Produção em 20/10** (só leitura): 2 cancelados, os dois com venda — o 388 (pela 306) e o **1358**, cancelado em 02/10
+pela regra velha (sem congelamento: a 306 o trata como `legado`, retido = pago − devolvido). FINANCEIRO segue com zero
+usuários.
+
+**Verificação.** `verify_312.py` 24/24 (a primeira rodada, contra o código da `main`, em `verify_312_primeira_falha.txt`:
+6/24, só as guardas que já valiam). Regressão: `verify_306b` 8/8; `verify_306` com a base conhecida (14b e 20 exigem a
+`main` de antes da 306) **mais o 23**, o retrato main × branch, que acusa a mudança de contrato da ficha da cliente
+(239 diferenças, todas `events[].cancelado` — a chave saiu) e volta a ficar verde quando a 312 estiver na `main`
+(dívida 136). `verify_303` 44/44 e `verify_196` verdes; `verify_145` (1 falha) e `verify_cancelamento_evento`
+(26/44, dívida 129) dão o mesmo resultado na `main` `5c298ac5` — não são da 312.
 
 ### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
 

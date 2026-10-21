@@ -6,7 +6,12 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-20** · **306b-motivo-editavel**: o banner "Evento cancelado" do
+> Última atualização: **2026-10-20** · **312-cancelado-fora-das-listas**: o cancelado sai do Dia, da busca, das fichas,
+> dos seletores, das filas 3D e do painel do grupo; a tela dele fica só para consulta (fora os dados de venda, o motivo e
+> o desfazer), com o motivo só para Comercial, Financeiro e Superadmin; o Casting ganha na Home "Eventos cancelados —
+> excluir e avisar"; a página de Cancelamentos abre ao Financeiro com filtros; o card "Cancelamentos do período" no
+> Dashboard Comercial e na DRE; o selo "Cancelado" nas coisas ligadas; a avaliação pública e a ficha de figurino do
+> portal dizem que o evento foi cancelado. Antes: **2026-10-20** · **306b-motivo-editavel**: o banner "Evento cancelado" do
 > detalhe ganha "Editar motivo" (Superadmin e Comercial), e o campo do motivo no diálogo de cancelar
 > avisa que ele aparece para quem abre o evento. Antes: **2026-10-20** · **306-dinheiro-do-cancelamento**: o diálogo de cancelar
 > ganha a devolução em três modos (nenhum vem marcado), a prévia do servidor, o BV, o imposto, os
@@ -319,6 +324,12 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   do que a home Jinja tinha (ver o aviso em `01_SISTEMA_E_BANCO.md` §3.16). Lista incompleta desde
   a feature 231 (o painel "🙋 Confirmações pendentes" não está listada acima — ver nota da 231 no
   cabeçalho deste documento).
+- **Feature 312 — "🚫 Eventos cancelados — excluir e avisar"** (Casting e Superadmin, acima de "Confirmações
+  pendentes", só com itens): uma linha por artista ainda escalado num evento cancelado futuro (fora quem recusou e a
+  vaga de presença), com **Avisar no WhatsApp** — "Oi, <nome>! O evento "<título>" de DD/MM, em que você faria
+  <personagem>, foi cancelado. Qualquer dúvida, fale com a gente." (sem link do portal; "sem WhatsApp no cadastro"
+  quando falta) — e **Tirar da escala** (confirmação). A linha some ao tirar; o bloco some com a lista vazia; o sino
+  `evento.cancelado_escala` do dia fica lido quando sai o último. É a única tarefa que um cancelado gera.
 - **Feature 239**: a mensagem pronta de **"Cobrar no WhatsApp"** (painel "Confirmações
   pendentes", feature 231) passou a incluir a URL raiz do Portal do Artista no texto —
   `GET /api/dashboard` manda `portal_url` (mesma fonte usada nos e-mails automáticos); com a env
@@ -364,7 +375,9 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   recombinado na tela): selo completo (ícone `CalendarX` + texto, tooltip "Sumiu do Google Agenda
   — percebido em dd/mm/aaaa") na **Lista**, na **busca** e no bloco detalhado e na lista "Sem
   horário" do **Dia**; só o ícone no chip do **Mês** (que mantém a cor da categoria e leva o texto
-  no `title`) e no bloco curto do Dia. Evento cancelado nunca mostra o selo.
+  no `title`) e no bloco curto do Dia. Evento cancelado nunca mostra o selo — e, desde a 312, não
+  aparece em visão nenhuma nem na busca (o Mês e a Lista já o escondiam; o Dia e a busca passaram a
+  esconder). Quem precisa dele vai à página de Cancelamentos ou ao card do período.
 - **API**: `GET /api/agenda`, `GET /api/agenda/day/<date_str>`.
 - **Vínculos**: cada evento abre `/events/:id`.
 
@@ -481,10 +494,12 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     indisponíveis ficam desabilitados **com `title` explicando o porquê**.
     **Feature 306**: no evento cancelado, "Editar tudo" some (a edição em bloco não corrige venda;
     o servidor recusaria); no marcado, o item do Superadmin vira **Cancelar evento**.
-  - **Banners** acima das abas (feature 224): evento **cancelado** (motivo, autor, data, e o
-    aviso "Saiu da agenda e das listas de venda e de cobrança; fica na página de Cancelamentos e,
-    marcado, na ficha da cliente" — desde a 306 o retido conta na DRE e nos relatórios do mês do
-    cancelamento; o card do período chega com a 1c) e **exclusão solicitada** aguardando decisão,
+  - **Banners** acima das abas (feature 224): evento **cancelado** ("Evento cancelado em DD/MM";
+    motivo e autor só para Comercial, Financeiro e Superadmin — feature 312, Q9; para os outros a
+    linha não existe — e o aviso "Saiu da agenda e das listas do sistema; fica na página de
+    Cancelamentos e no card 'Cancelamentos do período'. A tela fica só para consulta; só os dados de
+    venda (valores, comprovantes, devolução, multas) continuam editáveis, pelo Superadmin") e
+    **exclusão solicitada** aguardando decisão,
     esta com os botões "Analisar e decidir" e "Recusar solicitação" para o Superadmin. O
     diálogo de exclusão abre com o resumo de impacto — venda, quanto a cliente já pagou, elenco
     escalado e comissão em jogo — e diz qual das duas ações vai acontecer **antes** de
@@ -650,6 +665,14 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     R$ 0,01; para o FINANCEIRO o painel do orçamento continua só leitura (a lista de orçamentos e o
     vínculo são do vendedor dono). `?editar=venda` abre a venda em edição (é o destino do "Pôr o
     valor" da Home).
+  - **Evento cancelado (feature 312 — só consulta)**: com `flags.somente_consulta`, cada seção esconde o que grava
+    (dados do evento, clientes, contratos, logística, observações, figurino e "Imprimir fichas", ensaio, presentes 3D,
+    confirmar e "Pedir feedback" no menu, renomear o grupo, excluir avaliação); ficam os desfazer — **Desligar o
+    formulário** no Pré-contrato e o ✕ do presente 3D (`desfazer_*`) — e, na escala, **Tirar da escala** e o WhatsApp
+    para Casting e Superadmin, com "Evento cancelado: exclua os escalados e avise cada um pelo WhatsApp." enquanto
+    houver escalado. Nas abas Comercial e Financeiro, para quem não é Superadmin, "Evento cancelado: só o Superadmin
+    altera os dados de venda." no topo. Uma recusa `cancelado` (aba aberta antes do cancelamento) recarrega o evento
+    (`aoRecusarMutacao` do QueryClient) e a frase do servidor fica onde a ação foi pedida.
   - **Evento cancelado (feature 306)**: a tela fica para consulta, e o que mexe em dinheiro é do
     Superadmin — os botões seguem `flags.can_edit_venda_cancelado` (somem no "Ver como") e o
     servidor confere o papel real; aos demais, 409 `cancelado` ("Este evento está cancelado: só o
@@ -701,9 +724,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
       servidor quando ele recusa. Quando o grupo tem devolução aprovada (o corte de um dia, por
       exemplo), "Recebido R$ X (devolvidos R$ W) de R$ Y". No cancelado não sai o "— falta R$ Z" (a
       venda acabou); só o dia cortado de um grupo que segue vivo mostra o que falta da venda do grupo.
-    - **Grupo comercial**: o dia cancelado não agrupa, não desfaz nem recebe outro evento (o nome
-      do grupo segue editável); no principal vivo, o dia cancelado leva o selo "cancelado" e não
-      tem "Remover".
+    - **Grupo comercial**: o dia cancelado não agrupa, não desfaz nem recebe outro evento; no
+      principal **vivo** o dia cancelado não aparece no painel (feature 312 — continua no grupo, no
+      banco, e vê-se na página de Cancelamentos) e o rótulo "(N eventos)" conta só os vivos; na tela
+      do principal cancelado o painel lista os dias que caíram junto, com o selo.
     - **Faixa de pendências**: o chip "Recebimento" vira **Cancelado** — "devolução de R$ X a pagar
       · retido R$ Y" (dourado) ou "retido R$ Y" (verde) — e leva à aba Comercial. No satélite do "todos",
       "devolução do grupo de R$ X a pagar" ou "dinheiro no 1º dia do grupo"; no dia cortado, "devolução de
@@ -713,7 +737,8 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
       "Editar" de Acréscimos não aparece (o servidor recusa satélite), e "Marcar cobrado" do reembolso
       mostra a frase do servidor quando ele recusa.
     - **Escala**: tirar um artista da vaga de um cancelado não manda o e-mail de remoção — ele já
-      recebeu o de cancelamento no ato.
+      recebeu o de cancelamento no ato. Desde a 312 só Casting e Superadmin tiram, e só tiram (o
+      botão manda `{talent_id: null}`; o cachê da vaga fica).
   - **Aba Histórico**: *Avaliações dos artistas* (média + notas individuais com tags por
     critério) · *Feedback da cliente* · *Log de atividades* (accordion) — **este só existe no DOM
     para `SUPERADMIN`**.
@@ -1556,6 +1581,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   4. **Comissão prevista** (R$) — **destacado em verde sutil** (borda + fundo `green-soft`) para
      incentivar o comercial. Para gestor é a comissão projetada da equipe; para o vendedor, a
      projeção sobre as vendas dele.
+- **Card "Cancelamentos do período"** *(feature 312)*: logo abaixo dos KPIs, só com cancelado no mês do
+  cancelamento (no escopo da tela): cancelados, pago, devolvido, a devolver, retido, comissão do retido e BV do
+  retido — mais imposto e efeito no resultado para Superadmin e Financeiro — e a lista com o link de cada evento
+  (é por aqui que a vendedora acha o próprio cancelado). Para quem abre a página, "Ver na página de
+  Cancelamentos" filtrada no mês. A lista de vendas segue sem o cancelado e sem botão.
 - **Cancelados** *(feature 306)*: o retido dos cancelados do período (pelo mês do cancelamento, no
   escopo da tela) entra no **Total vendido** do vendedor congelado no ato, com a sublinha "… ·
   inclui R$ X retidos de N cancelamento(s)", e a comissão do retido entra na **Comissão prevista**
@@ -1605,9 +1635,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Métricas no topo da lista (feature 220)**: KPIs **Novos este mês**, **Com evento** e
   **Recorrentes (2+ eventos)** + barras de **novos clientes por mês** (12 meses; tooltip com a
   quebra formulário/Kommo/manual). `GET /api/clientes/metricas`.
-- **Ficha (`/clientes/:id`, feature 220)**: no card **Eventos**, o evento cancelado segue na lista com o
-  selo **cancelado** e o título apagado, e o cabeçalho diz "N evento(s) · M cancelado(s) · total vendido"
-  (a contagem não conta o cancelado; o total soma o retido — feature 306). Além do card **Eventos** (agenda 2026+), o card
+- **Ficha (`/clientes/:id`, feature 220)**: no card **Eventos**, o cancelado não aparece (feature 312; vê-se na
+  página de Cancelamentos); o cabeçalho diz "N evento(s) · total vendido", e o total, que soma o retido (306),
+  ganha a sublinha "inclui R$ X retidos de N cancelamento(s)". No histórico de formulários, o evento de um
+  formulário ligado a um cancelado leva o selo "Cancelado". Além do card **Eventos** (agenda 2026+), o card
   **"Festas anteriores (formulários)"** lista os formulários preenchidos pela cliente — data da
   festa, link para o evento quando existe ("na agenda") ou marcação "só formulário" (histórico
   pré-2026, que não é materializado no calendário). É a base do marketing de recompra.
@@ -1842,7 +1873,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   R$ X retidos") e na Tendência do mês do cancelamento; a nota a emitir de um cancelado leva o selo
   "cancelado · retido R$ X", e a parcela de um cancelado sai dos Recebimentos Previstos. O ticket
   médio segue pela venda dos eventos. A DRE antiga (Jinja, `/financeiro/`) tem a mesma linha e
-  bate ao centavo.
+  bate ao centavo. Acima de "Eventos no Período", o **card "Cancelamentos do período"** (feature 312, o mesmo do
+  Dashboard Comercial, com os oito números) mostra os cancelados do mês, cada um com retido, devolvido e comissão;
+  o retido do card é o da linha "Retido de cancelamentos".
 - **API**: `GET /api/financeiro/dashboard?incluir_loja_virtual=`.
 - **Vínculos**: cada linha de evento/auditoria/recebimento leva a `/events/<id>`; a linha de
   Gastos Recorrentes do DRE reflete os lançamentos de `/gastos/recorrentes`.
@@ -1956,6 +1989,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   reportado pelas plataformas, a rodada de origem e o selo "atualiza até aprovar" / "congelado".
   Nasce pendente e sem comprovante — anexar a fatura do cartão antes de aprovar.
 
+- **Feature 312**: o gasto ligado a um evento cancelado (a devolução, a multa, um custo de antes) leva o selo
+  "Cancelado" ao lado do evento; o select de vínculo mostra o evento atual mesmo quando a lista do dia não o oferece
+  (o seletor por data não oferece cancelado — Q2), em vez de "Sem evento vinculado".
 - **Feature 306 — devolução de evento cancelado travada**: a devolução à cliente nasce do
   cancelamento, aprovada, com o desembolso **"Devolução à cliente"** (rótulo na tabela; o tipo
   não se escolhe ao criar). Na edição de uma devolução de cancelado (`locked`), a janela avisa
@@ -2013,7 +2049,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com um modo fora de SP ativo já dispara o cálculo. **Deslocamento em duas etapas** (feature 262, no lugar da checkbox "Evento Fora de São Paulo"): "Evento em São Paulo" (padrão) × "Evento fora de São Paulo"; marcando fora, o painel dourado abre com a escolha "Por nossa conta" (padrão) × "Por conta da cliente" — no modo cliente o painel vira "Adicionais — Fora de SP", esconde tipo de transporte/carretinha/nº de carros (km e colaboradores ficam) e o veículo sai da conta. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190; snapshot antigo fora de SP reabre como "por nossa conta"). **Feature 307 — data especial pela data**: sob o campo Data, com a data vazia, a dica "Em 24/12 e 25/12 a tabela especial entra pela data" (dias lidos da tabela); quando o resultado volta com `quote.data_especial`, um aviso dourado (`AnimatePresence` + `motion.div`, `useReducedMotion`) diz "🎄 Data especial — Véspera e Natal: markup 3,34× e cachês próprios…" e, **só na faixa `natal`**, orienta a usar o item "Ajudante do Noel" e não somar o acréscimo "Outro" (outra faixa mostra só rótulo e markup; com "Personalizar valores" ligado o aviso lembra que o valor digitado vence); o painel de resultado mostra "🎄 Valores da data especial: …"; o botão vira **"Recalculando…"** e fica desabilitado do momento em que o payload muda até o resultado novo chegar (`calcPendente` + contador `seq` que descarta resposta antiga) e também após erro de cálculo (aí com o rótulo normal) — antes ele salvava o `result` da data anterior durante o debounce. **Feature 309 — produtos de tabela**: card **"Produtos de tabela"** (`ProdutosCard`) no topo da coluna direita, antes de Equipe, só quando `settings.produtos` chega no `/opcoes` (backend velho = sem card): `Combobox` de `@manto/ui` com os produtos ativos (descrição = preço normal + descrição ao cliente, ícone 🎅) + "Adicionar" (pode repetir); cada exemplar vira uma `ProdutoLinha` ("📦 Visita Mágica — Papai Noel (visita padrão, até 1h) — preço de tabela R$ 2.500,00", "Inclui: Papai Noel · Coordenador · Maquiador", selo "estimativa" em dourado quando a faixa não tem preço, selo "inativo" num orçamento recalculado) lida de `quote.produtos` — enquanto a resposta não volta a linha diz "calculando…" em vez de chutar o preço; o estado `produtos` entra em `INITIAL_STATE`/`resetAll`/payload/rehydrate (só a chave; o preço é resolvido de novo). Abaixo da Data, `quote.avisos` em bloco `role="alert"` com borda dourada cheia ("Para a Visita Mágica use o produto…", "preço ESTIMADO… Confira antes de enviar"), com a mesma regra de vida do aviso da 307 (some enquanto o recálculo não voltou). No painel de resultado, com só produto (servidor devolve só `show_1h`) o tile único se chama **"Preço de tabela"**; as `ProdutoLinha`s aparecem junto da nota da data especial. O contador de coordenadores mostra "N incluído(s) no produto" (`quote.coordenadores_inclusos`) e não desce abaixo deles. **Janela de deploy**: com produto selecionado e `quote.produtos` ausente (backend velho) o botão fica desabilitado com o aviso "O servidor não aplicou o produto — recarregue a página" |
-| `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN` | fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com, por cancelado, todas as devoluções (valor, estado — a devolver, no banco, devolvido —, quem recebe e, para quem vê o financeiro, o PIX) e "pago R$ X · retido R$ Y" (feature 306; sem devolução, "nada a devolver"); no satélite do "todos", "dinheiro no 1º dia do grupo" com link (sem repetir a devolução nem o pago do grupo) e "no 1º dia" na coluna Venda; no dia cortado, só as devoluções dele e "pago no grupo". É a **porta principal** de um evento cancelado — ele sai da agenda de propósito (feature 224); Comissões, a ficha da cliente e o sino também levam a ele. Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
+| `/events/cancelamentos` | Exclusões e cancelamentos | `SUPERADMIN`, `FINANCEIRO` (feature 312; menu em Sistema para o Superadmin e em Financeiro para o Financeiro) | *(312)* filtros na URL — mês do cancelamento e situação da devolução (a devolver, no banco, devolvida, sem) — e **Buscar** (título ou motivo, na lista carregada); total retido no cabeçalho ("nos N listados" sem mês); colunas Evento (+motivo, "dia cortado da venda de DD/MM", "a venda passou para DD/MM"), Data do evento, Cancelado em (+por quem), Venda, Pago, Devoluções, Retido, Comissão, BV, Imposto; vazio "Nenhum cancelamento com estes filtros" + "Limpar filtros"; erro com a mensagem do servidor. *(306)* fila com os pedidos de exclusão do Comercial aguardando decisão e o histórico de eventos cancelados, com, por cancelado, todas as devoluções (valor, estado — a devolver, no banco, devolvido —, quem recebe e, para quem vê o financeiro, o PIX) e "pago R$ X · retido R$ Y" (feature 306; sem devolução, "nada a devolver"); no satélite do "todos", "dinheiro no 1º dia do grupo" com link (sem repetir a devolução nem o pago do grupo) e "no 1º dia" na coluna Venda; no dia cortado, só as devoluções dele e "pago no grupo". É a **porta principal** de um evento cancelado — ele sai da agenda de propósito (feature 224); Comissões, a ficha da cliente e o sino também levam a ele. Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
 | `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP (no modo "deslocamento por conta da cliente" o tile "Veículo" some e aparece a nota "van/carro não incluído" — feature 262), memória de cálculo e envio do PDF por e-mail; **feature 307**: nota "🎄 Valores da data especial: <rótulo>" junto da nota de NF quando o quote congelado tem `data_especial`, e a mesma nota em itálico na mensagem e no PDF; **feature 309**: uma `ProdutoLinha` por `quote.produtos` (preço congelado) e os `quote.avisos` em bloco dourado no "Resumo de valores", tile único "Preço de tabela" quando só há produto, memória com a linha `produto` (fundo próprio `bg-blue-soft`, depois de "= Após markup") e "= Após produtos", mensagem com o bloco "🎅 *Visita Mágica — …* (descrição): *R$ X*" e PIX único. **Feature 266**: ganhou **Criar evento** (`/events/new?orcamento_id=`) como única ação sólida da barra — esta é a tela onde o "sim" da cliente chega, e converter exigia voltar ao histórico e reencontrar a linha. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas |
 | `/orcamento/historico` | Orçamentos | `COMERCIAL`, `SUPERADMIN` | tabela densa com filtros avançados (data, valor, vendedor, tipo), PDF, envio por e-mail, exclusão; **Abrir orçamento** (`/orcamento/:id`), **Criar evento** (`/events/new?orcamento_id=`) e **Recalcular** (`/orcamento?recalcular_id=`), feature 190. **Feature 273**: linha vinculada a um evento vivo mostra **Ver evento** (`/events/:id`); excluir orçamento vinculado é recusado com 409 e a mensagem, mostrada na página com link "Ver evento", aponta o evento a desvincular. **Feature 301**: a tabela passou a ser **do time inteiro** — a coluna **Vendedor** e o filtro por vendedor, que só o superadmin via, agora aparecem para todo o comercial, e a lista **abre sem filtro** (não começa em "meus orçamentos"). O botão **Excluir** só é renderizado na linha de quem pode excluir (autor ou superadmin), por `pode_excluir` do payload — antes aparecia em toda linha e só falhava depois do `confirm()`. Com 1.809 orçamentos concentrados (90% de um vendedor) e teto de 300 linhas, os filtros passam a ser o caminho normal |
 | `/orcamento/configuracoes` | Config. Preços | `SUPERADMIN` | `SiteSetting.pricing_config` + personagens especiais, em tabelas densas (feature 190). **Feature 307**: card **"Datas especiais — Véspera e Natal"** (`DatasEspeciaisCard`, um por faixa do bloco `datas_especiais`): rótulo, dias como chips `DD/MM` (adicionar/remover, `AnimatePresence`), `PriceTable` (extraída para `components/orcamento/PriceTable.tsx`) com markup, coordenador, piso e um cachê por especial sobrescrito, chips "+ Nome"/"× Nome" para sobrescrever (nada de `<select>` — a lista de especiais passa de 10; "+ Nome" nasce com o piso, nunca zerado, e "× Nome" pede confirmação porque o especial cai para o piso), campo da nota (uma linha, ≤ 200); salva pelo mesmo "Salvar configurações"; o 400 do servidor (`fields` `datas_especiais.<faixa>.<campo>`) destaca o campo — inclusive as linhas da `PriceTable` (`invalid`) — com `aria-invalid`, borda vermelha e mensagem com rótulo legível ("Markup: …", "Cachê — Papai Noel: …"), leva o foco ao primeiro inválido e deixa fora do rodapé as chaves `datas_especiais.*`; excluir um especial tira a sobrescrita dele das faixas no estado local e no servidor. As linhas "Papai Noel" e "Ajudante do Noel" da tabela normal aparecem pela migração na carga — **600 / 270 desde a 309** (a 307 tinha posto 712 / 423 por engenharia reversa do preço da Visita; a 309 desfaz). **Feature 309**: card **"Produtos de tabela"** (`ProdutosConfigCard`, molde do `DatasEspeciaisCard`, ocupa as duas colunas; só quando `settings.produtos` existe): por produto — rótulo (≤ 60) com a chave, "Ativo", "Remover produto" (`ConfirmDialog`), descrição ao cliente (≤ 120), "Preço por visita" (`MoneyInput`), um "Preço em <faixa> (dias)" por faixa de `datas_especiais` (zero = sem preço = "estimativa na data"), vagas como linhas (tipo por botões Especial/Ator/Coordenador/Maquiador — os dois últimos travam o nome —, nome, "cachê pela tabela" ou valor fixo, "maquiagem" para especial/ator, "×" com `ConfirmDialog`, aviso dourado quando o nome do especial não está na tabela), "+ Vaga" (≤ 10), "Noturno embutido no preço"; "Novo produto" por chave `^[a-z0-9_]{1,30}$`; card "Estimativa" (fator × markup). O 400 (`fields` `produtos.<chave>.<campo>` / `…vagas.<i>.<campo>` / `produtos_estimativa.<campo>`) destaca o campo com `aria-invalid`, leva o foco e lista "Preço: …"/"Vaga 2 — cachê: …" no próprio card; os `avisos` do 200 (faixa órfã descartada) aparecem em amarelo no card; o rodapé filtra `produtos*` |
@@ -2117,6 +2153,8 @@ Todas as telas são **mobile-first** (Princípio VIII).
 #### `/catalogo/avaliar/:token` — Avaliação da Cliente
 - **UX**: link público por token do evento; grava `ClientFeedback`, exibido em
   `/clientes/avaliacoes`.
+- **Feature 312**: link de evento cancelado (enviado antes do cancelamento) responde 410 e a página diz "Este evento
+  foi cancelado — Não há avaliação a fazer. Qualquer dúvida, fale com a gente.", sem formulário, sem título nem data.
 
 ---
 
@@ -2150,7 +2188,7 @@ avaliar). Alvos de toque ≥44px, nada abaixo de 12px, sem rolagem horizontal de
 | `/portal/historico` | Histórico completo de apresentações — **é o único lugar dele desde a 302** | Somatórios recebido / a receber / total; cachê + deslocamento por evento; link para avaliar via `RatingLink`; rótulo Função/Personagem (302). A linha mostra **só a data**, sem hora, e a omissão é deliberada: aqui nunca houve horário nenhum, então pôr a faixa significaria acrescentar o horário de **início** de um evento que já aconteceu. **Feature 303**: o aviso "Evento em confirmação" fica abaixo de título e cachê e acima de "Avaliar", fora do bloco do título (que é `truncate`), para quebrar linha em 320 px |
 | `/portal/perfil` | Dados pessoais, **medidas corporais**, PIX e portfólio | Medidas alimentam o módulo de Figurino; até 3 fotos de atuação + links (Vimeo/YouTube) |
 | `/portal/fotos-documentos` | Foto de rosto, corpo inteiro, foto do documento (RG/CPF/CNH — card novo da feature 264) e CNH | Preview do arquivo atual antes de substituir (fotos); documento e CNH mostram sucesso apos envio |
-| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | **Nome e data do evento no topo** (302) — a ficha abria sem nenhuma referência, e quem tem duas escalações na semana não sabia qual estava vendo; só a data, sem hora, que está no card de onde a pessoa veio. Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227) |
+| `/portal/eventos/:id/figurino` | Ficha de figurino do papel no evento | **Nome e data do evento no topo** (302) — a ficha abria sem nenhuma referência, e quem tem duas escalações na semana não sabia qual estava vendo; só a data, sem hora, que está no card de onde a pessoa veio. Peças, orientações e fotos; foto vem de `/portal/photo/<file>` (mesma sessão). **Coordenador vê o elenco inteiro** com o nome de quem interpreta cada personagem (feature 227). **Feature 312**: de evento cancelado, "Este evento foi cancelado." no lugar da ficha (a frase é do servidor; quem não está escalado continua lendo "Você não está escalado neste evento.") |
 | `/portal/eventos/:id/avaliar` | Avaliar o evento | Etapa 1 nota geral (abaixo de 4 exige comentário); etapa 2 opcional por categoria e por pessoa; janela de 7 dias para avaliar, 30 para editar. Etapa 2 é o **destino padrão** da etapa 1 desde a 232 (rolagem até o bloco), com desvio explícito para quem só quer a nota geral. **Feature 303**: evento cancelado não entra no contador "a avaliar" e a nota é recusada com "Este evento foi cancelado e não recebe avaliação." |
 | `/portal/termos` | Reler o termo já aceito | Modo leitura, sem trava nem botão. Desde a 311 diz "Você aceitou este termo em 12 de junho de 2026." (`terms_accepted_at`, horário de São Paulo); a migração para React (191) tinha perdido a data que a Jinja da 091 mostrava |
 

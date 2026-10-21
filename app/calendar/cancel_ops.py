@@ -670,7 +670,10 @@ def painel_de_cancelamentos(
     alvo. `imposto` e `efeito_resultado` só com `com_imposto` (Q1 do dono: Superadmin e Financeiro).
     JSON-safe (floats).
     """
+    from app.financeiro.vendas_ops import event_payment_status
+
     totais = totais if totais is not None else totais_cancelamentos(resumos)
+    status = event_payment_status(0, 0, False, cancelado=True)  # o rótulo do cancelado (306)
 
     def _do_alvo(r: ResumoCancelado) -> bool:
         return commission_target_id is None or (
@@ -710,7 +713,7 @@ def painel_de_cancelamentos(
                 )),
                 "retido": float(r.retido),
                 "comissao_retido": float(r.comissao_retido if _do_alvo(r) else Decimal("0.00")),
-                "status": "cancelado",
+                "status": status,
             }
             for r in resumos
         ],

@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **306b-motivo-editavel** (sem migration; `PATCH /api/events/<id>/motivo-cancelamento`, §3.3; `pode_editar_motivo_do_cancelado` e a flag
+> Última atualização: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
+> fichas, dos seletores, das filas e do painel do grupo; a trava `exigir_evento_vivo` e as recusas de vínculo com `codigo:
+> "cancelado"`; `GET /api/events/cancelamentos` também para o FINANCEIRO, com `mes`/`devolucao`; o card `cancelamentos` no
+> pipeline; `casting.cancelados_a_avisar`; a avaliação pública 410 — §4.3, "O cancelado fora das listas"). Antes: **2026-10-20** · **306b-motivo-editavel** (sem migration; `PATCH /api/events/<id>/motivo-cancelamento`, §3.3; `pode_editar_motivo_do_cancelado` e a flag
 > `can_edit_motivo_cancelado`, §4.3). Antes: **2026-10-20** · **306-dinheiro-do-cancelamento** (EM PRODUÇÃO desde 20/10/2026 ~09:30; migration
 > **`c5d2f7a9e306`** — head: as tabelas `event_cancellations`, `event_cancellation_bvs` e
 > `event_cancellation_elenco`, §2.2; o ajuste e o `no_banco` das comissões, a categoria "Multa de
@@ -749,7 +752,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio)* |
 | POST | `/api/events/<id>/devolver-ao-google` *(feature 303 — só Superadmin; responde o detalhe + `devolucao_google: {resultado}`; erros com `codigo`)* |
 | POST | `/api/events/<id>/cancelar` *(feature 224; corpo, resposta e recusas reescritos na 306 — ver "Feature 306" abaixo)* |
-| GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado)* |
+| GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado; a 312 abre ao FINANCEIRO e filtra por `mes` e `devolucao` — §4.3)* |
 | PATCH | `/api/events/<id>/devolucao` *(feature 306 — "Alterar devolução" do cancelado; só Superadmin real; responde `{ok, resumo}`)* |
 | PATCH | `/api/events/<id>/motivo-cancelamento` *(feature 306b — "Editar motivo" do cancelado; Superadmin ou Comercial pelo papel real; corpo `{motivo}`; o texto vale para os dias do grupo cancelados com o mesmo motivo e troca o antigo no `EventLog` e no `AuditLog` `event_cancelled`; 409 `nao_cancelado`, 400 `fields.motivo`; responde `{ok, motivo, eventos}`)* |
 | POST | `/api/events/<id>/multas` *(feature 306 — multa ao elenco depois do ato; só Superadmin real; responde `{ok, resumo, gastos}`)* |
@@ -1884,7 +1887,7 @@ Gates por módulo (todos em `app/api/`):
 | `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
-| `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação, `GET /api/events/cancelamentos` e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
+| `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
 | `cancel_ops.pode_editar_venda_do_cancelado(user)` — **a regra única do cancelado** (feature 306) | gate de `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, depois do 404 (os demais → 403); nas portas de dinheiro do evento, a recusa **depois** do gate de hoje — quem passa nele e não passa na regra leva **409 `codigo: "cancelado"`** (`EventoCanceladoError`), em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê antes de decidir. Porta a porta em "RBAC do evento cancelado", abaixo | `SUPERADMIN` pelo **papel real** (`user.roles`; o "Ver como" não conta) — a régua de `_can_delete()` e `_is_superadmin()` |
 | `cancel_ops.pode_editar_motivo_do_cancelado(user)` (feature 306b) | gate de `PATCH /api/events/<id>/motivo-cancelamento`, depois do 404 (os demais → 403): só o **texto** do motivo; o dinheiro do cancelado segue com a regra acima. A flag `can_edit_motivo_cancelado` do detalhe segue o "Ver como" | `SUPERADMIN` ou `COMERCIAL` pelo **papel real** |
 | `_ve_faixa_sumidos()` | `agenda.py`, `GET /api/events/sumidos-google` (feature 303) | `SUPERADMIN` ou `COMERCIAL` pelo **papel efetivo** (respeita o "Ver como"); os demais recebem **200** com `pode_ver: false` e a lista vazia — nunca 403 |
@@ -1938,7 +1941,7 @@ rollback e 409 `tente_de_novo` (`cancel_ops.traduzir_erro_de_banco`).
 | `GET /api/events/<id>/impacto-exclusao` | `_can_delete()`, sem mudança | Sem trava. Na prévia (`?devolucao=`): 400 `fields.devolucao` ou `fields.venda_nova`; evento já cancelado → `ja_cancelado` |
 | `PATCH /api/events/<id>/devolucao` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | 400 `devolucao_total` (falta ou não é número), antes da trava → trava → `nao_cancelado` → `regime_sem_retido` (`satelite`, `virtual`) → 400 com os `fields` → `abaixo_do_piso` (`piso`) → `acima_do_teto` (`teto`, só no `dia`) |
 | `POST /api/events/<id>/multas` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | Trava → `nao_cancelado` → 400 `fields.multas` ou `fields.multa_<elenco_id>` |
-| `GET /api/events/cancelamentos` | `_can_delete()`, sem mudança | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro` |
+| `GET /api/events/cancelamentos` | `_can_read_cancelamentos()` (feature 312: `SUPERADMIN` ou `FINANCEIRO`, papel real) | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro`; filtros da 312 abaixo |
 | `GET /api/events/<id>` | sem mudança | Só contrato: `event.cancelamento` só com `show_comercial` (§3.3) |
 | `PATCH /api/events/<id>/comercial` | `_can_create_event()` (`COMERCIAL`, `SUPERADMIN`), sem mudança | Depois do 409 de satélite e antes do 400 de data e do 403 da 215b: Comercial → `cancelado`; o Financeiro segue fora do gate (403). O Superadmin grava e recongela; o evento que mudou de estado entre a leitura e a trava → `estado_mudou` |
 | `PATCH /api/events/<id>` ("Editar tudo") | `_can_create_event()`, sem mudança | Depois do 400 de validação: `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` ou `with_invoice` **diferente** do gravado → `cancelado` **para todos, o Superadmin inclusive** (a porta não recongela; `event_ops.venda_mudaria`). Campo igual ao gravado passa |
@@ -1986,6 +1989,51 @@ escreve o texto do código à mão):
 ⚠️ `"cancelado"` (`CODIGO_EVENTO_CANCELADO`) tem homônimos de outros fluxos —
 `sumico_ops.CODIGO_CANCELADO` (recusa da devolução ao Google), `SITUACAO_CANCELADO` e
 `MOTIVO_FORA_CANCELADO`: nunca compare um com o outro.
+
+#### O cancelado fora das listas e a tela só de consulta (feature 312)
+
+A regra de leitura (o invariante em `docs/04`): **o cancelado não é item de lista nenhuma**. Todo filtro olha só
+`cancelled_at` (pedido de exclusão e a marca da 303 não escondem nem travam nada) e nenhum parâmetro o traz de volta
+(`incluir_cancelados` não existe). Contratos que mudaram de conteúdo, sem chave nova: `GET /api/agenda/day/<data>`,
+`GET /api/agenda/search` (o filtro vem antes do limite de 30, e com ela saem do vínculo de ensaio, da tag NFC e de
+`grupo/candidatos`), `GET /api/gastos/eventos?date=`, `GET /api/talents/<id>` (histórico e os quatro números), a Fila
+3D e as pendências de presente (`GET /api/3d/fila`), `GET /api/events/<id>` (`group.satellites[]` do principal **vivo**
+sem o dia cancelado; `ensaios[]` sem ensaio cancelado), o rótulo `group_label` "(N eventos)" do pipeline e da DRE (só os
+dias vivos, `group_ops.dias_vivos`), os candidatos automáticos do formulário e, no Jinja, o Dia, o conflito de agenda,
+a disponibilidade do `event_detail`, a lista de shows do vínculo de ensaio e a de eventos para agrupar.
+
+| Endpoint | Mudança | RBAC |
+|---|---|---|
+| `GET /api/clientes/<id>` | `events[]` e `event_count` sem o cancelado (sai `events[].cancelado`); **novo** `cancelamentos: {quantidade, retido}`; `form_history[].event_situacao` | inalterado |
+| `GET /api/events/cancelamentos[?mes=AAAA-MM][&devolucao=nao_pago\|no_banco\|pago\|sem]` | **novos** `total_retido`, `total_retido_escopo` (`periodo`\|`listados`), `filtros`; sai o `devolucao` legado. Com `mes`, sem limite; sem, os 200 mais recentes. `devolucao` pelo estado das devoluções do **resumo** (o do grupo), antes do corte; `sem` = nenhuma. `mes`/`devolucao` inválidos → 400 `fields` | `_can_read_cancelamentos()`: `SUPERADMIN` ou `FINANCEIRO` real; demais 403. Excluir, cancelar e alterar devolução seguem só `_can_delete()` |
+| `GET /api/vendas/pipeline` | **novo** `cancelamentos` (sempre; `quantidade: 0` sem cancelado) — `cancel_ops.painel_de_cancelamentos`, a mesma forma do `paineis.cancelamentos` da DRE: `quantidade, pago, devolvido, devolucao_a_pagar, retido, comissao_retido, bv_retido, imposto?, efeito_resultado?, itens[]` (itens com `event_date, seller_name, pago, devolvido, devolucao_a_pagar, comissao_retido`). Comissão pela régua do KPI (`commission_target_id`) | `imposto`/`efeito_resultado` só com a flag `show_financeiro` (SUPERADMIN, FINANCEIRO; segue o "Ver como") |
+| `GET /api/financeiro/dashboard` | `paineis.cancelamentos` sai da mesma função, com os totais da cascata (números iguais) e os itens enriquecidos | inalterado |
+| `GET /api/events/<id>` do cancelado | `flags.somente_consulta`; `can_edit_event`, `can_edit_core`, `can_confirm`, `can_group`, `can_manage_3d`, `can_request_delete` falsas; `desfazer_presente_3d`/`desfazer_formulario` com o que as duas seriam. `cancellation_reason` e `cancelled_by` só com `show_comercial` (Q9); o "Log de atividades" do Jinja idem | inalterado |
+| `GET /api/dashboard` | `casting.cancelados_a_avisar?: [{role_id, event_id, event_title, character_name, start_at, cancelled_at, talent_id, talent_name, whatsapp}]` — derivada da escala (`cancel_ops.elenco_dos_dias`), some com a vaga vazia | painel de casting (CASTING, SUPERADMIN) |
+| `POST /api/roles/<id>/assign` numa vaga de cancelado | só a remoção: talento no corpo, ou cachê/transporte diferentes dos gravados → 409 `cancelado`; a vaga fica com o cachê; sem e-mail de remoção (306); o último a sair marca lido o `evento.cancelado_escala` do dia | `_can_casting()` (CASTING, SUPERADMIN); FIGURINO, COMERCIAL e FINANCEIRO → 403 "Evento cancelado: quem tira da escala é o Casting." |
+| `GET`/`POST /api/avaliar/<token>` (público) | evento cancelado → **410** "Este evento foi cancelado — não há avaliação a fazer.", sem título nem data; nada gravado | público |
+| `GET /api/portal/events/<id>/figurino` | depois do 403 "não escalado" e do 404: cancelado → 400 "Este evento foi cancelado." | portal |
+| `POST /api/portal/invites/<role_id>/accept` | cancelado → 400, nada gravado | portal |
+| tags (`serialize_tag`), `GET /api/formularios/respostas/<id>`, pedidos de figurino | `event.situacao` / `event_situacao` (o selo) | inalterados |
+
+**A trava** (`cancel_ops.exigir_evento_vivo`, traduzida por `api_utils.trava_do_cancelado`): toda escrita na tela de
+um evento cancelado, **para todo papel, o Superadmin inclusive**, depois do 404 e do 403 de cada rota → **409**
+`{codigo: "cancelado", message: "Este evento foi cancelado — a tela fica só para consulta."}`, nada gravado. Alcança:
+`PATCH /api/events/<id>`, `…/basico`, `…/confirm`, `…/logistics`, observações, `…/clients`, contratos, `…/travel-estimate`,
+materiais, `…/presenca`, `PATCH …/grupo`, `POST …/sync`, `POST …/roles`, as escritas de vaga (`DELETE /roles/<id>`,
+transporte, figurino feito e ficha, dismiss/restore, `payment-status`), `PATCH …/3d-gifts/<id>`, `…/3d-dismissal`,
+`DELETE /api/clientes/avaliacoes/<id>`, `PATCH`/`DELETE /api/ensaios/<id>` de ensaio cancelado; no Jinja, **toda**
+ação do despachante `POST /events/<id>` (substitui as 8 de venda da 306), as rotas fora dele que escrevem no evento e
+"Imprimir fichas" (`flash` + volta). **Fica livre**: o que a 306 e a 306b gateiam por regra própria (dados de venda,
+`PATCH …/devolucao`, `POST …/multas`, `PATCH …/motivo-cancelamento`) e os desfazer (desligar formulário, soltar presente
+e tag, tirar da escala). Rota nova que escreve num evento cai na trava por padrão: o cenário 9b do `verify_312` lista
+toda regra de escrita com id e falha com uma sem classificação.
+
+**As recusas de vínculo** (`cancel_ops.recusar_se_cancelado_para_ligar`, no núcleo, antes de e-mail ou Google; código
+`cancelado`): com campo → **400** `fields` — vincular ensaio (`parent_event_id`), tag NFC nova (`event_id`; o mesmo id
+passa), pedido de figurino novo ou troca de evento (`event_id`); sem campo → **409** — agendar ensaio (API e Jinja),
+presente 3D novo, ligar formulário (painel, `/formularios`, edição em bloco), escalar, vaga com talento, convidar,
+`feedback-link`.
 
 #### RBAC de arquivo — `/uploads/<path>` e `/portal/photo/<path>` (feature 216)
 

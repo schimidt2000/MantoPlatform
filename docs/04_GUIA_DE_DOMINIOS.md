@@ -208,6 +208,35 @@ da devolução e da multa em São Paulo sem fuso (`now_sp()`); o `EventLog` da 3
 correções) sai sem `created_at`, pelo default UTC do modelo — o do cancelamento da 224 saía 3 h antes.
 Modelo e transições: `specs/306-dinheiro-do-cancelamento/data-model.md` §5 a §8.
 
+### Depois do ato: o cancelado fora das listas (feature 312)
+
+**Invariante.** O cancelado não aparece em lista nenhuma do sistema — agenda (Mês, Lista, Dia), busca, Home (fora a
+pendência do Casting, abaixo), fichas de talento e de cliente, listas de escolha (vínculo de ensaio, tag NFC, grupo,
+seletor por data de Gastos Extras, pedido de figurino e formulário, candidatos automáticos do formulário), filas do 3D,
+painel "Grupo comercial" do principal vivo, lista de vendas, tabela da DRE e o aviso de conflito de agenda do talento.
+Vê-se em três lugares: a página de Cancelamentos, o card "Cancelamentos do período" (DRE e Comercial) e a tela dele.
+Todo filtro e toda recusa olham **só** `cancelled_at`: o pedido de exclusão e a marca "Sumiu do Google" não escondem
+nem travam nada. Onde uma coisa viva já ligada a ele aparece (gasto, tag, pedido de figurino, formulário), o nome do
+evento leva o selo "Cancelado"; o vínculo não se desfaz sozinho.
+
+**Nada novo se liga a ele.** Ensaio (agendar e vincular), tag NFC nova, presente 3D novo, formulário, escala, convite,
+link de avaliação e pedido de figurino são recusados no núcleo (`cancel_ops.recusar_se_cancelado_para_ligar`), antes de
+e-mail ou Google, com `codigo: "cancelado"`. Ligar Gasto Extra por chamada direta continua valendo (a devolução e a
+multa da 306 se ligam ali); só não é oferecido na lista.
+
+**A tela dele só se consulta.** Toda escrita na tela do cancelado leva 409 `cancelado` para todo papel
+(`cancel_ops.exigir_evento_vivo`), menos as portas com regra própria — os dados de venda (só o Superadmin, 306), o
+motivo (Superadmin e Comercial, 306b) — e os desfazer: desligar o formulário, soltar tag ou presente, tirar o artista da
+escala. O motivo e o autor do cancelamento só saem a Comercial, Financeiro e Superadmin (Q9).
+
+**Fluxo: o Casting tira e avisa (Q10).** O ato da 306 manda o e-mail a cada escalado e o sino `evento.cancelado_escala`
+ao Casting, um por dia. A Home do Casting mostra "Eventos cancelados — excluir e avisar", **derivada da escala de
+hoje** pela régua do ato (`cancel_ops.elenco_dos_dias`: com talento, sem quem recusou, sem a vaga de presença), com o
+WhatsApp pronto. No cancelado, só Casting e Superadmin tiram da escala, e só tiram (`assign` sem talento; cachê e
+transporte não mudam); a vaga fica vazia como registro; nenhum e-mail de remoção sai; quando sai o último escalado de
+um dia, o sino daquele dia fica lido para todos, na mesma transação. A multa tardia ao elenco sai da lista congelada do
+ato (306), não da vaga de hoje.
+
 ### Invariantes
 
 1. **O título do evento no Google é a fonte de verdade do elenco.** `parse_characters`

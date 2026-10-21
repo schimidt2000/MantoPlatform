@@ -493,7 +493,7 @@ fora.
 | 71 | **P4** | série recorrente no Google (303) | a série-mãe nunca vem na lista (`singleEvents=True`): fica no ramo "presente fora da lista" a cada ciclo, com uma linha de auditoria por dia | decidir se a série vira evento ou é ignorada |
 | 72 | **P3** | devolução ao Google (303) | se alguém restaurar da lixeira o id velho **depois** da devolução, existem dois eventos no Google para o mesmo registro; o sync importa o velho como evento novo | detectar na reconferência ou ao importar |
 | 73 | **P3** | `event_ops.update_ensaio` e `routes.edit_ensaio` | só capturam `RuntimeError` da escrita no Google: outra exceção derruba a edição | tratar como `_sincronizar_e_trocar_tipo` |
-| 74 | **P3** | ensaio e presente 3D em evento cancelado; Fila de Impressão 3D (303) | ainda dá para agendar ensaio e vincular presente 3D a evento cancelado, e a Fila 3D não filtra cancelado | filtrar e recusar |
+| ~~74~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 312** — agendar e vincular ensaio e vincular presente 3D recusam o cancelado no núcleo; a Fila 3D e as pendências não o trazem | — | — |
 | 75 | **P3** | lembrete diário de convite (`invite_reminders`, 303) | continua lembrando convite pendente de evento marcado "Sumiu do Google Agenda" | decidir com o dono se o lembrete pausa enquanto marcado |
 | 76 | **P3** | `EventLog` gravado em horário de São Paulo: `cancel_ops.solicitar_exclusao` e `recusar_solicitacao` (224) e o desfazer do pagamento de comissão da 267c (`comissoes_ops.liquidar_item_de_comissao`, `created_at=now_sp()`) | o histórico trata sem-fuso como UTC e essas linhas saem 3 h antes da hora real. O cancelar saiu da lista na 306: o histórico do ato passou a usar o default UTC | deixar o default UTC, como a 303 e a 306 fazem |
 | 77 | **P4** | `specs/205-loja-interacoes-virtuais/verify_205.py` antes da 303 | o V7.2 antigo chamava a limpeza com a lista vazia e apagava do espelho os eventos não virtuais do mês — o espelho de quem rodou o 205 antes da 303 pode estar sem eles | refresh do espelho |
@@ -503,7 +503,7 @@ fora.
 | 81 | **P4** | ensaio-filho (303) | o pai vazio apagado leva o ensaio do banco, mas não do Google; se o ensaio continuar lá, o sync o reimporta solto | apagar o ensaio no Google junto, ou não reimportar ensaio sem pai |
 | 82 | **P4** | `_mark_talents_worked` (303) | liga "já trabalhou com a Manto" por evento marcado que pode não ter acontecido | excluir marcados da conta |
 | 83 | **P3** | `service.update_event` (edição e ramo "já tinha voltado" da devolução, 303) | manda sempre `dateTime` (dia inteiro vira bloco com hora) e só manda `location` quando não é vazio (local apagado no sistema não é apagado no Google) | mandar `date` no dia inteiro e limpar o local |
-| 84 | **P4** | `docs/01` §3.3 (achado na 303) | não inventaria os endpoints da 224 (`/cancelar`, `/solicitar-exclusao`, `/impacto-exclusao`, `/events/cancelamentos`) | acrescentar |
+| ~~84~~ | ~~P4~~ | ✅ **RESOLVIDO na feature 312** — `GET /api/events/cancelamentos` inventariado em `docs/01` §4.3 ("O cancelado fora das listas"), com o gate e os filtros; os outros da 224 já estão nas tabelas do cancelamento (§4.3) | — | — |
 | 85 | **P4** | verifies de `scripts/db/` depois da 303 | `verify_cancelamento_evento.py` seguia válido até a 306, que o envelheceu (dívida 129); `verify_168_admin_config_react.py` quebra no `cleanup_past` (o dublê devolve lista, o endpoint lê `ResultadoLimpeza`); `verify_151_excluir_sync.py` **não pode rodar sem ajuste** — troca `routes.fetch_single_event`, que o "Sincronizar" deixou de usar, e a consulta iria ao Google real | ajustar os dois antes de rodá-los |
 | 88 | **P2** | `VirtuaisCampanhasPage.tsx:90` → `/virtuais/campanhas/nova` (achado na 304) | o botão "Nova campanha" não cria nada: a rota cai em `VirtuaisCampanhaFormPage`, `Number("nova")` é `NaN`, a consulta fica desligada e a tela fica no esqueleto para sempre; `useCreateVirtualCampaign` nunca é usado e a tela não escolhe personagem. A campanha do Papai Noel nasceu por `specs/304-loja-natal-papai-noel/criar_campanha_noel.py` | tela curta de criação (título + personagem do catálogo) que manda para a edição; `catalog_character_id` precisa do id do `CatalogCharacter`, não da identidade de `useCatalogPersonagens` |
 | 89 | **P4** | `Combobox`/`GoogleAddressInput` do `@manto/ui` na loja `/v*` (304) | desenham com os tokens globais (painel branco, tinta escura): sobre o verde do tema saem claros. Legíveis, mas fora da identidade — aparecem no endereço do presente e no seletor de presente com mais de 10 peças | aceitar `className` de cores no campo e na lista, ou um `variant` escuro |
@@ -643,3 +643,16 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 132 | **P3** | escalação e pagamento × `Talent.terms_accepted_at` | o termo (prazo de pagamento, uso de imagem) só é exigido para usar o portal; escalar e pagar não olham o aceite. No backup de 20/10, 128 de 309 ativos não tinham aceitado, e 30 deles já tinham trabalhado em evento | decisão do dono: avisar o casting ao escalar quem não aceitou, ou exigir o aceite antes do primeiro evento |
+
+## Baixa da feature 312-cancelado-fora-das-listas (2026-10-20, branch)
+
+**Quitadas.** 74 (ensaio e 3D no cancelado) e 84 (inventário de `/events/cancelamentos`).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 133 | **P4** | Planilha de Pagamentos (`financeiro_write.py` `set-status` e `bulk-action`) | o status do cachê de uma vaga de evento cancelado ainda muda pela Planilha (fora da tela do evento, que a trava fecha) | decidir se o cachê do cancelado é editável pela Planilha (o cachê de cancelado já sai dela pela 306) |
+| 134 | **P4** | `figurino_write.py` `faltantes/associar` | liga ficha de figurino às vagas pendentes sem olhar o cancelamento | recusar vaga de cancelado no núcleo |
+| 135 | **P4** | listas internas sem o selo do cancelado | avaliações internas, as avaliações da ficha do talento e os comprovantes dos outros dias do grupo mostram o título do evento sem a situação (premissa 24 do plano 1c) | `event_situacao` onde a lista aparecer |
+| 136 | **P4** | `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |

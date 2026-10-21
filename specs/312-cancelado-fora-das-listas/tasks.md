@@ -320,22 +320,22 @@ o `ruff check` nos tocados. Sem migration.
 ## Phase 9: Polimento
 
 - [ ] T068 Rodada inteira 24/24 (com 9b) duas vezes seguidas; limpeza com zero sobra (cenário 23)
-- [ ] T069 [P] Regressão: `verify_306.py` (base 67/69), `verify_306b.py`, `verify_303.py`; de `scripts/db/`:
+- [X] T069 [P] Regressão: `verify_306.py` (base 67/69), `verify_306b.py`, `verify_303.py`; de `scripts/db/`:
       `verify_cancelamento_evento.py`, `verify_145_agenda_read.py` (escolhe o evento mais recente sem olhar
       cancelamento — anotar se falhar por isso), `verify_196_dashboard_comercial.py`, `verify_205.py`
-- [ ] T070 Textos que mentem: docstring de `is_cancelled` (`app/models.py:401-409`), docstring de
+- [X] T070 Textos que mentem: docstring de `is_cancelled` (`app/models.py:401-409`), docstring de
       `_query_month_events` (`routes.py:192-194`), comentário "única porta" do menu
 - [ ] T071 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3, com `--semear-tela` e
       `--limpar-tela`; portal e avaliação em 375×812 e 320–430 px; prints guardados no scratchpad
-- [ ] T072 [P] `docs/00` §4 (FINANCEIRO lê Cancelamentos); `docs/01` §2.2, §3.3 (inventário de
+- [X] T072 [P] `docs/00` §4 (FINANCEIRO lê Cancelamentos); `docs/01` §2.2, §3.3 (inventário de
       `/events/cancelamentos` — quita a 84), §3.4/§3.6–§3.8/§3.13, §4.3
-- [ ] T073 [P] `docs/02`: agenda, Dashboard Comercial, DRE, página de Cancelamentos, fichas, Gastos Extras,
+- [X] T073 [P] `docs/02`: agenda, Dashboard Comercial, DRE, página de Cancelamentos, fichas, Gastos Extras,
       seletores, Fila 3D, menu, tela do cancelado, Home do Casting, painel do grupo, portal, avaliação
-- [ ] T074 [P] `docs/04` (invariante do cancelado e o fluxo "o Casting tira e avisa"); `docs/05` (riscar 74 e 84;
+- [X] T074 [P] `docs/04` (invariante do cancelado e o fluxo "o Casting tira e avisa"); `docs/05` (riscar 74 e 84;
       registrar o que sobrar: fora da tela do evento, o status do cachê das vagas do cancelado ainda muda pela
       Planilha — `financeiro_write.py:53` `set-status` e `:242` `bulk-action` — e a ficha de figurino ainda se
       associa a vaga pendente de cancelado — `figurino_write.py:230`)
-- [ ] T075 `docs/03`: entrada nova no topo + linha no índice (registrar que a frase da 306b "os demais veem o
+- [X] T075 `docs/03`: entrada nova no topo + linha no índice (registrar que a frase da 306b "os demais veem o
       motivo" ficou superada pela Q9; a recontagem de 20/10; o 1358 legado)
 - [ ] T076 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
 - [ ] T077 Pré-merge: rebase sobre a `main` do dia, rodada inteira e regressão de novo; `git status` limpo; merge e

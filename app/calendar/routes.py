@@ -190,8 +190,9 @@ def _query_month_events(year: int, month: int) -> list["CalendarEvent"]:
     por início. Não chama o Google — lê só do banco.
 
     Evento cancelado (feature 224) fica de fora: ele não acontece mais, e deixá-lo na agenda
-    faria a equipe continuar se organizando para um evento que não existe. Ele segue acessível
-    pela tela de cancelamentos e pelo link direto.
+    faria a equipe continuar se organizando para um evento que não existe. Desde a 312, o Dia e
+    a busca também o escondem; ele segue acessível pela página de Cancelamentos, pelo card do
+    período e pelo link direto.
     """
     month_start_dt = datetime(year, month, 1)
     if month == 12:
