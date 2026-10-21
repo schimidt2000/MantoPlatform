@@ -593,18 +593,20 @@ def escopo_do_evento(venda: VendaResumo, event: CalendarEvent) -> str:
 
 
 def pode_copiar_cobranca(venda: VendaResumo, event: CalendarEvent, hoje: date) -> bool:
-    """A mensagem de cobrança só sai do principal (ou do avulso), a partir do vencimento (FR-003).
+    """A mensagem de cobrança só sai do principal (ou do avulso), a qualquer momento (299b).
 
     Nunca em cortesia, valor simbólico, evento sem valor ou venda quitada. No outro evento do grupo,
     não: a mensagem sairia com os personagens e a data do evento aberto, e quem cobra é o principal.
+    Até a 299b só liberava a partir do vencimento; o dono quis cobrar antes dele. `hoje` fica na
+    assinatura para os chamadores não mudarem.
     """
+    del hoje
     return (
         event.id == venda.principal.id
         and venda.motivo_fora is None
+        and not venda.cortesia
         and not venda.sem_valor
         and venda.saldo >= FOLGA_COBRANCA
-        and venda.vencimento is not None
-        and venda.vencimento <= hoje
     )
 
 

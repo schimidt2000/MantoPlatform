@@ -147,6 +147,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **299b-cobranca-a-qualquer-momento** | *(PRONTA na branch, não mergeada)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
@@ -294,7 +295,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
@@ -325,6 +326,28 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 299b — A mensagem de cobrança se copia a qualquer momento   (299b-cobranca-a-qualquer-momento · 2026-10-21 · sem migration)
+
+> **PRONTA na branch, não mergeada.** Nível 2 (hotfix da 299): uma regra num domínio, sem migration.
+
+**O pedido.** "Tire o bloqueio de poder copiar o texto de cobrança de 2 dias. Para poder
+copiar/cobrar em qualquer momento." Desde a 299 o item só ativava a partir do vencimento do saldo,
+e o Comercial não conseguia cobrar antes.
+
+**O que mudou.**
+- `cobranca_ops.pode_copiar_cobranca` não olha mais a data. O `hoje` fica na assinatura.
+- Ficam as travas em que não há o que cobrar ou quem cobra é outro evento: o principal ou avulso,
+  sem `motivo_fora`, sem cortesia (agora explícito), sem valor e com saldo de pelo menos R$ 1,00.
+- O título do item desativado passa a ser "Sem valor em aberto para cobrar". A mensagem não muda:
+  ela já diz "com vencimento em DD/MM/AAAA", o que serve de lembrete.
+- `docs/01`: "a partir do vencimento" vira "a qualquer momento".
+
+**Verificação.** `verify_299b.py` dá 4/7 na `main` antiga (caem os cenários 1, 2 e 7, os de antes
+do vencimento e sem vencimento) e 7/7 depois. O verify pegou ainda que a cortesia só era barrada
+pelo `motivo_fora`, e a trava ficou explícita. `verify_299.py` segue 17/17. Typecheck do `internal`.
+
+**Fora de escopo.** A lista de Cobranças da Home, as cores e os selos de vencimento não mudam.
 
 ### 311 — Aviso do prazo de pagamento (até 3 dias úteis) + a data do aceite no termo   (311-aviso-prazo-pagamento · 2026-10-20 · sem migration)
 
