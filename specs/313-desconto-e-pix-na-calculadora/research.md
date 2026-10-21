@@ -11,9 +11,18 @@ sobre a `base`; (b) o BV em % sobre `base + Σ(a)`, cada linha de BV sobre o mes
 em reais inteiro, uma vez; (c) a nota sobre a soma (`÷ NF_DIVISOR`). E `quote_ops.preco_na_duracao(snap, horas)`,
 que monta a base da duração a partir das bases salvas (1–4h: a da coluna; acima de 4h: `(base_4h − produtos) ÷ 4 ×
 h + produtos`, o produto fixo da 309) e chama `aplicar_acrescimos` por cima, devolvendo `{bruto, linhas, total}`
-(o `total` com o desconto do snapshot). `calculate_quote` usa as duas (as colunas 1–4h e a extra); o prefill
+(o `total` com o desconto do snapshot). **Acima de 4h sem acréscimo em R$ (nem BV em reais) e sem produto**, a
+conta é linear e a regra nova dá o mesmo número que escalar o preço de 4h: aí a extra continua
+`round(bruto_4h ÷ 4 × h, 2)` — o arredondamento de hoje, centavo por centavo (refazer pela base mudaria o centavo em
+cerca de metade dos orçamentos com nota ou acréscimo em %; analyze A2). Só com acréscimo em R$ ou produto a extra
+sai da base. `calculate_quote` usa as duas (as colunas 1–4h e a extra); o prefill
 (`extra_por_horas`, `total_custom`) e o evento (`orcamento_evento_ops`, R3) também. **Uma régua só para orçamento
 novo.**
+
+**A ordem da soma em float** (analyze B5): nos orçamentos que não são exceção, `aplicar_acrescimos` reproduz a
+expressão de hoje — `add` acumulado a partir de 0,0 na ordem do snapshot, `round(t + add, 2)`, depois `round(÷
+0,84, 2)`; a base do BV em % é `t + add_dos_não_BV`, sem arredondar, na mesma ordem; o `valores_brl` (Decimal)
+sobre esse mesmo número.
 
 **Rationale**: a reconferência achou quatro réguas acima de 4h (calculadora, `produtos.total_na_duracao`, o prefill,
 `_linhas_na_duracao`/`acrescimos_do_orcamento`) e a conta inversa da 305; reproduzir a regra nova em cada uma
@@ -36,8 +45,11 @@ chave), e a nova para o novo — só uma marca no próprio orçamento distingue.
 será a versão 3.
 
 **Validação do que volta do navegador** (o `/salvar` persiste o snapshot que o navegador devolve, research R2 da
-305): `bases` com 4 números finitos ≥ 0 e `brutos` ≥ os totais gravados; fora disso, o leitor cai no caminho de hoje
-pelas colunas (o erro inofensivo: mostra o que a cliente paga).
+305): `bases` com 4 números finitos ≥ 0, `brutos` ≥ os totais gravados e, de 1h a 4h, `|preco_na_duracao(snap,
+d).bruto − brutos[d]| ≤ 0,01` (as bases e os cheios contam a mesma história — analyze B8); fora disso, o leitor cai
+no caminho de hoje pelas colunas. De 1h a 4h as linhas do BV saem do `valores_brl` (Decimal, como a 305) — a mesma
+fonte do `bv_*` do `quote` —, para o BV a repassar da calculadora e o gravado no evento não diferirem em R$ 0,01;
+acima de 4h, de `preco_na_duracao`.
 
 ## R3 — O evento: cheio no denominador, final na venda
 
@@ -51,7 +63,8 @@ ou `preco_na_duracao(...)["total"]`. Quem usa o quê:
 | `acrescimos_do_orcamento` → `total` (o denominador do BV em `plano_dos_acrescimos`) | `_total_da_duracao` | **cheio** |
 | `acrescimos_do_orcamento` → valores por linha | `valores_brl` / conta inversa / régua h ÷ 4 | v2: `preco_na_duracao(...)["linhas"]`; legado: igual |
 | `_valor_gravado` (teto) | total | cheio |
-| `deduzir_duracao` (compara o `sale_value_gross`) | total | **cheio** |
+| `deduzir_duracao` (compara o `sale_value_gross or sale_value`) | total | o **cheio** e, sem casar, o **final** (o
+bruto vazio, o gêmeo Jinja e o bundle velho gravam bruto = final — analyze B6) |
 | `bv_nasce_no_vinculo` (venda que o vínculo grava) | total | **final** |
 | `aplicar_valores_do_orcamento` (273) | `sale_value = sale_value_gross = total` | `sale_value` = final, `sale_value_gross` = cheio |
 
@@ -65,8 +78,11 @@ deixaria de achar a duração pelo valor.
 ## R4 — A constante do PIX
 
 **Decisão**: o PIX à vista usa `AVISTA_FATOR` de `app/educamanto/pricing_ops.py:29` (0,95), que o `quote_ops` passa a
-importar ao lado do `NF_DIVISOR` (`quote_ops.py:18`): `PIX_PCT_PADRAO = (1 − AVISTA_FATOR) × 100`. `pix_pct =
-max(PIX_PCT_PADRAO, desconto exato)`; `pix = round(bruto × (1 − pix_pct ÷ 100), 2)`. O PDF deixa de ter o seu `0.95`
+importar ao lado do `NF_DIVISOR` (`quote_ops.py:18`): `PIX_PCT_PADRAO = round((1 − AVISTA_FATOR) × 100, 6)` — sem o
+`round`, o float dá 5,000000000000004 e o negociado de exatamente 5% (o caso mais comum) perderia a frase "já está
+aplicado" (analyze A3). `pix_pct = max(PIX_PCT_PADRAO, desconto exato)`, e a frase compara com tolerância de
+0,000001 (`round(d, 6) >= PIX_PCT_PADRAO`); com o negociado ≥ 5%, `pix_d = total_d` e `bv_pix_d = bv_d`, sem
+recalcular — a duração fechada por valor não sai um centavo diferente (analyze B4); `pix = round(bruto × (1 − pix_pct ÷ 100), 2)`. O PDF deixa de ter o seu `0.95`
 (`pdf.py:235-242`) e lê `pix_*` do `quote`, com `round(total × 0,95, 2)` como leitura de `quote` antigo.
 
 **Rationale**: sem desconto, `bruto = total` e a conta é a de hoje byte a byte (`round(t*0.95,2)`); uma constante
@@ -79,7 +95,10 @@ com desconto é `round(bruto × (1 − d ÷ 100), 2)`; a duração do "fechar po
 que acompanha vem de `bv_que_acompanha` (Decimal HALF_UP, a da 305). O % mostrado (`desconto_pct_texto`) é
 `floor(round(d, 6) × 10) ÷ 10` com vírgula e sem ",0" — o `round(d, 6)` antes do piso evita que 10% achado por valor
 (9,9999999…) vire "9,9". O selo do valor de venda no evento usa a mesma regra (função TS única em
-`lib/desconto.ts`, R9).
+`lib/desconto.ts`, R9); onde o `quote` traz `desconto_pct_texto`, a tela mostra o do servidor (uma fonte), e o
+verify confere as duas com 8,333…% e 9,9999…% (analyze A20). Os valores novos (total com desconto, PIX) ficam em
+float `round(x, 2)` porque são a mesma conta que a mensagem imprime; o BV, que vai a dinheiro gravado no evento,
+é Decimal HALF_UP (305) — analyze A15.
 
 ## R6 — O "fechar por R$": quais durações
 
@@ -95,7 +114,10 @@ ao estado que monta o payload (sem laço de recálculo).
 **Decisão**: o desconto incide sobre o valor personalizado (digitado ou multiplicador), como o plano (passo 6); os
 acréscimos continuam fora do personalizado (`valores_brl` zerados, 305); `brutos` guarda o valor personalizado;
 `bases` não se aplica (o evento segue "orçamento personalizado", sem BV). O "fechar por R$" vale também no
-personalizado.
+personalizado. Acima de 4h (o "Outra (h)" e o prefill, analyze B7): o cheio é a régua de hoje sobre
+`brutos["4h"]` (multiplicador com produto: o produto fixo, sem acréscimos nem nota, como a 309) e o final = cheio ×
+(1 − d), arredondado — nunca a régua sobre o `total_4h` já com desconto, que subtrairia o produto cheio de um total
+com desconto.
 
 ## R8 — EducaManto
 

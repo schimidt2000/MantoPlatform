@@ -10,11 +10,13 @@ Chaves novas, todas opcionais; ausentes = orçamento de antes, lido pelo caminho
 |---|---|---|
 | `versao_conta` | `2` | a marca da regra desta entrega (R2). Ausente = regra antiga (R$ × h ÷ 4 acima de 4h; BV sobre a base sem os outros acréscimos) |
 | `bases` | `[float × 4]` | a base pré-acréscimos de cada coluna 1–4h (apresentação + transporte + produto) |
-| `brutos` | `{"1h","2h","3h","4h": float, "custom"?: float}` | o preço antes do desconto |
-| `desconto_pct` | `float \| null` | o % como a comercial digitou (modo %) |
+| `brutos` | `{"1h","2h","3h","4h": float, "custom"?: float}` | o preço antes do desconto (a extra é `"custom"`,
+como `bruto_custom` no `quote`; a entrada `desconto_duracao` chama a mesma coluna de `"extra"`) |
+| `desconto_pct_digitado` | `float \| null` | o % como a comercial digitou (modo %); `null` no modo valor |
 | `desconto_valor` | `float \| null` | o valor final digitado (modo valor) |
 | `desconto_duracao` | `"1h" \| "2h" \| "3h" \| "4h" \| "extra" \| null` | a duração do valor digitado |
-| `desconto_aplicado` | `float` | o % exato aplicado (o digitado, ou o achado pelo valor); `0` sem desconto |
+| `desconto_aplicado` | `float` | o % exato aplicado (o digitado, ou o achado pelo valor); `0` sem desconto — **é
+esta** que o prefill, o histórico e o evento leem (analyze A5) |
 
 `acrescimos[i].valores_brl` continua (305): o que a linha somou ao preço **cheio**, pela regra nova quando
 `versao_conta = 2`. `produtos`, `produtos_total` (309) não mudam.
@@ -41,8 +43,9 @@ Passam a guardar o **valor final** (com o desconto). Sem desconto, o de hoje.
 | `bv_1h..4h`, `bv_custom` | `float \| null` | o BV a repassar com o desconto (`bv_que_acompanha`); `null` sem BV |
 | `bv_pix_1h..4h`, `bv_pix_custom` | `float \| null` | o mesmo, no PIX à vista |
 
-A memória ganha "Desconto (N%)" (tipo `pos`, negativa, depois da nota) e, com BV, "BV a repassar a quem indicou"
-(tipo `subtotal`, depois do total).
+A memória ganha, **só com desconto**, "Desconto (N%)" (tipo `pos`, negativa, depois da nota) e, com BV, "BV a
+repassar a quem indicou" (tipo `subtotal`, depois do total). Sem desconto a memória é a de hoje (paridade;
+analyze A4) — o BV a repassar sem desconto é o próprio BV da linha de acréscimo.
 
 ## `CalendarEvent`
 

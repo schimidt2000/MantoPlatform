@@ -119,11 +119,12 @@ desfazer o total; nenhuma camada nova.
 2. **Foundational** — `gabarito_paridade.py` rodado na `c074657b` (gravado); `verify_313.py` inteiro (cenários 1–16)
    rodado **vermelho** contra a `main`, primeira saída guardada (`verify_313_primeira_falha.txt`).
 3. **H3 — a ordem da conta (Q7/Q9)** — `aplicar_acrescimos`, `preco_na_duracao`, a extra pela R1, `versao_conta`,
-   `bases`, `brutos` no snapshot; a memória; a linha do BV nascendo em % (editor). Verdes: 1, 8, 9, 10.
+   `bases`, `brutos` no snapshot; a memória; o `verify_309` atualizado. Verdes: 1, 8, 9, 10.
 4. **H1 — desconto** — entrada %/valor, validação, `bruto_*`/`total_*`, `desconto_*`, `bv_*`, memória, snapshot.
    Verdes: + 2, 3, 4.
-5. **H2 — PIX e proposta** — `pix_*` pela constante, mensagem (três formatos) e PDF. Verdes: + 5, 6, 7.
-6. **H4 — evento** — prefill, `orcamento_evento_ops` (cheio × final), 273. Verdes: + 11, 12, 13, 14, 15.
+5. **H2 — PIX e proposta** — `pix_*` pela constante, mensagem (três formatos) e PDF. Verdes: + 5, 6.
+6. **H4 — evento** — prefill, `orcamento_evento_ops` (cheio × final), 273. Verdes: + 11, 12, 14 (7, 13 e 15 são
+   regressão: verdes desde a Foundational).
 7. **Telas** — calculadora (bloco Desconto, card Resultado, ajuda), orçamento gerado, histórico, Novo evento,
    `BvDoOrcamentoBlock`, `ValoresBlock`, EducaManto. Typecheck.
 8. **Polimento** — regressão (16), rodada inteira duas vezes, tela aberta, docs 01–05.
@@ -141,5 +142,5 @@ se perde; o revert não precisa de script.
 
 | Violação | Por que é necessária | Alternativa mais simples rejeitada porque |
 |---|---|---|
-| Núcleo do orçamento em float (IX pede Decimal no backend) | a paridade byte a byte com os 2.710 orçamentos salvos e com a mensagem de hoje exige a mesma aritmética (`round(x, 2)` de float); o BV, que vai a dinheiro gravado, já é Decimal (305) | converter o núcleo para Decimal mudaria centavos de orçamentos sem desconto — exatamente o que a SC-002 proíbe; a conversão é dívida própria (`docs/05`) |
+| Núcleo do orçamento em float (IX pede Decimal no backend) | a paridade byte a byte com os 2.710 orçamentos salvos e com a mensagem de hoje exige a mesma aritmética (`round(x, 2)` de float); os valores novos (total com desconto, PIX) são a mesma conta que a mensagem imprime; o BV, que vai a dinheiro gravado, já é Decimal (305) | converter o núcleo para Decimal mudaria centavos de orçamentos sem desconto — exatamente o que a SC-002 proíbe; a conversão é dívida própria (`docs/05`) |
 | Duas leituras do orçamento no evento (`versao_conta` ausente × 2) | o salvo tem de sair como foi cotado (020) e o novo pela regra do dono | uma régua só mudaria o BV e a venda de orçamentos antigos que viram evento depois (o `verify_305` cen_04 quebraria) |

@@ -19,8 +19,7 @@ $env:MANTO_SEM_THREADS = '1'; $env:PYTHONPATH = (Get-Location).Path; $env:PYTHON
 `python specs/313-desconto-e-pix-na-calculadora/verify_313.py` → todos os cenários da spec OK (0 = tudo OK, 1 =
 falha, 2 = ambiente impróprio). `--so=N,M` para iterar; a limpeza roda sempre. Regressão:
 `specs/305-…/verify_305.py --regressao`, `specs/309-…/verify_309.py`, `specs/307-…/verify_307.py`,
-`specs/235-…/verify_235.py`, e `scripts/db/verify_190_paridade_orcamento_educamanto.py` (no checkout principal,
-rodando com o `PYTHONPATH` do worktree).
+`specs/235-…/verify_235.py` (o `verify_190` de `scripts/db/` saiu: importa um modelo que a 235 removeu).
 
 ## 3. Portões
 

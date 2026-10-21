@@ -264,8 +264,9 @@ valores.
   incide sobre a base; o BV em % incide sobre a base mais os acréscimos manuais, sem ver outro BV; o BV em reais
   entra uma vez no passo do BV; a nota vem depois de tudo isso.
 - **FR-007**: A duração extra DEVE aplicar a régua de horas só à base (cachês, adicionais, transporte), com o produto
-  de tabela fixo como na 309, e os passos de acréscimo, BV e nota por cima; o resultado DEVE trazer a base de 4h para
-  que o Novo evento sugira qualquer outra duração pelo servidor.
+  de tabela fixo como na 309, e os passos de acréscimo, BV e nota por cima — sem acréscimo em R$ e sem produto, o
+  mesmo número que escalar o preço de 4h, com o arredondamento de hoje; o Novo evento DEVE receber do servidor o
+  preço de cada duração de 5 a 24 h.
 - **FR-008**: O orçamento salvo DEVE guardar o desconto como foi digitado (o % ou o valor e a duração) e a marca de
   que foi cotado pela regra desta entrega; orçamento sem a marca continua sendo lido pela regra com que foi cotado,
   em todo lugar que o lê.
@@ -340,20 +341,20 @@ primeira rodada (contra a `main`) guardada.
 | 0 | Gabarito de paridade | os orçamentos reais do espelho recalculados na `c074657b`, gravados antes de mexer |
 | 1 | Paridade | sem as chaves novas, o resultado é o do gabarito; exceções listadas (BV + outro acréscimo; extra com R$) conferidas pela fórmula; mutação |
 | 2 | Desconto em % | cheio, final × (1 − d), memória, snapshot; BV que acompanha; mutação trocando a razão por 1 |
-| 3 | Desconto pelo valor | valor exato na duração digitada, % sem arredondar, outras pelo mesmo %; inválidos → 400 no campo |
+| 3 | Desconto pelo valor | valor exato na duração digitada, % sem arredondar, outras pelo mesmo %; o texto do % com 8,333…% e 9,9999…% igual ao da regra da tela; inválidos → 400 no campo |
 | 4 | Base do desconto | fora de SP + acréscimo + nota: o desconto sobre o total; mutação antes do transporte / da nota |
-| 5 | PIX vale o maior | sem desconto, 3%, 10%, 4,96%; mutação somando |
+| 5 | PIX vale o maior | sem desconto, 3%, exatamente 5%, 10%, 4,96%; mutação somando |
 | 6 | Mensagem e PDF | frases de cada caso, "de/por", a quebra pelo cheio, sem "BV", três formatos (inclusive só produto); PDF de uma página |
-| 7 | Orçamento antigo | histórico, PDF e e-mail de um registro antigo saem como antes |
+| 7 | Orçamento antigo | histórico e PDF (o mesmo anexo do e-mail) de um registro antigo saem como antes; prefill sem as chaves novas |
 | 8 | Acréscimo uma vez | extra de 8h com urgência; com nota; mutação multiplicando |
 | 9 | BV sobre tudo | BV com "Outro"; com nota; na extra; BV em reais uma vez; os dois BVs não se veem |
 | 10 | EducaManto | chaves de desconto descartadas; a regra da FR-006 vale na contratação Manto |
 | 11 | Prefill | cheio e final separados, base de 4h e preços acima de 4h pelo servidor; orçamento antigo sem as chaves |
-| 12 | Evento criado | bruto e venda gravados; BV gravado acompanha (também com o PIX digitado); comissão; desconto concedido |
+| 12 | Evento criado | bruto e venda gravados; BV gravado acompanha (também com o PIX digitado); comissão (FR-025, sem mudança de regra); desconto concedido; o alerta de BV pendente não acende com bruto ≠ venda |
 | 13 | Orçamento antigo vira evento | BV e valores como hoje (a régua antiga e o denominador antigo) |
 | 14 | Vínculo 273 | bruto ≠ venda gravados; BV pela mesma conta; evento cancelado continua recusado |
 | 15 | RBAC | Financeiro, Casting e Revendedor → 403 no cálculo; Comercial e Superadmin 200 |
-| 16 | Regressão | `verify_305 --regressao`, `verify_309`, `verify_307`, `verify_235` verdes |
+| 16 | Regressão | `verify_305 --regressao`, `verify_309` (atualizado para as chaves e a regra da 313, T015a), `verify_307`, `verify_235` verdes |
 | L | Limpeza | eventos e orçamentos do verify apagados; nenhuma chamada de rede real |
 
 ## Critérios de sucesso *(obrigatório)*
