@@ -446,5 +446,7 @@ código antes de entrar aqui. Nenhum CRITICAL nem HIGH. Cenários vermelhos novo
 - [X] T097 Contrato e docs: `contracts/api.md` (filtro `devolucao` pelo resumo; números como `number`;
       `start_at` na pendência da Home; recusar convite), `docs/01` §4.3, `docs/02`, `docs/05` (riscar 134),
       `docs/03` (o converge) per plan: docs (partial)
-- [X] T098 Rodada inteira 27/27 duas vezes, regressão (306, 306b, 303, 196), typecheck e ruff; commit
+- [X] T098 *[20/10: 27/27 duas vezes; 306b 8/8, 303 44/44, 196 55/55, 306 66/69 (base); tela aberta — aba velha
+      do cancelado mostra a recusa na caixa, aviso de venda uma vez, WhatsApp da escala com a mensagem, Home agrupada,
+      página com "pago no grupo" e o menu do Financeiro]* Rodada inteira 27/27 duas vezes, regressão (306, 306b, 303, 196), typecheck e ruff; commit
       per Constitution VIII (missing)
