@@ -304,7 +304,7 @@ export function EventHeader({ data }: EventHeaderProps) {
           ? "A cobrança deste grupo está no evento principal"
           : cobrancaLiberada
             ? "Copiar mensagem de cobrança do valor em aberto"
-            : "Disponível apenas na data limite de pagamento ou em atraso",
+            : "Sem valor em aberto para cobrar",
         onClick: () => copiar(buildCobrancaMsg(mensagens), "Mensagem de cobrança copiada."),
       });
       items.push({

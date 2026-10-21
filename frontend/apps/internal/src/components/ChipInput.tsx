@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useState } from "react";
 
 interface ChipInputProps {
   value: string[];
@@ -10,12 +10,38 @@ interface ChipInputProps {
   ariaLabel?: string;
 }
 
+export interface ChipInputHandle {
+  /** Vira chip o texto ainda não confirmado e devolve a lista final (para o Salvar). */
+  commitPending: () => string[];
+}
+
+/** Vírgula, ponto e vírgula ou quebra de linha separam uma tag da outra. */
+const SEPARADOR = /[,;\n]/;
+
+/** `value` com os pedaços não vazios e ainda ausentes acrescentados no fim. */
+function withParts(value: string[], parts: string[]): string[] {
+  const next = [...value];
+  for (const part of parts) {
+    const clean = part.trim();
+    if (clean && !next.includes(clean)) next.push(clean);
+  }
+  return next;
+}
+
 /**
  * Tag input tokenizado estilo "Gmail recipients" (feature 185, FR-009): Enter ou vírgula
  * transforma o texto digitado em um chip removível; digitar filtra sugestões existentes.
  * Componente genérico, sem dependência de terceiros — só Tailwind + estado local.
+ *
+ * 185b: a vírgula é tratada no TEXTO, não só na tecla — o teclado do celular manda
+ * `key: "Unidentified"` e a vírgula ficava dentro do chip, e colar "a, b, c" virava um chip só.
+ * O texto que ficou sem Enter não vira chip no blur (o chip novo pode quebrar linha e empurrar o
+ * botão Salvar no meio do clique); o formulário o recolhe por `commitPending` ao salvar.
  */
-export function ChipInput({ value, onChange, suggestions = [], placeholder, ariaLabel }: ChipInputProps) {
+export const ChipInput = forwardRef<ChipInputHandle, ChipInputProps>(function ChipInput(
+  { value, onChange, suggestions = [], placeholder, ariaLabel },
+  ref,
+) {
   const [draft, setDraft] = useState("");
   const [showSuggestions, setShowSuggestions] = useState(false);
 
@@ -27,14 +53,38 @@ export function ChipInput({ value, onChange, suggestions = [], placeholder, aria
       .slice(0, 6);
   }, [draft, suggestions, value]);
 
-  function commitDraft(raw: string) {
-    const clean = raw.trim();
-    if (!clean || value.includes(clean)) {
-      setDraft("");
+  function commitParts(parts: string[]): string[] {
+    const next = withParts(value, parts);
+    if (next.length !== value.length) onChange(next);
+    return next;
+  }
+
+  function commitDraft(raw: string): string[] {
+    setDraft("");
+    return commitParts(raw.split(SEPARADOR));
+  }
+
+  useImperativeHandle(ref, () => ({ commitPending: () => commitDraft(draft) }));
+
+  function handleChange(text: string) {
+    if (!SEPARADOR.test(text)) {
+      setDraft(text);
       return;
     }
-    onChange([...value, clean]);
-    setDraft("");
+    // Tudo antes do último separador vira chip; o que vem depois continua sendo digitado.
+    const parts = text.split(SEPARADOR);
+    const rest = parts.pop() ?? "";
+    commitParts(parts);
+    setDraft(rest.trimStart());
+  }
+
+  function handlePaste(event: React.ClipboardEvent<HTMLInputElement>) {
+    // O <input> apaga as quebras de linha do colado antes do onChange: uma lista colada em
+    // linhas viraria uma tag só. Lido aqui, cada linha vira um chip.
+    const pasted = event.clipboardData.getData("text");
+    if (!SEPARADOR.test(pasted)) return;
+    event.preventDefault();
+    handleChange(draft + pasted);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -74,8 +124,9 @@ export function ChipInput({ value, onChange, suggestions = [], placeholder, aria
           aria-label={ariaLabel}
           value={draft}
           placeholder={value.length === 0 ? placeholder : undefined}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => handleChange(e.target.value)}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           onFocus={() => setShowSuggestions(true)}
           onBlur={() => {
             // Delay para permitir o clique numa sugestão antes de fechar a lista.
@@ -100,4 +151,4 @@ export function ChipInput({ value, onChange, suggestions = [], placeholder, aria
       )}
     </div>
   );
-}
+});
