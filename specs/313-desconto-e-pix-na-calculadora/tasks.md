@@ -127,14 +127,14 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
       importado ao lado do `NF_DIVISOR`, `quote_ops.py:18`; sem o `round` dá 5,000…04 — analyze A3); `pix_pct`, `pix_*`
       (R4), a frase do "já está aplicado" com `round(d, 6) >= PIX_PCT_PADRAO`; com negociado ≥ 5%, `pix_d = total_d`
       e `bv_pix_d = bv_d` sem recalcular (analyze B4); senão `bv_pix_*` pela mesma função
-- [ ] T023 [US2] Mensagem (`quote_ops.py:555-650`): `_dur_block` pelo cheio (`:555-562`, a quebra `:558`) com "de/por"
+- [X] T023 [US2] Mensagem (`quote_ops.py:555-650`): `_dur_block` pelo cheio (`:555-562`, a quebra `:558`) com "de/por"
       e "_(desconto de N% aplicado)_" quando há desconto; os três formatos (durações, produto + avulsos,
       só-produto — o "Total da visita" sempre aparece com desconto, `:586-592`); o bloco do PIX pelos `pix_*` com as
       duas frases (contracts); sem desconto, a string de hoje byte a byte
-- [ ] T024 [US2] PDF (`app/orcamento/pdf.py:160-193`, `:235-245`): "R$ Y (de R$ X)" na linha de cada duração, uma
+- [X] T024 [US2] PDF (`app/orcamento/pdf.py:160-193`, `:235-245`): "R$ Y (de R$ X)" na linha de cada duração, uma
       linha "Desconto de N% aplicado", o PIX lido de `pix_*` (legado `round(total × 0,95, 2)`), a frase do PIX com
       negociado ≥ 5%; conferir que cabe na página com a nota da data especial (`:215-228`)
-- [ ] T025 [US2] Rodada: + cenários 5, 6, 7 verdes; regressão; commit `feat(313): a proposta diz o desconto e o PIX
+- [X] T025 [US2] Rodada: + cenários 5, 6, 7 verdes; regressão; commit `feat(313): a proposta diz o desconto e o PIX
       vale o maior`
 
 ---

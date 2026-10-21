@@ -821,13 +821,20 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     saudacao = f"Olá, *{client_name}*!" if client_name else "Olá!"
     team_text = "\n".join(f"• {line}" for line in team_lines)
 
-    def _dur_block(label: str, total: float) -> str:
+    def _dur_block(label: str, total: float, bruto: float | None = None) -> str:
+        # Feature 313 (Q3 = A): com desconto, "de R$ X por R$ Y" e o % arredondado; a quebra apresentação/transporte
+        # sai do CHEIO — as duas linhas somam o "de" (o desconto é do total, Q1 = A, nunca só da apresentação).
+        bruto = total if bruto is None else bruto
         lines = [label]
         if transport_total > 0:
-            apres = round(total - transport_total, 2)
+            apres = round(bruto - transport_total, 2)
             lines.append(f"  • Valor da Apresentação: {_fmt_brl(apres)}")
             lines.append(f"  • Logística e Transporte: {_fmt_brl(transport_total)}")
-        lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
+        if desconto and abs(bruto - total) >= 0.005:
+            lines.append(f"  • *VALOR TOTAL: de {_fmt_brl(bruto)} por {_fmt_brl(total)}*")
+            lines.append(f"  _(desconto de {texto_do_percentual(desconto)}% aplicado)_")
+        else:
+            lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
         return "\n".join(lines)
 
     if modo_duracao == "entradas":
@@ -858,9 +865,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # Converge 309: com NF, transporte, BV, noturno por fora ou dois exemplares o total NÃO é o
         # preço do produto — o cliente precisa ver o VALOR TOTAL (e a logística), como nas durações.
         if len(produtos) > 1 or abs(totals[0] - produtos_total) >= 0.005:
-            investimento += f"\n\n{_dur_block('🎅 *Total da visita*', totals[0])}"
+            investimento += f"\n\n{_dur_block('🎅 *Total da visita*', totals[0], brutos[0])}"
     else:
-        investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i])
+        investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i], brutos[i]) for i in range(4) if show[i])
         if bloco_produto:
             investimento = f"{bloco_produto}\n\n{investimento}"
 
@@ -870,17 +877,24 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             custom_label = f"🎭 *{entradas_custom} entradas de 30 min ({duracao_custom}h)*"
         else:
             custom_label = f"🕐 *{duracao_custom} horas*"
-        investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
+        investimento += f"\n\n{_dur_block(custom_label, total_custom, bruto_custom)}"
 
     pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("3h", totals[2]), ("4h", totals[3])]
     if so_produto:
-        pix_vista = f"  • *{_fmt_brl(round(totals[0] * 0.95, 2))}*"
+        pix_vista = f"  • *{_fmt_brl(pix[0])}*"
     else:
         pix_vista = "\n".join(
-            f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*" for i, (lbl, tot) in enumerate(pix_durs) if show[i]
+            f"  • {lbl}: *{_fmt_brl(pix[i])}*" for i, (lbl, _tot) in enumerate(pix_durs) if show[i]
         )
     if total_custom:
-        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
+        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(pix_custom)}*"
+
+    # Feature 313 (D4, Q3 = A): o PIX vale o maior. Com o negociado de 5% ou mais não há o que baixar — a proposta
+    # diz que o desconto já está aplicado, sem repetir os valores; abaixo disso, o 5% de sempre, pelo cheio.
+    if pix_maior:
+        pix_bloco = f" o mesmo valor — o desconto de {texto_do_percentual(desconto)}% já está aplicado.\n\n"
+    else:
+        pix_bloco = f"\n{pix_vista}\n_(desconto especial de 5% aplicado)_\n\n"
 
     nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
 
@@ -915,9 +929,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         f"💰 *INVESTIMENTO*{nf_header}\n\n"
         f"{investimento}{deslocamento_nota}{nota_especial}\n\n"
         f"💳 *FORMAS DE PAGAMENTO*\n\n"
-        f"1️⃣ *À Vista (PIX):*\n"
-        f"{pix_vista}\n"
-        f"_(desconto especial de 5% aplicado)_\n\n"
+        f"1️⃣ *À Vista (PIX):*{pix_bloco}"
         f"2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n"
         f"3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n"
         f"✨ Podemos seguir com a reserva da sua data? "

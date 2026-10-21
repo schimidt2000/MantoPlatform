@@ -177,11 +177,21 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     valor_unico = quote.get("valor_unico")
     if valor_unico is None:
         valor_unico = bool(produtos) and show[0] and not any(show[1:])
+
+    # Feature 313 (Q3 = A): com desconto, "R$ Y (de R$ X)" na linha de cada duração e uma linha só com o % — uma por
+    # duração estouraria a página única (a 307 já limita a nota da data especial a 3 linhas). Quote antigo: sem chave.
+    desconto_texto = quote.get("desconto_pct_texto") if quote.get("desconto_pct") else None
+
+    def _valor(total: float, bruto: Any) -> str:
+        if desconto_texto and bruto is not None and abs(float(bruto) - total) >= 0.005:
+            return f"{_fmt_brl(total)} (de {_fmt_brl(float(bruto))})"
+        return _fmt_brl(total)
+
     for i, total in enumerate(totals):
         if not show[i]:
             continue
         rotulo = "Preço de tabela" if valor_unico and i == 0 else _dur_label(i)
-        y = _price_row(c, y, rotulo, _fmt_brl(total), highlight=(i == 3))
+        y = _price_row(c, y, rotulo, _valor(total, quote.get(f"bruto_{i + 1}h")), highlight=(i == 3))
         y -= 2
 
     if total_custom:
@@ -190,7 +200,13 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         else:
             custom_label = f"{duracao_custom} horas"
         y -= 2
-        y = _price_row(c, y, custom_label, _fmt_brl(float(total_custom)), highlight=True)
+        y = _price_row(c, y, custom_label, _valor(float(total_custom), quote.get("bruto_custom")), highlight=True)
+
+    if desconto_texto:
+        c.setFont(_FONT_ITALIC, 7.5)
+        c.setFillColor(_LIGHT)
+        c.drawString(_LEFT, y, f"Desconto de {desconto_texto}% aplicado")
+        y -= 12
 
     if nota_fiscal:
         c.setFont(_FONT_NORMAL, 7.5)
@@ -232,14 +248,19 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     # ── Formas de pagamento ────────────────────────────────────────────────
     y = _section_title(c, y, "Formas de Pagamento")
 
-    _pix_vista = [
-        f"1h {_fmt_brl(round(totals[0]*0.95,2))}" if show[0] else None,
-        f"2h {_fmt_brl(round(totals[1]*0.95,2))}" if show[1] else None,
-        f"3h {_fmt_brl(round(totals[2]*0.95,2))}" if show[2] else None,
-        f"4h {_fmt_brl(round(totals[3]*0.95,2))}" if show[3] else None,
-    ]
+    # Feature 313 (D4): o PIX vem do quote (`pix_*`, o maior entre 5% e o negociado); quote antigo sem a chave = o 5%
+    # sobre o total, a conta de sempre.
+    def _pix(i: int) -> float:
+        valor = quote.get(f"pix_{i + 1}h")
+        return float(valor) if valor is not None else round(totals[i] * 0.95, 2)
+
+    _pix_vista = [f"{i + 1}h {_fmt_brl(_pix(i))}" if show[i] else None for i in range(4)]
+    if desconto_texto and float(quote.get("desconto_pct") or 0) >= 5 - 1e-6:
+        linha_pix = ("PIX à vista:", f"o mesmo valor — o desconto de {desconto_texto}% já está aplicado")
+    else:
+        linha_pix = ("PIX à vista (5% desc.):", " | ".join(p for p in _pix_vista if p))
     pix_lines = [
-        ("PIX à vista (5% desc.):", " | ".join(p for p in _pix_vista if p)),
+        linha_pix,
         ("Reserva programada:", "50% no ato + 50% até 2 dias antes"),
         ("Cartão de crédito:", "Parcelamento disponível (taxas repassadas)"),
     ]
