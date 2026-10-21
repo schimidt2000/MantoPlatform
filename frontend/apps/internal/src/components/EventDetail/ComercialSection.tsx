@@ -26,7 +26,7 @@ import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { GastosVinculados } from "./GastosVinculados";
-import { AvisoVendaDoCancelado, DataRow, Empty, INPUT_CLASS, Panel, brl, formatDay } from "./parts";
+import { DataRow, Empty, INPUT_CLASS, Panel, brl, formatDay } from "./parts";
 import { ResultadoCancelamento } from "./ResultadoCancelamento";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
@@ -1317,7 +1317,6 @@ export interface ComercialSectionProps {
 export function ComercialSection({ data }: ComercialSectionProps) {
   return (
     <>
-      <AvisoVendaDoCancelado flags={data.flags} />
       {data.venda && <ClientesPanel data={data} />}
       {data.venda && <OrcamentoPanel data={data} />}
       {data.venda && <PreContratoPanel data={data} />}

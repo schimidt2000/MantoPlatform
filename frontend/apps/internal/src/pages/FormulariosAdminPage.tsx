@@ -257,9 +257,13 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
         <MetricBadge tone="gold">Sem cliente</MetricBadge>
       )}
       {response.event_id ? (
-        <MetricBadge tone="green">
-          Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
-        </MetricBadge>
+        <>
+          <MetricBadge tone="green">
+            Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
+          </MetricBadge>
+          {/* Feature 312 (converge): o selo também na lista, não só ao abrir o detalhe. */}
+          <SeloSituacao situacao={response.event_situacao} />
+        </>
       ) : response.destino === "encerrados" ? (
         <MetricBadge tone="neutral">
           Encerrado · {response.closed_reason_label ?? "sem motivo"}

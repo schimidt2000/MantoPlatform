@@ -259,7 +259,9 @@ def search_responses(q: str) -> list[FormResponse]:
 
     return (
         FormResponse.query.options(
-            joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+            joinedload(FormResponse.client),
+            joinedload(FormResponse.closed_by),
+            joinedload(FormResponse.event),  # o selo da situação (312), sem N+1
         )
         .filter(or_(*conditions))
         .order_by(FormResponse.created_at.desc())
@@ -300,7 +302,9 @@ def list_responses(
     """
     corte = corte or corte_de_chegada()
     query = FormResponse.query.options(
-        joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+        joinedload(FormResponse.client),
+        joinedload(FormResponse.closed_by),
+        joinedload(FormResponse.event),  # o selo da situação (312), sem N+1
     )
     condition = _status_condition(filtro, corte)
     if condition is not None:

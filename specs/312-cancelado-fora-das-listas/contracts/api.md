@@ -25,21 +25,24 @@ Envelope de erro: `json_error` (`{error, fields?, codigo?}`). Toda recusa por ca
 
 - **RBAC**: SUPERADMIN ou FINANCEIRO pelo papel real (`_can_read_cancelamentos`); demais **403**; anônimo **401**.
   `_can_delete` intocado (excluir, cancelar e alterar devolução continuam só do Superadmin).
-- **Erros**: `mes` fora de `AAAA-MM` (ou mês inexistente) → **400** `fields.mes`; `devolucao` fora do
-  vocabulário → **400** `fields.devolucao`.
+- **Erros**: `mes` fora de `AAAA-MM` (ou mês inexistente, ou ano fora de 2000–2999 — converge) → **400**
+  `fields.mes`; `devolucao` fora do vocabulário → **400** `fields.devolucao`.
 - **Resposta**: `pendentes[]` (inalterado, agora também ao FINANCEIRO); `cancelados[]` com o `resumo` da 306
-  (inalterado) e sem o objeto `devolucao` legado; **novos** `total_retido: str`, `total_retido_escopo: "periodo" |
+  (inalterado) e sem o objeto `devolucao` legado; **novos** `total_retido: number`, `total_retido_escopo: "periodo" |
   "listados"`, `filtros: {mes: str | null, devolucao: str | null}`. Com `mes`, sem limite; sem `mes`, 200 mais
-  recentes por `cancelled_at`. `devolucao` filtra por `EXISTS` (o evento aparece em cada estado que tem); `sem` =
-  `NOT EXISTS`. `total_retido` soma por evento.
+  recentes por `cancelled_at`. `devolucao` filtra pelas devoluções do **resumo** (research R8: o regime `venda`
+  soma as do grupo), antes do corte — o evento aparece em cada estado que tem; `sem` = nenhuma. No regime
+  `satelite` só contam as do próprio dia (converge: a tela não mostra no satélite as do grupo, e "A devolver"
+  trazia os N dias). `total_retido` soma por evento. `reason` e `cancelled_by` só com `show_comercial` (segue o
+  "Ver como"; o acesso é pelo papel real).
 
 ## Card "Cancelamentos do período"
 
 Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 
 ```text
-{ quantidade: int, pago: str, devolvido: str, devolucao_a_pagar: str, retido: str, comissao_retido: str,
-  bv_retido: str, imposto?: str, efeito_resultado?: str,
+{ quantidade: int, pago: number, devolvido: number, devolucao_a_pagar: number, retido: number,
+  comissao_retido: number, bv_retido: number, imposto?: number, efeito_resultado?: number,
   itens: [{ event_id, titulo, event_date, cancelado_em, seller_name, pago, devolvido, devolucao_a_pagar,
             retido, comissao_retido, status: "cancelado" }] }
 ```
@@ -95,6 +98,9 @@ Forma única (`painel_de_cancelamentos`), igual nas duas telas:
 | `GET`/`POST /api/avaliar/<token>` (público) | **410** "Este evento foi cancelado — não há avaliação a fazer."; nada gravado |
 | `GET /api/portal/events/<id>/figurino` (portal) | depois do 403 "não escalado" e do 404: **400** "Este evento foi cancelado." |
 | `POST /api/portal/invites/<role_id>/accept` (portal) | **400** "Este evento foi cancelado." (recusar e "Ciente" ficam livres) |
+| `POST /api/portal/invites/<role_id>/reject` (portal) | livre (200); no cancelado **não** emite o sino `convite.recusado` e, se era o último a avisar do dia, fecha o `evento.cancelado_escala` (converge) |
+| `POST /api/events/<id>/solicitar-exclusao` | **409** da trava (antes 400 sem código — converge) |
+| `POST /api/ensaios/<id>/vincular` e Jinja `link-parent` com o **próprio** ensaio cancelado | **409** da trava / `flash` (converge) |
 
 Evento com pedido de exclusão pendente ou marcado pela 303: nenhuma das recusas acima.
 
@@ -103,14 +109,15 @@ Evento com pedido de exclusão pendente ou marcado pela 303: nenhuma das recusas
 `POST /api/roles/<id>/assign` em vaga de evento cancelado:
 - **RBAC**: `_can_casting` (CASTING, SUPERADMIN pelo papel real); FIGURINO, COMERCIAL, FINANCEIRO → **403**
   "Evento cancelado: quem tira da escala é o Casting." (no vivo, inalterado: `_can_edit_event`).
-- Só `{talent_id: null}` sem cachê nem transporte → 200 com o detalhe; a vaga fica; nenhum e-mail de remoção.
-  Com talento, cachê ou transporte → 409 da trava.
+- Só `{talent_id: null}` sem cachê nem transporte → 200 com o detalhe; a vaga fica (cachê **e** adicional de
+  transporte: `{travel_cache: null}` não apaga — converge); nenhum e-mail de remoção. Com talento, ou cachê ou
+  transporte diferentes dos gravados → 409 da trava.
 - Quando não sobra ninguém a avisar naquele dia, a notificação `evento.cancelado_escala` do dia fica lida para
   todos, na mesma transação.
 
 ## Home
 
-`GET /api/dashboard` → `casting.cancelados_a_avisar?: [{role_id, event_id, event_title, event_date, cancelled_at,
+`GET /api/dashboard` → `casting.cancelados_a_avisar?: [{role_id, event_id, event_title, start_at, cancelled_at,
 character_name, talent_id, talent_name, whatsapp}]` — opcional; `[]` sem pendência; só no painel de casting
 (CASTING e SUPERADMIN, como hoje).
 

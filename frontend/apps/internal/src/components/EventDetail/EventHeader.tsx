@@ -32,6 +32,7 @@ import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
 import { SolicitarExclusaoDialog } from "./SolicitarExclusaoDialog";
 import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBanner";
 import { formatRange } from "./parts";
+import { useRecusaDoCancelado } from "../../lib/recusaDoCancelado";
 
 /**
  * Evento marcado "Sumiu do Google Agenda" (features 303 e 306): devolva ao Google ou cancele. O
@@ -228,6 +229,7 @@ export function EventHeader({ data }: EventHeaderProps) {
   const [motivoOpen, setMotivoOpen] = useState(false);
   const [aviso, setAviso] = useState("");
   const cancelado = Boolean(event.cancelled_at);
+  const [recusa, dispensarRecusa] = useRecusaDoCancelado(event.id);
   const marcado = Boolean(event.sumiu_do_google);
 
   // `duracao` maior para frase longa (o resultado da devolução): 2,2 s não dá para ler.
@@ -437,6 +439,16 @@ export function EventHeader({ data }: EventHeaderProps) {
             "Cancelamentos do período". A tela fica só para consulta; só os dados de venda
             (valores, comprovantes, devolução, multas) continuam editáveis, pelo Superadmin.
           </p>
+          {recusa && (
+            <div className="mt-2 flex flex-wrap items-start justify-between gap-2 rounded border border-red/40 bg-surface px-2 py-1.5">
+              <p className="min-w-0 text-ink">
+                <span className="font-medium">O que você pediu não foi feito:</span> {recusa}
+              </p>
+              <Button variant="ghost" size="sm" onClick={dispensarRecusa}>
+                Entendi
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

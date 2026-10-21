@@ -11,7 +11,7 @@ import json
 import logging
 import os
 
-from app.models import EventRole, FigurinoMissingDismissal, FigurinoSheet
+from app.models import CalendarEvent, EventRole, FigurinoMissingDismissal, FigurinoSheet
 from app.storage import COMPRESS_EXTS, formatos_aceitos
 
 logger = logging.getLogger(__name__)
@@ -35,11 +35,14 @@ def list_sheets() -> dict:
     sheets = FigurinoSheet.query.order_by(FigurinoSheet.character_name.asc()).all()
     sheet_norms = {s.character_name_norm for s in sheets if s.character_name_norm}
 
+    # Feature 312 (converge): a vaga de evento cancelado não pede ficha — o cancelado não é item
+    # de lista (quita a dívida 134 junto com `associate_missing_character`).
     roles = (
         EventRole.query.with_entities(
             EventRole.id, EventRole.character_name, EventRole.figurino_sheet_id
         )
-        .filter(EventRole.character_name.isnot(None))
+        .join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
+        .filter(EventRole.character_name.isnot(None), CalendarEvent.cancelled_at.is_(None))
         .all()
     )
 
@@ -276,9 +279,12 @@ def associate_missing_character(character_name_norm: str, *, sheet_id: int) -> i
     if sheet is None:
         return 0
 
+    # Feature 312 (converge): a vaga do cancelado não se escreve por aqui (a tela dele trava a
+    # mesma escrita, `POST /roles/<id>/figurino-sheet`).
     roles = (
-        EventRole.query.filter(EventRole.figurino_sheet_id.is_(None))
-        .filter(EventRole.character_name.isnot(None))
+        EventRole.query.join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
+        .filter(EventRole.figurino_sheet_id.is_(None))
+        .filter(EventRole.character_name.isnot(None), CalendarEvent.cancelled_at.is_(None))
         .all()
     )
     updated = 0

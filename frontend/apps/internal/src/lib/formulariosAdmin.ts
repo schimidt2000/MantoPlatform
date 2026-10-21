@@ -37,13 +37,13 @@ export interface FormResponseSummary {
   closed_note?: string | null;
   closed_by_name?: string | null;
   closed_at?: string | null;
+  /** Feature 312: a situação do evento ligado (o selo do cancelado), na lista e no detalhe. */
+  event_situacao?: SituacaoEvento | null;
 }
 
 export interface FormResponseDetail extends FormResponseSummary {
   data_sections: { secao: string; campos: [string, string, string][] }[];
   event_title: string | null;
-  /** Feature 312: a situação do evento ligado (o selo do cancelado). */
-  event_situacao?: SituacaoEvento | null;
 }
 
 /** Destino de um formulário — as partições que somam o total (feature 298). */

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { createQueryClient } from "@manto/api-client";
 import { App } from "./App";
+import { guardarRecusaDoCancelado } from "./lib/recusaDoCancelado";
 import { ME_KEY } from "./lib/useAuth";
 import "./index.css";
 
@@ -13,11 +14,13 @@ import "./index.css";
 // (feature 295). O `useCurrentUser` engole o 401 do próprio `/api/auth/me` e devolve `null`, então
 // sem isto nenhuma tela do ERP tinha como saber que a sessão tinha morrido.
 // Feature 312: a recusa com `codigo: "cancelado"` (o evento foi cancelado com a aba aberta)
-// recarrega o detalhe — a tela passa a só consulta, e a frase do servidor fica onde a ação foi pedida.
+// recarrega o detalhe — a tela passa a só consulta — e guarda a frase do servidor, que a caixa do
+// cancelado mostra (o formulário onde a ação foi pedida pode ter desmontado com a recarga).
 const queryClient = createQueryClient({
   aoPerderSessao: () => queryClient.setQueryData(ME_KEY, null),
   aoRecusarMutacao: (erro) => {
     if (erro.details?.codigo === "cancelado") {
+      guardarRecusaDoCancelado(erro.message);
       void queryClient.invalidateQueries({ queryKey: ["event"] });
     }
   },

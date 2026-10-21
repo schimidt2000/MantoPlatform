@@ -3542,8 +3542,18 @@ def recusar_solicitacao(event: CalendarEvent, *, actor: User, motivo: str = "") 
 
 
 def _tem_devolucao(resumo: ResumoCancelado, estado: str) -> bool:
-    """O cancelado entra no filtro `estado` da página (feature 312): `sem` = nenhuma devolução."""
-    estados = {(g.payment_status or "nao_pago") for g in resumo.devolucoes}
+    """O cancelado entra no filtro `estado` da página (feature 312): `sem` = nenhuma devolução.
+
+    O satélite do "todos" carrega no resumo as devoluções do grupo inteiro (o dinheiro mora no 1º
+    dia), mas a tela não as mostra nele: o filtro casa só as do próprio dia — senão "A devolver"
+    trazia os N dias de um grupo com uma devolução só (converge da 312).
+    """
+    from app.constants import REGIME_SATELITE
+
+    devolucoes = resumo.devolucoes
+    if resumo.regime == REGIME_SATELITE:
+        devolucoes = [g for g in devolucoes if g.event_id == resumo.event.id]
+    estados = {(g.payment_status or "nao_pago") for g in devolucoes}
     return not estados if estado == "sem" else estado in estados
 
 
@@ -3592,6 +3602,7 @@ def listar_cancelamentos(
         if mes is None:
             cancelados = cancelados[:LIMITE_SEM_MES]
     total_retido = sum((resumos[e.id].retido for e in cancelados if e.id in resumos), Decimal("0.00"))
+    ver_motivo = flags is None or bool(flags.get("show_comercial"))
 
     return {
         "total_retido": float(total_retido),
@@ -3619,10 +3630,14 @@ def listar_cancelamentos(
                 "start_at": e.start_at.isoformat() if e.start_at else None,
                 "sale_value": float(e.sale_value or 0),
                 "cancelled_at": e.cancelled_at.isoformat(),
+                # Q9 (312): motivo e autor seguem `show_comercial`, também no "Ver como" — o
+                # acesso à página é pelo papel real, o que se mostra segue a flag.
                 "cancelled_by": (
-                    db.session.get(User, e.cancelled_by_id).name if e.cancelled_by_id else None
+                    db.session.get(User, e.cancelled_by_id).name
+                    if e.cancelled_by_id and ver_motivo
+                    else None
                 ),
-                "reason": e.cancellation_reason,
+                "reason": e.cancellation_reason if ver_motivo else None,
                 "resumo": serializar_resumo_cancelado(resumos[e.id], flags or {}) if e.id in resumos else None,
             }
             for e in cancelados

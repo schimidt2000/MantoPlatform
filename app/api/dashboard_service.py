@@ -274,9 +274,11 @@ def serialize_ensaio_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "scheduled": [
             {
                 **_serialize_event_ref(e),
+                # Converge (312): o ensaio cancelado (legado) não é ensaio marcado.
                 "ensaios": [
                     en.start_at.isoformat() if en.start_at else None
                     for en in sorted(e.ensaios, key=lambda x: (x.start_at is None, x.start_at))
+                    if not en.is_cancelled
                 ],
             }
             for e in raw["scheduled"]

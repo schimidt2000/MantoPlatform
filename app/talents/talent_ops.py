@@ -12,7 +12,7 @@ import unicodedata
 
 from sqlalchemy import or_
 
-from app.models import EventRole, Talent
+from app.models import CalendarEvent, EventRole, Talent
 from app.storage import COMPRESS_EXTS, formatos_aceitos
 
 PAGE_SIZE = 60
@@ -142,11 +142,18 @@ def search_talents(
             if tag_filters:
                 query = query.filter(or_(*tag_filters))
         if character:
-            matching_roles = EventRole.query.filter(
-                EventRole.character_name.ilike(f"%{character}%"),
-                EventRole.assigned_at.isnot(None),
-                EventRole.talent_id.isnot(None),
-            ).all()
+            # Feature 312 (converge): a vaga de evento cancelado não conta — a ficha do talento
+            # também já não conta esse personagem.
+            matching_roles = (
+                EventRole.query.join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
+                .filter(
+                    EventRole.character_name.ilike(f"%{character}%"),
+                    EventRole.assigned_at.isnot(None),
+                    EventRole.talent_id.isnot(None),
+                    CalendarEvent.cancelled_at.is_(None),
+                )
+                .all()
+            )
             matching_ids = {r.talent_id for r in matching_roles}
             query = (
                 query.filter(Talent.id.in_(matching_ids)) if matching_ids else query.filter(False)
@@ -220,8 +227,6 @@ def get_talent_profile(
     Returns:
         Dict com `talent` (campos completos) e `history` (itens + totais).
     """
-    from app.models import CalendarEvent
-
     # Feature 312 (Q4 do dono, "e o histórico também"): o cancelado não conta nem aparece; como
     # os quatro números saem desta mesma lista, Eventos, Personagens, Total faturado e Último
     # evento também o ignoram.

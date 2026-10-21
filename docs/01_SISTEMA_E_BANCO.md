@@ -1999,21 +1999,27 @@ A regra de leitura (o invariante em `docs/04`): **o cancelado não é item de li
 `grupo/candidatos`), `GET /api/gastos/eventos?date=`, `GET /api/talents/<id>` (histórico e os quatro números), a Fila
 3D e as pendências de presente (`GET /api/3d/fila`), `GET /api/events/<id>` (`group.satellites[]` do principal **vivo**
 sem o dia cancelado; `ensaios[]` sem ensaio cancelado), o rótulo `group_label` "(N eventos)" do pipeline e da DRE (só os
-dias vivos, `group_ops.dias_vivos`), os candidatos automáticos do formulário e, no Jinja, o Dia, o conflito de agenda,
-a disponibilidade do `event_detail`, a lista de shows do vínculo de ensaio e a de eventos para agrupar.
+dias vivos, `group_ops.dias_vivos`, e só com dois ou mais — um principal vivo cujo único dia caiu é avulso na lista,
+a régua de `cobranca_ops._grupo_comercial`), os candidatos automáticos do formulário, o "Agendados" da Home do Ensaio,
+a lista de faltantes do figurino (`figurino_ops.list_sheets`; o "associar" também não grava em vaga de cancelado), o
+filtro "personagem" do diretório de talentos, o selo "já trabalhou com a Manto" (`routes.ids_de_quem_trabalhou`) e,
+no Jinja, o Dia, o conflito de agenda, a disponibilidade do `event_detail`, a lista de shows do vínculo de ensaio, a
+de eventos para agrupar, o painel do grupo do principal vivo e os ensaios do show (faixa, tabela e o "primeiro
+ensaio" da mensagem).
 
 | Endpoint | Mudança | RBAC |
 |---|---|---|
 | `GET /api/clientes/<id>` | `events[]` e `event_count` sem o cancelado (sai `events[].cancelado`); **novo** `cancelamentos: {quantidade, retido}`; `form_history[].event_situacao` | inalterado |
-| `GET /api/events/cancelamentos[?mes=AAAA-MM][&devolucao=nao_pago\|no_banco\|pago\|sem]` | **novos** `total_retido`, `total_retido_escopo` (`periodo`\|`listados`), `filtros`; sai o `devolucao` legado. Com `mes`, sem limite; sem, os 200 mais recentes. `devolucao` pelo estado das devoluções do **resumo** (o do grupo), antes do corte; `sem` = nenhuma. `mes`/`devolucao` inválidos → 400 `fields` | `_can_read_cancelamentos()`: `SUPERADMIN` ou `FINANCEIRO` real; demais 403. Excluir, cancelar e alterar devolução seguem só `_can_delete()` |
+| `GET /api/events/cancelamentos[?mes=AAAA-MM][&devolucao=nao_pago\|no_banco\|pago\|sem]` | **novos** `total_retido`, `total_retido_escopo` (`periodo`\|`listados`), `filtros`; sai o `devolucao` legado. Com `mes`, sem limite; sem, os 200 mais recentes. `devolucao` pelo estado das devoluções do **resumo** (o do grupo), antes do corte; no satélite do "todos", só as do próprio dia; `sem` = nenhuma. `mes`/`devolucao` inválidos (ano fora de 2000–2999 inclusive) → 400 `fields`. `reason`/`cancelled_by` só com `show_comercial` | `_can_read_cancelamentos()`: `SUPERADMIN` ou `FINANCEIRO` real; demais 403. Excluir, cancelar e alterar devolução seguem só `_can_delete()` |
 | `GET /api/vendas/pipeline` | **novo** `cancelamentos` (sempre; `quantidade: 0` sem cancelado) — `cancel_ops.painel_de_cancelamentos`, a mesma forma do `paineis.cancelamentos` da DRE: `quantidade, pago, devolvido, devolucao_a_pagar, retido, comissao_retido, bv_retido, imposto?, efeito_resultado?, itens[]` (itens com `event_date, seller_name, pago, devolvido, devolucao_a_pagar, comissao_retido`). Comissão pela régua do KPI (`commission_target_id`) | `imposto`/`efeito_resultado` só com a flag `show_financeiro` (SUPERADMIN, FINANCEIRO; segue o "Ver como") |
 | `GET /api/financeiro/dashboard` | `paineis.cancelamentos` sai da mesma função, com os totais da cascata (números iguais) e os itens enriquecidos | inalterado |
-| `GET /api/events/<id>` do cancelado | `flags.somente_consulta`; `can_edit_event`, `can_edit_core`, `can_confirm`, `can_group`, `can_manage_3d`, `can_request_delete` falsas; `desfazer_presente_3d`/`desfazer_formulario` com o que as duas seriam. `cancellation_reason` e `cancelled_by` só com `show_comercial` (Q9); o "Log de atividades" do Jinja idem | inalterado |
+| `GET /api/events/<id>` do cancelado | `flags.somente_consulta`; `can_edit_event`, `can_edit_core`, `can_confirm`, `can_group`, `can_manage_3d`, `can_request_delete` falsas; `desfazer_presente_3d`/`desfazer_formulario` com o que as duas seriam. `cancellation_reason` e `cancelled_by` só com `show_comercial` (Q9); o "Log de atividades" do Jinja idem (também o do `ensaio_detail`). Documento e nascimento do elenco seguem para Comercial e Superadmin (`show_pii` não lê a `can_confirm` zerada) | inalterado |
 | `GET /api/dashboard` | `casting.cancelados_a_avisar?: [{role_id, event_id, event_title, character_name, start_at, cancelled_at, talent_id, talent_name, whatsapp}]` — derivada da escala (`cancel_ops.elenco_dos_dias`), some com a vaga vazia | painel de casting (CASTING, SUPERADMIN) |
-| `POST /api/roles/<id>/assign` numa vaga de cancelado | só a remoção: talento no corpo, ou cachê/transporte diferentes dos gravados → 409 `cancelado`; a vaga fica com o cachê; sem e-mail de remoção (306); o último a sair marca lido o `evento.cancelado_escala` do dia | `_can_casting()` (CASTING, SUPERADMIN); FIGURINO, COMERCIAL e FINANCEIRO → 403 "Evento cancelado: quem tira da escala é o Casting." |
+| `POST /api/roles/<id>/assign` numa vaga de cancelado | só a remoção: talento no corpo, ou cachê/transporte diferentes dos gravados → 409 `cancelado`; a vaga fica com o cachê e o adicional de transporte; sem e-mail de remoção (306); o último a sair marca lido o `evento.cancelado_escala` do dia | `_can_casting()` (CASTING, SUPERADMIN); FIGURINO, COMERCIAL e FINANCEIRO → 403 "Evento cancelado: quem tira da escala é o Casting." |
 | `GET`/`POST /api/avaliar/<token>` (público) | evento cancelado → **410** "Este evento foi cancelado — não há avaliação a fazer.", sem título nem data; nada gravado | público |
 | `GET /api/portal/events/<id>/figurino` | depois do 403 "não escalado" e do 404: cancelado → 400 "Este evento foi cancelado." | portal |
 | `POST /api/portal/invites/<role_id>/accept` | cancelado → 400, nada gravado | portal |
+| `POST /api/portal/invites/<role_id>/reject` | livre; no cancelado não emite `convite.recusado` e, se era o último a avisar, fecha o `evento.cancelado_escala` do dia | portal |
 | tags (`serialize_tag`), `GET /api/formularios/respostas/<id>`, pedidos de figurino | `event.situacao` / `event_situacao` (o selo) | inalterados |
 
 **A trava** (`cancel_ops.exigir_evento_vivo`, traduzida por `api_utils.trava_do_cancelado`): toda escrita na tela de
@@ -2022,9 +2028,10 @@ um evento cancelado, **para todo papel, o Superadmin inclusive**, depois do 404 
 `PATCH /api/events/<id>`, `…/basico`, `…/confirm`, `…/logistics`, observações, `…/clients`, contratos, `…/travel-estimate`,
 materiais, `…/presenca`, `PATCH …/grupo`, `POST …/sync`, `POST …/roles`, as escritas de vaga (`DELETE /roles/<id>`,
 transporte, figurino feito e ficha, dismiss/restore, `payment-status`), `PATCH …/3d-gifts/<id>`, `…/3d-dismissal`,
-`DELETE /api/clientes/avaliacoes/<id>`, `PATCH`/`DELETE /api/ensaios/<id>` de ensaio cancelado; no Jinja, **toda**
-ação do despachante `POST /events/<id>` (substitui as 8 de venda da 306), as rotas fora dele que escrevem no evento e
-"Imprimir fichas" (`flash` + volta). **Fica livre**: o que a 306 e a 306b gateiam por regra própria (dados de venda,
+`DELETE /api/clientes/avaliacoes/<id>`, `PATCH`/`DELETE /api/ensaios/<id>` e `POST /api/ensaios/<id>/vincular` de
+ensaio cancelado, `POST …/solicitar-exclusao`; no Jinja, **toda**
+ação do despachante `POST /events/<id>` (substitui as 8 de venda da 306), as rotas fora dele que escrevem no evento
+(o `link-parent` do próprio ensaio cancelado inclusive) e "Imprimir fichas" (`flash` + volta). **Fica livre**: o que a 306 e a 306b gateiam por regra própria (dados de venda,
 `PATCH …/devolucao`, `POST …/multas`, `PATCH …/motivo-cancelamento`) e os desfazer (desligar formulário, soltar presente
 e tag, tirar da escala). Rota nova que escreve num evento cai na trava por padrão: o cenário 9b do `verify_312` lista
 toda regra de escrita com id e falha com uma sem classificação.

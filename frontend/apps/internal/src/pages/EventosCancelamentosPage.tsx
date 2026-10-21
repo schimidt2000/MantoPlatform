@@ -112,6 +112,10 @@ export function EventosCancelamentosPage() {
   const mes = MES_VALIDO.test(mesUrl) ? mesUrl : null;
   const devolucao = DEVOLUCOES_VALIDAS.has(devUrl) ? (devUrl as FiltroDevolucao) : null;
   const [busca, setBusca] = useState("");
+  // O rascunho do mês: no Firefox e no Safari de desktop o `type="month"` é um campo de texto, e
+  // gravar na URL a cada tecla ("2", "20"…) fazia o efeito abaixo apagar o que se digitava.
+  const [mesRascunho, setMesRascunho] = useState(mes ?? "");
+  useEffect(() => setMesRascunho(mes ?? ""), [mes]);
 
   // Valor inválido digitado na URL volta ao padrão em vez de virar erro.
   useEffect(() => {
@@ -161,7 +165,6 @@ export function EventosCancelamentosPage() {
         }
       />
 
-      {query.isLoading && <Skeleton className="h-40 w-full" />}
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           {query.error?.message || "Não foi possível carregar a lista."}
@@ -169,223 +172,253 @@ export function EventosCancelamentosPage() {
       )}
 
       {query.data && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                Aguardando decisão{" "}
-                {pendentes.length > 0 && <Badge tone="gold">{pendentes.length}</Badge>}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              {pendentes.length === 0 ? (
-                <p className="p-4 text-sm text-muted">Nenhum pedido pendente.</p>
-              ) : (
-                <Table>
-                  <thead>
-                    <TableRow head>
-                      <TableCell as="th">Evento</TableCell>
-                      <TableCell as="th">Data</TableCell>
-                      <TableCell as="th" align="right">
-                        Venda
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              Aguardando decisão{" "}
+              {pendentes.length > 0 && <Badge tone="gold">{pendentes.length}</Badge>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {pendentes.length === 0 ? (
+              <p className="p-4 text-sm text-muted">Nenhum pedido pendente.</p>
+            ) : (
+              <Table>
+                <thead>
+                  <TableRow head>
+                    <TableCell as="th">Evento</TableCell>
+                    <TableCell as="th">Data</TableCell>
+                    <TableCell as="th" align="right">
+                      Venda
+                    </TableCell>
+                    <TableCell as="th">Pedido por</TableCell>
+                    <TableCell as="th">Motivo</TableCell>
+                    <TableCell as="th" align="right">
+                      Ações
+                    </TableCell>
+                  </TableRow>
+                </thead>
+                <tbody>
+                  {pendentes.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="text-ink">{p.title}</TableCell>
+                      <TableCell className="tabular-nums">{data(p.start_at)}</TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {brl(p.sale_value)}
                       </TableCell>
-                      <TableCell as="th">Pedido por</TableCell>
-                      <TableCell as="th">Motivo</TableCell>
-                      <TableCell as="th" align="right">
-                        Ações
+                      <TableCell>
+                        {p.requested_by ?? "—"}
+                        <span className="block text-xs text-muted">
+                          {data(p.requested_at)}
+                        </span>
                       </TableCell>
-                    </TableRow>
-                  </thead>
-                  <tbody>
-                    {pendentes.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-ink">{p.title}</TableCell>
-                        <TableCell className="tabular-nums">{data(p.start_at)}</TableCell>
-                        <TableCell align="right" className="tabular-nums">
-                          {brl(p.sale_value)}
-                        </TableCell>
-                        <TableCell>
-                          {p.requested_by ?? "—"}
-                          <span className="block text-xs text-muted">
-                            {data(p.requested_at)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-muted">{p.reason ?? "—"}</TableCell>
-                        <TableCell align="right">
-                          <Button asChild size="sm" variant="outline">
-                            <Link to={`/events/${p.id}`}>Abrir evento</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <CardTitle>Eventos cancelados</CardTitle>
-                {totalRetido !== undefined && (
-                  <span className="text-sm text-muted">
-                    Retido:{" "}
-                    <span className="tabular-nums font-medium text-ink">{brl(totalRetido)}</span>
-                    {escopo === "listados" ? ` nos ${todos.length} listados` : " no mês"}
-                  </span>
-                )}
-              </div>
-              <div className="mt-3 flex flex-wrap items-end gap-2">
-                <label className="text-xs text-muted">
-                  Mês do cancelamento
-                  <input
-                    type="month"
-                    className={`${INPUT_CLASS} mt-1 block w-44`}
-                    value={mes ?? ""}
-                    onChange={(e) => filtrar("mes", e.target.value)}
-                    aria-label="Mês do cancelamento"
-                  />
-                </label>
-                <label className="text-xs text-muted">
-                  Devolução
-                  <select
-                    className={`${INPUT_CLASS} mt-1 block w-48`}
-                    value={devolucao ?? ""}
-                    onChange={(e) => filtrar("devolucao", e.target.value)}
-                    aria-label="Situação da devolução"
-                  >
-                    {OPCOES_DEVOLUCAO.map((o) => (
-                      <option key={o.valor} value={o.valor}>
-                        {o.rotulo}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="min-w-0 flex-1 text-xs text-muted">
-                  Buscar
-                  <input
-                    type="search"
-                    className={`${INPUT_CLASS} mt-1 block w-full`}
-                    value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
-                    placeholder="Título do evento ou motivo"
-                    aria-label="Buscar por título ou motivo"
-                  />
-                </label>
-                {comFiltro && (
-                  <Button variant="ghost" size="sm" onClick={limpar}>
-                    Limpar filtros
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              {cancelados.length === 0 ? (
-                <div className="flex flex-wrap items-center gap-2 p-4 text-sm text-muted">
-                  {comFiltro ? "Nenhum cancelamento com estes filtros." : "Nenhum evento cancelado."}
-                  {comFiltro && (
-                    <Button variant="outline" size="sm" onClick={limpar}>
-                      Limpar filtros
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                <Table className="min-w-[1100px]">
-                  <thead>
-                    <TableRow head>
-                      <TableCell as="th">Evento</TableCell>
-                      <TableCell as="th">Data do evento</TableCell>
-                      <TableCell as="th">Cancelado em</TableCell>
-                      <TableCell as="th" align="right">
-                        Venda
-                      </TableCell>
-                      <TableCell as="th" align="right">
-                        Pago
-                      </TableCell>
-                      <TableCell as="th">Devoluções</TableCell>
-                      <TableCell as="th" align="right">
-                        Retido
-                      </TableCell>
-                      <TableCell as="th" align="right">
-                        Comissão
-                      </TableCell>
-                      <TableCell as="th" align="right">
-                        BV
-                      </TableCell>
-                      <TableCell as="th" align="right">
-                        Imposto
-                      </TableCell>
-                      <TableCell as="th" align="right">
-                        <span className="sr-only">Ações</span>
+                      <TableCell className="text-muted">{p.reason ?? "—"}</TableCell>
+                      <TableCell align="right">
+                        <Button asChild size="sm" variant="outline">
+                          <Link to={`/events/${p.id}`}>Abrir evento</Link>
+                        </Button>
                       </TableCell>
                     </TableRow>
-                  </thead>
-                  <tbody>
-                    {cancelados.map((c) => {
-                      const r = c.resumo;
-                      const semVendaPropria = r?.regime === "satelite" || r?.regime === "dia";
-                      const bv = (r?.bvs ?? []).reduce((soma, b) => soma + (b.conta ?? 0), 0);
-                      return (
-                        <TableRow key={c.id}>
-                          <TableCell className="text-ink">
-                            {c.title}
-                            {r?.regime === "dia" && (
-                              <span className="block text-xs text-muted">
-                                dia cortado da venda de {diaMes(r.principal?.data)}
-                              </span>
-                            )}
-                            {r?.venda_passou_para && (
-                              <span className="block text-xs text-muted">
-                                a venda passou para {diaMes(r.venda_passou_para.data)}
-                              </span>
-                            )}
-                            {c.reason && <span className="block text-xs text-muted">{c.reason}</span>}
-                          </TableCell>
-                          <TableCell className="tabular-nums">{data(c.start_at)}</TableCell>
-                          <TableCell>
-                            <span className="tabular-nums">{data(c.cancelled_at)}</span>
-                            {c.cancelled_by && (
-                              <span className="block text-xs text-muted">por {c.cancelled_by}</span>
-                            )}
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {/* O satélite e o dia cortado não têm venda própria: ela mora no 1º dia. */}
-                            {semVendaPropria ? <span className="text-muted">no 1º dia</span> : brl(c.sale_value)}
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {r && r.regime !== "satelite" ? brl(r.pago) : "—"}
-                          </TableCell>
-                          <TableCell>
-                            <Devolucoes c={c} />
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {r ? brl(r.retido) : "—"}
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {r?.comissao ? brl(r.comissao.retido) : "—"}
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {r?.bvs ? brl(bv) : "—"}
-                          </TableCell>
-                          <TableCell align="right" className="tabular-nums">
-                            {r?.imposto != null ? brl(r.imposto) : "—"}
-                          </TableCell>
-                          <TableCell align="right">
-                            <Button asChild size="sm" variant="ghost">
-                              <Link to={`/events/${c.id}`}>Abrir</Link>
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </>
+                  ))}
+                </tbody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       )}
+
+      {/* Converge (312): os filtros ficam de pé com erro e durante a troca — é por eles que se sai. */}
+      <Card>
+        <CardHeader>
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <CardTitle>Eventos cancelados</CardTitle>
+            {totalRetido !== undefined && (
+              <span className="text-sm text-muted">
+                Retido:{" "}
+                <span className="tabular-nums font-medium text-ink">{brl(totalRetido)}</span>
+                {escopo === "listados" ? ` nos ${todos.length} listados` : " no mês"}
+              </span>
+            )}
+          </div>
+          <div className="mt-3 flex flex-wrap items-end gap-2">
+            <label className="text-xs text-muted">
+              Mês do cancelamento
+              <input
+                type="month"
+                className={`${INPUT_CLASS} mt-1 block w-44`}
+                value={mesRascunho}
+                placeholder="AAAA-MM"
+                onChange={(e) => {
+                  const valor = e.target.value;
+                  setMesRascunho(valor);
+                  if (!valor || MES_VALIDO.test(valor)) filtrar("mes", valor);
+                }}
+                aria-label="Mês do cancelamento"
+              />
+            </label>
+            <label className="text-xs text-muted">
+              Devolução
+              <select
+                className={`${INPUT_CLASS} mt-1 block w-48`}
+                value={devolucao ?? ""}
+                onChange={(e) => filtrar("devolucao", e.target.value)}
+                aria-label="Situação da devolução"
+              >
+                {OPCOES_DEVOLUCAO.map((o) => (
+                  <option key={o.valor} value={o.valor}>
+                    {o.rotulo}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="min-w-0 flex-1 text-xs text-muted">
+              Buscar
+              <input
+                type="search"
+                className={`${INPUT_CLASS} mt-1 block w-full`}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Título do evento ou motivo"
+                aria-label="Buscar por título ou motivo"
+              />
+            </label>
+            {comFiltro && (
+              <Button variant="ghost" size="sm" onClick={limpar}>
+                Limpar filtros
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {!query.data ? (
+            query.isError ? null : <Skeleton className="m-4 h-40" />
+          ) : cancelados.length === 0 ? (
+            <div className="flex flex-wrap items-center gap-2 p-4 text-sm text-muted">
+              {comFiltro ? "Nenhum cancelamento com estes filtros." : "Nenhum evento cancelado."}
+              {comFiltro && (
+                <Button variant="outline" size="sm" onClick={limpar}>
+                  Limpar filtros
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Table className="min-w-[1100px]">
+              <thead>
+                <TableRow head>
+                  <TableCell as="th">Evento</TableCell>
+                  <TableCell as="th">Data do evento</TableCell>
+                  <TableCell as="th">Cancelado em</TableCell>
+                  <TableCell as="th" align="right">
+                    Venda
+                  </TableCell>
+                  <TableCell as="th" align="right">
+                    Pago
+                  </TableCell>
+                  <TableCell as="th">Devoluções</TableCell>
+                  <TableCell as="th" align="right">
+                    Retido
+                  </TableCell>
+                  <TableCell as="th" align="right">
+                    Comissão
+                  </TableCell>
+                  <TableCell as="th" align="right">
+                    BV
+                  </TableCell>
+                  <TableCell as="th" align="right">
+                    Imposto
+                  </TableCell>
+                  <TableCell as="th" align="right">
+                    <span className="sr-only">Ações</span>
+                  </TableCell>
+                </TableRow>
+              </thead>
+              <tbody>
+                {cancelados.map((c) => {
+                  const r = c.resumo;
+                  const semVendaPropria = r?.regime === "satelite" || r?.regime === "dia";
+                  const bv = (r?.bvs ?? []).reduce((soma, b) => soma + (b.conta ?? 0), 0);
+                  return (
+                    <TableRow key={c.id}>
+                      <TableCell className="text-ink">
+                        {c.title}
+                        {r?.regime === "dia" && (
+                          <span className="block text-xs text-muted">
+                            dia cortado da venda de{" "}
+                            {r.principal ? (
+                              <Link to={`/events/${r.principal.id}`} className="text-blue underline">
+                                {diaMes(r.principal.data)}
+                              </Link>
+                            ) : (
+                              diaMes(undefined)
+                            )}
+                          </span>
+                        )}
+                        {r?.venda_passou_para && (
+                          <span className="block text-xs text-muted">
+                            a venda passou para {diaMes(r.venda_passou_para.data)}
+                          </span>
+                        )}
+                        {c.reason && <span className="block text-xs text-muted">{c.reason}</span>}
+                      </TableCell>
+                      <TableCell className="tabular-nums">{data(c.start_at)}</TableCell>
+                      <TableCell>
+                        <span className="tabular-nums">{data(c.cancelled_at)}</span>
+                        {c.cancelled_by && (
+                          <span className="block text-xs text-muted">por {c.cancelled_by}</span>
+                        )}
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {/* O satélite e o dia cortado não têm venda própria: ela mora no 1º dia. */}
+                        {semVendaPropria ? <span className="text-muted">no 1º dia</span> : brl(c.sale_value)}
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {/* No dia cortado o pago é o do grupo (o dinheiro mora no 1º dia, como na 306). */}
+                        {!r || r.regime === "satelite" ? (
+                          "—"
+                        ) : r.regime === "dia" ? (
+                          <span className="text-xs text-muted">
+                            pago no grupo {brl(r.pago)}
+                            {r.principal && (
+                              <>
+                                {" · venda no "}
+                                <Link to={`/events/${r.principal.id}`} className="text-blue underline">
+                                  1º dia
+                                </Link>
+                              </>
+                            )}
+                          </span>
+                        ) : (
+                          brl(r.pago)
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Devolucoes c={c} />
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {r ? brl(r.retido) : "—"}
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {r?.comissao ? brl(r.comissao.retido) : "—"}
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {r?.bvs ? brl(bv) : "—"}
+                      </TableCell>
+                      <TableCell align="right" className="tabular-nums">
+                        {r?.imposto != null ? brl(r.imposto) : "—"}
+                      </TableCell>
+                      <TableCell align="right">
+                        <Button asChild size="sm" variant="ghost">
+                          <Link to={`/events/${c.id}`}>Abrir</Link>
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </tbody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

@@ -948,8 +948,10 @@ def serialize_event_detail(
     roles = sorted(event.roles, key=lambda r: r.id)
     availability = talent_availability(event, [r.talent_id for r in roles if r.talent_id])
     # Mesmo público que a tela antiga dava ao "Exportar elenco" (`CASTING`, `COMERCIAL`,
-    # `SUPERADMIN`) — `can_confirm` é o flag de Comercial/Superadmin.
-    show_pii = flags["show_casting"] or flags["can_confirm"]
+    # `SUPERADMIN`) — Comercial/Superadmin, a régua da `can_confirm`. Lida por `is_comercial`/
+    # `is_superadmin` porque no cancelado a `can_confirm` vem zerada (312, só consulta) e a
+    # Comercial perdia documento e nascimento do elenco junto (converge).
+    show_pii = flags["show_casting"] or flags["is_comercial"] or flags["is_superadmin"]
     # Manutenção aberta na ficha de cada personagem (feature 225b). Uma consulta só para o elenco
     # inteiro: sem isto, "tem uma peça solta dentro do boneco" fica no relato de um evento e
     # ninguém lembra dele na hora de separar o figurino do próximo.

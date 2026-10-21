@@ -18,7 +18,7 @@ import { formatBRL } from "@manto/money";
 import { PORTAL_PUBLICO } from "../lib/eventDetail";
 import { useFaixaSumidosVisivel } from "../lib/sumidosGoogle";
 import { useCurrentUser } from "../lib/useAuth";
-import { useAcaoNoCargoDaHome, useAssignRole } from "../lib/casting";
+import { avisoDeCancelamentoNoWhatsApp, useAcaoNoCargoDaHome, useAssignRole } from "../lib/casting";
 import type {
   CanceladoAAvisarRef,
   ComercialSummary,
@@ -213,26 +213,39 @@ function UnconfirmedRow({ item }: { item: UnconfirmedInviteRef }) {
  * o cancelado) nem nome do aniversariante. "Tirar da escala" manda só `{talent_id: null}`; a linha
  * some com a resposta, e o bloco some com a lista vazia.
  */
+/** Os escalados a avisar agrupados por evento, na ordem em que o servidor os manda (T050). */
+function porEvento(itens: CanceladoAAvisarRef[]): CanceladoAAvisarRef[][] {
+  const grupos = new Map<number, CanceladoAAvisarRef[]>();
+  for (const item of itens) {
+    const grupo = grupos.get(item.event_id);
+    if (grupo) grupo.push(item);
+    else grupos.set(item.event_id, [item]);
+  }
+  return [...grupos.values()];
+}
+
+/** `dd/mm/aaaa` do horário de parede, sem `new Date()` (que desloca o fuso). */
+function diaDoEvento(iso: string): string {
+  return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+}
+
 function CanceladoAAvisarRow({ item }: { item: CanceladoAAvisarRef }) {
   const queryClient = useQueryClient();
   const tirar = useAssignRole(item.event_id);
-  const data = item.start_at ? new Date(item.start_at).toLocaleDateString("pt-BR") : "";
-  const zap = item.whatsapp
-    ? `https://wa.me/${item.whatsapp.replace(/\D/g, "")}?text=${encodeURIComponent(
-        `Oi, ${item.talent_name}! O evento "${item.event_title}"${data ? ` de ${data}` : ""}, em que você faria ${
-          item.character_name ?? "o seu papel"
-        }, foi cancelado. Qualquer dúvida, fale com a gente.`,
-      )}`
-    : null;
+  const zap = avisoDeCancelamentoNoWhatsApp({
+    whatsapp: item.whatsapp,
+    nome: item.talent_name,
+    evento: item.event_title,
+    inicio: item.start_at,
+    personagem: item.character_name,
+  });
 
   return (
     <div className="-mx-4 flex flex-wrap items-center justify-between gap-2 border-b border-line px-4 py-2.5 text-sm last:border-b-0">
       <div className="min-w-0">
         <div className="font-medium text-ink">{item.talent_name}</div>
-        <Link to={`/events/${item.event_id}?aba=producao`} className="text-muted hover:underline">
-          {item.character_name} · {item.event_title}
-          {data && ` — ${data}`}
-        </Link>
+        {/* O evento é o cabeçalho do grupo (`CanceladosAAvisar`); aqui, o papel de cada um. */}
+        <div className="text-muted">{item.character_name}</div>
         {tirar.isError && (
           <p className="text-xs text-red" role="alert">
             {tirar.error?.message || "Não foi possível tirar da escala."}
@@ -1274,8 +1287,19 @@ export function DashboardPage() {
                   o e-mail automático do cancelamento já saiu.
                 </p>
                 <ListaTruncada>
-                  {(data.casting?.cancelados_a_avisar ?? []).map((item) => (
-                    <CanceladoAAvisarRow key={item.role_id} item={item} />
+                  {porEvento(data.casting?.cancelados_a_avisar ?? []).map((grupo) => (
+                    <div key={grupo[0].event_id}>
+                      <Link
+                        to={`/events/${grupo[0].event_id}?aba=producao`}
+                        className="block pt-2 text-xs font-semibold text-ink hover:underline"
+                      >
+                        {grupo[0].event_title}
+                        {grupo[0].start_at && ` — ${diaDoEvento(grupo[0].start_at)}`}
+                      </Link>
+                      {grupo.map((item) => (
+                        <CanceladoAAvisarRow key={item.role_id} item={item} />
+                      ))}
+                    </div>
                   ))}
                 </ListaTruncada>
               </SectorPanel>

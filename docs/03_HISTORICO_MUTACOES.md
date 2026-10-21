@@ -7,7 +7,7 @@
 > Última atualização: **2026-10-20** · Estado do repositório: pós-feature
 > **312-cancelado-fora-das-listas** (sem migration; **em branch, não publicada** — o cancelado sai de toda lista e
 > só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
-> 24/24) — antes dela pós-feature
+> 27/27) — antes dela pós-feature
 > **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
 > dono, em horário comercial — `flask campanha-prazo-pagamento` avisa "até 3 dias úteis" ao banco de
 > talentos, e `/portal/termos` volta a mostrar a data do aceite; `verify_311.py` 8/8) — antes dela
@@ -379,8 +379,26 @@ que precisa olhar o resumo (grupo), não o `event_id`. O cenário 6 do verify ac
 pela regra velha (sem congelamento: a 306 o trata como `legado`, retido = pago − devolvido). FINANCEIRO segue com zero
 usuários.
 
-**Verificação.** `verify_312.py` 24/24 (a primeira rodada, contra o código da `main`, em `verify_312_primeira_falha.txt`:
-6/24, só as guardas que já valiam). Regressão: `verify_306b` 8/8; `verify_306` com a base conhecida (14b e 20 exigem a
+**Converge (T076).** Quatro revisores só de leitura, um por área (listas, trava, página e card, telas); nenhum achado
+CRITICAL nem HIGH. Os confirmados viraram os cenários 24–26, escritos e rodados vermelhos antes das correções
+(T078–T098 no `tasks.md`): o filtro "A devolver" trazia os N dias de um grupo "todos" (o satélite carrega as
+devoluções do grupo no resumo — agora casa só as do próprio dia); `?mes=9999-12` dava 500; a página mostrava o motivo
+no "Ver como Casting"; o "Agendados" da Home do Ensaio e a tela Jinja do show listavam o ensaio cancelado, e a do
+principal vivo o dia cancelado; "(1 eventos)" num principal cujo único dia caiu; o selo "já trabalhou com a Manto" e o
+filtro "personagem" contavam vaga de cancelado; os faltantes do figurino a contavam e o "associar" gravava nela
+(dívida 134, quitada); a lista de Formulários sem o selo; `solicitar-exclusao` respondia 400 sem código; vincular o
+próprio ensaio cancelado passava; o Log do `ensaio_detail` mostrava o motivo; a Comercial perdia documento e
+nascimento do elenco no cancelado (efeito do `can_confirm` zerado); recusar convite no portal mandava o sino
+"convite recusado" e não fechava o pedido ao Casting; `{travel_cache: null}` ao tirar da escala apagava o adicional de
+transporte. Na tela: a frase do servidor some com o formulário que desmonta na recarga — agora a caixa do cancelado a
+mostra; o WhatsApp da escala é o mesmo da Home; a página manteve o "pago no grupo · venda no 1º dia" da 306, os
+filtros de pé no erro e o campo de mês que funciona no Firefox; a Home agrupa por evento. Para conferir o selo "já
+trabalhou" sem ligá-lo em talento real do espelho, a régua virou `routes.ids_de_quem_trabalhou` (consulta pura).
+
+**Verificação.** `verify_312.py` 27/27 (a primeira rodada, contra o código da `main`, em `verify_312_primeira_falha.txt`:
+6/24, só as guardas que já valiam; a dos cenários do converge, contra o HEAD `344d127b`, no scratchpad). Depois do
+converge: 27/27 duas vezes; `verify_306b` 8/8, `verify_303` 44/44, `verify_196` 55/55, `verify_306` 66/69 (a mesma
+base — 14b, 20 e o 23). Regressão: `verify_306b` 8/8; `verify_306` com a base conhecida (14b e 20 exigem a
 `main` de antes da 306) **mais o 23**, o retrato main × branch, que acusa a mudança de contrato da ficha da cliente
 (239 diferenças, todas `events[].cancelado` — a chave saiu) e volta a ficar verde quando a 312 estiver na `main`
 (dívida 136). `verify_303` 44/44 e `verify_196` verdes; `verify_145` (1 falha) e `verify_cancelamento_evento`

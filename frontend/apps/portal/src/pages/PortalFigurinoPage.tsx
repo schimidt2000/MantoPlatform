@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { assetUrl } from "@manto/api-client";
+import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { Card, CardContent, Foto, PageHeader, Skeleton } from "@manto/ui";
 import { useFigurino } from "../lib/portalFigurino";
 import { formatLongDate, formatWeekday } from "../lib/format";
@@ -39,8 +39,10 @@ export function PortalFigurinoPage() {
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
           {/* Feature 312: a frase é do servidor ("Este evento foi cancelado." ou "Você não está
-              escalado neste evento."); sem ela (falha de rede), a de antes. */}
-          {query.error?.message || "Você não está escalado neste evento."}
+              escalado neste evento."); sem ela (falha de rede: "Failed to fetch"), a de antes. */}
+          {query.error instanceof ApiRequestError && query.error.message
+            ? query.error.message
+            : "Você não está escalado neste evento."}
         </div>
       )}
 

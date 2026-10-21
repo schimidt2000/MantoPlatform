@@ -493,7 +493,11 @@ function LinhaPedido({ p }: { p: Producao }) {
         {/* Na manutenção o que orienta é a ficha ("de qual boneco é isto"); na produção, o
             evento. Mostrar os dois em toda linha seria ruído. */}
         {p.figurino_sheet_name && (
-          <p className="mt-0.5 truncate text-xs text-muted">{p.figurino_sheet_name}</p>
+          <p className="mt-0.5 truncate text-xs text-muted">
+            {/* Feature 312 (converge): com ficha o evento não aparece, mas o cancelado avisa. */}
+            {p.event_title && <SeloSituacao situacao={p.event_situacao} compacto />}
+            {p.figurino_sheet_name}
+          </p>
         )}
         {p.event_title && !p.figurino_sheet_name && (
           <p className="mt-0.5 truncate text-xs text-muted" title={p.event_title}>

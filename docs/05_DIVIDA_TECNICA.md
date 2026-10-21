@@ -653,6 +653,6 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 133 | **P4** | Planilha de Pagamentos (`financeiro_write.py` `set-status` e `bulk-action`) | o status do cachê de uma vaga de evento cancelado ainda muda pela Planilha (fora da tela do evento, que a trava fecha) | decidir se o cachê do cancelado é editável pela Planilha (o cachê de cancelado já sai dela pela 306) |
-| 134 | **P4** | `figurino_write.py` `faltantes/associar` | liga ficha de figurino às vagas pendentes sem olhar o cancelamento | recusar vaga de cancelado no núcleo |
+| ~~134~~ | ~~P4~~ | ✅ **RESOLVIDO no converge da feature 312** — `figurino_ops.associate_missing_character` não grava em vaga de cancelado e `list_sheets` não a conta entre os faltantes | — | — |
 | 135 | **P4** | listas internas sem o selo do cancelado | avaliações internas, as avaliações da ficha do talento e os comprovantes dos outros dias do grupo mostram o título do evento sem a situação (premissa 24 do plano 1c) | `event_situacao` onde a lista aparecer |
 | 136 | **P4** | `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |

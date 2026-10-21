@@ -340,7 +340,7 @@ o `ruff check` nos tocados. Sem migration.
       associa a vaga pendente de cancelado — `figurino_write.py:230`)
 - [X] T075 `docs/03`: entrada nova no topo + linha no índice (registrar que a frase da 306b "os demais veem o
       motivo" ficou superada pela Q9; a recontagem de 20/10; o 1358 legado)
-- [ ] T076 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
+- [X] T076 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
 - [ ] T077 Pré-merge: rebase sobre a `main` do dia, rodada inteira e regressão de novo; `git status` limpo; merge e
       push **só quando o dono pedir**
 
@@ -381,3 +381,70 @@ o `ruff check` nos tocados. Sem migration.
 MVP = H1 + H2 (os dois P1: some de toda lista; tela só consulta e motivo só para quem trata). H3–H6 entram no mesmo
 deploy (um push só, quando o dono pedir); cada história fecha com commit próprio para o converge e o rollback
 lerem a fronteira.
+
+---
+
+## Phase 10: Convergence
+
+*(20/10, `/speckit-converge` T076 — quatro revisores só de leitura, um por área; cada achado conferido contra o
+código antes de entrar aqui. Nenhum CRITICAL nem HIGH. Cenários vermelhos novos: 24 (página), 25 (listas), 26
+(escritas) no `verify_312.py`, escritos e rodados vermelhos ANTES das correções.)*
+
+- [X] T078 Escrever os cenários 24, 25 e 26 no `verify_312.py` e rodá-los vermelhos contra o HEAD `344d127b`
+      (guardar a saída no scratchpad) per Constitution VIII (missing)
+- [X] T079 Filtro `devolucao` da página: no regime `satelite` casar só as devoluções do próprio dia
+      (`cancel_ops._tem_devolucao :3544`, hoje usa `resumo.devolucoes` = `do_grupo` de `:482`) — o grupo "todos" com
+      uma devolução não paga não pode trazer os N dias em "A devolver" per FR-028 / research R8 (contradicts)
+- [X] T080 Coluna Pago e dia cortado na página: no regime `dia`, "pago no grupo R$ X · venda no 1º dia" com o link
+      do principal (como a `main` fazia), e o "dia cortado da venda de DD/MM" com link
+      (`EventosCancelamentosPage.tsx :333-337, :356-358`) per FR-030 (partial)
+- [X] T081 A frase do servidor fica visível depois da recusa `cancelado` mesmo quando o formulário desmonta ou a
+      ação some do menu (confirmar, "Pedir feedback", observação, logística, contrato): `aoRecusarMutacao`
+      (`main.tsx`) guarda a frase e a caixa do cancelado (`EventHeader.tsx :412`) a mostra per FR-022 (partial)
+- [X] T082 O WhatsApp da escala do cancelado é o mesmo da Home — mensagem pronta e "sem WhatsApp no cadastro" —
+      numa função única (`CastingSection.tsx :419-428`, `DashboardPage.tsx :219-226`), com a data "DD/MM" sem ano
+      per FR-026 (partial + contradicts)
+- [X] T083 Selo "Cancelado" na LISTA de Formulários: `event_situacao` em `_response_summary`
+      (`formularios_admin_read.py`, hoje só o detalhe) e `SituacaoBadges` (`FormulariosAdminPage.tsx :259-262`)
+      per FR-036 (partial)
+- [X] T084 [P] `mes` fora do intervalo (`?mes=9999-12`) → 400 `fields.mes`, não 500 (`agenda_write.py` rota
+      cancelamentos / `cancel_ops.py :3583`); filtros e "Limpar filtros" visíveis com erro e durante a troca de
+      filtro (`EventosCancelamentosPage.tsx :164-171`); o campo de mês só grava na URL o valor completo (Firefox e
+      Safari desktop mostram `type="month"` como texto, `:112-124`) per FR-028 / FR-030 (partial)
+- [X] T085 [P] Motivo e autor na página só com `show_comercial` ("Ver como", `cancel_ops.py :3625-3626`) per FR-020
+      (partial)
+- [X] T086 [P] Home do Ensaio: "Agendados" sem o ensaio cancelado (`dashboard_service.serialize_ensaio_summary
+      :274-281`) per FR-009 (partial)
+- [X] T087 [P] Tela Jinja do evento: painel do grupo do principal vivo sem o dia cancelado (`event_detail.html
+      :1404`) e ensaios (faixa `:389-399`, tabela `:2232-2246`, `first_ensaio :2834`) sem o ensaio cancelado
+      per FR-008 / FR-009 (partial)
+- [X] T088 [P] Rótulo "(N eventos)" só com 2 dias vivos ou mais (`vendas_ops.py :352-357`, `financeiro_read.py
+      :428-432`, a régua de `cobranca_ops._grupo_comercial`) per FR-008 (partial)
+- [X] T089 [P] "Já trabalhou com a Manto" não liga por vaga de cancelado (`routes._mark_talents_worked :2511`) e o
+      filtro "personagem" da lista de talentos não conta vaga de cancelado (`talent_ops.py :144-156`) per Q4 /
+      FR-004 (missing)
+- [X] T090 [P] Figurino faltantes: a lista não conta vaga de cancelado e "associar" não grava nela
+      (`figurino_ops.list_sheets`, `associate_missing_character :265`) — quita a dívida 134 per FR-011 / FR-001
+      (missing)
+- [X] T091 [P] `assign` no cancelado: o adicional de transporte fica (`_UNSET` sempre, como o cachê;
+      `agenda_write.py :262`) — `{talent_id: null, travel_cache: null}` hoje apaga per FR-024 (contradicts)
+- [X] T092 [P] Portal: recusar convite de cancelado não manda o sino "convite recusado" e fecha o sino do pedido
+      ao Casting quando era o último (`portal_ops.reject_invite :429`) per FR-025 (partial)
+- [X] T093 [P] Trava no próprio ensaio cancelado em "vincular a um show" (Jinja `routes.link_ensaio_parent :2818`,
+      API `api_link_ensaio :2662`) e Log do `ensaio_detail.html` só com `show_comercial` quando cancelado
+      (`routes.py :1734`) per FR-011 / FR-020 (missing)
+- [X] T094 [P] Comercial continua vendo documento e nascimento do elenco no cancelado (`show_pii` lê a
+      `can_confirm` já zerada, `agenda_read.py :952`) per FR-019 (unrequested — efeito colateral)
+- [X] T095 [P] `solicitar-exclusao` de cancelado responde a trava (409 `cancelado`), não 400 sem código
+      (`agenda_write.py :917-923`) per FR-018 (partial)
+- [X] T096 [P] Telas: rótulo do menu "Exclusões e cancelamentos" para o Financeiro (`navigation.tsx :387-396`,
+      FR-031); selo no pedido de figurino com ficha (`FigurinoProducaoListPage.tsx :495-503`, FR-036) e no select
+      do modal de Gastos (`GastosExtrasPage.tsx :349, :535-538`, FR-037); a frase "só o Superadmin altera os dados
+      de venda" uma vez por aba (`EventDetailPage.tsx :139-147`, FR-019); o portal não mostra "Failed to fetch"
+      (`PortalFigurinoPage.tsx :41-44`, FR-038); as pendências de ação somem do cancelado (`ResumoSection.tsx
+      :311-345`, FR-019); a Home do Casting agrupada por evento (`DashboardPage.tsx :1267-1282`, T050) (partial)
+- [X] T097 Contrato e docs: `contracts/api.md` (filtro `devolucao` pelo resumo; números como `number`;
+      `start_at` na pendência da Home; recusar convite), `docs/01` §4.3, `docs/02`, `docs/05` (riscar 134),
+      `docs/03` (o converge) per plan: docs (partial)
+- [X] T098 Rodada inteira 27/27 duas vezes, regressão (306, 306b, 303, 196), typecheck e ruff; commit
+      per Constitution VIII (missing)

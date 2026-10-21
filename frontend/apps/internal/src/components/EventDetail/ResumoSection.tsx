@@ -305,6 +305,9 @@ interface Pendencia {
 
 /** Monta a lista de pendências a partir do que o RBAC deixou no payload. */
 function calcularPendencias(data: EventoDetalhe): Pendencia[] {
+  // Feature 312 (converge): o cancelado é só consulta — "Elenco 0/5", "Presença" e companhia
+  // chamariam para uma ação que a tela já não oferece.
+  if (data.flags.somente_consulta) return [];
   const lista: Pendencia[] = [];
   const roles = data.elenco ?? [];
   const personagens = roles.filter((r) => r.role_type !== "extra");

@@ -1278,6 +1278,283 @@ def c22_regressao() -> None:
     _garante(ev in ids, "22: o Dia perdeu o evento vivo")
 
 
+# ── converge (T076): um cenário por área, vermelho antes da correção ─────────────────────────
+def _achar(obj, chave: str, valor) -> list[dict]:
+    """Todo dicionário dentro de um JSON com `chave == valor`."""
+    achados: list[dict] = []
+    if isinstance(obj, dict):
+        if obj.get(chave) == valor:
+            achados.append(obj)
+        for v in obj.values():
+            achados += _achar(v, chave, valor)
+    elif isinstance(obj, list):
+        for x in obj:
+            achados += _achar(x, chave, valor)
+    return achados
+
+
+def c24_pagina_converge() -> None:
+    falhas = []
+    # T079: o grupo "todos" com uma devolução não paga — "A devolver" traz o 1º dia, não os N.
+    g = v6._grupo("312 todos", dias=2, comissao=None)
+    v6._cancelar_ok(g["principal"], v6._corpo_cancelar("parte", 600, alcance="todos"))
+    mes = v6._mes(v6._hoje_sp())
+    a_devolver = {
+        c.get("id")
+        for c in _get("fin", f"/api/events/cancelamentos?mes={mes}&devolucao=nao_pago").get(
+            "cancelados"
+        )
+        or []
+    }
+    if g["principal"] not in a_devolver:
+        falhas.append("o 1º dia do grupo fora de devolucao=nao_pago")
+    if a_devolver & set(g["dias"]):
+        falhas.append(
+            f"os dias do grupo em devolucao=nao_pago ({sorted(a_devolver & set(g['dias']))})"
+        )
+    sem = {
+        c.get("id")
+        for c in _get("fin", f"/api/events/cancelamentos?mes={mes}&devolucao=sem").get("cancelados")
+        or []
+    }
+    if not set(g["dias"]) <= sem or g["principal"] in sem:
+        falhas.append(
+            "devolucao=sem: os dias do grupo (sem devolução própria) fora, ou o 1º dentro"
+        )
+    # T084: mês fora do intervalo → 400 no campo, nunca 500.
+    for mes_ruim in ("9999-12", "0000-01"):
+        try:
+            r = _cliente("fin").get(f"/api/events/cancelamentos?mes={mes_ruim}")
+        except Exception as exc:  # noqa: BLE001 — o 500 do servidor de dev sobe como exceção
+            falhas.append(f"?mes={mes_ruim} → 500 ({type(exc).__name__}: {exc})")
+            continue
+        if r.status_code != 400 or "mes" not in (_erro(r).get("fields") or {}):
+            falhas.append(f"?mes={mes_ruim} → {r.status_code}")
+    # T085: o Superadmin em "Ver como Casting" lê a página pelo papel real, sem motivo nem autor.
+    c = _impersonar("sa", RoleName.CASTING)
+    r = c.get("/api/events/cancelamentos")
+    linha = next(
+        (x for x in (r.get_json() or {}).get("cancelados") or [] if x.get("id") == S["canc"]), None
+    )
+    if r.status_code != 200 or linha is None:
+        falhas.append(f"Ver como Casting: a página → {r.status_code}")
+    elif linha.get("reason") or linha.get("cancelled_by"):
+        falhas.append("Ver como Casting: a página mostra o motivo/autor")
+    _garante(not falhas, "24: " + " | ".join(falhas))
+
+
+def c25_listas_converge() -> None:
+    from app.calendar import routes as cal_routes
+    from app.figurino import figurino_ops
+    from app.figurino.drive_service import normalize_name
+
+    falhas = []
+    # T086: "Agendados" da Home do Ensaio sem o ensaio cancelado.
+    vivo_ens = v6._ensaio(S["vivo"], v6._dias_a_frente(17))
+    legado_em = _no_banco(
+        "SELECT start_at FROM calendar_events WHERE id = :i", i=S["ensaio_legado"]
+    )[0][0].isoformat()
+    ens = (_get("ens", "/api/dashboard").get("ensaio") or {}).get("scheduled") or []
+    linha = next((x for x in ens if x.get("event_id") == S["vivo"]), None)
+    if linha is None:
+        falhas.append("o show com ensaio vivo fora de Agendados")
+    elif legado_em in (linha.get("ensaios") or []):
+        falhas.append("Agendados lista o ensaio cancelado")
+    # T087: Jinja do principal vivo sem o dia cancelado; Jinja do show sem o ensaio cancelado.
+    html = _html("sa", f"/events/{S['g_principal']}")
+    if f'href="/events/{S["g_canc"]}"' in html:
+        falhas.append("Jinja: o painel do grupo lista o dia cancelado")
+    if f'href="/events/{S["g_vivo"]}"' not in html:
+        falhas.append("Jinja: o painel do grupo sem o dia vivo (controle)")
+    html = _html("sa", f"/events/{S['vivo']}")
+    marca = _data(S["ensaio_legado"]).strftime("%d/%m/%Y")
+    if f"📅 {marca}" in html or f"<td>{marca}</td>" in html:
+        i = html.index(marca)
+        trecho = " ".join(html[max(0, i - 300) : i + 80].split())
+        falhas.append(f"Jinja: o show lista o ensaio cancelado (…{trecho[-260:]})")
+    if f"📅 {_data(vivo_ens).strftime('%d/%m/%Y')}" not in html:
+        falhas.append("Jinja: o show sem o ensaio vivo (controle)")
+    # T088: principal vivo cujo único dia caiu — sem "(1 eventos)".
+    g = v6._grupo("312 so um", dias=1, comissao=None, pagos=(1000,))
+    r = v6._corte(g["dias"][0], 2000, modo="nada", valor=None)
+    _garante(r.status_code == 200, f"25: corte do único dia → {r.status_code} {_erro(r)}")
+    dia_p = _data(g["principal"])
+    ini_p = dia_p.replace(day=1)
+    fim_p = v6._mes_seguinte(ini_p) - timedelta(days=1)
+    for rotulo, corpo in (("pipeline", _pipeline("sa")), ("DRE", v6._dre(ini_p, fim_p))):
+        itens = [x for x in _achar(corpo, "event_id", g["principal"]) if "group_label" in x]
+        if not itens:
+            falhas.append(f"{rotulo}: o principal sem item")
+        elif any(x.get("group_label") for x in itens):
+            falhas.append(f"{rotulo}: rótulo {itens[0].get('group_label')!r} sem 2 dias vivos")
+    # T089/T090: um show passado cancelado com um talento novo num personagem só dele.
+    t_wb = v6._talento("t312 wb")
+    passado = v6._evento_com_elenco("312 wb", [f"W{TOKEN}A"], inicio=v6._dias_a_frente(-5))
+    r_wb = v6._escalar(passado, t_wb)
+    # Controle: o mesmo show passado, vivo, com outro talento — prova que a marcação roda.
+    t_ctrl = v6._talento("t312 wb ctrl")
+    passado_vivo = v6._evento_com_elenco(
+        "312 wb vivo", [f"X{TOKEN}A"], inicio=v6._dias_a_frente(-5)
+    )
+    v6._escalar(passado_vivo, t_ctrl)
+    _no_banco_escrever(
+        "UPDATE calendar_events SET cancelled_at = now(), cancellation_reason = 'wb 312' WHERE id = :i",
+        i=passado,
+    )
+    # O harness da 306 desliga `_mark_talents_worked` (ligaria o selo em talento real do espelho):
+    # o cenário lê a régua dele, `ids_de_quem_trabalhou`, sem gravar nada.
+    regua = getattr(cal_routes, "ids_de_quem_trabalhou", None)
+    if regua is None:
+        falhas.append(
+            "'já trabalhou com a Manto' sem régua separada (routes.ids_de_quem_trabalhou)"
+        )
+    else:
+        with app.app_context():
+            trabalharam = {r[0] for r in regua().all()}
+        if t_ctrl not in trabalharam:
+            falhas.append("controle: 'já trabalhou com a Manto' não conta o show vivo passado")
+        if t_wb in trabalharam:
+            falhas.append("'já trabalhou com a Manto' conta vaga de cancelado")
+    # O diretório de talentos (o `/api/talents` chapado do seletor não filtra nada).
+    achou = {
+        x.get("id")
+        for x in _get("sa", f"/api/talents/directory?character=W{TOKEN}A").get("items") or []
+    }
+    ctrl = {
+        x.get("id")
+        for x in _get("sa", f"/api/talents/directory?character=X{TOKEN}A").get("items") or []
+    }
+    if t_ctrl not in ctrl:
+        falhas.append("controle: o filtro 'personagem' não acha o talento do show vivo")
+    if t_wb in achou:
+        falhas.append("filtro 'personagem' da lista de talentos contou vaga de cancelado")
+    nome = _no_banco("SELECT character_name FROM event_roles WHERE id = :i", i=r_wb)[0][0]
+    with app.app_context():
+        norm = normalize_name(nome)
+        faltam = {
+            c["character_name_norm"] for c in figurino_ops.list_sheets()["chars_without_sheet"]
+        }
+        if norm in faltam:
+            falhas.append("figurino faltantes lista o personagem de vaga de cancelado")
+        ficha = _no_banco("SELECT id FROM figurino_sheets ORDER BY id LIMIT 1")
+        if ficha:
+            n = figurino_ops.associate_missing_character(norm, sheet_id=ficha[0][0])
+            db.session.rollback()
+            if n:
+                falhas.append(f"figurino 'associar' gravou em {n} vaga(s) de cancelado")
+    # T083: a LISTA de Formulários leva o selo do evento cancelado.
+    lista = _get("com", "/api/formularios/respostas").get("responses") or []
+    linha = next((x for x in lista if x.get("id") == S["form"]), None)
+    if linha is None:
+        falhas.append("o formulário da semente fora da lista")
+    elif linha.get("event_situacao") != "cancelado":
+        falhas.append(f"lista de Formulários: event_situacao={linha.get('event_situacao')!r}")
+    _garante(not falhas, "25: " + " | ".join(falhas))
+
+
+def c26_escritas_converge() -> None:
+    falhas = []
+    e = S["canc"]
+    # O estado que o 15 e o 21 deixam (vale também com `--so`): no cancelado só o t3, pendente, na
+    # vaga que tinha recusado; a presença fica como está.
+    _no_banco_escrever(
+        "UPDATE event_roles SET talent_id = NULL WHERE event_id = :e AND id <> :r AND id <> :p",
+        e=e,
+        r=S["r_recusou"],
+        p=S["r_presenca"] or 0,
+    )
+    _no_banco_escrever(
+        "UPDATE event_roles SET talent_id = :t, invite_status = 'pending' WHERE id = :r",
+        t=S["t3"],
+        r=S["r_recusou"],
+    )
+    # T095: pedir exclusão de um cancelado é a trava (409 cancelado), não um 400 sem código.
+    r = _cliente("com").post(f"/api/events/{e}/solicitar-exclusao", json={"motivo": "x"})
+    if not _e_trava(r):
+        falhas.append(f"solicitar-exclusao → {r.status_code} {_codigo(r)}")
+    # T094: a Comercial segue vendo documento e nascimento do elenco (como no vivo).
+    corpo_vivo = _get("com", f"/api/events/{S['vivo']}")
+    corpo_canc = _get("com", f"/api/events/{e}")
+    vivo_t = [x for x in _achar(corpo_vivo, "id", estado["t"]) if "birth_date" in x]
+    canc_t = [x for x in _achar(corpo_canc, "id", S["t3"]) if "full_name" in x or "name" in x]
+    if not vivo_t:
+        falhas.append("controle: a Comercial não vê birth_date no vivo")
+    elif not canc_t:
+        falhas.append("o escalado do cancelado sumiu do detalhe")
+    elif not any("birth_date" in x for x in canc_t):
+        falhas.append("a Comercial perdeu documento/nascimento do elenco no cancelado")
+    # T093: vincular o PRÓPRIO ensaio cancelado a um show; o Log do ensaio_detail com o motivo.
+    ens, pai = S["ensaio_legado"], S["vivo"]
+    r = _cliente("ens").post(f"/api/ensaios/{ens}/vincular", json={"parent_event_id": S["marcado"]})
+    if not _e_trava(r):
+        falhas.append(f"API vincular ensaio cancelado → {r.status_code} {_codigo(r)}")
+    r = _cliente("ens").post(
+        f"/events/{ens}/link-parent", data={"parent_event_id": str(S["marcado"])}
+    )
+    atual = _no_banco("SELECT parent_event_id FROM calendar_events WHERE id = :i", i=ens)[0][0]
+    if atual != pai:
+        falhas.append(f"o ensaio cancelado foi revinculado ({pai} → {atual})")
+        _no_banco_escrever(
+            "UPDATE calendar_events SET parent_event_id = :p WHERE id = :i", p=pai, i=ens
+        )
+    _no_banco_escrever(
+        "INSERT INTO event_logs (event_id, actor_name, actor_role, message, created_at) "
+        "VALUES (:e, 'v312', 'Superadmin', :m, now())",
+        e=ens,
+        m=f"Evento cancelado: Motivo do ensaio {TOKEN}",
+    )
+    if f"Motivo do ensaio {TOKEN}" in _html("cast", f"/events/{ens}"):
+        falhas.append("o Log do ensaio cancelado mostra o motivo ao Casting")
+    if f"Motivo do ensaio {TOKEN}" not in _html("sa", f"/events/{ens}"):
+        falhas.append("controle: o Superadmin não vê o Log do ensaio")
+    # T092: o artista recusa o convite do cancelado — sem sino "convite recusado"; o pedido ao
+    # Casting fecha quando era o último a avisar.
+    _no_banco_escrever(
+        "UPDATE notifications SET read_at = NULL WHERE kind = 'evento.cancelado_escala' AND entity_id = :e",
+        e=e,
+    )
+    resta = [
+        p
+        for p in (_get("cast", "/api/dashboard").get("casting") or {}).get("cancelados_a_avisar")
+        or []
+        if p.get("event_id") == e
+    ]
+    _garante(
+        [p.get("role_id") for p in resta] == [S["r_recusou"]],
+        f"26: semente do convite — a avisar {[p.get('role_id') for p in resta]}",
+    )
+    antes = _no_banco("SELECT count(*) FROM notifications WHERE kind = 'convite.recusado'")[0][0]
+    r = _portal(S["t3"]).post(f"/api/portal/invites/{S['r_recusou']}/reject", json={})
+    if r.status_code != 200:
+        falhas.append(f"recusar convite do cancelado → {r.status_code}")
+    depois = _no_banco("SELECT count(*) FROM notifications WHERE kind = 'convite.recusado'")[0][0]
+    if depois != antes:
+        falhas.append("recusar no cancelado mandou o sino 'convite recusado'")
+        _no_banco_escrever(
+            "DELETE FROM notifications WHERE kind = 'convite.recusado' AND id IN "
+            "(SELECT id FROM notifications WHERE kind = 'convite.recusado' ORDER BY id DESC LIMIT :n)",
+            n=depois - antes,
+        )
+    nao_lidas = _no_banco(
+        "SELECT count(*) FROM notifications WHERE kind = 'evento.cancelado_escala' AND entity_id = :e "
+        "AND read_at IS NULL",
+        e=e,
+    )[0][0]
+    if nao_lidas:
+        falhas.append("o pedido ao Casting ficou aberto depois que o último recusou")
+    # T091: tirar da escala no cancelado não apaga o adicional de transporte.
+    _no_banco_escrever("UPDATE event_roles SET travel_cache = 50 WHERE id = :r", r=S["r_recusou"])
+    r = _cliente("cast").post(
+        f"/api/roles/{S['r_recusou']}/assign", json={"talent_id": None, "travel_cache": None}
+    )
+    if r.status_code != 200:
+        falhas.append(f"tirar com travel_cache nulo → {r.status_code} {_erro(r)}")
+    tc = _no_banco("SELECT travel_cache FROM event_roles WHERE id = :r", r=S["r_recusou"])[0][0]
+    if tc is None or q(tc) != q(50):
+        falhas.append(f"o adicional de transporte da vaga mudou (50 → {tc})")
+    _garante(not falhas, "26: " + " | ".join(falhas))
+
+
 CENARIOS = [
     ("H1", "1", "agenda Dia, Mês e busca sem o cancelado", c1_agenda),
     ("H1", "2", "ficha do talento sem o cancelado", c2_ficha_talento),
@@ -1302,6 +1579,9 @@ CENARIOS = [
     ("H6", "20", "coisas ligadas com a situação", c20_ligadas),
     ("H6", "21", "portal: ficha de figurino e convite", c21_portal),
     ("R", "22", "regressão sem cancelado", c22_regressao),
+    ("H4", "24", "converge: filtro do grupo, mês fora do intervalo, Ver como", c24_pagina_converge),
+    ("H1", "25", "converge: Home do Ensaio, Jinja, rótulo, selo e faltantes", c25_listas_converge),
+    ("H2", "26", "converge: exclusão, PII, ensaio, portal e transporte", c26_escritas_converge),
 ]
 
 

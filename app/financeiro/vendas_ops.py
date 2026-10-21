@@ -347,15 +347,13 @@ def serialize_sale(
     is_permuta = _is_permuta(event)
     payment_status = event_payment_status(sale_value, received, is_permuta)
     closing = closing_date(event)
+    # Feature 312: o rótulo conta só os dias vivos (o cancelado não é item de lista); com um dia
+    # vivo só, o principal é avulso para a lista (a régua de `cobranca_ops._grupo_comercial`).
+    vivos = len(dias_vivos(event)) if event.is_group_leader else 0
     return {
         "event_id": event.id,
         "title": event.title,
-        "group_label": (
-            # Feature 312: o rótulo conta só os dias vivos (o cancelado não é item de lista).
-            f"{event.group_display_name} ({len(dias_vivos(event))} eventos)"
-            if event.is_group_leader
-            else None
-        ),
+        "group_label": f"{event.group_display_name} ({vivos} eventos)" if vivos >= 2 else None,
         "client_name": contratante_name(event),
         "event_date": event.start_at.date().isoformat() if event.start_at else None,
         "sale_date": event.sale_date.isoformat() if event.sale_date else None,

@@ -534,7 +534,13 @@ function GastoFormModal({
           travado={travado}
           vinculoAtual={
             mode === "edit" && expense?.event_id
-              ? { id: expense.event_id, titulo: expense.event_title ?? `Evento #${expense.event_id}` }
+              ? {
+                  id: expense.event_id,
+                  // Feature 312 (converge): a opção fixa leva a marca, como o select da linha.
+                  titulo: `${expense.event_title ?? `Evento #${expense.event_id}`}${
+                    expense.event_cancelled ? " (cancelado)" : ""
+                  }`,
+                }
               : null
           }
         />

@@ -1731,11 +1731,19 @@ def event_detail(event_id: int):
                 .order_by(CalendarEvent.start_at.desc())
                 .all()
             )
+        # Converge (312, Q9): o Log do cancelado leva o motivo — só para Comercial, Financeiro e
+        # Superadmin, seguindo o "Ver como" como o `has_role` da tela de show (definido abaixo).
+        _real_sa = any(r.name == RoleName.SUPERADMIN for r in current_user.roles)
+        _como = session.get("impersonate_role") if _real_sa else None
+        _papeis = {_como.upper()} if _como else {r.name.upper() for r in current_user.roles}
+        ve_motivo = bool(
+            _papeis & {RoleName.COMERCIAL.upper(), RoleName.FINANCEIRO.upper(), RoleName.SUPERADMIN.upper()}
+        )
         return render_template(
             "ensaio_detail.html",
             event=event,
             parent=event.parent,
-            logs=logs,
+            logs=logs if (ve_motivo or not event.is_cancelled) else [],
             show_ensaio=can_manage_ensaio,
             candidate_shows=candidate_shows,
             settings=SiteSetting.query.get(1),
@@ -2508,28 +2516,37 @@ def sync_events(items: list[dict]) -> None:
     _mark_talents_worked()
 
 
-def _mark_talents_worked() -> None:
-    """Liga "já trabalhou com a Manto" para talentos que realizaram um evento (feature 115).
+def ids_de_quem_trabalhou():
+    """A régua de "realizou um evento" (feature 115): a consulta dos ids, sem gravar nada.
 
-    "Realizou" = teve talento atribuído a um cargo, em evento que não é Ensaio, com convite
-    não recusado, e cuja data já passou. Roda a cada sincronização da agenda (mesma função
-    usada pelo botão "Sincronizar agora", pela thread automática e pelo sync de um evento).
-    Só LIGA o campo — nunca desliga uma marcação existente (FR-002).
+    "Realizou" = teve talento atribuído a um cargo, em evento que não é Ensaio nem cancelado
+    (feature 312: o show que não aconteceu não conta), com convite não recusado, e cuja data já
+    passou. Separada de `_mark_talents_worked` para ser conferida sem ligar o selo de ninguém.
     """
     now = datetime.utcnow()
-    worked_talent_ids = (
+    return (
         db.session.query(EventRole.talent_id)
         .join(CalendarEvent, EventRole.event_id == CalendarEvent.id)
         .filter(
             EventRole.talent_id.isnot(None),
             db.or_(EventRole.invite_status.is_(None), EventRole.invite_status != "rejected"),
             CalendarEvent.event_type != "ENSAIO",
+            CalendarEvent.cancelled_at.is_(None),
             db.func.coalesce(CalendarEvent.end_at, CalendarEvent.start_at) < now,
         )
         .distinct()
     )
+
+
+def _mark_talents_worked() -> None:
+    """Liga "já trabalhou com a Manto" para talentos que realizaram um evento (feature 115).
+
+    A régua é `ids_de_quem_trabalhou`. Roda a cada sincronização da agenda (mesma função usada
+    pelo botão "Sincronizar agora", pela thread automática e pelo sync de um evento). Só LIGA o
+    campo — nunca desliga uma marcação existente (FR-002).
+    """
     Talent.query.filter(
-        Talent.id.in_(worked_talent_ids),
+        Talent.id.in_(ids_de_quem_trabalhou()),
         Talent.worked_before.isnot(True),
     ).update({"worked_before": True}, synchronize_session=False)
     db.session.commit()
@@ -2825,6 +2842,9 @@ def link_ensaio_parent(ensaio_id: int):
         abort(400)
     if not any(r.name.upper() in _CAN_ENSAIO for r in current_user.roles):
         abort(403)
+    recusa = _recusa_jinja_do_cancelado(ensaio)  # converge (312): o ensaio cancelado é só consulta
+    if recusa is not None:
+        return recusa
 
     raw = request.form.get("parent_event_id", "").strip()
     if not raw.isdigit():

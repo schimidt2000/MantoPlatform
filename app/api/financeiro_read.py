@@ -422,14 +422,12 @@ def api_financeiro_dashboard() -> Any:
         venda = float(e.sale_value or 0)
         # Mesma regra do Dashboard Comercial (feature 196) — fonte única em `vendas_ops`.
         status = vendas_ops.event_payment_status(venda, recebido, _is_permuta(e))
+        # Feature 312: só os dias vivos, e só com dois ou mais (a régua do rótulo da lista de vendas).
+        vivos = len(group_ops.dias_vivos(e)) if e.is_group_leader else 0
         eventos_data.append({
             "event_id": e.id,
             "title": e.title,
-            "group_label": (
-                # Feature 312: só os dias vivos (a régua do rótulo da lista de vendas).
-                f"{e.group_display_name} ({len(group_ops.dias_vivos(e))} eventos)"
-                if e.is_group_leader else None
-            ),
+            "group_label": f"{e.group_display_name} ({vivos} eventos)" if vivos >= 2 else None,
             "start_at": e.start_at.isoformat() if e.start_at else None,
             "event_type": e.event_type or None,
             "receita": venda,

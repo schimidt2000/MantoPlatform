@@ -6,6 +6,7 @@ import { formatBRL, MoneyInput } from "@manto/money";
 import { PRESENCA_CHARACTER } from "../../lib/agenda";
 import type { EventoDetalhe, PaymentStatus, RoleItem } from "../../lib/agenda";
 import {
+  avisoDeCancelamentoNoWhatsApp,
   useAddRole,
   useAssignRole,
   useDeleteRole,
@@ -416,16 +417,39 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
             <CopyInviteButton role={role} data={data} />
           </>
         )}
-        {role.talent?.whatsapp && (
-          <Button asChild variant="ghost" size="sm">
-            <a
-              href={`https://wa.me/${role.talent.whatsapp}`}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              📱 WhatsApp
-            </a>
-          </Button>
+        {podeTirar && role.talent ? (
+          // Feature 312 (FR-026): no cancelado, o mesmo aviso da Home — mensagem pronta, ou o recado
+          // de que não há número para avisar.
+          (() => {
+            const zap = avisoDeCancelamentoNoWhatsApp({
+              whatsapp: role.talent.whatsapp,
+              nome: role.talent.name,
+              evento: data.event.title,
+              inicio: data.event.start_at,
+              personagem: role.character_name,
+            });
+            return zap ? (
+              <Button asChild variant="outline" size="sm">
+                <a href={zap} target="_blank" rel="noopener noreferrer">
+                  Avisar no WhatsApp
+                </a>
+              </Button>
+            ) : (
+              <span className="text-xs text-muted">sem WhatsApp no cadastro</span>
+            );
+          })()
+        ) : (
+          role.talent?.whatsapp && (
+            <Button asChild variant="ghost" size="sm">
+              <a
+                href={`https://wa.me/${role.talent.whatsapp}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                📱 WhatsApp
+              </a>
+            </Button>
+          )
         )}
         {podeTirar && role.talent && (
           <Button

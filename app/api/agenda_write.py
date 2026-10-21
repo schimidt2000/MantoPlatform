@@ -262,8 +262,9 @@ def api_assign_role(role_id: int) -> Any:
             cache_value=role.cache_value if cancelado else data.get("cache_value"),
             # Repasse CONDICIONAL (feature 239): esta tela não edita o adicional de transporte e
             # nunca manda a chave. Passar `data.get(...)` = None fazia o `assign_role` gravar NULL
-            # por cima do valor existente a cada "Salvar" — o `_UNSET` é o "não mexe nisso".
-            travel_cache=data["travel_cache"] if "travel_cache" in data else _UNSET,
+            # por cima do valor existente a cada "Salvar" — o `_UNSET` é o "não mexe nisso". No
+            # cancelado, nunca mexe (312, converge): `{travel_cache: null}` apagava o adicional.
+            travel_cache=data["travel_cache"] if "travel_cache" in data and not cancelado else _UNSET,
             actor_name=current_user.name,
             is_superadmin=is_superadmin,
             tz=_TZ_SP,
@@ -913,6 +914,10 @@ def api_solicitar_exclusao(event_id: int) -> Any:
         return json_error("Evento não encontrado", 404)
     if not _can_request_delete():
         return json_error("Sem permissão", 403)
+    # Converge (312): o cancelado é só consulta — a trava, com o código que recarrega a tela.
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
 
     from app.calendar.cancel_ops import CancelValidationError, solicitar_exclusao
 
@@ -967,6 +972,11 @@ def api_listar_cancelamentos() -> Any:
             mes = datetime.strptime(raw_mes, "%Y-%m").date()
         except ValueError:
             erros["mes"] = "Use o mês no formato AAAA-MM."
+        else:
+            # Converge (312): `9999-12` passa no formato e estourava no limite do mês (500).
+            if not 2000 <= mes.year <= 2999:
+                erros["mes"] = "Use um mês entre 2000 e 2999."
+                mes = None
     devolucao = (request.args.get("devolucao") or "").strip() or None
     if devolucao and devolucao not in FILTROS_DEVOLUCAO:
         erros["devolucao"] = "Situação da devolução desconhecida."
@@ -2670,6 +2680,10 @@ def api_link_ensaio(ensaio_id: int) -> Any:
         return json_error("Ensaio não encontrado", 404)
     if not _can_ensaio():
         return json_error("Sem permissão", 403)
+    # Converge (312): o ensaio cancelado (legado) é a tela de um cancelado — só consulta.
+    negado = trava_do_cancelado(ensaio)
+    if negado:
+        return negado
 
     body = request.get_json(silent=True) or {}
     parent_id = body.get("parent_event_id")

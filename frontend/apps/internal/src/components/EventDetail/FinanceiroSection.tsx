@@ -16,7 +16,7 @@ import {
   useEditPayment,
   useToggleContractSigned,
 } from "../../lib/eventAttachments";
-import { AvisoVendaDoCancelado, Empty, INPUT_CLASS, Panel, brl, formatDateTime, formatDay } from "./parts";
+import { Empty, INPUT_CLASS, Panel, brl, formatDateTime, formatDay } from "./parts";
 
 const MONEY_INPUT_CLASS = "h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -707,7 +707,6 @@ export interface FinanceiroSectionProps {
 export function FinanceiroSection({ data }: FinanceiroSectionProps) {
   return (
     <>
-      <AvisoVendaDoCancelado flags={data.flags} />
       {data.contratos && <ContratosPanel data={data} />}
       {data.notas_fiscais && <NotasFiscaisPanel data={data} />}
       {data.pagamentos && <PagamentosPanel data={data} />}

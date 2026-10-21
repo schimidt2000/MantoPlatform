@@ -561,6 +561,8 @@ export function useCancelamentos(filtros: { mes?: string | null; devolucao?: Fil
   return useQuery<CancelamentosResposta>({
     queryKey: ["cancelamentos", filtros.mes ?? null, filtros.devolucao ?? null],
     queryFn: () => apiFetch<CancelamentosResposta>(`/api/events/cancelamentos${qs ? `?${qs}` : ""}`),
+    // Converge (312): trocar de filtro mantém a lista anterior na tela até a nova chegar.
+    placeholderData: keepPreviousData,
   });
 }
 

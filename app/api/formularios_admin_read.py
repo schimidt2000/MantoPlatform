@@ -70,6 +70,8 @@ def _response_summary(r: FormResponse, corte: datetime) -> dict:
         "event_link_source": r.event_link_source,
         "event_link_ambiguous": r.event_link_ambiguous,
         "event_link_locked": r.event_link_locked,
+        # Feature 312 (converge): o selo também na LISTA (o evento vem no `joinedload`).
+        "event_situacao": r.event.situacao if r.event else None,
         "created_at": formularios_ops.iso_utc(r.created_at),
         # Feature 298: o destino (mesma regra das contagens, calculada no núcleo) e o encerramento.
         "destino": formularios_ops.destino_de(r, corte),
@@ -87,8 +89,6 @@ def _response_detail(r: FormResponse, corte: datetime) -> dict:
         **_response_summary(r, corte),
         "data_sections": r.data_sections,
         "event_title": r.event.title if r.event else None,
-        # Feature 312: o formulário ligado a um cancelado leva o selo no detalhe.
-        "event_situacao": r.event.situacao if r.event else None,
     }
 
 
