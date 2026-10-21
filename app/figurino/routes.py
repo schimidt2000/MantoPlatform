@@ -61,6 +61,12 @@ def print_event_figurinos(event_id: int):
     from .drive_service import normalize_name
 
     event = CalendarEvent.query.get_or_404(event_id)
+    # Feature 312 (Q7): o cancelado não imprime fichas (a tela dele é só consulta).
+    from app.calendar.routes import _recusa_jinja_do_cancelado
+
+    recusa = _recusa_jinja_do_cancelado(event)
+    if recusa is not None:
+        return recusa
     roles = [r for r in sorted(event.roles, key=lambda r: r.id) if r.role_type != "extra"]
 
     # 1º passe: nome normalizado → ficha explícita de algum cargo. É o que deixa um cargo

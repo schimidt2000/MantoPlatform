@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { API_BASE, ApiRequestError, apiFetch, assetUrl, type ApiErrorBody } from "@manto/api-client";
+import type { SituacaoEvento } from "./agenda";
 
 /**
  * Tags NFC das peças 3D (features 255, 261, 265 e 297) — tipos e hooks TanStack Query.
@@ -25,6 +26,8 @@ export interface NfcTagEventRef {
   id: number;
   title: string;
   start_at: string | null;
+  /** Feature 312: a situação do evento ligado (o selo do cancelado). Ausente em backend velho. */
+  situacao?: SituacaoEvento | null;
 }
 
 /**

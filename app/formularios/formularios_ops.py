@@ -259,7 +259,9 @@ def search_responses(q: str) -> list[FormResponse]:
 
     return (
         FormResponse.query.options(
-            joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+            joinedload(FormResponse.client),
+            joinedload(FormResponse.closed_by),
+            joinedload(FormResponse.event),  # o selo da situação (312), sem N+1
         )
         .filter(or_(*conditions))
         .order_by(FormResponse.created_at.desc())
@@ -300,7 +302,9 @@ def list_responses(
     """
     corte = corte or corte_de_chegada()
     query = FormResponse.query.options(
-        joinedload(FormResponse.client), joinedload(FormResponse.closed_by)
+        joinedload(FormResponse.client),
+        joinedload(FormResponse.closed_by),
+        joinedload(FormResponse.event),  # o selo da situação (312), sem N+1
     )
     condition = _status_condition(filtro, corte)
     if condition is not None:
@@ -488,6 +492,12 @@ def apply_event_link(
     Returns:
         ``VinculoResultado`` com a divergência de cliente, quando houver.
     """
+    # Feature 312 (Q2): pré-contrato não se liga a evento cancelado — o núcleo único cobre o painel
+    # do evento, a associação em /formularios e a edição em bloco. Import tardio: este módulo é
+    # folha (`event_ops.py:14-18`).
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para ligar um formulário a ele.")
     limpar_encerramento(response)
     response.event_id = event.id
     response.event_link_source = source
@@ -854,6 +864,7 @@ def _real_event_candidates(event_date: date) -> list[CalendarEvent]:
             db.func.date(CalendarEvent.start_at) == event_date,
             not_(CalendarEvent.title.like("🟧 ENSAIO%")),
             CalendarEvent.group_leader_id.is_(None),
+            CalendarEvent.cancelled_at.is_(None),  # feature 312: o automático nunca chega ao cancelado
         )
         .all()
     )

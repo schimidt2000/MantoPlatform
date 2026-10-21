@@ -145,7 +145,9 @@ export interface FigurinoSectionProps {
  */
 export function FigurinoSection({ data }: FigurinoSectionProps) {
   const personagens = (data.elenco ?? []).filter((r) => r.role_type !== "extra");
-  const canEdit = Boolean(data.flags.show_figurino);
+  // Feature 312: o cancelado é só consulta — nem marcar figurino nem imprimir fichas.
+  const consulta = Boolean(data.flags.somente_consulta);
+  const canEdit = Boolean(data.flags.show_figurino) && !consulta;
   const semFicha = personagens.filter((r) => !r.figurino_sheet_id).length;
 
   return (
@@ -154,7 +156,7 @@ export function FigurinoSection({ data }: FigurinoSectionProps) {
       actions={
         <>
           {semFicha > 0 && <Badge tone="red">{semFicha} sem ficha</Badge>}
-          {personagens.length > 0 && (
+          {personagens.length > 0 && !consulta && (
             <Button
               variant="outline"
               size="sm"

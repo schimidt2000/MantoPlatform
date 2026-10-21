@@ -26,7 +26,7 @@ import { AgruparEventosDialog } from "./AgruparEventosDialog";
 import { AlertaBvDoOrcamento } from "./AlertaBvDoOrcamento";
 import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { GastosVinculados } from "./GastosVinculados";
-import { brl, DataRow, Empty, formatDay, INPUT_CLASS, Panel } from "./parts";
+import { DataRow, Empty, INPUT_CLASS, Panel, brl, formatDay } from "./parts";
 import { ResultadoCancelamento } from "./ResultadoCancelamento";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
@@ -916,6 +916,30 @@ function PreContratoPanel({ data }: { data: EventoDetalhe }) {
   const salvar = useSetEventFormResponse(data.event.id);
   const canEdit = Boolean(data.flags.can_edit_core);
   const atual = venda.form_response;
+
+  // Feature 312: no cancelado não se liga formulário, mas desligar o que já estava (desfazer)
+  // continua — o pré-contrato volta para a fila de /formularios.
+  if (!canEdit && data.flags.desfazer_formulario && atual) {
+    return (
+      <Panel title="Pré-contrato">
+        <DataRow label={atual.form_type}>
+          <Link to={`/formularios?resposta=${atual.id}`} className="text-blue underline">
+            {atual.name}
+          </Link>
+        </DataRow>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
+          loading={salvar.isPending}
+          onClick={() => salvar.mutate({ form_response_id: null })}
+        >
+          Desligar o formulário
+        </Button>
+        {salvar.isError && <p className="mt-1 text-sm text-red">{salvar.error?.message}</p>}
+      </Panel>
+    );
+  }
 
   if (!canEdit) {
     return (

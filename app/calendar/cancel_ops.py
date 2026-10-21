@@ -655,6 +655,75 @@ def totais_cancelamentos(resumos: list[ResumoCancelado]) -> dict[str, Any]:
     }
 
 
+def painel_de_cancelamentos(
+    resumos: list[ResumoCancelado],
+    *,
+    totais: dict[str, Any] | None = None,
+    commission_target_id: int | None = None,
+    com_imposto: bool = True,
+) -> dict[str, Any]:
+    """O card "Cancelamentos do período" (feature 312): a mesma forma na DRE e no Comercial.
+
+    Os totais são os de `totais_cancelamentos` (a DRE passa os que já somou na cascata, para o card
+    e a linha "Retido de cancelamentos" serem o mesmo número). A comissão do retido segue a régua
+    do KPI do Comercial (`vendas_ops.build_kpis`): com `commission_target_id`, só a do beneficiário
+    alvo. `imposto` e `efeito_resultado` só com `com_imposto` (Q1 do dono: Superadmin e Financeiro).
+    JSON-safe (floats).
+    """
+    from app.financeiro.vendas_ops import event_payment_status
+
+    totais = totais if totais is not None else totais_cancelamentos(resumos)
+    status = event_payment_status(0, 0, False, cancelado=True)  # o rótulo do cancelado (306)
+
+    def _do_alvo(r: ResumoCancelado) -> bool:
+        return commission_target_id is None or (
+            r.beneficiario is not None and r.beneficiario.id == commission_target_id
+        )
+
+    comissao = (
+        totais["comissao_retido"]
+        if commission_target_id is None
+        else sum((r.comissao_retido for r in resumos if _do_alvo(r)), Decimal("0.00"))
+    )
+    nomes = {
+        u.id: u.name
+        for u in User.query.filter(User.id.in_({r.seller_id for r in resumos if r.seller_id} or {-1})).all()
+    }
+    painel: dict[str, Any] = {
+        "quantidade": totais["quantidade"],
+        "pago": float(totais["pago"]),
+        "devolvido": float(totais["devolvido"]),
+        "devolucao_a_pagar": float(totais["devolucao_a_pagar"]),
+        "retido": float(totais["retido"]),
+        "comissao_retido": float(comissao),
+        "bv_retido": float(totais["bv_retido"]),
+        "itens": [
+            {
+                "event_id": r.event.id,
+                "titulo": r.event.title,
+                "event_date": r.event.start_at.isoformat() if r.event.start_at else None,
+                "cancelado_em": r.cancelado_em.isoformat() if r.cancelado_em else None,
+                "seller_name": nomes.get(r.seller_id),
+                "pago": float(r.pago),
+                "devolvido": float(r.devolvido),
+                "devolucao_a_pagar": float(sum(
+                    (_dinheiro(g.amount) for g in r.devolucoes
+                     if g.status == "aprovado" and (g.payment_status or "nao_pago") != "pago"),
+                    Decimal("0.00"),
+                )),
+                "retido": float(r.retido),
+                "comissao_retido": float(r.comissao_retido if _do_alvo(r) else Decimal("0.00")),
+                "status": status,
+            }
+            for r in resumos
+        ],
+    }
+    if com_imposto:
+        painel["imposto"] = float(totais["imposto"])
+        painel["efeito_resultado"] = float(totais["efeito_resultado"])
+    return painel
+
+
 def retido_por_vendedor(resumos: list[ResumoCancelado]) -> dict[int, Decimal]:
     """O retido de cada vendedor (o congelado), para o Comercial e o desempenho (FR-046)."""
     out: dict[int, Decimal] = {}
@@ -2109,9 +2178,20 @@ def cancelar_evento(event: CalendarEvent, *, corpo: dict[str, Any] | None, actor
 def elenco_do_ato(event: CalendarEvent, dias: list[int] | None = None) -> list[EventRole]:
     """A régua única das escalações do ato (R18): com talento, sem quem recusou o convite e sem
     a vaga de presença do som. O impacto mostra esta lista; a H6 a grava no congelado."""
+    return elenco_dos_dias(dias or [event.id])
+
+
+def elenco_dos_dias(ids: list[int]) -> list[EventRole]:
+    """A régua de `elenco_do_ato` para uma lista de dias, em uma consulta (feature 312).
+
+    É também a de "quem o Casting ainda tem de tirar e avisar" num cancelado: as vagas de HOJE —
+    quem já saiu da escala sai daqui. Lista vazia devolve vazio (em `elenco_do_ato` ela caía no
+    próprio evento).
+    """
     from app.calendar.casting_ops import e_vaga_de_presenca
 
-    ids = dias or [event.id]
+    if not ids:
+        return []
     papeis = (
         EventRole.query.filter(EventRole.event_id.in_(ids), EventRole.talent_id.isnot(None))
         .order_by(EventRole.event_id, EventRole.id)
@@ -2982,6 +3062,73 @@ def recusar_se_cancelado(event: CalendarEvent, user: User, *, grupo: bool = Fals
         raise EventoCanceladoError()
 
 
+# ── Feature 312: a tela do cancelado só para consulta, e nada novo se liga a ele ─────────────
+
+
+class EventoSomenteConsultaError(CancelValidationError):
+    """A trava geral do cancelado (feature 312, FR-011; Q7 = A do dono).
+
+    Vale para TODO papel, o Superadmin inclusive: o que o Superadmin corrige no cancelado são os
+    dados de venda, e essas portas não passam por aqui (têm a regra própria da 306,
+    `recusar_se_cancelado`; o motivo tem a da 306b). Sai como 409 `cancelado`, o mesmo código das
+    outras recusas do cancelado, para a tela recarregar o evento ao recebê-lo.
+    """
+
+    MENSAGEM = "Este evento foi cancelado — a tela fica só para consulta."
+
+    def __init__(self, message: str = MENSAGEM) -> None:
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        super().__init__(message, status=409, codigo=CODIGO_EVENTO_CANCELADO)
+
+
+class EventoCanceladoVinculoError(CancelValidationError):
+    """Ligar algo novo a um evento cancelado (feature 312, FR-013–FR-017; Q2 e Q5 do dono).
+
+    Com `campo`, é 400 com o erro no campo (o vizinho de quem escolhe o evento num formulário:
+    vínculo de ensaio, tag NFC, pedido de figurino); sem campo, 409 (a ação é sobre o próprio
+    evento: agendar ensaio, presente, formulário, escalar, convidar, link de avaliação).
+    """
+
+    def __init__(self, message: str, *, campo: str | None = None) -> None:
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        super().__init__(
+            message, field=campo, status=400 if campo else 409, codigo=CODIGO_EVENTO_CANCELADO
+        )
+
+
+def fechar_pedido_ao_casting_se_vazio(dia: CalendarEvent) -> int:
+    """Feature 312 (Q10): sem ninguém mais a tirar e avisar no dia cancelado, o sino do pedido ao
+    Casting daquele dia fica lido para todos (o "aviso some sozinho" da 298). Sem commit: roda na
+    transação da remoção. Devolve quantos avisos ficaram lidos."""
+    from app.notificacoes import notificacoes_ops as nops
+
+    db.session.flush()
+    if elenco_dos_dias([dia.id]):
+        return 0
+    return nops.marcar_lidas_por_entidade("calendar_event", dia.id, nops.KIND_EVENTO_CANCELADO_ESCALA)
+
+
+def exigir_evento_vivo(event: CalendarEvent | None) -> None:
+    """Recusa toda escrita na tela de um evento cancelado (FR-011). Só olha `cancelled_at`:
+    o pedido de exclusão e a marca "Sumiu do Google" não travam nada (FR-010)."""
+    if event is not None and event.is_cancelled:
+        raise EventoSomenteConsultaError()
+
+
+def recusar_se_cancelado_para_ligar(
+    event: CalendarEvent | None, mensagem: str, *, campo: str | None = None
+) -> None:
+    """Recusa ligar algo NOVO a um evento cancelado, antes de qualquer escrita, e-mail ou Google.
+
+    Quem chama decide o que é "novo" (reenviar o vínculo que já existe passa): a tag que já era do
+    evento, o pedido de figurino que não troca de evento, o formulário que se desliga.
+    """
+    if event is not None and event.is_cancelled:
+        raise EventoCanceladoVinculoError(mensagem, campo=campo)
+
+
 def _dono_das_aberta(aprovadas: list[SpecialExpense], dono_id: int) -> list[SpecialExpense]:
     """As devoluções ainda não pagas, a do dono primeiro e as outras por id (R12)."""
     abertas = [d for d in aprovadas if (d.payment_status or "nao_pago") == "nao_pago"]
@@ -3394,11 +3541,43 @@ def recusar_solicitacao(event: CalendarEvent, *, actor: User, motivo: str = "") 
     db.session.commit()
 
 
-def listar_cancelamentos(*, flags: dict[str, Any] | None = None) -> dict[str, list[dict[str, Any]]]:
-    """Fila do Superadmin: solicitações pendentes + eventos já cancelados.
+def _tem_devolucao(resumo: ResumoCancelado, estado: str) -> bool:
+    """O cancelado entra no filtro `estado` da página (feature 312): `sem` = nenhuma devolução.
 
-    Feature 306 (contracts §15): cada cancelado ganha o `resumo`, montado em lote, com todas as
-    devoluções e o PIX só com `show_financeiro`. O campo `devolucao` fica por um ciclo.
+    O satélite do "todos" carrega no resumo as devoluções do grupo inteiro (o dinheiro mora no 1º
+    dia), mas a tela não as mostra nele: o filtro casa só as do próprio dia — senão "A devolver"
+    trazia os N dias de um grupo com uma devolução só (converge da 312).
+    """
+    from app.constants import REGIME_SATELITE
+
+    devolucoes = resumo.devolucoes
+    if resumo.regime == REGIME_SATELITE:
+        devolucoes = [g for g in devolucoes if g.event_id == resumo.event.id]
+    estados = {(g.payment_status or "nao_pago") for g in devolucoes}
+    return not estados if estado == "sem" else estado in estados
+
+
+FILTROS_DEVOLUCAO = ("nao_pago", "no_banco", "pago", "sem")
+LIMITE_SEM_MES = 200
+
+
+def listar_cancelamentos(
+    *,
+    flags: dict[str, Any] | None = None,
+    mes: date | None = None,
+    devolucao: str | None = None,
+) -> dict[str, Any]:
+    """A página de Cancelamentos: pedidos pendentes + eventos cancelados (features 224, 306, 312).
+
+    Feature 306 (contracts §15): cada cancelado traz o `resumo` em lote, com todas as devoluções e o
+    PIX só com `show_financeiro`. Feature 312:
+    - `mes` (o 1º dia): só os cancelados naquele mês (horário de São Paulo, como `cancelled_at` é
+      gravado), sem limite; sem `mes`, os 200 mais recentes e o total diz "dos listados";
+    - `devolucao` ∈ `FILTROS_DEVOLUCAO`: pelo estado das devoluções DO RESUMO (o regime `venda` soma
+      as do grupo, e a passagem da venda move a devolução de evento — um EXISTS por `event_id`
+      divergiria da coluna que a tela mostra). O evento entra em cada estado que tem; `sem` = nenhuma
+      devolução. Aplicado antes do corte de 200;
+    - sai o objeto `devolucao` legado (o "ciclo" da 306 passou; o bundle dela só o lia sem `resumo`).
     """
     pendentes = (
         CalendarEvent.query.filter(
@@ -3408,32 +3587,27 @@ def listar_cancelamentos(*, flags: dict[str, Any] | None = None) -> dict[str, li
         .order_by(CalendarEvent.deletion_requested_at.desc())
         .all()
     )
-    cancelados = (
-        CalendarEvent.query.filter(CalendarEvent.cancelled_at.isnot(None))
-        .order_by(CalendarEvent.cancelled_at.desc())
-        .limit(200)
-        .all()
-    )
+    consulta = CalendarEvent.query.filter(CalendarEvent.cancelled_at.isnot(None))
+    if mes is not None:
+        inicio = datetime(mes.year, mes.month, 1)
+        fim = datetime(mes.year + (mes.month // 12), mes.month % 12 + 1, 1)
+        consulta = consulta.filter(CalendarEvent.cancelled_at >= inicio, CalendarEvent.cancelled_at < fim)
+    consulta = consulta.order_by(CalendarEvent.cancelled_at.desc(), CalendarEvent.id.desc())
+    # Sem mês e sem filtro de devolução, o corte é na consulta; com o filtro, depois dele.
+    cancelados = consulta.limit(LIMITE_SEM_MES).all() if mes is None and not devolucao else consulta.all()
 
     resumos = resumos_cancelados([e.id for e in cancelados])
-
-    def _devolucao(event: CalendarEvent) -> dict[str, Any] | None:
-        # O campo fica por um ciclo (contracts §15); o `resumo` em lote é quem traz todas.
-        gasto = (
-            SpecialExpense.query.filter(filtro_devolucao(), SpecialExpense.event_id == event.id)
-            .order_by(SpecialExpense.id)
-            .first()
-        )
-        if gasto is None:
-            return None
-        return {
-            "id": gasto.id,
-            "amount": float(gasto.amount or 0),
-            "payee_name": gasto.payee_name,
-            "payment_status": gasto.payment_status,
-        }
+    if devolucao:
+        cancelados = [e for e in cancelados if e.id in resumos and _tem_devolucao(resumos[e.id], devolucao)]
+        if mes is None:
+            cancelados = cancelados[:LIMITE_SEM_MES]
+    total_retido = sum((resumos[e.id].retido for e in cancelados if e.id in resumos), Decimal("0.00"))
+    ver_motivo = flags is None or bool(flags.get("show_comercial"))
 
     return {
+        "total_retido": float(total_retido),
+        "total_retido_escopo": "periodo" if mes is not None else "listados",
+        "filtros": {"mes": mes.strftime("%Y-%m") if mes else None, "devolucao": devolucao or None},
         "pendentes": [
             {
                 "id": e.id,
@@ -3456,11 +3630,14 @@ def listar_cancelamentos(*, flags: dict[str, Any] | None = None) -> dict[str, li
                 "start_at": e.start_at.isoformat() if e.start_at else None,
                 "sale_value": float(e.sale_value or 0),
                 "cancelled_at": e.cancelled_at.isoformat(),
+                # Q9 (312): motivo e autor seguem `show_comercial`, também no "Ver como" — o
+                # acesso à página é pelo papel real, o que se mostra segue a flag.
                 "cancelled_by": (
-                    db.session.get(User, e.cancelled_by_id).name if e.cancelled_by_id else None
+                    db.session.get(User, e.cancelled_by_id).name
+                    if e.cancelled_by_id and ver_motivo
+                    else None
                 ),
-                "reason": e.cancellation_reason,
-                "devolucao": _devolucao(e),
+                "reason": e.cancellation_reason if ver_motivo else None,
                 "resumo": serializar_resumo_cancelado(resumos[e.id], flags or {}) if e.id in resumos else None,
             }
             for e in cancelados

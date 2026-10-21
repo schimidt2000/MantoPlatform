@@ -81,7 +81,7 @@ function RatingsPanel({ data }: { data: EventoDetalhe }) {
 function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
   const feedbacks = data.client_feedbacks;
   // Exclusão manual de feedback incorreto — só SUPERADMIN (o endpoint valida de novo).
-  const canDelete = Boolean(data.flags.is_superadmin);
+  const canDelete = Boolean(data.flags.is_superadmin) && !data.flags.somente_consulta; // feature 312
   const deleteFeedback = useDeleteClientFeedback();
   const [confirmingId, setConfirmingId] = useState<number | null>(null);
   if (!feedbacks) return null;

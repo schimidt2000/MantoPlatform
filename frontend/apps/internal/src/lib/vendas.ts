@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
-import type { LojaVirtualResumo, PeriodFilter } from "./financeiro";
+import type { CancelamentosDoPeriodo, LojaVirtualResumo, PeriodFilter } from "./financeiro";
 
 /** Situação do contrato do evento — derivada de `EventContract` no servidor (feature 196). */
 export type ContractStatus = "assinado" | "pendente" | "sem_contrato";
@@ -83,6 +83,11 @@ export interface DashboardComercial {
   loja_virtual?: LojaVirtualResumo;
   /** Reflete o opt-in explícito do gestor (FR-055) — por padrão `false`. */
   incluir_loja_virtual?: boolean;
+  /**
+   * Feature 312: o card "Cancelamentos do período" (mês do cancelamento, no escopo do usuário).
+   * Opcional: backend antigo não manda (o card não aparece).
+   */
+  cancelamentos?: CancelamentosDoPeriodo;
 }
 
 export interface DashboardComercialParams {

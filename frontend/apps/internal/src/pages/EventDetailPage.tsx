@@ -11,6 +11,7 @@ import { EventHeader } from "../components/EventDetail/EventHeader";
 import { FeedbackSection } from "../components/EventDetail/FeedbackSection";
 import { FigurinoSection } from "../components/EventDetail/FigurinoSection";
 import { FinanceiroSection } from "../components/EventDetail/FinanceiroSection";
+import { AvisoVendaDoCancelado } from "../components/EventDetail/parts";
 import { LogisticaSection } from "../components/EventDetail/LogisticaSection";
 import { Presente3DSection } from "../components/EventDetail/Presente3DSection";
 import { PedidoVirtualSection } from "../components/EventDetail/PedidoVirtualSection";
@@ -137,12 +138,16 @@ function montarAbas(data: EventoDetalhe, irPara: (tab: string) => void): AbaDef[
       value: "comercial",
       label: "Comercial",
       render: () => (
-        <div className={DUAS_COLUNAS}>
-          <div className="space-y-4">
-            <ComercialSection data={data} />
-          </div>
-          <div className="space-y-4">
-            <FinanceiroSection data={data} />
+        <div className="space-y-4">
+          {/* Feature 312: uma vez por aba — as duas colunas são a mesma aba (converge). */}
+          <AvisoVendaDoCancelado flags={data.flags} />
+          <div className={DUAS_COLUNAS}>
+            <div className="space-y-4">
+              <ComercialSection data={data} />
+            </div>
+            <div className="space-y-4">
+              <FinanceiroSection data={data} />
+            </div>
           </div>
         </div>
       ),

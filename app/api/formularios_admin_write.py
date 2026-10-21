@@ -23,7 +23,8 @@ from app.api.formularios_admin_read import (
     _require_vendas,
     _response_summary,
 )
-from app.api_utils import api_login_required, json_error
+from app.api_utils import api_login_required, json_error, json_recusa_do_cancelado
+from app.calendar.cancel_ops import CancelValidationError
 from app.formularios import destino_ops, formularios_ops
 from app.models import CalendarEvent, FormFieldDefinition, FormResponse
 
@@ -239,6 +240,9 @@ def api_formularios_vincular_evento(response_id: int) -> Any:
         # Até a 298 este caminho SOBRESCREVIA o vínculo; agora recusa como todos os outros.
         db.session.rollback()
         return json_error(exc.message, 409)
+    except CancelValidationError as exc:  # feature 312: o cancelado não recebe formulário
+        db.session.rollback()
+        return json_recusa_do_cancelado(exc)
     return jsonify({
         "response": _response_summary(response, formularios_ops.corte_de_chegada()),
         "divergencia_cliente": resultado.divergencia_cliente,

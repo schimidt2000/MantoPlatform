@@ -8,6 +8,7 @@ import {
 import { ApiRequestError, apiFetch } from "@manto/api-client";
 import { invalidarNotificacoes } from "./notificacoes";
 import type { MotivoEncerramento, SugestaoDeEvento } from "./types";
+import type { SituacaoEvento } from "./agenda";
 
 export interface FormResponseSummary {
   id: number;
@@ -36,6 +37,8 @@ export interface FormResponseSummary {
   closed_note?: string | null;
   closed_by_name?: string | null;
   closed_at?: string | null;
+  /** Feature 312: a situação do evento ligado (o selo do cancelado), na lista e no detalhe. */
+  event_situacao?: SituacaoEvento | null;
 }
 
 export interface FormResponseDetail extends FormResponseSummary {

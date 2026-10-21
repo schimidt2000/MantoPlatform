@@ -44,6 +44,7 @@ import {
   type StatusCounts,
   type StatusFilter,
 } from "../lib/formulariosAdmin";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 type FormType = "comum" | "corporativo";
 type FormFilter = FormType | "todos";
@@ -256,9 +257,13 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
         <MetricBadge tone="gold">Sem cliente</MetricBadge>
       )}
       {response.event_id ? (
-        <MetricBadge tone="green">
-          Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
-        </MetricBadge>
+        <>
+          <MetricBadge tone="green">
+            Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
+          </MetricBadge>
+          {/* Feature 312 (converge): o selo também na lista, não só ao abrir o detalhe. */}
+          <SeloSituacao situacao={response.event_situacao} />
+        </>
       ) : response.destino === "encerrados" ? (
         <MetricBadge tone="neutral">
           Encerrado · {response.closed_reason_label ?? "sem motivo"}
@@ -486,9 +491,12 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
     return (
       <div className="space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <MetricBadge tone="green" size="sm">
-            {response.event_title ?? "Evento vinculado"}
-          </MetricBadge>
+          <span className="flex min-w-0 items-center gap-1">
+            <MetricBadge tone="green" size="sm">
+              {response.event_title ?? "Evento vinculado"}
+            </MetricBadge>
+            <SeloSituacao situacao={response.event_situacao} />
+          </span>
           <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
             Desvincular
           </Button>

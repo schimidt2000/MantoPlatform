@@ -385,8 +385,11 @@
 })();
 </script>
 
+{# Feature 312 (converge): o ensaio cancelado (legado) não é item de lista — nem aqui, nem na tabela
+   "Ensaios vinculados", nem no "primeiro ensaio" da mensagem. #}
+{% set ensaios_vivos = event.ensaios | rejectattr('cancelled_at') | list %}
 {# ── Banner de ensaio(s) marcados — visível para todos ────────── #}
-{% if event.ensaios and event.event_type != 'ENSAIO' %}
+{% if ensaios_vivos and event.event_type != 'ENSAIO' %}
 <div style="
   background: rgba(84,69,150,.08); border: 1.5px solid var(--accent);
   border-radius: var(--r-md); padding: 14px 18px; margin-bottom: 16px;
@@ -394,9 +397,9 @@
   <span style="font-size:20px; line-height:1.2;">🎶</span>
   <div style="flex:1;">
     <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
-      Ensaio{% if event.ensaios|length > 1 %}s{% endif %} marcado{% if event.ensaios|length > 1 %}s{% endif %}
+      Ensaio{% if ensaios_vivos|length > 1 %}s{% endif %} marcado{% if ensaios_vivos|length > 1 %}s{% endif %}
     </div>
-    {% for e in event.ensaios | sort(attribute='start_at') %}
+    {% for e in ensaios_vivos | sort(attribute='start_at') %}
       <div style="font-size:13px; color:var(--text); display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px;">
         <span>📅 {{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}
         &nbsp;🕐 {{ e.start_at.strftime("%H:%M") if e.start_at else '—' }}
@@ -480,7 +483,7 @@
 
 <details class="panel" style="margin-bottom:16px;">
   <summary style="padding:12px 20px; cursor:pointer; font-weight:600; user-select:none;">
-    &#128197; Marcar {% if event.ensaios %}outro {% endif %}ensaio
+    &#128197; Marcar {% if ensaios_vivos %}outro {% endif %}ensaio
   </summary>
   <div style="padding:0 20px 16px;">
     <form method="post" action="/events/{{ event.id }}/create-ensaio"
@@ -1401,7 +1404,8 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 
       <p style="margin: 0 0 6px; font-weight: 600;">Eventos agrupados a este contrato:</p>
       <ul style="margin: 0; padding-left: 20px;">
-        {% for s in event.satellites %}
+        {# Feature 312 (converge): no principal vivo o dia cancelado não é item do painel (a API faz o mesmo). #}
+        {% for s in event.satellites if event.is_cancelled or not s.cancelled_at %}
         <li>
           <a href="/events/{{ s.id }}">{{ s.title }}</a>
           {% if s.start_at %} — {{ s.start_at.strftime('%d/%m/%Y %H:%M') }}{% endif %}
@@ -2229,7 +2233,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
 </div>
 
 {# ── Ensaios vinculados ───────────────────────────────────────── #}
-{% if event.ensaios %}
+{% if ensaios_vivos %}
 <div class="panel" style="margin-top:24px;">
   <div class="panel-title">Ensaios vinculados</div>
   <table>
@@ -2243,7 +2247,7 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       </tr>
     </thead>
     <tbody>
-      {% for e in event.ensaios | sort(attribute='start_at') %}
+      {% for e in ensaios_vivos | sort(attribute='start_at') %}
       <tr>
         <td>{{ e.start_at.strftime("%d/%m/%Y") if e.start_at else '—' }}</td>
         <td class="meta">
@@ -2831,8 +2835,10 @@ const _makeupTime  = {{ (event.makeup_time or "") | tojson }};
 {% elif event.makeup_location == 'local' %}{% set makeup_loc_label = "Local do evento" %}
 {% elif event.makeup_location %}{% set makeup_loc_label = event.makeup_location %}{% endif %}
 const _makeupLoc   = {{ makeup_loc_label | tojson }};
-{% if event.ensaios %}
-  {% set first_ensaio = event.ensaios | sort(attribute='start_at') | first %}
+{# o `set` do bloco de conteúdo não chega a este bloco #}
+{% set ensaios_vivos = event.ensaios | rejectattr('cancelled_at') | list %}
+{% if ensaios_vivos %}
+  {% set first_ensaio = ensaios_vivos | sort(attribute='start_at') | first %}
 const _ensaioDate  = {{ (first_ensaio.start_at.strftime("%d/%m/%Y") if first_ensaio.start_at else "") | tojson }};
 const _ensaioStart = {{ (first_ensaio.start_at.strftime("%H:%M") if first_ensaio.start_at else "") | tojson }};
 const _ensaioEnd   = {{ (first_ensaio.end_at.strftime("%H:%M") if first_ensaio.end_at else "") | tojson }};

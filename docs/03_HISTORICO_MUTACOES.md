@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-21** · Estado do repositório: pós-correções
+> Última atualização: **2026-10-21** · Estado do repositório: pós-feature
+> **312-cancelado-fora-das-listas** (sem migration; **EM PRODUÇÃO desde 21/10/2026 ~18:20**, a pedido do dono, logo
+> depois do deploy da 185b e da 299b — o cancelado sai de toda lista e
+> só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
+> 27/27) — antes dela pós-correções
 > **185b-tags-por-virgula** e **299b-cobranca-a-qualquer-momento** (sem migration; **EM PRODUÇÃO desde
 > 21/10/2026 ~18:17** pelos merges `190184da` e `b003b842`, a pedido do dono — as tags do catálogo se
 > separam pela vírgula também no celular e ao colar, e a mensagem de cobrança se copia a qualquer
@@ -151,6 +155,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **299b-cobranca-a-qualquer-momento** | *(EM PRODUÇÃO 21/10 ~18:17)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
@@ -300,7 +305,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Agenda / evento / formulário de evento | 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
 | Marketing e frequência | 204, 204b |
@@ -332,6 +337,81 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 312 — O cancelado sai de toda lista e só se vê onde se trata do cancelamento   (312-cancelado-fora-das-listas · 2026-10-20 · sem migration)
+
+> **EM PRODUÇÃO desde 21/10/2026 ~18:20** (merge `merge: 312 — …` sobre a `main` `b003b842`, que trouxe a 185b e a
+> 299b; a pedido do dono). Na branch nasceu sobre a `5c298ac5`; antes do merge a `main` do dia entrou nela e a rodada
+> repetiu: `verify_312` 27/27, `verify_299b` 7/7, `verify_306b` 8/8, `verify_303` 44/44, `verify_196` 55/55.
+
+**O pedido.** Item 1c do backlog de setembro, a terceira entrega da 303 (D34): "Evento cancelado não deve ficar mostrando
+para o talento. Ver esses eventos cancelados deve ser uma função apenas de uma parte específica do sistema, para filtrar
+cancelados e ver o que houve. Não deve ser algo que fica poluindo o calendário e outras coisas." Doze dúvidas respondidas
+em cinco rodadas (plano `docs/backlog/1c-sinalizar-e-filtrar-cancelados.md`, seção 7); spec em
+`specs/312-cancelado-fora-das-listas/spec.md`. O incidente de 20/10 de manhã (o motivo de um cancelamento à vista de
+todo interno, que levou à 306b) é o caso que a Q9 resolve.
+
+**O que mudou** (contratos em `docs/01` §4.3, "O cancelado fora das listas"; telas em `docs/02`; invariante e fluxo em
+`docs/04` §1, "Depois do ato"):
+- **Listas**: o Dia (API e Jinja) e a busca (antes do limite) passam a esconder o cancelado — Mês e Lista já escondiam;
+  saem também do seletor por data, dos candidatos do formulário, das listas Jinja de shows e de eventos para agrupar,
+  da ficha do talento (histórico e os quatro números), da ficha da cliente (lista; `cancelamentos {quantidade,
+  retido}` à parte), da Fila 3D e das pendências de presente, do conflito de agenda (três cópias) e do painel do grupo
+  do principal vivo; o rótulo "(N eventos)" conta só os vivos.
+- **A tela do cancelado** é só consulta: `cancel_ops.exigir_evento_vivo` (409 `cancelado` para todo papel) em toda
+  escrita da tela, no despachante Jinja inteiro e em "Imprimir fichas"; livres as portas da 306 e da 306b e os desfazer.
+  `cancel_ops.recusar_se_cancelado_para_ligar` recusa no núcleo, antes de e-mail ou Google, o que ligaria algo novo.
+  O detalhe manda `somente_consulta` e `desfazer_*`; a tela esconde o que grava e recarrega o evento na recusa
+  (`aoRecusarMutacao` no QueryClient). **Q9**: motivo e autor só com `show_comercial`, também no Log do Jinja.
+- **Casting (Q10)**: `casting.cancelados_a_avisar` na Home; no cancelado só Casting e Superadmin tiram da escala, e só
+  tiram; o último a sair marca o sino lido.
+- **Página de Cancelamentos**: Superadmin e Financeiro; `mes` e `devolucao`; total retido; sai o `devolucao` legado.
+- **Card "Cancelamentos do período"**: `cancel_ops.painel_de_cancelamentos`, a mesma forma na DRE e no pipeline.
+- **Coisas ligadas**: `situacao`/`event_situacao` em tags, formulários e pedidos de figurino; selo "Cancelado";
+  a avaliação pública responde 410 e a ficha de figurino do portal diz que o evento foi cancelado.
+
+**Decisões fixadas pela spec, não palavras do dono** (Session 2026-10-20 da spec, contestáveis): a ficha da cliente
+deixa de listar o cancelado (a 306 o mantinha marcado); a frase da spec da 306b "Financeiro e os demais veem o motivo"
+**fica superada pela Q9**; a trava não alcança rotas com regra própria (venda e motivo); o Jinja recusa toda ação no
+cancelado; o card usa os nomes de `paineis.cancelamentos` da 306; sai o `devolucao` legado.
+
+**Achados no caminho.** A reconferência do plano (`pesquisa/reconferencia-2026-10-20.md`) mostrou que a 306 já tinha
+feito metade do terreno e mudado premissas (booleanos `cancelado`, a ficha da cliente, a rota do motivo). O analyze,
+conferindo as tarefas contra o código, achou 30 correções antes do implement — as maiores: rotas de escrita sem trava
+(`POST …/sync`, que no cancelado puxaria do Google e mandaria e-mail de remoção; vaga vazia; ensaio legado; dispensa do
+3D; apagar avaliação), o Log do Jinja mostrando o motivo, o cachê zerado ao tirar da escala, e o filtro de devolução
+que precisa olhar o resumo (grupo), não o `event_id`. O cenário 6 do verify achou mais uma lista Jinja de escolha
+(`groupable_events`). A regressão da 306 mostrou que a primeira regra do `assign` (qualquer `cache_value` no corpo →
+409) quebrava a remoção legítima `{talent_id: null, cache_value: null}`: virou "cachê diferente do gravado".
+
+**Produção em 20/10** (só leitura): 2 cancelados, os dois com venda — o 388 (pela 306) e o **1358**, cancelado em 02/10
+pela regra velha (sem congelamento: a 306 o trata como `legado`, retido = pago − devolvido). FINANCEIRO segue com zero
+usuários.
+
+**Converge (T076).** Quatro revisores só de leitura, um por área (listas, trava, página e card, telas); nenhum achado
+CRITICAL nem HIGH. Os confirmados viraram os cenários 24–26, escritos e rodados vermelhos antes das correções
+(T078–T098 no `tasks.md`): o filtro "A devolver" trazia os N dias de um grupo "todos" (o satélite carrega as
+devoluções do grupo no resumo — agora casa só as do próprio dia); `?mes=9999-12` dava 500; a página mostrava o motivo
+no "Ver como Casting"; o "Agendados" da Home do Ensaio e a tela Jinja do show listavam o ensaio cancelado, e a do
+principal vivo o dia cancelado; "(1 eventos)" num principal cujo único dia caiu; o selo "já trabalhou com a Manto" e o
+filtro "personagem" contavam vaga de cancelado; os faltantes do figurino a contavam e o "associar" gravava nela
+(dívida 134, quitada); a lista de Formulários sem o selo; `solicitar-exclusao` respondia 400 sem código; vincular o
+próprio ensaio cancelado passava; o Log do `ensaio_detail` mostrava o motivo; a Comercial perdia documento e
+nascimento do elenco no cancelado (efeito do `can_confirm` zerado); recusar convite no portal mandava o sino
+"convite recusado" e não fechava o pedido ao Casting; `{travel_cache: null}` ao tirar da escala apagava o adicional de
+transporte. Na tela: a frase do servidor some com o formulário que desmonta na recarga — agora a caixa do cancelado a
+mostra; o WhatsApp da escala é o mesmo da Home; a página manteve o "pago no grupo · venda no 1º dia" da 306, os
+filtros de pé no erro e o campo de mês que funciona no Firefox; a Home agrupa por evento. Para conferir o selo "já
+trabalhou" sem ligá-lo em talento real do espelho, a régua virou `routes.ids_de_quem_trabalhou` (consulta pura).
+
+**Verificação.** `verify_312.py` 27/27 (a primeira rodada, contra o código da `main`, em `verify_312_primeira_falha.txt`:
+6/24, só as guardas que já valiam; a dos cenários do converge, contra o HEAD `344d127b`, no scratchpad). Depois do
+converge: 27/27 duas vezes; `verify_306b` 8/8, `verify_303` 44/44, `verify_196` 55/55, `verify_306` 66/69 (a mesma
+base — 14b, 20 e o 23). Regressão: `verify_306b` 8/8; `verify_306` com a base conhecida (14b e 20 exigem a
+`main` de antes da 306) **mais o 23**, o retrato main × branch, que acusa a mudança de contrato da ficha da cliente
+(239 diferenças, todas `events[].cancelado` — a chave saiu) e volta a ficar verde quando a 312 estiver na `main`
+(dívida 136). `verify_303` 44/44 e `verify_196` verdes; `verify_145` (1 falha) e `verify_cancelamento_evento`
+(26/44, dívida 129) dão o mesmo resultado na `main` `5c298ac5` — não são da 312.
+
 ### 185b — As tags do catálogo se separam pela vírgula   (185b-tags-por-virgula · 2026-10-21 · sem migration)
 
 > **EM PRODUÇÃO desde 21/10/2026 ~18:17** (merge `b003b842`, a pedido do dono). Nível 2 (hotfix da 185): só frontend, sem migration.
@@ -355,6 +435,7 @@ então não há tag antiga para consertar.
 ao do formulário e passou nos cinco casos: teclado real, clique real no Salvar com texto pendente,
 vírgula sem tecla (celular), colar com `;` e quebra de linha, e clique em sugestão. Também
 passou o typecheck do `internal`. Não há `verify_185b.py`: não há regra no servidor.
+
 ### 299b — A mensagem de cobrança se copia a qualquer momento   (299b-cobranca-a-qualquer-momento · 2026-10-21 · sem migration)
 
 > **EM PRODUÇÃO desde 21/10/2026 ~18:17** (merge `190184da`, a pedido do dono). Nível 2 (hotfix da 299): uma regra num domínio, sem migration.

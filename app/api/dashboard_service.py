@@ -95,9 +95,32 @@ def compute_casting_tasks(cutoff: datetime) -> dict[str, Any]:
         "pending": pending,
         "rejected_invites": rejected_invites,
         "unconfirmed": compute_unconfirmed_invites(),
+        "cancelados_a_avisar": compute_cancelados_a_avisar(cutoff),
         "total": total,
         "done": done,
     }
+
+
+def compute_cancelados_a_avisar(cutoff: datetime) -> list[EventRole]:
+    """Escalados de eventos CANCELADOS que o Casting ainda tem de tirar e avisar (feature 312).
+
+    Q10 do dono: "quando cancelado, pede para o casting excluir e avisar por WhatsApp". É a única
+    tarefa que um cancelado gera — as outras do painel continuam com `not_cancelled`. Derivada da
+    escala de hoje pela régua do ato (`cancel_ops.elenco_dos_dias`: com talento, sem quem recusou e
+    sem a vaga de presença): some sozinha quando a pessoa sai da vaga. Mesmo corte de data das
+    outras tarefas — evento que já passou não tem a quem avisar.
+    """
+    from app.calendar.cancel_ops import elenco_dos_dias
+
+    f = _base_filters(cutoff)
+    dias = [
+        e.id
+        for e in CalendarEvent.query.filter(
+            CalendarEvent.cancelled_at.isnot(None), f["exclude_ensaios"], f["future_events"]
+        ).all()
+    ]
+    papeis = elenco_dos_dias(dias)
+    return sorted(papeis, key=lambda r: (r.event.start_at or datetime.max, r.event_id, r.id))
 
 
 def compute_unconfirmed_invites() -> list[EventRole]:
@@ -191,8 +214,9 @@ def compute_ensaio_tasks(cutoff: datetime) -> dict[str, Any]:
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )
-    pending = [e for e in future_shows if not e.ensaios]
-    scheduled = [e for e in future_shows if e.ensaios]
+    # Feature 312: ensaio cancelado (legado) não conta como "agendado".
+    pending = [e for e in future_shows if not any(en.cancelled_at is None for en in e.ensaios)]
+    scheduled = [e for e in future_shows if any(en.cancelled_at is None for en in e.ensaios)]
 
     # `parent is None` cobre FK nulo e FK apontando para show já removido (feature 057);
     # corte na data de início do sistema para não poluir com órfãos antigos (feature 060).
@@ -250,9 +274,11 @@ def serialize_ensaio_summary(raw: dict[str, Any]) -> dict[str, Any]:
         "scheduled": [
             {
                 **_serialize_event_ref(e),
+                # Converge (312): o ensaio cancelado (legado) não é ensaio marcado.
                 "ensaios": [
                     en.start_at.isoformat() if en.start_at else None
                     for en in sorted(e.ensaios, key=lambda x: (x.start_at is None, x.start_at))
+                    if not en.is_cancelled
                 ],
             }
             for e in raw["scheduled"]
@@ -292,6 +318,20 @@ def serialize_unconfirmed_ref(role: EventRole) -> dict[str, Any]:
         "whatsapp": (talent.whatsapp_number or None) if talent else None,
         "reminder_count": role.invite_reminder_count or 0,
         "reminder_at": role.invite_reminder_at.isoformat() if role.invite_reminder_at else None,
+    }
+
+
+def serialize_cancelado_a_avisar(role: EventRole) -> dict[str, Any]:
+    """Linha de "Eventos cancelados — excluir e avisar" (feature 312): quem tirar, de qual evento,
+    e o WhatsApp com DDI para o aviso. O molde é `serialize_unconfirmed_ref` (231)."""
+    talent = role.talent
+    event = role.event
+    return {
+        **serialize_task_ref(role),
+        "cancelled_at": event.cancelled_at.isoformat() if event and event.cancelled_at else None,
+        "talent_id": role.talent_id,
+        "talent_name": (talent.artistic_name or talent.full_name) if talent else "—",
+        "whatsapp": (talent.whatsapp_number or None) if talent else None,
     }
 
 
@@ -476,6 +516,7 @@ def build_dashboard_summary(
             "pending": [serialize_task_ref(r) for r in raw["pending"]],
             "rejected_invites": [serialize_task_ref(r) for r in raw["rejected_invites"]],
             "unconfirmed": [serialize_unconfirmed_ref(r) for r in raw["unconfirmed"]],
+            "cancelados_a_avisar": [serialize_cancelado_a_avisar(r) for r in raw["cancelados_a_avisar"]],
             "total": raw["total"],
             "done": raw["done"],
         }

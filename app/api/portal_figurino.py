@@ -39,6 +39,11 @@ def api_portal_event_figurino(event_id: int) -> Any:
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado.", 404)
+    # Feature 312 (Q4: "evento cancelado não deve ficar mostrando para o talento"): o endereço
+    # guardado da ficha não mostra o cancelado — depois do "não escalado", para quem não está na
+    # escala não descobrir nada do evento (a ordem da 302). Sem título nem ficha no corpo.
+    if event.is_cancelled:
+        return json_error("Este evento foi cancelado.", 400)
 
     # `is_coordinator` muda o que a tela DIZ, não só o que ela lista: sem isso o coordenador não
     # entenderia por que apareceram personagens que não são dele, e o texto de lista vazia não

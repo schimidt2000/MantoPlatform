@@ -45,10 +45,25 @@ export interface UnconfirmedInviteRef extends DashboardTaskRef {
   reminder_at: string | null;
 }
 
+/**
+ * Escalado de um evento CANCELADO que o Casting ainda tem de tirar da escala e avisar pelo
+ * WhatsApp (feature 312, Q10 do dono). Derivado da escala: some quando a pessoa sai da vaga.
+ */
+export interface CanceladoAAvisarRef extends DashboardTaskRef {
+  role_id: number;
+  cancelled_at: string | null;
+  talent_id: number;
+  talent_name: string;
+  /** Já com DDI. */
+  whatsapp: string | null;
+}
+
 export interface CastingSummary {
   pending: DashboardTaskRef[];
   rejected_invites: DashboardTaskRef[];
   unconfirmed: UnconfirmedInviteRef[];
+  /** Feature 312 — opcional: backend velho na janela do deploy não manda (o bloco não aparece). */
+  cancelados_a_avisar?: CanceladoAAvisarRef[];
   total: number;
   done: number;
 }

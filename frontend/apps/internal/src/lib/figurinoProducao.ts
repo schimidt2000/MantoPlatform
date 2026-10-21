@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import type { SituacaoEvento } from "./agenda";
 
 /**
  * Produção de Figurinos (feature 225) — tipos e hooks TanStack Query.
@@ -150,6 +151,8 @@ export interface Producao {
   event_id: number | null;
   event_title: string | null;
   event_start_at: string | null;
+  /** Feature 312: a situação do evento do pedido (o selo do cancelado). */
+  event_situacao?: SituacaoEvento | null;
   figurino_sheet_id: number | null;
   figurino_sheet_name: string | null;
   figurino_sheet_photo: string | null;

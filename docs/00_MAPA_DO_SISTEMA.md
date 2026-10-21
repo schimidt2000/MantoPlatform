@@ -99,7 +99,7 @@ Existe um **segundo mecanismo vestigial**: tabelas `permissions`/`role_permissio
 | `CASTING` | escalar elenco, talentos, materiais de ensaio | |
 | `FIGURINO` | fichas de figurino, peças, sync do Drive | |
 | `COMERCIAL` | venda, clientes, orçamento, campanhas da Loja Virtual | |
-| `FINANCEIRO` | comissões, planilha de pagamentos, gastos, folha, usuários | |
+| `FINANCEIRO` | comissões, planilha de pagamentos, gastos, folha, usuários; lê a página de Cancelamentos (feature 312) | não exclui, não cancela, não altera devolução (`_can_delete` é só do Superadmin) |
 | `ENSAIO` | agenda + bloco de ensaio + painel próprio + EducaManto (uso) | `_CAN_ENSAIO_MATERIAL` em `app/calendar/routes.py:3627` |
 | `REVENDEDOR_EDUCAMANTO` | agenda (leitura) + EducaManto | guard próprio em `app/__init__.py:426` |
 | `MARKETING` | calendário editorial + espaços de revisão | |
@@ -148,12 +148,20 @@ papel não faz isso"; o 409, "faz, mas não neste evento". Os dois endpoints nov
 e `POST …/multas`, usam a própria regra como gate (403). Onde a porta **não recongela**, o cancelado
 leva o mesmo 409 **para todos, o Superadmin inclusive**: "Editar tudo" (`PATCH /api/events/<id>`) com
 campo de venda diferente do gravado, orçamento, exclusão, agrupar, desagrupar e soltar dia, e as
-ações de dinheiro da tela Jinja do evento (`_ACOES_RECUSADAS_NO_CANCELADO`, `app/calendar/routes.py`).
+ações da tela Jinja do evento (desde a 312, todas: `_recusa_jinja_do_cancelado`, `app/calendar/routes.py`).
 O Superadmin corrige pela tela nova, que refaz o retido, a comissão e o BV do retido na mesma
 transação. As flags `can_edit_venda_cancelado` e `can_edit_pagamentos` seguem a impersonação, como
 `can_group`, mas quem decide é o servidor. ⚠️ O `"cancelado"` do 409 (`CODIGO_EVENTO_CANCELADO`,
 `app/constants.py`) tem o mesmo nome que `sumico_ops.CODIGO_CANCELADO` (recusa da devolução ao Google)
 e que `SITUACAO_CANCELADO`: nunca compare um com o outro. Gate e 409 de cada porta: `docs/01` §4.3.
+
+**A tela do cancelado só se consulta (feature 312).** Fora as portas de venda acima e o motivo (Superadmin e
+Comercial, 306b), toda escrita na tela de um evento cancelado leva 409 `cancelado` **para todo papel** (a trava
+`cancel_ops.exigir_evento_vivo`), e ligar algo novo a ele (ensaio, tag, presente, formulário, escala, convite,
+avaliação, pedido de figurino) é recusado no núcleo. Duas regras de papel no cancelado: **o motivo e o autor do
+cancelamento só saem a Comercial, Financeiro e Superadmin** (`show_comercial`, segue o "Ver como"; Q9 do dono), e
+**só Casting e Superadmin tiram artista da escala** (`_can_casting`, só a remoção; Q10). Detalhe: `docs/01` §4.3, "O
+cancelado fora das listas".
 
 ---
 

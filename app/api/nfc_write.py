@@ -14,11 +14,12 @@ from typing import Any
 
 from flask import jsonify, request
 
-from app import limiter
+from app import db, limiter
 from app.api import api_bp
 from app.api.impressoes3d_read import require_3d_access
 from app.api.nfc_read import _serialize_admin_tag
-from app.api_utils import api_login_required, json_error
+from app.api_utils import api_login_required, json_error, json_recusa_do_cancelado
+from app.calendar.cancel_ops import CancelValidationError
 from app.impressoes3d import nfc_ops, nfc_recados_ops
 from app.models import NfcTag, NfcTagDelivery
 
@@ -73,6 +74,9 @@ def api_3d_nfc_update(tag_id: int) -> Any:
         )
     except nfc_ops.NfcValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312: o vínculo novo a cancelado
+        db.session.rollback()
+        return json_recusa_do_cancelado(exc)
     return jsonify({"tag": _serialize_admin_tag(tag)})
 
 

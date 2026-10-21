@@ -330,6 +330,10 @@ def add_event_gift(
     Raises:
         Impressao3DValidationError: Peça inexistente/inativa, quantidade ou prazo inválidos.
     """
+    # Feature 312 (Q2): evento cancelado não ganha presente; o que já estava ligado fica.
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para vincular presente a ele.")
     item = Acervo3DItem.query.get(item_id) if item_id else None
     if item is None:
         raise Impressao3DValidationError("item_id", "Selecione uma peça do Acervo 3D.")
@@ -428,6 +432,8 @@ def list_print_queue() -> list[Event3DGift]:
         .filter(
             Event3DGift.status != GIFT_3D_STATUS_ENTREGUE,
             CalendarEvent.event_type == EVENT_TYPE_SHOW,
+            # Feature 312 (Q2 do dono): o presente do cancelado fica no evento, fora da fila.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .all()
     )
@@ -469,6 +475,7 @@ def list_pending_events(*, include_dismissed: bool = False) -> list[CalendarEven
             CalendarEvent.event_type == EVENT_TYPE_SHOW,
             CalendarEvent.start_at >= today_start,
             Event3DGift.id.is_(None),
+            CalendarEvent.cancelled_at.is_(None),  # feature 312: o cancelado não pede presente
         )
     )
     if not include_dismissed:

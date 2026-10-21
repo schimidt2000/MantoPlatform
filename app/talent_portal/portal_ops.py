@@ -417,6 +417,10 @@ def accept_invite(talent: Talent, role_id: int) -> EventRole | None:
     role = _owned_role(talent, role_id)
     if role is None:
         return None
+    if role.event is not None and role.event.is_cancelled:
+        # Feature 312: o portal já não mostra o convite do cancelado; a chamada direta não o aceita
+        # (nada é gravado — a rota responde que o evento foi cancelado).
+        return role
     role.invite_status = "accepted"
     db.session.commit()
     return role
@@ -435,7 +439,14 @@ def reject_invite(talent: Talent, role_id: int) -> EventRole | None:
     if role.invite_status == "rejected":
         return role
     role.invite_status = "rejected"
-    notificacoes_ops.notificar_convite_recusado(role)
+    if role.event is not None and role.event.is_cancelled:
+        # Converge (312): recusar o do cancelado fica livre, mas não é recado ao Casting (não há
+        # vaga a repor) — e, se era o último a avisar, o pedido ao Casting daquele dia fecha.
+        from app.calendar.cancel_ops import fechar_pedido_ao_casting_se_vazio
+
+        fechar_pedido_ao_casting_se_vazio(role.event)
+    else:
+        notificacoes_ops.notificar_convite_recusado(role)
     db.session.commit()
     return role
 

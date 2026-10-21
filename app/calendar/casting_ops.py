@@ -96,6 +96,13 @@ def assign_role(
     Returns:
         Mensagem de sucesso descrevendo o efeito.
     """
+    # Feature 312 (Q5 do dono): no cancelado ninguém entra na escala — a recusa vem antes de
+    # qualquer escrita e do convite por e-mail. Tirar alguém (talento vazio) segue: é o pedido ao
+    # Casting (Q10), e quem pode tirar a rota decide.
+    if talent_id and getattr(event, "is_cancelled", False):
+        from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+        recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para escalar nem convidar ninguém.")
     old_talent_id = role.talent_id
     old_cache_value = role.cache_value
     old_travel_cache = role.travel_cache
@@ -166,6 +173,11 @@ def assign_role(
         old_talent = Talent.query.get(old_talent_id)
         if old_talent:
             send_async(send_removal_email, old_talent, event, role.character_name)
+    if getattr(event, "is_cancelled", False) and old_talent_id and not role.talent_id:
+        # Feature 312 (Q10): o último a sair da escala fecha o pedido ao Casting daquele dia.
+        from app.calendar.cancel_ops import fechar_pedido_ao_casting_se_vazio
+
+        fechar_pedido_ao_casting_se_vazio(event)
     db.session.commit()
 
     # Feature 239 (decisões 9/11): a presença sai daqui sem convite, sem e-mail e sem valor —
@@ -438,6 +450,11 @@ def add_role(
     """
     from app.models import EventRole
 
+    if getattr(event, "is_cancelled", False):
+        # Feature 312: nenhuma vaga nova no cancelado (a trava da rota já recusa; defesa do núcleo).
+        from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+        recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para escalar nem convidar ninguém.")
     role = EventRole(event_id=event.id, character_name=character_name, role_type=role_type or "character")
     # Feature 239 (decisão 9): recriar a vaga de presença pelo "Adicionar pessoa" não pode ser a
     # porta dos fundos do cachê — sem valor, sem transporte e sem convite, como no `assign_role`.
@@ -510,6 +527,10 @@ def send_invite(event: Any, role: Any, *, actor_name: str, tz: ZoneInfo) -> bool
     """
     if not role.talent_id:
         return False
+    if getattr(event, "is_cancelled", False):
+        from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+        recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não dá para escalar nem convidar ninguém.")
     role.invite_status = "pending"
     db.session.add(EventLog(
         event_id=event.id,
@@ -557,6 +578,10 @@ def convidar_recem_escalados(
     Returns:
         Quantos convites saíram.
     """
+    # Feature 312: defesa — cancelado não convida ninguém (os dois chamadores chegam aqui depois
+    # do commit da edição; quem segura a edição do cancelado é a trava da rota).
+    if getattr(event, "is_cancelled", False):
+        return 0
     if not assigned_now:
         return 0
 

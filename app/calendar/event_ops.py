@@ -1532,6 +1532,10 @@ def ensure_feedback_token(event: Any) -> str:
     """
     import secrets
 
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    # Feature 312 (Q5): evento cancelado não gera link de avaliação.
+    recusar_se_cancelado_para_ligar(event, "Este evento foi cancelado — não há avaliação a pedir.")
     if not event.feedback_token:
         event.feedback_token = secrets.token_urlsafe(32)
         db.session.commit()
@@ -1682,7 +1686,10 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
                 unaccent_lower_sql(CalendarEvent.title).like(like, escape="\\"),
                 CalendarEvent.event_clients.any(EventClient.client.has(client_match)),
                 CalendarEvent.client.has(client_match),
-            )
+            ),
+            # Feature 312: o cancelado sai da busca antes do limite (não ocupa vaga dos 30) e, com
+            # ela, do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
+            CalendarEvent.cancelled_at.is_(None),
         )
         .options(
             selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
@@ -1758,6 +1765,11 @@ def resolve_ensaio_location(location_type: str, custom_location: str) -> str:
     return (settings.manto_address or "") if settings else ""
 
 
+# Feature 312: as recusas de ensaio no show cancelado (a API e o Jinja leem estas).
+ENSAIO_DO_CANCELADO = "Este show foi cancelado — não dá para agendar ensaio para ele."
+ENSAIO_VINCULO_CANCELADO = "Este evento foi cancelado — não dá para vincular um ensaio a ele."
+
+
 def create_ensaio(
     parent: Any,
     *,
@@ -1773,10 +1785,13 @@ def create_ensaio(
         EnsaioValidationError: data/horário inválidos.
         RuntimeError: falha na criação no Google Calendar (nada é gravado no banco).
     """
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
     from app.calendar.routes import CALENDAR_ID
     from app.calendar.service import insert_event
     from app.models import CalendarEvent
 
+    # Feature 312 (Q2 do dono): show cancelado não ganha ensaio — antes do Google.
+    recusar_se_cancelado_para_ligar(parent, ENSAIO_DO_CANCELADO)
     start, end = build_ensaio_times(date_str, start_str, end_str)
     title = f"{ENSAIO_TITLE_PREFIX}{parent.title}"
     desc = (description or "").strip()
@@ -1869,7 +1884,13 @@ def delete_ensaio(ensaio: Any) -> str | None:
 
 
 def link_ensaio_to_show(ensaio: Any, parent: Any, actor_name: str) -> None:
-    """Vincula um ensaio órfão a um show (feature 063), com registro no log do ensaio."""
+    """Vincula um ensaio órfão a um show (feature 063), com registro no log do ensaio.
+
+    Feature 312 (Q2): show cancelado não recebe ensaio — 400 no campo do show, antes de gravar.
+    """
+    from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+    recusar_se_cancelado_para_ligar(parent, ENSAIO_VINCULO_CANCELADO, campo="parent_event_id")
     ensaio.parent_event_id = parent.id
     db.session.add(EventLog(
         event_id=ensaio.id,

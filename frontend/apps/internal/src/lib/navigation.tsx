@@ -384,6 +384,16 @@ const SECTIONS: NavSectionConfig[] = [
         isActive: (path) => path === "/gastos/recorrentes",
         isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
       },
+      {
+        // Feature 312: o Financeiro lê a página de Cancelamentos (devoluções a pagar, retido do
+        // mês). Para ele o item mora aqui; o Superadmin continua achando-o em Sistema.
+        key: "financeiro-cancelamentos",
+        label: "Exclusões e cancelamentos", // FR-031: o nome da página
+        href: "/events/cancelamentos",
+        icon: <Trash2 />,
+        isActive: (path) => path.startsWith("/events/cancelamentos"),
+        isVisible: (user) => hasRole(user, "FINANCEIRO") && !hasRole(user, "SUPERADMIN"),
+      },
     ],
   },
   {
@@ -491,9 +501,9 @@ const SECTIONS: NavSectionConfig[] = [
         isVisible: (user) => hasRole(user, "SUPERADMIN"),
       },
       {
-        // Feature 224: a porta principal de um evento cancelado — ele sai da agenda de propósito
-        // (desde a 306, Comissões, a ficha da cliente e o sino também levam a ele) —, e é aqui
-        // que se vê o pedido do Comercial esperando decisão.
+        // Feature 224: a página dos cancelados — eles saem da agenda e das listas de propósito
+        // (feature 312) e se veem aqui, no card do período e na tela de cada um —, e é aqui que se
+        // vê o pedido do Comercial esperando decisão. O Financeiro a acha na seção Financeiro.
         key: "events-cancelamentos",
         label: "Exclusões e cancelamentos",
         href: "/events/cancelamentos",

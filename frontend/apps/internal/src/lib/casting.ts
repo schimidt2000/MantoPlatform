@@ -42,7 +42,11 @@ export function useCastingOptions(eventId: number) {
 interface AssignInput {
   roleId: number;
   talent_id: number | null;
-  cache_value: number;
+  /**
+   * Ausente = não mexe no cachê. Feature 312: tirar da escala no cancelado manda só
+   * `{talent_id: null}` — com cachê no corpo o servidor recusa (a tela é só consulta).
+   */
+  cache_value?: number;
   travel_cache?: number;
 }
 
@@ -175,4 +179,26 @@ export function useAcaoNoCargoDaHome(acao: "dismiss" | "restore") {
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
   });
+}
+
+/**
+ * O link "Avisar no WhatsApp" de um escalado de evento cancelado (feature 312, FR-026): a Home do
+ * Casting e a escala da tela do cancelado mandam a MESMA mensagem — sem link do portal (o portal não
+ * mostra o cancelado). A data sai "DD/MM" direto do texto do horário de parede (sem `new Date()`,
+ * que desloca o fuso). `null` sem número: a tela diz "sem WhatsApp no cadastro".
+ */
+export function avisoDeCancelamentoNoWhatsApp(aviso: {
+  whatsapp: string | null | undefined;
+  nome: string;
+  evento: string;
+  inicio: string | null | undefined;
+  personagem: string | null | undefined;
+}): string | null {
+  const numero = (aviso.whatsapp ?? "").replace(/\D/g, "");
+  if (!numero) return null;
+  const dia = aviso.inicio ? ` de ${aviso.inicio.slice(8, 10)}/${aviso.inicio.slice(5, 7)}` : "";
+  const texto =
+    `Oi, ${aviso.nome}! O evento "${aviso.evento}"${dia}, em que você faria ` +
+    `${aviso.personagem ?? "o seu papel"}, foi cancelado. Qualquer dúvida, fale com a gente.`;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(texto)}`;
 }

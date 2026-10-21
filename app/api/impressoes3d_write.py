@@ -12,7 +12,13 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api.impressoes3d_read import require_3d_access
-from app.api_utils import api_login_required, json_error
+from app.api_utils import (
+    api_login_required,
+    json_error,
+    json_recusa_do_cancelado,
+    trava_do_cancelado,
+)
+from app.calendar.cancel_ops import CancelValidationError
 from app.constants import EVENT_TYPE_SHOW, RoleName
 from app.impressoes3d import impressoes3d_ops as ops
 from app.models import Acervo3DItem, CalendarEvent, Event3DGift
@@ -148,6 +154,8 @@ def api_event_3d_gift_create(event_id: int) -> Any:
         )
     except ops.Impressao3DValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312
+        return json_recusa_do_cancelado(exc)
     return jsonify(ops.serialize_gift(gift)), 201
 
 
@@ -162,6 +170,9 @@ def api_event_3d_gift_update(event_id: int, gift_id: int) -> Any:
     if gift is None:
         return json_error("Presente 3D não encontrado", 404)
 
+    negado = trava_do_cancelado(gift.event)
+    if negado:
+        return negado
     body = request.get_json(silent=True) or {}
     try:
         ops.update_event_gift(
@@ -205,6 +216,9 @@ def api_event_3d_dismiss(event_id: int) -> Any:
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     if event.event_type != EVENT_TYPE_SHOW:
         return json_error("Só eventos do tipo SHOW geram pendência de presente 3D", 400)
     ops.dismiss_event(event, dismissed_by=current_user.id)
@@ -221,5 +235,8 @@ def api_event_3d_undismiss(event_id: int) -> Any:
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
+    negado = trava_do_cancelado(event)
+    if negado:
+        return negado
     ops.undismiss_event(event)
     return "", 204

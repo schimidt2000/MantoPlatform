@@ -13,6 +13,26 @@ from flask_login import current_user
 from werkzeug.wrappers import Response
 
 
+def json_recusa_do_cancelado(exc: Any) -> tuple[Response, int]:
+    """A tradução única de uma recusa do núcleo do cancelado (`CancelValidationError` da 306 e
+    da 312) em `json_error`, com o `codigo` para a tela agir (recarregar o evento)."""
+    codigo = {"codigo": exc.codigo} if exc.codigo else {}
+    return json_error(exc.message, exc.status, fields=exc.fields, **codigo, **exc.extras)
+
+
+def trava_do_cancelado(event: Any) -> tuple[Response, int] | None:
+    """A trava da tela do cancelado (feature 312, FR-011) na porta da API: 409 `cancelado` ou
+    `None` para seguir. Chamada depois do 404 e do 403 de cada rota e antes de qualquer escrita.
+    A regra mora no núcleo (`cancel_ops.exigir_evento_vivo`); aqui só se traduz."""
+    from app.calendar.cancel_ops import CancelValidationError, exigir_evento_vivo
+
+    try:
+        exigir_evento_vivo(event)
+    except CancelValidationError as exc:
+        return json_recusa_do_cancelado(exc)
+    return None
+
+
 def json_error(
     message: str,
     status: int,

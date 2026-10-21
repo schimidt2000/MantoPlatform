@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import type { SituacaoEvento } from "./agenda";
 
 /** Cliente do CRM (feature 165) — chave real é o telefone normalizado. */
 export interface ClientSummary {
@@ -25,8 +26,6 @@ export interface ClientEvent {
   title: string;
   start_at: string | null;
   relation: string;
-  /** Feature 306: o evento cancelado fica na ficha (histórico) e não conta em `event_count`. */
-  cancelado?: boolean;
 }
 
 /** Festa registrada em formulário — inclui as anteriores à agenda de 2026. */
@@ -38,6 +37,8 @@ export interface ClientFormHistoryItem {
   /** Preenchidos quando a festa também existe como evento no calendário. */
   event_id: number | null;
   event_title: string | null;
+  /** Feature 312: a situação do evento ligado (o selo do cancelado). Ausente em backend velho. */
+  event_situacao?: SituacaoEvento | null;
 }
 
 export interface ClientDetail extends ClientSummary {
@@ -48,6 +49,11 @@ export interface ClientDetail extends ClientSummary {
   event_count: number;
   /** Venda dos eventos vivos + o retido dos cancelados (feature 306, D33). */
   total_sales: number;
+  /**
+   * Feature 312: o cancelado sai de `events`; aqui só explica o total. Ausente em backend velho
+   * (a sublinha não aparece).
+   */
+  cancelamentos?: { quantidade: number; retido: number };
   form_history: ClientFormHistoryItem[];
 }
 

@@ -68,7 +68,7 @@ def api_clientes_detail(client_id: int) -> Any:
     denied = _require_vendas()
     if denied:
         return denied
-    client, events, rel_by_event, total_sales = client_ops.get_client_detail(client_id)
+    client, events, rel_by_event, total_sales, cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
         return json_error("Cliente não encontrado", 404)
     history = client_ops.list_client_form_history(client_id)
@@ -84,14 +84,17 @@ def api_clientes_detail(client_id: int) -> Any:
                     "title": e.title,
                     "start_at": e.start_at.isoformat() if e.start_at else None,
                     "relation": rel_by_event.get(e.id, ""),
-                    # Feature 306: o cancelado fica na lista (histórico), marcado.
-                    "cancelado": e.is_cancelled,
                 }
                 for e in events
             ],
-            # Feature 306: a contagem é dos eventos que aconteceram (o cancelado não conta).
-            "event_count": sum(1 for e in events if not e.is_cancelled),
+            # Feature 312: a lista e a contagem são só dos vivos; o cancelado vê-se na página de
+            # Cancelamentos, e aqui só explica o total (que soma o retido, feature 306).
+            "event_count": len(events),
             "total_sales": float(total_sales),
+            "cancelamentos": {
+                "quantidade": cancelamentos["quantidade"],
+                "retido": float(cancelamentos["retido"]),
+            },
             # Festas registradas em formulário (inclui as anteriores à agenda de 2026) —
             # o `event` aninhado marca as que também viraram evento no calendário.
             "form_history": [
@@ -102,6 +105,8 @@ def api_clientes_detail(client_id: int) -> Any:
                     "created_at": r.created_at.isoformat(),
                     "event_id": r.event_id,
                     "event_title": r.event.title if r.event else None,
+                    # Feature 312: o formulário ligado a um cancelado leva a situação (o selo).
+                    "event_situacao": r.event.situacao if r.event else None,
                 }
                 for r in history
             ],

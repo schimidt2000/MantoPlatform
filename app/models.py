@@ -401,10 +401,12 @@ class CalendarEvent(db.Model):
     def is_cancelled(self) -> bool:
         """True se o evento foi cancelado (feature 224) — o registro existe; só o retido conta.
 
-        Cancelado não aparece na agenda nem nas métricas de venda e de casting. O dinheiro que a
-        Manto reteve (pago − devolvido) entra na DRE, no Comercial e na comissão pelo mês do
-        cancelamento (feature 306, `cancel_ops.resumo_cancelado`); a venda e o cachê do evento,
-        não. Equivalente SQL: ``CalendarEvent.cancelled_at.isnot(None)``.
+        Cancelado não aparece em lista nenhuma do sistema — agenda (todas as visões), busca, Home,
+        fichas, listas de escolha, filas e métricas (feature 312); vê-se na página de
+        Cancelamentos, no card do período e na tela dele, que é só consulta. O dinheiro que a Manto
+        reteve (pago − devolvido) entra na DRE, no Comercial e na comissão pelo mês do cancelamento
+        (feature 306, `cancel_ops.resumo_cancelado`); a venda e o cachê do evento, não. Equivalente
+        SQL: ``CalendarEvent.cancelled_at.isnot(None)``.
         """
         return self.cancelled_at is not None
 

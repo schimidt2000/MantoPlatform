@@ -12,7 +12,15 @@ import { Empty, INPUT_CLASS, Panel } from "./parts";
 type Observation = NonNullable<EventoDetalhe["observations"]>[number];
 
 /** Uma observação (texto, link ou imagem), com remoção confirmada. */
-function ObservationItem({ obs, eventId }: { obs: Observation; eventId: number }) {
+function ObservationItem({
+  obs,
+  eventId,
+  podeEditar,
+}: {
+  obs: Observation;
+  eventId: number;
+  podeEditar: boolean;
+}) {
   const del = useDeleteObservation(eventId);
   return (
     <li className="flex items-start justify-between gap-3 py-2">
@@ -39,17 +47,19 @@ function ObservationItem({ obs, eventId }: { obs: Observation; eventId: number }
           <p className="whitespace-pre-wrap break-words text-sm text-ink">{obs.content}</p>
         )}
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        loading={del.isPending}
-        onClick={() => {
-          if (window.confirm("Remover esta observação?")) del.mutate(obs.id);
-        }}
-        aria-label="Remover observação"
-      >
-        ✕
-      </Button>
+      {podeEditar && (
+        <Button
+          variant="ghost"
+          size="sm"
+          loading={del.isPending}
+          onClick={() => {
+            if (window.confirm("Remover esta observação?")) del.mutate(obs.id);
+          }}
+          aria-label="Remover observação"
+        >
+          ✕
+        </Button>
+      )}
     </li>
   );
 }
@@ -204,6 +214,8 @@ export interface ObservacoesSectionProps {
 /** Observações do evento (texto, link e imagem). */
 export function ObservacoesSection({ data }: ObservacoesSectionProps) {
   const observations = data.observations;
+  // Feature 312: no cancelado as observações ficam para consulta.
+  const podeEditar = !data.flags.somente_consulta;
   if (!observations) return null;
   return (
     <Panel title="Observações">
@@ -212,11 +224,11 @@ export function ObservacoesSection({ data }: ObservacoesSectionProps) {
       ) : (
         <ul className="divide-y divide-line">
           {observations.map((obs) => (
-            <ObservationItem key={obs.id} obs={obs} eventId={data.event.id} />
+            <ObservationItem key={obs.id} obs={obs} eventId={data.event.id} podeEditar={podeEditar} />
           ))}
         </ul>
       )}
-      <AddObservationForm eventId={data.event.id} />
+      {podeEditar && <AddObservationForm eventId={data.event.id} />}
     </Panel>
   );
 }

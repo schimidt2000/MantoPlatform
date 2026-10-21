@@ -13,8 +13,10 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
+from app import db
 from app.api import api_bp
-from app.api_utils import api_login_required, json_error
+from app.api_utils import api_login_required, json_error, json_recusa_do_cancelado
+from app.calendar.cancel_ops import CancelValidationError
 from app.constants import FIGURINO_PROD_SOLICITADO
 from app.email_service import (
     send_async,
@@ -140,6 +142,9 @@ def api_figurino_producao_create() -> Any:
         )
     except ops.ProducaoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312: o pedido novo para um cancelado
+        db.session.rollback()
+        return json_recusa_do_cancelado(exc)
 
     ops.add_fotos_iniciais(producao, fotos, actor=current_user)
 
@@ -187,6 +192,9 @@ def api_figurino_producao_update(producao_id: int) -> Any:
         producao, aviso = ops.update_producao(producao, actor=current_user, **dados)
     except ops.ProducaoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312: o pedido novo para um cancelado
+        db.session.rollback()
+        return json_recusa_do_cancelado(exc)
 
     _avisar_responsavel(producao, anterior)
     return _resposta(producao, aviso)
@@ -289,6 +297,9 @@ def api_figurino_producao_anexo_create(producao_id: int) -> Any:
         )
     except ops.ProducaoValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except CancelValidationError as exc:  # feature 312: o pedido novo para um cancelado
+        db.session.rollback()
+        return json_recusa_do_cancelado(exc)
 
     return _resposta(producao, None, status=201)
 

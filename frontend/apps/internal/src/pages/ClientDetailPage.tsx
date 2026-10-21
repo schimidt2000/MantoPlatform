@@ -19,6 +19,7 @@ import {
   useUpdateClient,
 } from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -177,17 +178,19 @@ export function ClientDetailPage() {
             </CardHeader>
             <CardContent>
               <p className="mb-2 text-sm text-muted">
-                {query.data.event_count} evento(s)
-                {(() => {
-                  // Feature 306: o cancelado fica na lista (histórico), marcado, e fora da contagem.
-                  const cancelados = query.data.events.filter((e) => e.cancelado).length;
-                  return cancelados > 0 ? ` · ${cancelados} cancelado(s)` : "";
-                })()}{" "}
-                · total vendido:{" "}
+                {query.data.event_count} evento(s) · total vendido:{" "}
                 <span className="tabular-nums text-ink">
                   R$ {formatBRL(query.data.total_sales)}
                 </span>
               </p>
+              {/* Feature 312: o cancelado não é item da lista (vê-se na página de Cancelamentos);
+                  a sublinha explica por que o total pode ser maior que a soma dos eventos. */}
+              {(query.data.cancelamentos?.quantidade ?? 0) > 0 && (
+                <p className="-mt-1 mb-2 text-xs text-muted">
+                  inclui R$ {formatBRL(query.data.cancelamentos?.retido ?? 0)} retidos de{" "}
+                  {query.data.cancelamentos?.quantidade} cancelamento(s)
+                </p>
+              )}
               {query.data.events.length === 0 ? (
                 <p className="text-sm text-muted">Nenhum evento associado.</p>
               ) : (
@@ -199,17 +202,9 @@ export function ClientDetailPage() {
                     >
                       <div>
                         <span className="text-muted">{formatDate(e.start_at)}</span>{" "}
-                        <Link
-                          to={`/events/${e.id}`}
-                          className={e.cancelado ? "text-muted hover:underline" : "text-ink hover:underline"}
-                        >
+                        <Link to={`/events/${e.id}`} className="text-ink hover:underline">
                           {e.title}
                         </Link>
-                        {e.cancelado && (
-                          <span className="ml-2 rounded-md bg-red-soft px-1.5 py-0.5 text-xs text-red">
-                            cancelado
-                          </span>
-                        )}
                       </div>
                       <span className="rounded-md bg-surface-2 px-1.5 py-0.5 text-xs text-muted">
                         {e.relation}
@@ -242,9 +237,12 @@ export function ClientDetailPage() {
                           {f.event_date ? formatDate(f.event_date) : "sem data"}
                         </span>{" "}
                         {f.event_id && f.event_title ? (
-                          <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
-                            {f.event_title}
-                          </Link>
+                          <>
+                            <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
+                              {f.event_title}
+                            </Link>{" "}
+                            <SeloSituacao situacao={f.event_situacao} />
+                          </>
                         ) : (
                           <Link
                             to={`/formularios?resposta=${f.id}`}

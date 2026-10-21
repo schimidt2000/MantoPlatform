@@ -1,4 +1,4 @@
-import { QueryCache, QueryClient } from "@tanstack/react-query";
+import { MutationCache, QueryCache, QueryClient } from "@tanstack/react-query";
 import { ApiRequestError } from "./client";
 
 export interface OpcoesQueryClient {
@@ -11,6 +11,12 @@ export interface OpcoesQueryClient {
    * que ninguém conseguia diagnosticar, porque parece um erro de servidor e é sessão expirada.
    */
   aoPerderSessao?: () => void;
+  /**
+   * Chamado quando QUALQUER mutação é recusada pela API (`ApiRequestError`). Feature 312: o app
+   * interno o usa para recarregar o evento quando a recusa diz que ele foi cancelado — a aba
+   * aberta antes do cancelamento passa a mostrar a tela só de consulta, sem cada tela repetir isso.
+   */
+  aoRecusarMutacao?: (erro: ApiRequestError) => void;
 }
 
 /**
@@ -26,6 +32,11 @@ export function createQueryClient(opcoes: OpcoesQueryClient = {}): QueryClient {
         if (erro instanceof ApiRequestError && erro.status === 401) {
           opcoes.aoPerderSessao?.();
         }
+      },
+    }),
+    mutationCache: new MutationCache({
+      onError: (erro) => {
+        if (erro instanceof ApiRequestError) opcoes.aoRecusarMutacao?.(erro);
       },
     }),
     defaultOptions: {

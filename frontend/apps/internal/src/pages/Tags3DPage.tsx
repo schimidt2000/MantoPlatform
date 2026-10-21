@@ -33,6 +33,7 @@ import {
   type NfcProcessingStatus,
   type NfcTag,
 } from "../lib/nfc";
+import { SeloSituacao } from "../components/SeloSituacao";
 
 /**
  * Coluna "Vídeo" da tabela: a conversão roda em fundo e a entrega nasce `pendente`, então
@@ -272,6 +273,7 @@ export function Tags3DPage() {
                             {tag.event ? (
                               <span className="block max-w-52">
                                 <span className="block truncate text-sm text-ink">
+                                  <SeloSituacao situacao={tag.event.situacao} compacto />
                                   {tag.event.title}
                                 </span>
                                 {tag.event.start_at && (

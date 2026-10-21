@@ -212,8 +212,12 @@ def search_events_by_date(day: date) -> list[CalendarEvent]:
     """
     from sqlalchemy import func
 
+    # Feature 312: o cancelado não é oferecido como escolha (Q2 do dono). Ligar gasto a ele por
+    # chamada direta continua valendo — a devolução e a multa da 306 se ligam ali.
     return (
-        CalendarEvent.query.filter(func.date(CalendarEvent.start_at) == day)
+        CalendarEvent.query.filter(
+            func.date(CalendarEvent.start_at) == day, CalendarEvent.cancelled_at.is_(None)
+        )
         .order_by(CalendarEvent.start_at.asc())
         .all()
     )

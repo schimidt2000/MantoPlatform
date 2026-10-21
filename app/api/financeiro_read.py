@@ -15,7 +15,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from flask import jsonify, request
+from flask import jsonify, request, session
 from flask_login import current_user
 
 from app.api import api_bp
@@ -162,6 +162,11 @@ def api_vendas_pipeline() -> Any:
     cancelados = cancelados_do_periodo(
         start_date, end_date, seller_id=scope.seller_id, educamanto_only=scope.educamanto_only
     )
+    from app.api.agenda_read import _role_flags
+    from app.calendar.cancel_ops import painel_de_cancelamentos
+
+    # Feature 312 (Q1 do dono): imposto e efeito no resultado só para Superadmin e Financeiro.
+    papel = _role_flags(current_user, session.get("impersonate_role"))
 
     payload: dict[str, Any] = {
         "period": period,
@@ -173,6 +178,13 @@ def api_vendas_pipeline() -> Any:
         "scope_label": "Empresa toda" if scope.commission_target_id is None else "Minhas vendas",
         "kpis": vendas_ops.build_kpis(funil, settings, scope.commission_target_id, cancelados=cancelados),
         "eventos": vendas_ops.serialize_sales(funil, settings),
+        # Feature 312: o card "Cancelamentos do período" (sempre; quantidade 0 sem cancelado), com a
+        # comissão pela mesma régua do KPI acima.
+        "cancelamentos": painel_de_cancelamentos(
+            cancelados,
+            commission_target_id=scope.commission_target_id,
+            com_imposto=papel["show_financeiro"],
+        ),
     }
     if scope.can_filter_seller:
         payload["sellers"] = _comercial_sellers()
@@ -198,6 +210,7 @@ def api_financeiro_dashboard() -> Any:
     mês do cancelamento (`cancel_ops.cancelados_do_periodo`).
     """
     from app import db
+    from app.calendar import group_ops
     from app.financeiro import vendas_ops
     from app.financeiro.routes import (
         FATOR_R_RATE_HIGH,
@@ -409,13 +422,12 @@ def api_financeiro_dashboard() -> Any:
         venda = float(e.sale_value or 0)
         # Mesma regra do Dashboard Comercial (feature 196) — fonte única em `vendas_ops`.
         status = vendas_ops.event_payment_status(venda, recebido, _is_permuta(e))
+        # Feature 312: só os dias vivos, e só com dois ou mais (a régua do rótulo da lista de vendas).
+        vivos = len(group_ops.dias_vivos(e)) if e.is_group_leader else 0
         eventos_data.append({
             "event_id": e.id,
             "title": e.title,
-            "group_label": (
-                f"{e.group_display_name} ({len(e.satellites) + 1} eventos)"
-                if e.is_group_leader else None
-            ),
+            "group_label": f"{e.group_display_name} ({vivos} eventos)" if vivos >= 2 else None,
             "start_at": e.start_at.isoformat() if e.start_at else None,
             "event_type": e.event_type or None,
             "receita": venda,
@@ -549,19 +561,9 @@ def api_financeiro_dashboard() -> Any:
             "monthly_trend": monthly_trend,
             "auditoria": auditoria,
             # Feature 306: sempre, com quantidade 0 no período sem cancelado (contracts §19).
-            "cancelamentos": {
-                **{k: (v if k in ("quantidade", "itens") else float(v)) for k, v in cancelamentos.items()},
-                "itens": [
-                    {
-                        "event_id": i["event_id"],
-                        "titulo": i["titulo"],
-                        "cancelado_em": i["cancelado_em"],
-                        "retido": float(i["retido"]),
-                        "status": vendas_ops.event_payment_status(0, 0, False, cancelado=True),
-                    }
-                    for i in cancelamentos["itens"]
-                ],
-            },
+            # Feature 312: o card "Cancelamentos do período", pela função única do card (os mesmos
+            # totais da cascata; os itens ganham devolvido, comissão, pago, data e vendedor).
+            "cancelamentos": cancel_ops.painel_de_cancelamentos(cancelados, totais=cancelamentos),
         },
         "eventos": eventos_data,
         "pendencias": {

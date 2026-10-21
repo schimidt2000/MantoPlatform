@@ -210,7 +210,7 @@ function MateriaisSection({ data }: { data: EventoDetalhe }) {
   const [url, setUrl] = useState("");
   const [urlLabel, setUrlLabel] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-  const canEdit = Boolean(data.flags.show_ensaio);
+  const canEdit = Boolean(data.flags.show_ensaio) && !data.flags.somente_consulta; // feature 312
   const materiais = data.materiais ?? [];
 
   return (

@@ -312,6 +312,14 @@ def update_tag(
             event = CalendarEvent.query.get(event_id)
             if event is None:
                 raise NfcValidationError("event_id", "Evento não encontrado.")
+            if tag.event_id != event.id:
+                # Feature 312 (Q2): tag nova não se liga a evento cancelado; a tag que já era dele
+                # (reenvio do mesmo id) continua editável.
+                from app.calendar.cancel_ops import recusar_se_cancelado_para_ligar
+
+                recusar_se_cancelado_para_ligar(
+                    event, "Este evento foi cancelado — não dá para ligar uma tag a ele.", campo="event_id"
+                )
             tag.event_id = event.id
     if client_id is not ...:
         if client_id is None:
@@ -362,6 +370,8 @@ def serialize_tag(tag: NfcTag) -> dict[str, Any]:
                 "id": event.id,
                 "title": event.title,
                 "start_at": event.start_at.isoformat() if event.start_at else None,
+                # Feature 312: a tag ligada a um evento cancelado leva o selo na lista.
+                "situacao": event.situacao,
             }
             if event
             else None

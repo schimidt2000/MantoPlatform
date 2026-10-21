@@ -16,7 +16,7 @@ import {
   useEditPayment,
   useToggleContractSigned,
 } from "../../lib/eventAttachments";
-import { brl, Empty, formatDateTime, formatDay, INPUT_CLASS, Panel } from "./parts";
+import { Empty, INPUT_CLASS, Panel, brl, formatDateTime, formatDay } from "./parts";
 
 const MONEY_INPUT_CLASS = "h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -28,7 +28,9 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
   const toggle = useToggleContractSigned(eventId);
   const [file, setFile] = useState<File | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isSuperadmin = Boolean(data.flags.is_superadmin);
+  // Feature 312: contrato não é dado de venda — no cancelado fica para consulta.
+  const consulta = Boolean(data.flags.somente_consulta);
+  const isSuperadmin = Boolean(data.flags.is_superadmin) && !consulta;
   const contratos = data.contratos ?? [];
 
   return (
@@ -91,6 +93,7 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
           ))}
         </ul>
       )}
+      {!consulta && (
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3">
         <p className="w-full text-xs text-muted">PDF / JPG / PNG — máx. 10 MB</p>
         <input
@@ -120,6 +123,7 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
           Enviar contrato
         </Button>
       </div>
+      )}
       {add.isError && <p className="mt-1 text-sm text-red">Não foi possível anexar o contrato.</p>}
     </Panel>
   );

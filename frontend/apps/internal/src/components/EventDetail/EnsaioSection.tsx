@@ -272,6 +272,12 @@ function EnsaioOwnPanel({ data, canEdit }: { data: EventoDetalhe; canEdit: boole
                     ))}
                 </ul>
               )}
+              {/* Feature 312: a recusa do servidor (show cancelado) aparece aqui, não vira botão morto. */}
+              {vincular.isError && (
+                <p className="mt-1 text-sm text-red" role="alert">
+                  {vincular.error?.message ?? "Não foi possível vincular o ensaio."}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -322,7 +328,8 @@ export interface EnsaioSectionProps {
  * Edição gated por `flags.show_ensaio` (Ensaio/Casting/Superadmin — `_CAN_ENSAIO`).
  */
 export function EnsaioSection({ data }: EnsaioSectionProps) {
-  const canEdit = Boolean(data.flags.show_ensaio);
+  // Feature 312: show cancelado não agenda, não vincula nem designa presença (só consulta).
+  const canEdit = Boolean(data.flags.show_ensaio) && !data.flags.somente_consulta;
   const create = useCreateEnsaio(data.event.id);
   const removeFromShow = useDeleteEnsaioFromShow(data.event.id);
   const [showForm, setShowForm] = useState(false);
