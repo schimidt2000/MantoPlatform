@@ -319,13 +319,16 @@ o `ruff check` nos tocados. Sem migration.
 
 ## Phase 9: Polimento
 
-- [ ] T068 Rodada inteira 24/24 (com 9b) duas vezes seguidas; limpeza com zero sobra (cenário 23)
+- [X] T068 Rodada inteira 24/24 (com 9b) duas vezes seguidas; limpeza com zero sobra (cenário 23)
 - [X] T069 [P] Regressão: `verify_306.py` (base 67/69), `verify_306b.py`, `verify_303.py`; de `scripts/db/`:
       `verify_cancelamento_evento.py`, `verify_145_agenda_read.py` (escolhe o evento mais recente sem olhar
       cancelamento — anotar se falhar por isso), `verify_196_dashboard_comercial.py`, `verify_205.py`
 - [X] T070 Textos que mentem: docstring de `is_cancelled` (`app/models.py:401-409`), docstring de
       `_query_month_events` (`routes.py:192-194`), comentário "única porta" do menu
-- [ ] T071 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3, com `--semear-tela` e
+- [X] T071 *[20/10: conferidas a agenda (Dia), a tela do cancelado como Superadmin e como Casting, a Home do
+      Casting (Tirar da escala tira a linha), a página como Financeiro (filtros, vazio, URL inválida), os cards da DRE e
+      do Comercial (vendedora sem imposto), a ficha da cliente, Gastos Extras, a avaliação pública a 375 e 320 px e a
+      ficha do portal a 375 px]* Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3, com `--semear-tela` e
       `--limpar-tela`; portal e avaliação em 375×812 e 320–430 px; prints guardados no scratchpad
 - [X] T072 [P] `docs/00` §4 (FINANCEIRO lê Cancelamentos); `docs/01` §2.2, §3.3 (inventário de
       `/events/cancelamentos` — quita a 84), §3.4/§3.6–§3.8/§3.13, §4.3
