@@ -785,8 +785,12 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
             // com quem recebe e o PIX, obrigatórios). Os campos também aparecem quando o 400 os traz
             // (prefill que falhou), para a pessoa ter onde digitar.
             const bvLinha = prefillEscolhido.data?.acrescimos_do_orcamento?.linhas.find((l) => l.is_bv);
+            // Feature 313: o vínculo aplica o total do orçamento, então o BV gravado é o que a linha vale com
+            // o desconto (`valores_final`, do servidor); backend de antes não manda — fica o cheio.
             const valorBv =
-              bvLinha && duracao ? bvLinha.valores_brl[duracao as "1" | "2" | "3" | "4"] : null;
+              bvLinha && duracao
+                ? (bvLinha.valores_final ?? bvLinha.valores_brl)[duracao as "1" | "2" | "3" | "4"]
+                : null;
             const pedidosPeloErro = Boolean(campos?.bv_recipient || campos?.bv_pix);
             if (!((semVenda && duracao && bvLinha) || pedidosPeloErro)) return null;
             return (

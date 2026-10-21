@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MoneyInput, formatBRL } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
+import { percentualDoDesconto, textoDoPercentual } from "../../lib/desconto";
 import { FIELD, FIELD_ERROR, LABEL, FieldError, BlockCard } from "./shared";
 
 const CHIP = "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors";
@@ -71,7 +72,8 @@ export function ValoresBlock({
   const gross = watch("sale_value_gross");
   const finalValue = watch("sale_value");
   const valorGravado = watch("valor_original");
-  const discountPct = gross > 0 && finalValue < gross ? ((gross - finalValue) / gross) * 100 : 0;
+  // Feature 313 (FR-022): o % pela mesma regra da proposta (uma casa, para baixo) — 4,96% sai "4,9", nunca "5,0".
+  const discountPct = percentualDoDesconto(gross, finalValue) ?? 0;
 
   if (satelite) return <VendaNoPrincipal principal={principal} />;
 
@@ -185,7 +187,7 @@ export function ValoresBlock({
             </div>
             {discountPct > 0 && (
               <span className="inline-flex items-center rounded-full bg-green-soft px-2.5 py-1 text-xs font-medium text-green">
-                {discountPct.toFixed(1)}% de desconto
+                {textoDoPercentual(discountPct)}% de desconto
               </span>
             )}
           </motion.div>

@@ -889,6 +889,8 @@ export function EducaMantoCalculadoraPage() {
                                 alterarConfig({ contratacao: { ...config.contratacao, acrescimos } })
                               }
                               tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                              tipoBv={opcoes.data.acrescimo_tipo_bv}
+                              ajuda="O acréscimo em R$ entra uma vez, em qualquer duração; o BV é calculado sobre o valor com os acréscimos. O BV é um repasse (não aparece para o cliente)."
                             />
 
                             <Button

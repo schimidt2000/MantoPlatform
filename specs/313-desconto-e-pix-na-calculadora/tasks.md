@@ -169,40 +169,40 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
 
 ## Phase 7: Telas (US1–US4)
 
-- [ ] T032 [P] [US1] `frontend/apps/internal/src/lib/orcamento.ts`: tipos opcionais — Input (`:169-202`) com as três
+- [X] T032 [P] [US1] `frontend/apps/internal/src/lib/orcamento.ts`: tipos opcionais — Input (`:169-202`) com as três
       chaves; `Quote` (`:230-280`) com `bruto_*`, `base_4h`, `desconto_*`, `pix_*`, `bv_*`, `bv_pix_*`;
       FormSnapshot (`:455-484`) com o digitado; `OrcamentoHistoricoEntry` (`:396-413`) com `desconto_pct`
-- [ ] T033 [P] [US1] `frontend/apps/internal/src/lib/desconto.ts` (novo): `textoDoPercentual(d)` (R5) e
+- [X] T033 [P] [US1] `frontend/apps/internal/src/lib/desconto.ts` (novo): `textoDoPercentual(d)` (R5) e
       `percentualDoDesconto(bruto, venda)`
-- [ ] T034 [US1] `OrcamentoCalculadoraPage.tsx`: bloco Desconto no card "Ajustes Finos" (`:707-820`) — campo de % e
+- [X] T034 [US1] `OrcamentoCalculadoraPage.tsx`: bloco Desconto no card "Ajustes Finos" (`:707-820`) — campo de % e
       "ou fechar [duração] por R$" (`MoneyInput`), as durações pelos `show_*`/`valor_unico`/`total_custom` do
       resultado (R6); o payload (`:311-367`) só com o modo ativo; o outro campo só leitura do resultado vivo; erro
       do desconto ao lado do bloco (hoje soltos em `:825-829`); o % mostrado é o `desconto_pct_texto` do servidor
       quando vier (analyze A20); estado em `INITIAL_STATE` (`:64-88`), `resetAll`
       (`:280-306`) e "Recalcular" (`:249-278`, zerando em snapshot antigo); frase do personalizado (Session 5)
-- [ ] T035 [US1] Card Resultado (`:831-887`): cheio riscado e final; linha do PIX; "BV a repassar" (com desconto e
+- [X] T035 [US1] Card Resultado (`:831-887`): cheio riscado e final; linha do PIX; "BV a repassar" (com desconto e
       no PIX) quando há BV; esmaecido "recalculando…"/"corrija os campos" por `resultadoVivo` (R9, hoje só
       `calcular.isPending`, `:837`); ajuda da "Duração extra" (`:720-730`, a frase de `:729`) com a conta da Q7
-- [ ] T036 [P] [US3] (FR-018, a parte do editor — a única tarefa de tela da US3) `components/orcamento/AcrescimosEditor.tsx`: props `tipoBv` e `ajuda` (R8); a linha que troca
+- [X] T036 [P] [US3] (FR-018, a parte do editor — a única tarefa de tela da US3) `components/orcamento/AcrescimosEditor.tsx`: props `tipoBv` e `ajuda` (R8); a linha que troca
       para o tipo BV nasce com "%" marcado; a gravada reabre como foi; passar as props na calculadora (`:702`) e no
       EducaManto (`EducaMantoCalculadoraPage.tsx:886-892`, ajuda sem "acompanha o desconto")
-- [ ] T037 [P] [US2] `OrcamentoResultadoPage.tsx`: "de/por" e o PIX por duração (`:37-57`), BV a repassar fora da
+- [X] T037 [P] [US2] `OrcamentoResultadoPage.tsx`: "de/por" e o PIX por duração (`:37-57`), BV a repassar fora da
       mensagem (só com desconto); fallback `bruto ?? total`, PIX só quando `pix_*` vier; o card do transporte
       (`:261-292`) não muda
-- [ ] T038 [P] [US1] `OrcamentoHistoricoPage.tsx`: selo "−N%" ao lado do Badge de show (`:275`) por `desconto_pct`
-- [ ] T039 [US4] `lib/eventCreate.ts` (`OrcamentoPrefill`, `:51-71`): `bruto_*`, `bruto_custom`, `desconto_pct`,
+- [X] T038 [P] [US1] `OrcamentoHistoricoPage.tsx`: selo "−N%" ao lado do Badge de show (`:275`) por `desconto_pct`
+- [X] T039 [US4] `lib/eventCreate.ts` (`OrcamentoPrefill`, `:51-71`): `bruto_*`, `bruto_custom`, `desconto_pct`,
       `extra_por_horas` opcionais; `EventCreatePage.tsx`: prefill (`:212-213`), `selectDuracao` (`:286-293`) e
       `selectDuracaoExtra` (`:301-314`) gravando cheio e final separados (`bruto ?? total`, o legado — analyze B12); "Outra (h)" (`:750-801`, preço `:779-796`)
       pelo `extra_por_horas` quando vier, com o campo de 5 a 24 h (legado: a régua de hoje — analyze A8)
-- [ ] T040 [US4] `components/EventFormBlocks/BvDoOrcamentoBlock.tsx` (`:60-90`; montado em
+- [X] T040 [US4] `components/EventFormBlocks/BvDoOrcamentoBlock.tsx` (`:60-90`; montado em
       `EventCreatePage.tsx:818-842`): mostra o `valores_final` da linha (o servidor fez a conta) quando a venda é o
       total do orçamento; venda digitada à mão → "calculado ao salvar", como hoje (nenhuma conta de dinheiro no
       navegador — analyze A7); o aviso de "valor diferente" (`:73-79`, `:90-95`) cala quando a venda é o total
-- [ ] T040a [US4] `components/EventDetail/ComercialSection.tsx` (o vínculo 273, `:786-797`): o BV que o vínculo vai
+- [X] T040a [US4] `components/EventDetail/ComercialSection.tsx` (o vínculo 273, `:786-797`): o BV que o vínculo vai
       gravar pelo `valores_final` do prefill, não o `valores_brl` cheio (analyze B3)
-- [ ] T041 [P] [US4] `components/EventFormBlocks/ValoresBlock.tsx`: o selo (`:74`, `:186-190`) por
+- [X] T041 [P] [US4] `components/EventFormBlocks/ValoresBlock.tsx`: o selo (`:74`, `:186-190`) por
       `textoDoPercentual` (FR-022)
-- [ ] T042 Typecheck (`cd frontend && npm run typecheck`); commit `feat(313): telas — o desconto na calculadora, a
+- [X] T042 Typecheck (`cd frontend && npm run typecheck`); commit `feat(313): telas — o desconto na calculadora, a
       proposta, o histórico e o Novo evento`
 
 ---

@@ -60,6 +60,15 @@ export interface OrcamentoPrefill {
   total_4h?: number;
   total_custom?: number | null;
   duracao_custom?: number | null;
+  /** Feature 313 (só orçamento novo; o de antes não traz): o preço cheio, antes do desconto. */
+  bruto_1h?: number;
+  bruto_2h?: number;
+  bruto_3h?: number;
+  bruto_4h?: number;
+  bruto_custom?: number | null;
+  desconto_pct?: number | null;
+  /** Feature 313: o preço de 5 a 24 h pela conta da calculadora, do servidor (ausente no personalizado). */
+  extra_por_horas?: Record<string, { bruto: number; total: number }>;
   has_show?: boolean;
   transport_value?: number;
   acrescimo_value?: number;
@@ -79,11 +88,33 @@ export interface AcrescimosDoOrcamento {
     is_bv: boolean;
     percentual: number | null;
     valores_brl: { "1": number | null; "2": number | null; "3": number | null; "4": number | null; custom: number | null };
+    /** Feature 313: o que a linha vale com o desconto (a venda = o total do orçamento), do servidor. */
+    valores_final?: { "1": number | null; "2": number | null; "3": number | null; "4": number | null; custom: number | null };
   }[];
   /** Feature 305 (converge): a proporção do BV é entre líquidos — a nota do orçamento e o 0,84 do
    * servidor. Opcionais: o backend antigo não manda (aí a tela compara brutos, como antes). */
   nota_do_orcamento?: boolean;
   divisor_da_nota?: number;
+}
+
+/**
+ * Feature 313: o preço cheio e o final de uma duração do orçamento (o cheio vai para `sale_value_gross`, o final
+ * para `sale_value`). Números do servidor: 1–4 h e, no orçamento novo, 5–24 h pelo `extra_por_horas`. Orçamento de
+ * antes: o `total_custom` quando a duração bate, senão a régua de sempre (4 h ÷ 4 × horas) — só sugestão, editável;
+ * sem cheio separado, o cheio é o próprio total. `null` = fora do que o orçamento novo cobre (acima de 24 h).
+ */
+export function precoDaDuracao(p: OrcamentoPrefill, horas: number): { bruto: number; total: number } | null {
+  if (horas >= 1 && horas <= 4) {
+    const total = p[`total_${horas}h` as "total_1h"] ?? 0;
+    return { total, bruto: p[`bruto_${horas}h` as "bruto_1h"] ?? total };
+  }
+  if (p.extra_por_horas) return p.extra_por_horas[String(horas)] ?? null;
+  if (p.duracao_custom === horas && p.total_custom) {
+    return { total: p.total_custom, bruto: p.bruto_custom ?? p.total_custom };
+  }
+  const regua = (v: number) => Math.round((v / 4) * horas * 100) / 100;
+  const total4 = p.total_4h ?? 0;
+  return { total: regua(total4), bruto: regua(p.bruto_4h ?? total4) };
 }
 
 export function useOrcamentoPrefill(orcamentoId: number | null) {
