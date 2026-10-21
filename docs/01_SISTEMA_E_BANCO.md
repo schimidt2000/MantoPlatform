@@ -840,7 +840,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > valida nem grava nada da venda. `PATCH /api/events/<id>/comercial` recusa o valor novo entre
 > R$ 0,01 e R$ 0,99 (vazio = "a definir"). `PATCH /api/events/<id>/orcamento` trata valor abaixo de
 > R$ 1,00 como "sem venda". No detalhe, `cobranca` sai do mesmo núcleo da Home: `outstanding` =
-> saldo do grupo, `due` = vencimento, `enabled` só no principal ou avulso, a partir do vencimento,
+> saldo do grupo, `due` = vencimento, `enabled` só no principal ou avulso, a qualquer momento (299b),
 > fora cortesia, simbólico e sem valor. Chaves novas, opcionais: `valor`, `recebido`, `quitado`,
 > `cortesia`, `sem_valor`, `valor_simbolico`, `sinal_pendente`, `vencimento_origem`, `escopo`,
 > `grupo_tamanho`; a cortesia nunca é `quitado` (a página diz "cortesia ou permuta").
