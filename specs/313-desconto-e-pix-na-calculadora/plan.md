@@ -128,6 +128,15 @@ desfazer o total; nenhuma camada nova.
    `BvDoOrcamentoBlock`, `ValoresBlock`, EducaManto. Typecheck.
 8. **Polimento** — regressão (16), rodada inteira duas vezes, tela aberta, docs 01–05.
 
+## Deploy e rollback
+
+Um push só, à noite (a calculadora sangra primeiro no 502), sem migration e sem script no Shell do Render. Sonda: um
+endpoint `/api/` com JSON e um orçamento calculado em produção logo depois. **Rollback** = `git revert` do merge +
+push: o código antigo ignora as chaves novas; os orçamentos salvos nesse meio-tempo (`versao_conta: 2`) seguem com
+as colunas no valor final e, se virarem evento depois do revert, o BV sai pela conta inversa antiga (pode diferir
+nos orçamentos com BV e outro acréscimo — os mesmos da exceção da Q7) e o cheio do evento igual à venda. Nenhum dado
+se perde; o revert não precisa de script.
+
 ## Rastreamento de complexidade
 
 | Violação | Por que é necessária | Alternativa mais simples rejeitada porque |

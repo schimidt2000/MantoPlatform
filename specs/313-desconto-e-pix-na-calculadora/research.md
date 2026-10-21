@@ -55,7 +55,9 @@ ou `preco_na_duracao(...)["total"]`. Quem usa o quê:
 | `bv_nasce_no_vinculo` (venda que o vínculo grava) | total | **final** |
 | `aplicar_valores_do_orcamento` (273) | `sale_value = sale_value_gross = total` | `sale_value` = final, `sale_value_gross` = cheio |
 
-`bv_que_acompanha` não muda (assinatura e tolerância — quatro chamadores); muda o número passado como `total`.
+`bv_que_acompanha` não muda (assinatura e tolerância — quatro chamadores); muda o número passado como `total`. A
+proporção continua entre **líquidos** (`plano_dos_acrescimos`: venda × 0,84 com nota no evento ÷ cheio × 0,84 com
+nota no orçamento, a régua da B10): o cheio só entra no lugar do total.
 
 **Rationale**: sem isto a razão venda ÷ total dá 1 e o BV não encolhe (reconferência §2); a dedução de duração
 deixaria de achar a duração pelo valor.

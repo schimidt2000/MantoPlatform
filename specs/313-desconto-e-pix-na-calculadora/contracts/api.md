@@ -13,7 +13,8 @@ desconto_valor?: number                     # o valor final de UMA duração (mo
 desconto_duracao?: "1h"|"2h"|"3h"|"4h"|"extra"
 ```
 
-Com `desconto_valor` + `desconto_duracao`, o servidor acha o % (sem arredondar) e ignora `desconto_pct`.
+Com `desconto_valor` + `desconto_duracao`, o servidor acha o % (sem arredondar) e ignora `desconto_pct`. Valor final
+igual ao cheio (± R$ 0,005) = sem desconto.
 
 **400 `fields`** (um campo por vez, como hoje): `desconto_pct` fora de `0 < d < 100` (ou não numérico) → `desconto_pct`;
 `desconto_valor` sem `desconto_duracao` (ou o contrário), duração que o resultado não mostra (R6), valor ≤ 0 ou

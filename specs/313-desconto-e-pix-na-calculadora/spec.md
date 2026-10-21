@@ -222,7 +222,14 @@ valores.
 - **Deploy cruzado**: toda chave nova é opcional nos dois sentidos. Tela nova com servidor velho mostra o orçamento
   sem desconto (nunca um número errado como certo) e não trava "Gerar Orçamento"; tela velha com servidor novo grava
   bruto = venda = total com desconto — a venda nasce certa e o BV sai encolhido pelo servidor.
-- **Desconto de 0, vazio ou ausente** = sem desconto: a conta, a mensagem e o PDF são os de hoje.
+- **Aba aberta com o bundle antigo**: o "Recalcular" antigo repopula campo a campo e descarta o desconto do orçamento
+  salvo (recalcula o cheio); o Novo evento antigo grava cheio = venda = total com desconto. Nenhum número errado
+  como certo; some só o registro do cheio no evento.
+- **Gêmeo Jinja da criação de evento** (pausado, só pelo host do backend): lê o mesmo prefill e grava o mesmo número
+  em cheio e venda — o total com desconto. A venda nasce certa e o cheio se perde; o orçamento com BV continua
+  recusado ali (B8 da 305). Aceito, não se estende.
+- **Desconto de 0, vazio ou ausente**, ou valor final igual ao cheio = sem desconto: a conta, a mensagem e o PDF são
+  os de hoje.
 - **Desconto de 100% ou mais, ou negativo** → recusado no campo; acima de 0 e abaixo de 100 qualquer Comercial
   digita, sem teto (como hoje digita a venda).
 - **Digitar o valor com pausa no meio** ("2", depois "200"): a calculadora não pisca um % absurdo como resultado
@@ -269,7 +276,9 @@ valores.
 
 **Proposta (mensagem e PDF)**
 
-- **FR-011**: Sem desconto, a mensagem e o PDF DEVEM sair idênticos aos de hoje.
+- **FR-011**: Sem desconto, a mensagem e o PDF DEVEM sair idênticos aos de hoje, palavra por palavra — salvo os
+  valores dos orçamentos que a regra do acréscimo (Q7, FR-006) muda de preço (BV com outro acréscimo; duração extra
+  com acréscimo em R$), cuja mensagem difere só nesses números.
 - **FR-012**: Com desconto, cada duração DEVE mostrar "de R$ X por R$ Y" e "(desconto de N% aplicado)", com N
   arredondado a uma casa para baixo, com vírgula e sem ",0".
 - **FR-013**: O bloco "À Vista (PIX)" DEVE, com negociado menor que 5%, mostrar o valor com 5% e a frase de hoje; com
