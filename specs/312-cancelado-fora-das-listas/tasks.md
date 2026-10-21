@@ -341,7 +341,8 @@ o `ruff check` nos tocados. Sem migration.
 - [X] T075 `docs/03`: entrada nova no topo + linha no índice (registrar que a frase da 306b "os demais veem o
       motivo" ficou superada pela Q9; a recontagem de 20/10; o 1358 legado)
 - [X] T076 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
-- [ ] T077 Pré-merge: rebase sobre a `main` do dia, rodada inteira e regressão de novo; `git status` limpo; merge e
+- [X] T077 *[21/10: a `main` trouxe a 185b e a 299b (merge na branch, conflitos só de docs e do `feature.json`);
+      27/27 + 299b 7/7, 306b 8/8, 303 44/44, 196 55/55; merge e push a pedido do dono]* Pré-merge: rebase sobre a `main` do dia, rodada inteira e regressão de novo; `git status` limpo; merge e
       push **só quando o dono pedir**
 
 ---

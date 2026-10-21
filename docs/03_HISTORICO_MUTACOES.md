@@ -4,8 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-20** · Estado do repositório: pós-feature
-> **312-cancelado-fora-das-listas** (sem migration; **em branch, não publicada** — o cancelado sai de toda lista e
+> Última atualização: **2026-10-21** · Estado do repositório: pós-feature
+> **312-cancelado-fora-das-listas** (sem migration; **EM PRODUÇÃO desde 21/10/2026 ~18:20**, a pedido do dono, logo
+> depois do deploy da 185b e da 299b — o cancelado sai de toda lista e
 > só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
 > 27/27) — antes dela pós-feature
 > **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
@@ -150,7 +151,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **312-cancelado-fora-das-listas** | *(em branch)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
+| **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(PRONTA na branch, não mergeada)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **299b-cobranca-a-qualquer-momento** | *(PRONTA na branch, não mergeada)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
@@ -334,8 +335,9 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 312 — O cancelado sai de toda lista e só se vê onde se trata do cancelamento   (312-cancelado-fora-das-listas · 2026-10-20 · sem migration)
 
-> **Em branch** (`312-cancelado-fora-das-listas`, worktree `C:\tmp\mp312`, base `main` `5c298ac5`). Merge e push só
-> quando o dono pedir.
+> **EM PRODUÇÃO desde 21/10/2026 ~18:20** (merge `merge: 312 — …` sobre a `main` `b003b842`, que trouxe a 185b e a
+> 299b; a pedido do dono). Na branch nasceu sobre a `5c298ac5`; antes do merge a `main` do dia entrou nela e a rodada
+> repetiu: `verify_312` 27/27, `verify_299b` 7/7, `verify_306b` 8/8, `verify_303` 44/44, `verify_196` 55/55.
 
 **O pedido.** Item 1c do backlog de setembro, a terceira entrega da 303 (D34): "Evento cancelado não deve ficar mostrando
 para o talento. Ver esses eventos cancelados deve ser uma função apenas de uma parte específica do sistema, para filtrar
