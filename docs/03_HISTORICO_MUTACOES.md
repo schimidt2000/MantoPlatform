@@ -8,7 +8,11 @@
 > **312-cancelado-fora-das-listas** (sem migration; **EM PRODUÇÃO desde 21/10/2026 ~18:20**, a pedido do dono, logo
 > depois do deploy da 185b e da 299b — o cancelado sai de toda lista e
 > só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
-> 27/27) — antes dela pós-feature
+> 27/27) — antes dela pós-correções
+> **185b-tags-por-virgula** e **299b-cobranca-a-qualquer-momento** (sem migration; **EM PRODUÇÃO desde
+> 21/10/2026 ~18:17** pelos merges `190184da` e `b003b842`, a pedido do dono — as tags do catálogo se
+> separam pela vírgula também no celular e ao colar, e a mensagem de cobrança se copia a qualquer
+> momento; `verify_299b.py` 7/7) — antes delas pós-feature
 > **311-aviso-prazo-pagamento** (sem migration; **EM PRODUÇÃO desde 20/10/2026 ~17:40**, a pedido do
 > dono, em horário comercial — `flask campanha-prazo-pagamento` avisa "até 3 dias úteis" ao banco de
 > talentos, e `/portal/termos` volta a mostrar a data do aceite; `verify_311.py` 8/8) — antes dela
@@ -152,8 +156,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
-| **185b-tags-por-virgula** | *(PRONTA na branch, não mergeada)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
-| **299b-cobranca-a-qualquer-momento** | *(PRONTA na branch, não mergeada)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
+| **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
+| **299b-cobranca-a-qualquer-momento** | *(EM PRODUÇÃO 21/10 ~18:17)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
 | **311-aviso-prazo-pagamento** | *(EM PRODUÇÃO 20/10 ~17:40)* Comando `flask campanha-prazo-pagamento` avisa o banco de talentos de que o cachê sai em **até 3 dias úteis**, prazo do termo desde 06/04/2026. Tem duas versões: quem aceitou recebe a data do aceite e o link `/termos`; quem não aceitou (128 de 309) recebe o caminho do primeiro acesso. A tela `/portal/termos` volta a dizer quando a pessoa aceitou (`terms_accepted_at` em São Paulo) | 2026-10-20 | — | (aqui) | ver Registro |
 | **306b-motivo-editavel** | *(EM PRODUÇÃO 20/10 ~12:00)* O motivo do cancelamento passa a ser **editável por Superadmin e Comercial** ("Editar motivo" no banner do cancelado; `PATCH /api/events/<id>/motivo-cancelamento`): vale para os dias do grupo cancelados com o mesmo motivo e troca o texto antigo no histórico (`EventLog` e `AuditLog`), com uma linha "Editou o motivo do cancelamento" sem o texto antigo. Nasceu de um cancelamento real na manhã do deploy da 306, em que o motivo citava o que a cliente tinha dito | 2026-10-20 | `—` | (aqui) | — |
 | **306-dinheiro-do-cancelamento** | *(EM PRODUÇÃO 20/10 ~09:30)* Cancelar devolvendo o dinheiro: devolução **Tudo, Parte ou Nada** com prévia, e o que a Manto **retém** (pago − devolvido) entra na **DRE do mês do cancelamento** (+400, não −600), na **comissão** e no **BV** na mesma proporção, por reconciliação no primeiro repasse aberto (fecha a **224g**: o estorno com a data da venda). Cancelar todos os dias de um grupo, só um dia (a venda diminui) ou só o 1º (a venda passa ao dia seguinte); o marcado "Sumiu do Google Agenda" passa a se cancelar; cachê pago recusa; os ensaios caem, o elenco e as equipes são avisados, e a multa ao elenco vira Gasto Extra. Só o Superadmin real corrige a venda do cancelado, e tudo se recongela. Três tabelas novas (congelado do ato) | 2026-10-19 | `c5d2f7a9e306` | (aqui) | — |
@@ -410,7 +414,7 @@ base — 14b, 20 e o 23). Regressão: `verify_306b` 8/8; `verify_306` com a base
 
 ### 185b — As tags do catálogo se separam pela vírgula   (185b-tags-por-virgula · 2026-10-21 · sem migration)
 
-> **PRONTA na branch, não mergeada.** Nível 2 (hotfix da 185): só frontend, sem migration.
+> **EM PRODUÇÃO desde 21/10/2026 ~18:17** (merge `b003b842`, a pedido do dono). Nível 2 (hotfix da 185): só frontend, sem migration.
 
 **O pedido.** "As tags quando classifico algo no catálogo ficam tudo junto, não fica separado por
 vírgula."
@@ -434,7 +438,7 @@ passou o typecheck do `internal`. Não há `verify_185b.py`: não há regra no s
 
 ### 299b — A mensagem de cobrança se copia a qualquer momento   (299b-cobranca-a-qualquer-momento · 2026-10-21 · sem migration)
 
-> **PRONTA na branch, não mergeada.** Nível 2 (hotfix da 299): uma regra num domínio, sem migration.
+> **EM PRODUÇÃO desde 21/10/2026 ~18:17** (merge `190184da`, a pedido do dono). Nível 2 (hotfix da 299): uma regra num domínio, sem migration.
 
 **O pedido.** "Tire o bloqueio de poder copiar o texto de cobrança de 2 dias. Para poder
 copiar/cobrar em qualquer momento." Desde a 299 o item só ativava a partir do vencimento do saldo,

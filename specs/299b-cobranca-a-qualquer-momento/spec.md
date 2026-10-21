@@ -1,7 +1,7 @@
 # 299b — A mensagem de cobrança se copia a qualquer momento
 
-**Branch**: `299b-cobranca-a-qualquer-momento` · **Created**: 2026-10-21 · **Status**: PRONTA na
-branch (não mergeada) · **Migration**: nenhuma
+**Branch**: `299b-cobranca-a-qualquer-momento` · **Created**: 2026-10-21 · **Status**: EM PRODUÇÃO
+desde 21/10/2026 ~18:17 · **Migration**: nenhuma
 
 ## O pedido
 
