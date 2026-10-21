@@ -791,7 +791,7 @@ export function EventCreatePage() {
                         <span className="text-xs text-muted">
                           {(() => {
                             const preco = precoDaDuracao(prefill.data, Number(duracaoExtra));
-                            return preco ? `R$ ${formatBRL(preco.total)}` : "até 24 h";
+                            return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, digite o valor";
                           })()}
                         </span>
                       )}

@@ -40,7 +40,7 @@ import {
   type Performer,
   type Quote,
 } from "../lib/orcamento";
-import { bvDe, pixDe } from "../lib/desconto";
+import { linhasDoBv, pixDe, temBv } from "../lib/desconto";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -112,16 +112,20 @@ function ResultadoDaDuracao({
   const total = coluna === "custom" ? (quote.total_custom ?? 0) : quote[`total_${coluna}`];
   const bruto = coluna === "custom" ? quote.bruto_custom : quote[`bruto_${coluna}`];
   const pix = pixDe(quote, coluna);
-  const bv = bvDe(quote, coluna);
+  const bv = linhasDoBv(quote, coluna, brl);
   return (
     <div className="rounded-md bg-surface-2 p-3 text-center">
       <p className="text-xs uppercase text-muted">{label}</p>
       {bruto != null && Math.abs(bruto - total) >= 0.005 && (
         <p className="text-xs text-muted line-through">{brl(bruto)}</p>
       )}
-      <p className="text-lg font-semibold text-ink">{brl(total)}</p>
+      <p className="whitespace-nowrap text-lg font-semibold text-ink">{brl(total)}</p>
       {pix != null && <p className="text-xs text-muted">PIX à vista: {brl(pix)}</p>}
-      {bv != null && <p className="text-xs text-muted">BV a repassar: {brl(bv)}</p>}
+      {bv.map((linha) => (
+        <p key={linha} className="text-xs text-muted">
+          {linha}
+        </p>
+      ))}
     </div>
   );
 }
@@ -247,6 +251,10 @@ export function OrcamentoCalculadoraPage() {
   const [descontoDuracao, setDescontoDuracao] = useState<DuracaoDoDesconto>(INITIAL_STATE.descontoDuracao);
   const [result, setResult] = useState<CalcularOrcamentoResult | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Feature 313: o "fechar por R$" apontou para uma duração que o orçamento não mostra — o servidor diz quais mostra
+  // (`duracoes_do_desconto` no erro) e o seletor passa a elas; sem isso ficava preso no resultado anterior.
+  const [duracoesDoErro, setDuracoesDoErro] = useState<DuracaoDoDesconto[] | null>(null);
+  const [avisoDoDesconto, setAvisoDoDesconto] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // Feature 307: do payload mudar até a resposta chegar, `result` é de outra conta — durante os
   // 400 ms do debounce `calcular.isPending` ainda é false, e "Gerar Orçamento" salvaria o preço
@@ -356,6 +364,7 @@ export function OrcamentoCalculadoraPage() {
     setCustValores(INITIAL_STATE.custValores);
     setCustMult(INITIAL_STATE.custMult);
     setDescontoModo(INITIAL_STATE.descontoModo);
+    setAvisoDoDesconto(null);
     setDescontoPct(INITIAL_STATE.descontoPct);
     setDescontoValor(INITIAL_STATE.descontoValor);
     setDescontoDuracao(INITIAL_STATE.descontoDuracao);
@@ -444,10 +453,15 @@ export function OrcamentoCalculadoraPage() {
     const timer = setTimeout(() => {
       calcular.mutate(payload, {
         onSuccess: (data) => {
-          if (meu === seq.current) setResult(data);
+          if (meu !== seq.current) return;
+          setResult(data);
+          setDuracoesDoErro(null);
         },
         onError: (err) => {
-          if (meu === seq.current && err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
+          if (meu !== seq.current || !(err instanceof ApiRequestError)) return;
+          if (err.fields) setFieldErrors(err.fields);
+          const ds = err.details.duracoes_do_desconto;
+          setDuracoesDoErro(Array.isArray(ds) && ds.length ? (ds as DuracaoDoDesconto[]) : null);
         },
         onSettled: () => {
           if (meu === seq.current) setCalcPendente(false);
@@ -468,6 +482,7 @@ export function OrcamentoCalculadoraPage() {
   // Feature 313: as durações que aceitam "fechar por R$" são as que a proposta mostra (decisão do servidor: o
   // só-produto mostra um valor, a extra só quando existe); sem resultado ainda, as marcadas.
   const duracoesDoDesconto = useMemo((): { valor: DuracaoDoDesconto; rotulo: string }[] => {
+    if (duracoesDoErro) return duracoesDoErro.map((d) => ({ valor: d, rotulo: d === "extra" ? "duração extra" : d }));
     const q = result?.quote;
     if (!q) return DURACOES.filter((d) => incluirDuracao.includes(d)).map((d) => ({ valor: d, rotulo: d }));
     if (q.valor_unico) return [{ valor: "1h", rotulo: "Preço de tabela" }];
@@ -478,11 +493,20 @@ export function OrcamentoCalculadoraPage() {
     }));
     if (q.total_custom) ops.push({ valor: "extra", rotulo: `${q.duracao_custom}h` });
     return ops;
-  }, [result, incluirDuracao]);
+  }, [result, incluirDuracao, duracoesDoErro]);
   useEffect(() => {
-    if (!resultadoVivo || !duracoesDoDesconto.length) return;
-    if (!duracoesDoDesconto.some((o) => o.valor === descontoDuracao)) setDescontoDuracao(duracoesDoDesconto[0].valor);
-  }, [resultadoVivo, duracoesDoDesconto, descontoDuracao]);
+    if ((!resultadoVivo && !duracoesDoErro) || !duracoesDoDesconto.length) return;
+    if (duracoesDoDesconto.some((o) => o.valor === descontoDuracao)) return;
+    setDescontoDuracao(duracoesDoDesconto[0].valor);
+    // O valor digitado era o preço DAQUELA duração: levá-lo para outra viraria um desconto que ninguém negociou
+    // (R$ 600 das 2h aplicado ao preço de tabela de R$ 2.500 = 76%). Zera e avisa.
+    if (descontoModo === "valor" && descontoValor > 0) {
+      setDescontoValor(0);
+      setAvisoDoDesconto("A duração do “fechar por R$” saiu do orçamento — escolha a duração e digite o valor de novo.");
+    }
+    // O modo e o valor são lidos só no momento da troca (não disparam o efeito).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultadoVivo, duracoesDoErro, duracoesDoDesconto, descontoDuracao]);
   const descontoTexto = resultadoVivo ? (result?.quote.desconto_pct_texto ?? null) : null;
   const totalDaDuracaoDoDesconto = (() => {
     const q = resultadoVivo ? result?.quote : undefined;
@@ -560,7 +584,7 @@ export function OrcamentoCalculadoraPage() {
       )}
 
       {opcoes.data && (
-        <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-start [&>*]:min-w-0">
           {/* ── Coluna esquerda — Dados e Segurança (1/3) ────────────────────── */}
           <div className="space-y-4 lg:col-span-1">
             <Card>
@@ -940,6 +964,7 @@ export function OrcamentoCalculadoraPage() {
                         onChange={(e) => {
                           setDescontoModo("pct");
                           setDescontoPct(Number(e.target.value) || 0);
+                          setAvisoDoDesconto(null);
                         }}
                         aria-invalid={Boolean(fieldErrors.desconto_pct)}
                       />
@@ -952,7 +977,10 @@ export function OrcamentoCalculadoraPage() {
                         id="desconto-duracao"
                         className={`${INPUT} w-auto`}
                         value={descontoDuracao}
-                        onChange={(e) => setDescontoDuracao(e.target.value as DuracaoDoDesconto)}
+                        onChange={(e) => {
+                          setDescontoDuracao(e.target.value as DuracaoDoDesconto);
+                          setAvisoDoDesconto(null);
+                        }}
                       >
                         {duracoesDoDesconto.map((o) => (
                           <option key={o.valor} value={o.valor}>
@@ -972,6 +1000,7 @@ export function OrcamentoCalculadoraPage() {
                         onValueChange={(v) => {
                           setDescontoModo("valor");
                           setDescontoValor(v);
+                          setAvisoDoDesconto(null);
                         }}
                         aria-invalid={Boolean(fieldErrors.desconto_valor)}
                       />
@@ -984,6 +1013,7 @@ export function OrcamentoCalculadoraPage() {
                           setDescontoPct(0);
                           setDescontoValor(0);
                           setDescontoModo("pct");
+                          setAvisoDoDesconto(null);
                         }}
                       >
                         Sem desconto
@@ -999,6 +1029,11 @@ export function OrcamentoCalculadoraPage() {
                   {descontoModo === "valor" && descontoValor > 0 && descontoTexto && (
                     <p className="mt-2 text-xs text-muted">
                       = {descontoTexto}% de desconto, aplicado também nas outras durações.
+                    </p>
+                  )}
+                  {avisoDoDesconto && (
+                    <p className="mt-2 text-sm text-ink" role="status">
+                      {avisoDoDesconto}
                     </p>
                   )}
                   {errosDoDesconto.map((msg) => (
@@ -1035,7 +1070,7 @@ export function OrcamentoCalculadoraPage() {
                       {calcular.isError ? "Corrija os campos para recalcular." : "Recalculando…"}
                     </p>
                   )}
-                  <div className={`grid grid-cols-2 gap-3 sm:grid-cols-4 transition-opacity ${resultadoVivo ? "" : "opacity-50"}`}>
+                  <div className={`grid grid-cols-2 gap-3 lg:grid-cols-4 transition-opacity ${resultadoVivo ? "" : "opacity-50"}`}>
                     {(
                       [
                         [valorUnico ? "Preço de tabela" : "1 Hora", result.quote.show_1h, "1h"],
@@ -1052,7 +1087,8 @@ export function OrcamentoCalculadoraPage() {
                   </div>
                   {result.quote.desconto_pct_texto && (
                     <p className="text-sm text-muted">
-                      Desconto de {result.quote.desconto_pct_texto}% sobre o total; o BV a repassar acompanha.
+                      Desconto de {result.quote.desconto_pct_texto}% sobre o total
+                      {temBv(result.quote) ? "; o BV a repassar acompanha." : "."}
                     </p>
                   )}
                   {/* Feature 307: o resultado diz quando caiu numa faixa de data especial. */}
@@ -1074,7 +1110,7 @@ export function OrcamentoCalculadoraPage() {
                       O servidor não aplicou o produto — recarregue a página.
                     </p>
                   )}
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
                       Ver memória de cálculo
                     </Button>

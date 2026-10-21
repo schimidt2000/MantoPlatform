@@ -14,7 +14,7 @@ import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
 import { ProdutoLinha } from "../components/orcamento/ProdutoLinha";
-import { brutoDe, bvDe, pixDe, temDesconto, type ColunaDoQuote } from "../lib/desconto";
+import { brutoDe, linhasDoBv, pixDe, temBv, temDesconto, type ColunaDoQuote } from "../lib/desconto";
 import {
   useEnviarEmailOrcamento,
   useOrcamentoDetalhe,
@@ -220,13 +220,13 @@ export function OrcamentoResultadoPage() {
           <CardTitle>Resumo de valores</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {duracoesVisiveis(quote).map(({ label, total, coluna, destaque }) => {
               // Feature 313: o cheio riscado quando há desconto (quote antigo: `bruto ?? total`, nada riscado); o PIX
               // só quando o servidor mandou; o BV a repassar fica aqui, fora da mensagem, e só com desconto.
               const bruto = brutoDe(quote, coluna);
               const pix = pixDe(quote, coluna);
-              const bv = temDesconto(quote) ? bvDe(quote, coluna) : null;
+              const bv = temDesconto(quote) ? linhasDoBv(quote, coluna, brl) : [];
               return (
                 <div
                   key={label}
@@ -238,17 +238,21 @@ export function OrcamentoResultadoPage() {
                   {bruto != null && Math.abs(bruto - total) >= 0.005 && (
                     <p className="text-xs text-muted line-through">{brl(bruto)}</p>
                   )}
-                  <p className="text-lg font-semibold text-ink">{brl(total)}</p>
+                  <p className="whitespace-nowrap text-lg font-semibold text-ink">{brl(total)}</p>
                   {pix != null && <p className="text-xs text-muted">PIX à vista: {brl(pix)}</p>}
-                  {bv != null && <p className="text-xs text-muted">BV a repassar: {brl(bv)}</p>}
+                  {bv.map((linha) => (
+                    <p key={linha} className="text-xs text-muted">
+                      {linha}
+                    </p>
+                  ))}
                 </div>
               );
             })}
           </div>
           {quote.desconto_pct_texto && (
             <p className="mt-3 text-sm text-muted">
-              Desconto de {quote.desconto_pct_texto}% aplicado sobre o total. O BV a repassar já acompanha o desconto e
-              não aparece para a cliente.
+              Desconto de {quote.desconto_pct_texto}% aplicado sobre o total.
+              {temBv(quote) && " O BV a repassar já acompanha o desconto e não aparece para a cliente."}
             </p>
           )}
           {/* Feature 309: produtos de tabela vendidos (preço congelado no orçamento). */}

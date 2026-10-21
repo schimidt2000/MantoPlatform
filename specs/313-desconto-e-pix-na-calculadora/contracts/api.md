@@ -18,7 +18,9 @@ igual ao cheio (± R$ 0,005) = sem desconto.
 
 **400 `fields`** (um campo por vez, como hoje): `desconto_pct` < 0, ≥ 100 ou não numérico → `desconto_pct`;
 `desconto_valor` sem `desconto_duracao` (ou o contrário), duração que o resultado não mostra (R6), valor ≤ 0 ou
-maior que o cheio daquela duração → `desconto_valor`.
+maior que o cheio daquela duração → `desconto_valor`. Na duração que o resultado não mostra, o objeto de erro traz
+também `duracoes_do_desconto` (ex.: `["1h", "2h"]`; só-produto `["1h"]`) — a tela troca o seletor por elas e zera o
+valor digitado, com aviso (achado da tela aberta, T045: sem isso o seletor ficava preso no resultado anterior).
 
 **Saída** — `quote` com as chaves do `data-model.md`; `snapshot` com `versao_conta`, `bases`, `brutos` e o desconto
 digitado. Mensagem:

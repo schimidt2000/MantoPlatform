@@ -50,7 +50,7 @@ def api_orcamento_calcular() -> Any:
     try:
         result = quote_ops.calculate_quote(payload)
     except quote_ops.QuoteValidationError as exc:
-        return json_error(exc.message, 400, fields={exc.field: exc.message})
+        return json_error(exc.message, 400, fields={exc.field: exc.message}, **exc.extra)
     return jsonify(result)
 
 

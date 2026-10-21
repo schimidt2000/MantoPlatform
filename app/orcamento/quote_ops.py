@@ -41,12 +41,17 @@ _MARKUP_SERVICE = 1.5
 
 
 class QuoteValidationError(Exception):
-    """Erro de validação de negócio (ex.: orçamento personalizado sem valores)."""
+    """Erro de validação de negócio (ex.: orçamento personalizado sem valores).
 
-    def __init__(self, field: str, message: str) -> None:
+    ``extra`` vai dentro do objeto de erro da API (``json_error(**extra)``) para a tela agir, não só mostrar — a
+    feature 313 manda nele as durações que o orçamento mostra quando o "fechar por R$" aponta para outra.
+    """
+
+    def __init__(self, field: str, message: str, extra: dict | None = None) -> None:
         super().__init__(message)
         self.field = field
         self.message = message
+        self.extra = extra or {}
 
 
 def _fmt_brl(value: float) -> str:
@@ -256,7 +261,13 @@ def _ler_desconto(
         except (TypeError, ValueError):
             raise QuoteValidationError("desconto_valor", "O valor final precisa ser um número.") from None
         if isinstance(raw_valor, bool) or raw_dur not in mostradas:
-            raise QuoteValidationError("desconto_valor", "Escolha uma das durações que o orçamento mostra.")
+            # As mostradas vão junto: a tela troca o seletor por elas (sem isso, ele ficava preso nas durações do
+            # resultado anterior — ex.: "fechar 2h por" e a comercial deixa só um produto, que mostra um valor).
+            raise QuoteValidationError(
+                "desconto_valor",
+                "Escolha uma das durações que o orçamento mostra.",
+                {"duracoes_do_desconto": list(mostradas)},
+            )
         cheio = bruto_custom if raw_dur == "extra" else brutos[int(raw_dur[0]) - 1]
         if not cheio or valor != valor or valor <= 0 or valor > cheio + 0.005:
             raise QuoteValidationError(

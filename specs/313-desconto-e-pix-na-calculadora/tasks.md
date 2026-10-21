@@ -209,10 +209,10 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
 
 ## Phase 8: Polimento
 
-- [ ] T043 Rodada inteira do `verify_313.py` duas vezes seguidas; limpeza com zero sobra
-- [ ] T044 [P] Regressão: `verify_305.py --regressao`, `verify_307.py`, `verify_309.py` (com a T015a),
+- [X] T043 Rodada inteira do `verify_313.py` duas vezes seguidas; limpeza com zero sobra
+- [X] T044 [P] Regressão: `verify_305.py --regressao`, `verify_307.py`, `verify_309.py` (com a T015a),
       `verify_235.py`; `ruff check` nos tocados contra HEAD
-- [ ] T045 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3; o PDF aberto de verdade; a
+- [X] T045 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3; o PDF aberto de verdade; a
       mensagem e o PDF no viewport mobile
 - [ ] T046 [P] `docs/01` (contrato do cálculo, prefill, vínculo; a ordem da conta; a linha de RBAC em §4.3 — nenhum
       gate muda), `docs/02` (calculadora, orçamento

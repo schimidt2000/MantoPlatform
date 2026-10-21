@@ -588,6 +588,24 @@ def c3_desconto_valor() -> None:
             campo in fields,
             f"{campo} fora de {fields} ({ {k: corpo.get(k) for k in ('desconto_pct', 'desconto_valor', 'desconto_duracao')} })",
         )
+    # Duração que o orçamento não mostra: o erro diz quais ele mostra (achado da tela, T045) — sem isso o seletor
+    # da calculadora fica preso no resultado anterior (ex.: "fechar 2h por" e a comercial põe só um produto).
+    for corpo, esperadas in (
+        (_payload(desconto_valor=valor, desconto_duracao="3h", incluir_duracao=["1h", "2h"]), ["1h", "2h"]),
+        (
+            _payload(
+                performers=[], produtos=[{"chave": VISITA}], coordenador_qty=0,
+                desconto_valor=100, desconto_duracao="2h",
+            ),
+            ["1h"],
+        ),
+    ):
+        r = _cliente("com").post("/api/orcamento/calcular", json=corpo)
+        _garante(r.status_code == 400, f"duração fora: esperava 400, veio {r.status_code}")
+        _garante(
+            _erro(r).get("duracoes_do_desconto") == esperadas,
+            f"o erro não diz as durações mostradas: {_erro(r).get('duracoes_do_desconto')!r} ≠ {esperadas}",
+        )
 
 
 def c4_base_do_desconto() -> None:

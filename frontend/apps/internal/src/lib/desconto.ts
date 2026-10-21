@@ -44,6 +44,21 @@ export function bvDe(quote: Quote, coluna: ColunaDoQuote, noPix = false): number
   return (quote as unknown as Record<string, number | null | undefined>)[chave(noPix ? "bv_pix" : "bv", coluna)] ?? null;
 }
 
+/** O orçamento tem BV? (pelos `bv_*` que o servidor mandou; quote antigo: não sabe, `false`.) */
+export function temBv(quote: Quote): boolean {
+  return (["1h", "2h", "3h", "4h", "custom"] as const).some((c) => bvDe(quote, c) != null);
+}
+
+/** As linhas do BV a repassar de uma coluna: com desconto e, quando o PIX dá outro valor, a do PIX. */
+export function linhasDoBv(quote: Quote, coluna: ColunaDoQuote, brl: (v: number) => string): string[] {
+  const bv = bvDe(quote, coluna);
+  if (bv == null) return [];
+  const noPix = bvDe(quote, coluna, true);
+  return noPix != null && Math.abs(noPix - bv) >= 0.005
+    ? [`BV a repassar: ${brl(bv)}`, `BV no PIX: ${brl(noPix)}`]
+    : [`BV a repassar: ${brl(bv)}`];
+}
+
 /** Há desconto negociado neste quote? (quote antigo: não.) */
 export function temDesconto(quote: Quote): boolean {
   return Boolean(quote.desconto_pct);
