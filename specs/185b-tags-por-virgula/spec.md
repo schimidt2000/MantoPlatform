@@ -1,7 +1,7 @@
 # 185b — As tags do catálogo se separam pela vírgula
 
-**Branch**: `185b-tags-por-virgula` · **Created**: 2026-10-21 · **Status**: PRONTA na branch (não
-mergeada) · **Migration**: nenhuma
+**Branch**: `185b-tags-por-virgula` · **Created**: 2026-10-21 · **Status**: EM PRODUÇÃO desde
+21/10/2026 ~18:17 · **Migration**: nenhuma
 
 ## O pedido
 
