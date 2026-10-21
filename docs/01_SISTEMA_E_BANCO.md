@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
+> Última atualização: **2026-10-21** · Em branch: **313-desconto-e-pix-na-calculadora** (sem migration; o desconto
+> negociado e o PIX que vale o maior em `/orcamento/calcular`, a ordem da conta da Q7 marcada por `versao_conta: 2` no
+> snapshot, o cheio e o final no prefill, no Novo evento e no vínculo 273, `duracoes_do_desconto` no 400 — §3.13,
+> "Feature 313"; nenhum gate muda, §4.3). Antes: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
 > fichas, dos seletores, das filas e do painel do grupo; a trava `exigir_evento_vivo` e as recusas de vínculo com `codigo:
 > "cancelado"`; `GET /api/events/cancelamentos` também para o FINANCEIRO, com `mes`/`devolucao`; o card `cancelamentos` no
 > pipeline; `casting.cancelados_a_avisar`; a avaliação pública 410 — §4.3, "O cancelado fora das listas"). Antes: **2026-10-20** · **306b-motivo-editavel** (sem migration; `PATCH /api/events/<id>/motivo-cancelamento`, §3.3; `pode_editar_motivo_do_cancelado` e a flag
@@ -1280,6 +1283,32 @@ EducaManto remove `produtos` em `_totais_contratacao`. CLI pós-deploy:
 DIFERENÇA da coluna — 712→600, 800→650, 423→270… — lendo a base na nota do teto da 239 (cobre 762 =
 712 + noturno, fora de SP e 2h–4h) só em "Papai Noel"/"Ajudante do Noel" sem cachê e sem artista, em
 eventos desde 16/10/2026; nome diferente ou base fora da lista só no relatório).
+**Feature 313 (sem migration) — desconto negociado, PIX que vale o maior e a ordem da conta.** Chaves e tipos em
+`specs/313-desconto-e-pix-na-calculadora/data-model.md`; o contrato em `contracts/api.md`. `POST /calcular` aceita
+`desconto_pct` (0 ≤ d < 100) **ou** `desconto_valor` + `desconto_duracao` (`"1h".."4h"|"extra"`: o valor final de uma
+duração; o servidor acha o % exato sobre o cheio dela e ignora `desconto_pct`; igual ao cheio ± R$ 0,005 = sem
+desconto). 400 com `fields.desconto_pct` (fora da faixa, não numérico) ou `fields.desconto_valor` (só um dos dois, ≤ 0,
+acima do cheio, duração que o resultado não mostra — esta com `duracoes_do_desconto: [...]` no objeto de erro, para a
+tela trocar o seletor). **A ordem da conta** (uma função, `quote_ops.aplicar_acrescimos(base, acrescimos, nota)`): base
+(apresentação + transporte + produto) → acréscimos em R$ **uma vez** → os % que não são BV sobre a base → o BV em %
+sobre tudo isso (o BV em R$ entra uma vez, no passo do BV) → a nota → o desconto, o último passo, sobre o total. Acima
+de 4h, `_preco_extra`: a base de 4h ÷ 4 × horas (produto fixo), os acréscimos pela mesma função — sem parte fixa fica
+o `round(bruto_4h ÷ 4 × h, 2)` de antes. O snapshot novo leva `versao_conta: 2`, `bases`, `brutos` e o desconto
+digitado (`desconto_pct_digitado`/`desconto_valor`/`desconto_duracao`) e o aplicado (`desconto_aplicado`, o que os
+leitores leem); `total_1h..4h` do `OrcamentoHistory` passam a ser o **final**. Snapshot sem a marca (todo orçamento de
+antes) segue o caminho de antes em toda leitura — histórico, PDF, prefill, evento, 305 (`snapshot_v2` cruza `bases` ×
+`brutos` e, inválido, também cai no de antes). O `quote` ganha `bruto_*`, `base_4h`, `desconto_pct`/`_texto`/`_modo`,
+`pix_pct = max(5, d)` e `pix_*` (sobre o **cheio**: vale o maior), `bv_*`/`bv_pix_*` (o BV a repassar com o desconto e
+no PIX, por `bv_que_acompanha`; `null` sem BV); o texto do % é `texto_do_percentual` (uma casa, **para baixo**, vírgula,
+sem ",0"). Mensagem e PDF: "de R$ X por R$ Y" + "_(desconto de N% aplicado)_" por duração; com d ≥ 5% o PIX diz "o
+mesmo valor — o desconto de N% já está aplicado", abaixo disso o bloco de 5% de sempre; sem desconto, byte a byte a de
+antes. A memória ganha "Desconto (N%)" e "BV a repassar a quem indicou" só com desconto. `GET /historico` traz
+`desconto_pct` por item. **Prefill** (`_build_orcamento_prefill`, só orçamento v2): `bruto_1h..4h`, `bruto_custom`,
+`desconto_pct`, `extra_por_horas: {"5".."24": {bruto, total}}` (ausente no personalizado) e, em cada
+`acrescimos_do_orcamento.linhas[]`, `valores_final` (o que a linha vale com o desconto; `valores_brl` segue o cheio).
+**Evento**: a tela manda `sale_value_gross` = cheio e `sale_value` = final; o BV gravado (305) e `deduzir_duracao`
+usam o **cheio** da duração como denominador (cheio primeiro, depois o final); o vínculo 273
+(`aplicar_valores_do_orcamento`) grava o mesmo par. O EducaManto tira `desconto_*` do payload em `_totais_contratacao`.
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
@@ -1905,7 +1934,7 @@ Gates por módulo (todos em `app/api/`):
 | `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:34` (importado por `formularios_admin_write`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_require_vendas()` — endpoints da 298 | `formularios_admin_write`: `…/encerrar`, `…/reabrir`, `…/manter-entre-repetidos`, `…/sugestao/<id>/confirmar`, `…/sugestao/<id>/descartar`, `…/usar-cliente-do-evento` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (papel real — o "Ver como" não se aplica, dívida §3.5) |
 | `_pode_criar_evento()` | `formularios_admin_read`: `GET …/para-evento` e a flag do detalhe (delega para `_CAN_CREATE`, sem repetir a lista) | `COMERCIAL`, `SUPERADMIN` — FINANCEIRO leva 403 |
-| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py` (importado por `orcamento_write.py`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403**. Gate de **módulo**: passado ele, **não há** checagem de dono (feature 301) — exceto no `DELETE .../historico/<id>`, por `_get_entry_para_excluir` (autor ou SUPERADMIN). A regra de escopo está em §3.13 |
+| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py` (importado por `orcamento_write.py`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403**. Gate de **módulo**: passado ele, **não há** checagem de dono (feature 301) — exceto no `DELETE .../historico/<id>`, por `_get_entry_para_excluir` (autor ou SUPERADMIN). A regra de escopo está em §3.13. A 313 não muda gate: o desconto vive no mesmo `POST /calcular` (Financeiro, Casting e Revendedor continuam 403 — `verify_313` cenário 15) |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |

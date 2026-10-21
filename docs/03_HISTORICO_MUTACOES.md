@@ -155,6 +155,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **313-desconto-e-pix-na-calculadora** | *(em branch, não publicada)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **299b-cobranca-a-qualquer-momento** | *(EM PRODUÇÃO 21/10 ~18:17)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
@@ -336,6 +337,70 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 313 — Desconto negociado e PIX que vale o maior na calculadora; o acréscimo entra uma vez e o BV é calculado sobre tudo   (313-desconto-e-pix-na-calculadora · 2026-10-21 · sem migration)
+
+> **Em branch, não publicada** (worktree `C:\tmp\mp313`, base `c074657b`). Merge e push só quando o dono pedir, à
+> noite (T049).
+
+**O pedido.** Item 3b do backlog de setembro, a parte 1 (a noite do desconto; os dias adicionais são outra entrega):
+a comercial dá desconto quando a cliente "chora por desconto" e hoje não tem onde — fazia à mão ou com acréscimo
+negativo. Plano `docs/backlog/3b-calculadora-desconto-e-dias.md`; spec em
+`specs/313-desconto-e-pix-na-calculadora/spec.md`. As decisões do dono: o desconto é sobre o **total** (Q1 = A); a
+comercial digita o % **ou** o valor final de uma duração (Q8 = B); a proposta diz "de/por" e o % arredondado, e o 5% do
+PIX vale o maior (Q3 = A, D4); no evento o PIX de quem recebe o BV continua digitado (Q2 = C), o "valor antes do
+desconto" nasce com o cheio e a venda com o final (D3); o acréscimo manual entra **uma vez** em qualquer duração e o BV
+em % é calculado sobre o valor com os acréscimos, antes da nota (Q7); o BV em reais continua, entra uma vez e encolhe
+com o desconto, e a linha nova de BV nasce com "%" (Q9 = B); o BV acompanha a venda (3a-Q1 = B).
+
+**O que mudou** (contrato em `docs/01` §3.13, "Feature 313"; telas em `docs/02` A.7 e `/events/new`; a ordem da conta
+em `docs/04` §6, linha "Orçamento", e o BV pelo cheio em §1, invariantes do BV):
+- **A ordem da conta numa função** (`quote_ops.aplicar_acrescimos`), para 1–4 h e a extra (`_preco_extra`): base → R$
+  uma vez → % sobre a base → BV sobre tudo → nota → desconto. Vale só no orçamento marcado `versao_conta: 2`; todo
+  leitor do salvo pergunta pela marca (`snapshot_v2`) e, sem ela, faz a conta de antes.
+- **O desconto** em % ou pelo valor fechado de uma duração (o % exato vale para as outras); o `quote` traz o cheio, o
+  final, o PIX (`max(5, d)` sobre o cheio) e o BV a repassar com o desconto e no PIX; mensagem e PDF com "de/por";
+  memória com "Desconto (N%)" e "BV a repassar". O % da proposta e o selo do evento: uma casa, **para baixo**.
+- **O evento**: o Novo evento e o vínculo 273 gravam o cheio em `sale_value_gross` e o final em `sale_value`; o BV
+  (305) e a dedução da duração usam o **cheio** como denominador; o prefill ganha `bruto_*`, `extra_por_horas` (5 a 24
+  h) e `valores_final` por linha de acréscimo.
+- **Telas**: o bloco "Desconto negociado", o card Resultado (cheio riscado, PIX, BV a repassar), o orçamento gerado,
+  o selo "−N%" do histórico, o Novo evento e o editor de acréscimos (a linha de BV nasce em %).
+
+**Decisões fixadas pela spec, não palavras do dono** (Session 2026-10-21, contestáveis): o desconto incide também sobre
+o produto de tabela (309) e sobre o personalizado; o acréscimo negativo segue como acréscimo (entra uma vez e baixa a
+base do BV); o que já foi cotado não muda, nem quando vira evento depois (020); o BV do evento encolhe pelo cheio; o %
+da proposta e o selo do evento usam a mesma regra; os dias adicionais ficam para a outra noite.
+
+**Quantos orçamentos a regra nova mudaria.** O gabarito de paridade (`gabarito_paridade.py`, na `c074657b`) recalculou
+os 2.484 orçamentos do espelho pela conta nova sem desconto: **17** mudam, todos pelas exceções da Q7, conferidas
+pela fórmula — 9 com BV e "Outro" (o BV passa a incidir sobre o "Outro") e 8 com duração extra e acréscimo em R$ (o R$
+deixa de escalar com as horas); os outros 2.467 saem byte a byte. Nenhum deles muda de verdade: o salvo não tem a
+marca e continua com a conta de antes. Recontagem da produção em 21/10 (só leitura): 2.710 orçamentos; 267 vendas
+desde junho, 92 com desconto dado à mão; 121 orçamentos acima de 4h, 11 deles com acréscimo em R$; 2 BV em reais;
+nenhum acréscimo negativo; nenhum produto de tabela.
+
+**Achados no caminho.** A reconferência do plano (`pesquisa/reconferencia-2026-10-21.md`), escrito em 01–02/10 contra a
+`f6ad283`, mostrou que a 305 já tinha a função única do BV (`bv_que_acompanha`) e fixado o denominador e as réguas
+acima de 4h que o desconto quebraria — daí a marca de regra no snapshot e o cheio no evento. O analyze (33 achados de
+dois leitores, aplicados antes do implement) pegou, entre outros: a extra sem parte fixa precisava manter o
+`round(bruto_4h ÷ 4 × h, 2)` de hoje para a paridade; o limiar de 5% do PIX em float; o `verify_309` a atualizar pela
+Q7 (6h com BV e fixo de 200 → 4.158,00); a tela do vínculo 273 mostrando o BV cheio; a ordem de soma em float; a extra
+do personalizado; a validação cruzada `bases` × `brutos`; valores Decimal vazando no `quote`. A **tela aberta** (T045)
+achou dois defeitos da própria 313, corrigidos com cenário vermelho antes: o "fechar 2h por R$ 600" ficava preso
+quando a comercial deixava só um produto (o seletor esperava um resultado que o servidor recusava) — agora o 400 traz
+`duracoes_do_desconto` e a tela troca o seletor, **zerando o valor com aviso**, porque levá-lo para o preço de tabela
+viraria 76% de desconto que ninguém negociou; e o BV no PIX numa linha própria. E três de antes, registrados no
+`docs/05` (138–140): a memória que não fecha por R$ 0,01 no BV em meio centavo, a primeira linha do PDF no traço, o
+"BV" duplicado no seletor. No celular, a tabela da Equipe esticava a calculadora a 737px em 375 (grade sem
+`min-w-0`) — corrigido, porque escondia as colunas novas.
+
+**Verificação.** `verify_313.py` 17/17 duas vezes seguidas com o gabarito (a primeira rodada, contra a `main`, em
+`verify_313_primeira_falha.txt`: 5/17). Regressão: `verify_305 --regressao` 68/68, `verify_307` 17/17, `verify_309`
+19/19 (atualizado pela Q7), `verify_235` verde. `verify_273` dá 8/15 na base e na branch (não é da 313); `verify_190`
+está morto desde a 235 (importa `EducaMantoPackage`). Typecheck das três SPAs e `ruff check` limpos (o I001 de
+`app/calendar/routes.py` já estava na base). Tela aberta no backend do worktree (Google dublado) com Comercial e
+Superadmin descartáveis, em desktop, 375 px e tema claro; o PDF aberto de verdade.
 
 ### 312 — O cancelado sai de toda lista e só se vê onde se trata do cancelamento   (312-cancelado-fora-das-listas · 2026-10-20 · sem migration)
 

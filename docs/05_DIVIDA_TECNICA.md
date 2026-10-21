@@ -656,3 +656,17 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | ~~134~~ | ~~P4~~ | ✅ **RESOLVIDO no converge da feature 312** — `figurino_ops.associate_missing_character` não grava em vaga de cancelado e `list_sheets` não a conta entre os faltantes | — | — |
 | 135 | **P4** | listas internas sem o selo do cancelado | avaliações internas, as avaliações da ficha do talento e os comprovantes dos outros dias do grupo mostram o título do evento sem a situação (premissa 24 do plano 1c) | `event_situacao` onde a lista aparecer |
 | 136 | **P4** | `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |
+
+## Baixa da feature 313-desconto-e-pix-na-calculadora (2026-10-21, branch)
+
+**Quitadas.** Nenhuma. A 100 (acréscimo negativo, que a equipe usava como desconto) continua — o desconto negociado
+agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e no Jinja.
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 137 | **P4** | `app/orcamento/quote_ops.py` (núcleo do orçamento) | a conta do orçamento é float com `round(x, 2)` (o Princípio IX pede Decimal no backend); a 313 manteve assim de propósito — a paridade byte a byte com os 2.484 orçamentos do espelho e com a mensagem de hoje exige a mesma aritmética (plano §Complexidade). O BV, que vira dinheiro gravado, já é Decimal (305) | converter numa feature própria, com gabarito de paridade (`specs/313-…/gabarito_paridade.py`) e a lista dos centavos que mudam aprovada pelo dono |
+| 138 | **P4** | memória de cálculo com BV em % (`quote_ops`, a linha do BV) | o BV que cai em meio centavo arredonda na linha (796,25 × 10% → 79,62) e no total por outro caminho (875,875 → 875,88): a memória não fecha por R$ 0,01 nessas colunas. Já era assim antes da 313 (a conta é a mesma; visto na tela aberta, T045) | a linha do BV = total arredondado − base arredondada, ou uma regra de arredondamento só, junto da 137 |
+| 139 | **P5** | PDF do orçamento (`app/orcamento/pdf.py`, tabela INVESTIMENTO) | a primeira linha ("1 hora") encosta no traço do título da seção — no PDF de antes da 313 também (conferido num orçamento de 2026) | descer a tabela um respiro abaixo do traço |
+| 140 | **P5** | seletor de tipo do acréscimo (`OrcamentoCalculadoraPage` → `AcrescimosEditor`) | "BV" aparece duas vezes: a tabela de preços do espelho já traz "BV" em `acrescimo_tipos` e a tela soma `acrescimo_tipo_bv` (vem de antes da 313) | deduplicar ao montar a lista (`new Set`) ou tirar "BV" de `acrescimo_tipos` nas Configurações |

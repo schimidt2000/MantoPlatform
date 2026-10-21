@@ -214,11 +214,11 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
       `verify_235.py`; `ruff check` nos tocados contra HEAD
 - [X] T045 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3; o PDF aberto de verdade; a
       mensagem e o PDF no viewport mobile
-- [ ] T046 [P] `docs/01` (contrato do cálculo, prefill, vínculo; a ordem da conta; a linha de RBAC em §4.3 — nenhum
+- [X] T046 [P] `docs/01` (contrato do cálculo, prefill, vínculo; a ordem da conta; a linha de RBAC em §4.3 — nenhum
       gate muda), `docs/02` (calculadora, orçamento
       gerado, histórico — o filtro por valor passa a olhar o total final, analyze B13 —, Novo evento), `docs/04` (a ordem da conta do orçamento e o BV do evento pelo cheio),
       `docs/05` (o núcleo em float — a justificativa do plano; riscar o que quitar)
-- [ ] T047 `docs/03`: entrada nova no topo + linha no índice (a reconferência; as exceções da Q7 e quantos
+- [X] T047 `docs/03`: entrada nova no topo + linha no índice (a reconferência; as exceções da Q7 e quantos
       orçamentos atingem; as premissas da Session)
 - [ ] T048 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
 - [ ] T049 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
