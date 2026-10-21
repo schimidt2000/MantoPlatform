@@ -11,7 +11,7 @@ import {
   useCreateCategory,
   useUpdateCatalogItem,
 } from "../lib/adminCatalogo";
-import { ChipInput } from "../components/ChipInput";
+import { ChipInput, type ChipInputHandle } from "../components/ChipInput";
 import { AdminCatalogCharacterPanel } from "../components/AdminCatalogCharacterPanel";
 import {
   CatalogPhotoManager,
@@ -54,6 +54,8 @@ export function AdminCatalogoFormPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [tagsList, setTagsList] = useState<string[]>([]);
+  // O texto digitado sem Enter entra no Salvar (185b): sem isso ele sumia sem aviso.
+  const tagsInputRef = useRef<ChipInputHandle>(null);
   const [videoUrl, setVideoUrl] = useState("");
   const [categoryIds, setCategoryIds] = useState<number[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -132,7 +134,7 @@ export function AdminCatalogoFormPage() {
     const input = {
       name,
       description,
-      tags: tagsList.join(", "),
+      tags: (tagsInputRef.current?.commitPending() ?? tagsList).join(", "),
       videoUrl,
       categoryIds,
       newPhotos: newSlots.map((slot) => slot.file),
@@ -238,6 +240,7 @@ export function AdminCatalogoFormPage() {
           <div>
             <label className={LABEL}>Tags</label>
             <ChipInput
+              ref={tagsInputRef}
               value={tagsList}
               onChange={setTagsList}
               suggestions={tagSuggestionsQuery.data?.tags ?? []}
