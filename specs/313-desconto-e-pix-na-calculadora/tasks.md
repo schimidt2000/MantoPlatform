@@ -144,25 +144,25 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 **Objetivo**: FR-021 (servidor), FR-023, FR-024; FR-025 (sem mudança de regra, provada no cenário 12). **Prova**:
 cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
 
-- [ ] T026 [US4] `app/calendar/orcamento_evento_ops.py`: `_bruto_da_duracao(entry, d)` ao lado de
+- [X] T026 [US4] `app/calendar/orcamento_evento_ops.py`: `_bruto_da_duracao(entry, d)` ao lado de
       `_total_da_duracao` (`:165-191`) — legado (sem `versao_conta`, ou snapshot inválido pela validação da R2, com o
       cruzamento `bases` × `brutos` — analyze B8) = hoje, os dois iguais; v2 = `brutos[f"{d}h"]` /
       `preco_na_duracao(...)` (R3); personalizado v2 acima de 4h pela R7
-- [ ] T027 [US4] `acrescimos_do_orcamento` (`:283-344`): v2 tira as linhas, de 1h a 4h, do `valores_brl` (a fonte do
+- [X] T027 [US4] `acrescimos_do_orcamento` (`:283-344`): v2 tira as linhas, de 1h a 4h, do `valores_brl` (a fonte do
       `bv_*` do `quote` — analyze B8) e, acima de 4h, de `preco_na_duracao(...)["linhas"]` (sem
       `_conta_inversa` nem `_linhas_na_duracao`, `:233-280`) e devolve como `total` o **cheio**; legado igual;
       `_valor_gravado` com o cheio como teto (`:216-230`)
-- [ ] T028 [US4] `deduzir_duracao` (`:347-369`) compara o `bruto` com o cheio e, sem casar, com o final (o bruto
+- [X] T028 [US4] `deduzir_duracao` (`:347-369`) compara o `bruto` com o cheio e, sem casar, com o final (o bruto
       vazio, o gêmeo Jinja e o bundle velho gravam bruto = final — analyze B6); `bv_nasce_no_vinculo` (`:452-463`) usa
       o final como venda; `plano_dos_acrescimos` (`:383-442`) sem mudança além do `total` que recebe (a proporção
       entre líquidos fica, research R3)
-- [ ] T029 [US4] Prefill — `_build_orcamento_prefill` (`app/calendar/routes.py:3322-3416`): `bruto_1h..4h`,
+- [X] T029 [US4] Prefill — `_build_orcamento_prefill` (`app/calendar/routes.py:3322-3416`): `bruto_1h..4h`,
       `bruto_custom`, `desconto_pct` (o `desconto_aplicado` do snapshot — analyze A5), `extra_por_horas` (5–24, v2 não
       personalizado) e `total_custom` pela R1 para v2; `_acrescimos_do_prefill` (`:3419-3452`) com `valores_final` por
       linha (analyze A7); legado como hoje (`:3376-3393`)
-- [ ] T030 [US4] Vínculo 273 — `aplicar_valores_do_orcamento` (`:864-916`): `sale_value` = final, `sale_value_gross`
+- [X] T030 [US4] Vínculo 273 — `aplicar_valores_do_orcamento` (`:864-916`): `sale_value` = final, `sale_value_gross`
       = cheio (`:904-905`), pelo prefill da T029, com `bruto_{d}h ?? total_{d}h` para o legado (analyze B12)
-- [ ] T031 [US4] Rodada: + cenários 11, 12, 14 verdes (o 12 com o alerta de BV pendente — analyze A14); `verify_305 --regressao` verde (cen_04); commit
+- [X] T031 [US4] *[11, 12, 14 verdes (7, 13, 15 seguem); `verify_309` 19/19; `verify_305 --regressao` 68/68 (o `verify_273` dentro dela dá 8/15 igual à base `c074657b`)]* Rodada: + cenários 11, 12, 14 verdes (o 12 com o alerta de BV pendente — analyze A14); `verify_305 --regressao` verde (cen_04); commit
       `feat(313): o evento nasce com o cheio e a venda, e o BV encolhe junto`
 
 ---

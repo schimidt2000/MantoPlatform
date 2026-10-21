@@ -907,7 +907,7 @@ def c11_prefill() -> None:
     linhas = (pj.get("acrescimos_do_orcamento") or {}).get("linhas") or []
     bv = next((linha for linha in linhas if linha.get("is_bv")), None)
     _garante(bv and bv.get("valores_final"), f"prefill sem valores_final do BV: {bv}")
-    _perto(bv["valores_final"][1], qq["bv_2h"], "valores_final 2h = bv_2h")
+    _perto(bv["valores_final"]["2"], qq["bv_2h"], "valores_final 2h = bv_2h")
 
 
 def c12_evento() -> None:
@@ -944,11 +944,13 @@ def c12_evento() -> None:
         dur_f, _o = deduzir_duracao(entry, bruto=qq["total_2h"], horas_agenda=None)
     _garante(dur == 2 and origem == "pelo valor", f"dedução pelo cheio: {dur} {origem}")
     _garante(dur_f == 2, f"dedução pelo final (bruto = final): {dur_f}")
-    # PIX digitado por cima: o BV acompanha a venda digitada.
+    # PIX digitado por cima: o BV acompanha a venda digitada (outro orçamento igual — um orçamento vira um evento só,
+    # a regra 1:1 da 273).
+    oid2, _res2 = _orc_desconto("c12b", dpct=3)
     eid2 = _criar(
         _corpo_criacao(
             f"{PREFIX}c12b",
-            oid,
+            oid2,
             venda=qq["pix_2h"],
             bruto=qq["bruto_2h"],
             bv_recipient=QUEM,

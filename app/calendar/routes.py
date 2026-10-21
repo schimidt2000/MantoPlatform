@@ -3375,7 +3375,29 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     )
     total_4h_val = float(entry.total_4h or 0)
     total_custom = None
-    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
+    # Feature 313: orçamento cotado pela regra nova (versão 2) — o cheio e o final de qualquer duração saem da mesma
+    # conta da calculadora (`preco_na_duracao`); o de antes segue a régua de sempre, logo abaixo.
+    from app.calendar.orcamento_evento_ops import snapshot_v2
+    from app.orcamento.quote_ops import preco_na_duracao
+
+    v2 = snapshot_v2(entry)
+    novas: dict = {}
+    if v2 is not None:
+        brutos = v2.get("brutos") or {}
+        novas = {f"bruto_{d}h": float(brutos[f"{d}h"]) for d in (1, 2, 3, 4)}
+        novas["desconto_pct"] = float(v2.get("desconto_aplicado") or 0) or None
+        # O "Outra (h)" de 5 a 24 h pelo servidor: o acréscimo em R$ uma vez, o BV sobre tudo (Q7).
+        novas["extra_por_horas"] = {
+            str(h): {"bruto": conta["bruto"], "total": conta["total"]}
+            for h in range(5, 25)
+            if (conta := preco_na_duracao(v2, h)) is not None
+        }
+    if v2 is not None and duracao_custom > 4:
+        conta = preco_na_duracao(v2, duracao_custom)
+        if conta is not None:
+            total_custom = conta["total"]
+            novas["bruto_custom"] = conta["bruto"]
+    elif duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
         # Feature 309: com produto de tabela o produto fica fixo na régua — a MESMA função da
         # calculadora e de `_total_da_duracao`; sem produto, a conta de sempre.
         produtos_total = float(snap.get("produtos_total") or 0)
@@ -3413,6 +3435,8 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         "acrescimos_do_orcamento": _acrescimos_do_prefill(entry, duracao_custom if total_custom else None),
         "with_invoice": bool(snap.get("nota_fiscal", False)),
         "caches": caches,
+        # Feature 313 (só orçamento da versão 2; ausentes no de antes): bruto_*, desconto_pct, extra_por_horas.
+        **novas,
     }
 
 
@@ -3424,10 +3448,13 @@ def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) 
     sem isso ela comparava brutos e mostrava um BV quando o servidor gravava outro.
     """
     from app.calendar.orcamento_evento_ops import (
+        _bruto_da_duracao,
+        _total_da_duracao,
         acrescimos_do_orcamento,
         divisor_da_nota,
         snapshot_do_orcamento,
     )
+    from app.orcamento.quote_ops import bv_que_acompanha
 
     snap = snapshot_do_orcamento(entry)
     nota = {"nota_do_orcamento": bool(snap.get("nota_fiscal")), "divisor_da_nota": float(divisor_da_nota())}
@@ -3442,12 +3469,28 @@ def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) 
             for d in (1, 2, 3, 4)
         }
         valores["custom"] = float(custom[i]["amount_brl"]) if custom and i < len(custom) else None
+        # Feature 313: o que a linha vale com o desconto (a venda = o total do orçamento) — a conta é do servidor,
+        # pela função única da 305; o quadro do Novo evento e o vínculo só mostram.
+        finais = {}
+        for d in (1, 2, 3, 4):
+            cheio, final = _bruto_da_duracao(entry, d), _total_da_duracao(entry, d)
+            finais[str(d)] = (
+                float(bv_que_acompanha(valores[str(d)], final, cheio))
+                if valores[str(d)] is not None and cheio and final
+                else None
+            )
+        if duracao_custom and valores["custom"] is not None:
+            cheio, final = _bruto_da_duracao(entry, duracao_custom), _total_da_duracao(entry, duracao_custom)
+            finais["custom"] = float(bv_que_acompanha(valores["custom"], final, cheio)) if cheio and final else None
+        else:
+            finais["custom"] = None
         linhas.append({
             "tipo": base["tipo"],
             "descricao": base["descricao"],
             "is_bv": base["is_bv"],
             "percentual": float(base["percentual"]) if base["percentual"] is not None else None,
             "valores_brl": valores,
+            "valores_final": finais,
         })
     return {"personalizado": False, "linhas": linhas, **nota}
 
