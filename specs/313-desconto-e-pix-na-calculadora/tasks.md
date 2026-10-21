@@ -59,36 +59,36 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 
 **Objetivo**: FR-006, FR-007, FR-008 (marca), FR-009, FR-018 (só a parte do editor). **Prova**: cenários 1, 8, 9, 10.
 
-- [ ] T008 [US3] Em `app/orcamento/quote_ops.py`, criar `aplicar_acrescimos(base, acrescimos, nota)` (R1): (a) não
+- [X] T008 [US3] Em `app/orcamento/quote_ops.py`, criar `aplicar_acrescimos(base, acrescimos, nota)` (R1): (a) não
       BV — R$ inteiro, % sobre a `base`; (b) BV em % sobre `base + Σ(a)`, cada BV sobre o mesmo número; BV em reais
       inteiro; (c) `÷ NF_DIVISOR` se `nota`. Devolve o preço e os valores por linha (o que cada uma somou). Float
       com `round(x, 2)` como a conta de hoje (`:443-480`), **na mesma ordem de soma** nos casos sem exceção (`add` a
       partir de 0,0 na ordem do snapshot; a base do BV = `t + add_dos_não_BV`, sem arredondar — analyze B5);
       docstring com a ordem do dono (Q7)
-- [ ] T009 [US3] Em `quote_ops.py`, trocar o trecho de acréscimos + nota (`:443-480`) por `aplicar_acrescimos` por
+- [X] T009 [US3] Em `quote_ops.py`, trocar o trecho de acréscimos + nota (`:443-480`) por `aplicar_acrescimos` por
       coluna, guardando antes as `bases` (o `totals` antes dos acréscimos); manter a memória ("Acréscimo: …", "Nota
       fiscal") com os valores da função e `valores_brl` em Decimal HALF_UP a partir dos valores da função (305,
       `:452-466`)
-- [ ] T010 [US3] Em `quote_ops.py`, criar `preco_na_duracao(snap, horas)` (R1): base da duração (1–4h = `bases[i]`;
+- [X] T010 [US3] Em `quote_ops.py`, criar `preco_na_duracao(snap, horas)` (R1): base da duração (1–4h = `bases[i]`;
       >4h = `(bases[3] − produtos_total) ÷ 4 × h + produtos_total`) + `aplicar_acrescimos`; **acima de 4h sem acréscimo
       em R$ (nem BV em reais) e sem produto, `round(bruto_4h ÷ 4 × h, 2)`** (o arredondamento de hoje — analyze A2);
       devolve `{bruto, linhas, total}` (o `total` com o desconto do snapshot, quando houver — a US1 preenche); no personalizado, acima de 4h, a
       régua sobre `brutos["4h"]` e o final = cheio × (1 − d) (analyze B7). Trocar a extra (`:482-488`) por ela;
       `produtos.total_na_duracao` fica só para o legado (`produtos.py:283-292`, sem mudança)
-- [ ] T011 [US3] Snapshot (`quote_ops.py:715-749`): `versao_conta: 2` (constante `VERSAO_CONTA`), `bases`,
+- [X] T011 [US3] Snapshot (`quote_ops.py:715-749`): `versao_conta: 2` (constante `VERSAO_CONTA`), `bases`,
       `brutos` (data-model); o `quote` ganha `base_4h`
-- [ ] T012 [US3] Personalizado (`quote_ops.py:493-534`): continua sem acréscimos; `brutos` = os valores
+- [X] T012 [US3] Personalizado (`quote_ops.py:493-534`): continua sem acréscimos; `brutos` = os valores
       personalizados; `bases` ausente (R7)
-- [ ] T013 [US3] Conferir `produtos.parte_do_produto_no_total` (`produtos.py:269-280`) e
+- [X] T013 [US3] Conferir `produtos.parte_do_produto_no_total` (`produtos.py:269-280`) e
       `_produtos.bloco_da_mensagem` para orçamento novo: nenhum chamador novo depende do `(1+Σ%)÷0,84` (só o legado
       pelo `total_na_duracao`); registrar no research se algum depender
-- [ ] T014 [P] [US3] EducaManto (`app/educamanto/quote_ops.py:124-129`): `pop` de `desconto_pct`, `desconto_valor`,
+- [X] T014 [P] [US3] EducaManto (`app/educamanto/quote_ops.py:124-129`): `pop` de `desconto_pct`, `desconto_valor`,
       `desconto_duracao` junto dos de `event_date`/`produtos` (R8)
-- [ ] T015a [US3] Atualizar `specs/309-produtos-de-tabela/verify_309.py` para a regra da 313 (analyze A1): as chaves
+- [X] T015a [US3] Atualizar `specs/309-produtos-de-tabela/verify_309.py` para a regra da 313 (analyze A1): as chaves
       novas do data-model em `CHAVES_NOVAS` (`:70`); o caso "6h com BV 10% + fixo 200" (`:765-788`) com os números da
       Q7 (BV sobre a base com o fixo, o fixo uma vez); registrar no `docs/03` da 313 que o golden da 309 mudou por
       regra do dono
-- [ ] T015 [US3] Rodada: cenários 1, 8, 9, 10 verdes; `verify_309` verde (com a T015a) (o 1 com as exceções conferidas pela fórmula); `ruff`; commit
+- [X] T015 [US3] *[1, 8, 9, 10 verdes; paridade: 17 exceções da Q7 (9 BV + outro, 8 extra + R$), todas pela fórmula, 0 diferenças fora delas; o `verify_309` 18/19 — as linhas do evento em 6h dependem da US4]* Rodada: cenários 1, 8, 9, 10 verdes; `verify_309` verde (com a T015a) (o 1 com as exceções conferidas pela fórmula); `ruff`; commit
       `feat(313): a ordem da conta — o acréscimo uma vez e o BV sobre tudo (Q7/Q9)`
 
 ---

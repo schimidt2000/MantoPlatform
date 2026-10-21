@@ -15,7 +15,7 @@ from typing import Any
 
 from app import db
 from app.constants import ACRESCIMO_TIPO_BV
-from app.educamanto.pricing_ops import NF_DIVISOR
+from app.educamanto.pricing_ops import AVISTA_FATOR, NF_DIVISOR
 from app.models import OrcamentoHistory, User
 from app.money import format_brl
 
@@ -84,6 +84,158 @@ def bv_que_acompanha(bv: Any, venda: Any, total: Any) -> Decimal:
     if abs(venda_d - total_d) <= _CENTAVO:
         return bv_d.quantize(_CENTAVO, rounding=ROUND_HALF_UP)
     return (bv_d * venda_d / total_d).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
+
+
+#: Feature 313 — a marca de regra gravada no snapshot: orçamento com ela foi cotado pela ordem da conta da Q7 (o
+#: acréscimo em R$ uma vez; o BV sobre a base com os outros acréscimos) e tem `bases`/`brutos`. Sem ela, todo leitor
+#: (prefill, evento) segue o caminho de antes — o que foi cotado não muda (020). A noite dos dias será a versão 3.
+VERSAO_CONTA = 2
+
+#: O PIX à vista padrão, em %: o mesmo fator do EducaManto. Arredondado porque `(1 − 0,95) × 100` em float dá
+#: 5,000000000000004 — e o negociado de exatamente 5% (o caso mais comum) perderia o "já está aplicado".
+PIX_PCT_PADRAO = round((1 - AVISTA_FATOR) * 100, 6)
+
+
+def aplicar_acrescimos(base: float, acrescimos: list[dict], nota: bool) -> dict[str, Any]:
+    """O que é do pedido, por cima da base de uma duração, na ordem que o dono deu (feature 313, Q7/Q9).
+
+    "O acréscimo adicionado manualmente é colocado por cima de tudo no valor. E o BV é calculado em cima de tudo
+    isso" (Q7). Em ordem: (a) os acréscimos que não são BV — em R$ entram inteiros, uma vez; em % incidem sobre a
+    ``base``; (b) o BV em % incide sobre ``base + (a)``, cada linha de BV sobre o mesmo número (os BVs não se veem);
+    o BV em reais entra inteiro, uma vez (Q9 = B); (c) a nota fiscal sobre a soma (``÷ NF_DIVISOR``).
+
+    A soma é feita na ordem do snapshot e com os mesmos ``round`` da conta de antes: onde a regra do dono não muda
+    o número (BV sozinho, só acréscimos sem BV em %), o centavo é o de sempre — a paridade com os orçamentos salvos.
+
+    Returns:
+        ``{"valores": [float por linha], "base_bv": float, "antes_nf": float, "preco": float}`` — ``valores`` sem
+        arredondar (a memória arredonda); ``antes_nf`` e ``preco`` ao centavo.
+    """
+    valores = [0.0] * len(acrescimos)
+    add_nao_bv = 0.0
+    for k, a in enumerate(acrescimos):
+        if a.get("is_bv"):
+            continue
+        valores[k] = (base * a["value"] / 100.0) if a["is_percent"] else a["value"]
+        add_nao_bv += valores[k]
+    base_bv = base + add_nao_bv
+    for k, a in enumerate(acrescimos):
+        if a.get("is_bv"):
+            valores[k] = (base_bv * a["value"] / 100.0) if a["is_percent"] else a["value"]
+    add = 0.0
+    for v in valores:
+        add += v
+    antes_nf = round(base + add, 2)
+    preco = round(antes_nf / NF_DIVISOR, 2) if nota else antes_nf
+    return {"valores": valores, "base_bv": base_bv, "antes_nf": antes_nf, "preco": preco}
+
+
+def _tem_parte_fixa(acrescimos: list[dict], produtos_total: float) -> bool:
+    """Acréscimo em R$ (BV em reais inclusive) ou produto de tabela: a duração extra deixa de ser linear."""
+    return bool(produtos_total) or any(not a["is_percent"] for a in acrescimos)
+
+
+def _preco_extra(
+    base_4h: float, total_4h: float, produtos_total: float, horas: int, acrescimos: list[dict], nota: bool
+) -> dict[str, Any]:
+    """O preço de uma duração acima de 4h pela régua da Q7 (feature 313, research R1).
+
+    A régua de horas vale só para a base (o produto de tabela fica fixo, 309); os acréscimos, o BV e a nota vêm por
+    cima, uma vez. Sem parte fixa a conta é linear e dá o mesmo número que escalar o preço de 4h — e aí ela escala o
+    preço de 4h, com o arredondamento de sempre (refazer pela base mudaria o centavo de metade dos orçamentos com
+    nota ou %).
+
+    Returns:
+        ``{"preco": float, "valores": [float por linha]}``.
+    """
+    if not _tem_parte_fixa(acrescimos, produtos_total):
+        preco = round(total_4h / 4 * horas, 2)
+        quatro = aplicar_acrescimos(base_4h, acrescimos, nota)["valores"]
+        return {"preco": preco, "valores": [v / 4 * horas for v in quatro]}
+    base_h = (base_4h - produtos_total) / 4 * horas + produtos_total
+    conta = aplicar_acrescimos(base_h, acrescimos, nota)
+    return {"preco": conta["preco"], "valores": conta["valores"]}
+
+
+def _linhas_do_snapshot_313(snap: dict) -> list[dict]:
+    """Os acréscimos do snapshot na forma que `aplicar_acrescimos` lê (`value` numérico, sem linha vazia)."""
+    linhas = []
+    for a in snap.get("acrescimos") or []:
+        if not isinstance(a, dict) or not a.get("tipo"):
+            continue
+        try:
+            valor = float(a.get("value"))
+        except (TypeError, ValueError):
+            continue
+        if not valor:
+            continue
+        linhas.append({
+            "tipo": a["tipo"],
+            "is_percent": bool(a.get("is_percent")),
+            "value": valor,
+            "is_bv": a["tipo"] == ACRESCIMO_TIPO_BV,
+        })
+    return linhas
+
+
+def preco_na_duracao(snap: dict, horas: int) -> dict[str, Any] | None:
+    """O preço de um orçamento da versão 2 numa duração qualquer, a partir do snapshot salvo (research R1).
+
+    Fonte única do que a calculadora mostrou, para o prefill do Novo evento ("Outra (h)") e o evento (o BV e a
+    dedução de duração). 1–4h: o cheio gravado (`brutos`) e as linhas do `valores_brl`; acima de 4h: `_preco_extra`
+    sobre as bases. No personalizado o cheio acima de 4h é a régua sobre `brutos["4h"]` (o produto fixo, sem
+    acréscimos nem nota). O total aplica o desconto do snapshot.
+
+    Returns:
+        ``{"bruto": float, "linhas": [float por acréscimo], "total": float}``, ou ``None`` quando o snapshot não é
+        da versão 2 ou não se sustenta (o chamador segue o caminho de antes).
+    """
+    if not isinstance(snap, dict) or snap.get("versao_conta") != VERSAO_CONTA:
+        return None
+    try:
+        brutos = snap.get("brutos") or {}
+        d = float(snap.get("desconto_aplicado") or 0)
+        horas = int(horas)
+        produtos_total = float(snap.get("produtos_total") or 0)
+        personalizado = bool(snap.get("personalizado_ativo"))
+        linhas_acr = _linhas_do_snapshot_313(snap)
+        if horas in (1, 2, 3, 4):
+            bruto = float(brutos[f"{horas}h"])
+            linhas = []
+            for a in snap.get("acrescimos") or []:
+                if isinstance(a, dict) and a.get("tipo") and a.get("value"):
+                    lista = a.get("valores_brl") or [0, 0, 0, 0]
+                    linhas.append(float(lista[horas - 1]))
+        elif personalizado:
+            quatro = float(brutos["4h"])
+            bruto = round((quatro - produtos_total) / 4 * horas + produtos_total, 2)
+            linhas = [0.0] * len(linhas_acr)
+        else:
+            bases = snap.get("bases") or []
+            extra = _preco_extra(
+                float(bases[3]), float(brutos["4h"]), produtos_total, horas, linhas_acr, bool(snap.get("nota_fiscal"))
+            )
+            bruto, linhas = extra["preco"], extra["valores"]
+    except (KeyError, IndexError, TypeError, ValueError):
+        return None
+    total = round(bruto * (1 - d / 100), 2) if d else bruto
+    # A duração em que a comercial digitou o valor final sai com o valor exato (Q8 = B); a extra só é "a digitada"
+    # se for a mesma duração extra do orçamento.
+    alvo = f"{horas}h" if horas <= 4 else ("extra" if int(float(snap.get("duracao_custom") or 0)) == horas else None)
+    if d and alvo and snap.get("desconto_duracao") == alvo and snap.get("desconto_valor") is not None:
+        total = round(float(snap["desconto_valor"]), 2)
+    return {"bruto": bruto, "linhas": linhas, "total": total}
+
+
+def texto_do_percentual(d: float) -> str:
+    """O % como a proposta mostra (feature 313, Q3 = A): uma casa, para baixo, com vírgula e sem ",0".
+
+    A proposta nunca promete mais desconto do que dá (4,96% → "4,9"). O ``round(d, 6)`` antes do piso evita que 10%
+    achado pelo valor digitado (9,9999999…) vire "9,9".
+    """
+    piso = Decimal(str(round(d, 6))).quantize(Decimal("0.1"), rounding="ROUND_FLOOR")
+    texto = f"{piso:.1f}".replace(".", ",")
+    return texto[:-2] if texto.endswith(",0") else texto
 
 
 def _is_noturno(raw_time: str) -> bool:
@@ -440,36 +592,33 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                 f"{transporte_tipo} · {num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
             )
 
+    # Feature 313: a base de cada duração antes do que é do pedido (acréscimos, BV, nota) — gravada no snapshot
+    # para o prefill e o evento refazerem qualquer duração pela mesma conta (`preco_na_duracao`).
+    bases = list(totals)
     if acrescimos:
-        for a in acrescimos:
-            valores = [
-                round(t * a["value"] / 100.0, 2) if a["is_percent"] else a["value"]
-                for t in totals
-            ]
+        # Feature 313 (Q7/Q9): a ordem do dono — acréscimo manual uma vez, BV sobre tudo isso, nota no fim.
+        contas = [aplicar_acrescimos(t, acrescimos, False) for t in totals]
+        for k, a in enumerate(acrescimos):
+            valores = [round(c["valores"][k], 2) for c in contas]
             rotulo = a["tipo"] + (f" — {a['descricao']}" if a["descricao"] else "")
             sufixo = f"{a['value']:g}%" if a["is_percent"] else _fmt_brl(a["value"])
             _linha(f"Acréscimo: {rotulo}", valores, "pos", sufixo)
             # Feature 305: o que este acréscimo somou ao preço em cada duração, em reais, gravado no
             # snapshot — é daqui que o evento tira o BV do orçamento (a memória acima é só exibição,
             # em float). A conta é a mesma, em Decimal HALF_UP; no meio centavo pode diferir da
-            # memória em R$ 0,01, e quem lê aceita essa tolerância.
+            # memória em R$ 0,01, e quem lê aceita essa tolerância. O BV em % incide sobre a base COM os
+            # outros acréscimos (313, Q7) — `base_bv` da conta.
             a["valores_brl"] = [
                 float(
-                    (Decimal(str(t)) * Decimal(str(a["value"])) / 100).quantize(
-                        _CENTAVO, rounding=ROUND_HALF_UP
-                    )
+                    (
+                        Decimal(str(c["base_bv"] if a["is_bv"] else t)) * Decimal(str(a["value"])) / 100
+                    ).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
                 )
                 if a["is_percent"]
                 else float(Decimal(str(a["value"])).quantize(_CENTAVO, rounding=ROUND_HALF_UP))
-                for t in totals
+                for t, c in zip(totals, contas, strict=True)
             ]
-        new_totals = []
-        for t in totals:
-            add = 0.0
-            for a in acrescimos:
-                add += (t * a["value"] / 100.0) if a["is_percent"] else a["value"]
-            new_totals.append(round(t + add, 2))
-        totals = new_totals
+        totals = [c["antes_nf"] for c in contas]
 
     if nota_fiscal:
         antes_nf = list(totals)
@@ -481,11 +630,11 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     total_custom = None
     if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
-        if produtos:
-            # Feature 309: o produto fica fixo na régua — a mesma função do prefill e do evento.
-            total_custom = _produtos.total_na_duracao(totals[3], produtos_total, duracao_custom, acrescimos, nota_fiscal)
-        else:
-            total_custom = round(totals[3] / 4 * duracao_custom, 2)
+        # Feature 313 (Q7): a régua de horas só na base; o acréscimo em R$ uma vez; o produto fixo (309). Sem parte
+        # fixa, o mesmo número de sempre (o preço de 4h escalado). A mesma conta do prefill e do evento.
+        total_custom = _preco_extra(bases[3], totals[3], produtos_total, duracao_custom, acrescimos, nota_fiscal)[
+            "preco"
+        ]
 
     # No personalizado "multiplicador" o produto NÃO é multiplicado: soma por fora. A validação de
     # "valores válidos" olha a base × multiplicador, como hoje — senão um multiplicador zerado passaria.
@@ -532,6 +681,10 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             # Converge 309: no valor final o produto NÃO está dentro do total digitado — `produtos_total`
             # zero no quote/snapshot para a régua do evento (prefill, `_total_da_duracao`) ser a linear.
             produtos_total = 0.0
+
+    # Feature 313: o preço cheio de cada duração — o "valor antes do desconto" que vai ao evento.
+    brutos = list(totals)
+    bruto_custom = total_custom
 
     _linha("TOTAL FINAL AO CLIENTE", totals, "total")
 
@@ -710,6 +863,8 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # Detalhamento linha a linha da conta (só exibição). Vai junto no `form_snapshot` do
         # histórico, então um orçamento salvo reabre com a mesma memória que foi apresentada.
         "memoria": memoria,
+        # Feature 313: a base de 4h (antes dos acréscimos) — o ponto de partida de qualquer duração extra.
+        "base_4h": None if personalizado else bases[3],
     }
 
     snapshot = {
@@ -746,6 +901,14 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # valor do cachê vem da tabela viva na data do evento); a régua do prefill lê `produtos_total`.
         "produtos": _produtos.para_snapshot(produtos),
         "produtos_total": produtos_total,
+        # Feature 313 (research R2): a marca de regra e o que o prefill e o evento precisam para refazer qualquer
+        # duração pela mesma conta (`preco_na_duracao`), sem a conta inversa da regra antiga.
+        "versao_conta": VERSAO_CONTA,
+        "bases": None if personalizado else [float(b) for b in bases],
+        "brutos": {
+            **{f"{i + 1}h": brutos[i] for i in range(4)},
+            **({"custom": bruto_custom} if bruto_custom else {}),
+        },
     }
 
     return {"quote": quote, "snapshot": snapshot}

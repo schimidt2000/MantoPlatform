@@ -127,6 +127,9 @@ def _totais_contratacao(contratacao: dict, prefixo_erro: str) -> tuple[dict, lis
     # Feature 309 (FR-016): produto de tabela é da calculadora de orçamento, não da contratação do
     # musical — a chave pode vir gravada em `inputs` e é ignorada em todo recálculo.
     payload.pop("produtos", None)
+    # Feature 313: o desconto negociado é da calculadora de orçamento; o EducaManto tem o dele, no fechamento.
+    for chave in ("desconto_pct", "desconto_valor", "desconto_duracao"):
+        payload.pop(chave, None)
 
     duracoes = contratacao["duracoes"]
     custom = [d for d in duracoes if d not in _DURACOES_FIXAS]
