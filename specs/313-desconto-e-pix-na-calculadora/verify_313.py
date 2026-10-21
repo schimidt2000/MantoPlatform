@@ -155,9 +155,12 @@ def _texto_pct(d: float) -> str:
 
 
 def _bv_que_acompanha(bv, venda, total) -> float:
-    from app.orcamento.quote_ops import bv_que_acompanha
-
-    return float(bv_que_acompanha(Decimal(str(bv)), Decimal(str(venda)), Decimal(str(total))))
+    """A regra da 305 escrita de novo aqui (oráculo independente — a mutação do cenário 2 troca a do app):
+    ``bv × venda ÷ total`` ao centavo, HALF_UP; venda a até R$ 0,01 do total devolve o BV cheio."""
+    bv_d, venda_d, total_d = (Decimal(str(x)) for x in (bv, venda, total))
+    if abs(venda_d - total_d) <= CENTAVO:
+        return float(q(bv_d))
+    return float(q(bv_d * venda_d / total_d))
 
 
 # ── fixtures ────────────────────────────────────────────────────────────────────────────────────

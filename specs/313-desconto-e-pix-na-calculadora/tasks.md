@@ -97,24 +97,24 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 
 **Objetivo**: FR-001, FR-002, FR-003, FR-005, FR-008 (desconto), FR-010. **Prova**: cenários 2, 3, 4.
 
-- [ ] T016 [US1] Em `quote_ops.calculate_quote` (`:106`), ler `desconto_pct`, `desconto_valor`, `desconto_duracao`
+- [X] T016 [US1] Em `quote_ops.calculate_quote` (`:106`), ler `desconto_pct`, `desconto_valor`, `desconto_duracao`
       (contracts); validar (FR-010, `QuoteValidationError` com o campo, `:43-49`); com valor + duração, achar `d`
       sem arredondar sobre o cheio daquela duração (R6: só durações que o resultado mostra — `show` já forçado em
       1h no só-produto, `:580-583`; "extra" só com `total_custom`); valor igual ao cheio = sem desconto
-- [ ] T017 [US1] Passo do desconto, último da conta: `bruto_* = totals` antes; `total_* = round(bruto × (1 − d ÷
+- [X] T017 [US1] Passo do desconto, último da conta: `bruto_* = totals` antes; `total_* = round(bruto × (1 − d ÷
       100), 2)`, a duração digitada com o valor exato; também a extra e o personalizado (R7); memória "Desconto (N%)"
       tipo `pos`, negativa, depois da nota — só com desconto (analyze A4)
-- [ ] T018 [US1] `quote` com `bruto_*`, `desconto_pct` (exato), `desconto_pct_texto` (R5: `floor(round(d, 6) × 10) ÷
+- [X] T018 [US1] `quote` com `bruto_*`, `desconto_pct` (exato), `desconto_pct_texto` (R5: `floor(round(d, 6) × 10) ÷
       10`, vírgula, sem ",0"), `desconto_modo`; snapshot com o digitado (`desconto_pct_digitado`, `desconto_valor`,
       `desconto_duracao`) e `desconto_aplicado`; `preco_na_duracao`
       aplicando `desconto_aplicado` (e o valor exato quando a extra foi a digitada)
-- [ ] T019 [US1] BV que acompanha no `quote`: `bv_*` = `bv_que_acompanha(BV cheio da coluna, total, bruto)`
+- [X] T019 [US1] BV que acompanha no `quote`: `bv_*` = `bv_que_acompanha(BV cheio da coluna, total, bruto)`
       (`quote_ops.py:59-86`, sem mudar a função); memória "BV a repassar a quem indicou" tipo `subtotal` depois do
       total, quando há BV **e desconto** (sem desconto a memória é a de hoje — analyze A4); `bv_*` como `float()` no
       `quote` (o `bv_que_acompanha` devolve Decimal, que o `jsonify` viraria texto — analyze B9)
-- [ ] T020 [P] [US1] Histórico: `_entry_summary` (`app/api/orcamento_read.py:125`) ganha `desconto_pct` lido do
+- [X] T020 [P] [US1] Histórico: `_entry_summary` (`app/api/orcamento_read.py:125`) ganha `desconto_pct` lido do
       `form_snapshot` (`desconto_aplicado` > 0; um `json.loads` por linha, até 300 — aceito, analyze A19)
-- [ ] T021 [US1] Rodada: + cenários 2, 3, 4 verdes; regressão 1, 8, 9, 10 continua; commit `feat(313): o desconto em
+- [X] T021 [US1] Rodada: + cenários 2, 3, 4 verdes; regressão 1, 8, 9, 10 continua; commit `feat(313): o desconto em
       % ou pelo valor fechado`
 
 ---
@@ -123,7 +123,7 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 
 **Objetivo**: FR-004, FR-011–FR-015. **Prova**: cenários 5, 6, 7.
 
-- [ ] T022 [US2] PIX no núcleo: `PIX_PCT_PADRAO = round((1 − AVISTA_FATOR) × 100, 6)` (`app/educamanto/pricing_ops.py:29`,
+- [X] T022 [US2] PIX no núcleo: `PIX_PCT_PADRAO = round((1 − AVISTA_FATOR) × 100, 6)` (`app/educamanto/pricing_ops.py:29`,
       importado ao lado do `NF_DIVISOR`, `quote_ops.py:18`; sem o `round` dá 5,000…04 — analyze A3); `pix_pct`, `pix_*`
       (R4), a frase do "já está aplicado" com `round(d, 6) >= PIX_PCT_PADRAO`; com negociado ≥ 5%, `pix_d = total_d`
       e `bv_pix_d = bv_d` sem recalcular (analyze B4); senão `bv_pix_*` pela mesma função
