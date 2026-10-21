@@ -1,0 +1,97 @@
+﻿python.exe : C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: 
+RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported 
+version!
+At line:1 char:435
++ ... nv313.ps1"; & $py specs\313-desconto-e-pix-na-calculadora\verify_313. ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\schim\...ported version!:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+[2026-10-21 19:07:22,370] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br 
+plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the 
+in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for 
+production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about 
+configuring the storage backend.
+  warnings.warn(
+[2026-10-21 19:07:23,183] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-21 19:07:36,985] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,119] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,252] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,382] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,513] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,646] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:37,783] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,004] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,172] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,300] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,448] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,628] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,758] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:38,889] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,019] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,163] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,295] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,430] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,565] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,695] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:39,831] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,213] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,344] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,484] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,663] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,789] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:40,916] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:41,046] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-21 19:07:41,177] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+── verify 313 — desconto e PIX na calculadora ──
+         paridade: 2484 no gabarito, 0 com diferença, 0 exceções da Q7
+  FALHA  1 · paridade com o gabarito; exceções da Q7 pela fórmula: nenhuma exceção da Q7 — a regra do acréscimo uma vez / BV sobre tudo não está no código
+  FALHA  2 · desconto em % (com e sem BV) + mutação: bruto_1h None ≠ 1170.0
+  FALHA  3 · desconto pelo valor; o texto do %; inválidos: a duração digitada não saiu exata: 1375.0 ≠ 1237.0
+  FALHA  4 · a base do desconto é o total: 'bruto_1h'
+  FALHA  5 · PIX vale o maior (3%, 5%, 10%, 4,96%): sem desconto 1h
+  FALHA  6 · mensagem e PDF: 'bruto_1h'
+  OK     7 · orçamento antigo: histórico, PDF, prefill
+  FALHA  8 · o acréscimo em R$ uma vez; sem parte fixa, o centavo de hoje: 8h com urgência de 300 (uma vez): 3720.0 ≠ 3420.0
+  FALHA  9 · o BV sobre tudo; BV em reais uma vez: BV sobre a base com o Outro: 1487.0 ≠ 1507.0
+  FALHA  10 · EducaManto: contratação Manto em 6h: o R$ uma vez: 2790.0 ≠ 2640.0
+  FALHA  11 · prefill: 'bruto_1h'
+  FALHA  12 · evento criado: cheio, venda, BV, comissão, dedução, PIX digitado: 'bruto_2h'
+  OK     13 · orçamento antigo vira evento (régua e denominador de hoje)
+  FALHA  14 · vínculo 273: 'bruto_2h'
+  OK     15 · DEVE FALHAR: Financeiro, Casting e Revendedor no cálculo
+  OK     16 · regressão 305/307/309/235
+  OK     L · limpeza
+
+5/17 cenários OK · chamadas ao Google: 1

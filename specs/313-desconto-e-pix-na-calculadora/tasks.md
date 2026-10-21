@@ -23,9 +23,9 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 
 ## Phase 1: Setup
 
-- [ ] T001 Conferir `.specify/feature.json` → `specs/313-desconto-e-pix-na-calculadora`; criar `env313.ps1` no
+- [X] T001 Conferir `.specify/feature.json` → `specs/313-desconto-e-pix-na-calculadora`; criar `env313.ps1` no
       scratchpad (o `env312.ps1` com `C:\tmp\mp313`); contar os `form_snapshot` do `manto_local` (só leitura) e anotar
-- [ ] T002 Copiar `.local-db-url` (já na raiz do worktree) e conferir que `specs/305-…/verify_305.py`,
+- [X] T002 Copiar `.local-db-url` (já na raiz do worktree) e conferir que `specs/305-…/verify_305.py`,
       `specs/307-…/verify_307.py`, `specs/309-…/verify_309.py` e `specs/235-…/verify_235.py` rodam verdes na
       `c074657b` — a base da regressão (o `scripts/db/verify_190_paridade_orcamento_educamanto.py` saiu: importa
       `EducaMantoPackage`, que a 235 removeu)
@@ -34,24 +34,24 @@ primeira rodada contra a `main` fica em `verify_313_primeira_falha.txt`.
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T003 Escrever `specs/313-desconto-e-pix-na-calculadora/gabarito_paridade.py` (só leitura, sem
+- [X] T003 Escrever `specs/313-desconto-e-pix-na-calculadora/gabarito_paridade.py` (só leitura, sem
       `create_app` de threads: `FLASK_ENV=development`, `MANTO_SEM_THREADS=1`): para cada `OrcamentoHistory` com
       `form_snapshot` JSON, montar o payload como o "Recalcular" faz (`personalizado_ativo` → `personalizado`,
       `OrcamentoCalculadoraPage.tsx:249-278`) e chamar `quote_ops.calculate_quote`; gravar `{id: {quote, snapshot}
       | {erro}}` em JSON no caminho dado por `--gravar`; e `--comparar <json>` que devolve as diferenças por chave
       (ignorando as chaves novas do data-model)
-- [ ] T004 Rodar o gabarito na `c074657b` (antes de qualquer mudança em `app/`) → `<scratchpad>\gabarito313.json`;
+- [X] T004 Rodar o gabarito na `c074657b` (antes de qualquer mudança em `app/`) → `<scratchpad>\gabarito313.json`;
       anotar contagem, erros e o hash
-- [ ] T005 Escrever `specs/313-desconto-e-pix-na-calculadora/verify_313.py` inteiro — os cenários 1–16 e L da spec
+- [X] T005 Escrever `specs/313-desconto-e-pix-na-calculadora/verify_313.py` inteiro — os cenários 1–16 e L da spec
       (tabela "Verificação"), no molde do `verify_312.py` (usuários descartáveis Comercial/Superadmin/Financeiro/
       Casting/Revendedor EducaManto; Google dublado; `cenario()`, `--so`, limpeza no `finally`; escrita conferida por
       conexão separada; orçamentos montados por `POST /api/orcamento/calcular` + `/salvar`, nunca `EventRole`
       inventada). O cenário 1 chama o `--comparar` do T003 e confere cada exceção da R11 pela fórmula; o 13 usa um
       orçamento salvo **sem** `versao_conta` (o caso do `verify_305` cen_04: BV de 375 em 6h); o 16 roda as
       regressões do T002 como subprocesso
-- [ ] T006 Rodar o `verify_313.py` contra a `main` e guardar a saída em
+- [X] T006 Rodar o `verify_313.py` contra a `main` e guardar a saída em
       `specs/313-desconto-e-pix-na-calculadora/verify_313_primeira_falha.txt` (verdes esperados: 7, 13, 15, 16, L)
-- [ ] T007 Commit `docs(313): gabarito de paridade e verify antes do núcleo`
+- [X] T007 Commit `docs(313): gabarito de paridade e verify antes do núcleo`
 
 ---
 

@@ -32,14 +32,39 @@ sys.path.insert(0, str(RAIZ))
 #: que todo o resto seja idêntico. `memoria` não está aqui: as linhas novas (desconto, BV a repassar) só existem
 #: com desconto ou BV, e sem eles a memória tem de ser a de hoje.
 CHAVES_NOVAS_QUOTE = {
-    "bruto_1h", "bruto_2h", "bruto_3h", "bruto_4h", "bruto_custom", "base_4h",
-    "desconto_pct", "desconto_pct_texto", "desconto_modo",
-    "pix_pct", "pix_1h", "pix_2h", "pix_3h", "pix_4h", "pix_custom",
-    "bv_1h", "bv_2h", "bv_3h", "bv_4h", "bv_custom",
-    "bv_pix_1h", "bv_pix_2h", "bv_pix_3h", "bv_pix_4h", "bv_pix_custom",
+    "bruto_1h",
+    "bruto_2h",
+    "bruto_3h",
+    "bruto_4h",
+    "bruto_custom",
+    "base_4h",
+    "desconto_pct",
+    "desconto_pct_texto",
+    "desconto_modo",
+    "pix_pct",
+    "pix_1h",
+    "pix_2h",
+    "pix_3h",
+    "pix_4h",
+    "pix_custom",
+    "bv_1h",
+    "bv_2h",
+    "bv_3h",
+    "bv_4h",
+    "bv_custom",
+    "bv_pix_1h",
+    "bv_pix_2h",
+    "bv_pix_3h",
+    "bv_pix_4h",
+    "bv_pix_custom",
 }
 CHAVES_NOVAS_SNAPSHOT = {
-    "versao_conta", "bases", "brutos", "desconto_pct_digitado", "desconto_valor", "desconto_duracao",
+    "versao_conta",
+    "bases",
+    "brutos",
+    "desconto_pct_digitado",
+    "desconto_valor",
+    "desconto_duracao",
     "desconto_aplicado",
 }
 
@@ -50,7 +75,9 @@ def payload_do_snapshot(snap: dict) -> dict:
     payload["personalizado"] = bool(snap.get("personalizado_ativo"))
     payload["personalizado_criterio"] = snap.get("personalizado_criterio") or None
     # Feature 309: só a chave do produto volta; o preço é resolvido pela tabela vigente.
-    payload["produtos"] = [{"chave": p.get("chave")} for p in snap.get("produtos") or [] if isinstance(p, dict)]
+    payload["produtos"] = [
+        {"chave": p.get("chave")} for p in snap.get("produtos") or [] if isinstance(p, dict)
+    ]
     return payload
 
 
@@ -72,7 +99,10 @@ def recalcular_todos() -> dict[str, Any]:
         except quote_ops.QuoteValidationError as exc:
             saida[str(entry.id)] = {"erro": f"{exc.field}: {exc.message}"}
             continue
-        except (TypeError, ValueError) as exc:  # snapshot antigo com texto onde hoje vai número ("0,01")
+        except (
+            TypeError,
+            ValueError,
+        ) as exc:  # snapshot antigo com texto onde hoje vai número ("0,01")
             saida[str(entry.id)] = {"erro": f"{type(exc).__name__}: {exc}"}
             continue
         saida[str(entry.id)] = {"quote": res["quote"], "snapshot": res["snapshot"]}
@@ -111,8 +141,14 @@ def diferencas(gabarito: dict[str, Any], atual: dict[str, Any]) -> dict[str, lis
                 out[oid] = [f"erro: {g.get('erro')!r} → {a.get('erro')!r}"]
             continue
         caminhos = _caminhos(
-            {"quote": _sem_novas(g["quote"], CHAVES_NOVAS_QUOTE), "snapshot": _sem_novas(g["snapshot"], CHAVES_NOVAS_SNAPSHOT)},
-            {"quote": _sem_novas(a["quote"], CHAVES_NOVAS_QUOTE), "snapshot": _sem_novas(a["snapshot"], CHAVES_NOVAS_SNAPSHOT)},
+            {
+                "quote": _sem_novas(g["quote"], CHAVES_NOVAS_QUOTE),
+                "snapshot": _sem_novas(g["snapshot"], CHAVES_NOVAS_SNAPSHOT),
+            },
+            {
+                "quote": _sem_novas(a["quote"], CHAVES_NOVAS_QUOTE),
+                "snapshot": _sem_novas(a["snapshot"], CHAVES_NOVAS_SNAPSHOT),
+            },
         )
         # `valores_brl` dentro de `snapshot.acrescimos` é do BV cheio: quando a regra da Q7 muda o preço, muda junto,
         # e isso é avaliado com o preço (cenário 1); aqui só se registra.
@@ -139,8 +175,10 @@ def main() -> int:
         texto = json.dumps(atual, ensure_ascii=False, sort_keys=True, default=str)
         Path(args.gravar).write_text(texto, encoding="utf-8")
         erros = sum(1 for v in atual.values() if "erro" in v)
-        print(f"gravados {len(atual)} orçamentos ({erros} com erro de validação); sha256 "
-              f"{hashlib.sha256(texto.encode('utf-8')).hexdigest()[:16]}")
+        print(
+            f"gravados {len(atual)} orçamentos ({erros} com erro de validação); sha256 "
+            f"{hashlib.sha256(texto.encode('utf-8')).hexdigest()[:16]}"
+        )
         return 0
     gabarito = json.loads(Path(args.comparar).read_text(encoding="utf-8"))
     # Comparação pelo mesmo caminho de serialização da gravação (floats e strings iguais aos do JSON).
