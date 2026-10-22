@@ -211,6 +211,8 @@ nunca chegaria.
 - Venda em grupo que troca de principal: o vínculo segue a venda (passagem de grupo).
 - Integração desligada (sem token) ou ClickSign fora do ar: a situação cai para o que existe hoje (anexos), a Home mostra
   "Integração com a ClickSign desligada" só ao Superadmin, e nada quebra.
+- Duas pessoas ligando, desligando ou descartando o mesmo documento ao mesmo tempo: vale a primeira; a segunda recebe
+  "este contrato acabou de ser alterado" e a tela se atualiza.
 - PDF assinado indisponível no momento do aviso: a situação vira "Assinado" mesmo assim; o anexo é tentado de novo na
   conferência seguinte.
 
@@ -224,7 +226,9 @@ nunca chegaria.
   cancelado, vencido ou recusado na conta, e guardar a identificação dele, nome, situação, prazo, datas, telefone/e-mail
   e canal do signatário.
 - **FR-002**: O sistema DEVE classificar cada documento como **de cliente** (nome com data e telefone, festa ou
-  corporativo), **de artista** ou **outro**; só o de cliente entra em venda.
+  corporativo), **de artista** ou **outro**; só o de cliente liga sozinho a uma venda. O "outro" com data legível (ex.:
+  corporativo só com razão social) vai para "A conferir" com sugestões pela data; artista e "outro" sem data ficam fora
+  das listas.
 - **FR-003**: O sistema DEVE ler do nome a data (`DD-MM-AAAA`, `DDMMAAAA`, `DMMAAAA`), o telefone `(DD) NNNNN-NNNN` e o
   tema ou razão social, tolerando o sufixo `(1)` e espaços.
 - **FR-004**: O sistema DEVE ligar sozinho o documento de cliente à venda viva (principal ou avulso) com evento na data
@@ -251,6 +255,11 @@ nunca chegaria.
 - **FR-010**: A Home DEVE ter o painel "Contratos" (depois de Cobranças) com os grupos "Para cobrar", "Venceu ou foi
   recusado", "Venda sem contrato" (só evento nos próximos 30 dias), "A conferir" e, recolhido, "Já aconteceu sem
   contrato assinado"; cada linha com cliente, data do evento, prazo, cor pela régua da Premissa 5 e a última cobrança.
+  Os três primeiros grupos levam só evento de hoje em diante; evento que já passou (desde o corte) sem contrato assinado,
+  em qualquer situação, vai para "Já aconteceu". Cor de "Venda sem contrato" pela distância do evento (vermelho até 7
+  dias, amarelo 8–30); "Venceu ou foi recusado" é sempre vermelho.
+- **FR-019**: A coluna "Contrato" da lista de vendas (`/vendas`) DEVE mostrar a mesma situação da página do evento,
+  julgada pela venda (uma fonte só); com a integração desligada, continua como hoje.
 - **FR-011**: "Cobrar contrato" DEVE copiar a mensagem pronta, escolhida pelo canal do signatário (WhatsApp ou e-mail),
   com saudação pela hora, tema e data da festa, e DEVE registrar quem cobrou e quando.
 - **FR-012**: "Cobrar contrato" DEVE ficar ativo só no principal ou avulso com contrato aguardando assinatura, e
@@ -313,7 +322,7 @@ qualquer conexão de saída. Login só por `POST /api/auth/login`; escrita confe
 | 6 | venda cancelada não liga | FR-005 | não |
 | 7 | grupo: documento no satélite vale para a venda; situação pelo principal | FR-008 | não |
 | 8 | vigente: reenvio assinado + original cancelado depois = assinado; remarcação substitui | FR-008 | não |
-| 9 | situação na página do evento e nas listas da Home (cada grupo, cor) | FR-007, FR-010 | não |
+| 9 | situação na página do evento, nas listas da Home (cada grupo, cor, fronteira de data) e na coluna de `/vendas` | FR-007, FR-010, FR-019 | não |
 | 10 | mensagem pelo canal (WhatsApp × e-mail) e registro da cobrança | FR-011 | não |
 | 11 | botão desativado com o motivo certo (assinado, vencido, sem contrato, cancelado, satélite) | FR-012 | não |
 | 12 | assinado → PDF anexado ao principal, marcado, autor automático, sem duplicar | FR-009 | não |
@@ -338,9 +347,11 @@ menu ⋯) como COMERCIAL e como FINANCEIRO; faixa "A conferir".
 ## Critérios de sucesso *(obrigatório)*
 
 - **SC-001**: Nos 30 dias depois da entrega, pelo menos 9 de cada 10 contratos de cliente criados na ClickSign ficam
-  ligados à venda certa sem nenhum clique.
+  ligados à venda certa sem nenhum clique (contagem: documentos de cliente criados no período com vínculo de origem
+  automática que nunca foram desligados ÷ todos os documentos de cliente do período).
 - **SC-002**: Nenhum contrato fica ligado sozinho à venda errada sem que a tela mostre a divergência (data, telefone ou
-  tema).
+  tema); todo desligamento fica registrado com quem e quando, e o número de desligamentos de vínculos automáticos nos 30
+  dias é zero ou explicado um a um.
 - **SC-003**: A assinatura aparece no sistema em até 5 minutos depois que a cliente assina, e no máximo até a conferência
   periódica seguinte quando o aviso se perder.
 - **SC-004**: A comercial cobra um contrato a partir da Home em no máximo 2 toques, sem abrir o evento.
@@ -372,3 +383,5 @@ decide sozinho), `docs/05` (dívidas novas; colunas `clicksign_*` inertes do `Si
   `research.md` antes de fechar o plano; se não forem, o plano muda de fonte (e-mails da ClickSign) e a spec volta para
   revisão.
 - O cadastro do aviso automático na ClickSign é feito pelo próprio sistema, sem o dono entrar no painel.
+- Do signatário, a Manto guarda só nome, telefone, e-mail e canal de envio — o necessário para ligar e cobrar. CPF,
+  endereço e IP que a ClickSign tem não são copiados (o PDF assinado anexado continua tendo o log da ClickSign, como hoje).

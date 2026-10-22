@@ -100,6 +100,7 @@ app/api/clicksign_webhook.py                        # NOVO — aviso HMAC
 app/api/__init__.py                                 # 3 imports
 app/api/agenda_read.py                              # bloco `contrato` + fragmentos em `mensagens`
 app/api/dashboard_service.py                        # `comercial.contratos` via _bloco
+app/financeiro/vendas_ops.py                        # contract_status_map lê a situação da venda (FR-019) quando a integração está ligada
 app/__init__.py                                     # _start_clicksign_sync (atrás de MANTO_SEM_THREADS)
 app/cli.py                                          # clicksign-sincronizar, clicksign-webhook
 app/calendar/routes.py                              # _clear_event_side_tables: documento volta a a_conferir; cobranças/desvínculos por CASCADE
