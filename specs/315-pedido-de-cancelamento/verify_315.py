@@ -451,7 +451,10 @@ def c9_cancelado() -> None:
 def c16_nao_tranca() -> None:
     ev = _evento("c16")
     _pedir_ok("com", ev, _nada())
-    r = _cliente("com").patch(f"/api/events/{ev}/comercial", json={"sale_value": 2100})
+    # O PATCH da aba Comercial substitui o bloco inteiro: vendedor e taxa vão como estão.
+    vendedor, taxa = _no_banco("SELECT seller_id, commission_rate FROM calendar_events WHERE id = :i", i=ev)[0]
+    corpo = {"sale_value": 2100, "seller_id": vendedor, "commission_rate": float(taxa) if taxa is not None else None}
+    r = _cliente("com").patch(f"/api/events/{ev}/comercial", json=corpo)
     _garante(r.status_code == 200, f"16: editar a venda → {r.status_code} {r.get_data(as_text=True)[:200]}")
     _garante(_resumo_na_agenda("cast", ev).get("mês"), "16: o evento com pedido saiu do mês")
 

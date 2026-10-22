@@ -59,17 +59,17 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 **Meta**: o Comercial pede com motivo, alcance e devolução; o pedido grava e avisa os Superadmins.
 **Teste independente**: cenários 1–5, 7–9, 16, 17, 26 (o 6 inteiro precisa do detalhe da US2).
 
-- [ ] T006 [US1] `app/constants.py` (ao lado de `:616-649`): `CODIGO_PEDIDO_PENDENTE = "pedido_pendente"`,
+- [X] T006 [US1] `app/constants.py` (ao lado de `:616-649`): `CODIGO_PEDIDO_PENDENTE = "pedido_pendente"`,
       `CODIGO_SEM_PEDIDO = "sem_pedido"` e a união `CODIGOS_RECUSA_DO_PEDIDO` (com `cancelado`, `ensaio`,
       `cache_pago`). Os kinds do sino **não** moram aqui: ficam no catálogo de `notificacoes_ops.py:54-60` (T007)
-- [ ] T007 [US1] `app/notificacoes/notificacoes_ops.py`: os dois kinds no catálogo e em `DESTINATARIOS_POR_KIND`
+- [X] T007 [US1] `app/notificacoes/notificacoes_ops.py`: os dois kinds no catálogo e em `DESTINATARIOS_POR_KIND`
       (`:54-77`; receita na docstring `:15-17`); `notificar_pedido_cancelamento(event, *, carimbo, n_escalados,
       autor_nome)` no molde de `notificar_evento_sumiu_google` (`:355-386`) — urgente em ≤ 7 dias ou passado (`:272`,
       `:311`), corpo com data · venda · recebido · N escalados · alcance · quem pediu · motivo, cortado em 500;
       `notificar_pedido_decidido(event_id, *, autor, quem_decidiu_id, titulo, corpo, link)` com
       `destinatarios=[autor]` (`:153-160` não filtra: o produtor filtra `autor.is_active and autor.has_access and
       autor.id != quem_decidiu_id`), sem entidade e sem link no "excluído"
-- [ ] T008 [US1] `app/calendar/solicitacao_ops.py` (NOVO, research R1): `ler_corpo` (forma R4: `motivo`, `alcance`,
+- [X] T008 [US1] `app/calendar/solicitacao_ops.py` (NOVO, research R1): `ler_corpo` (forma R4: `motivo`, `alcance`,
       `devolucao_*`, `venda_nova` — esta proibida fora do pedido de um dia só —, todos os erros de uma vez; venda
       virtual só motivo; Nada sem nome/PIX; pelo caminho velho sem `devolucao` e sem `alcance` → colunas nulas),
       `alcance_do_evento` (R3), `bloqueio_do_proprio_dia(event)` (ensaio pelo tipo; cachê pago **do próprio dia** pela
@@ -83,16 +83,16 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       pedido_pendente com o nome); nada no request atribui as colunas no objeto fora do UPDATE (autoflush); `EventLog`
       sem `created_at`; `_log_sync("cancel_requested", …)` (`routes.py:376`); o aviso; commit. `serializar_devolucao`
       tolerante a JSON corrompido
-- [ ] T009 [US1] `app/api/agenda_write.py`: nas views de hoje (`:908-930`, `:932-948`) as regras novas
+- [X] T009 [US1] `app/api/agenda_write.py`: nas views de hoje (`:908-930`, `:932-948`) as regras novas
       `/events/<id>/pedido-cancelamento` (POST/DELETE) além das velhas (R9 — os nomes de endpoint não mudam, o 9b do
       `verify_312` segue certo); o POST chama `solicitacao_ops.solicitar` com `caminho_velho` pela `request.url_rule`;
       erros por `json_error(..., codigo=…)`; 200 com `serialize_event_detail` (molde do devolver-ao-google); o DELETE
       continua no `recusar_solicitacao` de hoje até a T018 (só ganha a rota nova e o gate `_can_delete`, papel real);
       docstrings com o RBAC
-- [ ] T010 [US1] `app/calendar/cancel_ops.py`: tirar **só** `solicitar_exclusao` (`:3502-3521`, que gravava o
+- [X] T010 [US1] `app/calendar/cancel_ops.py`: tirar **só** `solicitar_exclusao` (`:3502-3521`, que gravava o
       `EventLog` em SP — dívida 76); o único chamador é `agenda_write.py:922`. O `recusar_solicitacao` (`:3524-3541`) sai
       na T018
-- [ ] T011 [US1] Rodar `verify_315.py '--so=1,2,3,4,5,7,8,9,16,17,26'` — verdes; os outros seguem vermelhos; commit
+- [X] T011 [US1] Rodar `verify_315.py '--so=1,2,3,4,5,7,8,9,16,17,26'` — verdes; os outros seguem vermelhos; commit
       `feat(315): pedir — a forma da 306, as recusas, o claim e o aviso aos Superadmins`
 
 **Checkpoint**: verdes 1–5, 7–9, 16, 17, 26, 27, 28.
@@ -141,14 +141,14 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 **Meta**: recusar, cancelar e excluir fecham o pedido e respondem a quem pediu, uma vez.
 **Teste independente**: cenários 13, 18–25.
 
-- [ ] T018 [US3] `app/calendar/solicitacao_ops.py`: `recusar(event, *, actor, motivo)` — claim `UPDATE … SET <cinco
+- [X] T018 [US3] `app/calendar/solicitacao_ops.py`: `recusar(event, *, actor, motivo)` — claim `UPDATE … SET <cinco
       colunas>=NULL WHERE deletion_requested_at = :carimbo_lido` com `refresh(event)` (perdeu → 409 `sem_pedido`),
       `EventLog` sem `created_at`, `_log_sync("cancel_request_refused", …)`,
       `marcar_lidas_por_entidade("calendar_event", id, kind="evento.pedido_cancelamento")` (`notificacoes_ops.py:458-474`
       — sempre com o kind, senão marca o `pedido_decidido`), resposta "Pedido recusado — <título>: <motivo>" (sem motivo:
       "Pedido recusado — <título>"), commit; a view `DELETE` (`agenda_write.py:932-948`) passa a chamá-lo e o
       `recusar_solicitacao` de `cancel_ops.py:3524-3541` sai (único chamador `agenda_write.py:942`)
-- [ ] T019 [US3] `app/calendar/solicitacao_ops.py` `fechar_no_cancelamento(dia, *, alcance, novo_principal)` e
+- [X] T019 [US3] `app/calendar/solicitacao_ops.py` `fechar_no_cancelamento(dia, *, alcance, novo_principal)` e
       `app/calendar/cancel_ops.py`: `ao_cancelar` (`:1594-1602`) passa a chamá-lo (import tardio; assinatura intacta — o
       espião do `verify_306.py:384-412` envolve e chama o real); as três linhas que zeravam o pedido em
       `_encerrar_os_dias` (`:2059-2061`) saem (o fecho zera as cinco, lendo autor/alcance/carimbo antes); avisos do
@@ -157,7 +157,7 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       nos outros dias"; passagem (o 1º dia sozinho) → "Dia dd/mm cancelado — <título>: a venda passou para o dia dd/mm;
       os outros dias seguem". O pedido legado num ensaio, que o ato apaga do banco (`:2068`), sai sem resposta (aceito:
       ensaio não recebe pedido novo)
-- [ ] T020 [US3] `solicitacao_ops.responder_na_exclusao(autor_id, titulo, carimbo, *, quem_excluiu)` e
+- [X] T020 [US3] `solicitacao_ops.responder_na_exclusao(autor_id, titulo, carimbo, *, quem_excluiu)` e
       `app/api/agenda_write.py` `api_delete_event` (`:669-718`): antes de `_delete_event_flow`, guardar autor, título e
       carimbo do pedido (o objeto morre no commit, `routes.py:4586`); depois de `deleted`, chamar
       `responder_na_exclusao` em transação própria — "Evento excluído — <título>", sem entidade e sem link; não responde

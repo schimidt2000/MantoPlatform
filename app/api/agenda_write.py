@@ -700,6 +700,10 @@ def api_delete_event(event_id: int) -> Any:
             409,
         )
 
+    from app.calendar import solicitacao_ops
+
+    # Feature 315: quem pediu é respondido depois do commit — o objeto morre nele.
+    pedido = solicitacao_ops.pedido_antes_da_exclusao(event)
     try:
         deleted, aviso = _delete_event_flow(
             event,
@@ -715,6 +719,7 @@ def api_delete_event(event_id: int) -> Any:
         return json_error(
             "Desagrupe os eventos satélites antes de excluir este evento", 409
         )
+    solicitacao_ops.responder_na_exclusao(pedido, quem_excluiu_id=current_user.id)
     return jsonify({"ok": True, "aviso": aviso})
 
 
@@ -905,48 +910,63 @@ def api_devolver_ao_google(event_id: int) -> Any:
     return jsonify(result)
 
 
+@api_bp.route("/events/<int:event_id>/pedido-cancelamento", methods=["POST"])
 @api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["POST"])
 @api_login_required
 def api_solicitar_exclusao(event_id: int) -> Any:
-    """Comercial pede a exclusão; o Superadmin decide (feature 224). Corpo: `{motivo}`."""
+    """O Comercial pede o cancelamento; só o Superadmin decide (features 224 e 315).
+
+    RBAC: Comercial ou Superadmin pelo papel real (`_can_request_delete`). Corpo (contracts):
+    `{motivo, alcance?, devolucao: {modo, valor?, nome?, pix?}, venda_nova?}`. O caminho velho
+    (`/solicitar-exclusao`, o bundle de antes do deploy) aceita o corpo só com o motivo. Recusas
+    pelo envelope do cancelado (`codigo`: cancelado, ensaio, cache_pago, pedido_pendente; 400 por
+    campo). 200: o detalhe do evento.
+    """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
     if not _can_request_delete():
         return json_error("Sem permissão", 403)
-    # Converge (312): o cancelado é só consulta — a trava, com o código que recarrega a tela.
-    negado = trava_do_cancelado(event)
-    if negado:
-        return negado
 
-    from app.calendar.cancel_ops import CancelValidationError, solicitar_exclusao
+    from app.calendar import solicitacao_ops
+    from app.calendar.cancel_ops import CancelValidationError
 
-    body = request.get_json(silent=True) or {}
+    caminho_velho = bool(request.url_rule and request.url_rule.rule.endswith("/solicitar-exclusao"))
     try:
-        solicitar_exclusao(event, motivo=body.get("motivo") or "", actor=current_user)
+        solicitacao_ops.solicitar(
+            event, request.get_json(silent=True), current_user, caminho_velho=caminho_velho
+        )
     except CancelValidationError as exc:
-        return json_error(exc.message, 400, fields={"motivo": exc.message})
-    return jsonify({"ok": True})
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    return jsonify(serialize_event_detail(event, current_user, session.get("impersonate_role")))
 
 
+@api_bp.route("/events/<int:event_id>/pedido-cancelamento", methods=["DELETE"])
 @api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["DELETE"])
 @api_login_required
 def api_recusar_solicitacao(event_id: int) -> Any:
-    """Superadmin recusa a solicitação de exclusão (feature 224)."""
+    """O Superadmin recusa o pedido de cancelamento (features 224 e 315). Corpo: `{motivo?}`.
+
+    RBAC: só Superadmin pelo papel real (`_can_delete`) — o autor do pedido também leva 403 (Q5 = D).
+    409 `sem_pedido` quando outra decisão já fechou o pedido. 200: o detalhe do evento.
+    """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import CancelValidationError, recusar_solicitacao
+    from app.calendar import solicitacao_ops
+    from app.calendar.cancel_ops import CancelValidationError
 
     body = request.get_json(silent=True) or {}
     try:
-        recusar_solicitacao(event, actor=current_user, motivo=body.get("motivo") or "")
+        solicitacao_ops.recusar(event, actor=current_user, motivo=body.get("motivo") or "")
     except CancelValidationError as exc:
-        return json_error(exc.message, 400)
-    return jsonify({"ok": True})
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    return jsonify(serialize_event_detail(event, current_user, session.get("impersonate_role")))
 
 
 @api_bp.route("/events/cancelamentos")

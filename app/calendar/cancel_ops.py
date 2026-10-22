@@ -1592,14 +1592,19 @@ def _brl(valor: Any) -> str:
 
 
 def ao_cancelar(event: CalendarEvent, *, alcance: str, novo_principal: CalendarEvent | None = None) -> None:
-    """Ponto de extensão da 2a (data-model §6.4, FR-062), sem efeito nesta entrega.
+    """O que o cancelamento faz além do dinheiro em cada dia que encerra (data-model §6.4, FR-062).
 
     Roda em **todo** cancelamento, na transação, logo depois de `cancelled_at`: o avulso e cada
     dia do "todos" com `(ALCANCE_TODOS, None)`; o corte de um dia que não é o principal com
     `(ALCANCE_SO_ESTE_DIA, None)`; o antigo 1º dia, **depois** de `passar_venda`, com
-    `(ALCANCE_SO_ESTE_DIA, novo_principal)`. O verify o chama pelo módulo.
+    `(ALCANCE_SO_ESTE_DIA, novo_principal)`. O verify o chama pelo módulo (o espião da 306 envolve
+    esta função: a assinatura não muda).
+
+    Feature 315: fecha o pedido de cancelamento do dia, se havia, e responde a quem pediu.
     """
-    return None
+    from app.calendar import solicitacao_ops  # tardio: solicitacao_ops importa este módulo
+
+    solicitacao_ops.fechar_no_cancelamento(event, alcance=alcance, novo_principal=novo_principal)
 
 
 def _recusas_de_estado(event: CalendarEvent) -> None:
@@ -2055,10 +2060,7 @@ def _encerrar_os_dias(
         dia.cancelled_at = now_sp()
         dia.cancelled_by_id = actor.id
         dia.cancellation_reason = pedido.motivo
-        # A solicitação foi atendida: limpa para o evento não ficar marcado como pendente.
-        dia.deletion_requested_at = None
-        dia.deletion_requested_by_id = None
-        dia.deletion_request_reason = None
+        # O pedido de cancelamento do dia fecha em `ao_cancelar` (feature 315), que lê o autor antes.
         if forma.corta:
             novo = forma.vivo if forma.tipo == "passagem" else None
             ao_cancelar(dia, alcance=ALCANCE_SO_ESTE_DIA, novo_principal=novo)
@@ -3497,48 +3499,6 @@ def aplicar_estorno_comissao(event: CalendarEvent) -> None:
                 )
             )
             cp.event_id = None
-
-
-def solicitar_exclusao(event: CalendarEvent, *, motivo: str, actor: User) -> None:
-    """Registra o pedido do Comercial. O Superadmin decide depois. Commita."""
-    motivo = (motivo or "").strip()
-    if not motivo:
-        raise CancelValidationError("Informe o motivo da exclusão.")
-    if event.is_cancelled:
-        raise CancelValidationError("Este evento já está cancelado.")
-
-    agora = datetime.now(tz=TZ).replace(tzinfo=None)
-    event.deletion_requested_at = agora
-    event.deletion_requested_by_id = actor.id
-    event.deletion_request_reason = motivo
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=actor.name,
-        actor_role=", ".join(r.name for r in actor.roles),
-        message=f"Solicitou a exclusão do evento: {motivo}",
-        created_at=agora,
-    ))
-    db.session.commit()
-
-
-def recusar_solicitacao(event: CalendarEvent, *, actor: User, motivo: str = "") -> None:
-    """Superadmin recusa o pedido — os campos da solicitação voltam a nulo. Commita."""
-    if event.deletion_requested_at is None:
-        raise CancelValidationError("Não há solicitação de exclusão neste evento.")
-
-    agora = datetime.now(tz=TZ).replace(tzinfo=None)
-    sufixo = f": {motivo.strip()}" if (motivo or "").strip() else "."
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=actor.name,
-        actor_role=", ".join(r.name for r in actor.roles),
-        message=f"Recusou a solicitação de exclusão{sufixo}",
-        created_at=agora,
-    ))
-    event.deletion_requested_at = None
-    event.deletion_requested_by_id = None
-    event.deletion_request_reason = None
-    db.session.commit()
 
 
 def _tem_devolucao(resumo: ResumoCancelado, estado: str) -> bool:

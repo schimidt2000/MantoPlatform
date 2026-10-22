@@ -58,6 +58,8 @@ KIND_RECADO_NFC = "recado_nfc.novo"
 KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
 KIND_EVENTO_CANCELADO = "evento.cancelado"
 KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
+KIND_EVENTO_PEDIDO_CANCELAMENTO = "evento.pedido_cancelamento"
+KIND_EVENTO_PEDIDO_DECIDIDO = "evento.pedido_decidido"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -74,6 +76,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # Superadmin, que é quem cancela.
     KIND_EVENTO_CANCELADO: (RoleName.ENSAIO,),
     KIND_EVENTO_CANCELADO_ESCALA: (RoleName.CASTING,),
+    # Feature 315: o pedido de cancelamento vai a quem decide; a resposta, só a quem pediu — sempre
+    # pela lista explícita (`destinatarios=[autor]`), nunca por papel.
+    KIND_EVENTO_PEDIDO_CANCELAMENTO: (RoleName.SUPERADMIN,),
+    KIND_EVENTO_PEDIDO_DECIDIDO: (),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -383,6 +389,73 @@ def notificar_evento_sumiu_google(
         entidade=("calendar_event", event.id),
         dedupe_key=f"{KIND_EVENTO_SUMIU_GOOGLE}:{event.id}:{marcado_em:%Y%m%d%H%M%S%f}",
         severity="urgent",
+    )
+
+
+def notificar_pedido_cancelamento(
+    event: CalendarEvent,
+    *,
+    carimbo: datetime,
+    preso: PresoAoEvento,
+    n_escalados: int,
+    alcance: str,
+    autor: str,
+    motivo: str,
+) -> int:
+    """O Comercial pediu o cancelamento → SUPERADMIN (feature 315). Regime A, sem commit.
+
+    Roda na transação que grava o pedido: pedido sem aviso não existe. A chave leva o carimbo — um
+    aviso por pedido, e aviso novo se o pedido for recusado e feito de novo. `urgent` quando o evento
+    é em ≤ 7 dias ou já passou. O corpo diz o que está em jogo para o Superadmin decidir sem abrir o
+    evento; nome e PIX de quem recebe a devolução nunca entram (o sino não tem corte por papel).
+    """
+    agora = now_sp()
+    urgente = bool(event.start_at and event.start_at - agora <= timedelta(days=ANTECEDENCIA_URGENTE_DIAS))
+    partes = [f"{event.start_at:%d/%m/%Y}" if event.start_at else "sem data"]
+    partes.append(f"venda {format_brl(preso.venda, prefix=True)}" if preso.venda > 0 else "sem venda")
+    partes.append(f"recebido {format_brl(preso.recebido, prefix=True)}")
+    partes.append(_escalados_no_aviso(n_escalados))
+    partes.append(alcance)
+    partes.append(f"pedido por {autor}: {motivo}")
+    return emitir(
+        KIND_EVENTO_PEDIDO_CANCELAMENTO,
+        title=f"Cancelamento pedido — {event.title}",
+        body=" · ".join(partes),
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=f"{KIND_EVENTO_PEDIDO_CANCELAMENTO}:{event.id}:{carimbo:%Y%m%d%H%M%S%f}",
+        severity="urgent" if urgente else "info",
+    )
+
+
+def notificar_pedido_decidido(
+    autor: User | None,
+    *,
+    quem_decidiu_id: int | None,
+    decisao: str,
+    carimbo: datetime,
+    event_id: int,
+    title: str,
+    body: str | None = None,
+    com_link: bool = True,
+) -> int:
+    """O Superadmin fechou o pedido → só quem pediu (feature 315). Sem commit.
+
+    Uma resposta por pedido: a chave leva a decisão e o carimbo do pedido, e só a transação que
+    ganhou o claim (ou o fecho do cancelamento) chega aqui. Não responde a quem perdeu o acesso nem
+    a quem decidiu o próprio pedido — `emitir` não filtra a lista explícita, então o filtro é daqui.
+    Na exclusão o evento não existe mais: sem entidade e sem link (`com_link=False`).
+    """
+    if autor is None or not (autor.is_active and autor.has_access) or autor.id == quem_decidiu_id:
+        return 0
+    return emitir(
+        KIND_EVENTO_PEDIDO_DECIDIDO,
+        title=title,
+        body=body,
+        link_path=f"/events/{event_id}" if com_link else None,
+        entidade=("calendar_event", event_id) if com_link else None,
+        dedupe_key=f"{KIND_EVENTO_PEDIDO_DECIDIDO}:{event_id}:{decisao}:{carimbo:%Y%m%d%H%M%S%f}",
+        destinatarios=[autor],
     )
 
 
