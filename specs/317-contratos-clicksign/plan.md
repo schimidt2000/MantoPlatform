@@ -28,7 +28,7 @@ no frontend
 **Dependências principais**: Flask, SQLAlchemy, Alembic (migrations à mão); `requests` 2.32.5 (já no
 `requirements.txt:33`), `hmac`/`hashlib` (stdlib); React, TanStack Query, Tailwind, `@manto/ui`, `@manto/api-client`
 
-**Armazenamento**: PostgreSQL — 3 tabelas novas + 6 colunas em `site_settings`; PDFs assinados no disco persistente
+**Armazenamento**: PostgreSQL — 3 tabelas novas + 7 colunas em `site_settings`; PDFs assinados no disco persistente
 (`UPLOAD_CONTRACTS`, `contracts/`)
 
 **Verificação**: `specs/317-contratos-clicksign/verify_317.py` contra `manto_local` com dublê da ClickSign e disjuntor
@@ -44,7 +44,7 @@ de rede em `socket.socket.connect`; `cd frontend && npm run typecheck`; tela abe
 **Restrições**: nenhuma chamada à ClickSign de cópia local (`_suppress_clicksign`); token só em env; o aviso nunca decide;
 rotas novas sob `/api/` (sem mudança em `BACKEND_PREFIXES`); campos novos opcionais no TS; sem Jinja
 
-**Escala/escopo**: 3 tabelas, 6 colunas, 5 endpoints de escrita/leitura novos + 1 webhook, 2 comandos CLI, 1 thread;
+**Escala/escopo**: 3 tabelas, 7 colunas, 5 endpoints de escrita/leitura novos + 1 webhook, 2 comandos CLI, 1 thread;
 telas: Home (painel novo), evento (menu ⋯, aba Comercial, chip do Resumo, diálogo "Ligar contrato")
 
 ## Constitution Check
@@ -86,7 +86,7 @@ specs/317-contratos-clicksign/
 ### Código
 
 ```text
-migrations/versions/<rev>_contratos_clicksign.py   # 3 tabelas + 6 colunas (data-model.md)
+migrations/versions/<rev>_contratos_clicksign.py   # 3 tabelas + 7 colunas (data-model.md)
 app/models.py                                       # ClicksignDocumento, ClicksignDesvinculo, ClicksignCobranca; SiteSetting
 app/constants.py                                    # situações, tipos, vínculos, régua do contrato, textos de bloqueio
 app/config.py                                       # _suppress_clicksign + envs CLICKSIGN_*
@@ -141,7 +141,7 @@ testar parser/vínculo/situação sem rede. O cliente HTTP mora em `app/integrac
 - Threads: `app/__init__.py:927-957`, molde `_start_invite_reminders` (`:494-542`), claim `invite_reminders._claim_rodada`
   (`app/calendar/invite_reminders.py:130`).
 - CLI: `app/cli.py` `register_commands` (`:12`), molde `formularios-cliente-do-evento` (`--execute`) — aqui `--aplicar`.
-- Frontend: `EventHeader.tsx` bloco `if (mensagens)` (`:294-320`, fora do `!cancelado`: o item trava por conta própria),
+- Frontend: `EventHeader.tsx` bloco `if (mensagens)` (`:294-320`, dentro de `canComercial`, que o cancelado zera: o item some no cancelado),
   soma `pendente` (`:380`), `KebabMenu` usa `label` como key (rótulo único); `PainelCobrancas.tsx` (molde da linha);
   `DashboardPage.tsx` `SectionKey` (`:818`), `computeSectionStats` (`:911`), grade (`:1378-1429`), "Tudo em dia"
   (`:1471`); `SugestaoDeEventoFaixa.tsx` (molde da faixa); `eventAttachments.ts` não invalida `["dashboard"]`.

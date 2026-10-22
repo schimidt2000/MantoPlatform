@@ -37,6 +37,7 @@ Um envelope da conta ClickSign (cada envelope dos fluxos tem um documento e um s
 | `vinculado_por_id` | FK `users.id` ON DELETE SET NULL | quem ligou/desligou à mão |
 | `vinculado_em` | DateTime | |
 | `contrato_anexo_id` | FK `event_contracts.id` ON DELETE SET NULL | o PDF assinado anexado |
+| `anexo_pendente` | Boolean | default False — vira True quando o documento fecha ligado; o anexo bem-sucedido ou recusado (arquivo grande/ inválido → log) o zera. Excluir o anexo NÃO o religa (não reanexa sozinho) |
 | `sincronizado_em` | DateTime | NOT NULL |
 
 Índices: `ix_clicksign_documentos_event_id`, `ix_clicksign_documentos_vinculo` (parcial `vinculo = 'a_conferir'`, também
@@ -52,7 +53,9 @@ a_conferir ──Ligar (COMERCIAL/SA)──▶ ligado(manual)
 ligado ──Desligar──▶ a_conferir (motivo desligado) + linha em clicksign_desvinculos
 a_conferir ──Descartar──▶ descartado (definitivo)
 ligado ──venda excluída (_clear_event_side_tables)──▶ a_conferir (event_id NULL)
-ligado ──passar_venda──▶ ligado no novo principal (TABELAS_DA_PASSAGEM)
+ligado ──passar_venda──▶ ligado no novo principal (TABELAS_DA_PASSAGEM, com desvínculos e cobranças)
+ligado ──agrupar/desagrupar──▶ não move (a busca do vigente é pelo grupo)
+ligado ──evento apagado pelo sumiço do Google──▶ impossível: documento ligado prende o evento (sumico_ops.preso_ao_evento)
 ```
 
 A sincronização só reavalia o vínculo de documento **novo** ou `a_conferir` com `vinculo_origem` vazio; nunca mexe em
@@ -93,6 +96,7 @@ UNIQUE (`documento_id`, `event_id`) — molde `FormResponseDismissedEvent` (298)
 | `clicksign_webhook_secret_anterior_ate` | DateTime | |
 | `clicksign_sync_at` | DateTime | claim atômico da sincronização (3 workers gunicorn) |
 | `clicksign_sync_cursor` | DateTime | `modified` máximo já processado (início da próxima busca, com folga de 10 min) |
+| `clicksign_sync_pendente` | Boolean (NOT NULL, default false) | o aviso que chega com uma passada em curso marca; a passada repete antes de soltar o claim |
 
 As colunas antigas `clicksign_token` / `clicksign_sandbox` continuam **inertes** (nunca lidas; dívida no `docs/05`).
 
@@ -106,9 +110,19 @@ As colunas antigas `clicksign_token` / `clicksign_sandbox` continuam **inertes**
 
 - **Venda que entra** (clarify): principal ou avulso, desde `corte_dia_sp()`, fora cancelado, ENSAIO, compromisso
   interno e loja virtual; **cortesia entra** (diferente de `motivo_fora_da_venda`, que a exclui).
-- **Vigente** (R-04): `ClicksignDocumento` `tipo=cliente`, `vinculo=ligado`, `event_id = principal`; o de `criado_em`
-  mais recente, mas um `closed` vence qualquer `canceled` criado antes dele.
+- **Vigente** (R-04): `ClicksignDocumento` `tipo=cliente`, `vinculo=ligado`, `event_id IN group_events(principal)` (o
+  documento ligado a um dia que depois virou satélite continua valendo para a venda — achado R1 do analyze); o de
+  `criado_em` mais recente, mas um `closed` vence qualquer `canceled` criado antes dele. Na Home, em lote por todos os
+  ids dos grupos.
+- **Assinado à mão**: algum `EventContract.is_signed` em qualquer dia do grupo cujo id **não** é `contrato_anexo_id` de
+  nenhum documento (o PDF automático não conta como marca manual).
 - **Situação**: `assinado` · `assinado_manual` · `aguardando` · `vencido` · `recusado` · `sem_contrato`.
 - **Cor** (Premissa 5): aguardando → pior entre prazo (`≤1 dia` vermelho, `2–3` amarelo) e evento (`≤7` vermelho,
-  `8–30` amarelo); sem contrato → régua do evento (`FORM_COR_*`); vencido/recusado → vermelho se evento ≤ 30 dias.
+  `8–30` amarelo); sem contrato → régua do evento (`FORM_COR_*`); vencido/recusado → sempre vermelho (FR-010). Contagem
+  por cor própria do domínio (sem "verde"; não reusar `resumo_por_cor`).
+- **Chave de telefone**: DDD + últimos 8 dígitos (casa celular antigo de 8 dígitos e número sem 55); fontes: `Client.phone`
+  do `CalendarEvent.client`, dos `EventClient` e `FormResponse.contact_phone` ligado — em lote, não por evento.
+- **Coluna de `/vendas`** (FR-019): `contract_status_map` devolve as seis situações quando a integração está ligada; a
+  venda sem documento cai na regra antiga do `EventContract` (`pendente` → "Anexo sem assinatura"). Labels e
+  `ContractStatus` do frontend ampliados (`VendasPipelinePage.tsx:34`, `vendas.ts:6`).
 - **Pode cobrar**: só principal/avulso (`escopo_do_evento`), venda viva, situação `aguardando`, papel COMERCIAL/SA.

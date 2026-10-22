@@ -132,10 +132,10 @@ cobrança, travas do botão, RBAC.
    no WhatsApp e é só abrir, tocar no link e assinar) e a cobrança fica registrada com quem e quando.
 2. **Dado** um contrato cujo signatário recebe pelo e-mail, **Quando** a comercial cobra, **Então** a mensagem fala do
    e-mail da ClickSign, não do WhatsApp.
-3. **Dado** uma venda assinada, vencida, sem contrato, cancelada ou um dia do grupo que não é o principal, **Quando** a
-   comercial abre o menu, **Então** "Cobrar contrato" aparece desativado com o motivo ("Contrato já assinado", "O
-   contrato venceu sem assinatura. Gere um novo na ClickSign.", "Nenhum contrato na ClickSign para esta venda", "A
-   cobrança deste grupo está no evento principal").
+3. **Dado** uma venda assinada, vencida, sem contrato ou um dia do grupo que não é o principal, **Quando** a comercial
+   abre o menu, **Então** "Cobrar contrato" aparece desativado com o motivo ("Contrato já assinado", "O contrato venceu
+   sem assinatura. Gere um novo na ClickSign.", "Nenhum contrato na ClickSign para esta venda", "A cobrança deste grupo
+   está no evento principal"). No evento cancelado o item não aparece, como toda a parte comercial do menu.
 4. **Dado** o FINANCEIRO, **Quando** abre o evento ou a Home, **Então** vê a situação do contrato, mas não o botão de
    cobrar nem o de confirmar vínculo; um pedido direto à API devolve 403.
 
@@ -209,6 +209,10 @@ nunca chegaria.
 - Venda cancelada depois de ligada: o vínculo fica (histórico), a venda sai das listas como em toda a casa (312).
 - Venda excluída: o documento volta para "A conferir".
 - Venda em grupo que troca de principal: o vínculo segue a venda (passagem de grupo).
+- Evento avulso com contrato ligado que vira dia de um grupo (agrupar), ou o contrário: a situação continua a da venda.
+- Evento sem valor com contrato ligado que some do Google: não é apagado sozinho (o contrato o prende), como já acontece
+  com evento que tem contrato anexado.
+- O Superadmin exclui o PDF assinado que o sistema anexou: o sistema não o anexa de novo sozinho.
 - Integração desligada (sem token) ou ClickSign fora do ar: a situação cai para o que existe hoje (anexos), a Home mostra
   "Integração com a ClickSign desligada" só ao Superadmin, e nada quebra.
 - Duas pessoas ligando, desligando ou descartando o mesmo documento ao mesmo tempo: vale a primeira; a segunda recebe
@@ -338,7 +342,7 @@ qualquer conexão de saída. Login só por `POST /api/auth/login`; escrita confe
 | 22 | conferência periódica acerta aviso perdido | FR-015 | não |
 | 23 | trava: nenhuma conexão de saída com a cópia local | FR-017 | não |
 | 24 | sem credencial: integração desligada, telas respondem | FR-018 | não |
-| 25 | rotas novas de escrita classificadas no `verify_312` (cancelado) | — | não |
+| 25 | agrupar e desagrupar mantém a situação da venda (documento ligado a um dia que vira satélite); sumiço do Google não apaga evento com contrato ligado | FR-008 | não |
 | 26 | limpeza | registros descartáveis apagados (`roles.clear()` antes do usuário) | — |
 
 Conferência de tela: Home (painel Contratos, com e sem itens, 375 px), página do evento (aba Comercial, chip do Resumo,

@@ -40,8 +40,8 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T004 Modelos em `app/models.py`: `ClicksignDocumento`, `ClicksignDesvinculo`, `ClicksignCobranca` e as 6 colunas
-      novas de `SiteSetting`, conforme `data-model.md` (índice parcial também no `__table_args__`; docstrings com o porquê)
+- [ ] T004 Modelos em `app/models.py`: `ClicksignDocumento` (com `anexo_pendente`), `ClicksignDesvinculo`,
+      `ClicksignCobranca` e as 7 colunas novas de `SiteSetting` (com `clicksign_sync_pendente`), conforme `data-model.md` (índice parcial também no `__table_args__`; docstrings com o porquê)
 - [ ] T005 Migration manual `migrations/versions/<rev>_contratos_clicksign.py` (`down_revision = "c5d2f7a9e306"`,
       aditiva, upgrade/downgrade completos); `flask db upgrade` no `manto_local`; `flask db heads` com uma cabeça só
 - [ ] T006 Núcleo puro `app/contratos/__init__.py` + `app/contratos/contratos_ops.py`: `normalizar_nome` (NFC, sem
@@ -65,17 +65,21 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 **Verificação**: cenários 1–8, 12–15, 23–25 em PASS.
 
-- [ ] T008 [US1] `app/contratos/sincronizar_ops.py`: `candidatos_da_venda(lido)` (vendas vivas com qualquer dia do
-      grupo na data; telefones de `Client.phone`, contratantes `EventClient`, `FormResponse.contact_phone` ligado —
-      reusar `formularios_ops._event_client_phones`; tema por `pre_evento_ops`), respeitando `clicksign_desvinculos` e
-      cancelado; `aplicar_envelope(env, cliente)` = upsert por `envelope_id`, signatário/canal na 1ª vez, eventos só
-      quando `closed`/`canceled` (assinado_em, recusado), vínculo só para documento novo ou `a_conferir` automático
-- [ ] T009 [US1] `sincronizar_ops.anexar_assinado(doc)`: busca `links.files.signed`, baixa, salva por `save_file`
-      (embrulha em `FileStorage`) em `contracts/`, cria `EventContract(is_signed=True)` no principal, `EventLog` com autor
-      automático; idempotente por `contrato_anexo_id`; falha → tenta na próxima passada
+- [ ] T008 [US1] `app/contratos/sincronizar_ops.py`: `candidatos_da_venda(lido)` (vendas vivas — `venda_entra`, que
+      filtra ENSAIO/🟧/loja virtual de `vendas_desde` e mantém cortesia — com qualquer dia do grupo na data; telefones em
+      LOTE de `CalendarEvent.client`, contratantes `EventClient` e `FormResponse.contact_phone` ligado, comparados pela
+      chave DDD + últimos 8 dígitos; tema por `pre_evento_ops`), respeitando `clicksign_desvinculos` e cancelado;
+      `aplicar_envelope(env, cliente)` = upsert por `envelope_id`, signatário/canal na 1ª vez, eventos só quando
+      `closed`/`canceled` (assinado_em, recusado), vínculo só para documento novo ou `a_conferir` automático; vigente e
+      assinado-à-mão pelo grupo inteiro (`group_events`), excluindo os `contrato_anexo_id`
+- [ ] T009 [US1] `sincronizar_ops.anexar_assinado(doc)`: só com `anexo_pendente`; busca `links.files.signed`, baixa,
+      embrulha em `FileStorage(io.BytesIO(...))` e usa `routes._add_contract_record(event, file_storage=…,
+      is_signed=True)` no evento ligado; `EventLog` com autor automático; sucesso ou recusa do arquivo (None → log) zera
+      `anexo_pendente`; falha de rede mantém para a próxima passada; excluir o anexo não reanexa
 - [ ] T010 [US1] `sincronizar_ops.sincronizar(*, desde=None, ate=None, aplicar=True)`: pagina `filter[modified]` (50),
       claim atômico em `site_settings.clicksign_sync_at` (janela curta para aviso, intervalo para a periódica), cursor
-      `clicksign_sync_cursor` com folga de 10 min, devolve contagens; trava via `current_app.config` → `travada`
+      `clicksign_sync_cursor` com folga de 10 min, devolve contagens; trava via `current_app.config` → `travada`; aviso
+      que perde o claim marca `clicksign_sync_pendente` e a passada em curso repete antes de soltar
 - [ ] T011 [US1] Aviso `app/api/clicksign_webhook.py`: `POST /api/webhooks/clicksign`, `limiter 60/min`, corpo ≤ 64 KB
       por `request.stream.read`, HMAC-SHA256 do corpo bruto contra segredo atual/anterior com `hmac.compare_digest`,
       inválido → 404; válido → 200 e `sincronizar` em thread (`app_context`, rollback, `session.remove`) ou na hora com
@@ -85,10 +89,14 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
       `somente_consulta`; `_serialize_mensagens` ganha `contrato_canal`/`contrato_prazo`
 - [ ] T013 [US1] Integridade: `app/calendar/routes.py` `_clear_event_side_tables` devolve documentos `ligado` do evento a
       `a_conferir` (`event_id` nulo, motivo `venda_excluida`); `app/calendar/group_ops.py` `TABELAS_DA_PASSAGEM` +
-      `_ROTULO_DA_PASSAGEM` com `ClicksignDocumento`; `verify_306.py` (retrato da passagem e limpeza) e `verify_312.py`
-      (cenário 9b) conferidos e ajustados se precisarem
-- [ ] T014 [US1] `app/financeiro/vendas_ops.py` `contract_status_map`: com integração ligada, deriva de
-      `situacao_da_venda` (FR-019), mantendo os três rótulos atuais da coluna; desligada, como hoje
+      `_ROTULO_DA_PASSAGEM` com `ClicksignDocumento`, `ClicksignDesvinculo` e `ClicksignCobranca`;
+      `app/calendar/sumico_ops.py` `preso_ao_evento` (`:178-203`) conta documento ligado como "não vazio" (o sumiço do
+      Google não apaga o evento); `verify_306.py` (retrato da passagem e limpeza) conferido; `verify_312` segue verde (as
+      rotas `/api/contratos/` estão fora de `PREFIXOS_DA_TELA` de propósito: a trava é no núcleo)
+- [ ] T014 [US1] `app/financeiro/vendas_ops.py` `contract_status_map` + `CONTRACT_STATUS_LABELS`: com integração
+      ligada, as seis situações da venda (FR-019), e a venda sem documento cai na regra antiga do `EventContract`;
+      frontend `lib/vendas.ts` (`ContractStatus`) e `pages/VendasPipelinePage.tsx` (`CONTRACT_TONE`) ampliados com
+      fallback para valor desconhecido; desligada, como hoje
 - [ ] T015 [P] [US1] Frontend tipos/hook: `frontend/apps/internal/src/lib/agenda.ts` (`EventoDetalhe.contrato?`,
       `EventMensagens.contrato_canal?/contrato_prazo?`) e `lib/contratos.ts` novo (tipos `ContratoDaVenda`, hooks
       `useCobrarContrato`, `useLigarContrato`, `useDesligarContrato`, `useDescartarContrato`, `useContratosAConferir`,
@@ -96,7 +104,7 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 - [ ] T016 [US1] `frontend/apps/internal/src/components/EventDetail/ContratoClickSign.tsx` novo (Panel "Situação do
       contrato": badge da situação, nome do documento, prazo/assinado em, canal, outros documentos) montado em
       `FinanceiroSection.tsx` acima do "Contrato assinado"; chip do `ResumoSection.tsx` pela situação nova com fallback
-- [ ] T017 [US1] Rodar `verify_317` (1–8, 12–15, 23–25 PASS) + `npm run typecheck`; commit `feat(317): …`
+- [ ] T017 [US1] Rodar `verify_317` (1–8, 12–15, 23–25 PASS; o 25 inclui agrupar/desagrupar e sumiço do Google) + `npm run typecheck`; commit `feat(317): …`
 
 **Checkpoint**: o contrato aparece e é assinado na página do evento sem clique.
 
@@ -109,7 +117,8 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 - [ ] T018 [US2] `contratos_ops`: `listas_da_home(vendas, documentos, cobrancas, hoje)` → `para_cobrar`, `vencidos`,
       `sem_contrato` (≤ 30 dias), `a_conferir`, `ja_aconteceu`, `resumo` (molde `resumo_por_cor`); `pode_cobrar` +
       `motivo_bloqueio`
-- [ ] T019 [US2] `app/api/dashboard_service.py` `_painel_comercial`: `bloco["contratos"] = _bloco("contratos", …)` com
+- [ ] T019 [US2] `app/api/dashboard_service.py` `_painel_comercial`: `"contratos": None` no dict inicial (a volta cedo
+      quando `vendas_desde` falha mostra AvisoDeFalha, não some) e `bloco["contratos"] = _bloco("contratos", …)` com
       `vendas` já carregadas e documentos/cobranças em lote (sem consulta por linha); `mensagem` (characters/date_line/
       location) por linha reaproveitando a montagem de `_serialize_mensagens` em lote
 - [ ] T020 [US2] `app/contratos/sincronizar_ops.registrar_cobranca(doc_id, usuario)` + `app/api/contratos_write.py`
@@ -118,13 +127,15 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 - [ ] T021 [P] [US2] `frontend/apps/internal/src/lib/eventDetail.ts`: exporta `saudacao` e cria
       `buildCobrancaContratoMsg(m, canal, prazo)` (WhatsApp × e-mail; texto da spec/plano); `lib/types.ts`
       `ComercialSummary.contratos?: ContratosResumo | null`
-- [ ] T022 [US2] `EventHeader.tsx`: item "📝 Cobrar contrato" no bloco `if (mensagens)` (rótulo único), `disabled` +
-      `title` pelo `motivo_bloqueio`, trava própria do cancelado, copia e chama `useCobrarContrato`; entra na soma
-      `pendente`
+- [ ] T022 [US2] `copyToClipboard` sai de `EventHeader.tsx:194` para `lib/clipboard.ts` (Home e evento usam o mesmo);
+      `EventHeader.tsx`: item "📝 Cobrar contrato" no bloco `if (mensagens)` (rótulo único; no cancelado o bloco inteiro
+      já some — `can_confirm` zerado), `disabled` + `title` pelo `motivo_bloqueio`, copia e chama `useCobrarContrato`;
+      entra na soma `pendente`; `lib/eventAttachments.ts`: os hooks de contrato passam a invalidar `["dashboard"]`
 - [ ] T023 [US2] `components/home/PainelContratos.tsx` novo (molde `PainelCobrancas`: `LinhaDaHome`, `GrupoDeLinhas`,
       `AvisoDeFalha`, botão "Cobrar contrato" que copia e registra, "Cobrado por X em DD/MM", "Abrir evento") e
       `DashboardPage.tsx` (`SectionKey "contratos"` depois de `comercial`, card em `computeSectionStats`, painel na grade,
-      linha no "Tudo em dia")
+      `para_agir` somado em `totalPendencias` do "Tudo em dia ✓" de `:1165`); aviso "Integração com a ClickSign
+      desligada" só para Superadmin quando `integracao_ligada` é falso; tipo próprio para a `mensagem` da linha
 - [ ] T024 [US2] Rodar `verify_317` (9–11, 16–17 PASS) + typecheck; tela aberta (Home 375 px, COMERCIAL × FINANCEIRO;
       menu ⋯); commit
 
@@ -166,7 +177,9 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 **Verificação**: cenário 22 em PASS.
 
 - [ ] T031 [US5] `app/__init__.py`: `_start_clicksign_sync(app)` (molde `_start_invite_reminders`; só com token e
-      `CLICKSIGN_SYNC_ENABLED`; atrás de `MANTO_SEM_THREADS`) + log na subida quando a integração está desligada (XIV)
+      `CLICKSIGN_SYNC_ENABLED`; atrás de `MANTO_SEM_THREADS`; **dorme 60 s antes de tocar o banco** — o `startCommand`
+      roda `flask db upgrade && python seed.py` sem `MANTO_SEM_THREADS` e as colunas novas ainda não existem nesse
+      processo) + log na subida quando a integração está desligada, lido só da config (nunca do `SiteSetting`) (XIV)
 - [ ] T032 [US5] Rodar `verify_317` inteiro (26/26); commit
 
 ---
