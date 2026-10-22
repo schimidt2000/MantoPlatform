@@ -58,15 +58,25 @@ Premissas contestáveis no `/speckit-clarify`; o dono só precisa dizer se disco
 
 1. **A unidade do contrato é a venda**: o evento avulso ou o principal do grupo, como a cobrança de valor (299). Um
    contrato ligado a qualquer dia do grupo vale para a venda inteira.
-2. **Quais vendas entram**: as mesmas da cobrança de valor — fora cancelado, ensaio, compromisso interno (🟧/🟠), loja
-   virtual e cortesia/permuta — com evento a partir de **01/06/2026**.
+2. **Quais vendas entram**: as da cobrança de valor **mais cortesia/permuta** (decidido no clarify) — fora cancelado,
+   ensaio, compromisso interno (🟧/🟠) e loja virtual — com evento a partir de **01/06/2026**.
 3. **Documento vigente**: entre os contratos de cliente ligados à mesma venda, vale o **mais recente**. Um reenvio
    assinado não fica "vencido" porque a cópia anterior foi cancelada depois; um contrato novo (remarcação) substitui o
    antigo.
 4. **Assinado à mão continua valendo**: venda sem contrato da ClickSign, mas com anexo marcado "assinado" pelo
    Superadmin (DocuSign, papel), aparece "Assinado (marcado à mão)". A marca manual continua só do Superadmin.
 5. **Régua de cor** (a mesma linguagem da Home): vermelho quando o contrato vence hoje ou amanhã, ou o evento é em até
-   7 dias; amarelo quando vence em 2–3 dias, ou o evento é em 8–30 dias; cinza no resto. Vale a pior das duas.
+   7 dias; amarelo quando vence em 2–3 dias, ou o evento é em 8–30 dias; cinza no resto. Vale a pior das duas
+   (confirmada no clarify).
+
+### Session 2026-10-22 (`/speckit-clarify`)
+
+- Q: Venda de cortesia ou permuta também precisa de contrato assinado? → A: Entra — aparece em "Contratos" e pode ser
+  cobrada como qualquer venda.
+- Q: No grupo "Venda sem contrato" da Home, quais vendas aparecem? → A: Só as com evento nos próximos 30 dias; as mais
+  distantes ficam na página do evento.
+- Q: Quando a linha de contrato aguardando assinatura fica vermelha? → A: Prazo vence hoje/amanhã ou evento em até 7
+  dias; amarelo com prazo em 2–3 dias ou evento em 8–30; cinza no resto.
 
 ## Cenários e Verificação *(obrigatório)*
 
@@ -239,8 +249,8 @@ nunca chegaria.
 **Home e cobrança**
 
 - **FR-010**: A Home DEVE ter o painel "Contratos" (depois de Cobranças) com os grupos "Para cobrar", "Venceu ou foi
-  recusado", "Venda sem contrato", "A conferir" e, recolhido, "Já aconteceu sem contrato assinado"; cada linha com
-  cliente, data do evento, prazo, cor pela régua da Premissa 5 e a última cobrança.
+  recusado", "Venda sem contrato" (só evento nos próximos 30 dias), "A conferir" e, recolhido, "Já aconteceu sem
+  contrato assinado"; cada linha com cliente, data do evento, prazo, cor pela régua da Premissa 5 e a última cobrança.
 - **FR-011**: "Cobrar contrato" DEVE copiar a mensagem pronta, escolhida pelo canal do signatário (WhatsApp ou e-mail),
   com saudação pela hora, tema e data da festa, e DEVE registrar quem cobrou e quando.
 - **FR-012**: "Cobrar contrato" DEVE ficar ativo só no principal ou avulso com contrato aguardando assinatura, e
