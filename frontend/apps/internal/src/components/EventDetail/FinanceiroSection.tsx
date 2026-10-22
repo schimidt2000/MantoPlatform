@@ -1,7 +1,16 @@
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Badge, Button } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@manto/ui";
+import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
 import {
@@ -15,6 +24,7 @@ import {
   useDeleteReimbursement,
   useEditPayment,
   useToggleContractSigned,
+  type PossivelDuplicata,
 } from "../../lib/eventAttachments";
 import { Empty, INPUT_CLASS, Panel, brl, formatDateTime, formatDay } from "./parts";
 
@@ -130,14 +140,53 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
 }
 
 /** Um comprovante de pagamento — superadmin pode corrigir o valor ou excluir. */
+/**
+ * "Anexar comprovante" num pagamento de PIX que nasceu sem arquivo (feature 318): o arquivo vai
+ * para o mesmo pagamento — o recebido não muda.
+ */
+function AnexarAoPix({
+  eventId,
+  item,
+}: {
+  eventId: number;
+  item: NonNullable<EventoDetalhe["pagamentos"]>["items"][number];
+}) {
+  const add = useAddPayment(eventId);
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        className="hidden"
+        aria-label="Anexar comprovante a este PIX"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) add.mutate({ amount: item.amount ?? 0, file, anexarA: item.id });
+        }}
+      />
+      <Button variant="ghost" size="sm" loading={add.isPending} onClick={() => inputRef.current?.click()}>
+        Anexar comprovante
+      </Button>
+      {add.isError && (
+        <span role="alert" className="text-xs text-red">
+          {add.error?.message || "Não foi possível anexar."}
+        </span>
+      )}
+    </>
+  );
+}
+
 function PagamentoItem({
   item,
   eventId,
   isSuperadmin,
+  podeAnexar,
 }: {
   item: NonNullable<EventoDetalhe["pagamentos"]>["items"][number];
   eventId: number;
   isSuperadmin: boolean;
+  podeAnexar: boolean;
 }) {
   const edit = useEditPayment(eventId);
   const del = useDeletePayment(eventId);
@@ -177,18 +226,41 @@ function PagamentoItem({
     );
   }
 
+  const pix = item.pix;
   return (
     <li className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm">
-      <span className="text-muted">{formatDateTime(item.created_at)}</span>
+      <span className="min-w-0 text-muted">
+        {pix ? (
+          // Feature 318: o pagamento veio do aviso de PIX do banco (ligado sozinho ou confirmado).
+          <span className="flex flex-wrap items-center gap-1.5">
+            <span className="text-ink">
+              PIX · {item.conta ?? pix.conta ?? "conta não cadastrada"} · {formatDateTime(pix.recebido_em)}
+              {pix.pagador && ` · de ${pix.pagador}`}
+            </span>
+            <Badge tone={pix.automatico ? "green" : "blue"}>
+              {pix.automatico ? "automático" : `confirmado por ${pix.decidido_por ?? "—"}`}
+            </Badge>
+          </span>
+        ) : (
+          <>
+            {formatDateTime(item.created_at)}
+            {item.conta && ` · ${item.conta}`}
+          </>
+        )}
+      </span>
       <span className="flex items-center gap-2">
-        <a
-          href={assetUrl(item.file_path)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-blue underline"
-        >
-          Ver comprovante
-        </a>
+        {item.file_path ? (
+          <a
+            href={assetUrl(item.file_path)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue underline"
+          >
+            Ver comprovante
+          </a>
+        ) : (
+          podeAnexar && <AnexarAoPix eventId={eventId} item={item} />
+        )}
         <span className="tabular-nums text-ink">{brl(item.amount)}</span>
         {isSuperadmin && (
           <>
@@ -331,9 +403,35 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
   const add = useAddPayment(eventId);
   const [amount, setAmount] = useState(0);
   const [file, setFile] = useState<File | null>(null);
+  const [contaId, setContaId] = useState<number | null>(null);
+  // Feature 318: o 409 `possivel_duplicata` — o comprovante pode ser do PIX que já entrou.
+  const [duplicata, setDuplicata] = useState<PossivelDuplicata | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const pagamentos = data.pagamentos;
   if (!pagamentos) return null;
+
+  function limpar() {
+    setAmount(0);
+    setFile(null);
+    setContaId(null);
+    setDuplicata(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  function enviar(extra: { anexarA?: number; forcarNovo?: boolean } = {}) {
+    if (!file) return;
+    add.mutate(
+      { amount, file, contaId, ...extra },
+      {
+        onSuccess: limpar,
+        onError: (erro) => {
+          if (erro instanceof ApiRequestError && erro.details?.codigo === "possivel_duplicata") {
+            setDuplicata((erro.details.pagamento as PossivelDuplicata) ?? null);
+          }
+        },
+      },
+    );
+  }
   // Feature 306: no cancelado, só quem corrige a venda do cancelado lança comprovante. O que já
   // existia se gata com `!== false` (janela de deploy: backend antigo não manda a chave).
   const podeLancar = data.flags.can_edit_pagamentos !== false;
@@ -362,6 +460,7 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
               item={item}
               eventId={eventId}
               isSuperadmin={Boolean(data.flags.is_superadmin)}
+              podeAnexar={podeLancar}
             />
           ))}
         </ul>
@@ -382,33 +481,61 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             aria-label="Comprovante de pagamento"
           />
-          <Button
-            size="sm"
-            loading={add.isPending}
-            disabled={!amount || !file}
-            onClick={() =>
-              file &&
-              add.mutate(
-                { amount, file },
-                {
-                  onSuccess: () => {
-                    setAmount(0);
-                    setFile(null);
-                    if (inputRef.current) inputRef.current.value = "";
-                  },
-                },
-              )
-            }
-          >
+          {(pagamentos.contas ?? []).length > 0 && (
+            <select
+              className="h-11 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+              value={contaId ?? ""}
+              onChange={(e) => setContaId(e.target.value ? Number(e.target.value) : null)}
+              aria-label="Conta que recebeu"
+            >
+              <option value="">Conta que recebeu (opcional)</option>
+              {(pagamentos.contas ?? []).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.apelido}
+                </option>
+              ))}
+            </select>
+          )}
+          <Button size="sm" loading={add.isPending} disabled={!amount || !file} onClick={() => enviar()}>
             Inserir comprovante
           </Button>
-          {add.isError && (
+          {add.isError && !duplicata && (
             <p className="w-full text-sm text-red" role="alert">
               {add.error?.message || "Informe o valor e insira o comprovante."}
             </p>
           )}
         </div>
       )}
+      <Dialog open={duplicata !== null} onOpenChange={(aberto) => !aberto && setDuplicata(null)}>
+        <DialogContent open={duplicata !== null}>
+          <DialogHeader>
+            <DialogTitle>Esse comprovante é do PIX que já entrou?</DialogTitle>
+            <DialogDescription>
+              {duplicata &&
+                `Um PIX de ${brl(Number(duplicata.valor))}${duplicata.pagador ? ` de ${duplicata.pagador}` : ""}` +
+                  `${duplicata.recebido_em ? ` em ${formatDateTime(duplicata.recebido_em)}` : ""}` +
+                  `${duplicata.conta ? ` (${duplicata.conta})` : ""} já foi registrado nesta venda. ` +
+                  "Se for o mesmo pagamento, o arquivo é anexado a ele e o recebido não muda."}
+            </DialogDescription>
+          </DialogHeader>
+          {add.isError && duplicata && !(add.error instanceof ApiRequestError && add.error.details?.codigo === "possivel_duplicata") && (
+            <p role="alert" className="rounded-md bg-red-soft px-3 py-2 text-sm text-red">
+              {add.error?.message || "Não foi possível registrar."}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" disabled={add.isPending} onClick={() => setDuplicata(null)}>
+              Cancelar
+            </Button>
+            <Button variant="outline" disabled={add.isPending} onClick={() => enviar({ forcarNovo: true })}>
+              Não, é outro pagamento
+            </Button>
+            <Button loading={add.isPending} onClick={() => duplicata && enviar({ anexarA: duplicata.id })}>
+              Sim, anexar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Panel>
   );
 }

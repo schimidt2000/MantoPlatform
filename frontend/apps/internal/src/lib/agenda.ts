@@ -677,7 +677,26 @@ export interface EventoDetalhe {
     seller: string | null;
   };
   pagamentos?: {
-    items: { id: number; amount: number | null; file_path: string; created_at: string | null }[];
+    items: {
+      id: number;
+      amount: number | null;
+      /** Feature 318: `null` no pagamento de PIX ainda sem arquivo (a prova é o aviso do banco). */
+      file_path: string | null;
+      created_at: string | null;
+      origem?: "comprovante" | "pix_email";
+      conta_id?: number | null;
+      conta?: string | null;
+      pix?: {
+        id: number;
+        pagador: string | null;
+        recebido_em: string;
+        automatico: boolean;
+        decidido_por: string | null;
+        conta: string | null;
+      } | null;
+    }[];
+    /** Feature 318: as contas para o campo opcional "Conta que recebeu". */
+    contas?: { id: number; apelido: string }[];
     received_total: number | null;
     /**
      * Feature 299 — um resumo por evento dos comprovantes dos OUTROS eventos do grupo (no

@@ -22,6 +22,7 @@ import {
   PenSquare,
   Plus,
   Printer,
+  QrCode,
   Receipt,
   RefreshCw,
   Repeat,
@@ -345,6 +346,18 @@ const SECTIONS: NavSectionConfig[] = [
           notRevendedor(user) &&
           (hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN") ||
             user.is_educamanto_responsavel),
+      },
+      {
+        // Feature 318: o "É esta?" do PIX lido do aviso do banco — Comercial, Financeiro e
+        // Superadmin respondem (decisão do dono). Fica aqui porque a seção Financeiro não aparece
+        // para a Comercial.
+        key: "pix-recebidos",
+        label: "PIX recebidos",
+        href: "/pix",
+        icon: <QrCode />,
+        isActive: (path) => path === "/pix",
+        isVisible: (user) =>
+          notRevendedor(user) && hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN"),
       },
       {
         key: "formularios",

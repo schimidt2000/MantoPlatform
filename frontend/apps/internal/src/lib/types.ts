@@ -172,6 +172,8 @@ export interface ComercialSummary {
   corte?: string | null;
   /** Papel efetivo edita a venda (senão a ação da linha "sem valor" é "Abrir"). */
   pode_editar_venda?: boolean;
+  /** Feature 318: PIX lidos do aviso do banco esperando "É esta?" (`null` = a contagem falhou). */
+  pix_para_conferir?: { total: number } | null;
 }
 
 /** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */

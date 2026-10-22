@@ -584,6 +584,16 @@ def build_dashboard_summary(
             "cobrancas_resumo", lambda: cobranca_ops.resumo_das_cobrancas(linhas, vendas)
         )
         bloco["sem_valor"] = _bloco("sem_valor", lambda: cobranca_ops.listar_sem_valor(vendas, hoje))
+
+        # Feature 318: quantos PIX lidos do aviso do banco esperam um "É esta?". O repasse da
+        # InfinitePay só conta para quem cuida do dinheiro (decisão do dono).
+        def _pix() -> dict[str, Any]:
+            from app.financeiro import pix_ops
+
+            ve_repasse = is_superadmin or _effective_has_role(user, impersonate, RoleName.FINANCEIRO)
+            return {"total": pix_ops.contagem_para_conferir(ver_repasse=ve_repasse)}
+
+        bloco["pix_para_conferir"] = _bloco("pix_para_conferir", _pix)
         return bloco
 
     # O `_bloco` de fora fica só como rede para defeito no próprio envelope: falha das vendas e
