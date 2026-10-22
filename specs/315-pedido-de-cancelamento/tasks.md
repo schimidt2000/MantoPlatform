@@ -228,8 +228,15 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 - [ ] T034 [P] Regressão (a lista da T003) e `ruff check` nos tocados contra HEAD — nota: o cenário 12 do
       `verify_303` (`:2374-2377`, `:2582`) passa a gerar `evento.pedido_cancelamento` aos Superadmins do `manto_local`;
       conferir que a limpeza dele (por `entity_type`, `:967`) os leva
-- [ ] T035 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3 — interno (desktop e 375 px) e
+- [X] T035 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3 — interno (desktop e 375 px) e
       portal (375×812), com o Google dublado
+      — **feito 22/10** (Flask em 127.0.0.1:5011 com o Google dublado, Vite em `mp315.localhost:5193`, semente descartável
+      já limpa): menu e diálogo no 1º dia de uma venda de 3 dias (alcance com "a venda passa para o dia 11/04", Tudo some
+      em "só este dia"), envio, o quadro com a nota do autor, a faixa dourada (1 → link; 2 → "2 pedidos de cancel." em
+      375 px), o selo neutro na Lista, a página "Cancelamentos" com alcance e devolução, o quadro só leitura no diálogo de
+      cancelar (motivo do cancelamento vazio), "Recusar pedido" com motivo e a resposta no sino do Comercial; 375 px sem
+      rolagem lateral (diálogo 343 px). **O portal não foi aberto**: a tela não mudou (o `em_confirmacao` já é
+      desenhado desde a 303) e o cenário 14 do verify cobre o dado
 - [ ] T036 [P] `docs/01` (cabeçalho e head; §2.2 as duas colunas; §3.3 os endpoints e o alias; §3.13.5 os dois kinds;
       §3.15 o `em_confirmacao`; o contrato da faixa; §4.3 RBAC), `docs/02` (menu, quadro, diálogos, faixa, selo, página
       "Cancelamentos", sino, portal), `docs/04` (fluxo do pedido; as invariantes da spec), `docs/05` (quitar a parte da

@@ -398,14 +398,16 @@ def recusar(event: CalendarEvent, *, actor: User, motivo: str = "") -> None:
     _log_sync("cancel_request_refused", event, details=detalhe, actor=actor.name, actor_role=papel)
     # Sempre com o kind: sem ele, a resposta de uma decisão anterior também ficaria lida.
     nops.marcar_lidas_por_entidade("calendar_event", event.id, nops.KIND_EVENTO_PEDIDO_CANCELAMENTO)
-    titulo = f"Pedido recusado — {event.title}"
+    titulo = f"Pedido recusado — {event.title}: {motivo}" if motivo else f"Pedido recusado — {event.title}"
     _responder(
         autor_id,
         quem_decidiu_id=actor.id,
         decisao="recusado",
         carimbo=carimbo,
         event_id=event.id,
-        title=f"{titulo}: {motivo}" if motivo else titulo,
+        title=titulo,
+        # O corpo repete o motivo de propósito: no sino, o aviso informativo tem o título numa linha só
+        # (cortado), e é a linha do corpo que mostra o motivo.
         body=motivo or None,
     )
     db.session.commit()
