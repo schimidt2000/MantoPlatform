@@ -162,6 +162,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **319-aviso-gasto-extra** | *(PRONTA 22/10, aguardando deploy)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
@@ -345,6 +346,22 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 319 — O aviso de gasto extra diz o que é   (319-aviso-gasto-extra · 2026-10-22 · sem migration)
+
+> **PRONTA, aguardando deploy.** Nível 2 (um e-mail, sem migration). Detalhe: `specs/319-aviso-gasto-extra/spec.md`.
+
+**O pedido.** O dono mandou o print da tela bloqueada: dois avisos idênticos "Novo gasto extra cadastrado —
+aprovação pendente", com a prévia repetindo o assunto e emendando "Manto Produções Olá, João!". Não dava para
+saber o que era nem distinguir um gasto do outro. Decidiu: valor primeiro no assunto e botão para a tela.
+
+**O que mudou.** `send_new_expense_alert_email`: assunto `Gasto extra R$ X · descrição`; preheader com
+categoria · quem lançou · pagamento · comprovante · evento — dd/mm, mais enchimento invisível; corpo com
+todos os campos e botão "Revisar gasto →" (`/gastos`, mesma base do aviso de ensaio).
+
+**Pegadinha.** O celular mostra o assunto e o **preheader** — não o corpo. Se o preheader for curto, ele emenda o
+texto do corpo (cabeçalho "Manto Produções" + saudação). O enchimento `&#847;&zwnj;&nbsp;` corta isso. Este
+e-mail também passou a escapar o texto do usuário; os outros de `email_service.py` ainda não escapam (dívida).
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 
