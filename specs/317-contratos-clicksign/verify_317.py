@@ -123,8 +123,15 @@ import app.integracoes.clicksign_client as _cliente_cs  # noqa: E402
 _REAIS = {
     nome: getattr(_cliente_cs, nome)
     for nome in (
-        "listar_envelopes", "signatarios", "eventos", "documentos", "documento", "baixar",
-        "listar_webhooks", "criar_webhook", "remover_webhook",
+        "listar_envelopes",
+        "signatarios",
+        "eventos",
+        "documentos",
+        "documento",
+        "baixar",
+        "listar_webhooks",
+        "criar_webhook",
+        "remover_webhook",
     )
 }
 PDF_FALSO = b"%PDF-1.4\n% verify 317\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
@@ -142,25 +149,52 @@ class ContaClickSign:
         self.chamadas = {"listar": 0, "baixar": 0}
 
     def envelope(
-        self, chave: str, nome: str, *, status: str = "running", criado: datetime | None = None,
-        prazo_dias: int = 5, telefone: str | None = "11999999999", email: str | None = None,
-        canal: str = "whatsapp", recusado: bool = False,
+        self,
+        chave: str,
+        nome: str,
+        *,
+        status: str = "running",
+        criado: datetime | None = None,
+        prazo_dias: int = 5,
+        telefone: str | None = "do_nome",
+        email: str | None = None,
+        canal: str = "whatsapp",
+        recusado: bool = False,
     ) -> str:
         criado = criado or datetime.combine(estado["hoje"], time(10, 0))
+        if telefone == "do_nome":
+            # Na conta real o signatário é o WhatsApp que o fluxo põe no nome (sem o 55).
+            from app.contratos.contratos_ops import ler_nome
+
+            lido = ler_nome(nome).telefone
+            telefone = lido[2:] if lido else None
         eid = f"{PREFIX}{chave}"
         self.envelopes[eid] = {
             "id": eid,
             "attributes": {
-                "name": nome, "status": status, "created": _iso(criado), "modified": _iso(criado),
+                "name": nome,
+                "status": status,
+                "created": _iso(criado),
+                "modified": _iso(criado),
                 "deadline_at": _iso(criado + timedelta(days=prazo_dias)),
             },
-            "signers": [{
-                "id": f"{eid}-s", "attributes": {
-                    "name": "Signatária de teste", "phone_number": telefone, "email": email,
-                    "communicate_events": {"signature_request": canal, "signature_reminder": "none"},
-                },
-            }],
-            "events": [{"attributes": {"name": "refusal", "created": _iso(criado)}}] if recusado else [],
+            "signers": [
+                {
+                    "id": f"{eid}-s",
+                    "attributes": {
+                        "name": "Signatária de teste",
+                        "phone_number": telefone,
+                        "email": email,
+                        "communicate_events": {
+                            "signature_request": canal,
+                            "signature_reminder": "none",
+                        },
+                    },
+                }
+            ],
+            "events": [{"attributes": {"name": "refusal", "created": _iso(criado)}}]
+            if recusado
+            else [],
             "documents": [{"id": f"{eid}-d", "attributes": {"filename": f"{nome}.pdf"}}],
         }
         return eid
@@ -174,8 +208,17 @@ class ContaClickSign:
             env["events"].insert(0, {"attributes": {"name": "sign", "created": _iso(quando)}})
 
     # As funções do cliente, com a mesma assinatura (a trava é ignorada pelo dublê).
-    def listar_envelopes(self, *, pagina: int = 1, modificado_desde=None, modificado_ate=None,
-                         criado_desde=None, criado_ate=None, status=None, **_kw) -> dict:
+    def listar_envelopes(
+        self,
+        *,
+        pagina: int = 1,
+        modificado_desde=None,
+        modificado_ate=None,
+        criado_desde=None,
+        criado_ate=None,
+        status=None,
+        **_kw,
+    ) -> dict:
         self.chamadas["listar"] += 1
         itens = []
         for env in self.envelopes.values():
@@ -194,7 +237,7 @@ class ContaClickSign:
                 continue
             itens.append({"id": env["id"], "type": "envelopes", "attributes": dict(a)})
         inicio = (pagina - 1) * 50
-        return {"data": itens[inicio:inicio + 50], "meta": {"record_count": len(itens)}}
+        return {"data": itens[inicio : inicio + 50], "meta": {"record_count": len(itens)}}
 
     def signatarios(self, envelope_id: str, **_kw) -> list:
         return self.envelopes[envelope_id]["signers"]
@@ -302,7 +345,9 @@ def _aviso(corpo: dict, segredo: str | None = SEGREDO):
     bruto = json.dumps(corpo).encode()
     cabecalhos = {"Content-Type": "application/json"}
     if segredo is not None:
-        cabecalhos["Content-Hmac"] = "sha256=" + hmac.new(segredo.encode(), bruto, hashlib.sha256).hexdigest()
+        cabecalhos["Content-Hmac"] = (
+            "sha256=" + hmac.new(segredo.encode(), bruto, hashlib.sha256).hexdigest()
+        )
     with app.test_client() as c:
         return c.post("/api/webhooks/clicksign", data=bruto, headers=cabecalhos)
 
@@ -320,9 +365,17 @@ def _nome_festa(dia: date, telefone: str, tema: str) -> str:
     return f"{dia:%d%m%Y} + {fone} + {tema}"
 
 
-def _evento(nome: str, dia: date, *, telefone: str | None = None, lider: int | None = None,
-            cancelado: bool = False, cortesia: bool = False, titulo: str | None = None,
-            valor: int = 3000) -> int:
+def _evento(
+    nome: str,
+    dia: date,
+    *,
+    telefone: str | None = None,
+    lider: int | None = None,
+    cancelado: bool = False,
+    cortesia: bool = False,
+    titulo: str | None = None,
+    valor: int = 3000,
+) -> int:
     inicio = datetime.combine(dia, time(15, 0))
     ev = CalendarEvent(
         title=f"{titulo or nome} {TITULO_TESTE}",
@@ -343,24 +396,33 @@ def _evento(nome: str, dia: date, *, telefone: str | None = None, lider: int | N
         # O telefone é UNIQUE na ficha: a mesma cliente com duas festas é uma ficha só.
         cl = Client.query.filter_by(phone=telefone).first()
         if cl is None:
-            cl = Client(name=f"{PREFIX}{nome}", phone=telefone, phone_display=f"+{telefone}", source="manual")
+            cl = Client(
+                name=f"{PREFIX}{nome}",
+                phone=telefone,
+                phone_display=f"+{telefone}",
+                source="manual",
+            )
             db.session.add(cl)
             db.session.flush()
-        db.session.add(EventClient(event_id=ev.id, client_id=cl.id, relationship_type="Contratante"))
+        db.session.add(
+            EventClient(event_id=ev.id, client_id=cl.id, relationship_type="Contratante")
+        )
         ev.client_id = cl.id
     estado["ids"][nome] = ev.id
     return ev.id
 
 
 def _formulario(event_id: int, telefone: str, tema: str) -> None:
-    db.session.add(FormResponse(
-        form_type="comum",
-        data=json.dumps([{"secao": "Evento", "campos": [["tema_evento", "Tema", tema]]}]),
-        contact_name=f"{PREFIX}formulario",
-        contact_phone=telefone,
-        event_id=event_id,
-        event_link_source="manual",
-    ))
+    db.session.add(
+        FormResponse(
+            form_type="comum",
+            data=json.dumps([{"secao": "Evento", "campos": [["tema_evento", "Tema", tema]]}]),
+            contact_name=f"{PREFIX}formulario",
+            contact_phone=telefone,
+            event_id=event_id,
+            event_link_source="manual",
+        )
+    )
 
 
 def preparar() -> None:
@@ -371,9 +433,14 @@ def preparar() -> None:
 
     s = SiteSetting.query.get(1)
     estado["site_original"] = {
-        c: getattr(s, c) for c in (
-            "clicksign_webhook_id", "clicksign_webhook_secret", "clicksign_webhook_secret_anterior",
-            "clicksign_webhook_secret_anterior_ate", "clicksign_sync_at", "clicksign_sync_cursor",
+        c: getattr(s, c)
+        for c in (
+            "clicksign_webhook_id",
+            "clicksign_webhook_secret",
+            "clicksign_webhook_secret_anterior",
+            "clicksign_webhook_secret_anterior_ate",
+            "clicksign_sync_at",
+            "clicksign_sync_cursor",
             "clicksign_sync_pendente",
         )
     }
@@ -427,26 +494,55 @@ def preparar() -> None:
     env["c"] = conta.envelope("c", _nome_festa(_d(12), fones[4], "Cancelada"))
     env["s"] = conta.envelope("s", _nome_festa(_d(40), fones[9], "Sem venda"))
     env["v_orig"] = conta.envelope(
-        "v_orig", _nome_festa(_d(25), fones[5], "Sereia"), status="canceled", criado=agora - timedelta(days=3))
+        "v_orig",
+        _nome_festa(_d(25), fones[5], "Sereia"),
+        status="canceled",
+        criado=agora - timedelta(days=3),
+    )
     env["v_reenvio"] = conta.envelope(
-        "v_reenvio", _nome_festa(_d(25), fones[5], "Sereia") + " (1)", status="closed",
-        criado=agora - timedelta(days=2))
+        "v_reenvio",
+        _nome_festa(_d(25), fones[5], "Sereia") + " (1)",
+        status="closed",
+        criado=agora - timedelta(days=2),
+    )
     env["r1"] = conta.envelope(
-        "r1", _nome_festa(_d(30), fones[6], "Lego"), status="closed", criado=agora - timedelta(days=5))
+        "r1",
+        _nome_festa(_d(30), fones[6], "Lego"),
+        status="closed",
+        criado=agora - timedelta(days=5),
+    )
     env["r2"] = conta.envelope(
-        "r2", _nome_festa(_d(30), fones[6], "Lego"), criado=agora - timedelta(days=1))
+        "r2", _nome_festa(_d(30), fones[6], "Lego"), criado=agora - timedelta(days=1)
+    )
     env["x"] = conta.envelope("x", _nome_festa(_d(5), fones[7], "Circo"), status="canceled")
-    env["y"] = conta.envelope("y", _nome_festa(_d(6), fones[8], "Mickey"), status="canceled", recusado=True)
+    env["y"] = conta.envelope(
+        "y", _nome_festa(_d(6), fones[8], "Mickey"), status="canceled", recusado=True
+    )
     env["k"] = conta.envelope("k", _nome_festa(_d(9), fones[12], "Natal"))
-    env["m"] = conta.envelope("m", _nome_festa(_d(11), fones[13], "Princesas"), canal="email",
-                              telefone=None, email="cliente@exemplo.com")
+    env["m"] = conta.envelope(
+        "m",
+        _nome_festa(_d(11), fones[13], "Princesas"),
+        canal="email",
+        telefone=None,
+        email="cliente@exemplo.com",
+    )
     env["f"] = conta.envelope("f", _nome_festa(_d(13), fones[15], "Bluey"))
     env["g"] = conta.envelope("g", _nome_festa(_d(16), fones[16], "Astronauta"))
     env["art"] = conta.envelope(
-        "art", unicodedata.normalize(
-            "NFD", "Fulana de Tal_CONTRATO DE PRESTAÇÃO DE SERVIÇOS ARTÍSTICOS_Belém"))
+        "art",
+        unicodedata.normalize(
+            "NFD", "Fulana de Tal_CONTRATO DE PRESTAÇÃO DE SERVIÇOS ARTÍSTICOS_Belém"
+        ),
+    )
     env["outro"] = conta.envelope("outro", "Declaração Estágio Supervisionado")
     env["data_ruim"] = conta.envelope("data_ruim", "31022026 + (11) 90000-0018 + Data impossível")
+    env["mail"] = conta.envelope(
+        "mail",
+        f"{_d(11):%d-%m-%Y} + cliente@exemplo.com + Sereia",
+        telefone=None,
+        email="cliente@exemplo.com",
+        canal="email",
+    )
 
 
 def _sincronizar(**kw) -> dict:
@@ -460,7 +556,9 @@ def _doc(chave: str):
     return _no_banco(
         "SELECT id, tipo, status, event_id, vinculo, vinculo_origem, vinculo_motivo, contrato_anexo_id, "
         "canal, data_lida, telefone_lido, tema_lido, anexo_pendente "
-        "FROM clicksign_documentos WHERE envelope_id = :e", e=estado["env"][chave])
+        "FROM clicksign_documentos WHERE envelope_id = :e",
+        e=estado["env"][chave],
+    )
 
 
 def _contrato(email: str, nome: str) -> dict:
@@ -491,22 +589,32 @@ def cen_01() -> None:
     from app.contratos.contratos_ops import ler_nome
 
     casos = {
-        "25102026 + (11) 98492-5407 + Hot Wheels Monster Trunck (1)": (date(2026, 10, 25), "5511984925407", "Hot Wheels Monster Trunck"),
+        "25102026 + (11) 98492-5407 + Hot Wheels Monster Trunck (1)": (
+            date(2026, 10, 25),
+            "5511984925407",
+            "Hot Wheels Monster Trunck",
+        ),
         "4122026 + (11) 98235-3711 + Natal.pdf": (date(2026, 12, 4), "5511982353711", "Natal"),
         "04-10-2025 + (11) 91234-5678 + Ursinhos": (date(2025, 10, 4), "5511912345678", "Ursinhos"),
-        "07112026 + Clube Atlético São Paulo + (11) 94370-4338.pdf": (date(2026, 11, 7), "5511943704338", "Clube Atlético São Paulo"),
+        "07112026 + Clube Atlético São Paulo + (11) 94370-4338.pdf": (
+            date(2026, 11, 7),
+            "5511943704338",
+            "Clube Atlético São Paulo",
+        ),
         "31022026 + (11) 90000-0018 + Data impossível": (None, "5511900000018", "Data impossível"),
     }
     for nome, (dia, fone, tema) in casos.items():
         lido = ler_nome(nome)
         _garante((lido.data, lido.telefone, lido.tema) == (dia, fone, tema), f"{nome!r} → {lido}")
     lido = ler_nome("02-08-2025 + amanda@uol.com.br + Sereia")
-    _garante(lido.email == "amanda@uol.com.br" and lido.telefone is None, f"e-mail no nome → {lido}")
+    _garante(
+        lido.email == "amanda@uol.com.br" and lido.telefone is None, f"e-mail no nome → {lido}"
+    )
 
 
 def cen_02() -> None:
     """Classificação cliente × artista × outro (artista com acento decomposto)."""
-    _sincronizar()
+    _sincronizar(desde=_d(-30))
     _garante(_doc("art")[1] == "artista" and _doc("art")[4] == "fora", f"artista → {_doc('art')}")
     _garante(_doc("outro")[1] == "outro" and _doc("outro")[4] == "fora", f"outro → {_doc('outro')}")
     _garante(_doc("a")[1] == "cliente", f"cliente → {_doc('a')}")
@@ -515,16 +623,22 @@ def cen_02() -> None:
 def cen_03() -> None:
     """Vínculo único por data + telefone (cliente, contratante e formulário)."""
     ev = estado["ids"]
-    for chave in ("a", "x", "y", "k", "f", "g"):
+    for chave in ("a", "x", "y", "k", "f", "g", "m"):
         d = _doc(chave)
-        _garante(d[4] == "ligado" and d[5] == "auto" and d[3] == ev[chave], f"{chave} não ligou sozinho: {d}")
-    # O contrato com e-mail no lugar do telefone nunca liga sozinho.
-    _garante(_doc("m")[4] == "a_conferir", f"m (e-mail) → {_doc('m')}")
+        _garante(
+            d[4] == "ligado" and d[5] == "auto" and d[3] == ev[chave],
+            f"{chave} não ligou sozinho: {d}",
+        )
+    # O contrato com e-mail NO NOME, no lugar do telefone (fluxo antigo), nunca liga sozinho.
+    d = _doc("mail")
+    _garante(d[4] == "a_conferir" and d[6] == "sem_telefone", f"e-mail no nome → {d}")
 
 
 def cen_04() -> None:
     """Empate resolvido pelo tema; empate sem tema → a conferir."""
-    _garante(_doc("e1")[4] == "ligado" and _doc("e1")[3] == estado["ids"]["e1"], f"e1 → {_doc('e1')}")
+    _garante(
+        _doc("e1")[4] == "ligado" and _doc("e1")[3] == estado["ids"]["e1"], f"e1 → {_doc('e1')}"
+    )
     d = _doc("e2")
     _garante(d[4] == "a_conferir" and d[6] == "empate" and d[3] is None, f"e2 → {d}")
 
@@ -554,8 +668,14 @@ def cen_07() -> None:
 
 def cen_08() -> None:
     """Vigente: reenvio assinado vence o original cancelado; remarcação em processo vence o antigo."""
-    _garante(_contrato(estado["comercial"], "v")["contrato"]["situacao"] == "assinado", "v deveria estar assinado")
-    _garante(_contrato(estado["comercial"], "r")["contrato"]["situacao"] == "aguardando", "r deveria aguardar")
+    _garante(
+        _contrato(estado["comercial"], "v")["contrato"]["situacao"] == "assinado",
+        "v deveria estar assinado",
+    )
+    _garante(
+        _contrato(estado["comercial"], "r")["contrato"]["situacao"] == "aguardando",
+        "r deveria aguardar",
+    )
 
 
 def cen_09() -> None:
@@ -565,14 +685,28 @@ def cen_09() -> None:
     _garante(c["situacao"] == "aguardando" and c["cor"] == "vermelho", f"a → {c}")
     _garante(c["documento"]["canal"] == "whatsapp", f"canal de a → {c['documento']}")
     p = _painel(estado["comercial"])
-    _garante({ev["a"], ev["k"], ev["r"]} <= _ids(p["para_cobrar"]), f"para_cobrar → {_ids(p['para_cobrar'])}")
+    _garante(
+        {ev["a"], ev["k"], ev["r"]} <= _ids(p["para_cobrar"]),
+        f"para_cobrar → {_ids(p['para_cobrar'])}",
+    )
     _garante({ev["x"], ev["y"]} <= _ids(p["vencidos"]), f"vencidos → {_ids(p['vencidos'])}")
-    _garante(ev["z"] in _ids(p["sem_contrato"]) and ev["zz"] not in _ids(p["sem_contrato"]), "sem_contrato errado")
+    _garante(
+        ev["z"] in _ids(p["sem_contrato"]) and ev["zz"] not in _ids(p["sem_contrato"]),
+        "sem_contrato errado",
+    )
     _garante(ev["p"] in _ids(p["ja_aconteceu"]), "p deveria estar em ja_aconteceu")
-    _garante(ev["b"] not in _ids(p["para_cobrar"]) | _ids(p["sem_contrato"]), "b assinado apareceu para cobrar")
-    _garante(ev["c"] not in _ids(p["para_cobrar"]) | _ids(p["vencidos"]) | _ids(p["sem_contrato"]), "cancelada nas listas")
+    _garante(
+        ev["b"] not in _ids(p["para_cobrar"]) | _ids(p["sem_contrato"]),
+        "b assinado apareceu para cobrar",
+    )
+    _garante(
+        ev["c"] not in _ids(p["para_cobrar"]) | _ids(p["vencidos"]) | _ids(p["sem_contrato"]),
+        "cancelada nas listas",
+    )
     linha_a = next(linha for linha in p["para_cobrar"] if linha["event_id"] == ev["a"])
-    _garante(linha_a["severidade"] == "vermelho" and linha_a["documento_id"], f"linha a → {linha_a}")
+    _garante(
+        linha_a["severidade"] == "vermelho" and linha_a["documento_id"], f"linha a → {linha_a}"
+    )
     conferir = {linha["documento_id"] for linha in p["a_conferir"]}
     _garante({_doc("e2")[0], _doc("s")[0], _doc("c")[0]} <= conferir, f"a_conferir → {conferir}")
     with app.app_context():
@@ -586,11 +720,16 @@ def cen_09() -> None:
 def cen_10() -> None:
     """Mensagem pelo canal (WhatsApp × e-mail) e registro da cobrança."""
     corpo = _contrato(estado["comercial"], "a")
-    _garante(corpo["mensagens"].get("contrato_canal") == "whatsapp", f"mensagens de a → {corpo['mensagens']}")
+    _garante(
+        corpo["mensagens"].get("contrato_canal") == "whatsapp",
+        f"mensagens de a → {corpo['mensagens']}",
+    )
     doc_a = corpo["contrato"]["documento"]["id"]
     r = _chamar(estado["comercial"], "post", f"/api/contratos/{doc_a}/cobranca")
     _garante(r.status_code == 201, f"cobrar a → {r.status_code} {r.get_data(as_text=True)[:200]}")
-    linha = _no_banco("SELECT usuario_nome, event_id FROM clicksign_cobrancas WHERE documento_id = :d", d=doc_a)
+    linha = _no_banco(
+        "SELECT usuario_nome, event_id FROM clicksign_cobrancas WHERE documento_id = :d", d=doc_a
+    )
     _garante(linha is not None and linha[1] == estado["ids"]["a"], f"cobrança não gravada: {linha}")
     ultima = _contrato(estado["comercial"], "a")["contrato"]["ultima_cobranca"]
     _garante(ultima and ultima["por"], f"última cobrança → {ultima}")
@@ -608,7 +747,10 @@ def cen_11() -> None:
     }
     for nome, motivo in casos.items():
         c = _contrato(estado["comercial"], nome)["contrato"]
-        _garante(c["pode_cobrar"] is False and c["motivo_bloqueio"] == motivo, f"{nome} → {c['pode_cobrar']} {c['motivo_bloqueio']!r}")
+        _garante(
+            c["pode_cobrar"] is False and c["motivo_bloqueio"] == motivo,
+            f"{nome} → {c['pode_cobrar']} {c['motivo_bloqueio']!r}",
+        )
     r = _chamar(estado["comercial"], "post", f"/api/contratos/{_doc('b')[0]}/cobranca")
     _garante(r.status_code == 409, f"cobrar assinado → {r.status_code}")
 
@@ -619,26 +761,44 @@ def cen_12() -> None:
     _garante(d[7] is not None and d[12] is False, f"b sem anexo: {d}")
     linha = _no_banco("SELECT event_id, is_signed FROM event_contracts WHERE id = :i", i=d[7])
     _garante(linha == (estado["ids"]["b"], True), f"anexo de b → {linha}")
-    log = _no_banco("SELECT count(*) FROM event_logs WHERE event_id = :e AND actor_name = 'ClickSign (automático)'",
-                    e=estado["ids"]["b"])[0]
+    log = _no_banco(
+        "SELECT count(*) FROM event_logs WHERE event_id = :e AND actor_name = 'ClickSign (automático)'",
+        e=estado["ids"]["b"],
+    )[0]
     _garante(log >= 1, "sem EventLog automático")
     baixados = conta.chamadas["baixar"]
     _sincronizar(desde=_d(-30))
     _garante(conta.chamadas["baixar"] == baixados, "baixou de novo")
-    _garante(_no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["b"])[0] == 1, "duplicou")
+    _garante(
+        _no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["b"])[
+            0
+        ]
+        == 1,
+        "duplicou",
+    )
     with app.app_context():
         EventContract.query.filter_by(id=d[7]).delete()
         db.session.commit()
     _sincronizar(desde=_d(-30))
-    _garante(_no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["b"])[0] == 0,
-             "o PDF excluído voltou sozinho")
+    _garante(
+        _no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["b"])[
+            0
+        ]
+        == 0,
+        "o PDF excluído voltou sozinho",
+    )
 
 
 def cen_13() -> None:
     """Aviso com HMAC errado ou ausente: 404 e nenhuma consulta (DEVE falhar)."""
     antes = conta.chamadas["listar"]
-    _garante(_aviso({"event": {"name": "sign"}}, segredo="errado").status_code == 404, "HMAC errado aceito")
-    _garante(_aviso({"event": {"name": "sign"}}, segredo=None).status_code == 404, "sem HMAC aceito")
+    _garante(
+        _aviso({"event": {"name": "sign"}}, segredo="errado").status_code == 404,
+        "HMAC errado aceito",
+    )
+    _garante(
+        _aviso({"event": {"name": "sign"}}, segredo=None).status_code == 404, "sem HMAC aceito"
+    )
     _garante(conta.chamadas["listar"] == antes, "aviso inválido disparou consulta")
 
 
@@ -648,14 +808,24 @@ def cen_14() -> None:
     for _ in range(2):
         r = _aviso({"event": {"name": "sign"}, "document": {"key": "qualquer"}})
         _garante(r.status_code == 200, f"aviso válido → {r.status_code}")
-    _garante(_contrato(estado["comercial"], "k")["contrato"]["situacao"] == "assinado", "k não assinou pelo aviso")
-    n = _no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["k"])[0]
+    _garante(
+        _contrato(estado["comercial"], "k")["contrato"]["situacao"] == "assinado",
+        "k não assinou pelo aviso",
+    )
+    n = _no_banco("SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"]["k"])[
+        0
+    ]
     _garante(n == 1, f"k com {n} anexos")
 
 
 def cen_15() -> None:
     """Aviso diz "assinado", a ClickSign diz "em processo": nada muda (DEVE falhar se interpretar)."""
-    r = _aviso({"event": {"name": "auto_close"}, "document": {"key": estado["env"]["a"], "status": "closed"}})
+    r = _aviso(
+        {
+            "event": {"name": "auto_close"},
+            "document": {"key": estado["env"]["a"], "status": "closed"},
+        }
+    )
     _garante(r.status_code == 200, f"aviso → {r.status_code}")
     sit = _contrato(estado["comercial"], "a")["contrato"]["situacao"]
     _garante(sit == "aguardando", f"o aviso decidiu sozinho: {sit}")
@@ -666,8 +836,13 @@ def cen_16() -> None:
     fin = estado["financeiro"]
     c = _contrato(fin, "a")["contrato"]
     _garante(c["pode_cobrar"] is False and c["pode_conferir"] is False, f"financeiro → {c}")
-    _garante(_chamar(fin, "post", f"/api/contratos/{_doc('a')[0]}/cobranca").status_code == 403, "financeiro cobrou")
-    r = _chamar(fin, "post", f"/api/contratos/{_doc('e2')[0]}/ligar", {"event_id": estado["ids"]["e2"]})
+    _garante(
+        _chamar(fin, "post", f"/api/contratos/{_doc('a')[0]}/cobranca").status_code == 403,
+        "financeiro cobrou",
+    )
+    r = _chamar(
+        fin, "post", f"/api/contratos/{_doc('e2')[0]}/ligar", {"event_id": estado["ids"]["e2"]}
+    )
     _garante(r.status_code == 403, f"financeiro ligou → {r.status_code}")
     _garante(_painel(fin)["pode_cobrar"] is False, "painel do financeiro com pode_cobrar")
 
@@ -675,18 +850,33 @@ def cen_16() -> None:
 def cen_17() -> None:
     """CASTING não vê o contrato (DEVE falhar com 403)."""
     r = _chamar(estado["casting"], "get", f"/api/events/{estado['ids']['a']}")
-    _garante(r.status_code == 200 and "contrato" not in r.get_json(), "casting viu o bloco do contrato")
-    _garante(_chamar(estado["casting"], "get", "/api/contratos/a-conferir").status_code == 403, "casting leu a conferir")
+    _garante(
+        r.status_code == 200 and "contrato" not in r.get_json(), "casting viu o bloco do contrato"
+    )
+    _garante(
+        _chamar(estado["casting"], "get", "/api/contratos/a-conferir").status_code == 403,
+        "casting leu a conferir",
+    )
 
 
 def cen_18() -> None:
     """Ligar à mão a partir de "A conferir"."""
-    r = _chamar(estado["comercial"], "post", f"/api/contratos/{_doc('e2')[0]}/ligar", {"event_id": estado["ids"]["e2"]})
+    r = _chamar(
+        estado["comercial"],
+        "post",
+        f"/api/contratos/{_doc('e2')[0]}/ligar",
+        {"event_id": estado["ids"]["e2"]},
+    )
     _garante(r.status_code == 200, f"ligar → {r.status_code} {r.get_data(as_text=True)[:200]}")
     d = _doc("e2")
     _garante(d[4] == "ligado" and d[5] == "manual" and d[3] == estado["ids"]["e2"], f"e2 → {d}")
     # Ligar a venda cancelada é recusado (trava da 312, no núcleo).
-    r = _chamar(estado["comercial"], "post", f"/api/contratos/{_doc('c')[0]}/ligar", {"event_id": estado["ids"]["c"]})
+    r = _chamar(
+        estado["comercial"],
+        "post",
+        f"/api/contratos/{_doc('c')[0]}/ligar",
+        {"event_id": estado["ids"]["c"]},
+    )
     _garante(r.status_code == 409, f"ligar a cancelada → {r.status_code}")
 
 
@@ -695,7 +885,9 @@ def cen_19() -> None:
     r = _chamar(estado["comercial"], "post", f"/api/contratos/{_doc('e1')[0]}/desligar")
     _garante(r.status_code == 200, f"desligar → {r.status_code}")
     _garante(_doc("e1")[4] == "a_conferir" and _doc("e1")[6] == "desligado", f"e1 → {_doc('e1')}")
-    conta.mudar(estado["env"]["e1"], status="running", quando=datetime.combine(estado["hoje"], time(13, 0)))
+    conta.mudar(
+        estado["env"]["e1"], status="running", quando=datetime.combine(estado["hoje"], time(13, 0))
+    )
     _sincronizar(desde=_d(-1))
     _garante(_doc("e1")[4] == "a_conferir", f"religou sozinho: {_doc('e1')}")
 
@@ -711,15 +903,20 @@ def cen_20() -> None:
 
 def cen_21() -> None:
     """Comando retroativo: simulação não grava; --aplicar duas vezes = idempotente."""
-    novo = conta.envelope("retro", _nome_festa(_d(14), estado["fones"][19], "Retro"),
-                          criado=datetime.combine(_d(-20), time(10, 0)))
+    novo = conta.envelope(
+        "retro",
+        _nome_festa(_d(14), estado["fones"][19], "Retro"),
+        criado=datetime.combine(_d(-20), time(10, 0)),
+    )
     estado["env"]["retro"] = novo
     runner = app.test_cli_runner()
     r = runner.invoke(args=["clicksign-sincronizar", "--desde", _d(-60).isoformat()])
     _garante(r.exit_code == 0, f"dry-run → {r.exit_code} {r.output[-300:]}")
     _garante(_doc("retro") is None, "o dry-run gravou")
     for _ in range(2):
-        r = runner.invoke(args=["clicksign-sincronizar", "--desde", _d(-60).isoformat(), "--aplicar"])
+        r = runner.invoke(
+            args=["clicksign-sincronizar", "--desde", _d(-60).isoformat(), "--aplicar"]
+        )
         _garante(r.exit_code == 0, f"--aplicar → {r.exit_code} {r.output[-300:]}")
     n = _no_banco("SELECT count(*) FROM clicksign_documentos WHERE envelope_id = :e", e=novo)[0]
     _garante(n == 1, f"retro gravado {n} vezes")
@@ -732,7 +929,10 @@ def cen_22() -> None:
 
     with app.app_context():
         sincronizar_ops.sincronizar(motivo="periodica")
-    _garante(_contrato(estado["comercial"], "f")["contrato"]["situacao"] == "assinado", "f não assinou na periódica")
+    _garante(
+        _contrato(estado["comercial"], "f")["contrato"]["situacao"] == "assinado",
+        "f não assinou na periódica",
+    )
 
 
 def cen_23() -> None:
@@ -742,13 +942,18 @@ def cen_23() -> None:
         from app.integracoes.clicksign_client import ClicksignTravada
 
         with app.app_context():
-            _garante(app.config["CLICKSIGN_SUPPRESS_CALLS"] is True, "CLICKSIGN_SUPPRESS_CALLS desligado no local")
+            _garante(
+                app.config["CLICKSIGN_SUPPRESS_CALLS"] is True,
+                "CLICKSIGN_SUPPRESS_CALLS desligado no local",
+            )
             from app.contratos import sincronizar_ops
 
             resultado = sincronizar_ops.sincronizar(motivo="periodica")
         _garante(resultado.get("travada") is True, f"sincronizar sem trava: {resultado}")
         try:
-            _cliente_cs.listar_envelopes(base="https://app.clicksign.com/api/v3", token="x", travada=True)
+            _cliente_cs.listar_envelopes(
+                base="https://app.clicksign.com/api/v3", token="x", travada=True
+            )
             raise AssertionError("o cliente real não travou")
         except ClicksignTravada:
             pass
@@ -763,11 +968,16 @@ def cen_24() -> None:
     try:
         c = _contrato(estado["comercial"], "a")["contrato"]
         _garante(c["integracao_ligada"] is False, f"integração ligada sem token: {c}")
-        _garante(_painel(estado["comercial"])["integracao_ligada"] is False, "painel sem a marca de desligada")
+        _garante(
+            _painel(estado["comercial"])["integracao_ligada"] is False,
+            "painel sem a marca de desligada",
+        )
         with app.app_context():
             from app.contratos import sincronizar_ops
 
-            _garante(sincronizar_ops.sincronizar().get("desligada") is True, "sincronizou sem token")
+            _garante(
+                sincronizar_ops.sincronizar().get("desligada") is True, "sincronizou sem token"
+            )
     finally:
         app.config["CLICKSIGN_ACCESS_TOKEN"] = TOKEN_FALSO
 
@@ -788,24 +998,28 @@ def cen_25() -> None:
         db.session.commit()
         from app.calendar.sumico_ops import preso_ao_evento
 
-        _garante(preso_ao_evento(db.session.get(CalendarEvent, ev["g"])).tem_contrato,
-                 "evento com contrato ligado não está preso")
+        _garante(
+            preso_ao_evento(db.session.get(CalendarEvent, ev["g"])).tem_contrato,
+            "evento com contrato ligado não está preso",
+        )
 
 
 # ── Limpeza ──────────────────────────────────────────────────────────────────────────────────────
 
 
 def _tabelas_filhas() -> list[tuple[str, str]]:
-    linhas = db.session.execute(text(
-        "SELECT DISTINCT tc.table_name, kcu.column_name "
-        "FROM information_schema.table_constraints tc "
-        "JOIN information_schema.key_column_usage kcu "
-        "  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema "
-        "JOIN information_schema.constraint_column_usage ccu "
-        "  ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema "
-        "WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'calendar_events' "
-        "  AND tc.table_name <> 'calendar_events'"
-    )).fetchall()
+    linhas = db.session.execute(
+        text(
+            "SELECT DISTINCT tc.table_name, kcu.column_name "
+            "FROM information_schema.table_constraints tc "
+            "JOIN information_schema.key_column_usage kcu "
+            "  ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema "
+            "JOIN information_schema.constraint_column_usage ccu "
+            "  ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema "
+            "WHERE tc.constraint_type = 'FOREIGN KEY' AND ccu.table_name = 'calendar_events' "
+            "  AND tc.table_name <> 'calendar_events'"
+        )
+    ).fetchall()
     return [(tabela, coluna) for tabela, coluna in linhas]
 
 
@@ -815,25 +1029,44 @@ def limpar() -> None:
     # Os PDFs que a sincronização gravou no disco local.
     from app.storage import delete_file
 
-    for (caminho,) in db.session.execute(text(
-        "SELECT ec.file_path FROM event_contracts ec JOIN calendar_events ce ON ce.id = ec.event_id "
-        "WHERE ce.google_event_id LIKE :p"), {"p": padrao}):
+    for (caminho,) in db.session.execute(
+        text(
+            "SELECT ec.file_path FROM event_contracts ec JOIN calendar_events ce ON ce.id = ec.event_id "
+            "WHERE ce.google_event_id LIKE :p"
+        ),
+        {"p": padrao},
+    ):
         delete_file(caminho)
-    db.session.execute(text("DELETE FROM clicksign_documentos WHERE envelope_id LIKE :p"), {"p": padrao})
-    ids = [i for (i,) in db.session.execute(
-        text("SELECT id FROM calendar_events WHERE google_event_id LIKE :p"), {"p": padrao})]
+    db.session.execute(
+        text("DELETE FROM clicksign_documentos WHERE envelope_id LIKE :p"), {"p": padrao}
+    )
+    ids = [
+        i
+        for (i,) in db.session.execute(
+            text("SELECT id FROM calendar_events WHERE google_event_id LIKE :p"), {"p": padrao}
+        )
+    ]
     if ids:
-        db.session.execute(text("UPDATE calendar_events SET group_leader_id = NULL, parent_event_id = NULL "
-                                "WHERE id = ANY(:ids)"), {"ids": ids})
+        db.session.execute(
+            text(
+                "UPDATE calendar_events SET group_leader_id = NULL, parent_event_id = NULL "
+                "WHERE id = ANY(:ids)"
+            ),
+            {"ids": ids},
+        )
         for tabela, coluna in _tabelas_filhas():
-            db.session.execute(text(f"DELETE FROM {tabela} WHERE {coluna} = ANY(:ids)"), {"ids": ids})
+            db.session.execute(
+                text(f"DELETE FROM {tabela} WHERE {coluna} = ANY(:ids)"), {"ids": ids}
+            )
         db.session.execute(text("DELETE FROM calendar_events WHERE id = ANY(:ids)"), {"ids": ids})
     db.session.execute(text("DELETE FROM form_responses WHERE contact_name LIKE :p"), {"p": padrao})
     Client.query.filter(Client.name.like(padrao)).delete(synchronize_session=False)
     usuarios = User.query.filter(User.email.like(f"{PREFIX}%@manto.local")).all()
     if usuarios:
-        db.session.execute(text("DELETE FROM notifications WHERE user_id = ANY(:ids)"),
-                           {"ids": [u.id for u in usuarios]})
+        db.session.execute(
+            text("DELETE FROM notifications WHERE user_id = ANY(:ids)"),
+            {"ids": [u.id for u in usuarios]},
+        )
     for user in usuarios:
         user.roles.clear()
         db.session.delete(user)
@@ -842,7 +1075,9 @@ def limpar() -> None:
         for coluna, valor in estado["site_original"].items():
             setattr(s, coluna, valor)
     db.session.commit()
-    sobras = _no_banco("SELECT count(*) FROM calendar_events WHERE google_event_id LIKE :p", p=padrao)[0]
+    sobras = _no_banco(
+        "SELECT count(*) FROM calendar_events WHERE google_event_id LIKE :p", p=padrao
+    )[0]
     _garante(sobras == 0, f"sobraram {sobras} eventos de teste")
 
 
@@ -895,7 +1130,9 @@ def main() -> int:
             cenario("26. limpeza", limpar)
 
     ok = sum(1 for _, passou, _ in resultados if passou)
-    print(f"\n{ok}/{len(resultados)} OK · escapes de rede: {len(_ESCAPES)} · listar: {conta.chamadas['listar']}")
+    print(
+        f"\n{ok}/{len(resultados)} OK · escapes de rede: {len(_ESCAPES)} · listar: {conta.chamadas['listar']}"
+    )
     for nome, passou, erro in resultados:
         if not passou:
             print(f"  - {nome}: {erro}")

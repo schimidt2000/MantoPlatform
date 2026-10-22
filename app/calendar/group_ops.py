@@ -54,6 +54,9 @@ from typing import Any
 from app import db
 from app.models import (
     CalendarEvent,
+    ClicksignCobranca,
+    ClicksignDesvinculo,
+    ClicksignDocumento,
     CommissionPayment,
     EventAcrescimo,
     EventClient,
@@ -92,6 +95,10 @@ TABELAS_DA_PASSAGEM = (
     EventAcrescimo,
     CommissionPayment,
     FormResponse,
+    # Feature 317: o contrato da ClickSign, os desvínculos e as cobranças seguem a venda.
+    ClicksignDocumento,
+    ClicksignDesvinculo,
+    ClicksignCobranca,
 )
 
 ACTOR_ROLE = "Comercial"
@@ -380,6 +387,9 @@ _ROTULO_DA_PASSAGEM = {
     EventAcrescimo: "acréscimos",
     CommissionPayment: "linhas de comissão",
     FormResponse: "formulários",
+    ClicksignDocumento: "contratos da ClickSign",
+    ClicksignDesvinculo: "contratos desligados",
+    ClicksignCobranca: "cobranças de contrato",
 }
 _COLECOES_DA_PASSAGEM = ("installments", "invoices", "acrescimos", "event_clients", "form_responses", "commission_payments")
 

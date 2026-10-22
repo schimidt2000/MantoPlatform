@@ -111,7 +111,9 @@ def upgrade() -> None:
             sa.ForeignKey("calendar_events.id", ondelete="CASCADE"),
             nullable=False,
         ),
-        sa.Column("por_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column(
+            "por_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        ),
         sa.Column("em", sa.DateTime(), nullable=False),
         sa.UniqueConstraint("documento_id", "event_id", name="uq_clicksign_desvinculo"),
     )
@@ -132,7 +134,10 @@ def upgrade() -> None:
             nullable=False,
         ),
         sa.Column(
-            "usuario_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+            "usuario_id",
+            sa.Integer(),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column("usuario_nome", sa.String(120), nullable=False),
         sa.Column("em", sa.DateTime(), nullable=False),

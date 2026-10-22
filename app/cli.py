@@ -1108,6 +1108,110 @@ def register_commands(app):
         click.echo(f"formularios-cliente-do-evento: {len(pares)} formulário(s) receberam a "
                    "cliente do evento.")
 
+    @app.cli.command("clicksign-sincronizar")
+    @click.option("--desde", type=click.DateTime(formats=["%Y-%m-%d"]), default=None,
+                  help="início (AAAA-MM-DD) do 'modificado desde'; padrão: o marco da última passada")
+    @click.option("--ate", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="fim (AAAA-MM-DD)")
+    @click.option("--aplicar", is_flag=True, help="grava de verdade (padrão: só conta e desfaz)")
+    def clicksign_sincronizar(desde, ate, aplicar: bool):
+        """Traz da ClickSign os contratos modificados no período e liga às vendas (feature 317).
+
+        O retroativo desde junho é `--desde 2026-06-01`. Sem `--aplicar`, lê tudo, conta e desfaz
+        (nenhuma linha gravada, nenhum PDF baixado). Idempotente: repetir com `--aplicar` não duplica.
+        Rodar no `manto-backend` com `MANTO_SEM_THREADS=1` na frente. Numa cópia local, a trava
+        (`CLICKSIGN_ALLOW_LOCAL_CALLS`) decide se fala com a ClickSign real.
+        """
+        from app.contratos import sincronizar_ops
+
+        resultado = sincronizar_ops.sincronizar(
+            desde=desde.date() if desde else None,
+            ate=ate.date() if ate else None,
+            aplicar=aplicar,
+            motivo="comando",
+        )
+        if resultado.get("desligada"):
+            click.echo("clicksign-sincronizar: integração desligada (CLICKSIGN_ACCESS_TOKEN vazio).")
+            return
+        if resultado.get("travada"):
+            click.echo("clicksign-sincronizar: travado neste processo (cópia local). Nada consultado.")
+            return
+        if resultado.get("ocupada"):
+            click.echo("clicksign-sincronizar: outra passada em curso; tente em alguns minutos.")
+            return
+        modo = "GRAVADO" if aplicar else "SIMULAÇÃO (nada gravado — repita com --aplicar)"
+        click.echo(
+            f"clicksign-sincronizar [{modo}]: {resultado.get('envelopes', 0)} envelope(s), "
+            f"{resultado.get('novos', 0)} novo(s); ligados {resultado.get('ligados', 0)}, "
+            f"a conferir {resultado.get('a_conferir', 0)}, fora (artista/outro) {resultado.get('fora', 0)}; "
+            f"PDFs anexados {resultado.get('anexados', 0)}, a anexar {resultado.get('anexar', 0)}."
+        )
+        if resultado.get("erro"):
+            click.echo(f"clicksign-sincronizar: interrompido — {resultado['erro']}")
+
+    @app.cli.command("clicksign-webhook")
+    @click.option("--listar", is_flag=True, help="lista os avisos cadastrados na conta")
+    @click.option("--registrar", "url", default=None, help="URL pública do aviso (…/api/webhooks/clicksign)")
+    @click.option("--remover", "remover_id", default=None, help="id do aviso a remover")
+    @click.option("--aplicar", is_flag=True, help="cadastra/remove de verdade (padrão: só mostra)")
+    def clicksign_webhook(listar: bool, url: str | None, remover_id: str | None, aplicar: bool):
+        """Cadastra o aviso da ClickSign e guarda o segredo devolvido (feature 317).
+
+        Só pelo comando, nunca na subida: assim uma cópia local nunca aponta a ClickSign para si.
+        Recadastrar guarda o segredo antigo por 24 h (avisos em trânsito continuam válidos).
+        """
+        from datetime import timedelta
+
+        from app import db
+        from app.constants import (
+            CLICKSIGN_EVENTOS_DO_AVISO,
+            CLICKSIGN_SEGREDO_ANTERIOR_HORAS,
+            now_sp,
+        )
+        from app.contratos.sincronizar_ops import _conexao, integracao_ligada
+        from app.integracoes import clicksign_client
+        from app.models import SiteSetting
+
+        if not integracao_ligada():
+            click.echo("clicksign-webhook: integração desligada (CLICKSIGN_ACCESS_TOKEN vazio).")
+            return
+        conexao = _conexao()
+        if listar:
+            for aviso in clicksign_client.listar_webhooks(**conexao):
+                atributos = aviso.get("attributes") or {}
+                click.echo(f"  {aviso.get('id')}  {atributos.get('status')}  {atributos.get('endpoint')}")
+            return
+        if remover_id:
+            if not aplicar:
+                click.echo(f"clicksign-webhook: removeria {remover_id}. Repita com --aplicar.")
+                return
+            clicksign_client.remover_webhook(remover_id, **conexao)
+            s = db.session.get(SiteSetting, 1)
+            if s.clicksign_webhook_id == remover_id:
+                s.clicksign_webhook_id = None
+            db.session.commit()
+            click.echo(f"clicksign-webhook: {remover_id} removido.")
+            return
+        if not url:
+            raise click.UsageError("Use --listar, --registrar <url> ou --remover <id>.")
+        if not url.startswith("https://") or "localhost" in url or "127.0.0.1" in url:
+            raise click.UsageError("A URL do aviso tem de ser pública e https.")
+        if not aplicar:
+            click.echo(f"clicksign-webhook: cadastraria {url} com os eventos "
+                       f"{', '.join(CLICKSIGN_EVENTOS_DO_AVISO)}. Repita com --aplicar.")
+            return
+        criado = clicksign_client.criar_webhook(url, CLICKSIGN_EVENTOS_DO_AVISO, **conexao)
+        segredo = (criado.get("attributes") or {}).get("secret")
+        if not segredo:
+            raise click.ClickException("A ClickSign não devolveu o segredo do aviso.")
+        s = db.session.get(SiteSetting, 1)
+        if s.clicksign_webhook_secret:
+            s.clicksign_webhook_secret_anterior = s.clicksign_webhook_secret
+            s.clicksign_webhook_secret_anterior_ate = now_sp() + timedelta(hours=CLICKSIGN_SEGREDO_ANTERIOR_HORAS)
+        s.clicksign_webhook_secret = segredo
+        s.clicksign_webhook_id = criado.get("id")
+        db.session.commit()
+        click.echo(f"clicksign-webhook: aviso {criado.get('id')} cadastrado para {url}.")
+
     @app.cli.command("migrate-drive-to-volume")
     @click.option("--dry-run", is_flag=True, help="Apenas conta o que seria migrado, sem baixar nem alterar.")
     @click.option("--limit", type=int, default=0, help="Migra no máximo N arquivos (0 = todos).")

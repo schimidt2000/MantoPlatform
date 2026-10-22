@@ -782,6 +782,26 @@ def _serialize_travel(event: CalendarEvent, settings: Any) -> dict[str, Any]:
     }
 
 
+def _bloco_do_contrato(event: CalendarEvent, flags: dict[str, Any]) -> dict[str, Any] | None:
+    """O bloco `contrato` (feature 317), num savepoint: falha vira `None` e fica no log."""
+    from flask import current_app
+
+    from app import db
+    from app.contratos import situacao_ops
+
+    try:
+        with db.session.begin_nested():
+            return situacao_ops.bloco_do_evento(
+                event,
+                pode_cobrar_papel=bool(flags.get("can_confirm")),
+                pode_conferir_papel=bool(flags.get("can_confirm")),
+                hoje=now_sp().date(),
+            )
+    except Exception:  # noqa: BLE001 — o contrato não pode derrubar o detalhe do evento
+        current_app.logger.exception("bloco do contrato falhou no evento %s", event.id)
+        return None
+
+
 def _serialize_mensagens(
     event: CalendarEvent, cobranca: dict[str, Any], reembolsos: list[Any]
 ) -> dict[str, Any]:
@@ -1179,6 +1199,17 @@ def serialize_event_detail(
             sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
         )
         data["mensagens"] = _serialize_mensagens(event, data["cobranca"], reembolsos)
+        # Feature 317: situação do contrato da ClickSign, julgada pela venda. Isolado num
+        # savepoint: uma falha aqui deixa `contrato: null` (a tela mostra o aviso) e não derruba o
+        # detalhe inteiro. Cobrar e conferir seguem o `can_confirm` (COMERCIAL/SA, zerado no
+        # cancelado), como os outros itens comerciais do menu.
+        data["contrato"] = _bloco_do_contrato(event, flags)
+        if data["contrato"] and data["contrato"]["documento"]:
+            documento = data["contrato"]["documento"]
+            data["mensagens"]["contrato_canal"] = documento["canal"]
+            data["mensagens"]["contrato_prazo"] = (
+                datetime.fromisoformat(documento["prazo"]).strftime("%d/%m") if documento["prazo"] else ""
+            )
         # Comprovantes de pagamento e reembolsos são do bloco COMERCIAL, não do financeiro: no
         # Jinja os dois painéis ficavam dentro de `{% if show_comercial %}` (event_detail.html,
         # linhas 1982-2196). Quem vende precisa saber se a cliente já pagou — e é quem sobe o

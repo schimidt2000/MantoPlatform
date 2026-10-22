@@ -112,7 +112,9 @@ def _requisitar(
         raise ClicksignIndisponivel(f"ClickSign indisponível (HTTP {response.status_code}).")
     if response.status_code == 204 or not response.content:
         if response.status_code >= 400:
-            raise ClicksignRecusou(f"ClickSign recusou (HTTP {response.status_code}).", status=response.status_code)
+            raise ClicksignRecusou(
+                f"ClickSign recusou (HTTP {response.status_code}).", status=response.status_code
+            )
         return {}
     try:
         body = response.json()
@@ -161,21 +163,33 @@ def listar_envelopes(
     return _requisitar("GET", f"{base}/envelopes", token=token, travada=travada, params=params)
 
 
-def signatarios(envelope_id: str, *, base: str, token: str, travada: bool = True) -> list[dict[str, Any]]:
+def signatarios(
+    envelope_id: str, *, base: str, token: str, travada: bool = True
+) -> list[dict[str, Any]]:
     """Signatários do envelope (nome, telefone, e-mail, ``communicate_events``)."""
-    body = _requisitar("GET", f"{base}/envelopes/{envelope_id}/signers", token=token, travada=travada)
+    body = _requisitar(
+        "GET", f"{base}/envelopes/{envelope_id}/signers", token=token, travada=travada
+    )
     return list(body.get("data") or [])
 
 
-def eventos(envelope_id: str, *, base: str, token: str, travada: bool = True) -> list[dict[str, Any]]:
+def eventos(
+    envelope_id: str, *, base: str, token: str, travada: bool = True
+) -> list[dict[str, Any]]:
     """Eventos do envelope (``sign``, ``auto_close``, ``refusal``…), o mais recente primeiro."""
-    body = _requisitar("GET", f"{base}/envelopes/{envelope_id}/events", token=token, travada=travada)
+    body = _requisitar(
+        "GET", f"{base}/envelopes/{envelope_id}/events", token=token, travada=travada
+    )
     return list(body.get("data") or [])
 
 
-def documentos(envelope_id: str, *, base: str, token: str, travada: bool = True) -> list[dict[str, Any]]:
+def documentos(
+    envelope_id: str, *, base: str, token: str, travada: bool = True
+) -> list[dict[str, Any]]:
     """Documentos do envelope (nos fluxos da Manto, sempre um)."""
-    body = _requisitar("GET", f"{base}/envelopes/{envelope_id}/documents", token=token, travada=travada)
+    body = _requisitar(
+        "GET", f"{base}/envelopes/{envelope_id}/documents", token=token, travada=travada
+    )
     return list(body.get("data") or [])
 
 
@@ -184,7 +198,10 @@ def documento(
 ) -> dict[str, Any]:
     """Um documento com ``links.files`` (``original``, ``signed``, ``ziped``)."""
     body = _requisitar(
-        "GET", f"{base}/envelopes/{envelope_id}/documents/{document_id}", token=token, travada=travada
+        "GET",
+        f"{base}/envelopes/{envelope_id}/documents/{document_id}",
+        token=token,
+        travada=travada,
     )
     return dict(body.get("data") or {})
 
@@ -221,13 +238,22 @@ def listar_webhooks(*, base: str, token: str, travada: bool = True) -> list[dict
 
 
 def criar_webhook(
-    url_destino: str, nomes_de_eventos: tuple[str, ...], *, base: str, token: str, travada: bool = True
+    url_destino: str,
+    nomes_de_eventos: tuple[str, ...],
+    *,
+    base: str,
+    token: str,
+    travada: bool = True,
 ) -> dict[str, Any]:
     """Cadastra o aviso da conta; a resposta traz o ``secret`` do HMAC (só nesta hora)."""
     corpo = {
         "data": {
             "type": "webhooks",
-            "attributes": {"endpoint": url_destino, "status": "active", "events": list(nomes_de_eventos)},
+            "attributes": {
+                "endpoint": url_destino,
+                "status": "active",
+                "events": list(nomes_de_eventos),
+            },
         }
     }
     body = _requisitar("POST", f"{base}/webhooks", token=token, travada=travada, json_body=corpo)

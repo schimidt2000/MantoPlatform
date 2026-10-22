@@ -1,0 +1,684 @@
+"""Sincronização com a ClickSign e as escritas do vínculo e da cobrança (feature 317).
+
+A ClickSign é a fonte da verdade. Toda passada pergunta "o que mudou desde o último marco"
+(`filter[modified]`), grava cada envelope em `ClicksignDocumento` (idempotente pelo id do envelope),
+liga o de cliente à venda quando há um candidato só e anexa o PDF assinado. A mesma função serve ao
+aviso da ClickSign (que só dispara — o conteúdo dele nunca é lido), à conferência periódica e ao
+comando retroativo (research R-01).
+
+Sem `flask.request`. Lê a trava e o token de `current_app.config` a cada chamada: o verify troca os
+dois no mesmo processo. Comita por conta própria só a sincronização (é um job, não um endpoint); as
+escritas chamadas pela API (`ligar`, `desligar`, `descartar`, `registrar_cobranca`) não comitam.
+"""
+
+from __future__ import annotations
+
+import io
+import logging
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
+from typing import Any
+
+from flask import current_app
+from sqlalchemy import func, text
+from werkzeug.datastructures import FileStorage
+
+from app import db
+from app.constants import (
+    CLICKSIGN_AUTOR,
+    CLICKSIGN_AUTOR_PAPEL,
+    CLICKSIGN_CURSOR_FOLGA_MINUTOS,
+    CLICKSIGN_TIPO_ARTISTA,
+    CLICKSIGN_TIPO_CLIENTE,
+    CONFERIR_DESLIGADO,
+    CONFERIR_SEM_TELEFONE,
+    CONFERIR_TELEFONE_DIVERGE,
+    FORM_SUGESTAO_JANELA_DIAS,
+    TZ_SP,
+    VINCULO_A_CONFERIR,
+    VINCULO_DESCARTADO,
+    VINCULO_FORA,
+    VINCULO_LIGADO,
+    VINCULO_ORIGEM_AUTO,
+    VINCULO_ORIGEM_MANUAL,
+    now_sp,
+)
+from app.contratos import contratos_ops as nucleo
+from app.integracoes import clicksign_client as cliente
+from app.models import (
+    CalendarEvent,
+    ClicksignCobranca,
+    ClicksignDesvinculo,
+    ClicksignDocumento,
+    EventClient,
+    EventLog,
+    FormResponse,
+)
+
+logger = logging.getLogger(__name__)
+
+# Uma passada presa (worker morto no meio) libera o lock depois disto.
+LOCK_PRESO_MINUTOS = 10
+# Sem marco (primeira passada automática), olha só a última semana: o passivo desde junho entra
+# pelo comando retroativo, com simulação antes (quickstart §3).
+JANELA_SEM_MARCO_DIAS = 7
+# Quantas vezes a passada repete por causa de aviso que chegou no meio dela.
+REPETICOES_MAXIMAS = 3
+
+
+class ContratoIndisponivel(Exception):
+    """O documento ou a venda não está em condição para a ação pedida (vira 409 na API).
+
+    Attributes:
+        codigo: `ja_ligado`, `nao_ligado`, `tipo_fora`, `cancelado`, `nao_cobravel`, `sem_venda`.
+        motivo: Frase em pt-BR para a tela.
+    """
+
+    def __init__(self, codigo: str, motivo: str) -> None:
+        super().__init__(motivo)
+        self.codigo = codigo
+        self.motivo = motivo
+
+
+# ── Configuração ─────────────────────────────────────────────────────────────────────────────
+
+
+def integracao_ligada() -> bool:
+    """Há token configurado (FR-018)."""
+    return bool(current_app.config.get("CLICKSIGN_ACCESS_TOKEN"))
+
+
+def _conexao() -> dict[str, Any]:
+    """Os três argumentos que toda função do cliente recebe; chave ausente = travado (XIV)."""
+    return {
+        "base": current_app.config.get("CLICKSIGN_API_BASE", "https://app.clicksign.com/api/v3"),
+        "token": current_app.config.get("CLICKSIGN_ACCESS_TOKEN", ""),
+        "travada": current_app.config.get("CLICKSIGN_SUPPRESS_CALLS", True),
+    }
+
+
+def _para_sp(valor: str | None) -> datetime | None:
+    """ISO com fuso da ClickSign (`-03:00`) → horário de parede de SP sem fuso (como o resto)."""
+    if not valor:
+        return None
+    try:
+        momento = datetime.fromisoformat(valor)
+    except ValueError:
+        return None
+    if momento.tzinfo is not None:
+        momento = momento.astimezone(TZ_SP).replace(tzinfo=None)
+    return momento
+
+
+# ── Lock da passada ──────────────────────────────────────────────────────────────────────────
+
+
+def _reivindicar() -> bool:
+    """Lock de execução única entre os 3 workers (molde `invite_reminders._claim_rodada`)."""
+    agora = now_sp()
+    resultado = db.session.execute(
+        text(
+            "UPDATE site_settings SET clicksign_sync_at = :agora "
+            "WHERE id = 1 AND (clicksign_sync_at IS NULL OR clicksign_sync_at < :preso)"
+        ),
+        {"agora": agora, "preso": agora - timedelta(minutes=LOCK_PRESO_MINUTOS)},
+    )
+    db.session.commit()
+    return resultado.rowcount == 1
+
+
+def _soltar() -> None:
+    db.session.execute(text("UPDATE site_settings SET clicksign_sync_at = NULL WHERE id = 1"))
+    db.session.commit()
+
+
+def marcar_pendente() -> None:
+    """O aviso que chegou com uma passada em curso pede para ela repetir antes de soltar."""
+    db.session.execute(text("UPDATE site_settings SET clicksign_sync_pendente = true WHERE id = 1"))
+    db.session.commit()
+
+
+def _consumir_pendente() -> bool:
+    resultado = db.session.execute(
+        text(
+            "UPDATE site_settings SET clicksign_sync_pendente = false "
+            "WHERE id = 1 AND clicksign_sync_pendente = true"
+        )
+    )
+    db.session.commit()
+    return resultado.rowcount == 1
+
+
+def _cursor() -> datetime | None:
+    return db.session.execute(
+        text("SELECT clicksign_sync_cursor FROM site_settings WHERE id = 1")
+    ).scalar()
+
+
+def _gravar_cursor(maior: datetime) -> None:
+    db.session.execute(
+        text(
+            "UPDATE site_settings SET clicksign_sync_cursor = :c "
+            "WHERE id = 1 AND (clicksign_sync_cursor IS NULL OR clicksign_sync_cursor < :c)"
+        ),
+        {"c": maior},
+    )
+
+
+# ── Candidatos (venda viva na data do documento) ─────────────────────────────────────────────
+
+
+@dataclass
+class _Venda:
+    principal: CalendarEvent
+    eventos: list[CalendarEvent]
+    chaves: set[str]
+    temas: tuple[str, ...]
+
+
+def _principal(evento: CalendarEvent) -> CalendarEvent:
+    from app.financeiro.cobranca_ops import principal_da_venda
+
+    return principal_da_venda(evento)
+
+
+def _venda(principal: CalendarEvent) -> _Venda:
+    """A venda com os telefones (ficha, contratantes, formulário) e os temas para desempatar."""
+    from app.calendar.group_ops import group_events
+    from app.formularios.pre_evento_ops import _campos, _valor
+
+    eventos = group_events(principal)
+    ids = [e.id for e in eventos]
+    telefones: set[str] = set()
+    for evento in eventos:
+        if evento.client is not None:
+            telefones.add(evento.client.phone)
+    for ec in EventClient.query.filter(EventClient.event_id.in_(ids)).all():
+        if ec.client is not None:
+            telefones.add(ec.client.phone)
+    temas = [principal.title or ""]
+    for resposta in FormResponse.query.filter(FormResponse.event_id.in_(ids)).all():
+        if resposta.contact_phone:
+            telefones.add(resposta.contact_phone)
+        tema = _valor(_campos(resposta), "tema")
+        if tema:
+            temas.append(tema)
+    chaves = {c for c in (nucleo.chave_telefone(t) for t in telefones) if c}
+    return _Venda(principal, eventos, chaves, tuple(temas))
+
+
+def _vendas_na_data(inicio: date, fim: date | None = None) -> list[_Venda]:
+    """Vendas com algum dia (principal ou satélite) no intervalo; ensaio, 🟧 e loja ficam fora."""
+    fim = fim or inicio
+    eventos = CalendarEvent.query.filter(
+        func.date(CalendarEvent.start_at) >= inicio, func.date(CalendarEvent.start_at) <= fim
+    ).all()
+    vistos: dict[int, _Venda] = {}
+    for evento in eventos:
+        principal = _principal(evento)
+        if principal.id in vistos:
+            continue
+        # A venda cancelada continua candidata (para dizer "cancelada"); as outras exclusões não.
+        if not principal.cancelled_at and not nucleo.venda_entra(principal):
+            continue
+        vistos[principal.id] = _venda(principal)
+    return list(vistos.values())
+
+
+def _desvinculados(documento: ClicksignDocumento) -> set[int]:
+    if documento.id is None:
+        return set()
+    return {
+        event_id
+        for (event_id,) in db.session.query(ClicksignDesvinculo.event_id).filter_by(
+            documento_id=documento.id
+        )
+    }
+
+
+def candidatos(documento: ClicksignDocumento) -> list[nucleo.Candidato]:
+    """Vendas com a data e o telefone do documento (sem as de onde ele foi desligado)."""
+    chave = nucleo.chave_telefone(documento.telefone_lido)
+    if documento.data_lida is None or chave is None:
+        return []
+    fora = _desvinculados(documento)
+    return [
+        nucleo.Candidato(v.principal.id, v.temas, bool(v.principal.cancelled_at))
+        for v in _vendas_na_data(documento.data_lida)
+        if chave in v.chaves and v.principal.id not in fora
+    ]
+
+
+def sugestoes(documento: ClicksignDocumento) -> list[dict[str, Any]]:
+    """Vendas vivas parecidas para a conferência: mesmo telefone em ±3 dias, ou mesma data."""
+    if documento.data_lida is None:
+        return []
+    chave = nucleo.chave_telefone(documento.telefone_lido)
+    janela = timedelta(days=FORM_SUGESTAO_JANELA_DIAS)
+    fora = _desvinculados(documento)
+    achadas = []
+    for venda in _vendas_na_data(documento.data_lida - janela, documento.data_lida + janela):
+        principal = venda.principal
+        if principal.cancelled_at or principal.id in fora:
+            continue
+        mesma_data = any(
+            e.start_at and e.start_at.date() == documento.data_lida for e in venda.eventos
+        )
+        if (chave and chave in venda.chaves) or mesma_data:
+            achadas.append(
+                {
+                    "event_id": principal.id,
+                    "titulo": principal.title,
+                    "data_evento": principal.start_at.date().isoformat()
+                    if principal.start_at
+                    else None,
+                    "cliente": _cliente_da_venda(principal),
+                    "mesmo_telefone": bool(chave and chave in venda.chaves),
+                }
+            )
+    achadas.sort(key=lambda s: (not s["mesmo_telefone"], s["data_evento"] or ""))
+    return achadas[:5]
+
+
+def _cliente_da_venda(principal: CalendarEvent) -> str | None:
+    from app.financeiro.vendas_ops import contratante_name
+
+    return contratante_name(principal)
+
+
+# ── Aplicar um envelope ──────────────────────────────────────────────────────────────────────
+
+
+def _vincular(documento: ClicksignDocumento) -> None:
+    """Classifica e decide o vínculo automático (FR-002/FR-004/FR-005)."""
+    if documento.tipo == CLICKSIGN_TIPO_ARTISTA or (
+        documento.tipo != CLICKSIGN_TIPO_CLIENTE and documento.data_lida is None
+    ):
+        documento.vinculo, documento.vinculo_motivo, documento.event_id = VINCULO_FORA, None, None
+        return
+    if documento.tipo != CLICKSIGN_TIPO_CLIENTE:
+        documento.vinculo, documento.vinculo_motivo = VINCULO_A_CONFERIR, CONFERIR_SEM_TELEFONE
+        return
+    chave_nome = nucleo.chave_telefone(documento.telefone_lido)
+    chave_signatario = nucleo.chave_telefone(documento.signatario_telefone)
+    if chave_nome and chave_signatario and chave_nome != chave_signatario:
+        documento.vinculo, documento.vinculo_motivo = VINCULO_A_CONFERIR, CONFERIR_TELEFONE_DIVERGE
+        return
+    lido = nucleo.NomeLido(
+        documento.data_lida,
+        None,
+        documento.telefone_lido,
+        documento.signatario_email,
+        documento.tema_lido,
+    )
+    event_id, motivo = nucleo.escolher_candidato(lido, candidatos(documento))
+    if event_id is None:
+        documento.vinculo, documento.vinculo_motivo, documento.event_id = (
+            VINCULO_A_CONFERIR,
+            motivo,
+            None,
+        )
+        return
+    documento.vinculo = VINCULO_LIGADO
+    documento.vinculo_origem = VINCULO_ORIGEM_AUTO
+    documento.vinculo_motivo = None
+    documento.event_id = event_id
+    documento.vinculado_em = now_sp()
+
+
+def _ler_signatario(documento: ClicksignDocumento, conexao: dict[str, Any]) -> None:
+    from app.clientes.importer import normalize_phone
+
+    signers = cliente.signatarios(documento.envelope_id, **conexao)
+    if not signers:
+        return
+    atributos = signers[0].get("attributes") or {}
+    documento.signatario_nome = (atributos.get("name") or "")[:200] or None
+    documento.signatario_telefone = normalize_phone(atributos.get("phone_number"))
+    documento.signatario_email = (atributos.get("email") or "")[:200] or None
+    documento.canal = nucleo.canal_do_signatario(atributos.get("communicate_events"))
+
+
+def _ler_eventos(documento: ClicksignDocumento, conexao: dict[str, Any]) -> None:
+    nomes = [(e.get("attributes") or {}) for e in cliente.eventos(documento.envelope_id, **conexao)]
+    assinaturas = [
+        _para_sp(a.get("created")) for a in nomes if a.get("name") in ("sign", "auto_close")
+    ]
+    assinaturas = [m for m in assinaturas if m]
+    if documento.status == nucleo.STATUS_FECHADO:
+        documento.assinado_em = max(assinaturas) if assinaturas else documento.modificado_em
+    documento.recusado = any(a.get("name") == "refusal" for a in nomes)
+
+
+def aplicar_envelope(
+    envelope: dict[str, Any], conexao: dict[str, Any]
+) -> tuple[ClicksignDocumento, bool]:
+    """Grava um envelope (idempotente pelo id) e devolve (documento, mudou)."""
+    atributos = envelope.get("attributes") or {}
+    documento = ClicksignDocumento.query.filter_by(envelope_id=envelope["id"]).first()
+    novo = documento is None
+    modificado = _para_sp(atributos.get("modified"))
+    status = atributos.get("status") or nucleo.STATUS_RASCUNHO
+    if novo:
+        documento = ClicksignDocumento(
+            envelope_id=envelope["id"], vinculo=VINCULO_A_CONFERIR, tipo="outro", status=status
+        )
+        db.session.add(documento)
+    mudou = novo or documento.status != status or documento.modificado_em != modificado
+    status_anterior = None if novo else documento.status
+
+    documento.nome = atributos.get("name")
+    documento.status = status
+    documento.prazo = _para_sp(atributos.get("deadline_at"))
+    documento.criado_em = _para_sp(atributos.get("created"))
+    documento.modificado_em = modificado
+    documento.sincronizado_em = now_sp()
+    if documento.status == nucleo.STATUS_CANCELADO:
+        documento.cancelado_em = documento.cancelado_em or modificado
+
+    lido = nucleo.ler_nome(documento.nome)
+    documento.data_lida = lido.data
+    documento.telefone_lido = lido.telefone
+    documento.tema_lido = lido.tema
+    documento.tipo = nucleo.classificar(documento.nome, lido)
+
+    if novo or (documento.canal is None and documento.signatario_telefone is None):
+        _ler_signatario(documento, conexao)
+    if mudou and documento.status in (nucleo.STATUS_FECHADO, nucleo.STATUS_CANCELADO):
+        _ler_eventos(documento, conexao)
+
+    db.session.flush()
+    # Só documento novo ou ainda "a conferir" por decisão automática é reavaliado: ligado à mão,
+    # descartado e desligado nunca mudam sozinhos (FR-005).
+    if novo or (
+        documento.vinculo == VINCULO_A_CONFERIR
+        and documento.vinculo_origem is None
+        and documento.vinculo_motivo != CONFERIR_DESLIGADO
+    ):
+        _vincular(documento)
+    if (
+        documento.status == nucleo.STATUS_FECHADO
+        and status_anterior != nucleo.STATUS_FECHADO
+        and documento.vinculo == VINCULO_LIGADO
+        and documento.contrato_anexo_id is None
+    ):
+        documento.anexo_pendente = True
+    return documento, mudou
+
+
+def anexar_assinado(documento: ClicksignDocumento, conexao: dict[str, Any]) -> bool:
+    """Baixa o PDF assinado e o anexa ao evento ligado, marcado como assinado (FR-009).
+
+    Falha de rede mantém `anexo_pendente` para a próxima passada; arquivo recusado (grande ou
+    inválido) desiste com log. Excluir o anexo depois não o traz de volta (`anexo_pendente` falso).
+    """
+    from app.calendar.routes import _add_contract_record
+
+    if not documento.anexo_pendente or documento.event_id is None:
+        return False
+    evento = db.session.get(CalendarEvent, documento.event_id)
+    if evento is None:
+        return False
+    try:
+        if documento.document_id is None:
+            docs = cliente.documentos(documento.envelope_id, **conexao)
+            if not docs:
+                return False
+            documento.document_id = docs[0]["id"]
+        detalhe = cliente.documento(documento.envelope_id, documento.document_id, **conexao)
+        url = ((detalhe.get("links") or {}).get("files") or {}).get("signed")
+        if not url:
+            return False
+        dados = cliente.baixar(url, travada=conexao["travada"])
+    except cliente.ClicksignIndisponivel as exc:
+        logger.warning("[clicksign] anexo de %s adiado: %s", documento.envelope_id, exc)
+        return False
+    nome_arquivo = (
+        f"{nucleo.normalizar_nome(documento.nome) or documento.envelope_id} - Clicksign.pdf"
+    )
+    arquivo = FileStorage(io.BytesIO(dados), filename=nome_arquivo, content_type="application/pdf")
+    contrato = _add_contract_record(evento, file_storage=arquivo, is_signed=True)
+    documento.anexo_pendente = False
+    if contrato is None:
+        logger.warning(
+            "[clicksign] PDF de %s recusado pelo upload (tamanho ou tipo)", documento.envelope_id
+        )
+        return False
+    db.session.flush()
+    documento.contrato_anexo_id = contrato.id
+    db.session.add(
+        EventLog(
+            event_id=evento.id,
+            actor_name=CLICKSIGN_AUTOR,
+            actor_role=CLICKSIGN_AUTOR_PAPEL,
+            message=f"Anexou o contrato assinado na ClickSign: {nucleo.normalizar_nome(documento.nome)}",
+            created_at=datetime.utcnow(),
+        )
+    )
+    return True
+
+
+# ── A passada ────────────────────────────────────────────────────────────────────────────────
+
+
+def _uma_passada(
+    desde: date, ate: date | None, aplicar: bool, conexao: dict[str, Any]
+) -> dict[str, int]:
+    contagem = {
+        "envelopes": 0,
+        "novos": 0,
+        "ligados": 0,
+        "a_conferir": 0,
+        "fora": 0,
+        "anexados": 0,
+        "anexar": 0,
+    }
+    maior: datetime | None = None
+    pagina = 1
+    while True:
+        resposta = cliente.listar_envelopes(
+            modificado_desde=desde, modificado_ate=ate, pagina=pagina, **conexao
+        )
+        envelopes = list(resposta.get("data") or [])
+        for envelope in envelopes:
+            existia = (
+                ClicksignDocumento.query.filter_by(envelope_id=envelope["id"]).first() is not None
+            )
+            documento, _mudou = aplicar_envelope(envelope, conexao)
+            contagem["envelopes"] += 1
+            contagem["novos"] += 0 if existia else 1
+            if documento.vinculo == VINCULO_LIGADO:
+                contagem["ligados"] += 1
+            elif documento.vinculo == VINCULO_A_CONFERIR:
+                contagem["a_conferir"] += 1
+            else:
+                contagem["fora"] += 1
+            if documento.anexo_pendente:
+                if aplicar:
+                    contagem["anexados"] += 1 if anexar_assinado(documento, conexao) else 0
+                else:
+                    contagem["anexar"] += 1
+            if documento.modificado_em and (maior is None or documento.modificado_em > maior):
+                maior = documento.modificado_em
+        if len(envelopes) < cliente.TAMANHO_DA_PAGINA:
+            break
+        pagina += 1
+    if aplicar:
+        if maior is not None:
+            _gravar_cursor(maior)
+        db.session.commit()
+    else:
+        db.session.rollback()
+    return contagem
+
+
+def sincronizar(
+    *,
+    desde: date | None = None,
+    ate: date | None = None,
+    aplicar: bool = True,
+    motivo: str = "aviso",
+) -> dict[str, Any]:
+    """Uma passada incremental (e as repetições pedidas por aviso no meio dela).
+
+    Args:
+        desde: Início do `filter[modified]`; sem ele, o marco menos a folga (ou a última semana).
+        ate: Fim do intervalo (o comando usa; a passada automática não).
+        aplicar: Falso = simulação: lê tudo, conta e desfaz (o comando sem `--aplicar`).
+        motivo: `aviso`, `periodica` ou `comando` — só para o log.
+
+    Returns:
+        Contagens; ou `{"desligada": True}` sem token, `{"travada": True}` com a trava,
+        `{"ocupada": True}` quando outra passada segura o lock (e fica pedida a repetição).
+    """
+    if not integracao_ligada():
+        return {"desligada": True}
+    conexao = _conexao()
+    if conexao["travada"]:
+        try:
+            cliente.listar_envelopes(pagina=1, **conexao)
+        except cliente.ClicksignTravada:
+            return {"travada": True}
+    if not _reivindicar():
+        marcar_pendente()
+        return {"ocupada": True}
+    total: dict[str, Any] = {"motivo": motivo, "passadas": 0}
+    try:
+        for _ in range(REPETICOES_MAXIMAS):
+            inicio = desde
+            if inicio is None:
+                marco = _cursor()
+                inicio = (
+                    (marco - timedelta(minutes=CLICKSIGN_CURSOR_FOLGA_MINUTOS)).date()
+                    if marco
+                    else now_sp().date() - timedelta(days=JANELA_SEM_MARCO_DIAS)
+                )
+            contagem = _uma_passada(inicio, ate, aplicar, conexao)
+            total["passadas"] += 1
+            for chave, valor in contagem.items():
+                total[chave] = total.get(chave, 0) + valor
+            if not aplicar or not _consumir_pendente():
+                break
+    except cliente.ClicksignError as exc:
+        db.session.rollback()
+        logger.warning("[clicksign] passada (%s) interrompida: %s", motivo, exc)
+        total["erro"] = str(exc)
+    finally:
+        _soltar()
+    return total
+
+
+# ── Escritas da comercial (sem commit; a rota comita) ────────────────────────────────────────
+
+
+def _documento_travado(documento_id: int) -> ClicksignDocumento | None:
+    return (
+        ClicksignDocumento.query.filter_by(id=documento_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+
+
+def ligar(documento_id: int, event_id: int, usuario: Any) -> ClicksignDocumento:
+    """Liga o documento à venda do evento (sempre o principal). FR-006."""
+    from app.calendar.cancel_ops import EventoSomenteConsultaError, exigir_evento_vivo
+
+    documento = _documento_travado(documento_id)
+    if documento is None:
+        raise LookupError("documento")
+    if documento.vinculo == VINCULO_LIGADO:
+        raise ContratoIndisponivel("ja_ligado", "Este contrato já está ligado a uma venda.")
+    if documento.tipo == CLICKSIGN_TIPO_ARTISTA:
+        raise ContratoIndisponivel("tipo_fora", "Contrato de artista não se liga a venda.")
+    evento = db.session.get(CalendarEvent, event_id, with_for_update=True)
+    if evento is None:
+        raise LookupError("evento")
+    principal = _principal(evento)
+    try:
+        exigir_evento_vivo(principal)
+    except EventoSomenteConsultaError as exc:
+        raise ContratoIndisponivel("cancelado", str(exc)) from exc
+    documento.vinculo = VINCULO_LIGADO
+    documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
+    documento.vinculo_motivo = None
+    documento.event_id = principal.id
+    documento.vinculado_por_id = getattr(usuario, "id", None)
+    documento.vinculado_em = now_sp()
+    if documento.status == nucleo.STATUS_FECHADO and documento.contrato_anexo_id is None:
+        documento.anexo_pendente = True
+    return documento
+
+
+def desligar(documento_id: int, usuario: Any) -> ClicksignDocumento:
+    """Desliga e lembra o par: a sincronização não religa sozinha nessa venda (FR-005)."""
+    documento = _documento_travado(documento_id)
+    if documento is None:
+        raise LookupError("documento")
+    if documento.vinculo != VINCULO_LIGADO or documento.event_id is None:
+        raise ContratoIndisponivel("nao_ligado", "Este contrato não está ligado a uma venda.")
+    existe = ClicksignDesvinculo.query.filter_by(
+        documento_id=documento.id, event_id=documento.event_id
+    ).first()
+    if existe is None:
+        db.session.add(
+            ClicksignDesvinculo(
+                documento_id=documento.id,
+                event_id=documento.event_id,
+                por_id=getattr(usuario, "id", None),
+            )
+        )
+    documento.vinculo = VINCULO_A_CONFERIR
+    documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
+    documento.vinculo_motivo = CONFERIR_DESLIGADO
+    documento.event_id = None
+    documento.vinculado_por_id = getattr(usuario, "id", None)
+    documento.vinculado_em = now_sp()
+    documento.anexo_pendente = False
+    return documento
+
+
+def descartar(documento_id: int, usuario: Any) -> ClicksignDocumento:
+    """ "Não é de nenhuma venda": sai da conferência para sempre."""
+    documento = _documento_travado(documento_id)
+    if documento is None:
+        raise LookupError("documento")
+    if documento.vinculo == VINCULO_LIGADO:
+        raise ContratoIndisponivel("ja_ligado", "Desligue o contrato da venda antes de descartar.")
+    documento.vinculo = VINCULO_DESCARTADO
+    documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
+    documento.vinculado_por_id = getattr(usuario, "id", None)
+    documento.vinculado_em = now_sp()
+    return documento
+
+
+def registrar_cobranca(documento_id: int, usuario: Any) -> ClicksignCobranca:
+    """Registra o "Cobrar contrato" (FR-011); só o contrato aguardando, no principal vivo."""
+    documento = db.session.get(ClicksignDocumento, documento_id)
+    if documento is None:
+        raise LookupError("documento")
+    if documento.vinculo != VINCULO_LIGADO or documento.event_id is None:
+        raise ContratoIndisponivel("sem_venda", "Este contrato não está ligado a uma venda.")
+    from app.contratos.situacao_ops import situacao_da_venda
+
+    principal = db.session.get(CalendarEvent, documento.event_id)
+    principal = _principal(principal)
+    situacao = situacao_da_venda(principal)
+    bloqueio = nucleo.bloqueio_da_cobranca(
+        situacao["situacao"], eh_principal=True, venda_viva=principal.cancelled_at is None
+    )
+    if bloqueio or (situacao["documento"] is None or situacao["documento"].id != documento.id):
+        raise ContratoIndisponivel(
+            "nao_cobravel", bloqueio or "Este não é o contrato vigente da venda."
+        )
+    cobranca = ClicksignCobranca(
+        documento_id=documento.id,
+        event_id=principal.id,
+        usuario_id=getattr(usuario, "id", None),
+        usuario_nome=(getattr(usuario, "name", None) or getattr(usuario, "email", None) or "—")[
+            :120
+        ],
+        em=now_sp(),
+    )
+    db.session.add(cobranca)
+    return cobranca

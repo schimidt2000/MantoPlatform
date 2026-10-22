@@ -16,9 +16,10 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 from app.constants import (
     CLICKSIGN_MARCA_ARTISTA,
@@ -194,10 +195,14 @@ def _tema_bate(tema: str | None, candidato: Candidato) -> bool:
     alvo = texto_comparavel(tema)
     if not alvo:
         return False
-    return any(alvo in texto_comparavel(t) or texto_comparavel(t) in alvo for t in candidato.temas if t)
+    return any(
+        alvo in texto_comparavel(t) or texto_comparavel(t) in alvo for t in candidato.temas if t
+    )
 
 
-def escolher_candidato(lido: NomeLido, candidatos: Sequence[Candidato]) -> tuple[int | None, str | None]:
+def escolher_candidato(
+    lido: NomeLido, candidatos: Sequence[Candidato]
+) -> tuple[int | None, str | None]:
     """Decide a venda do documento: (event_id, None) para ligar, ou (None, motivo) para conferir.
 
     Regra (FR-004, research R-02): candidato vivo único liga; empate se resolve pelo tema; sem
@@ -301,7 +306,9 @@ def dias_ate(prazo: datetime | date | None, hoje: date) -> int | None:
     return (dia - hoje).days
 
 
-def cor_do_contrato(situacao: str, prazo: datetime | None, dias_ate_o_evento: int, hoje: date) -> str:
+def cor_do_contrato(
+    situacao: str, prazo: datetime | None, dias_ate_o_evento: int, hoje: date
+) -> str:
     """Régua da premissa 5 (confirmada no clarify) e do FR-010.
 
     Aguardando: a pior entre o prazo (vence hoje/amanhã = vermelho, 2–3 dias = amarelo) e a
@@ -340,7 +347,9 @@ def selo_do_contrato(situacao: str, prazo: datetime | None, hoje: date) -> str:
     return CONTRATO_ROTULOS[situacao]
 
 
-def rotulo_da_situacao(situacao: str, prazo: datetime | None, assinado_em: datetime | None, hoje: date) -> str:
+def rotulo_da_situacao(
+    situacao: str, prazo: datetime | None, assinado_em: datetime | None, hoje: date
+) -> str:
     """Frase da página do evento (FR-007)."""
     if situacao == CONTRATO_ASSINADO and assinado_em is not None:
         return f"Assinado em {assinado_em:%d/%m}"
@@ -349,9 +358,7 @@ def rotulo_da_situacao(situacao: str, prazo: datetime | None, assinado_em: datet
     return CONTRATO_ROTULOS[situacao]
 
 
-def bloqueio_da_cobranca(
-    situacao: str, *, eh_principal: bool, venda_viva: bool
-) -> str | None:
+def bloqueio_da_cobranca(situacao: str, *, eh_principal: bool, venda_viva: bool) -> str | None:
     """`None` quando dá para cobrar; senão o motivo em pt-BR (FR-012)."""
     if not venda_viva:
         return COBRAR_CONTRATO_BLOQUEIO_CANCELADA

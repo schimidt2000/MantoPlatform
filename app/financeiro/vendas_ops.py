@@ -22,10 +22,20 @@ CONTRACT_ASSINADO = "assinado"
 CONTRACT_PENDENTE = "pendente"
 CONTRACT_SEM_CONTRATO = "sem_contrato"
 
+# Feature 317 (FR-019): com a integração da ClickSign ligada, a coluna mostra a mesma situação
+# da página do evento. "pendente" sobra para a venda sem contrato na ClickSign mas com anexo sem a
+# marca de assinado (o que existia antes).
+CONTRACT_AGUARDANDO = "aguardando"
+CONTRACT_VENCIDO = "vencido"
+CONTRACT_RECUSADO = "recusado"
+
 CONTRACT_STATUS_LABELS: dict[str, str] = {
     CONTRACT_ASSINADO: "Assinado",
     CONTRACT_PENDENTE: "Pendente",
     CONTRACT_SEM_CONTRATO: "Sem contrato",
+    CONTRACT_AGUARDANDO: "Aguardando assinatura",
+    CONTRACT_VENCIDO: "Venceu sem assinatura",
+    CONTRACT_RECUSADO: "Recusado pela cliente",
 }
 
 # ── Status de recebimento do evento (derivado de EventPayment) ────────────────
@@ -119,6 +129,21 @@ def contract_status_map(event_ids: list[int]) -> dict[int, str]:
             status[event_id] = CONTRACT_ASSINADO
         elif status[event_id] == CONTRACT_SEM_CONTRATO:
             status[event_id] = CONTRACT_PENDENTE
+
+    from app.contratos.sincronizar_ops import integracao_ligada
+
+    if not integracao_ligada():
+        return status
+    # Feature 317: a situação da ClickSign, julgada pela venda (o grupo inteiro), vence a regra
+    # antiga; sem documento, a regra antiga fica (anexo sem marca = "pendente").
+    from app.constants import CONTRATO_ASSINADO_MANUAL, CONTRATO_SEM_CONTRATO
+    from app.contratos import situacao_ops
+
+    principais = CalendarEvent.query.filter(CalendarEvent.id.in_(event_ids)).all()
+    for event_id, situacao in situacao_ops.status_para_vendas(principais).items():
+        if situacao == CONTRATO_SEM_CONTRATO:
+            continue
+        status[event_id] = CONTRACT_ASSINADO if situacao == CONTRATO_ASSINADO_MANUAL else situacao
     return status
 
 

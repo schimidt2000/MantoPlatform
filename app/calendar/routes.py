@@ -305,6 +305,25 @@ def _clear_event_side_tables(event_id: int) -> None:
     FormResponse.query.filter_by(event_id=event_id).update(
         {"event_id": None, "event_link_source": None, "event_link_ambiguous": False}
     )
+    # Feature 317: o contrato da ClickSign ligado à venda excluída volta para "a conferir" (o
+    # documento existe na ClickSign e pode ser da venda recriada). `vinculo_origem` limpo: a
+    # sincronização pode religar sozinha quando o evento voltar (analyze R6). Cobranças e
+    # desvínculos vão pelo CASCADE.
+    from app.constants import CONFERIR_VENDA_EXCLUIDA, VINCULO_A_CONFERIR, VINCULO_LIGADO
+    from app.models import ClicksignDocumento
+
+    ClicksignDocumento.query.filter(
+        ClicksignDocumento.event_id == event_id, ClicksignDocumento.vinculo == VINCULO_LIGADO
+    ).update(
+        {
+            "event_id": None,
+            "vinculo": VINCULO_A_CONFERIR,
+            "vinculo_origem": None,
+            "vinculo_motivo": CONFERIR_VENDA_EXCLUIDA,
+            "contrato_anexo_id": None,
+        },
+        synchronize_session=False,
+    )
 
 
 def _delete_event(event: CalendarEvent, also_from_google: bool = False) -> str | None:
