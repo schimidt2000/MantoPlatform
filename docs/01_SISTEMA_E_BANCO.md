@@ -7,7 +7,12 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-21** · **313-desconto-e-pix-na-calculadora** (EM PRODUÇÃO desde 22/10/2026 ~04:58; sem migration; o desconto
+> Última atualização: **2026-10-22** · Em branch: **315-pedido-de-cancelamento** (migration **`d8b4e15f2c31`** — head:
+> `calendar_events.deletion_request_scope` e `deletion_request_refund`, §2.2; `POST/DELETE
+> /api/events/<id>/pedido-cancelamento` com o caminho velho `/solicitar-exclusao` nas mesmas views, a chave `pedidos` da
+> faixa, o bloco do pedido com corte por papel no detalhe e na fila, a herança do pedido de "todos" no dia da venda, §3.3;
+> kinds `evento.pedido_cancelamento` e `evento.pedido_decidido`, §3.13.5; `em_confirmacao` com o pedido, §3.15; gates e
+> recusas, §4.3). Antes: **2026-10-21** · **313-desconto-e-pix-na-calculadora** (EM PRODUÇÃO desde 22/10/2026 ~04:58; sem migration; o desconto
 > negociado e o PIX que vale o maior em `/orcamento/calcular`, a ordem da conta da Q7 marcada por `versao_conta: 2` no
 > snapshot, o cheio e o final no prefill, no Novo evento e no vínculo 273, `duracoes_do_desconto` no 400 — §3.13,
 > "Feature 313"; nenhum gate muda, §4.3). Antes: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
@@ -242,7 +247,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender), **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -752,7 +757,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 |---|---|
 | GET | `/api/agenda`, `/api/agenda/day/<date_str>`, `/api/talents`, `/api/events/<id>`, `/api/events/new/options`, `/api/events/new/prefill` |
 | GET | `/api/events/<id>/casting-options` *(feature 215)* |
-| GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio)* |
+| GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio; a 315 soma a chave opcional `pedidos: {total, items}` com os pedidos de cancelamento pendentes, na mesma ordem — `total`/`items` seguem só do sumiço)* |
+| POST, DELETE | `/api/events/<id>/pedido-cancelamento` *(feature 315 — pedir: Comercial ou Superadmin real, corpo `{motivo, alcance?, devolucao: {modo, valor?, nome?, pix?}, venda_nova?}`; recusar: só Superadmin real, `{motivo?}`; os dois respondem o detalhe. Alias `/api/events/<id>/solicitar-exclusao` nas mesmas views — o bundle de antes do deploy; pelo alias o corpo só com `motivo` vale, sem devolução e com alcance nulo. Recusas em §4.3)* |
 | POST | `/api/events/<id>/devolver-ao-google` *(feature 303 — só Superadmin; responde o detalhe + `devolucao_google: {resultado}`; erros com `codigo`)* |
 | POST | `/api/events/<id>/cancelar` *(feature 224; corpo, resposta e recusas reescritos na 306 — ver "Feature 306" abaixo)* |
 | GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado; a 312 abre ao FINANCEIRO e filtra por `mes` e `devolucao` — §4.3)* |
@@ -1616,6 +1622,18 @@ dos dois avisa o Superadmin, que é quem cancela:
   pelo WhatsApp"); `urgent` quando o dia é em até 7 dias, como a recusa de convite; link para a aba
   Produção do dia (`/events/<dia>?aba=producao`); chave `evento.cancelado_escala:<id da URL>:<dia>`.
 
+Produtores da feature 315 (o pedido de cancelamento), chamados por `solicitacao_ops`:
+- `notificar_pedido_cancelamento` (kind `evento.pedido_cancelamento`, SUPERADMIN ativos, entidade
+  `calendar_event`, link `/events/<id>`): na transação do pedido (regime A); `urgent` quando o evento é em até 7 dias ou
+  já passou; o corpo diz data · venda · recebido · escalados nos dias que o pedido alcança · alcance · quem pediu e o
+  motivo — nunca nome nem PIX de quem recebe a devolução; chave `evento.pedido_cancelamento:<id>:<carimbo>`. Toda
+  decisão o marca lido (sempre com o kind); a exclusão o apaga.
+- `notificar_pedido_decidido` (kind `evento.pedido_decidido`, **só o autor**, por lista explícita): "Pedido recusado —
+  <título>: <motivo>", "Evento cancelado — <título> (dd/mm)", "Dia dd/mm cancelado — <título>: a venda segue nos outros
+  dias" ou "…: a venda passou para o dia dd/mm; os outros dias seguem", e "Evento excluído — <título>" (sem entidade e
+  sem link, depois do commit da exclusão, regime B). O produtor não responde a quem perdeu o acesso nem a quem decidiu
+  o próprio pedido; chave `evento.pedido_decidido:<id>:<decisão>:<carimbo do pedido>`.
+
 Os ensaios que o ato apaga levam junto os avisos do sino deles (`event_ops._apagar_ensaio_no_banco`,
 o mesmo caminho do botão e da troca de tipo). O e-mail de remoção ao elenco, um por talento com
 e-mail, sai depois do commit.
@@ -1747,7 +1765,8 @@ serializador (`portal_ops._role_summary`) e carrega, desde a feature 302, mais d
   guarda endereço, não observação. O bloco vai em `pending_invites` e `upcoming`; no `history` é
   sempre `null`.
 - **`em_confirmacao`** (feature 303) — booleano, verdadeiro quando o evento está marcado "Sumiu do
-  Google Agenda" e não cancelado. Vai o código, nunca o motivo: a tela escreve "Evento em
+  Google Agenda" e não cancelado, ou (feature 315) tem pedido de cancelamento pendente — dele ou do 1º dia da venda,
+  quando o pedido é de "todos os dias" (lote `solicitacoes_da_venda`, uma consulta por lista). Vai o código, nunca o motivo: a tela escreve "Evento em
   confirmação — entre em contato com a produção". Em `pending_invites`, `upcoming` e `history` da
   agenda e em `items` do histórico; opcional no TypeScript, como as duas acima.
 
@@ -1970,7 +1989,10 @@ rollback e 409 `tente_de_novo` (`cancel_ops.traduzir_erro_de_banco`).
 | `GET /api/events/<id>/impacto-exclusao` | `_can_delete()`, sem mudança | Sem trava. Na prévia (`?devolucao=`): 400 `fields.devolucao` ou `fields.venda_nova`; evento já cancelado → `ja_cancelado` |
 | `PATCH /api/events/<id>/devolucao` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | 400 `devolucao_total` (falta ou não é número), antes da trava → trava → `nao_cancelado` → `regime_sem_retido` (`satelite`, `virtual`) → 400 com os `fields` → `abaixo_do_piso` (`piso`) → `acima_do_teto` (`teto`, só no `dia`) |
 | `POST /api/events/<id>/multas` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | Trava → `nao_cancelado` → 400 `fields.multas` ou `fields.multa_<elenco_id>` |
-| `GET /api/events/cancelamentos` | `_can_read_cancelamentos()` (feature 312: `SUPERADMIN` ou `FINANCEIRO`, papel real) | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro`; filtros da 312 abaixo |
+| `GET /api/events/cancelamentos` | `_can_read_cancelamentos()` (feature 312: `SUPERADMIN` ou `FINANCEIRO`, papel real) | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro`; filtros da 312 abaixo; feature 315: cada pendente com `alcance`, `devolucao` e `venda_nova`, com o corte do detalhe |
+| `POST /api/events/<id>/pedido-cancelamento` (e o alias `…/solicitar-exclusao`) **(315)** | `_can_request_delete()`: `COMERCIAL` ou `SUPERADMIN` real, depois do 404 | `cancelado` (trava da 312) → `ensaio` → `cache_pago` do próprio dia → 400 com todos os `fields` (`motivo`, `alcance`, `devolucao_modo`, `devolucao_valor`, `devolucao_nome`, `devolucao_pix`, `venda_nova`) → `cache_pago` dos outros dias que "todos" alcança (`dias`) → claim → `pedido_pendente` ("Já existe um pedido de <nome>…"). Não confere dinheiro (máximo e mínimo são do cancelar) |
+| `DELETE /api/events/<id>/pedido-cancelamento` (e o alias) **(315)** | `_can_delete()`: só `SUPERADMIN` real — o autor do pedido também leva 403 | claim pelo carimbo lido → `sem_pedido` quando outra decisão fechou o pedido antes |
+| `GET /api/events/<id>` — bloco `deletion_request` **(315)** | sem mudança no gate | Todos veem `requested_at` e `alcance`; `requested_by(_id)`, `reason`, `devolucao.modo/valor` e `venda_nova` com `show_comercial`; `devolucao.nome/pix` também com `show_financeiro` ou para o autor sem "Ver como". `pedido_bloqueado` e `escolha_do_alcance` só com `can_request_delete` |
 | `GET /api/events/<id>` | sem mudança | Só contrato: `event.cancelamento` só com `show_comercial` (§3.3) |
 | `PATCH /api/events/<id>/comercial` | `_can_create_event()` (`COMERCIAL`, `SUPERADMIN`), sem mudança | Depois do 409 de satélite e antes do 400 de data e do 403 da 215b: Comercial → `cancelado`; o Financeiro segue fora do gate (403). O Superadmin grava e recongela; o evento que mudou de estado entre a leitura e a trava → `estado_mudou` |
 | `PATCH /api/events/<id>` ("Editar tudo") | `_can_create_event()`, sem mudança | Depois do 400 de validação: `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` ou `with_invoice` **diferente** do gravado → `cancelado` **para todos, o Superadmin inclusive** (a porta não recongela; `event_ops.venda_mudaria`). Campo igual ao gravado passa |

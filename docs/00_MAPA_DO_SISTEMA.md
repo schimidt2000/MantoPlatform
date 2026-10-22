@@ -335,6 +335,7 @@ Inventário completo, com o que é morto, o que é duplicado e como fatiar: **`d
 | Endpoint novo | `docs/01` §3 (inventário) → módulo `app/api/<dominio>_{read,write}.py` → **registrar em `app/api/__init__.py`** |
 | Regra de comissão / DRE | `docs/04` §Financeiro (a regra completa está lá, em 9 pontos) → `app/financeiro/routes.py:120-350` |
 | Mexer no sync do Google | `docs/04` §Agenda → `app/calendar/sync.py` (moldura) → `sync_events` em `app/calendar/routes.py` → limpeza, marca e devolução em `app/calendar/sumico_ops.py` (303) |
+| Pedido de cancelamento (o Comercial pede, o Superadmin decide) | `docs/04` §Agenda "Antes do ato" → `app/calendar/solicitacao_ops.py` (315: o único que escreve as cinco colunas do pedido) → o fecho em `cancel_ops.ao_cancelar` → `components/EventDetail/PedirCancelamentoDialog.tsx` e `QuadroDoPedido.tsx` |
 | Tela nova no ERP | `docs/02` (telas vizinhas) → rota em `internal/src/App.tsx` → item em `lib/navigation.tsx` (`isVisible`) → módulo em `lib/` → página em `pages/` |
 | Componente compartilhado | `packages/ui/src/components/` → **exportar em `packages/ui/src/index.ts`** |
 | Loja Virtual / pagamento | `docs/04` §Loja Virtual → `app/marketing/virtuais_ops.py` → `app/integracoes/infinitepay_client.py` |

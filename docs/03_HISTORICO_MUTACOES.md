@@ -162,6 +162,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **315-pedido-de-cancelamento** | *(em branch, não publicada)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
@@ -345,6 +346,44 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 315 — O Comercial pede o cancelamento e o Superadmin decide   (315-pedido-de-cancelamento · 2026-10-22 · migration `d8b4e15f2c31`)
+
+> **Em branch, não publicada** (worktree `C:\tmp\mp315`). Nível 1. Item 2a do backlog de setembro
+> (`docs/backlog/`), sobre a 306 (o cancelar com dinheiro) e a 312 (o cancelado fora das listas).
+
+**O porquê.** O "Solicitar exclusão" da 224 existia e ninguém usava: o pedido não avisava ninguém, não dizia o que a
+cliente combinou e não fechava sozinho quando o Superadmin cancelava. A reconferência de 22/10
+(`specs/315-pedido-de-cancelamento/pesquisa/reconferencia-2026-10-22.md`) achou **um pedido real parado desde 07/10**
+(evento de 12/12, com venda), feito por uma Comercial e marcado "sumiu do Google" seis minutos depois — com seis
+avisos de sumiço no sino e nenhum lido. O pedido em si não tinha aviso nenhum.
+
+**O que mudou.**
+- **Pedir** (`POST /api/events/<id>/pedido-cancelamento`, Comercial ou Superadmin real): motivo; no 1º dia de uma
+  venda com outro dia vivo, todos os dias ou só este; a devolução combinada na forma do cancelar da 306 (Tudo/Parte/
+  Nada, valor, quem recebe e PIX; num dia só, Parte/Nada e o novo valor da venda; na venda virtual, só o motivo).
+  Recusas na ordem da 306 (cancelado → ensaio → cachê pago → campos → cachê pago dos outros dias → `pedido_pendente`).
+  Cada Superadmin ativo recebe `evento.pedido_cancelamento` na mesma transação (`urgent` em até 7 dias ou já passado).
+- **Decidir**: só o Superadmin real — recusar (`DELETE …`, motivo opcional), cancelar (o ato da 306 fecha o pedido de
+  cada dia em `ao_cancelar`) ou excluir o vazio. Quem pediu recebe uma resposta por pedido (`evento.pedido_decidido`):
+  recusado com o motivo, "Evento cancelado", "Dia dd/mm cancelado — a venda segue / passou para o dia dd/mm", "Evento
+  excluído" (sem link). Pedir e recusar por `UPDATE` condicional: duas ações ao mesmo tempo dão um vencedor e um 409.
+- **Ver**: o quadro "Cancelamento pedido — aguardando o Superadmin" com o corte da Q6 (todos veem que há pedido;
+  motivo e devolução, quem trata do cancelamento; nome e PIX, Financeiro, Superadmin e o autor); a frase dos pedidos
+  na faixa do topo; o selo neutro "Cancelamento pedido" no Mês, Dia, Lista e busca (também nos outros dias de uma
+  venda com pedido de "todos"); "Evento em confirmação" no portal; a página vira "Cancelamentos", com alcance e
+  devolução na fila.
+- **Contrato velho**: `/solicitar-exclusao` segue nas mesmas views (bundle de antes do deploy) — dívida 148. O pedido
+  de antes (o do 1350) fica "sem devolução informada", lido como "todos". Sai o `EventLog` em horário de SP da 224
+  (parte da dívida 76).
+
+**Premissas da Session 2026-10-22** (contestáveis, na spec): pedido aceito no evento marcado "sumiu do Google" e não
+decidido pelo "Devolver ao Google"; ensaio e dia com cachê pago não recebem pedido; a devolução segue a forma da 306 e
+o pedido não confere dinheiro; nome e PIX só para Superadmin, Financeiro e o autor.
+
+**Verificação.** `verify_315.py` 28/28 (primeira rodada vermelha guardada em `verify_315_primeira_falha.txt`: 2/28);
+regressão 306 67/69 (base), 312 27/27, 303 44/44, 311 8/8, 302 22/22. **Pré-merge**: a 310 (pronta, não publicada)
+também desce de `c5d2f7a9e306` — quem entrar por último na `main` repõe o `down_revision`.
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 
