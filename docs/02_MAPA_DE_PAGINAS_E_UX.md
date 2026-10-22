@@ -263,9 +263,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   fecham e devolvem o foco. Poll de 60 s, só no shell; a régua de abas do evento e as âncoras da
   Home somam os 40 px quando ela está na tela (`useFaixaSumidosVisivel`, observer passivo). Em
   375 px: uma linha só, sem título.
-  **Feature 315**: a mesma barra ganha a frase "N pedidos de cancelamento aguardando o Superadmin"
-  (dourada, ícone `FileX`; em 375 px "N pedidos de cancel."), com o seu botão e a sua lista — um pedido é link
-  direto; as duas frases dividem a barra quando há sumiço e pedido. Some quando o pedido é decidido.
+  **Feature 315**: a mesma barra vermelha ganha a frase "1 pedido de cancelamento aguarda decisão" / "N pedidos de
+  cancelamento aguardam decisão" (ícone `FileX`; em 375 px "N pedidos de cancel."), com o seu botão e a sua lista — um
+  pedido é link direto; as duas frases dividem a barra quando há sumiço e pedido, separadas por um traço. Some quando o
+  pedido é decidido.
 
 #### `/notificacoes` — Notificações *(feature 272)*
 - **Acesso**: qualquer usuário interno (a caixa é do próprio usuário); **sem item de menu** — a
@@ -525,7 +526,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     "tudo"), valor em Parte, quem recebe e PIX em Tudo e Parte — e, no pedido de um dia só, o novo valor da venda;
     na venda virtual, só o motivo. "O que está em jogo" (venda e recebido da tela; o que o cancelamento faz) e
     "Depois de enviado, só o Superadmin fecha o pedido". "Enviar pedido" só com tudo preenchido; os erros do
-    servidor ficam no campo. Nenhuma conta de dinheiro: máximo e mínimo são do cancelar.
+    servidor ficam no campo; ao lado do botão desabilitado, "Falta informar: …". Recusa de estado (outro pedido chegou
+    antes, o dia ficou bloqueado) fecha o diálogo e a frase do servidor sai na linha de aviso do cabeçalho; o 409 de
+    cachê pago no "todos" fica no diálogo (com os dias), para escolher "Só este dia". Nenhuma conta de dinheiro: máximo
+    e mínimo são do cancelar.
     **Feature 306**: no evento cancelado, "Editar tudo" some (a edição em bloco não corrige venda;
     o servidor recusaria); no marcado, o item do Superadmin vira **Cancelar evento**.
   - **Banners** acima das abas (feature 224): evento **cancelado** ("Evento cancelado em DD/MM";
@@ -534,7 +538,8 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     Cancelamentos e no card 'Cancelamentos do período'. A tela fica só para consulta; só os dados de
     venda (valores, comprovantes, devolução, multas) continuam editáveis, pelo Superadmin") e
     **cancelamento pedido** aguardando o Superadmin (feature 315, `QuadroDoPedido`: data, quem pediu, alcance,
-    motivo e devolução combinada — cada um só quando o servidor manda, pelo corte por papel; para o autor, "Se a
+    motivo e devolução combinada — cada um só quando o servidor manda, pelo corte por papel; o alcance em texto pronto
+    do servidor ("todos os 3 dias da venda"); "sem devolução informada" no pedido de antes do deploy; para o autor, "Se a
     cliente voltar atrás, avise o Superadmin — só ele fecha o pedido"; no outro dia de uma venda com pedido de "todos",
     "Pedido feito no 1º dia da venda" com link),
     este com os botões "Analisar e decidir" e "Recusar pedido" (confirmação com motivo opcional, que vai a quem

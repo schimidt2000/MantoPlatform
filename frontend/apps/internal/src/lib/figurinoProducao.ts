@@ -153,6 +153,8 @@ export interface Producao {
   event_start_at: string | null;
   /** Feature 312: a situação do evento do pedido (o selo do cancelado). */
   event_situacao?: SituacaoEvento | null;
+  /** Feature 315: desde quando vale a situação (o tooltip do selo). */
+  event_situacao_desde?: string | null;
   figurino_sheet_id: number | null;
   figurino_sheet_name: string | null;
   figurino_sheet_photo: string | null;

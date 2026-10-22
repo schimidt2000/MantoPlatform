@@ -214,8 +214,10 @@ export function EventosCancelamentosPage() {
                         </span>
                       </TableCell>
                       <TableCell className="text-muted">
-                        {p.alcance === "so_este_dia" && (
-                          <span className="block text-xs font-semibold text-ink">Só este dia da venda</span>
+                        {(p.alcance_texto || p.alcance === "so_este_dia") && (
+                          <span className="block text-xs font-semibold text-ink first-letter:uppercase">
+                            {p.alcance_texto ?? "só este dia da venda"}
+                          </span>
                         )}
                         {p.reason ?? (p.requested_by === undefined ? "" : "—")}
                         {textoDaDevolucao(p) && (

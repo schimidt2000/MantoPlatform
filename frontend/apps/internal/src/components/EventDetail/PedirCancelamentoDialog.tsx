@@ -48,6 +48,9 @@ export interface PedirCancelamentoDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEnviado: () => void;
+  /** Recusa de estado (outro pedido chegou antes, o dia ficou bloqueado): o diálogo fecha e quem o
+   * abriu anuncia a frase do servidor — o evento já foi recarregado. */
+  onRecusado: (mensagem: string) => void;
 }
 
 /**
@@ -57,7 +60,13 @@ export interface PedirCancelamentoDialogProps {
  * da devolução são do cancelar, na hora de cancelar. O número de dias e o dia que receberia a venda
  * vêm prontos do servidor (`escolha_do_alcance`) — a tela não calcula.
  */
-export function PedirCancelamentoDialog({ data, open, onOpenChange, onEnviado }: PedirCancelamentoDialogProps) {
+export function PedirCancelamentoDialog({
+  data,
+  open,
+  onOpenChange,
+  onEnviado,
+  onRecusado,
+}: PedirCancelamentoDialogProps) {
   const event = data.event;
   const pedir = usePedirCancelamento(event.id);
   const [motivo, setMotivo] = useState("");
@@ -79,14 +88,18 @@ export function PedirCancelamentoDialog({ data, open, onOpenChange, onEnviado }:
   const venda = data.cobranca?.valor ?? data.venda?.sale_value ?? null;
   const recebido = data.cobranca?.recebido ?? null;
 
-  const completo =
-    motivo.trim() !== "" &&
-    (!escolha || alcance !== null) &&
-    (virtual ||
-      (modo !== null &&
-        (modo !== "parte" || valor > 0) &&
-        (!recebe || (nome.trim() !== "" && pix.trim() !== "")) &&
-        (!umDiaSo || vendaNova > 0)));
+  // O que falta, dito ao lado do botão desabilitado (a tela diz o que falta, não só trava).
+  const faltam: string[] = [];
+  if (!motivo.trim()) faltam.push("o motivo");
+  if (escolha && alcance === null) faltam.push("o que cancelar");
+  if (!virtual) {
+    if (modo === null) faltam.push("quanto devolver");
+    if (modo === "parte" && valor <= 0) faltam.push("o valor a devolver");
+    if (recebe && !nome.trim()) faltam.push("quem recebe");
+    if (recebe && !pix.trim()) faltam.push("o PIX");
+    if (umDiaSo && vendaNova <= 0) faltam.push("o novo valor da venda");
+  }
+  const completo = faltam.length === 0;
 
   function limpar() {
     setMotivo("");
@@ -125,6 +138,15 @@ export function PedirCancelamentoDialog({ data, open, onOpenChange, onEnviado }:
         onEnviado();
       },
       onError: (e) => {
+        const codigo = e instanceof ApiRequestError ? e.details?.codigo : undefined;
+        if (codigo === "pedido_pendente" || codigo === "ensaio" || codigo === "cache_pago" || codigo === "cancelado") {
+          // Estado: o diálogo não faz mais sentido (o hook já recarregou o evento).
+          if (codigo !== "cache_pago" || !escolha) {
+            fechar(false);
+            onRecusado(e.message);
+            return;
+          }
+        }
         if (e instanceof ApiRequestError && e.fields) setErros(e.fields);
         setErro(e.message);
       },
@@ -327,6 +349,7 @@ export function PedirCancelamentoDialog({ data, open, onOpenChange, onEnviado }:
             </p>
           )}
         </div>
+        {!completo && <p className="text-xs text-muted">Falta informar: {faltam.join(", ")}.</p>}
         <DialogFooter>
           <Button variant="outline" size="sm" onClick={() => fechar(false)}>
             Voltar

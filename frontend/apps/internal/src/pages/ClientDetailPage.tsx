@@ -241,7 +241,7 @@ export function ClientDetailPage() {
                             <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
                               {f.event_title}
                             </Link>{" "}
-                            <SeloSituacao situacao={f.event_situacao} />
+                            <SeloSituacao situacao={f.event_situacao} desde={f.event_situacao_desde} />
                           </>
                         ) : (
                           <Link

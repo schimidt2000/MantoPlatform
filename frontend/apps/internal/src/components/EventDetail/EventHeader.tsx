@@ -379,7 +379,7 @@ export function EventHeader({ data }: EventHeaderProps) {
             : "Já existe um pedido aguardando o Superadmin"
           : bloqueio
             ? bloqueio.frase
-            : "Pedir ao Superadmin para cancelar este evento",
+            : "Pede ao Superadmin que cancele este evento — ele recebe o aviso no sino",
         onClick: () => setSolicitarOpen(true),
       });
     }
@@ -464,7 +464,7 @@ export function EventHeader({ data }: EventHeaderProps) {
         </div>
       )}
 
-      {/* Antes do pedido de exclusão: quando os dois existem, o sumiço é o que explica o resto. */}
+      {/* Antes do pedido de cancelamento: quando os dois existem, o sumiço é o que explica o resto. */}
       <SumiuDoGoogleBanner
         data={data}
         onDevolver={abrirDevolver}
@@ -586,7 +586,10 @@ export function EventHeader({ data }: EventHeaderProps) {
                       anunciar("Pedido recusado — quem pediu foi avisado.");
                     },
                     onError: (e) => {
-                      if (e.details?.codigo === "sem_pedido") setRecusarOpen(false);
+                      if (e.details?.codigo === "sem_pedido") {
+                        setRecusarOpen(false);
+                        anunciar("Este pedido já foi decidido — o evento foi recarregado.", 6000);
+                      }
                     },
                   },
                 )
@@ -611,6 +614,7 @@ export function EventHeader({ data }: EventHeaderProps) {
           open={solicitarOpen}
           onOpenChange={setSolicitarOpen}
           onEnviado={() => anunciar("Pedido enviado ao Superadmin.", 4000)}
+          onRecusado={(mensagem) => anunciar(mensagem, 6000)}
         />
       )}
     </header>

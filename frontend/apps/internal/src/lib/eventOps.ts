@@ -85,11 +85,14 @@ export function useDeleteEvent(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Feature 306: o marcado excluído sai da lista de sumidos sem esperar o poll.
       invalidarSumidosGoogle(queryClient);
+      // Feature 315: o pedido do evento excluído sai do sino e da fila de Cancelamentos na hora.
+      invalidarNotificacoes(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
     },
   });
 }
 
-// ── Excluir / cancelar / solicitar exclusão (feature 224) ────────────────────
+// ── Excluir / cancelar / pedir o cancelamento (features 224 e 315) ───────────
 
 /**
  * Os 18 `codigo` das recusas do cancelamento e das correções do cancelado (feature 306,
@@ -570,6 +573,8 @@ export interface CancelamentoPendente {
   requested_by?: string | null;
   reason?: string | null;
   alcance?: AlcanceCancelamento | null;
+  alcance_texto?: string;
+  sem_devolucao_informada?: boolean;
   devolucao?: { modo?: ModoDevolucao | null; valor?: string; nome?: string; pix?: string } | null;
   venda_nova?: string | null;
 }

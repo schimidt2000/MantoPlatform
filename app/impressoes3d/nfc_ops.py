@@ -372,6 +372,8 @@ def serialize_tag(tag: NfcTag) -> dict[str, Any]:
                 "start_at": event.start_at.isoformat() if event.start_at else None,
                 # Feature 312: a tag ligada a um evento cancelado leva o selo na lista.
                 "situacao": event.situacao,
+                # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+                "situacao_desde": event.situacao_desde.isoformat() if event.situacao_desde else None,
             }
             if event
             else None

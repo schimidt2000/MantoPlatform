@@ -73,7 +73,7 @@ function Segmento({ total, itens, frase, fraseCurta, Icone, tom, aberto, onAlter
 /**
  * Faixa fixa no topo de toda tela do sistema interno: quantos eventos sumiram do Google Agenda e
  * foram mantidos (feature 303) e quantos pedidos de cancelamento aguardam o Superadmin (feature
- * 315). Para Superadmin e Comercial — quem decide é o `pode_ver` do servidor; o componente é
+ * 315), na mesma faixa vermelha. Para Superadmin e Comercial — quem decide é o `pode_ver` do servidor; o componente é
  * montado para todo usuário no `AppShell`. As duas frases dividem a mesma barra de 40 px, cada uma
  * com o seu botão e a sua lista.
  *
@@ -172,12 +172,13 @@ export function FaixaSumidosGoogle() {
                   itens={itensPedidos}
                   frase={
                     totalPedidos === 1
-                      ? "1 pedido de cancelamento aguardando o Superadmin"
-                      : `${totalPedidos} pedidos de cancelamento aguardando o Superadmin`
+                      ? "1 pedido de cancelamento aguarda decisão"
+                      : `${totalPedidos} pedidos de cancelamento aguardam decisão`
                   }
                   fraseCurta={totalPedidos === 1 ? "1 pedido de cancelamento" : `${totalPedidos} pedidos de cancel.`}
                   Icone={FileX}
-                  tom="border-b border-gold/40 bg-gold-soft text-gold-ink"
+                  // A mesma faixa vermelha; com as duas frases, um traço as separa.
+                  tom={cn("bg-red text-on-color", total > 0 && "border-l border-on-color/40")}
                   aberto={aberta === "pedidos"}
                   onAlternar={() => alternar("pedidos")}
                   botaoRef={botaoPedidos}

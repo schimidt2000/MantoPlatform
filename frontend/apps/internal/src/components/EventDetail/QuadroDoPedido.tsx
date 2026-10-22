@@ -14,14 +14,15 @@ function brl(valor: string | number): string {
   return `R$ ${formatBRL(Number(valor))}`;
 }
 
-/** O alcance como o quadro o diz; `null` (pedido de antes da 315) não diz nada. */
-function textoDoAlcance(alcance: PedidoDeCancelamento["alcance"]): string | null {
-  if (alcance === "so_este_dia") return "só este dia da venda";
-  return null;
+/** O alcance como o servidor o diz ("todos os 3 dias da venda"); sem ele (backend de antes), só o "só este dia". */
+function textoDoAlcance(pedido: PedidoDeCancelamento): string | null {
+  if (pedido.alcance_texto) return pedido.alcance_texto;
+  return pedido.alcance === "so_este_dia" ? "só este dia da venda" : null;
 }
 
 /** "Devolver parte: R$ 600,00 a Fulana (PIX …)" — com o que o servidor mandou para este papel. */
 export function textoDaDevolucao(pedido: PedidoDeCancelamento): string | null {
+  if (pedido.sem_devolucao_informada) return "sem devolução informada";
   const dev = pedido.devolucao;
   if (!dev?.modo) return null;
   const rotulo = { tudo: "Devolver tudo", parte: "Devolver parte", nada: "Não devolver" }[dev.modo];
@@ -45,7 +46,7 @@ export interface QuadroDoPedidoProps {
  * autor e devolução por papel — chave ausente é "não mostrar", nunca "sem motivo".
  */
 export function QuadroDoPedido({ pedido, ehAutor = false, acoes }: QuadroDoPedidoProps) {
-  const alcance = textoDoAlcance(pedido.alcance);
+  const alcance = textoDoAlcance(pedido);
   const devolucao = textoDaDevolucao(pedido);
   return (
     <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="status">

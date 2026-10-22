@@ -552,6 +552,12 @@ def serialize_producao(
         "event_id": producao.event_id,
         "event_title": producao.event.title if producao.event else None,
         "event_situacao": producao.event.situacao if producao.event else None,  # feature 312: o selo
+        # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+        "event_situacao_desde": (
+            producao.event.situacao_desde.isoformat()
+            if producao.event and producao.event.situacao_desde
+            else None
+        ),
         "event_start_at": (
             producao.event.start_at.isoformat()
             if producao.event and producao.event.start_at

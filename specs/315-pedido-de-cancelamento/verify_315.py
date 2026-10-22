@@ -860,7 +860,7 @@ def c35_autor_apagado() -> None:
     ev = _evento("c35")
     _pedir_ok("c35", ev, _nada())
     r = _cliente("sa").delete(f"/api/admin/users/{estado['usuarios']['c35']['id']}")
-    _garante(r.status_code == 200, f"35: excluir o autor → {r.status_code} {r.get_data(as_text=True)[:300]}")
+    _garante(r.status_code in (200, 204), f"35: excluir o autor → {r.status_code} {r.get_data(as_text=True)[:300]}")
     p = _pedido(ev)
     _garante(p["at"] is not None and p["by"] is None, f"35: o pedido {p}")
     _garante(_recusar("sa", ev).status_code == 200, "35: recusar sem autor")

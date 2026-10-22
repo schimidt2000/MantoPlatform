@@ -262,7 +262,7 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
             Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
           </MetricBadge>
           {/* Feature 312 (converge): o selo também na lista, não só ao abrir o detalhe. */}
-          <SeloSituacao situacao={response.event_situacao} />
+          <SeloSituacao situacao={response.event_situacao} desde={response.event_situacao_desde} />
         </>
       ) : response.destino === "encerrados" ? (
         <MetricBadge tone="neutral">
@@ -495,7 +495,7 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
             <MetricBadge tone="green" size="sm">
               {response.event_title ?? "Evento vinculado"}
             </MetricBadge>
-            <SeloSituacao situacao={response.event_situacao} />
+            <SeloSituacao situacao={response.event_situacao} desde={response.event_situacao_desde} />
           </span>
           <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
             Desvincular

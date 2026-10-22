@@ -495,13 +495,13 @@ function LinhaPedido({ p }: { p: Producao }) {
         {p.figurino_sheet_name && (
           <p className="mt-0.5 truncate text-xs text-muted">
             {/* Feature 312 (converge): com ficha o evento não aparece, mas o cancelado avisa. */}
-            {p.event_title && <SeloSituacao situacao={p.event_situacao} compacto />}
+            {p.event_title && <SeloSituacao situacao={p.event_situacao} desde={p.event_situacao_desde} compacto />}
             {p.figurino_sheet_name}
           </p>
         )}
         {p.event_title && !p.figurino_sheet_name && (
           <p className="mt-0.5 truncate text-xs text-muted" title={p.event_title}>
-            <SeloSituacao situacao={p.event_situacao} compacto />
+            <SeloSituacao situacao={p.event_situacao} desde={p.event_situacao_desde} compacto />
             {p.event_title}
           </p>
         )}

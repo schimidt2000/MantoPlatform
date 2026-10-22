@@ -445,6 +445,10 @@ def delete_user(user: User, *, actor_id: int) -> None:
     SpecialExpense.query.filter_by(approved_by_id=user.id).update({"approved_by_id": None})
     SpecialExpense.query.filter_by(reimburse_user_id=user.id).update({"reimburse_user_id": None})
     EventCancellation.query.filter_by(updated_by_id=user.id).update({"updated_by_id": None})
+    # Feature 315: o pedido de cancelamento pendente fica, sem autor (só `solicitacao_ops` mexe nele).
+    from app.calendar.solicitacao_ops import soltar_autor
+
+    soltar_autor(user.id)
 
     audit("delete", "user", user.id, user.name, f"Usuário excluído: {user.email or user.name}")
     db.session.delete(user)

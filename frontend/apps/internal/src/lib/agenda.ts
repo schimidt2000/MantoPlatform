@@ -5,8 +5,8 @@ import type { AvisoFalho } from "./virtuais";
 
 /**
  * Situação única do evento (feature 303), com a precedência resolvida no servidor:
- * cancelado > sumiu do Google > exclusão solicitada. A tela lê este valor e nunca recombina
- * `cancelled_at`, a marca e o pedido de exclusão.
+ * cancelado > sumiu do Google > cancelamento pedido (`exclusao_solicitada`, o código de antes). A tela lê
+ * este valor e nunca recombina `cancelled_at`, a marca e o pedido de cancelamento.
  */
 export type SituacaoEvento = "cancelado" | "sumiu_do_google" | "exclusao_solicitada";
 
@@ -441,6 +441,10 @@ export interface EventoDetalhe {
       requested_at: string;
       /** `null` = pedido de antes da 315 (ou pelo caminho velho): vale como "todos". */
       alcance?: "todos" | "so_este_dia" | null;
+      /** O alcance em texto pronto ("todos os 3 dias da venda"); ausente no evento avulso. */
+      alcance_texto?: string;
+      /** Pedido de antes do deploy ou pelo caminho velho, fora da venda virtual. */
+      sem_devolucao_informada?: boolean;
       requested_by?: string | null;
       requested_by_id?: number | null;
       reason?: string | null;

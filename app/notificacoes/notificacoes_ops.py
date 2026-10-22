@@ -33,6 +33,7 @@ import json
 import logging
 from collections.abc import Iterable
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, or_, select, update
@@ -396,7 +397,8 @@ def notificar_pedido_cancelamento(
     event: CalendarEvent,
     *,
     carimbo: datetime,
-    preso: PresoAoEvento,
+    venda: Decimal,
+    recebido: Decimal,
     n_escalados: int,
     alcance: str,
     autor: str,
@@ -407,13 +409,13 @@ def notificar_pedido_cancelamento(
     Roda na transação que grava o pedido: pedido sem aviso não existe. A chave leva o carimbo — um
     aviso por pedido, e aviso novo se o pedido for recusado e feito de novo. `urgent` quando o evento
     é em ≤ 7 dias ou já passou. O corpo diz o que está em jogo para o Superadmin decidir sem abrir o
-    evento; nome e PIX de quem recebe a devolução nunca entram (o sino não tem corte por papel).
+    evento — venda e recebido são os da venda inteira (num grupo, os do 1º dia e de todos os dias); nome e PIX de quem recebe a devolução nunca entram (o sino não tem corte por papel).
     """
     agora = now_sp()
     urgente = bool(event.start_at and event.start_at - agora <= timedelta(days=ANTECEDENCIA_URGENTE_DIAS))
     partes = [f"{event.start_at:%d/%m/%Y}" if event.start_at else "sem data"]
-    partes.append(f"venda {format_brl(preso.venda, prefix=True)}" if preso.venda > 0 else "sem venda")
-    partes.append(f"recebido {format_brl(preso.recebido, prefix=True)}")
+    partes.append(f"venda {format_brl(venda, prefix=True)}" if venda > 0 else "sem venda")
+    partes.append(f"recebido {format_brl(recebido, prefix=True)}")
     partes.append(_escalados_no_aviso(n_escalados))
     partes.append(alcance)
     partes.append(f"pedido por {autor}: {motivo}")

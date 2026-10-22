@@ -33,6 +33,8 @@ from app.calendar.cancel_ops import (
     CancelValidationError,
     _decimal,
     _dias_vivos_ordenados,
+    _evento_curto,
+    _pago_por_evento,
     _papeis_com_cache_pago,
     _quem_recebe_a_venda,
     _texto,
@@ -48,6 +50,7 @@ from app.constants import (
     CODIGO_EVENTO_CANCELADO,
     CODIGO_PEDIDO_PENDENTE,
     CODIGO_SEM_PEDIDO,
+    EVENT_TYPE_SHOW,
     EVENT_TYPE_VIRTUAL,
     MODO_NADA,
     MODO_PARTE,
@@ -266,10 +269,53 @@ def _ler_corpo(
 
 
 def _recusa_do_cache_pago(ids: list[int]) -> None:
+    """409 `cache_pago` com os dias, na forma do cancelar da 306 (`_evento_curto`), e a frase dizendo quais."""
     papeis = _papeis_com_cache_pago(ids)
     if papeis:
-        dias = sorted({r.event_id for r in papeis})
-        raise CancelValidationError(FRASE_CACHE_PAGO, status=409, codigo=CODIGO_CACHE_PAGO, dias=dias)
+        dias = (
+            CalendarEvent.query.filter(CalendarEvent.id.in_({r.event_id for r in papeis}))
+            .order_by(CalendarEvent.start_at, CalendarEvent.id)
+            .all()
+        )
+        quais = ", ".join(_dd_mm(d.start_at) for d in dias)
+        rotulo = "Dia com cachê pago" if len(dias) == 1 else "Dias com cachê pago"
+        raise CancelValidationError(
+            f"{FRASE_CACHE_PAGO} {rotulo}: {quais}.",
+            status=409,
+            codigo=CODIGO_CACHE_PAGO,
+            dias=[_evento_curto(d) for d in dias],
+        )
+
+
+def _o_que_esta_em_jogo(event: CalendarEvent, alcancados: list[int]) -> tuple[Decimal, Decimal, int]:
+    """Venda e recebido **da venda** (num grupo, a do principal e os comprovantes de todos os dias) e os
+    escalados nos dias que o pedido alcança, pela régua do cancelamento sem a vaga automática do técnico
+    de som do SHOW (a mesma exceção de `sumico_ops.preso_ao_evento`)."""
+    from app.calendar.routes import SOUND_TECH_CHARACTER, SOUND_TECH_TALENT_ID
+
+    principal = db.session.get(CalendarEvent, event.group_leader_id) if event.group_leader_id else event
+    principal = principal or event
+    ids = ids_do_grupo([principal.id]).get(principal.id, [principal.id])
+    recebido = sum(_pago_por_evento(ids).values(), Decimal("0"))
+    escalados = [
+        r
+        for r in elenco_dos_dias(alcancados)
+        if not (
+            r.event is not None
+            and r.event.event_type == EVENT_TYPE_SHOW
+            and r.role_type == "extra"
+            and r.character_name == SOUND_TECH_CHARACTER
+            and r.talent_id == SOUND_TECH_TALENT_ID
+        )
+    ]
+    return Decimal(str(principal.sale_value or 0)), recebido, len(escalados)
+
+
+def _sumiu_no_meio(event_id: int) -> None:
+    """O evento foi excluído entre a leitura da view e o claim: 404 claro, não o 500 do `refresh`.
+    Recebe o id lido antes do rollback — depois dele, ler `event.id` recarregaria a linha apagada."""
+    if db.session.query(CalendarEvent.id).filter(CalendarEvent.id == event_id).first() is None:
+        raise CancelValidationError("Este evento foi excluído.", status=404)
 
 
 def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *, caminho_velho: bool) -> None:
@@ -283,7 +329,6 @@ def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *
         CancelValidationError: as recusas acima, com `codigo` e `fields`.
     """
     from app.calendar.routes import _log_sync
-    from app.calendar.sumico_ops import preso_ao_evento  # tardio: sumico_ops importa cancel_ops
 
     exigir_evento_vivo(event)
     bloqueio = bloqueio_do_proprio_dia(event)
@@ -296,6 +341,7 @@ def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *
     _recusa_do_cache_pago(alcancados)
 
     carimbo = now_sp()
+    event_id = event.id
     registro = json.dumps(lido["registro"], ensure_ascii=False) if lido["registro"] else None
     linhas = db.session.execute(
         update(CalendarEvent)
@@ -315,9 +361,9 @@ def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *
     ).rowcount
     # A view carregou o evento antes do UPDATE: sem o refresh, o identity map guardaria o valor
     # velho — no ramo que ganhou (o detalhe da resposta) e no que perdeu (o nome de quem pediu).
-    db.session.refresh(event)
     if not linhas:
         db.session.rollback()
+        _sumiu_no_meio(event_id)
         db.session.refresh(event)
         if event.is_cancelled:
             raise CancelValidationError(
@@ -329,6 +375,7 @@ def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *
         raise CancelValidationError(
             f"Já existe um pedido de {quem} aguardando o Superadmin.", status=409, codigo=CODIGO_PEDIDO_PENDENTE
         )
+    db.session.refresh(event)
 
     texto_alcance = _texto_do_alcance(event, alcance, dias)
     detalhe = f"Pediu o cancelamento ({texto_alcance}): {lido['motivo']}"
@@ -340,11 +387,13 @@ def solicitar(event: CalendarEvent, corpo: dict[str, Any] | None, actor: User, *
     # da 224 da dívida 76, que gravava em horário de São Paulo).
     db.session.add(EventLog(event_id=event.id, actor_name=actor.name, actor_role=papel, message=detalhe))
     _log_sync("cancel_requested", event, details=detalhe, actor=actor.name, actor_role=papel)
+    venda, recebido, n_escalados = _o_que_esta_em_jogo(event, alcancados)
     nops.notificar_pedido_cancelamento(
         event,
         carimbo=carimbo,
-        preso=preso_ao_evento(event),
-        n_escalados=len(elenco_dos_dias(alcancados)),
+        venda=venda,
+        recebido=recebido,
+        n_escalados=n_escalados,
         alcance=texto_alcance,
         autor=actor.name,
         motivo=lido["motivo"],
@@ -378,6 +427,7 @@ def recusar(event: CalendarEvent, *, actor: User, motivo: str = "") -> None:
 
     carimbo = event.deletion_requested_at
     autor_id = event.deletion_requested_by_id
+    event_id = event.id
     linhas = 0
     if carimbo is not None and not event.is_cancelled:
         linhas = db.session.execute(
@@ -386,10 +436,11 @@ def recusar(event: CalendarEvent, *, actor: User, motivo: str = "") -> None:
             .values(**_SEM_PEDIDO)
             .execution_options(synchronize_session=False)
         ).rowcount
-    db.session.refresh(event)
     if not linhas:
         db.session.rollback()
+        _sumiu_no_meio(event_id)
         raise CancelValidationError(FRASE_JA_DECIDIDO, status=409, codigo=CODIGO_SEM_PEDIDO)
+    db.session.refresh(event)
 
     motivo = _texto(motivo)
     detalhe = f"Recusou o pedido de cancelamento: {motivo}" if motivo else "Recusou o pedido de cancelamento."
@@ -497,6 +548,12 @@ def serializar_para(
         "requested_at": event.deletion_requested_at.isoformat(),
         "alcance": event.deletion_request_scope,
     }
+    # O alcance em texto pronto ("todos os 3 dias da venda", "só este dia da venda"); nada no avulso.
+    texto_alcance = _texto_do_alcance(
+        event, event.deletion_request_scope, _principal_com_outro_dia_vivo(event)
+    )
+    if texto_alcance != "o evento":
+        bloco["alcance_texto"] = texto_alcance
     if flags is None:
         ver_motivo = ver_quem_recebe = True
     else:
@@ -513,6 +570,10 @@ def serializar_para(
     bloco["requested_by_id"] = event.deletion_requested_by_id
     bloco["reason"] = event.deletion_request_reason or None
     registro = devolucao_gravada(event)
+    if registro is None and event.event_type != EVENT_TYPE_VIRTUAL:
+        # Pedido de antes do deploy ou pelo caminho velho: a tela diz "sem devolução informada"
+        # (a venda virtual não tem devolução a combinar).
+        bloco["sem_devolucao_informada"] = True
     if registro:
         dev = dict(registro.get("devolucao") or {})
         if not ver_quem_recebe:
@@ -583,3 +644,15 @@ def faixa_das_solicitacoes(limite: int = LIMITE_FAIXA) -> dict[str, Any]:
             for x in (futuros + passados + sem_data)[:limite]
         ],
     }
+
+
+def soltar_autor(user_id: int) -> int:
+    """O autor de pedidos pendentes vai ser excluído: os pedidos ficam, sem autor (data-model: "autor
+    apagado"); quem decide segue normal e ninguém recebe a resposta. Sem commit — roda na transação da
+    exclusão do usuário (`admin/user_ops.delete_user`)."""
+    return (
+        CalendarEvent.query.filter(CalendarEvent.deletion_requested_by_id == user_id).update(
+            {"deletion_requested_by_id": None}, synchronize_session=False
+        )
+        or 0
+    )

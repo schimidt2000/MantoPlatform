@@ -28,6 +28,8 @@ export interface NfcTagEventRef {
   start_at: string | null;
   /** Feature 312: a situação do evento ligado (o selo do cancelado). Ausente em backend velho. */
   situacao?: SituacaoEvento | null;
+  /** Feature 315: desde quando vale a situação (o tooltip do selo). */
+  situacao_desde?: string | null;
 }
 
 /**
