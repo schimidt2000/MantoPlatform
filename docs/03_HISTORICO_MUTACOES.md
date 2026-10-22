@@ -162,6 +162,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **317-contratos-clicksign** | *(pronta, não publicada)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
@@ -345,6 +346,63 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 317 — O contrato da ClickSign se liga sozinho à venda e a comercial cobra em um clique   (317-contratos-clicksign · 2026-10-22 · migration `d3c7a1e5b317`)
+
+> **Pronta, não publicada.** Nível 1, worktree `C:\tmp\mp317`. Esteira completa (specify → clarify → plan
+> com Portão 0 → checklist 35/35 → tasks → analyze com refutação contra o código, 20 achados aplicados →
+> implement → converge). `verify_317.py` 26/26, zero conexão de saída.
+
+**O pedido.** "Vincular os contratos do ClickSign com os clientes, deixar isso de forma mais clara e automatizar
+sem ação humana — no máximo para verificar se de fato é esse. Ficar claro: precisa cobrar esse contrato, esse aqui
+foi assinado, não precisa cobrar mais. Igual à cobrança de valor, um botãozinho para cobrar contrato, com uma
+mensagem explicando: o ClickSign te manda uma mensagem pelo WhatsApp, numa conversa com o ClickSign, é só clicar
+lá e assinar."
+
+**O que se descobriu.** A comercial transcreve o formulário da Manto para um "Fluxo com formulário" da ClickSign
+(conta PRIME DREAMS LTDA, plano Plus Automação), que gera o contrato com o nome `DDMMAAAA + (DD) NNNNN-NNNN +
+Tema` e o manda à cliente pelo WhatsApp, com 5–6 dias de prazo (vencido, cancela sozinho). O sistema não sabia
+de nada: só 7 de 60 anexos marcados "assinado" (só o Superadmin marca) e o histórico gravava "Adicionou contrato
+assinado" sempre. O webhook do CRM antigo (021) nunca funcionou (lia uma coluna inexistente → 401 sempre). A API
+v3 só responde com "E-mail do usuário da API" preenchido no painel (configurado em 22/10 com o administrador).
+Ensaio só leitura na conta real: 237 envelopes desde 01/06 → 144 ligariam sozinhos contra o espelho de ~20/10.
+
+**Decisões do dono (22/10).** O botão só copia a mensagem (o lembrete da ClickSign por WhatsApp é cobrado à parte)
+e registra quem cobrou; fica no menu ⋯ do evento e em cada linha da Home; COMERCIAL e SUPERADMIN cobram e
+confirmam, o FINANCEIRO só vê; gerar o contrato pela API fica para outra feature. No clarify: cortesia entra;
+"Venda sem contrato" só nos próximos 30 dias; vermelho com prazo hoje/amanhã ou evento em até 7 dias.
+
+**Como ficou.**
+- **A ClickSign é a fonte; o aviso não decide.** Toda passada pede `filter[modified]` desde o marco e grava em
+  `clicksign_documentos` (idempotente pelo envelope). O aviso (`POST /api/webhooks/clicksign`, HMAC do corpo
+  bruto, o primeiro do repositório) só dispara a passada; a conferência de 30 min (thread com lock) cobre aviso
+  perdido; `flask clicksign-sincronizar --desde 2026-06-01 [--aplicar]` traz o passivo.
+- **Vínculo**: nome normalizado (NFC — a ClickSign devolve "Ç" decomposto), data em `DD-MM-AAAA`/`DDMMAAAA`/
+  `DMMAAAA`, telefone do nome conferido com o do signatário; candidata = venda viva com qualquer dia do grupo na
+  data e telefone igual (chave DDD + 8 últimos) na ficha, nas contratantes ou no formulário ligado; empate → tema;
+  sem candidato, cancelada, telefone divergente ou data ilegível → "A conferir". Desligado não religa sozinho.
+- **Situação da venda** (julgada pelo grupo inteiro — agrupar não move linhas): vigente = em processo mais
+  recente, senão um assinado vence qualquer cancelado; assinado manual (fora os PDFs automáticos) continua valendo.
+- **PDF assinado** entra sozinho em `event_contracts` (`_add_contract_record`, autor "ClickSign (automático)"), uma
+  vez só; o Superadmin que exclui não o vê voltar.
+- **Telas**: bloco "Situação do contrato" no evento, painel "✍️ Contratos" na Home (só festa futura em "A
+  conferir"), chip do Resumo e coluna de `/vendas` pela mesma situação; "📝 Cobrar contrato" no menu ⋯.
+- **Segurança**: token só na env (`CLICKSIGN_ACCESS_TOKEN`, `sync: false`), trava `_suppress_clicksign()` no mesmo
+  commit do cliente, segredo do aviso no `SiteSetting` (revogável; inofensivo porque o aviso não decide).
+
+**Pegadinhas.** O token foi **regerado** em 22/10 (o anterior apareceu num print do chat). `requests` passa por
+`socket.socket.connect`, não por `create_connection`: o disjuntor da 310 não pegaria escape (o do `verify_317`
+pega os dois). O `manto_local` está na revisão da 310 (`e8b4a1c7d310`): a migration da 317 foi aplicada direto
+(DDL) sem mexer no `alembic_version`. A 310 também parte de `c5d2f7a9e306`: quem mergear por último reencadeia.
+
+**Verificação.** `specs/317-contratos-clicksign/verify_317.py` 26/26 (primeira rodada 3/26 em
+`verify_317_primeira_falha.txt`); `npm run typecheck` (três apps) e `ruff` limpos nos tocados; tela aberta como
+COMERCIAL e FINANCEIRO (evento, menu ⋯ com o texto copiado conferido, Home a 375 px sem rolagem horizontal);
+`verify_299`, `verify_312` e `verify_306` de novo.
+
+**Antes de ligar** (quickstart §3, à noite): colar `CLICKSIGN_ACCESS_TOKEN` no `manto-backend`; `flask
+clicksign-webhook --registrar https://<domínio>/api/webhooks/clicksign --aplicar`; `flask clicksign-sincronizar
+--desde 2026-06-01` (simulação) → `--aplicar`; contrato de teste de ponta a ponta; avisar a comercial.
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 
