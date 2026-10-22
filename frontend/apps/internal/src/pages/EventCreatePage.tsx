@@ -18,6 +18,7 @@ import {
 } from "../lib/eventFormSchema";
 import {
   useCreateEvent,
+  precoDaDuracao,
   useEventCreateOptions,
   useOrcamentoPrefill,
   type CharacterInput,
@@ -209,7 +210,8 @@ export function EventCreatePage() {
     if (p.date) setValue("date", p.date);
     if (p.start_time) setValue("start", p.start_time);
     if (p.location) setValue("location", p.location);
-    setValue("sale_value_gross", p.total_1h ?? 0);
+    // Feature 313: o cheio e o final separados (orçamento de antes: os dois são o total).
+    setValue("sale_value_gross", p.bruto_1h ?? p.total_1h ?? 0);
     setValue("sale_value", p.total_1h ?? 0);
     setValue("transport_value", p.transport_value ?? 0);
     setValue("acrescimo_value", p.acrescimo_value ?? 0);
@@ -287,9 +289,10 @@ export function EventCreatePage() {
     setDuracao(dur);
     setDuracaoExtra("");
     if (!prefill.data) return;
-    const total = prefill.data[`total_${dur}h` as "total_1h"] ?? 0;
-    setValue("sale_value_gross", total);
-    setValue("sale_value", total);
+    const preco = precoDaDuracao(prefill.data, Number(dur));
+    if (!preco) return;
+    setValue("sale_value_gross", preco.bruto);
+    setValue("sale_value", preco.total);
   };
 
   /**
@@ -297,6 +300,7 @@ export function EventCreatePage() {
    * formulário só oferecia 1–4h e um evento de 6 horas nascia com cachês (e teto) errados.
    * O preço de referência usa o total_custom do orçamento quando a duração bate; senão, a
    * mesma régua linear da calculadora (total de 4h ÷ 4 × horas) — só sugestão, editável.
+   * Feature 313: no orçamento novo o preço de 5 a 24 h vem do servidor (`precoDaDuracao`).
    */
   const selectDuracaoExtra = (raw: string) => {
     setDuracaoExtra(raw);
@@ -304,13 +308,11 @@ export function EventCreatePage() {
     if (!Number.isInteger(horas) || horas < 5) return;
     setDuracao(String(horas));
     if (!prefill.data) return;
-    const total4 = prefill.data.total_4h ?? 0;
-    const total =
-      prefill.data.duracao_custom === horas && prefill.data.total_custom
-        ? prefill.data.total_custom
-        : Math.round((total4 / 4) * horas * 100) / 100;
-    setValue("sale_value_gross", total);
-    setValue("sale_value", total);
+    const preco = precoDaDuracao(prefill.data, horas);
+    // Acima do que o orçamento cobre (24 h), os valores da duração anterior não valem para esta: zera e a venda
+    // exige ser digitada — antes o evento de 30 h saía com o preço de 4 h (converge, T054).
+    setValue("sale_value_gross", preco ? preco.bruto : 0);
+    setValue("sale_value", preco ? preco.total : 0);
   };
 
   // ── Fase 2: upload de anexos pendentes, depois que o evento já existe ──────────
@@ -780,6 +782,7 @@ export function EventCreatePage() {
                       <input
                         type="number"
                         min={5}
+                        max={prefill.data.extra_por_horas ? 24 : undefined}
                         className="w-16 rounded border border-line bg-panel px-1 py-0.5 text-sm text-ink"
                         value={duracaoExtra}
                         onChange={(e) => selectDuracaoExtra(e.target.value)}
@@ -787,11 +790,10 @@ export function EventCreatePage() {
                       />
                       {duracaoExtra && duracao === duracaoExtra && prefill.data && (
                         <span className="text-xs text-muted">
-                          R$ {formatBRL(
-                            prefill.data.duracao_custom === Number(duracaoExtra) && prefill.data.total_custom
-                              ? prefill.data.total_custom
-                              : Math.round(((prefill.data.total_4h ?? 0) / 4) * Number(duracaoExtra) * 100) / 100,
-                          )}
+                          {(() => {
+                            const preco = precoDaDuracao(prefill.data, Number(duracaoExtra));
+                            return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, digite o valor";
+                          })()}
                         </span>
                       )}
                     </label>
@@ -825,9 +827,11 @@ export function EventCreatePage() {
                     ? null
                     : ["1", "2", "3", "4"].includes(duracao)
                       ? (prefill.data[`total_${duracao}h` as "total_1h"] ?? null)
-                      : prefill.data.duracao_custom === Number(duracao) && prefill.data.total_custom
-                        ? prefill.data.total_custom
-                        : null
+                      : prefill.data.extra_por_horas
+                        ? (prefill.data.extra_por_horas[duracao]?.total ?? null)
+                        : prefill.data.duracao_custom === Number(duracao) && prefill.data.total_custom
+                          ? prefill.data.total_custom
+                          : null
                 }
                 venda={watch("sale_value")}
                 nota={Boolean(watch("with_invoice"))}

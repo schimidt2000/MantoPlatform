@@ -67,7 +67,14 @@ NOEL_712 = [712, 800, 850, 900]
 AJUDANTE_423 = [423, 480, 510, 540]
 NOEL_600 = [600, 650, 675, 700]
 AJUDANTE_270 = [270, 320, 345, 370]
-CHAVES_NOVAS = ("produtos", "produtos_total", "coordenadores_inclusos", "avisos", "valor_unico")
+CHAVES_NOVAS = (
+    "produtos", "produtos_total", "coordenadores_inclusos", "avisos", "valor_unico",
+    # Feature 313 (desconto e PIX): chaves novas do `quote`, neutras quando não há desconto.
+    "base_4h", "bruto_1h", "bruto_2h", "bruto_3h", "bruto_4h", "bruto_custom",
+    "desconto_pct", "desconto_pct_texto", "desconto_modo",
+    "pix_pct", "pix_1h", "pix_2h", "pix_3h", "pix_4h", "pix_custom",
+    "bv_1h", "bv_2h", "bv_3h", "bv_4h", "bv_custom", "bv_pix_1h", "bv_pix_2h", "bv_pix_3h", "bv_pix_4h", "bv_pix_custom",
+)
 MARCA_PRODUTO = "cachê da tabela · produto"
 VISITA = "visita_magica"
 VISITA_AJ = "visita_magica_ajudante"
@@ -760,8 +767,10 @@ def cen_07_regua_e_personalizado() -> None:
         3938.00,
         "6h com BV 10%",
     )
-    # Converge: acréscimos do EVENTO acima de 4h, linha a linha — BV % sobre a base da duração (boneco
-    # 720 ÷ 4 × 6 + 2.500 = 3.580 → 358) e fixo × h ÷ 4 (200 → 300); total 4.238 fecha com a régua.
+    # Converge: acréscimos do EVENTO acima de 4h, linha a linha. Feature 313 (Q7 do dono: "o acréscimo adicionado
+    # manualmente é colocado por cima de tudo no valor. E o BV é calculado em cima de tudo isso"): o fixo entra uma
+    # vez (200, não 300) e o BV de 10% incide sobre a base da duração com ele (3.580 + 200 = 3.780 → 378); total
+    # 3.580 + 200 + 378 = 4.158 (era 4.238 pela régua antiga, que escalava o fixo e não punha o fixo na base do BV).
     from app.calendar.orcamento_evento_ops import acrescimos_do_orcamento
 
     res = _calcular(
@@ -776,13 +785,13 @@ def cen_07_regua_e_personalizado() -> None:
             ],
         )
     )
-    _iguais(res["quote"]["total_custom"], 4238.00, "6h com BV 10% + fixo 200: venda")
+    _iguais(res["quote"]["total_custom"], 4158.00, "6h com BV 10% + fixo 200: venda")
     oid = _salvar(res)
     with app.app_context():
         entry = db.session.get(OrcamentoHistory, oid)
         linhas = acrescimos_do_orcamento(entry, 6)["linhas"]
     valores_linhas = [float(linha["amount_brl"]) for linha in linhas]
-    _garante(valores_linhas == [358.00, 300.00], f"linhas do evento em 6h: {valores_linhas}")
+    _garante(valores_linhas == [378.00, 200.00], f"linhas do evento em 6h: {valores_linhas}")
 
     q = _calcular(
         _payload(

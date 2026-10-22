@@ -199,7 +199,17 @@ export interface CalcularOrcamentoInput {
   event_date?: string;
   client_name?: string;
   event_location?: string;
+  /**
+   * Feature 313 — o desconto negociado: o % (modo %) OU o valor final de uma duração (modo valor). Só o campo do
+   * modo ativo vai no payload; o outro a tela mostra a partir da resposta.
+   */
+  desconto_pct?: number;
+  desconto_valor?: number;
+  desconto_duracao?: DuracaoDoDesconto;
 }
+
+/** Feature 313 — a duração a que o "fechar por R$" se refere (`extra` = a duração acima de 4h). */
+export type DuracaoDoDesconto = "1h" | "2h" | "3h" | "4h" | "extra";
 
 export interface TransportBreakdown {
   transporte: number;
@@ -277,6 +287,38 @@ export interface Quote {
   personalizado_criterio: string | null;
   cache_base: number[] | null;
   custom_mult: number[] | null;
+  /**
+   * Feature 313 — todas opcionais: ausentes em orçamento salvo antes e na janela do deploy (backend velho). A tela
+   * trata ausência como "sem desconto": `bruto ?? total`, e o PIX só quando `pix_*` vier.
+   */
+  base_4h?: number | null;
+  bruto_1h?: number;
+  bruto_2h?: number;
+  bruto_3h?: number;
+  bruto_4h?: number;
+  bruto_custom?: number | null;
+  /** O % exato aplicado (o digitado ou o achado pelo valor); `null` sem desconto. */
+  desconto_pct?: number | null;
+  /** O % como a proposta mostra ("8,3", "10") — a fonte única do texto; a tela não recalcula. */
+  desconto_pct_texto?: string | null;
+  desconto_modo?: "pct" | "valor" | null;
+  pix_pct?: number;
+  pix_1h?: number;
+  pix_2h?: number;
+  pix_3h?: number;
+  pix_4h?: number;
+  pix_custom?: number | null;
+  /** O BV a repassar a quem indicou, já com o desconto (`null` sem BV). Interno: não vai à proposta. */
+  bv_1h?: number | null;
+  bv_2h?: number | null;
+  bv_3h?: number | null;
+  bv_4h?: number | null;
+  bv_custom?: number | null;
+  bv_pix_1h?: number | null;
+  bv_pix_2h?: number | null;
+  bv_pix_3h?: number | null;
+  bv_pix_4h?: number | null;
+  bv_pix_custom?: number | null;
 }
 
 export interface CalcularOrcamentoResult {
@@ -410,6 +452,8 @@ export interface OrcamentoHistoricoEntry {
   /** feature 273 — evento não cancelado que aponta para este orçamento ("Ver evento"). */
   event_id: number | null;
   event_title: string | null;
+  /** Feature 313 — o % de desconto aplicado (o selo "−N%"); ausente/`null` sem desconto ou backend velho. */
+  desconto_pct?: number | null;
 }
 
 export interface OrcamentoHistoricoResponse {
@@ -481,6 +525,10 @@ export interface OrcamentoFormSnapshot {
     estimado: boolean;
     vagas: VagaDoProduto[];
   }[];
+  /** Feature 313 — o desconto como foi digitado; ausente em orçamento salvo antes (o "Recalcular" zera). */
+  desconto_pct_digitado?: number | null;
+  desconto_valor?: number | null;
+  desconto_duracao?: DuracaoDoDesconto | null;
 }
 
 /** Detalhe congelado de um orçamento salvo, incluindo o estado bruto para "Recalcular". */

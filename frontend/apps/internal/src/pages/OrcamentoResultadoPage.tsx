@@ -14,6 +14,7 @@ import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
 import { ProdutoLinha } from "../components/orcamento/ProdutoLinha";
+import { brutoDe, linhasDoBv, pixDe, temBv, temDesconto, type ColunaDoQuote } from "../lib/desconto";
 import {
   useEnviarEmailOrcamento,
   useOrcamentoDetalhe,
@@ -34,24 +35,28 @@ function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
 }
 
+type LinhaDoResumo = { label: string; total: number; coluna: ColunaDoQuote; destaque?: boolean };
+
 /** Durações marcadas no orçamento + a duração personalizada, quando houver. */
-function duracoesVisiveis(quote: Quote): { label: string; total: number; destaque?: boolean }[] {
+function duracoesVisiveis(quote: Quote): LinhaDoResumo[] {
   // Feature 309: só produto no orçamento = um valor, que não é "1 hora" — é o preço da tabela. O
   // servidor decide (`valor_unico`); quote salvo antes da chave cai na inferência pelos `show_*`.
   const valorUnico =
     quote.valor_unico ??
     ((quote.produtos?.length ?? 0) > 0 && quote.show_1h && !quote.show_2h && !quote.show_3h && !quote.show_4h);
-  const linhas: { label: string; total: number; destaque?: boolean }[] = [
-    { label: valorUnico ? "Preço de tabela" : "1 hora", total: quote.total_1h, mostrar: quote.show_1h },
-    { label: "2 horas", total: quote.total_2h, mostrar: quote.show_2h },
-    { label: "3 horas", total: quote.total_3h, mostrar: quote.show_3h },
-    { label: "4 horas", total: quote.total_4h, mostrar: quote.show_4h },
-  ]
+  const linhas: LinhaDoResumo[] = (
+    [
+      { label: valorUnico ? "Preço de tabela" : "1 hora", total: quote.total_1h, coluna: "1h", mostrar: quote.show_1h },
+      { label: "2 horas", total: quote.total_2h, coluna: "2h", mostrar: quote.show_2h },
+      { label: "3 horas", total: quote.total_3h, coluna: "3h", mostrar: quote.show_3h },
+      { label: "4 horas", total: quote.total_4h, coluna: "4h", mostrar: quote.show_4h },
+    ] as const
+  )
     .filter((l) => l.mostrar)
-    .map(({ label, total }) => ({ label, total }) as { label: string; total: number });
+    .map(({ label, total, coluna }) => ({ label, total, coluna }));
 
   if (quote.total_custom) {
-    linhas.push({ label: `${quote.duracao_custom} horas`, total: quote.total_custom, destaque: true });
+    linhas.push({ label: `${quote.duracao_custom} horas`, total: quote.total_custom, coluna: "custom", destaque: true });
   }
   return linhas;
 }
@@ -215,19 +220,41 @@ export function OrcamentoResultadoPage() {
           <CardTitle>Resumo de valores</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {duracoesVisiveis(quote).map(({ label, total, destaque }) => (
-              <div
-                key={label}
-                className={`rounded-md p-3 text-center ${
-                  destaque ? "border-2 border-gold bg-surface-2" : "border border-line"
-                }`}
-              >
-                <p className="text-xs uppercase text-muted">{label}</p>
-                <p className="text-lg font-semibold text-ink">{brl(total)}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {duracoesVisiveis(quote).map(({ label, total, coluna, destaque }) => {
+              // Feature 313: o cheio riscado quando há desconto (quote antigo: `bruto ?? total`, nada riscado); o PIX
+              // só quando o servidor mandou; o BV a repassar fica aqui, fora da mensagem, e só com desconto.
+              const bruto = brutoDe(quote, coluna);
+              const pix = pixDe(quote, coluna);
+              const bv = temDesconto(quote) ? linhasDoBv(quote, coluna, brl) : [];
+              return (
+                <div
+                  key={label}
+                  className={`rounded-md p-3 text-center ${
+                    destaque ? "border-2 border-gold bg-surface-2" : "border border-line"
+                  }`}
+                >
+                  <p className="text-xs uppercase text-muted">{label}</p>
+                  {bruto != null && Math.abs(bruto - total) >= 0.005 && (
+                    <p className="text-xs text-muted line-through">{brl(bruto)}</p>
+                  )}
+                  <p className="whitespace-nowrap text-lg font-semibold text-ink">{brl(total)}</p>
+                  {pix != null && <p className="text-xs text-muted">PIX à vista: {brl(pix)}</p>}
+                  {bv.map((linha) => (
+                    <p key={linha} className="text-xs text-muted">
+                      {linha}
+                    </p>
+                  ))}
+                </div>
+              );
+            })}
           </div>
+          {quote.desconto_pct_texto && (
+            <p className="mt-3 text-sm text-muted">
+              Desconto de {quote.desconto_pct_texto}% aplicado sobre o total.
+              {temBv(quote) && " O BV a repassar já acompanha o desconto e não aparece para a cliente."}
+            </p>
+          )}
           {/* Feature 309: produtos de tabela vendidos (preço congelado no orçamento). */}
           {(quote.produtos ?? []).length > 0 && (
             <div className="mt-3 space-y-1">
