@@ -36,7 +36,7 @@ function RatingsPanel({ data }: { data: EventoDetalhe }) {
           <span className="flex items-center gap-2 text-sm">
             <span className="text-lg font-semibold text-ink tabular-nums">{ratings.average}</span>
             <Stars score={Math.round(ratings.average ?? 0)} />
-            <span className="text-xs text-muted">{ratings.count} avaliações</span>
+            <span className="text-xs text-muted">{ratings.count === 1 ? "1 avaliação" : `${ratings.count} avaliações`}</span>
           </span>
         ) : null
       }
@@ -108,7 +108,7 @@ function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
                     variant="ghost"
                     size="sm"
                     className="ml-auto text-muted hover:text-red"
-                    aria-label="Excluir avaliação"
+                    aria-label="Excluir feedback"
                     onClick={() => setConfirmingId(feedback.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -117,7 +117,7 @@ function ClientFeedbackPanel({ data }: { data: EventoDetalhe }) {
               </div>
               {confirmingId === feedback.id && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-2 rounded-md border border-red bg-red-soft p-2 text-sm">
-                  <span className="text-red">Excluir esta avaliação? A ação não pode ser desfeita.</span>
+                  <span className="text-red">Excluir este feedback? A ação não pode ser desfeita.</span>
                   <Button variant="outline" size="sm" onClick={() => setConfirmingId(null)}>
                     Cancelar
                   </Button>

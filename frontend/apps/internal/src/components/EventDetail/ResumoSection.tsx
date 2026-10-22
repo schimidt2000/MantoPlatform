@@ -207,7 +207,7 @@ function DadosForm({
           }}
         />
         <p className="mt-1 text-xs text-muted">
-          É o mesmo texto que vai para o Google Agenda. Sem edição aqui, a formatação original é
+          É o mesmo texto que vai para o Google Agenda. Sem edição neste campo, a formatação original é
           preservada.
         </p>
       </div>

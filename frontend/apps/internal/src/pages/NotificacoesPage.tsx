@@ -67,7 +67,7 @@ export function NotificacoesPage() {
 
       {marcarTodas.isError && (
         <p role="alert" className="mb-3 rounded-md bg-red-soft px-3 py-2 text-sm text-red">
-          Não foi possível marcar como lidas. Tente de novo.
+          Não foi possível marcar como lidas. Tente novamente.
         </p>
       )}
 
@@ -93,14 +93,14 @@ export function NotificacoesPage() {
               onClick={() => void lista.refetch()}
               className="ml-2 font-semibold text-accent hover:underline"
             >
-              Tentar de novo
+              Tentar novamente
             </button>
           </div>
         )}
         {!lista.isLoading && !lista.isError && itens.length === 0 && (
           <p className="p-10 text-center text-sm text-muted">
             {somenteNaoLidas
-              ? "Tudo lido. Quando chegar uma resposta de formulário, uma avaliação de cliente ou uma recusa de convite, ela aparece aqui."
+              ? "Tudo lido. Quando chegar uma resposta de formulário, uma avaliação de cliente ou uma recusa de convite, ela aparece nesta lista."
               : "Nenhuma notificação ainda."}
           </p>
         )}

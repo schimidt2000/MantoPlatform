@@ -101,8 +101,8 @@ export function RevisaoSpacePage() {
             <div>
               <p className="font-medium">
                 {createErrors.length === 1
-                  ? "1 arquivo não entrou no espaço:"
-                  : `${createErrors.length} arquivos não entraram no espaço:`}
+                  ? "1 arquivo não foi aceito no espaço:"
+                  : `${createErrors.length} arquivos não foram aceitos no espaço:`}
               </p>
               <ul className="mt-1 list-inside list-disc">
                 {createErrors.map((e, i) => (
@@ -158,7 +158,7 @@ export function RevisaoSpacePage() {
           {space.can_manage && (
             <div className="space-y-2">
               <label className="mb-1 block text-xs font-medium text-muted">
-                Adicionar materiais
+                Inserir materiais
               </label>
               <input
                 type="file"
@@ -187,7 +187,7 @@ export function RevisaoSpacePage() {
                         setUploadErrors([
                           err instanceof ApiRequestError
                             ? err.message
-                            : "Falha no envio. Tente novamente.",
+                            : "Não foi possível enviar os arquivos. Tente novamente.",
                         ]),
                     },
                   );

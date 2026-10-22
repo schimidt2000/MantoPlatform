@@ -77,7 +77,7 @@ export const eventSchema = z
     { message: "Informe o número de parcelas (2 a 12).", path: ["payment_installments"] },
   )
   .refine((v) => v.start === "" || v.end === "" || v.start !== v.end, {
-    message: "Horário de fim deve ser diferente do início.",
+    message: "O horário de fim deve ser diferente do início.",
     path: ["end"],
   });
 

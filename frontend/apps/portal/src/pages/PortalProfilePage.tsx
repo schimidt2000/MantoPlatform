@@ -234,7 +234,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
                     className="aspect-square w-full rounded-md object-cover"
                     fallback={
                       <div className="flex aspect-square w-full items-center justify-center rounded-md bg-surface-2 px-1 text-center text-[10px] leading-tight text-muted">
-                        arquivo não encontrado
+                        Arquivo não encontrado
                       </div>
                     }
                   />
@@ -256,7 +256,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
 
           {photoSlotsLeft > 0 ? (
             <FileUpload
-              label="Adicionar foto de atuação"
+              label="Inserir foto de atuação"
               accept={PHOTO_ACCEPT}
               maxSizeBytes={PHOTO_MAX}
               error={photoError}
@@ -276,7 +276,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
             />
           ) : (
             <p className="text-sm text-muted">
-              Limite de fotos atingido. Remova uma para adicionar outra.
+              Limite de fotos atingido. Remova uma para inserir outra.
             </p>
           )}
           {/* text-sm: é a explicação de por que o botão de enviar sumiu e o aviso de que o
@@ -327,7 +327,7 @@ function PortfolioSection({ profile }: { profile: PortalProfile }) {
               name="portfolio_url"
               type="url"
               inputMode="url"
-              placeholder="https://vimeo.com/..."
+              placeholder="https://vimeo.com/…"
               value={linkUrl}
               onChange={(event) => setLinkUrl(event.target.value)}
             />
@@ -422,7 +422,7 @@ export function PortalProfilePage() {
       <div className="p-4">
         <FormError>Não foi possível carregar seu perfil. Tente novamente.</FormError>
         <Button className="mt-3 w-full" onClick={() => profileQuery.refetch()}>
-          Recarregar
+          Tentar novamente
         </Button>
       </div>
     );

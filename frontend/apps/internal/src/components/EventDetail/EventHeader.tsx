@@ -404,8 +404,8 @@ export function EventHeader({ data }: EventHeaderProps) {
           <Button asChild variant="outline" size="sm">
             <Link to="/agenda">
               <span aria-hidden="true">←</span>
-              <span className="hidden sm:inline">Voltar para Agenda</span>
-              <span className="sr-only sm:hidden">Voltar para Agenda</span>
+              <span className="hidden sm:inline">Voltar para a Agenda</span>
+              <span className="sr-only sm:hidden">Voltar para a Agenda</span>
             </Link>
           </Button>
         </div>
@@ -435,8 +435,8 @@ export function EventHeader({ data }: EventHeaderProps) {
             )}
           </div>
           <p className="mt-1 text-muted">
-            Saiu da agenda e das listas do sistema; fica na página de Cancelamentos e no card
-            "Cancelamentos do período". A tela fica só para consulta; só os dados de venda
+            Saiu da agenda e das listas do sistema; permanece na página de Cancelamentos e no card
+            “Cancelamentos do período”. Esta tela é somente para consulta; apenas os dados de venda
             (valores, comprovantes, devolução, multas) continuam editáveis, pelo Superadmin.
           </p>
           {recusa && (

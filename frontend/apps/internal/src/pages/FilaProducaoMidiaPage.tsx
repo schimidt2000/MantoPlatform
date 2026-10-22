@@ -74,7 +74,7 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
             </span>
           )}
           {!delivery.prazo_vencido && delivery.prazo_proximo && (
-            <span className="text-gold">· vence logo</span>
+            <span className="text-gold">· vence em breve</span>
           )}
         </div>
       </TableCell>

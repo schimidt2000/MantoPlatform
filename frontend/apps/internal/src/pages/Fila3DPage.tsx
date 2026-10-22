@@ -57,7 +57,7 @@ function StatusSelect({ entry }: { entry: Fila3DEntry }) {
         className={INPUT_CLASS}
         value={entry.status}
         disabled={update.isPending}
-        aria-label={`Status do presente ${entry.item?.name ?? ""}`}
+        aria-label={`Situação do presente ${entry.item?.name ?? ""}`}
         onChange={(e) =>
           update.mutate({
             eventId: entry.event_id,
@@ -73,7 +73,7 @@ function StatusSelect({ entry }: { entry: Fila3DEntry }) {
         ))}
       </select>
       {update.isPending && <span className="text-xs text-muted">Salvando…</span>}
-      {update.isError && <span className="text-xs text-red">Erro ao salvar</span>}
+      {update.isError && <span className="text-xs text-red">Não foi possível salvar.</span>}
     </div>
   );
 }
@@ -324,7 +324,7 @@ export function Fila3DPage() {
       )}
       {semNada && (
         <p className="text-sm text-muted">
-          Nenhum show pendente e nenhum presente a imprimir. Tudo em dia por aqui. 🎉
+          Nenhum show pendente e nenhum presente a imprimir.
         </p>
       )}
 
@@ -385,7 +385,7 @@ export function Fila3DPage() {
                 <TableCell as="th" align="right">
                   Qtd.
                 </TableCell>
-                <TableCell as="th">Status</TableCell>
+                <TableCell as="th">Situação</TableCell>
                 <TableCell as="th" />
               </TableRow>
             </thead>
@@ -431,7 +431,7 @@ export function Fila3DPage() {
                   </TableCell>
                   <TableCell>
                     <Button variant="outline" size="sm" onClick={() => setDetalhe(entry)}>
-                      Ver Detalhes para Impressão
+                      Ver detalhes de impressão
                     </Button>
                   </TableCell>
                 </TableRow>

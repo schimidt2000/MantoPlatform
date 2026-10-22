@@ -227,12 +227,12 @@ def validar_agrupamento(
         return f'"{leader.title}" já é satélite de outro grupo e não pode ser principal.'
     # Um principal que já lidera um grupo PODE receber novos satélites (mesma regra da 053).
     if leader.event_type == "ENSAIO":  # FR-003
-        return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
+        return "Eventos do tipo ENSAIO não podem ser agrupados."
     for sat in satellites:
         if sat.id == leader.id:  # FR-004
             return "Não é possível agrupar um evento a ele mesmo."
         if sat.event_type == "ENSAIO":  # FR-003
-            return "Eventos do tipo ENSAIO não podem ser agrupados por este mecanismo."
+            return "Eventos do tipo ENSAIO não podem ser agrupados."
         if sat.is_satellite:  # FR-002
             return f'"{sat.title}" já pertence a outro grupo — desagrupe antes de continuar.'
         if sat.is_group_leader:

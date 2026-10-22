@@ -219,7 +219,7 @@ export function DadosEventoBlock({
             {reembolsoInvoiceFile && (
               <p className={HELP}>Arquivo selecionado: {reembolsoInvoiceFile.name}</p>
             )}
-            <p className={HELP}>Pode deixar em branco e adicionar depois, direto na página do evento.</p>
+            <p className={HELP}>Pode ficar em branco e ser inserido depois, na página do evento.</p>
           </div>
         )}
       </div>

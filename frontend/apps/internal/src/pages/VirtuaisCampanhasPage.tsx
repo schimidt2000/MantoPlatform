@@ -114,7 +114,7 @@ export function VirtuaisCampanhasPage() {
         <div className="flex flex-col items-center gap-2 rounded-lg border border-line p-10 text-center">
           <Video className="size-8 text-muted" />
           <p className="text-sm text-muted">
-            Nenhuma campanha ainda. Crie a primeira para começar a vender interações.
+            Nenhuma campanha cadastrada ainda. Crie a primeira para começar a vender interações.
           </p>
         </div>
       )}

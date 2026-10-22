@@ -224,7 +224,7 @@ function KanbanCard({
         >
           <ChevronLeft className="h-4 w-4" aria-hidden="true" />
         </Button>
-        {move.isError && <span className="text-[11px] text-red">Erro ao mover</span>}
+        {move.isError && <span className="text-[11px] text-red">Não foi possível mover.</span>}
         <Button
           variant="ghost"
           size="sm"
@@ -329,7 +329,7 @@ export function MarketingKanban({ posts, onOpenPost, onCreateInColumn }: Marketi
                       isDropTarget ? "border-accent text-accent" : "border-line text-muted",
                     )}
                   >
-                    {isDropTarget ? "Solte aqui" : "Nada aqui ainda"}
+                    {isDropTarget ? "Solte aqui" : "Nenhuma postagem ainda."}
                   </li>
                 )}
               </ul>

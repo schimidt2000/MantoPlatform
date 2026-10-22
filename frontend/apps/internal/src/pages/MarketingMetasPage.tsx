@@ -20,12 +20,12 @@ function usedPercent(goal: MarketingGoal): number {
 
 /** Frase de urgência do card — é o que a tela precisa dizer em uma linha. */
 function urgencyText(goal: MarketingGoal): string {
-  if (goal.never_posted) return "Nenhum post publicado ainda — precisa de conteúdo urgente.";
+  if (goal.never_posted) return "Nenhum post publicado ainda — publique o primeiro post.";
   if (goal.status === "delayed") {
     return `Atrasado ${goal.days_late} dia(s) além do intervalo combinado.`;
   }
   const restam = goal.target_interval_days - (goal.days_since_last_post ?? 0);
-  if (restam <= 0) return "Vence hoje — vale adiantar o próximo post.";
+  if (restam <= 0) return "Vence hoje — publique o próximo post.";
   return `Em dia — próximo post em ${restam} dia(s).`;
 }
 
@@ -153,7 +153,7 @@ function GoalCard({ goal, onEdit }: GoalCardProps) {
           </Button>
           {deleteGoal.isError && (
             <span className="text-xs text-red" role="alert">
-              Erro ao excluir
+              Não foi possível excluir a meta.
             </span>
           )}
         </div>

@@ -188,7 +188,7 @@ function NovoPedidoDialog({
           </DialogTitle>
           <DialogDescription>
             {eCompra
-              ? "Alguma coisa que precisa ser comprada. Um super admin aprova, e depois quem for responsável marca como comprada e como recebida."
+              ? "Um item que precisa ser comprado. Um Superadmin aprova; depois, quem for responsável marca como comprado e como recebido."
               : eManutencao
                 ? "Conserto, ajuste ou adaptação de um figurino que já existe. A oficina assume direto — não precisa de aprovação."
                 : "Uma peça nova, que ainda não existe. A oficina aprova e assume depois."}
@@ -248,7 +248,7 @@ function NovoPedidoDialog({
               </div>
 
               <div>
-                <span className="text-xs text-muted">Dá para usar assim como está?</span>
+                <span className="text-xs text-muted">Pode ser usado como está?</span>
                 <div className="mt-1 flex gap-2">
                   <button
                     type="button"
@@ -259,7 +259,7 @@ function NovoPedidoDialog({
                         : "border-line text-muted hover:bg-surface-2"
                     }`}
                   >
-                    Dá para usar
+                    Pode ser usado
                   </button>
                   <button
                     type="button"
@@ -448,7 +448,7 @@ function NovoPedidoDialog({
               </select>
               <p className="mt-1 text-xs text-muted">
                 {eCompra
-                  ? "Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem responsável, o aviso vai para os super admins."
+                  ? "Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem responsável, o aviso vai para os Superadmins."
                   : "Quem for designado recebe e-mail e o prazo entra na agenda pessoal. Sem responsável, o aviso vai para a equipe de figurino."}
               </p>
             </div>
@@ -716,11 +716,11 @@ export function FigurinoProducaoListPage() {
               ) : (
                 <Shirt className="h-8 w-8 text-muted" />
               )}
-              <p className="font-medium text-ink">Nada nesta lista</p>
+              <p className="font-medium text-ink">Nenhum pedido nesta lista.</p>
               <p className="max-w-md text-sm text-muted">
                 {eCompras
-                  ? "Quando faltar alguma coisa que precisa ser comprada — pedraria, tinta, um sapato — é aqui que o pedido nasce, com prazo e responsável, e é aqui que o gasto dele fica junto."
-                  : "Quando alguém precisar de uma peça para um evento — uma bermuda, um sapato, um figurino inteiro — é aqui que o pedido nasce, e é aqui que os gastos dele ficam juntos."}
+                  ? "Quando faltar um item que precisa ser comprado — pedraria, tinta, um sapato —, o pedido nasce nesta tela, com prazo e responsável, e o gasto dele fica registrado junto."
+                  : "Quando alguém precisar de uma peça para um evento — uma bermuda, um sapato, um figurino inteiro —, o pedido nasce nesta tela, e os gastos dele ficam registrados junto."}
               </p>
             </Card>
           ) : (

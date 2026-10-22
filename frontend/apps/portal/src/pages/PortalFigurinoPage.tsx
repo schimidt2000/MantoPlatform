@@ -12,7 +12,7 @@ export function PortalFigurinoPage() {
   return (
     <div className="space-y-4 p-4">
       <PageHeader
-        title="Ficha de Figurino"
+        title="Ficha de figurino"
         className="mb-0"
         actions={
           <Link to="/agenda" className="text-sm text-accent hover:underline">

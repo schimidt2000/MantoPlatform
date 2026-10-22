@@ -862,7 +862,7 @@ def reservar(
         preco = campaign.price_live
     else:
         if campaign.recorded_available <= 0:
-            raise VirtuaisConflitoError("Os vídeos gravados desta campanha esgotaram.")
+            raise VirtuaisConflitoError("Os vídeos gravados desta campanha se esgotaram.")
         preco = campaign.price_recorded
 
     preco_presente = campaign.price_gift if peca is not None else Decimal("0.00")
@@ -1865,7 +1865,7 @@ def salvar_video_entrega(delivery: VirtualMediaDelivery, file_obj: Any) -> Virtu
 
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise VirtuaisValidationError("video", "Escolha o arquivo de vídeo.")
+        raise VirtuaisValidationError("video", "Selecione o arquivo de vídeo.")
 
     extensao = os.path.splitext(nome_original)[1].lower()
     if extensao not in VIRTUAL_VIDEO_EXTENSIONS:
@@ -1973,7 +1973,7 @@ def atualizar_status_entrega(
         and delivery.order.modality == VIRTUAL_MODALITY_GRAVADO
         and not delivery.video_path
     ):
-        raise VirtuaisValidationError("video", "Envie o vídeo antes de finalizar a entrega.")
+        raise VirtuaisValidationError("video", "Insira o vídeo antes de finalizar a entrega.")
 
     delivery.status = limpo
     delivery.updated_by_id = user_id

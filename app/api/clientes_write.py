@@ -74,7 +74,7 @@ def api_clientes_update(client_id: int) -> Any:
         return denied
     client, _events, _rel, _total, _cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
-        return json_error("Cliente não encontrado", 404)
+        return json_error("Cliente não encontrada", 404)
     body = request.get_json(silent=True) or {}
     client_ops.update_client_fields(
         client,
@@ -100,7 +100,7 @@ def api_clientes_delete(client_id: int) -> Any:
         return json_error("Sem permissão", 403)
     client, _events, _rel, _total, _cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
-        return json_error("Cliente não encontrado", 404)
+        return json_error("Cliente não encontrada", 404)
     client_ops.delete_client(client)
     return "", 204
 

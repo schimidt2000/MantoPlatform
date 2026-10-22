@@ -353,7 +353,7 @@ def associate_client(response: FormResponse, client_id: int | None) -> Client:
     if client_id:
         client = Client.query.get(client_id)
         if not client:
-            raise FormValidationError("client_id", "Cliente não encontrado.")
+            raise FormValidationError("client_id", "Cliente não encontrada.")
     else:
         phone = response.contact_phone
         if not phone:

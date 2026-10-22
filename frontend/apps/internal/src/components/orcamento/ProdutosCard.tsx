@@ -74,7 +74,7 @@ export function ProdutosCard({
           <div className="flex-1">
             <Combobox
               aria-label="Produto de tabela"
-              placeholder="Escolher produto…"
+              placeholder="Selecionar produto…"
               emptyMessage="Nenhum produto ativo na tabela de preços."
               options={options}
               value={escolha}

@@ -451,7 +451,7 @@ export function CatalogPersonagensView({
         <p className="rounded-md border border-dashed border-line p-6 text-center text-sm text-muted">
           {personagens.length === 0
             ? "Nenhum personagem criado ainda. Abra um tema e adicione o elenco dele."
-            : "Nenhum personagem bate com o filtro."}
+            : "Nenhum personagem encontrado com este filtro."}
         </p>
       )}
     </div>

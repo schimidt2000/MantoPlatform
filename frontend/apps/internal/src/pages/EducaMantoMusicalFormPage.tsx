@@ -244,7 +244,7 @@ export function EducaMantoMusicalFormPage() {
       <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
         <PageHeader title="EducaManto — Musical" className="mb-0" />
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar o musical — a edição é exclusiva do superadmin.
+          Não foi possível carregar o musical — a edição é exclusiva do Superadmin.
         </div>
       </div>
     );

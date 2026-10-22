@@ -261,7 +261,7 @@ def api_figurino_producao_comentar(producao_id: int) -> Any:
 
     mensagem = (_payload().get("message") or "").strip()
     if not mensagem:
-        return json_error("Escreva alguma coisa.", 400, fields={"message": "Obrigatório"})
+        return json_error("Escreva a mensagem.", 400, fields={"message": "Obrigatório"})
 
     from app import db
 

@@ -83,7 +83,7 @@ def quick_create_client(
     """
     clean_name = (name or "").strip()
     if not clean_name:
-        raise ClientValidationError("name", "Informe o nome do cliente.")
+        raise ClientValidationError("name", "Informe o nome da cliente.")
     phone = normalize_phone(phone_raw)
     if not phone:
         raise ClientValidationError("phone", "Telefone inválido. Inclua DDD (e DDI se houver).")

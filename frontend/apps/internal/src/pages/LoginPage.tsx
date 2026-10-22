@@ -108,7 +108,7 @@ export function LoginPage() {
               )}
 
               <Button type="submit" loading={login.isPending} className="w-full">
-                {login.isPending ? "Entrando..." : "Entrar"}
+                {login.isPending ? "Entrando…" : "Entrar"}
               </Button>
             </form>
           </CardContent>

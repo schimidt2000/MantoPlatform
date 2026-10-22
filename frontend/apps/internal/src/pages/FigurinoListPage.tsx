@@ -250,7 +250,7 @@ function MissingSheetsPanel({ missing, sheets }: MissingPanelProps) {
                   loading={dismissingNorm === item.character_name_norm}
                   onClick={() => handleDismiss(item)}
                 >
-                  Excluir
+                  Descartar
                 </Button>
               </div>
             </li>

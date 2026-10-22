@@ -73,7 +73,7 @@ function CharacterFilterDropdown({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="ex: Thor, Homem-Aranha, Mario…"
+          placeholder="Ex.: Thor, Homem-Aranha, Mario…"
           className="h-8 w-full rounded-md border border-line bg-panel px-2 text-xs text-ink"
           aria-label="Filtrar por personagem"
         />

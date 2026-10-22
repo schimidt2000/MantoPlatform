@@ -89,7 +89,7 @@ function PaymentStatusSelect({
   }
   return (
     <label className="inline-flex items-center gap-1.5">
-      <span className="sr-only">Status de pagamento de {role.character_name}</span>
+      <span className="sr-only">Situação de pagamento de {role.character_name}</span>
       <select
         className={`h-8 rounded-md border px-1.5 text-xs ${
           role.payment_status === "pago"
@@ -376,7 +376,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
           {!cacheAlterado
             ? "Cachê autorizado acima do limite deste evento."
             : podeUltrapassar
-              ? "Acima do limite deste evento. Como superadmin você pode salvar assim mesmo — fica registrado no log."
+              ? "Acima do limite deste evento. Como Superadmin você pode salvar assim mesmo — fica registrado no log."
               : "Acima do limite deste evento. Ao salvar, o valor volta para o limite."}
         </p>
       )}
@@ -459,7 +459,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
             onClick={() => {
               if (
                 window.confirm(
-                  `Tirar ${role.talent?.name ?? "o artista"} da escala de "${role.character_name}"? ` +
+                  `Remover ${role.talent?.name ?? "o artista"} da escala de "${role.character_name}"? ` +
                     "Avise a pessoa pelo WhatsApp.",
                 )
               ) {
@@ -467,7 +467,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
               }
             }}
           >
-            Tirar da escala
+            Remover da escala
           </Button>
         )}
         {canEdit && data.flags.is_superadmin && !role.talent && (
@@ -510,7 +510,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
       )}
       {transporte.isError && (
         <p className="mt-1 text-sm text-red">
-          {transporte.error?.message || "Não foi possível mudar o transporte."}
+          {transporte.error?.message || "Não foi possível alterar o transporte."}
         </p>
       )}
       {remove.isError && <p className="mt-1 text-sm text-red">{remove.error?.message}</p>}
@@ -742,7 +742,7 @@ export function CastingSection({ data }: CastingSectionProps) {
       >
         {podeTirar && aAvisar > 0 && (
           <p className="mb-2 rounded-md bg-red-soft px-3 py-2 text-sm text-red" role="note">
-            Evento cancelado: exclua os escalados e avise cada um pelo WhatsApp.
+            Evento cancelado: remova os escalados da escala e avise cada um pelo WhatsApp.
           </p>
         )}
         {renderList(personagens)}

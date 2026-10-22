@@ -203,7 +203,7 @@ function DataEspecialAlert({
           ? `Orçamento personalizado: o valor digitado vence — confira se cobre a tabela de ${faixa.rotulo}.`
           : "Vale para qualquer orçamento nesta data — o preço já é o da tabela especial."}
         {natal && !personalizado
-          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não some o acréscimo "Outro".'
+          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não inclua o acréscimo "Outro".'
           : ""}
       </p>
     </motion.div>
@@ -508,7 +508,7 @@ export function OrcamentoCalculadoraPage() {
     // (R$ 600 das 2h aplicado ao preço de tabela de R$ 2.500 = 76%). Zera e avisa.
     if (descontoModo === "valor" && descontoValor > 0) {
       setDescontoValor(0);
-      setAvisoDoDesconto("A duração do “fechar por R$” saiu do orçamento — escolha a duração e digite o valor de novo.");
+      setAvisoDoDesconto("A duração do “fechar por R$” saiu do orçamento — selecione a duração e informe o valor novamente.");
     }
     // O modo e o valor são lidos só no momento da troca (não disparam o efeito).
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -599,7 +599,7 @@ export function OrcamentoCalculadoraPage() {
           <div className="space-y-4 lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle>Dados do Evento</CardTitle>
+                <CardTitle>Dados do evento</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
@@ -835,7 +835,7 @@ export function OrcamentoCalculadoraPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Ajustes Finos</CardTitle>
+                <CardTitle>Ajustes finos</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -859,7 +859,7 @@ export function OrcamentoCalculadoraPage() {
                       // "Recalcular" põe horas e valor juntos e não passa por este caminho.
                       if (descontoModo === "valor" && descontoDuracao === "extra" && descontoValor > 0) {
                         setDescontoValor(0);
-                        setAvisoDoDesconto("As horas da duração extra mudaram — digite de novo o valor de fechamento.");
+                        setAvisoDoDesconto("As horas da duração extra mudaram — informe novamente o valor de fechamento.");
                       }
                     }}
                   />
@@ -1155,7 +1155,7 @@ export function OrcamentoCalculadoraPage() {
                         descontoSemBackend
                       }
                     >
-                      {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar Orçamento"}
+                      {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar orçamento"}
                     </Button>
                   </div>
                 </CardContent>

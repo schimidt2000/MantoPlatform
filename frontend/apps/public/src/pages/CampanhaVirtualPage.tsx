@@ -182,7 +182,7 @@ export function CampanhaVirtualPage() {
           const status = (erro as { status?: number }).status;
           if (status === 409) {
             setAvisoTopo(
-              erro.message || "Esse horário acabou de ser reservado. Escolha outro, por favor.",
+              erro.message || "Este horário acabou de ser reservado. Escolha outro, por favor.",
             );
             setSlotId(null);
             void recarregarHorarios();

@@ -37,7 +37,7 @@ export function SolicitarExclusaoDialog({
   function enviar() {
     setErro("");
     if (!motivo.trim()) {
-      setErro("Explique o motivo — é o que o Superadmin vai ler para decidir.");
+      setErro("Informe o motivo — é o que o Superadmin lê para decidir.");
       return;
     }
     solicitar.mutate(
@@ -62,7 +62,7 @@ export function SolicitarExclusaoDialog({
         <p className="text-sm text-ink">“{eventTitle}”</p>
         <p className="mt-1 text-sm text-muted">
           O pedido vai para o Superadmin, que decide entre excluir e cancelar — e trata a
-          devolução, se a cliente já tiver pago alguma coisa.
+          devolução, se a cliente já tiver feito algum pagamento.
         </p>
         <div className="mt-3">
           <label className="mb-1 block text-xs font-semibold uppercase text-muted" htmlFor="motivo-solicitacao">

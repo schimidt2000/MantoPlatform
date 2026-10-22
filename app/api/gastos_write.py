@@ -339,7 +339,7 @@ def api_gastos_conta_preencher(conta_id: int) -> Any:
     body = request.get_json(silent=True) or {}
     amount = _to_decimal(body.get("amount"))
     if amount is None:
-        return json_error("Informe o valor exato da conta (ex.: 512,30).", 400, fields={"amount": "obrigatório"})
+        return json_error("Informe o valor exato da conta (ex.: 512,30).", 400, fields={"amount": "Obrigatório"})
     try:
         entry = gastos_ops.fill_entry(
             conta, current_user, _month_ref_or_current(body.get("month_ref")), amount,

@@ -43,7 +43,7 @@ function VendaNoPrincipal({ principal }: { principal: { id: number; title: strin
             </Link>
           </>
         ) : null}
-        . Aqui salvam só os dados deste evento.
+        . Neste formulário, só os dados deste evento são salvos.
       </p>
     </BlockCard>
   );
@@ -117,7 +117,7 @@ export function ValoresBlock({
       )}
       {aDefinir && (
         <div className="space-y-1 text-xs">
-          <p className="text-muted">O evento fica em “Sem valor”, na Home, até alguém pôr o valor.</p>
+          <p className="text-muted">O evento fica em “Sem valor”, na Home, até alguém inserir o valor.</p>
           {/* Aviso no lugar (e não depois de salvar): marcar num evento que já tinha valor apaga o
               valor e cancela a comissão a pagar. A comissão já paga não muda. */}
           {valorGravado != null && valorGravado >= 1 && (
@@ -181,7 +181,7 @@ export function ValoresBlock({
                     />
                   )}
                 />
-                <p className="mt-1 text-xs text-muted">Valor total cobrado do cliente.</p>
+                <p className="mt-1 text-xs text-muted">Valor total cobrado da cliente.</p>
                 <FieldError message={errors.sale_value?.message} />
               </div>
             </div>

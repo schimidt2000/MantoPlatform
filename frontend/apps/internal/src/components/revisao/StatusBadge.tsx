@@ -3,9 +3,9 @@ import { cn } from "@manto/ui";
 export type StatusValue = "em_revisao" | "aprovado" | "precisa_ajustes" | "rejeitado";
 
 export const STATUS_META: Record<StatusValue, { label: string; text: string; bg: string }> = {
-  em_revisao: { label: "Em Revisão", text: "text-blue", bg: "bg-blue-soft" },
+  em_revisao: { label: "Em revisão", text: "text-blue", bg: "bg-blue-soft" },
   aprovado: { label: "Aprovado", text: "text-green", bg: "bg-green-soft" },
-  precisa_ajustes: { label: "Precisa de Ajustes", text: "text-gold", bg: "bg-gold-soft" },
+  precisa_ajustes: { label: "Precisa de ajustes", text: "text-gold", bg: "bg-gold-soft" },
   rejeitado: { label: "Rejeitado", text: "text-red", bg: "bg-red-soft" },
 };
 
@@ -28,7 +28,7 @@ export function StatusBadge({ status, canManage, onChange, isPending }: StatusBa
         {meta.label}
       </span>
       {canManage && (
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Alterar status de aprovação">
+        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Alterar situação de aprovação">
           {STATUS_ORDER.filter((value) => value !== status).map((value) => (
             <button
               key={value}

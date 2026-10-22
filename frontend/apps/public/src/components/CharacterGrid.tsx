@@ -19,7 +19,7 @@ export function CharacterGrid({ characters, temaSlug, highlightedSlug }: Charact
   return (
     <div className="mt-16 border-t border-line pt-10">
       <h2 className="mb-1 text-balance font-display text-2xl font-medium text-ink sm:text-3xl">
-        ✦ Elenco Individual
+        ✦ Elenco individual
       </h2>
       <p className="mb-5 text-sm text-muted">
         Cada personagem também pode ser contratado separadamente do pacote completo.

@@ -73,7 +73,7 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
           hint={
             resumo.devolucoes.length > 0
               ? resumo.devolucoes.map((d) => `${brl(d.valor)} ${ESTADO[d.estado] ?? d.estado}`).join(" · ")
-              : "nada a devolver"
+              : "nenhuma devolução"
           }
         />
         {!doGrupo && <Card label="Retido pela Manto" value={brl(resumo.retido)} />}
@@ -93,7 +93,7 @@ export function ResultadoCancelamento({ data }: { data: EventoDetalhe }) {
             </div>
             {linkComissoes && (
               <Link to={linkComissoes} className="mt-1 inline-block text-[11px] text-blue underline">
-                ver em comissões
+                Ver em comissões
               </Link>
             )}
           </div>

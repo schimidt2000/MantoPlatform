@@ -77,7 +77,7 @@ export function CancelamentoBvBloco({ bvs, proporcional, entradas, onEntrada, er
                     />
                   </div>
                   <p className="text-xs text-gold-ink sm:col-span-2">
-                    Esse PIX vai à Planilha de Pagamentos — sem ele, o BV não tem como ser pago.
+                    Este PIX vai à Planilha de Pagamentos — sem ele, o BV não pode ser pago.
                   </p>
                 </div>
               )}

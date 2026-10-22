@@ -34,7 +34,7 @@ export function AcrescimosEditor({
     <div className="space-y-3">
       <p className="text-xs text-muted">
         {ajuda ??
-          "O BV entra no total, mas é um repasse (não aparece para o cliente) e o PIX de quem recebe é informado no evento."}
+          "O BV entra no total, mas é um repasse (não aparece para a cliente) e o PIX de quem recebe é informado no evento."}
       </p>
       {acrescimos.map((a, i) => (
         <div key={i} className="flex flex-wrap items-center gap-2">

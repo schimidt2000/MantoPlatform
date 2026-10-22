@@ -186,7 +186,7 @@ def _html_wrap(content_html: str, preheader: str = "", tema: dict | None = None)
           <td style="background:#ffffff;padding:32px;border-radius:0 0 12px 12px;">
             {content_html}
             <div style="margin-top:28px;padding-top:20px;border-top:1px solid #eeecf8;font-size:12px;color:#aaa;text-align:center;line-height:1.6;">
-              Este email foi enviado automaticamente pela plataforma Manto Produções.<br>
+              Este e-mail foi enviado automaticamente pela plataforma Manto Produções.<br>
               Em caso de dúvidas, fale com nossa equipe.
             </div>
           </td>
@@ -349,7 +349,7 @@ def send_invite_reminder_email(talent, roles) -> bool:
         + _paragraph(chamada)
         + _info_box(linhas)
         + _paragraph(
-            "Confirmar leva um toque: entre no portal, abra <strong>Convites</strong> e responda "
+            "Confirmar é rápido: entre no portal, abra <strong>Convites</strong> e responda "
             "<strong>Aceitar</strong> ou <strong>Recusar</strong>. Se não puder ir, recusar também "
             "ajuda — é assim que a produção consegue chamar outra pessoa a tempo."
         )
@@ -477,7 +477,7 @@ def send_portal_announcement_email(talent) -> bool:
         )
         + f'<div style="margin:20px 0;">{bullets}</div>'
         + _paragraph(
-            'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você mesmo cria no '
+            'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você cria no '
             'primeiro acesso. É rápido e seguro.'
         )
         + _btn("Acessar o portal agora →", login_url)
@@ -487,7 +487,7 @@ def send_portal_announcement_email(talent) -> bool:
             f'Ou copie o endereço: <a href="{login_url}" style="color:#2d1f6e;">{login_url}</a>'
         )
         + _alert_box(
-            "Em caso de dúvidas para acessar, responda este email ou fale com nossa equipe — vamos te ajudar.",
+            "Em caso de dúvidas para acessar, responda este e-mail ou fale com nossa equipe — vamos te ajudar.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
     )
@@ -559,7 +559,7 @@ def send_password_reset_email(talent, reset_url: str) -> bool:
         + _btn("Criar nova senha →", reset_url)
         + _paragraph(f'Se o botão não funcionar, copie e cole: <a href="{reset_url}" style="color:#2d1f6e;">{reset_url}</a>')
         + _alert_box(
-            "Este link é válido por <strong>1 hora</strong>. Se você não solicitou a redefinição, ignore este email — sua senha não será alterada.",
+            "Este link é válido por <strong>1 hora</strong>. Se você não solicitou a redefinição, ignore este e-mail — sua senha não será alterada.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
     )
@@ -615,7 +615,7 @@ def send_foto_pendente_email(talent, *, faltas: list[str], acao_url: str, valida
             f'padding-left:18px;color:#555;">{itens}</ul></td></tr>'
         )
         + _paragraph(
-            "É rápido: o botão abaixo abre o portal, você cria sua senha e cai direto na tela "
+            "É rápido: o botão abaixo abre o portal, você cria sua senha e vai direto para a tela "
             "de envio das fotos."
         )
         + _btn("Enviar minhas fotos →", acao_url)
@@ -777,10 +777,10 @@ def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:
             "está tudo salvo, você não precisa preencher nada de novo."
         )
         + _paragraph(
-            "Falta só confirmar que este é mesmo o seu email. É por ele que enviamos os convites "
+            "Falta só confirmar que este é mesmo o seu e-mail. É por ele que enviamos os convites "
             "de trabalho, então um endereço errado significa perder oportunidade."
         )
-        + _btn("Confirmar meu email →", confirm_url)
+        + _btn("Confirmar meu e-mail →", confirm_url)
         + _paragraph(
             f'Se o botão não funcionar, copie e cole: '
             f'<a href="{confirm_url}" style="color:#2d1f6e;">{confirm_url}</a>'
@@ -794,9 +794,9 @@ def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:
 
     return _send(
         to=talent.email_contact,
-        subject="✅ Confirme seu email — Cadastro Manto Produções",
+        subject="✅ Confirme seu e-mail — Cadastro Manto Produções",
         html=_html_wrap(
-            content, preheader="Um clique para confirmar seu email e receber nossos convites."
+            content, preheader="Um clique para confirmar seu e-mail e receber nossos convites."
         ),
     )
 
@@ -819,7 +819,7 @@ def send_welcome_email(talent, temp_password: str) -> bool:
         + _paragraph("Seja bem-vindo(a) ao <strong>Portal Manto Produções</strong>! Seus dados de acesso estão prontos.")
         + _info_box(rows)
         + _alert_box(
-            "Você será solicitado(a) a <strong>criar uma nova senha</strong> no primeiro acesso.",
+            "No primeiro acesso, você vai <strong>criar uma nova senha</strong>.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
         + _btn("Acessar o portal →", login_url)
@@ -856,7 +856,7 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
         )
         + _paragraph(
             "Caso tenha alguma dúvida ou queira ajustar algum detalhe, fique à vontade para responder "
-            "este email ou entrar em contato pelo WhatsApp — estamos aqui para tornar o seu evento especial."
+            "este e-mail ou entrar em contato pelo WhatsApp — estamos aqui para tornar o seu evento especial."
         )
         + _alert_box(
             "Proposta válida por <strong>7 dias</strong> a contar desta data.",
@@ -931,11 +931,11 @@ def send_new_expense_alert_email(expense, users: list) -> int:
             + _paragraph(content_paragraph)
             + _info_box(rows)
             + _alert_box(
-                "Acesse o sistema para revisar e aprovar o gasto.",
+                "Acesse a plataforma para revisar e aprovar o gasto.",
                 color="#fffbea", border="#f0d060", text="#7a5800",
             )
         )
-        html = _html_wrap(content, preheader="Novo gasto extra cadastrado — verifique no sistema para aprovação.")
+        html = _html_wrap(content, preheader="Novo gasto extra cadastrado — revise e aprove na plataforma.")
         if _send(to=user.email, subject="Novo gasto extra cadastrado — aprovação pendente", html=html):
             sent += 1
     return sent
@@ -1000,7 +1000,7 @@ def send_figurino_producao_email(producao, user) -> bool:
     )
 
     content = (
-        _greeting(user.name.split()[0] if user.name else "Olá")
+        _greeting(user.name.split()[0] if user.name else "equipe")
         + corpo
         + _info_box(rows)
         + _alert_box(aviso, color="#fffbea", border="#f0d060", text="#7a5800")
@@ -1059,7 +1059,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
 
     corpo = _paragraph(
         f"Entrou um pedido de <strong>{rotulo.lower()}</strong>{contexto} e "
-        "ainda não tem ninguém responsável."
+        "ainda está sem responsável."
     )
     if producao.description:
         corpo += _paragraph(producao.description)
@@ -1071,7 +1071,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
         )
         cores = {"color": "#fdecec", "border": "#e45858", "text": "#8a1f1f"}
     elif e_compra:
-        aviso = "Abra os pedidos de compra para aprovar e dizer quem vai comprar."
+        aviso = "Abra os pedidos de compra para aprovar e definir quem vai comprar."
         cores = {"color": "#fffbea", "border": "#f0d060", "text": "#7a5800"}
     else:
         aviso = "Abra a fila da oficina para assumir o pedido e definir o prazo."
@@ -1083,7 +1083,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
         if not user.email:
             continue
         content = (
-            _greeting(user.name.split()[0] if user.name else "Olá")
+            _greeting(user.name.split()[0] if user.name else "equipe")
             + corpo
             + _info_box(rows)
             + _alert_box(aviso, **cores)
@@ -1223,7 +1223,7 @@ def send_virtual_order_confirmed_email(order) -> bool:
 
     url = _virtuais_order_url(order)
     proximo_passo = (
-        "No dia, abra a página do pedido uns minutinhos antes: o link da chamada fica lá. "
+        "No dia, abra a página do pedido alguns minutos antes: o link da chamada fica lá. "
         "Deixe a cartinha por perto — a criança pode mostrar na câmera."
         if ao_vivo
         else "Assim que o vídeo ficar pronto, mandamos outro e-mail. Ele fica na página do pedido."

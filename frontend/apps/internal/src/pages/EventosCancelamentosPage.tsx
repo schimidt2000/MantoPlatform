@@ -36,7 +36,7 @@ function diaMes(iso: string | null | undefined): string {
 }
 
 const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" | "blue" }> = {
-  pago: { label: "devolvido", tone: "green" },
+  pago: { label: "devolvida", tone: "green" },
   no_banco: { label: "no banco", tone: "blue" },
   nao_pago: { label: "a devolver", tone: "gold" },
 };

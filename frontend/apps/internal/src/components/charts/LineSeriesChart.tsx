@@ -65,7 +65,7 @@ export function LineSeriesChart({ title, points, formatValue = padrao, tone = "a
   const ponto = ativo != null ? points[ativo] : null;
 
   if (valores.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted">Sem dado no período.</p>;
+    return <p className="py-6 text-center text-sm text-muted">Nenhum dado no período.</p>;
   }
 
   return (

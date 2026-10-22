@@ -73,7 +73,7 @@ export function SugestaoDeEventoFaixa({
       <ConfirmDialog
         open={descartando}
         title="Não é este evento?"
-        description="A sugestão não voltará para este formulário. Ainda dá para ligar à mão pela tela Formulários."
+        description="A sugestão não voltará para este formulário. Ainda é possível ligar manualmente pela tela Formulários."
         confirmLabel="Não é este"
         pending={descartar.isPending}
         error={descartar.isError ? mensagemDaApi(descartar.error, "Não foi possível descartar.") : null}

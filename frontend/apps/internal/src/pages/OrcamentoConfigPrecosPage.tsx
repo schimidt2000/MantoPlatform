@@ -93,7 +93,7 @@ export function OrcamentoConfigPrecosPage() {
       <div className="grid items-start gap-4 [&>*]:min-w-0 xl:grid-cols-2">
       <Card>
         <CardHeader>
-          <CardTitle>Markup (Coeficiente de Venda)</CardTitle>
+          <CardTitle>Markup (coeficiente de venda)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <PriceTable
@@ -115,7 +115,7 @@ export function OrcamentoConfigPrecosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Cachê — Atores</CardTitle>
+          <CardTitle>Cachê — atores</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <PriceTable
@@ -130,7 +130,7 @@ export function OrcamentoConfigPrecosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Cachê — Cantores</CardTitle>
+          <CardTitle>Cachê — cantores</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <PriceTable
@@ -157,7 +157,7 @@ export function OrcamentoConfigPrecosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Técnico de Som e Coordenadores</CardTitle>
+          <CardTitle>Técnico de som e coordenadores</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <PriceTable
@@ -184,7 +184,7 @@ export function OrcamentoConfigPrecosPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Itens Especiais (Customizados)</CardTitle>
+          <CardTitle>Itens especiais (customizados)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 p-0">
           <Table>
@@ -501,7 +501,7 @@ export function OrcamentoConfigPrecosPage() {
       <Button loading={save.isPending} onClick={handleSave}>
         Salvar configurações
       </Button>
-      {save.isSuccess && <p className="text-sm text-green">Configurações salvas com sucesso!</p>}
+      {save.isSuccess && <p className="text-sm text-green">Configurações salvas.</p>}
       {save.isError && (
         <div className="space-y-1" role="alert">
           <p className="text-sm text-red">Não foi possível salvar as configurações.</p>

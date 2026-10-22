@@ -38,7 +38,7 @@ function NewClientsChart({ months }: { months: ClientsMonthMetric[] }) {
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">Novos clientes por mês</CardTitle>
+        <CardTitle className="text-base">Novas clientes por mês</CardTitle>
       </CardHeader>
       <CardContent className="space-y-1.5">
         {months.map((m) => (
@@ -78,7 +78,7 @@ export function ClientsListPage() {
         title="Clientes"
         className="mb-4"
         subtitle={
-          query.data ? `${query.data.total_clients} cliente(s) cadastrado(s)` : undefined
+          query.data ? `${query.data.total_clients} cliente(s) cadastrada(s)` : undefined
         }
         actions={
           <>
@@ -95,7 +95,7 @@ export function ClientsListPage() {
         <div className="mb-4 grid gap-3 lg:grid-cols-[1fr_1fr_2fr]">
           <div className="grid gap-3">
             <KpiCard
-              label="Novos este mês"
+              label="Novas este mês"
               value={String(newThisMonth)}
               hint="clientes que entraram na base"
             />
@@ -134,14 +134,14 @@ export function ClientsListPage() {
 
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar os clientes.
+          Não foi possível carregar as clientes.
         </div>
       )}
 
       {query.data && query.data.items.length === 0 && (
         <div className="flex flex-wrap items-center gap-3">
           <p className="text-sm text-muted">
-            {q ? `Nenhum cliente encontrado para "${q}".` : "Nenhum cliente cadastrado ainda."}
+            {q ? `Nenhuma cliente encontrada para "${q}".` : "Nenhuma cliente cadastrada ainda."}
           </p>
           <NovaClienteDialog />
         </div>

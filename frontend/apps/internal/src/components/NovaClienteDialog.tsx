@@ -125,9 +125,9 @@ export function NovaClienteDialog({ onCreated }: { onCreated?: (id: number) => v
             <DialogDescription>
               {resultado
                 ? resultado.reused
-                  ? "Esse telefone já estava cadastrado — nada foi duplicado."
-                  : "Pronto. A ficha já está na base de clientes."
-                : "Nome e telefone são obrigatórios; o resto pode ser completado depois na ficha."}
+                  ? "Este telefone já estava cadastrado — nenhuma ficha foi duplicada."
+                  : "Ficha salva na base de clientes."
+                : "Nome e telefone são obrigatórios; os demais dados podem ser completados depois na ficha."}
             </DialogDescription>
           </DialogHeader>
 

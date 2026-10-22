@@ -137,7 +137,7 @@ export function VitrineVirtualPage() {
         {isError && (
           <p className="mt-4 text-[14px] text-alo-muted">
             Não conseguimos carregar agora. Atualize a página em instantes — ou fale com a gente
-            pelo WhatsApp, que a gente resolve por lá.
+            pelo WhatsApp, que resolvemos por lá.
           </p>
         )}
 

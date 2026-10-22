@@ -674,3 +674,15 @@ agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e n
 | 142 | **P5** | `orcamento_evento_ops._linhas_v2` acima de 4h | casa as linhas do `valores_brl` com as da conta da extra pela posição; os dois filtros (`_linhas_do_snapshot` × `_linhas_do_snapshot_313`) só coincidem no snapshot que a calculadora gera — num forjado, o valor de uma linha vai para outra | um filtro só, ou casar por índice do acréscimo |
 | 143 | **P5** | `deduzir_duracao` com o bruto = o final (gêmeo Jinja, bundle velho) | procura o cheio em todas as durações antes do final: se o final de uma duração for igual ao cheio de outra ("3 h pelo preço de 2 h"), deduz a duração errada — só muda o BV com acréscimo em R$ | dar preferência à duração gravada no evento quando houver |
 | 144 | **P5** | a marca `versao_conta: 2` × `snapshot_v2` | o leitor refaz a conta com o `aplicar_acrescimos` de hoje e exige ± R$ 0,01: uma mudança futura de centavo nessa função, sem subir a versão, manda todo orçamento v2 para o caminho de antes sem aviso (cheio = final, o BV deixa de encolher) | qualquer mudança no núcleo sobe `VERSAO_CONTA` e trata a versão anterior; um cenário do verify segura a paridade |
+
+## Baixa da correção 316-tom-dos-textos (2026-10-22, branch)
+
+**Quitadas.** Nenhuma (só texto).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 145 | **P4** | `app/api/figurino_producao_write.py:223` × `app/figurino/producao_ops.py:875` | o endpoint decide o 403 por `"super admin" in exc.message.lower()`: a mensagem "Só um super admin aprova um pedido…" ficou fora da padronização para "Superadmin" porque trocar o texto viraria 400 | a exceção carrega um código (`ProducaoValidationError.code`), e o endpoint decide por ele, não pelo texto |
+| 146 | **P5** | `lib/navigation.tsx` e títulos de módulo ("Banco de Talentos", "Calculadora de Orçamento", "Planilha de Pagamentos", "Calc. Orçamento", "Config. Preços") | nome de seção em Title Case convivendo com "Gerenciar catálogo" e "Exclusões e cancelamentos"; a 316 padronizou cartão e botão, não o menu | decisão de produto: um padrão para o menu inteiro, sidebar e título de página juntos |
+| 147 | **P5** | mensagens da API com enum ou campo em texto (`"Status inválido (use: …)"`, `form_response_id inválido`, `Envie a lista completa em \`items\``), "Google Calendar" × "Google Agenda" (`agenda_write`, `event_ops`), cabeçalho do CSV de comissões (`lib/financeiro.ts`: "Status", "Qtd de Vendas") | ficaram fora da 316: as duas primeiras só aparecem com o frontend quebrado; o CSV pode ser lido por planilha externa pelo nome da coluna | tratar ao mexer em cada endpoint; o CSV só com o dono confirmando que nenhuma planilha depende do cabeçalho |

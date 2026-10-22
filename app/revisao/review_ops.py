@@ -312,7 +312,7 @@ def add_comment(
     """Cria um comentário na versão ATUAL do material (versões antigas são só leitura)."""
     clean_body = (body or "").strip()
     if not clean_body:
-        raise ReviewValidationError("body", "Comentário vazio.")
+        raise ReviewValidationError("body", "Escreva o comentário antes de enviar.")
     current_version = asset.version or 1
     if requested_version is not None and requested_version != current_version:
         raise ReviewCommentVersionError("Comentários só podem ser feitos na versão atual.")

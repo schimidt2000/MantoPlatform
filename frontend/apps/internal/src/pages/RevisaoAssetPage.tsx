@@ -217,7 +217,7 @@ export function RevisaoAssetPage() {
                   <>
                     {asset.media_type === "audio" && (
                       <p className="text-xs text-muted">
-                        Será ancorado no ponto atual do player (pause e ajuste antes de comentar).
+                        O comentário será ancorado no ponto atual do player (pause e ajuste antes de comentar).
                       </p>
                     )}
                     {asset.media_type === "pdf" && (
@@ -348,7 +348,7 @@ export function RevisaoAssetPage() {
                           onSettled: () => setReplaceProgress(null),
                           onError: (err) =>
                             setReplaceError(
-                              err instanceof ApiRequestError ? err.message : "Falha ao substituir.",
+                              err instanceof ApiRequestError ? err.message : "Não foi possível substituir o arquivo.",
                             ),
                         },
                       );
@@ -365,7 +365,7 @@ export function RevisaoAssetPage() {
                     size="sm"
                     loading={finalizeAsset.isPending}
                     onClick={() => {
-                      if (window.confirm("Finalizar este material? Os arquivos serão removidos do armazenamento.")) {
+                      if (window.confirm("Finalizar este material? Os arquivos serão excluídos do armazenamento.")) {
                         finalizeAsset.mutate();
                       }
                     }}

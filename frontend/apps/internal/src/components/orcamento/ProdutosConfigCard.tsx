@@ -102,7 +102,7 @@ export function ProdutosConfigCard({
   const adicionarProduto = () => {
     const chave = novaChave.trim().toLowerCase();
     if (!CHAVE_RE.test(chave)) {
-      setErroChaveLocal("chave inválida — só letras minúsculas, números e _ (até 30)");
+      setErroChaveLocal("Chave inválida — só letras minúsculas, números e _ (até 30)");
       return;
     }
     if (chave in produtos) {

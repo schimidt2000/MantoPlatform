@@ -55,7 +55,7 @@ export function AdminSyncPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4 sm:p-6">
-<PageHeader title="Sync da agenda" className="mb-0" />
+<PageHeader title="Sincronização da agenda" className="mb-0" />
 
       <div className="flex flex-wrap gap-2">
         <Button
@@ -115,7 +115,7 @@ export function AdminSyncPage() {
       {query.isLoading && <Skeleton className="h-64 w-full" />}
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar o status de sync.
+          Não foi possível carregar a situação da sincronização.
         </div>
       )}
 

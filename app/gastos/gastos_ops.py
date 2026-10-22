@@ -291,7 +291,7 @@ def _validate_expense_data(data: dict, *, require_receipt: bool, tipo_atual: str
         raise GastoValidationError("amount", "Informe um valor válido (ex.: 1.000,00).")
     if require_receipt and not data.get("receipt_path"):
         raise GastoValidationError(
-            "receipt", "Anexe a Nota Fiscal (foto ou PDF que mostre o valor dos produtos)."
+            "receipt", "Insira a nota fiscal (foto ou PDF que mostre o valor dos produtos)."
         )
 
     disbursement_type = (data.get("disbursement_type") or "").strip() or None
@@ -849,7 +849,7 @@ def parse_conta_data(data: dict) -> dict:
     if frequency == "semanal":
         weekday = data.get("weekday")
         if weekday is None or not 0 <= int(weekday) <= 6:
-            raise GastoValidationError("weekday", "Escolha o dia da semana da cobrança semanal.")
+            raise GastoValidationError("weekday", "Selecione o dia da semana da cobrança.")
         weekday = int(weekday)
         due_day = 1
     else:
