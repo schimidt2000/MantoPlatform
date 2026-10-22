@@ -760,6 +760,112 @@ def c25_pedido_legado() -> None:
     _garante(len(_decididos("com")) - antes == 1, "25: o autor do legado não recebeu a resposta")
 
 
+# ── C — converge (fase 8) ─────────────────────────────────────────────────────────────────────
+def c29_tecnico_de_som() -> None:
+    """T040: o aviso conta os escalados sem a vaga automática do técnico de som do SHOW."""
+    from app.calendar.routes import SOUND_TECH_CHARACTER, SOUND_TECH_TALENT_ID
+
+    ev = v6._evento_com_elenco("315 c29", ["fada"])
+    _no_banco_escrever(
+        "UPDATE event_roles SET talent_id = :t WHERE event_id = :i AND character_name = :c AND role_type = 'extra'",
+        t=SOUND_TECH_TALENT_ID,
+        i=ev,
+        c=SOUND_TECH_CHARACTER,
+    )
+    v6._escalar(ev, estado["t"])
+    _pedir_ok("com", ev, _nada())
+    corpos = {a["corpo"] for a in _avisos(KIND_PEDIDO, ev)}
+    _garante(corpos and all("1 pessoa escalada" in (c or "") for c in corpos), f"29: aviso {corpos}")
+
+
+def c30_sem_devolucao_informada() -> None:
+    """T041: o pedido sem devolução (caminho velho, de antes do deploy) diz "sem devolução informada"."""
+    ev = _evento("c30")
+    _pedir_ok("com", ev, {"motivo": MOTIVO}, velha=True)
+    bloco = _bloco(_detalhe("sa", ev)) or {}
+    _garante(bloco.get("sem_devolucao_informada") is True, f"30: detalhe {bloco}")
+    fila = _cliente("sa").get(v6.ROTAS["cancelamentos"]).get_json().get("pendentes") or []
+    item = [x for x in fila if x.get("id") == ev]
+    _garante(item and item[0].get("sem_devolucao_informada") is True, f"30: fila {item}")
+    virtual = _evento("c30 virtual", tipo="VIRTUAL")
+    _pedir_ok("com", virtual, {"motivo": MOTIVO})
+    _garante("sem_devolucao_informada" not in (_bloco(_detalhe("sa", virtual)) or {}), "30: a venda virtual não tem devolução")
+    completo = _pedido_completo("c30 completo")
+    _garante("sem_devolucao_informada" not in (_bloco(_detalhe("sa", completo)) or {}), "30: o completo")
+
+
+def c31_alcance_em_texto() -> None:
+    """T043: o alcance em texto pronto também no "todos" — no detalhe (a todos) e na fila."""
+    g = v6._grupo("315 c31", pagos=(), comissao=None, dias=2)
+    _pedir_ok("com", g["principal"], _nada(alcance="todos"))
+    for apelido in ("cast", "sa"):
+        bloco = _bloco(_detalhe(apelido, g["principal"])) or {}
+        _garante(bloco.get("alcance_texto") == "todos os 3 dias da venda", f"31: {apelido} {bloco}")
+    fila = _cliente("sa").get(v6.ROTAS["cancelamentos"]).get_json().get("pendentes") or []
+    item = [x for x in fila if x.get("id") == g["principal"]]
+    _garante(item and item[0].get("alcance_texto") == "todos os 3 dias da venda", f"31: fila {item}")
+    avulso = _evento("c31 avulso")
+    _pedir_ok("com", avulso, _nada())
+    _garante(not (_bloco(_detalhe("sa", avulso)) or {}).get("alcance_texto"), "31: o avulso não tem alcance a dizer")
+
+
+def c32_aviso_de_outro_dia() -> None:
+    """T044: o pedido feito num outro dia da venda avisa a venda e o recebido da venda, nunca "sem venda"."""
+    g = v6._grupo("315 c32", pagos=(1000, 500), comissao=None, dias=2)
+    dia = g["dias"][1]
+    _pedir_ok("com", dia, _nada(venda_nova="2000.00"))
+    corpos = " ".join(a["corpo"] or "" for a in _avisos(KIND_PEDIDO, dia))
+    _garante("sem venda" not in corpos, f"32: {corpos[:300]}")
+    _garante("R$ 3.000,00" in corpos and "R$ 1.500,00" in corpos, f"32: venda/recebido {corpos[:300]}")
+
+
+def c33_dias_do_cache_pago() -> None:
+    """T045: o 409 de cachê pago no "todos" diz os dias (id, título, data), como o cancelar da 306."""
+    g = v6._grupo("315 c33", pagos=(), comissao=None, dias=1)
+    dia_pago = v6._evento_com_elenco("315 c33 dia pago", ["bruxa"])
+    v6._agrupar(g["principal"], dia_pago)
+    _cache_pago(dia_pago)
+    r = _pedir("com", g["principal"], _nada(alcance="todos"))
+    dias = _erro(r).get("dias") or []
+    _garante(
+        r.status_code == 409 and [d.get("id") for d in dias if isinstance(d, dict)] == [dia_pago],
+        f"33: {r.status_code} {_erro(r)}",
+    )
+    data = _no_banco("SELECT start_at FROM calendar_events WHERE id = :i", i=dia_pago)[0][0]
+    _garante(f"{data:%d/%m}" in (_erro(r).get("message") or ""), f"33: a frase não diz o dia {_erro(r)}")
+
+
+def c34_excluido_no_meio() -> None:
+    """T046: o evento excluído entre a leitura e o claim dá 404 claro, não 500."""
+    from app.calendar import solicitacao_ops
+
+    ev = _evento("c34", venda=None, taxa=None, vendedor=None)
+    real = solicitacao_ops.bloqueio_do_proprio_dia
+
+    def apaga_antes(event):
+        _no_banco_escrever("DELETE FROM calendar_events WHERE id = :i", i=ev)
+        return real(event)
+
+    solicitacao_ops.bloqueio_do_proprio_dia = apaga_antes
+    try:
+        r = _pedir("com", ev, _nada())
+    finally:
+        solicitacao_ops.bloqueio_do_proprio_dia = real
+    _garante(r.status_code == 404, f"34: pedir no excluído → {r.status_code} {r.get_data(as_text=True)[:200]}")
+
+
+def c35_autor_apagado() -> None:
+    """T052: excluir o usuário que tem pedido pendente: o pedido fica, sem autor."""
+    v6._usuario("c35", RoleName.COMERCIAL)
+    ev = _evento("c35")
+    _pedir_ok("c35", ev, _nada())
+    r = _cliente("sa").delete(f"/api/admin/users/{estado['usuarios']['c35']['id']}")
+    _garante(r.status_code == 200, f"35: excluir o autor → {r.status_code} {r.get_data(as_text=True)[:300]}")
+    p = _pedido(ev)
+    _garante(p["at"] is not None and p["by"] is None, f"35: o pedido {p}")
+    _garante(_recusar("sa", ev).status_code == 200, "35: recusar sem autor")
+
+
 # ── R — contratos que outras features leem ────────────────────────────────────────────────────
 def c27_contratos() -> None:
     from app.calendar import sumico_ops
@@ -797,6 +903,13 @@ CENARIOS = [
     ("H3", "25", "o pedido de antes do deploy", c25_pedido_legado),
     ("H1", "26", "DEVE FALHAR: o autor não fecha o próprio pedido (Q5 = D)", c26_q5d),
     ("R", "27", "contratos que outras features leem (faixa_sumidos)", c27_contratos),
+    ("C", "29", "o aviso sem a vaga automática do técnico de som", c29_tecnico_de_som),
+    ("C", "30", "sem devolução informada (caminho velho e pedido de antes)", c30_sem_devolucao_informada),
+    ("C", "31", "o alcance em texto também no 'todos'", c31_alcance_em_texto),
+    ("C", "32", "o aviso de outro dia diz a venda da venda", c32_aviso_de_outro_dia),
+    ("C", "33", "DEVE FALHAR: o 409 de cachê pago diz os dias", c33_dias_do_cache_pago),
+    ("C", "34", "DEVE FALHAR: excluído entre a leitura e o claim → 404", c34_excluido_no_meio),
+    ("C", "35", "excluir o autor deixa o pedido sem autor", c35_autor_apagado),
 ]
 
 
@@ -833,7 +946,7 @@ def main() -> int:
             print(f"  FALHA      28 · limpeza: {exc}")
     oks = sum(1 for r in v6.resultados if r[2] == "OK")
     print(f"\n{oks}/{len(v6.resultados)} cenários OK")
-    for bloco in ("S", "H1", "H2", "H3", "R", "L"):
+    for bloco in ("S", "H1", "H2", "H3", "R", "C", "L"):
         linhas = [r for r in v6.resultados if r[0] == bloco]
         if linhas:
             print(f"  {bloco}: {sum(1 for r in linhas if r[2] == 'OK')}/{len(linhas)}")
