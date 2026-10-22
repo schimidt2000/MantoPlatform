@@ -23,22 +23,23 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 
 ## Phase 1: Setup
 
-- [ ] T001 Conferir `.specify/feature.json` → `specs/315-pedido-de-cancelamento`; `env315.ps1` no scratchpad (já
+- [X] T001 Conferir `.specify/feature.json` → `specs/315-pedido-de-cancelamento`; `env315.ps1` no scratchpad (já
       criado, `C:\tmp\mp315`); `.local-db-url` e `frontend/node_modules` no worktree (já feitos)
-- [ ] T002 Migration à mão `migrations/versions/<rev>_solicitacao_de_cancelamento.py` (`down_revision =
+- [X] T002 Migration à mão `migrations/versions/<rev>_solicitacao_de_cancelamento.py` (`down_revision =
       "c5d2f7a9e306"`; `add_column` de `deletion_request_scope String(16)` e `deletion_request_refund Text`, nulas;
       `downgrade` = `drop_column` das duas) e as duas colunas em `app/models.py` ao lado de `:304-306`, com comentário do
-      porquê; `flask db upgrade` no `manto_local` e `flask db heads` com um head só
-- [ ] T003 Base da regressão no HEAD (com a migration aplicada): `specs/306-…/verify_306.py` (base 67/69),
+      porquê; `flask db heads` com um head só no worktree; no `manto_local` (que está na 310, `e8b4a1c7d310`) as duas
+      colunas entram por `ADD COLUMN IF NOT EXISTS`, sem mexer no `alembic_version`
+- [X] T003 Base da regressão no HEAD (com a migration aplicada): `specs/306-…/verify_306.py` (base 67/69),
       `specs/312-…/verify_312.py` (27/27), `specs/303-…/verify_303.py`, `specs/311-…/verify_311.py`,
-      `specs/302-…/verify_302.py` — anotar os números (o `scripts/db/verify_cancelamento_evento.py` fica fora: dívidas
+      `specs/302-…/verify_302.py` — anotar os números (**base 22/10**: 306 67/69, 312 27/27, 303 44/44, 311 8/8, 302 22/22; o `scripts/db/verify_cancelamento_evento.py` fica fora: dívidas
       85 e 129)
 
 ---
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T004 Escrever `specs/315-pedido-de-cancelamento/verify_315.py` inteiro, cenários 1–28 da spec, importando o harness
+- [X] T004 Escrever `specs/315-pedido-de-cancelamento/verify_315.py` inteiro, cenários 1–28 da spec, importando o harness
       da 306 como a 312 faz (`verify_312.py:7-13`, `:46-49`: `GoogleFalso`, disjuntor, e-mail falso, `_usuario`,
       `_externo`, `_sob_mutacao` `verify_306.py:6895`); prefixo `__v315_`; eventos descartáveis em 2050; vendas de
       vários dias criadas pelos endpoints de agrupar; cachê pago marcado pelo endpoint de status; o pedido "de antes do
@@ -46,7 +47,7 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       aqui também o `reason`); o cenário 26 exige o 403 também na rota nova (404 hoje — senão passaria contra o código de
       hoje); o 6 confere o 409 na porta e o `pedido_bloqueado` no detalhe; sai 2 se houver backend local
       rodando; `--so=` para iterar
-- [ ] T005 Rodar o `verify_315.py` contra o código de hoje e guardar a saída em
+- [X] T005 Rodar o `verify_315.py` contra o código de hoje e guardar a saída em
       `specs/315-pedido-de-cancelamento/verify_315_primeira_falha.txt`. Esperado: verdes só 27 (regressão) e 28
       (limpeza) — os cenários pedem pela rota nova, que ainda dá 404; o resto vermelho pelo motivo certo (rota nova 404,
       aviso ausente, corte ausente, `pedidos` ausente…)
@@ -239,6 +240,9 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 - [ ] T039 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
       **só quando o dono pedir**, à noite; depois do push, a sonda: um `/api/` com JSON e o `GET
       /api/events/sumidos-google` com a chave `pedidos` trazendo o 1350 (SC-006)
+      — **cadeia de migrations**: a 310 (`e8b4a1c7d310`, pronta e não publicada) também desce de `c5d2f7a9e306`;
+      quem entrar por último na `main` aponta o `down_revision` para a outra (senão o `flask db upgrade` do start acha
+      dois heads e a produção não sobe). No `manto_local` as colunas da 315 entraram à mão (o banco está na 310)
 
 ---
 

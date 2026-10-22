@@ -1,0 +1,226 @@
+﻿python.exe : C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: 
+RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported 
+version!
+At line:1 char:508
++ ... falha.txt"; & $py specs\315-pedido-de-cancelamento\verify_315.py *> $ ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\schim\...ported version!:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+[2026-10-22 12:24:30,191] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br 
+plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the 
+in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for 
+production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about 
+configuring the storage backend.
+  warnings.warn(
+[2026-10-22 12:24:30,944] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-22 12:24:33,433] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:34,268] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:34,993] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:35,653] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:36,323] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:37,033] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,020] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,186] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,328] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,482] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,624] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,765] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:38,909] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,062] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,217] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,482] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,636] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,787] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:39,942] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,090] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,338] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,521] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,667] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,815] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:40,981] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,127] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,285] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,454] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,603] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,756] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:41,900] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:42,045] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:42,198] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:42,453] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 12:24:42,603] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+
+── verify 315 (token 7C682C) ──
+  (aquecimento de 2026-09 a 2026-12: fica no espelho nada novo)
+  FALHA      1 · pedir: grava as cinco colunas, histórico, auditoria e o aviso a cada Superadmin: pedir 23110 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      2 · urgência: ≤ 7 dias e passado urgentes; longe informativo: pedir 23111 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      3 · a forma da devolução (400 por campo; Nada; venda virtual): 3: motivo → 404 {'message': 'Recurso não encontrado.'}
+  FALHA      4 · venda de vários dias: o alcance, o corte e o outro dia: 4: sem alcance 404 {'message': 'Recurso não encontrado.'}
+  FALHA      5 · DEVE FALHAR: segundo pedido e pedidos ao mesmo tempo: pedir 23118 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      6 · DEVE FALHAR: ensaio e cachê pago (porta, ordem e detalhe): 6: ensaio → 404 {'message': 'Recurso não encontrado.'}
+  FALHA      7 · evento marcado: aceita e não decide no devolver ao Google: pedir 23120 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      8 · pedir e recusar sem Google nem e-mail: pedir 23121 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      9 · DEVE FALHAR: pedido em evento cancelado: 9: cancelado → 404 {'message': 'Recurso não encontrado.'}
+  FALHA      10 · DEVE FALHAR (leitura): o corte da Q6 e da premissa 5 no detalhe, com mutação: pedir 23123 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      11 · DEVE FALHAR (leitura): a fila com o corte; Comercial 403: pedir 23124 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      12 · a faixa: pedidos a Comercial e Superadmin; `total` só do sumiço: pedir 23125 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      13 · o selo no mês, no dia e na busca; some na decisão: pedir 23126 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      14 · o portal: Evento em confirmação no futuro e no histórico: pedir 23127 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      15 · o satélite herda o pedido de todos os dias: pedir 23128 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      16 · o pedido não tranca: pedir 23131 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      17 · o caminho velho (corpo só com o motivo): 17: pedido pelo caminho velho {'at': datetime.datetime(2026, 10, 22, 12, 24, 40, 819706), 'by': 3581, 'reason': 'A cliente desistiu da festa (verify 315)', 'scope': None, 'refund': None}
+  FALHA      18 · recusar: fecha, responde, marca lido, limpa: pedir 23133 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      19 · DEVE FALHAR: quem não é Superadmin real não recusa: pedir 23134 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      20 · cancelar fecha o pedido e responde com link: pedir 23135 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      21 · venda de vários dias: todos, um dia, a passagem: pedir 23136 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      22 · excluir o vazio responde sem link: pedir 23139 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      23 · DEVE FALHAR: decisões ao mesmo tempo — um vencedor, uma resposta: pedir 23140 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      24 · autor sem acesso; o Superadmin que pede e decide: pedir 23141 como vend2 → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      25 · o pedido de antes do deploy: 25: fora da faixa
+  FALHA      26 · DEVE FALHAR: o autor não fecha o próprio pedido (Q5 = D): pedir 23143 como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  OK         27 · contratos que outras features leem (faixa_sumidos)
+  OK         28 · limpeza e nenhuma rede
+
+2/28 cenários OK
+  H1: 0/11
+  H2: 0/6
+  H3: 0/9
+  R: 1/1
+  L: 1/1
