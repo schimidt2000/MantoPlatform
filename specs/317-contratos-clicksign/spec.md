@@ -279,9 +279,10 @@ nunca chegaria.
   cliente/artista/outro, situação, prazo, criado/assinado/cancelado em, telefone/e-mail e canal do signatário, data,
   telefone e tema lidos do nome, venda ligada, origem do vínculo automático/manual, estado do vínculo
   ligado/a conferir/descartado, quem ligou/desligou e quando, anexo assinado gerado, última conferência).
-- **Aviso recebido**: cada aviso da ClickSign, guardado para processar uma vez só (identificação única, evento, documento,
-  recebido/processado em).
+- **Aviso recebido**: não é guardado. O aviso só dispara a sincronização com a ClickSign, que é idempotente (o mesmo
+  documento nunca vira duas linhas nem dois anexos), então repetir ou perder um aviso não muda o resultado.
 - **Cobrança de contrato**: cada "Cobrar contrato" (documento, venda, quem, quando).
+- **Desvínculo**: par documento × venda que a comercial desligou ou recusou; o sistema não religa sozinho esse par.
 - **Configuração**: segredo do aviso, revogável, e o marco da última conferência.
 
 Modelos em `app/models.py`, migration à mão, aditiva.
