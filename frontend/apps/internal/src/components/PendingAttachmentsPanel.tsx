@@ -1,6 +1,8 @@
 import { Button, Card, CardContent } from "@manto/ui";
 
-export type AttachmentUploadStatus = "pending" | "uploading" | "success" | "error";
+/** `duplicata_pix` (feature 318): o comprovante tem o valor de um PIX que já entrou na venda — não
+ * dá para decidir aqui se é o mesmo pagamento; a página do evento pergunta. */
+export type AttachmentUploadStatus = "pending" | "uploading" | "success" | "error" | "duplicata_pix";
 
 export interface AttachmentUploadItem {
   id: string;
@@ -25,6 +27,7 @@ export function PendingAttachmentsPanel({
     uploading: "Enviando…",
     success: "Enviado ✓",
     error: "Falhou",
+    duplicata_pix: "Esse valor já entrou por PIX — anexe pela página do evento",
   };
 
   return (
@@ -40,6 +43,8 @@ export function PendingAttachmentsPanel({
                   className={
                     item.status === "error"
                       ? "text-red"
+                      : item.status === "duplicata_pix"
+                        ? "text-gold-ink"
                       : item.status === "success"
                         ? "text-green"
                         : "text-muted"

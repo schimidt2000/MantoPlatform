@@ -37,6 +37,7 @@ from app.constants import CLIENT_RELATION_TIPOS, EVENT_PAYMENT_ORIGEM_PIX, RoleN
 from app.models import (
     CalendarEvent,
     Client,
+    ContaRecebimento,
     EventContract,
     EventLog,
     EventObservation,
@@ -2149,45 +2150,16 @@ def _int_or_none(valor: Any) -> int | None:
         return None
 
 
-def _ids_do_grupo_do_evento(event: CalendarEvent) -> list[int]:
+def _pagamento_de_pix_sem_arquivo_do_grupo(event: CalendarEvent, pagamento: EventPayment) -> bool:
     from app.financeiro.cobranca_ops import principal_da_venda
 
     principal = principal_da_venda(event)
-    return [principal.id, *(e.id for e in principal.satellites or [])]
-
-
-def _pagamento_de_pix_sem_arquivo_do_grupo(event: CalendarEvent, pagamento: EventPayment) -> bool:
+    ids = {principal.id, *(e.id for e in principal.satellites or [])}
     return (
         pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX
         and not pagamento.file_path
-        and pagamento.event_id in _ids_do_grupo_do_evento(event)
+        and pagamento.event_id in ids
     )
-
-
-def _pix_sem_arquivo_de_mesmo_valor(event: CalendarEvent, amount: Decimal) -> dict | None:
-    """O pagamento de PIX (sem arquivo) do grupo com o mesmo valor, como a tela precisa mostrar."""
-    from app.models import PixRecebido
-
-    pagamento = (
-        EventPayment.query.filter(
-            EventPayment.event_id.in_(_ids_do_grupo_do_evento(event)),
-            EventPayment.origem == EVENT_PAYMENT_ORIGEM_PIX,
-            EventPayment.file_path.is_(None),
-            EventPayment.amount.between(amount - Decimal("0.01"), amount + Decimal("0.01")),
-        )
-        .order_by(EventPayment.id)
-        .first()
-    )
-    if pagamento is None:
-        return None
-    pix = PixRecebido.query.filter_by(event_payment_id=pagamento.id).first()
-    return {
-        "id": pagamento.id,
-        "valor": str(pagamento.amount),
-        "conta": pagamento.conta.apelido if pagamento.conta else None,
-        "recebido_em": pix.recebido_em.isoformat(timespec="seconds") if pix else None,
-        "pagador": pix.pagador_nome if pix else None,
-    }
 
 
 @api_bp.route("/events/<int:event_id>/payments", methods=["POST"])
@@ -2230,18 +2202,12 @@ def api_add_payment(event_id: int) -> Any:
         _log_anexo(event.id, f"Anexou o comprovante ao pagamento de PIX de R$ {pagamento.amount}")
         db.session.commit()
         return _event_detail_json(event), 200
-    if request.form.get("forcar_novo") != "1" and amount:
-        duplicata = _pix_sem_arquivo_de_mesmo_valor(event, amount)
-        if duplicata is not None:
-            return json_error(
-                "Esse comprovante pode ser do PIX que já entrou.",
-                409,
-                codigo="possivel_duplicata",
-                pagamento=duplicata,
-            )
+    if conta_id is not None and db.session.get(ContaRecebimento, conta_id) is None:
+        return json_error("Conta não encontrada.", 400, fields={"conta_id": "Inválida"})
 
     # Feature 306 (decisão (c)): o núcleo trava o grupo, recusa o cancelado antes de salvar o
-    # arquivo, grava e refaz o principal cancelado pelo pago do grupo.
+    # arquivo, grava e refaz o principal cancelado pelo pago do grupo. Feature 318: sob a mesma
+    # trava, devolve 409 `possivel_duplicata` se um PIX de mesmo valor já entrou (`checar_pix`).
     try:
         gravar_comprovante_no_grupo(
             event,
@@ -2250,6 +2216,7 @@ def api_add_payment(event_id: int) -> Any:
             valor=amount,
             arquivo=file_storage,
             conta_id=conta_id,
+            checar_pix=request.form.get("forcar_novo") != "1",
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -2309,6 +2276,16 @@ def api_delete_payment(payment_id: int) -> Any:
     if not _is_superadmin():
         return json_error("Apenas o Superadmin pode excluir comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
+    # Feature 318: pagamento ligado a um PIX lido do banco sai pelo "Desfazer" da tela PIX recebidos
+    # — excluir aqui deixaria o PIX "ligado" sem dinheiro e fora da fila para sempre.
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        return json_error(
+            "Este pagamento veio de um PIX lido do banco: use \"Desfazer\" em PIX recebidos.",
+            409,
+            codigo="pagamento_de_pix",
+        )
 
     from sqlalchemy.exc import DBAPIError
 

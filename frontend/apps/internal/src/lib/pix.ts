@@ -16,6 +16,9 @@ export interface SugestaoVenda {
   vendedor: string | null;
   saldo: string | null;
   motivos: string[];
+  /** Id do comprovante manual de mesmo valor (conciliação) — a tela pergunta "este ou novo?". */
+  conciliar?: number | null;
+  pode_novo?: boolean;
 }
 
 export interface SugestaoRepasse {
@@ -145,9 +148,9 @@ function useRespostaPix<TVars extends { pixId: number }>(
 
 /** "É esta" / "Outra venda…" (uma venda) ou, no repasse, as 1–3 vendas marcadas. */
 export function useConfirmarPix() {
-  return useRespostaPix<{ pixId: number; eventIds: number[] }>(
+  return useRespostaPix<{ pixId: number; eventIds: number[]; novo?: boolean }>(
     "confirmar",
-    ({ eventIds }) => ({ event_ids: eventIds }),
+    ({ eventIds, novo }) => ({ event_ids: eventIds, novo: Boolean(novo) }),
     ({ eventIds }) => eventIds,
   );
 }

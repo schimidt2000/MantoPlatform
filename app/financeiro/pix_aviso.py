@@ -24,7 +24,7 @@ from decimal import Decimal
 from email import message_from_bytes
 from email.header import decode_header, make_header
 from email.message import Message
-from email.utils import parsedate_to_datetime
+from email.utils import parseaddr, parsedate_to_datetime
 from zoneinfo import ZoneInfo
 
 from app.constants import PIX_TIPO_DESCONHECIDO, PIX_TIPO_DEVOLUCAO, PIX_TIPO_PIX
@@ -43,7 +43,16 @@ _RE_DEVOLUCAO = re.compile(
 )
 # O Google grava `dkim=pass header.i=@inter.co` (às vezes `header.d=inter.co`). Só o do Inter vale:
 # um e-mail assinado por outro domínio que diga ser do Inter não passa.
-_RE_DKIM_INTER = re.compile(r"dkim=pass\s+header\.[id]=@?(?:[\w.-]+\.)?inter\.co\b", re.IGNORECASE)
+_RE_DKIM_INTER = re.compile(
+    # Domínio EXATO (ou subdomínio de) `inter.co`, terminando em espaço, `;` ou fim: `inter.co.evil.com`
+    # e `inter.co-evil.com` não passam (revisão adversarial da 318).
+    r"dkim=pass\s+header\.[id]=@?(?:[\w-]+\.)*inter\.co(?=[\s;]|$)",
+    re.IGNORECASE,
+)
+# Só vale o `Authentication-Results` gravado pelo Google ao receber (o primeiro, o mais recente):
+# um cabeçalho com esse nome escrito por quem mandou o e-mail não prova nada.
+_AUTHSERV_GOOGLE = "mx.google.com"
+REMETENTE_INTER = "no-reply@inter.co"
 
 
 @dataclass(frozen=True)
@@ -118,8 +127,21 @@ def _recebido_em(msg: Message) -> datetime:
 
 
 def autenticado_pelo_inter(msg: Message) -> bool:
-    """`True` se algum `Authentication-Results` traz o DKIM do Inter aprovado."""
-    return any(_RE_DKIM_INTER.search(str(v)) for v in (msg.get_all("Authentication-Results") or []))
+    """`True` se o remetente é exatamente o do Inter e o Google, ao receber, aprovou o DKIM do Inter.
+
+    Lê só o primeiro `Authentication-Results` (o mais recente, gravado pelo servidor que recebeu) e
+    exige que seja do `mx.google.com`.
+    """
+    _, endereco = parseaddr(_cabecalho(msg, "From"))
+    if endereco.strip().lower() != REMETENTE_INTER:
+        return False
+    resultados = msg.get_all("Authentication-Results") or []
+    if not resultados:
+        return False
+    primeiro = str(resultados[0]).strip()
+    if not primeiro.lower().startswith(_AUTHSERV_GOOGLE):
+        return False
+    return bool(_RE_DKIM_INTER.search(primeiro))
 
 
 def ler_aviso_inter(raw: bytes) -> AvisoPix | AvisoDesconhecido | None:

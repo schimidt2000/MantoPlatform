@@ -38,6 +38,14 @@ def _recusa(exc: pix_ops.PixErro) -> Any:
     return json_error(exc.mensagem, exc.status)
 
 
+def _ids(valores: Any) -> list[int] | None:
+    """Ids inteiros de uma lista vinda do corpo; `None` se algum não for número."""
+    try:
+        return [int(v) for v in (valores or [])]
+    except (TypeError, ValueError):
+        return None
+
+
 def _gate_resposta(pix_id: int) -> Any:
     """Quem responde o "É esta?": vendas; o repasse da InfinitePay, só Financeiro/Superadmin."""
     negado = _require_vendas()
@@ -71,8 +79,11 @@ def api_pix_confirmar(pix_id: int) -> Any:
     if negado:
         return negado
     corpo = request.get_json(silent=True) or {}
-    ids = corpo.get("event_ids") or ([corpo["event_id"]] if corpo.get("event_id") else [])
-    return _executar(lambda: pix_ops.confirmar(pix_id, ids, current_user))
+    ids = _ids(corpo.get("event_ids") or ([corpo["event_id"]] if corpo.get("event_id") else []))
+    if not ids:
+        return json_error("Escolha a venda deste PIX.", 400, fields={"event_id": "Obrigatório"})
+    novo = bool(corpo.get("novo"))
+    return _executar(lambda: pix_ops.confirmar(pix_id, ids, current_user, novo=novo))
 
 
 @api_bp.route("/pix/<int:pix_id>/descartar", methods=["POST"])
@@ -82,9 +93,10 @@ def api_pix_descartar(pix_id: int) -> Any:
     if negado:
         return negado
     corpo = request.get_json(silent=True) or {}
-    if not corpo.get("event_id"):
-        return json_error("Informe a venda.", 400)
-    return _executar(lambda: pix_ops.descartar(pix_id, int(corpo["event_id"]), current_user))
+    ids = _ids([corpo.get("event_id")]) if corpo.get("event_id") else None
+    if not ids:
+        return json_error("Informe a venda.", 400, fields={"event_id": "Obrigatório"})
+    return _executar(lambda: pix_ops.descartar(pix_id, ids[0], current_user))
 
 
 @api_bp.route("/pix/<int:pix_id>/nao-e-venda", methods=["POST"])
@@ -123,7 +135,8 @@ def api_pix_config_salvar() -> Any:
         nomes = [str(n).strip() for n in corpo.get("pagadores_proprios") or [] if str(n).strip()]
         s.pix_pagadores_proprios = "\n".join(dict.fromkeys(nomes)) or None
     for item in corpo.get("contas") or []:
-        conta = db.session.get(ContaRecebimento, int(item.get("id") or 0))
+        conta_ids = _ids([item.get("id") or 0])
+        conta = db.session.get(ContaRecebimento, conta_ids[0]) if conta_ids else None
         if conta is None:
             db.session.rollback()
             return json_error("Conta não encontrada.", 404)

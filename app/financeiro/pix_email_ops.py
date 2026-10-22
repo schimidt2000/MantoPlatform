@@ -115,27 +115,44 @@ def processar_brutos(brutos: list[bytes]) -> dict:
             continue
         if PixRecebido.query.filter_by(message_id=aviso.message_id[:300]).first() is not None:
             continue
+        # 1º o aviso fica guardado (commit próprio): se a decisão quebrar, ele não some — fica
+        # "novo", é tentado de novo na próxima rodada e o erro aparece na saúde.
         try:
             pix = _ingerir(aviso, ativo_desde)
             db.session.add(pix)
-            db.session.flush()
-            if pix.estado == PIX_ESTADO_NOVO:
-                if vendas is None:
-                    vendas = pix_ops.vendas_abertas()
-                pix_ops.vincular(pix, vendas=vendas)
-                if pix.event_payment_id:
-                    vendas = None  # o saldo mudou: a próxima decisão relê as vendas
             db.session.commit()
-            contagem["novos"] += 1
-            if pix.estado == PIX_ESTADO_NAO_ENTENDIDO:
-                contagem["nao_entendidos"] += 1
         except IntegrityError:
             db.session.rollback()  # outro processo guardou o mesmo e-mail primeiro
-        except Exception:  # noqa: BLE001 — um aviso que quebra não para a rodada
+            continue
+        contagem["novos"] += 1
+        if pix.estado == PIX_ESTADO_NAO_ENTENDIDO:
+            contagem["nao_entendidos"] += 1
+        if pix.estado != PIX_ESTADO_NOVO:
+            continue
+        pix_id = pix.id
+        try:
+            pix = PixRecebido.query.filter_by(id=pix_id).with_for_update().first()
+            if vendas is None:
+                vendas = pix_ops.vendas_abertas()
+            pix_ops.vincular(pix, vendas=vendas)
+            if pix.event_payment_id:
+                vendas = None  # o saldo mudou: a próxima decisão relê as vendas
+            db.session.commit()
+        except Exception as exc:  # noqa: BLE001 — um aviso que quebra não para a rodada
             db.session.rollback()
+            vendas = None
             contagem["erros"] += 1
-            log.exception("[pix-email] falha ao processar o aviso %s", aviso.message_id)
+            _registrar_erro(f"falha ao decidir o PIX {pix_id}: {exc}")
+            log.exception("[pix-email] falha ao decidir o PIX %s", pix_id)
     return contagem
+
+
+def _registrar_erro(texto: str) -> None:
+    s = db.session.get(SiteSetting, 1)
+    if s is not None:
+        s.pix_email_ultimo_erro = texto[:500]
+        s.pix_email_ultimo_erro_em = now_sp()
+        db.session.commit()
 
 
 def reavaliar_pendentes() -> int:
@@ -144,7 +161,8 @@ def reavaliar_pendentes() -> int:
     ids = [
         pid
         for (pid,) in db.session.query(PixRecebido.id).filter(
-            PixRecebido.estado == PIX_ESTADO_SEM_VENDA,
+            # `novo` = aviso guardado cuja decisão quebrou numa rodada anterior.
+            PixRecebido.estado.in_((PIX_ESTADO_SEM_VENDA, PIX_ESTADO_NOVO)),
             PixRecebido.decidido_por_id.is_(None),
             PixRecebido.tipo == PIX_TIPO_PIX,
             PixRecebido.recebido_em >= desde,
@@ -157,7 +175,7 @@ def reavaliar_pendentes() -> int:
     for pid in ids:
         try:
             pix = PixRecebido.query.filter_by(id=pid).with_for_update().first()
-            if pix is None or pix.estado != PIX_ESTADO_SEM_VENDA or pix.decidido_por_id:
+            if pix is None or pix.estado not in (PIX_ESTADO_SEM_VENDA, PIX_ESTADO_NOVO) or pix.decidido_por_id:
                 db.session.rollback()
                 continue
             pix.estado = PIX_ESTADO_NOVO

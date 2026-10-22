@@ -204,7 +204,7 @@ def _ligar_leitura(desde: datetime | None = None) -> None:
 VALORES = (
     "7311.47", "8622.94", "4311.47", "5133.83", "3977.21", "6241.59", "2468.13", "1999.67",
     "2127.83", "1351.29", "1801.73", "2311.29", "1234.57", "2718.28", "1618.03", "4747.47",
-    "3131.31", "5133.83",
+    "3131.31", "5133.83", "3434.34", "2626.26", "5858.58", "2424.24", "1163.64", "3737.37",
 )
 
 
@@ -473,6 +473,14 @@ def c15_concilia() -> None:
     raw, mid = _aviso("2.127,83", "Joana Concilia Teste")
     _processar(raw)
     p = _pix(mid)
+    # Revisão adversarial: conciliar nunca é automático (o comprovante pode ser de outro pagamento
+    # de mesmo valor) — pergunta, com o comprovante como opção.
+    _garante(p["estado"] == "para_conferir", f"conciliou sozinho: {p['estado']}")
+    _garante(any(c.get("conciliar") == manual for c in p["candidatos"]), f"{p['candidatos']}")
+    _garante(len(_pagamentos(eid)) == 1, "criou pagamento antes de perguntar")
+    r = _post("com", f"/api/pix/{p['id']}/confirmar", {"event_id": eid})
+    _garante(r.status_code == 200, f"confirmar conciliação → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    p = _pix(mid)
     pags = _pagamentos(eid)
     _garante(len(pags) == 1, f"criou outro pagamento: {pags}")
     _garante(p["pagamento"] == manual, "não conciliou com o manual")
@@ -566,6 +574,9 @@ def c22_repasse_duas_vendas() -> None:
     _garante(r2.status_code == 200, f"duas vendas → {r2.status_code} {r2.get_data(as_text=True)[:200]}")
     _igual(_recebido(a), "600.00", "venda A")
     _igual(_recebido(b), "400.00", "venda B")
+    # O cliente pagou na InfinitePay: a conta do pagamento é a dela, não o MEI do repasse.
+    contas = {r[4] for r in _pagamentos(a) + _pagamentos(b)}
+    _garante(contas == {_conta_id("InfinitePay Prime")}, f"conta do repasse: {contas}")
     S["h5_multi"] = p["id"]
 
 
@@ -671,6 +682,83 @@ def c28_sem_arquivo_nas_telas() -> None:
     _garante('href="None"' not in r.get_data(as_text=True), "Jinja com link quebrado")
 
 
+# ── R: achados da revisão adversarial (22/10) ─────────────────────────────────────────────────
+def c30_dkim_forjado() -> None:
+    from app.financeiro.pix_aviso import ler_aviso_inter
+
+    _venda("r1", "3434.34", "Forjado Nome Teste")
+    raw, _mid = _aviso("3.434,34", "Forjado Nome Teste")
+    for velho, novo in (
+        (b"header.i=@inter.co", b"header.i=@inter.co.evil.com"),
+        (b"header.i=@inter.co", b"header.d=inter.co-evil.com"),
+        (b"From: no-reply@inter.co", b"From: no-reply@inter.co.evil.com"),
+        (b"Authentication-Results: mx.google.com;", b"Authentication-Results: mx.golpe.com;"),
+    ):
+        forjado = raw.replace(velho, novo)
+        _garante(forjado != raw, f"substituição não aconteceu: {velho!r}")
+        aviso = ler_aviso_inter(forjado)
+        _garante(aviso is not None and not aviso.autenticado, f"forjado passou: {novo!r}")
+
+
+def c31_nome_de_um_termo() -> None:
+    eid = _venda("r2", "2626.26", "Teodora")
+    raw, mid = _aviso("2.626,26", "TEODORA SILVA MACHADO")
+    _processar(raw)
+    p = _pix(mid)
+    _garante(p["estado"] == "para_conferir", f"ligou sozinho por um termo só: {p['estado']}")
+    _garante(not _pagamentos(eid), "criou pagamento")
+
+
+def c32_excluir_pagamento_de_pix() -> None:
+    eid = _venda("r3", "5858.58", "Excluir Pix Teste")
+    raw, mid = _aviso("5.858,58", "Excluir Pix Teste")
+    _processar(raw)
+    pid = _pix(mid)["pagamento"]
+    _garante(pid, "não ligou")
+    r = _cliente("sa").delete(f"/api/payments/{pid}")
+    _garante(r.status_code == 409 and _codigo(r) == "pagamento_de_pix", f"→ {r.status_code} {_codigo(r)}")
+    _garante(len(_pagamentos(eid)) == 1, "apagou o pagamento do PIX")
+
+
+def c33_conciliacao_outra_conta() -> None:
+    eid = _venda("r4", "4848.48", "Sinal Na Cora Teste")
+    manual = v6._comprovante(eid, 2424.24)
+    _no_banco_escrever(
+        "UPDATE event_payments SET conta_id = :c WHERE id = :i", c=_conta_id("Cora Monta"), i=manual
+    )
+    raw, mid = _aviso("2.424,24", "Sinal Na Cora Teste")
+    _processar(raw)
+    p = _pix(mid)
+    _garante(all(c.get("conciliar") != manual for c in p["candidatos"]), "conciliou com a Cora")
+    _garante(p["estado"] == "ligado_auto", f"o saldo devia ligar: {p['estado']} ({p['motivo']})")
+    _igual(_recebido(eid), "4848.48", "sinal (Cora) + saldo (PIX)")
+
+
+def c34_repasse_validado() -> None:
+    a = _venda("r5", "1212.12", "Repasse Valida Teste")
+    _no_banco_escrever("UPDATE calendar_events SET payment_method = 'cartao' WHERE id = :e", e=a)
+    fora = _venda("r6", "8080.80", "Fora Das Sugestoes")
+    raw, mid = _aviso("1.163,64", "PRIME DREAMS LTDA")
+    _processar(raw)
+    p = _pix(mid)
+    _garante(p["tipo_sugestao"] == "repasse_infinitepay", f"'PRIME DREAMS LTDA' não é repasse: {p}")
+    r = _post("fin", f"/api/pix/{p['id']}/confirmar", {"event_ids": [fora]})
+    _garante(r.status_code == 400, f"repasse fora das sugestões → {r.status_code}")
+    _garante(not _pagamentos(fora), "pagou venda fora das sugestões")
+
+
+def c35_anexar_no_cancelado() -> None:
+    eid = _venda("r7", "3737.37", "Anexar Cancelado Teste")
+    raw, mid = _aviso("3.737,37", "Anexar Cancelado Teste")
+    _processar(raw)
+    pid = _pix(mid)["pagamento"]
+    _garante(pid, "não ligou")
+    _no_banco_escrever("UPDATE calendar_events SET cancelled_at = now() WHERE id = :e", e=eid)
+    r = _anexar("com", eid, "3737.37", anexar_a=str(pid))
+    _garante(r.status_code == 409, f"Comercial anexou no cancelado: {r.status_code}")
+    _garante(_pagamentos(eid)[0][2] is None, "o arquivo entrou")
+
+
 CENARIOS = [
     ("H1", "1", "valor + nome, venda única → liga sozinho", c1_valor_e_nome),
     ("H1", "2", "o mesmo e-mail duas vezes", c2_idempotente),
@@ -701,6 +789,12 @@ CENARIOS = [
     ("H6", "27", "desfazer: sem arquivo, com arquivo, repasse", c27_desfazer),
     ("H1", "27b", "PIX adiantado religa em 7 dias, não em 8", c27b_reavaliar),
     ("H6", "28", "pagamento sem arquivo no React e no Jinja", c28_sem_arquivo_nas_telas),
+    ("R", "30", "e-mail forjado não é autenticado", c30_dkim_forjado),
+    ("R", "31", "um termo só no nome não liga sozinho", c31_nome_de_um_termo),
+    ("R", "32", "excluir pagamento de PIX pela tela do evento (DEVE FALHAR)", c32_excluir_pagamento_de_pix),
+    ("R", "33", "comprovante de outra conta não é conciliado", c33_conciliacao_outra_conta),
+    ("R", "34", "repasse: 'LTDA' e escolha fora das sugestões (DEVE FALHAR)", c34_repasse_validado),
+    ("R", "35", "anexar no cancelado pela Comercial (DEVE FALHAR)", c35_anexar_no_cancelado),
 ]
 
 

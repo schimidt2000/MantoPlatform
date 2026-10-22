@@ -31,7 +31,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from itertools import combinations
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 
 from app import db
 from app.constants import (
@@ -106,8 +106,9 @@ def _termos(nome_norm: str) -> set[str]:
 
 
 def nome_bate(pagador_norm: str | None, nomes: list[str]) -> bool:
-    """O pagador é alguém da venda? Dois termos em comum (ou o único termo de um nome curto), ou o
-    nome inteiro muito parecido (`PIX_NOME_SEMELHANCA`)."""
+    """O pagador é alguém da venda? Dois termos em comum, ou o nome inteiro muito parecido
+    (`PIX_NOME_SEMELHANCA`). Um termo só não basta: "Ana" bateria com toda "Ana Paula" que pagasse
+    um valor igual (revisão adversarial da 318)."""
     if not pagador_norm:
         return False
     termos_pagador = _termos(pagador_norm)
@@ -115,13 +116,23 @@ def nome_bate(pagador_norm: str | None, nomes: list[str]) -> bool:
         alvo = normalizar_nome(nome)
         if not alvo:
             continue
-        termos_alvo = _termos(alvo)
-        comuns = termos_pagador & termos_alvo
-        if len(comuns) >= 2 or (comuns and (len(termos_alvo) == 1 or len(termos_pagador) == 1)):
+        if len(termos_pagador & _termos(alvo)) >= 2:
             return True
         if difflib.SequenceMatcher(None, pagador_norm, alvo).ratio() >= PIX_NOME_SEMELHANCA:
             return True
     return False
+
+
+def _mesmo_nome(pagador_norm: str | None, referencia_norm: str) -> bool:
+    """O pagador É esta pessoa/empresa: os termos da referência (sem "ltda", "me"…) estão todos no
+    nome do pagador — "PRIME DREAMS LTDA" é "Prime Dreams"."""
+    if not pagador_norm or not referencia_norm:
+        return False
+    termos_ref = _termos(referencia_norm)
+    termos_pag = _termos(pagador_norm)
+    if not termos_ref:
+        return pagador_norm == referencia_norm
+    return termos_ref <= termos_pag and len(termos_pag - termos_ref) <= 1
 
 
 def pagadores_proprios() -> set[str]:
@@ -129,6 +140,10 @@ def pagadores_proprios() -> set[str]:
     s = db.session.get(SiteSetting, 1)
     texto = (s.pix_pagadores_proprios if s else None) or ""
     return {normalizar_nome(linha) for linha in texto.splitlines() if normalizar_nome(linha)}
+
+
+def e_pagador_proprio(pagador_norm: str | None) -> bool:
+    return any(_mesmo_nome(pagador_norm, ref) for ref in pagadores_proprios())
 
 
 def conta_por_numero(numero: str | None) -> ContaRecebimento | None:
@@ -253,16 +268,18 @@ def _comprovantes_conciliaveis(pix: PixRecebido) -> list[EventPayment]:
     ligados = db.session.query(PixRecebido.event_payment_id).filter(
         PixRecebido.event_payment_id.isnot(None)
     )
-    return (
-        EventPayment.query.filter(
-            EventPayment.origem == EVENT_PAYMENT_ORIGEM_COMPROVANTE,
-            EventPayment.amount.between(pix.valor - PIX_TOLERANCIA_VALOR, pix.valor + PIX_TOLERANCIA_VALOR),
-            EventPayment.created_at >= desde,
-            EventPayment.id.notin_(ligados),
-        )
-        .order_by(EventPayment.id)
-        .all()
+    consulta = EventPayment.query.filter(
+        EventPayment.origem == EVENT_PAYMENT_ORIGEM_COMPROVANTE,
+        EventPayment.amount.between(pix.valor - PIX_TOLERANCIA_VALOR, pix.valor + PIX_TOLERANCIA_VALOR),
+        EventPayment.created_at >= desde,
+        EventPayment.id.notin_(ligados),
     )
+    if pix.conta_id is not None:
+        # Comprovante marcado com OUTRA conta é outro dinheiro (ex.: o sinal pago na Cora).
+        consulta = consulta.filter(
+            or_(EventPayment.conta_id.is_(None), EventPayment.conta_id == pix.conta_id)
+        )
+    return consulta.order_by(EventPayment.id).all()
 
 
 def sugestoes_de_venda(pix: PixRecebido, vendas: list | None = None) -> list[Sugestao]:
@@ -274,10 +291,14 @@ def sugestoes_de_venda(pix: PixRecebido, vendas: list | None = None) -> list[Sug
     )
 
     vendas = vendas if vendas is not None else vendas_abertas()
+    abertas = {v.principal.id for v in vendas}
     descartados = set(pix.descartados or [])
     principais_pagos, clientes_pagos = _ja_pagou(pix)
     por_principal: dict[int, Sugestao] = {}
 
+    # Comprovante manual do mesmo valor pode ser este PIX — ou outro pagamento de valor igual (sinal
+    # e saldo de 50% são iguais por construção). Por isso a conciliação NUNCA é automática: vira
+    # "É esta?" com as duas saídas ("é este comprovante" / "é pagamento novo").
     for pagamento in _comprovantes_conciliaveis(pix):
         evento = db.session.get(CalendarEvent, pagamento.event_id)
         if evento is None:
@@ -294,7 +315,8 @@ def sugestoes_de_venda(pix: PixRecebido, vendas: list | None = None) -> list[Sug
         por_principal.setdefault(
             principal.id,
             Sugestao([principal.id], motivos, Decimal(str(pagamento.amount)), forte=True, nome=nome,
-                     ja_pagou=ja, conciliar=pagamento.id),
+                     ja_pagou=ja, conciliar=pagamento.id,
+                     extra={"pode_novo": principal.id in abertas}),
         )
 
     for venda in vendas:
@@ -330,11 +352,26 @@ def _e_da_prime(pix: PixRecebido) -> bool:
 
 def e_repasse_prime_dreams(pix: PixRecebido) -> bool:
     """PIX de "Prime Dreams" que caiu fora da Prime (no MEI): repasse, não venda."""
-    return pix.pagador_norm == PIX_PAGADOR_PRIME and not _e_da_prime(pix)
+    return _mesmo_nome(pix.pagador_norm, PIX_PAGADOR_PRIME) and not _e_da_prime(pix)
+
+
+def _pares_ja_usados(pix: PixRecebido) -> set[int]:
+    """PIX da Prime que já explicaram outro repasse — não servem de par duas vezes."""
+    usados: set[int] = set()
+    outros = PixRecebido.query.filter(
+        PixRecebido.estado == PIX_ESTADO_CONTA_PROPRIA,
+        PixRecebido.id != pix.id,
+        PixRecebido.recebido_em >= pix.recebido_em - timedelta(days=PIX_REPASSE_PRIME_DIAS + 3),
+    ).all()
+    for outro in outros:
+        for c in outro.candidatos or []:
+            usados |= set(c.get("par_prime") or [])
+    return usados
 
 
 def _par_na_prime(pix: PixRecebido) -> list[PixRecebido] | None:
     """O(s) PIX da Prime que este repasse está passando adiante (mesmo valor ou soma de até 3)."""
+    usados = _pares_ja_usados(pix)
     janela = (
         PixRecebido.query.filter(
             PixRecebido.tipo == PIX_TIPO_PIX,
@@ -346,7 +383,7 @@ def _par_na_prime(pix: PixRecebido) -> list[PixRecebido] | None:
         .order_by(PixRecebido.recebido_em.desc())
         .all()
     )
-    da_prime = [p for p in janela if _e_da_prime(p)][:20]
+    da_prime = [p for p in janela if _e_da_prime(p) and p.id not in usados][:20]
     for tamanho in range(1, PIX_REPASSE_PRIME_MAX_SOMA + 1):
         for grupo in combinations(da_prime, tamanho):
             if _igual(sum((p.valor for p in grupo), Decimal("0")), pix.valor):
@@ -407,11 +444,23 @@ def _ligar_uma(
     valor: Decimal,
     usuario: User | None,
     conciliar: int | None = None,
-) -> EventPayment:
-    """Registra (ou concilia) o pagamento de uma venda. Sem commit."""
-    from app.calendar.cancel_ops import gravar_comprovante_no_grupo
+    conta_id: int | None = None,
+) -> EventPayment | None:
+    """Registra (ou concilia) o pagamento de uma venda. Sem commit.
+
+    No automático (`usuario=None`), a venda é travada ANTES de gravar e a conciliação é refeita sob
+    a trava: se a comercial anexou um comprovante do mesmo valor entre a leitura e a gravação,
+    devolve `None` (o PIX vai para "É esta?" — nunca conta em dobro).
+    """
+    from app.calendar.cancel_ops import gravar_comprovante_no_grupo, travar_grupo
 
     evento = db.session.get(CalendarEvent, principal_id)
+    if usuario is None and conciliar is None:
+        travar_grupo(evento)
+        db.session.expire_all()
+        ids_grupo = {evento.id, *(e.id for e in evento.satellites or [])}
+        if any(p.event_id in ids_grupo for p in _comprovantes_conciliaveis(pix)):
+            return None
     if conciliar is not None:
         pagamento = db.session.get(EventPayment, conciliar)
         if pagamento.conta_id is None:
@@ -427,7 +476,7 @@ def _ligar_uma(
             actor=usuario,
             valor=valor,
             origem=EVENT_PAYMENT_ORIGEM_PIX,
-            conta_id=pix.conta_id,
+            conta_id=conta_id if conta_id is not None else pix.conta_id,
         )
         texto = (
             f"Pagamento de {format_brl(valor, prefix=True)} registrado pelo PIX de "
@@ -487,6 +536,7 @@ def vincular(pix: PixRecebido, *, vendas: list | None = None, permitir_auto: boo
         par = _par_na_prime(pix)
         if par:
             pix.estado = PIX_ESTADO_CONTA_PROPRIA
+            pix.candidatos = [{"par_prime": [p.id for p in par]}]  # não serve de par de novo
             pix.motivo = "repasse da Prime (" + ", ".join(
                 f"PIX de {format_brl(p.valor, prefix=True)} em {p.recebido_em:%d/%m}" for p in par
             ) + ")"
@@ -504,7 +554,7 @@ def vincular(pix: PixRecebido, *, vendas: list | None = None, permitir_auto: boo
             pix.motivo = "repasse sem par na Prime e sem venda no cartão que explique o valor"
         return
 
-    if pix.pagador_norm and pix.pagador_norm in pagadores_proprios():
+    if e_pagador_proprio(pix.pagador_norm):
         pix.estado = PIX_ESTADO_CONTA_PROPRIA
         pix.motivo = "pagador próprio (transferência entre contas)"
         return
@@ -515,21 +565,24 @@ def vincular(pix: PixRecebido, *, vendas: list | None = None, permitir_auto: boo
     if (
         permitir_auto
         and len(fortes) == 1
+        and fortes[0].conciliar is None  # conciliação sempre pergunta (pode ser outro pagamento)
         and (fortes[0].nome or fortes[0].ja_pagou)
         and pix.autenticado
     ):
         escolhida = fortes[0]
-        pagamento = _ligar_uma(
-            pix, escolhida.event_ids[0], valor=pix.valor, usuario=None, conciliar=escolhida.conciliar
-        )
-        db.session.flush()
-        pix.estado = PIX_ESTADO_LIGADO_AUTO
-        pix.event_payment_id = pagamento.id
-        pix.candidatos = [escolhida.para_json()]
-        pix.motivo = "; ".join(escolhida.motivos)
-        pix.decidido_em = now_sp()
-        _avisar(pix, PIX_KIND_LIGADO, [escolhida])
-        return
+        pagamento = _ligar_uma(pix, escolhida.event_ids[0], valor=pix.valor, usuario=None)
+        if pagamento is not None:
+            db.session.flush()
+            pix.estado = PIX_ESTADO_LIGADO_AUTO
+            pix.event_payment_id = pagamento.id
+            pix.candidatos = [escolhida.para_json()]
+            pix.motivo = "; ".join(escolhida.motivos)
+            pix.decidido_em = now_sp()
+            _avisar(pix, PIX_KIND_LIGADO, [escolhida])
+            return
+        # Um comprovante do mesmo valor apareceu sob a trava: pergunta, com ele entre as opções.
+        sugestoes = sugestoes_de_venda(pix, vendas)
+        fortes = [s for s in sugestoes if s.forte]
     if sugestoes:
         pix.estado = PIX_ESTADO_PARA_CONFERIR
         pix.candidatos = [s.para_json() for s in sugestoes[:PIX_MAX_SUGESTOES]]
@@ -552,35 +605,56 @@ def _travar(pix_id: int) -> PixRecebido:
     return pix
 
 
-def confirmar(pix_id: int, event_ids: list[int], usuario: User) -> PixRecebido:
-    """"É esta" / "Outra venda…" (e, no repasse, as 1–3 vendas marcadas). Sem commit."""
+def confirmar(
+    pix_id: int, event_ids: list[int], usuario: User, *, novo: bool = False
+) -> PixRecebido:
+    """"É esta" / "Outra venda…" (e, no repasse, as 1–3 vendas sugeridas). Sem commit.
+
+    Quando a venda tem um comprovante manual do mesmo valor, `novo=False` concilia com ele ("é este
+    comprovante") e `novo=True` registra outro pagamento ("é pagamento novo").
+    """
     from app.financeiro.cobranca_ops import principal_da_venda
 
     pix = _travar(pix_id)
     if pix.estado != PIX_ESTADO_PARA_CONFERIR:
         raise PixErro("Este PIX já foi decidido.", codigo="ja_decidido")
-    ids = list(dict.fromkeys(int(i) for i in event_ids if i))
     repasse = pix.tipo_sugestao == PIX_SUGESTAO_REPASSE
-    if not ids or (not repasse and len(ids) != 1) or len(ids) > PIX_REPASSE_MAX_VENDAS:
-        raise PixErro("Escolha a venda deste PIX.", status=400, codigo="venda_obrigatoria")
 
-    abertas = {v.principal.id: v for v in vendas_abertas()}
     principais: list[int] = []
-    for eid in ids:
-        evento = db.session.get(CalendarEvent, eid)
+    for eid in event_ids:
+        evento = db.session.get(CalendarEvent, eid) if eid else None
         if evento is None:
             raise PixErro("Venda não encontrada.", status=404)
         principais.append(principal_da_venda(evento).id)
+    principais = list(dict.fromkeys(principais))  # dois dias da mesma venda são UMA venda
+    if not principais or (not repasse and len(principais) != 1) or len(principais) > PIX_REPASSE_MAX_VENDAS:
+        raise PixErro("Escolha a venda deste PIX.", status=400, codigo="venda_obrigatoria")
 
+    abertas = {v.principal.id: v for v in vendas_abertas()}
     pagamentos: list[EventPayment] = []
     if repasse:
+        sugeridos = [set(c.get("event_ids") or []) for c in pix.candidatos or []]
+        if set(principais) not in sugeridos:
+            raise PixErro(
+                "Escolha uma das combinações sugeridas para este repasse.",
+                status=400,
+                codigo="repasse_fora_das_sugestoes",
+            )
+        # O cliente pagou na InfinitePay (conta da Prime): é essa a conta do pagamento, não o MEI
+        # para onde o dono passou o dinheiro depois — senão o total do MEI sairia inflado.
+        infinitepay = ContaRecebimento.query.filter_by(banco="infinitepay").first()
         cobrado = Decimal("0")
         for pid in principais:
             venda = abertas.get(pid)
             if venda is None:
                 raise PixErro("Essa venda não está mais em aberto.", codigo="venda_indisponivel")
             cobrado += venda.saldo
-            pagamentos.append(_ligar_uma(pix, pid, valor=venda.saldo, usuario=usuario))
+            pagamentos.append(
+                _ligar_uma(
+                    pix, pid, valor=venda.saldo, usuario=usuario,
+                    conta_id=infinitepay.id if infinitepay else None,
+                )
+            )
         taxa = cobrado - pix.valor
         pix.motivo = (
             f"repasse da InfinitePay: cobrado {format_brl(cobrado, prefix=True)}, "
@@ -588,15 +662,17 @@ def confirmar(pix_id: int, event_ids: list[int], usuario: User) -> PixRecebido:
         )
     else:
         pid = principais[0]
-        sugestao = next(
-            (s for s in sugestoes_de_venda(pix) if s.event_ids[0] == pid and s.conciliar), None
-        )
-        if sugestao is None and pid not in abertas:
+        conciliavel = None
+        if not novo:
+            conciliavel = next(
+                (s for s in sugestoes_de_venda(pix) if s.event_ids[0] == pid and s.conciliar), None
+            )
+        if conciliavel is None and pid not in abertas:
             raise PixErro("Essa venda não está mais em aberto.", codigo="venda_indisponivel")
         pagamentos.append(
             _ligar_uma(
                 pix, pid, valor=pix.valor, usuario=usuario,
-                conciliar=sugestao.conciliar if sugestao else None,
+                conciliar=conciliavel.conciliar if conciliavel else None,
             )
         )
         pix.motivo = f"confirmado por {usuario.name}"
@@ -745,6 +821,9 @@ def para_api(pix: PixRecebido) -> dict:
             item = _evento_resumo(eventos[0], c.get("valor_alvo"))
             item["motivos"] = c.get("motivos") or []
             item["event_ids"] = [eventos[0].id]
+            # Comprovante manual do mesmo valor: a tela oferece "é este comprovante" e "é novo".
+            item["conciliar"] = c.get("conciliar")
+            item["pode_novo"] = bool(c.get("pode_novo", True))
             sugestoes.append(item)
     pagamento = None
     if pix.pagamento is not None:
@@ -779,11 +858,12 @@ def resumo_por_conta(meses: int) -> dict:
     inicio = hoje
     for _ in range(meses - 1):
         inicio = (inicio - timedelta(days=1)).replace(day=1)
-    mes = func.to_char(EventPayment.created_at, "YYYY-MM")
+    # `created_at` é UTC: o mês é o de São Paulo (pagamento das 21h às 24h do último dia é do mês).
+    mes = func.to_char(EventPayment.created_at - timedelta(hours=3), "YYYY-MM")
     linhas = (
         db.session.query(ContaRecebimento.apelido, mes, func.sum(EventPayment.amount))
         .outerjoin(ContaRecebimento, ContaRecebimento.id == EventPayment.conta_id)
-        .filter(EventPayment.created_at >= datetime.combine(inicio, datetime.min.time()))
+        .filter(EventPayment.created_at >= datetime.combine(inicio, datetime.min.time()) + timedelta(hours=3))
         .group_by(ContaRecebimento.apelido, mes)
         .all()
     )
@@ -803,3 +883,48 @@ def resumo_por_conta(meses: int) -> dict:
         "contas": [{"conta": a, "por_mes": contas.get(a, {})} for a in ordem],
         "sem_conta": sem_conta,
     }
+
+
+# ── comprovante manual × PIX (usado pelo núcleo, sob a trava do grupo) ──────────────────────────
+def pagamento_pix_sem_arquivo_igual(event: CalendarEvent, valor: Decimal) -> EventPayment | None:
+    """O pagamento de PIX (sem arquivo) do grupo da venda com o mesmo valor, se houver."""
+    from app.financeiro.cobranca_ops import principal_da_venda
+
+    principal = principal_da_venda(event)
+    ids = [principal.id, *(e.id for e in principal.satellites or [])]
+    return (
+        EventPayment.query.filter(
+            EventPayment.event_id.in_(ids),
+            EventPayment.origem == EVENT_PAYMENT_ORIGEM_PIX,
+            EventPayment.file_path.is_(None),
+            EventPayment.amount.between(valor - PIX_TOLERANCIA_VALOR, valor + PIX_TOLERANCIA_VALOR),
+        )
+        .order_by(EventPayment.id)
+        .first()
+    )
+
+
+def resumo_da_duplicata(pagamento: EventPayment) -> dict:
+    """O que a tela mostra na pergunta "esse comprovante é do PIX que já entrou?"."""
+    pix = PixRecebido.query.filter_by(event_payment_id=pagamento.id).first()
+    return {
+        "id": pagamento.id,
+        "valor": str(pagamento.amount),
+        "conta": pagamento.conta.apelido if pagamento.conta else None,
+        "recebido_em": pix.recebido_em.isoformat(timespec="seconds") if pix else None,
+        "pagador": pix.pagador_nome if pix else None,
+    }
+
+
+def pix_do_pagamento(pagamento_id: int) -> PixRecebido | None:
+    """O PIX ligado a este pagamento (direto ou como pagamento extra de um repasse)."""
+    pix = PixRecebido.query.filter_by(event_payment_id=pagamento_id).first()
+    if pix is not None:
+        return pix
+    for candidato in PixRecebido.query.filter(
+        PixRecebido.estado.in_(PIX_ESTADOS_LIGADOS),
+        PixRecebido.tipo_sugestao == PIX_SUGESTAO_REPASSE,
+    ).all():
+        if pagamento_id in (candidato.pagamentos_extra or []):
+            return candidato
+    return None

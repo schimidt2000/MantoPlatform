@@ -62,14 +62,38 @@ function LinhaSugestao({ pix, sugestao }: { pix: PixRecebido; sugestao: Sugestao
           <Motivos motivos={sugestao.motivos} />
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          size="sm"
-          loading={confirmar.isPending}
-          onClick={() => confirmar.mutate({ pixId: pix.id, eventIds: [sugestao.event_id] })}
-        >
-          É esta
-        </Button>
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+        {sugestao.conciliar ? (
+          <>
+            <Button
+              size="sm"
+              loading={confirmar.isPending}
+              onClick={() => confirmar.mutate({ pixId: pix.id, eventIds: [sugestao.event_id] })}
+            >
+              É o comprovante já anexado
+            </Button>
+            {sugestao.pode_novo !== false && (
+              <Button
+                size="sm"
+                variant="outline"
+                loading={confirmar.isPending}
+                onClick={() =>
+                  confirmar.mutate({ pixId: pix.id, eventIds: [sugestao.event_id], novo: true })
+                }
+              >
+                É outro pagamento
+              </Button>
+            )}
+          </>
+        ) : (
+          <Button
+            size="sm"
+            loading={confirmar.isPending}
+            onClick={() => confirmar.mutate({ pixId: pix.id, eventIds: [sugestao.event_id] })}
+          >
+            É esta
+          </Button>
+        )}
         <Button size="sm" variant="ghost" onClick={() => setDescartando(true)}>
           Não é esta
         </Button>

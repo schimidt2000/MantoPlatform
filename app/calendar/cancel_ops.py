@@ -3005,6 +3005,7 @@ def gravar_comprovante_no_grupo(
     comprovante: EventPayment | None = None,
     origem: str | None = None,
     conta_id: int | None = None,
+    checar_pix: bool = False,
 ) -> EventPayment | None:
     """O núcleo das três portas de comprovante (decisão (c); contracts §9). Não faz commit.
 
@@ -3036,11 +3037,33 @@ def gravar_comprovante_no_grupo(
     if acao == "anexar":
         from app.calendar.routes import _attach_payment_file
 
+        # Mesma regra do "adicionar" no cancelado; e, sob a trava, o pagamento ainda tem de ser de
+        # PIX sem arquivo (um "Desfazer" ao mesmo tempo pode tê-lo apagado ou mudado).
+        if event.is_cancelled and not pode_editar_venda_do_cancelado(actor):
+            raise EventoCanceladoError()
+        db.session.refresh(comprovante)
+        if comprovante.origem != EVENT_PAYMENT_ORIGEM_PIX or comprovante.file_path:
+            raise CancelValidationError(
+                "Esse pagamento mudou agora. Recarregue a página.", status=409, codigo="estado_mudou"
+            )
         if not _attach_payment_file(comprovante, file_storage=arquivo):
             raise CancelValidationError(
                 "Insira o arquivo do comprovante.", fields={"file": "Obrigatório"}
             )
         return comprovante
+    if acao == "adicionar" and checar_pix and valor:
+        # Feature 318: sob a trava do grupo (a thread do PIX grava sob a mesma trava), um comprovante
+        # do mesmo valor de um PIX que já entrou é devolvido como possível duplicata.
+        from app.financeiro import pix_ops
+
+        duplicata = pix_ops.pagamento_pix_sem_arquivo_igual(event, valor)
+        if duplicata is not None:
+            raise CancelValidationError(
+                "Esse comprovante pode ser do PIX que já entrou.",
+                status=409,
+                codigo="possivel_duplicata",
+                pagamento=pix_ops.resumo_da_duplicata(duplicata),
+            )
     if acao == "adicionar":
         comprovante = _add_payment_record(
             event,

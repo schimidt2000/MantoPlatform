@@ -204,8 +204,11 @@ export function EventEditPage() {
         await addImageObservation.mutateAsync({ file: item.file, label: item.label || undefined });
       }
       setAttachmentStatus((s) => ({ ...s, [item.id]: "success" }));
-    } catch {
-      setAttachmentStatus((s) => ({ ...s, [item.id]: "error" }));
+    } catch (erro) {
+      // Feature 318: comprovante de valor igual a um PIX que já entrou — a decisão ("é o mesmo?")
+      // é da página do evento; tentar de novo aqui só repetiria o 409.
+      const duplicata = erro instanceof ApiRequestError && erro.details?.codigo === "possivel_duplicata";
+      setAttachmentStatus((s) => ({ ...s, [item.id]: duplicata ? "duplicata_pix" : "error" }));
     }
   };
 

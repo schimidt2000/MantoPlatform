@@ -1123,6 +1123,12 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     ).first()
     if not payment:
         return
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        # Feature 318: o pagamento de um PIX lido do banco sai pelo "Desfazer" (ver a API).
+        flash('Este pagamento veio de um PIX lido do banco: use "Desfazer" em PIX recebidos.', "error")
+        return
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=current_user.name,

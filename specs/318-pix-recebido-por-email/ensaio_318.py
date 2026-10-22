@@ -70,6 +70,9 @@ def main() -> int:
     ap.add_argument("--ate", default="2026-10-21")
     ap.add_argument("--gabarito", required=True)
     ap.add_argument("--env", default=str(Path(r"C:\Users\schim\Desktop\Manto_Platform\.env")))
+    # Simula o clique certo no "É esta?" quando a venda certa está entre as sugestões: mede o regime
+    # em que cada confirmação ensina o "já pagou antes" (o replay puro só tem as automáticas).
+    ap.add_argument("--simular-confirmacao", action="store_true")
     args = ap.parse_args()
     desde, ate = date.fromisoformat(args.desde), date.fromisoformat(args.ate)
 
@@ -138,6 +141,10 @@ def main() -> int:
             db.session.flush()
 
             original = pix_ops.vendas_abertas
+            from app.constants import RoleName
+            from app.models import Role, User
+
+            quem_confirma = User.query.join(User.roles).filter(Role.name == RoleName.SUPERADMIN).first()
 
             def vendas_na_epoca(limite: datetime):
                 return [
@@ -175,6 +182,9 @@ def main() -> int:
                     sugeridos = {e for c in pix.candidatos or [] for e in c.get("event_ids") or []}
                     if certo_evento is not None and certo_evento in sugeridos:
                         contagem["conferir_com_a_certa"] += 1
+                        if args.simular_confirmacao and quem_confirma is not None:
+                            pix_ops.confirmar(pix.id, [certo_evento], quem_confirma)
+                            db.session.flush()
                     elif certo_evento is not None:
                         contagem["conferir_sem_a_certa"] += 1
                     else:
