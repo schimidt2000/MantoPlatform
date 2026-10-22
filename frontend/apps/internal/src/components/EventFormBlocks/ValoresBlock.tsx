@@ -185,7 +185,7 @@ export function ValoresBlock({
                 <FieldError message={errors.sale_value?.message} />
               </div>
             </div>
-            {discountPct > 0 && (
+            {discountPct > 0 && textoDoPercentual(discountPct) && (
               <span className="inline-flex items-center rounded-full bg-green-soft px-2.5 py-1 text-xs font-medium text-green">
                 {textoDoPercentual(discountPct)}% de desconto
               </span>

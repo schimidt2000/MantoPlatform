@@ -8,17 +8,26 @@
  */
 import type { Quote } from "./orcamento";
 
-export function textoDoPercentual(d: number): string {
+export function textoDoPercentual(d: number): string | null {
   // O arredondamento a 6 casas antes do piso evita que 10% achado pelo valor (9,9999999…) vire "9,9".
   const piso = Math.floor(Math.round(d * 1e6) / 1e5) / 10;
+  // Abaixo de 0,1% não há o que anunciar: "0% de desconto" é um selo que mente (converge, T055).
+  if (piso <= 0) return null;
   const texto = piso.toFixed(1).replace(".", ",");
   return texto.endsWith(",0") ? texto.slice(0, -2) : texto;
 }
 
-/** O % de desconto entre o cheio e a venda, ou `null` quando não há desconto (venda ≥ cheio ou cheio vazio). */
+/**
+ * O % de desconto entre o cheio e a venda, ou `null` quando não há desconto (venda ≥ cheio ou cheio vazio).
+ *
+ * Os dois chegam arredondados ao centavo, e o % exato da proposta pode ficar até meio centavo para qualquer lado:
+ * 3.571,43 com 5% vira venda 3.392,86, e a razão dá 4,99998% → "4,9" contra o "5" da proposta. Por isso o % é o
+ * maior compatível com o centavo (venda − ½ centavo sobre cheio + ½ centavo) — o selo bate com a proposta, e numa
+ * venda digitada à mão a diferença é de milésimos de ponto (converge, T051).
+ */
 export function percentualDoDesconto(bruto: number | null | undefined, venda: number | null | undefined): number | null {
   if (!bruto || venda == null || venda >= bruto) return null;
-  return (1 - venda / bruto) * 100;
+  return (1 - (venda - 0.005) / (bruto + 0.005)) * 100;
 }
 
 export type ColunaDoQuote = "1h" | "2h" | "3h" | "4h" | "custom";

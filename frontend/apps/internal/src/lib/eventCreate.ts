@@ -67,7 +67,7 @@ export interface OrcamentoPrefill {
   bruto_4h?: number;
   bruto_custom?: number | null;
   desconto_pct?: number | null;
-  /** Feature 313: o preço de 5 a 24 h pela conta da calculadora, do servidor (ausente no personalizado). */
+  /** Feature 313: o preço de 5 a 24 h pela conta da calculadora, do servidor (no personalizado, a régua da R7). */
   extra_por_horas?: Record<string, { bruto: number; total: number }>;
   has_show?: boolean;
   transport_value?: number;

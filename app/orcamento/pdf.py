@@ -183,7 +183,8 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     desconto_texto = quote.get("desconto_pct_texto") if quote.get("desconto_pct") else None
 
     def _valor(total: float, bruto: Any) -> str:
-        if desconto_texto and bruto is not None and abs(float(bruto) - total) >= 0.005:
+        # O "de" vale para todo desconto; a linha do % só quando ele passa de 0,1 (converge, T055).
+        if quote.get("desconto_pct") and bruto is not None and abs(float(bruto) - total) >= 0.005:
             return f"{_fmt_brl(total)} (de {_fmt_brl(float(bruto))})"
         return _fmt_brl(total)
 
@@ -255,7 +256,9 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
         return float(valor) if valor is not None else round(totals[i] * 0.95, 2)
 
     _pix_vista = [f"{i + 1}h {_fmt_brl(_pix(i))}" if show[i] else None for i in range(4)]
-    if desconto_texto and float(quote.get("desconto_pct") or 0) >= 5 - 1e-6:
+    from app.orcamento.quote_ops import pix_vale_o_desconto
+
+    if desconto_texto and pix_vale_o_desconto(quote.get("desconto_pct")):
         linha_pix = ("PIX à vista:", f"o mesmo valor — o desconto de {desconto_texto}% já está aplicado")
     else:
         linha_pix = ("PIX à vista (5% desc.):", " | ".join(p for p in _pix_vista if p))

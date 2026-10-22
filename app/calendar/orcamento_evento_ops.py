@@ -167,7 +167,9 @@ def snapshot_v2(entry: OrcamentoHistory | None) -> dict | None:
 
     O `/salvar` grava o snapshot que o navegador devolve (research R2 da 305), então as bases e os cheios só valem
     se contam a mesma história: 4 bases finitas ≥ 0, cada cheio ≥ a coluna gravada e igual (± R$ 0,01) ao que a
-    conta da Q7 dá sobre a base. Fora disso, o leitor segue o caminho de antes (o erro inofensivo).
+    conta da Q7 dá sobre a base; os acréscimos e o produto finitos; cada coluna = o cheio com o desconto aplicado
+    (± R$ 0,01; a duração digitada = o valor digitado) e o valor digitado da extra até o cheio dela (converge,
+    T056). Fora disso, o leitor segue o caminho de antes (o erro inofensivo).
     """
     from app.orcamento.quote_ops import VERSAO_CONTA, _linhas_do_snapshot_313, aplicar_acrescimos
 
@@ -186,10 +188,29 @@ def snapshot_v2(entry: OrcamentoHistory | None) -> dict | None:
         if not personalizado and (not isinstance(bases, list) or len(bases) != 4):
             return None
         linhas = _linhas_do_snapshot_313(snap)
+        if not all(math.isfinite(float(linha["value"])) for linha in linhas):
+            return None
+        if not math.isfinite(float(snap.get("produtos_total") or 0)):
+            return None
+        digitada, valor_digitado = snap.get("desconto_duracao"), snap.get("desconto_valor")
+        if valor_digitado is not None:
+            valor_digitado = float(valor_digitado)
+            if not math.isfinite(valor_digitado) or valor_digitado <= 0 or not d:
+                return None
+            if digitada == "extra":
+                cheio_extra = float(brutos["custom"])
+                if not math.isfinite(cheio_extra) or valor_digitado > cheio_extra + 0.005:
+                    return None
+            elif digitada not in ("1h", "2h", "3h", "4h"):
+                return None
         for i, duracao in enumerate(DURACOES_TABELA):
             bruto = float(brutos[f"{duracao}h"])
             coluna = float(getattr(entry, f"total_{duracao}h") or 0)
             if not math.isfinite(bruto) or bruto + 0.005 < coluna:
+                return None
+            # A coluna gravada é o cheio com o desconto: um `desconto_aplicado` forjado não bate com ela.
+            esperado = valor_digitado if digitada == f"{duracao}h" else round(bruto * (1 - d / 100), 2)
+            if abs(esperado - coluna) > 0.01:
                 return None
             if not personalizado:
                 base = float(bases[i])

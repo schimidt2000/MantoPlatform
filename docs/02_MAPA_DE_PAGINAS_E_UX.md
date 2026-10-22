@@ -459,7 +459,7 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   **Feature 313**: de orçamento com desconto, o "valor antes do desconto" nasce com o **cheio** da duração e o "valor de
   venda" com o **final** (`precoDaDuracao` em `lib/eventCreate.ts`; orçamento de antes: os dois iguais); o selo "N% de
   desconto" do `ValoresBlock` usa a mesma regra da proposta (uma casa, para baixo). "Outra (h)" vai de 5 a 24 h pelo
-  `extra_por_horas` do servidor (acima disso: "acima de 24 h, digite o valor"; orçamento de antes: a régua de sempre).
+  `extra_por_horas` do servidor (acima disso os valores zeram e a tela pede "acima de 24 h, digite o valor"; orçamento de antes: a régua de sempre).
   O quadro do BV mostra o BV já com o desconto (`valores_final`) quando a venda é o total do orçamento; venda digitada
   à mão → "calculado ao salvar". O vínculo 273 da aba Comercial mostra o mesmo BV com desconto.
 - **API**: `GET /api/events/new/options`, `/prefill` · `POST /api/events` (+ endpoints de

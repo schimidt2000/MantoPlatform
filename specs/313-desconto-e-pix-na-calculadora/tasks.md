@@ -220,7 +220,7 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
       `docs/05` (o núcleo em float — a justificativa do plano; riscar o que quitar)
 - [X] T047 `docs/03`: entrada nova no topo + linha no índice (a reconferência; as exceções da Q7 e quantos
       orçamentos atingem; as premissas da Session)
-- [ ] T048 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
+- [X] T048 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
 - [ ] T049 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
       **só quando o dono pedir**, à noite
 
@@ -256,3 +256,25 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
 Uma entrega só (a noite do desconto), sem migration, num push à noite quando o dono pedir. MVP = US3 + US1 + US2 (a
 calculadora e a proposta); a US4 entra no mesmo deploy, porque sem ela o evento grava o cheio igual à venda (o bruto
 se perderia) e o BV não encolheria.
+
+---
+
+## Phase 9: Convergence
+
+Três revisores só de leitura (núcleo; evento e leitores do salvo; telas e deploy cruzado), 21/10. Nada CRITICAL. Por
+achado de servidor, cenário vermelho no `verify_313` (cenário 17) antes da correção; os de tela, conferidos na tela
+aberta e por `node` sobre a regra.
+
+- [X] T050 Desconto que zera uma duração (`desconto_valor` 0,01/0,004 ou `desconto_pct` 99,9999) responde 400 no campo, não 500 (`_bv_acompanha` → `None` → `float(None)` em `_linha`, `app/orcamento/quote_ops.py:794-817`) per FR-010 (contradicts)
+- [X] T051 Selo "N% de desconto" do `ValoresBlock` igual à proposta quando a venda vem de um % arredondado ao centavo (3.571,43 com 5% dava "4,9" × "5"): `percentualDoDesconto` pelo maior % compatível com o centavo (`lib/desconto.ts`) per FR-022 / Session 6 (contradicts)
+- [X] T052 "Recalcular" de orçamento com "fechar [extra] por R$" não zera o valor: o efeito que troca a duração só age com resultado de verdade (`OrcamentoCalculadoraPage.tsx`, efeito de `duracoesDoDesconto`) per FR-020 / US1 AC5 (contradicts)
+- [X] T053 Bundle novo × backend velho: com desconto digitado e `quote.desconto_pct` ausente, a calculadora avisa "o servidor não aplicou o desconto — recarregue a página" e não deixa gerar; a frase "Fecha 2h por R$" só com o desconto no resultado per caso de borda "deploy cruzado" (partial)
+- [X] T054 Novo evento: "Outra (h)" acima de 24 h num orçamento novo zera venda e cheio (obriga a digitar) em vez de manter os da duração anterior (`EventCreatePage.selectDuracaoExtra`) per FR-021 (partial)
+- [X] T055 Texto do % abaixo de 0,1: sem "desconto de 0%" na mensagem, no PDF, na memória e no selo "−0%" do histórico — o "de/por" continua (`texto_do_percentual` devolve `None`; `textoDoPercentual` idem) per FR-013/Session 6, lacuna fixada como premissa no docs/03 (partial)
+- [X] T056 Leitores do snapshot salvo na defensiva: `snapshot_v2`/`preco_na_duracao` com as conversões dentro do `try`, valores não finitos (NaN/inf em `bases`, `brutos`, `acrescimos[].value`, `produtos_total`, `desconto_valor`) recusados, `desconto_valor` da extra ≤ cheio e `desconto_aplicado` conferido contra cheio × coluna — inválido cai no caminho de antes (`app/calendar/orcamento_evento_ops.py:165-203`, `quote_ops.py:229-233`) per R2 / data-model "Validação ao ler" (partial)
+- [X] T057 Calculadora: trocar as horas da duração extra com "fechar [extra] por R$" zera o valor com o aviso (o R$ negociado para 6 h não vale para 7 h); o campo % aceita "0" e "0,5" digitados (texto cru no estado) per FR-007/Q8 (partial)
+- [X] T058 PDF decide "PIX = o mesmo valor" pelo `pix_pct` do quote (não `desconto_pct >= 5 - 1e-6`), a mesma regra da mensagem (`app/orcamento/pdf.py:258`) per FR-004/R4 (contradicts)
+- [X] T059 `desconto_valor` booleano recusado com "O valor final precisa ser um número." e sem `duracoes_do_desconto` (`quote_ops.py:263`) per FR-010 (partial)
+- [X] T060 A linha "Desconto de N% sobre o total" do card Resultado só com o resultado vivo (`OrcamentoCalculadoraPage.tsx`) per R9 (partial)
+- [X] T061 Contrato e docs: `extra_por_horas` vem também no personalizado (pela R7, `routes.py:3389-3394`) — corrigir `contracts/api.md` e `docs/01`; exceção de paridade nova (produto de tabela acima de 4 h com nota: ±R$ 0,01 pela ordem de arredondamento, 5 de 32 casos sondados, nenhum em produção) no docs/03; dívidas: BV em duas linhas ±R$ 0,01 calculadora × evento, `_linhas_v2` casando por posição, `deduzir_duracao` com o bruto = final, a marca `versao_conta` sensível a centavo do `aplicar_acrescimos` per plan: R2/R11 (partial)
+- [X] T062 Rodada inteira do `verify_313` duas vezes, regressão (305 `--regressao`, 307, 309, 235), typecheck e `ruff check`; a tela dos achados T051–T057 aberta de novo per Constitution VIII (missing)

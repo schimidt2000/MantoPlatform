@@ -309,9 +309,10 @@ export function EventCreatePage() {
     setDuracao(String(horas));
     if (!prefill.data) return;
     const preco = precoDaDuracao(prefill.data, horas);
-    if (!preco) return;
-    setValue("sale_value_gross", preco.bruto);
-    setValue("sale_value", preco.total);
+    // Acima do que o orçamento cobre (24 h), os valores da duração anterior não valem para esta: zera e a venda
+    // exige ser digitada — antes o evento de 30 h saía com o preço de 4 h (converge, T054).
+    setValue("sale_value_gross", preco ? preco.bruto : 0);
+    setValue("sale_value", preco ? preco.total : 0);
   };
 
   // ── Fase 2: upload de anexos pendentes, depois que o evento já existe ──────────

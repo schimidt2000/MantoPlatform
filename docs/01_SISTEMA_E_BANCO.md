@@ -1304,7 +1304,7 @@ sem ",0"). Mensagem e PDF: "de R$ X por R$ Y" + "_(desconto de N% aplicado)_" po
 mesmo valor — o desconto de N% já está aplicado", abaixo disso o bloco de 5% de sempre; sem desconto, byte a byte a de
 antes. A memória ganha "Desconto (N%)" e "BV a repassar a quem indicou" só com desconto. `GET /historico` traz
 `desconto_pct` por item. **Prefill** (`_build_orcamento_prefill`, só orçamento v2): `bruto_1h..4h`, `bruto_custom`,
-`desconto_pct`, `extra_por_horas: {"5".."24": {bruto, total}}` (ausente no personalizado) e, em cada
+`desconto_pct`, `extra_por_horas: {"5".."24": {bruto, total}}` (no personalizado, a régua sobre o cheio de 4h) e, em cada
 `acrescimos_do_orcamento.linhas[]`, `valores_final` (o que a linha vale com o desconto; `valores_brl` segue o cheio).
 **Evento**: a tela manda `sale_value_gross` = cheio e `sale_value` = final; o BV gravado (305) e `deduzir_duracao`
 usam o **cheio** da duração como denominador (cheio primeiro, depois o final); o vínculo 273

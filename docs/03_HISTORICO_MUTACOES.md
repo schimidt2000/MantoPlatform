@@ -376,7 +376,10 @@ da proposta e o selo do evento usam a mesma regra; os dias adicionais ficam para
 os 2.484 orçamentos do espelho pela conta nova sem desconto: **17** mudam, todos pelas exceções da Q7, conferidas
 pela fórmula — 9 com BV e "Outro" (o BV passa a incidir sobre o "Outro") e 8 com duração extra e acréscimo em R$ (o R$
 deixa de escalar com as horas); os outros 2.467 saem byte a byte. Nenhum deles muda de verdade: o salvo não tem a
-marca e continua com a conta de antes. Recontagem da produção em 21/10 (só leitura): 2.710 orçamentos; 267 vendas
+marca e continua com a conta de antes. O converge achou uma exceção que o gabarito não alcança (o espelho não tem
+orçamento com produto): **produto de tabela acima de 4 h com nota** pode sair R$ 0,01 diferente da conta de antes
+(5 de 32 casos sondados na base × branch — a 309 fazia a régua em Decimal sobre o total com nota; a 313 refaz pela
+base, na função única). Premissa contestável: fica a função única; nenhum orçamento de produção tem produto. Recontagem da produção em 21/10 (só leitura): 2.710 orçamentos; 267 vendas
 desde junho, 92 com desconto dado à mão; 121 orçamentos acima de 4h, 11 deles com acréscimo em R$; 2 BV em reais;
 nenhum acréscimo negativo; nenhum produto de tabela.
 
@@ -395,7 +398,19 @@ viraria 76% de desconto que ninguém negociou; e o BV no PIX numa linha própria
 "BV" duplicado no seletor. No celular, a tabela da Equipe esticava a calculadora a 737px em 375 (grade sem
 `min-w-0`) — corrigido, porque escondia as colunas novas.
 
-**Verificação.** `verify_313.py` 17/17 duas vezes seguidas com o gabarito (a primeira rodada, contra a `main`, em
+**Converge (T048).** Três revisores só de leitura (núcleo; evento e leitores do salvo; telas e deploy cruzado), nada
+CRITICAL. Viraram o cenário 17 do verify, vermelho antes, e as tarefas T050–T062: o desconto que zera uma duração
+(R$ 0,005 nas 4h, 99,9999%) dava 500 com BV — agora 400 no campo; o `desconto_valor` booleano caía na mensagem da
+duração; abaixo de 0,1% a proposta dizia "desconto de 0%" — agora fica só o "de/por" (premissa contestável); o PDF
+decidia o "PIX = o mesmo valor" por outra regra que a mensagem (`pix_vale_o_desconto`, regra única); snapshot forjado
+no `/salvar` (valor não numérico, NaN, extra acima do cheio, `desconto_aplicado` que não bate com as colunas) dava 500
+ou NaN no prefill — agora cai no caminho de antes. Na tela: o selo do valor de venda dizia "4,9%" onde a proposta diz
+"5%" (3.571,43 com 5%: o % recalculado dos centavos arredondados) — agora o maior % compatível com o centavo; o
+"Recalcular" de um "fechar [extra] por R$" zerava o valor; com o backend de antes a calculadora dizia "Fecha 2h por"
+o cheio — agora avisa e não deixa gerar; trocar as horas da extra levava o R$ negociado para outras horas; o campo %
+apagava o "0" do começo; acima de 24 h o Novo evento mantinha o preço da duração anterior.
+
+**Verificação.** `verify_313.py` 18/18 duas vezes seguidas com o gabarito (o 17 é o do converge) (a primeira rodada, contra a `main`, em
 `verify_313_primeira_falha.txt`: 5/17). Regressão: `verify_305 --regressao` 68/68, `verify_307` 17/17, `verify_309`
 19/19 (atualizado pela Q7), `verify_235` verde. `verify_273` dá 8/15 na base e na branch (não é da 313); `verify_190`
 está morto desde a 235 (importa `EducaMantoPackage`). Typecheck das três SPAs e `ruff check` limpos (o I001 de

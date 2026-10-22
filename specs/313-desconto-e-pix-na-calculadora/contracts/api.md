@@ -49,7 +49,7 @@ O `quote` congelado traz as chaves novas quando existem; o PDF lê `pix_*` (lega
 ## `GET /api/events/new/prefill?orcamento_id=`
 
 Ganha, para orçamento `versao_conta = 2`: `bruto_1h..4h`, `bruto_custom`, `desconto_pct` (o `desconto_aplicado`),
-`extra_por_horas: {"5": {bruto, total}, …, "24": {…}}` (a R1 sobre as bases congeladas; ausente no personalizado;
+`extra_por_horas: {"5": {bruto, total}, …, "24": {…}}` (a R1 sobre as bases congeladas; no personalizado, a régua da R7 sobre `brutos["4h"]` — corrigido no converge;
 o "Outra (h)" passa a aceitar de 5 a 24 h) e `total_custom`/`bruto_custom` pela R1; cada
 `acrescimos_do_orcamento.linhas[]` ganha `valores_final` (o que a linha vale com o desconto, por duração — o
 servidor faz a conta; o navegador só mostra, analyze A7). Orçamento antigo: as chaves novas ausentes; `total_custom` como hoje. Sem `pix_*` (Q2 = C).

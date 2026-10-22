@@ -1100,6 +1100,89 @@ def c16_regressao() -> None:
     _garante(not falhas, " | ".join(falhas))
 
 
+def c17_converge() -> None:
+    """Os achados do converge (T050–T059), cada um vermelho antes da correção."""
+    import copy
+    import io
+
+    from pypdf import PdfReader
+
+    bv = [_acr("BV", 10, True)]
+    # T050 — o desconto que zera uma duração é 400 no campo, não 500 (com BV, `float(None)` na memória).
+    for corpo, campo in (
+        (_payload(acrescimos=bv, desconto_valor=0.005, desconto_duracao="4h"), "desconto_valor"),
+        (_payload(acrescimos=bv, desconto_valor=0.004, desconto_duracao="2h"), "desconto_valor"),
+        (_payload(acrescimos=bv, desconto_pct=99.9999), "desconto_pct"),
+        (_payload(desconto_valor=0.004, desconto_duracao="2h"), "desconto_valor"),
+    ):
+        r = _cliente("com").post("/api/orcamento/calcular", json=corpo)
+        _garante(
+            r.status_code == 400 and campo in (_erro(r).get("fields") or {}),
+            f"zerar a duração → {r.status_code} {r.get_data(as_text=True)[:160]}",
+        )
+    # T059 — `desconto_valor` booleano: a mensagem do número, sem trocar o seletor.
+    r = _cliente("com").post(
+        "/api/orcamento/calcular", json=_payload(desconto_valor=True, desconto_duracao="2h")
+    )
+    err = _erro(r)
+    _garante(
+        r.status_code == 400
+        and "número" in (err.get("fields") or {}).get("desconto_valor", "")
+        and "duracoes_do_desconto" not in err,
+        f"bool → {err}",
+    )
+    # T055 — abaixo de 0,1%: nada de "desconto de 0%"; o de/por continua.
+    bruto2 = _calcular(_payload())["quote"]["bruto_2h"]
+    pq = _calcular(_payload(desconto_valor=round(bruto2 - 0.5, 2), desconto_duracao="2h"))["quote"]
+    _garante(pq.get("desconto_pct") and pq.get("desconto_pct_texto") is None, f"texto {pq.get('desconto_pct_texto')!r}")
+    _garante(
+        "desconto de 0%" not in pq["message"] and f"de {_fmt(bruto2)} por" in pq["message"],
+        "mensagem com 0% ou sem de/por",
+    )
+    _garante(
+        not any(str(m.get("label", "")).startswith("Desconto (0%)") for m in pq["memoria"]),
+        "memória com Desconto (0%)",
+    )
+    # T058 — o PDF decide o PIX pela mesma regra da mensagem (d entre 4,999999 e 4,9999995).
+    res = _calcular(_payload(client_name=f"{PREFIX}c17pdf", desconto_pct=4.9999992))
+    _garante("já está aplicado" not in res["quote"]["message"], "a mensagem tomou 4,9999992 por 5")
+    oid = _salvar(res)
+    pdf = _cliente("com").get(f"/api/orcamento/historico/{oid}/pdf")
+    texto = "\n".join(p.extract_text() or "" for p in PdfReader(io.BytesIO(pdf.data)).pages)
+    _garante("o mesmo valor" not in texto, "o PDF diz 'o mesmo valor' e a mensagem dá o PIX de 5%")
+    # T056 — snapshot salvo adulterado: o prefill não quebra e cai no caminho de antes.
+    base = _calcular(
+        _payload(client_name=f"{PREFIX}c17s", acrescimos=bv, desconto_pct=10, duracao_custom=6)
+    )
+    casos = {
+        "valor não numérico": lambda sn: sn.update(desconto_valor="x", desconto_duracao="2h"),
+        "NaN no acréscimo": lambda sn: sn["acrescimos"][0].update(value=float("nan")),
+        "extra acima do cheio": lambda sn: sn.update(desconto_valor=50000.0, desconto_duracao="extra"),
+        "desconto_aplicado forjado": lambda sn: sn.update(desconto_aplicado=50.0),
+    }
+    for rotulo, mexe in casos.items():
+        forjado = copy.deepcopy(base)
+        forjado["snapshot"]["client_name"] = f"{PREFIX}c17 {rotulo}"
+        mexe(forjado["snapshot"])
+        oid = _salvar(forjado)
+        r = _cliente("com").get(f"/api/events/new/prefill?orcamento_id={oid}")
+        corpo = r.get_data(as_text=True)
+        _garante(r.status_code == 200, f"{rotulo}: prefill → {r.status_code} {corpo[:120]}")
+        pj = r.get_json()
+        # `acrescimos` é o eco cru do snapshot (de antes da 313): o NaN forjado volta como veio. O que a 313 calcula
+        # (preços, extra_por_horas, valores_final) não pode carregar NaN.
+        calculado = {k: v for k, v in pj.items() if k != "acrescimos"}
+        _garante("NaN" not in json.dumps(calculado), f"{rotulo}: NaN no que a 313 calcula")
+        _garante(
+            pj.get("desconto_pct") in (None, 10) and pj.get("desconto_pct") != 50,
+            f"{rotulo}: desconto_pct {pj.get('desconto_pct')}",
+        )
+        for h, preco in (pj.get("extra_por_horas") or {}).items():
+            _garante(preco["total"] <= preco["bruto"] + 0.01, f"{rotulo}: {h}h final acima do cheio {preco}")
+        if pj.get("total_custom") and pj.get("bruto_custom"):
+            _garante(pj["total_custom"] <= pj["bruto_custom"] + 0.01, f"{rotulo}: extra acima do cheio")
+
+
 def cL_limpeza() -> None:
     with app.app_context():
         limpar()
@@ -1132,6 +1215,7 @@ CENARIOS = [
     ("14", "vínculo 273", c14_vinculo),
     ("15", "DEVE FALHAR: Financeiro, Casting e Revendedor no cálculo", c15_rbac),
     ("16", "regressão 305/307/309/235", c16_regressao),
+    ("17", "converge: zerar a duração, bool, abaixo de 0,1%, PDF do PIX, snapshot forjado", c17_converge),
 ]
 
 

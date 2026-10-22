@@ -9,6 +9,7 @@ alteração `pricing.py`/`transport.py`/`settings.py`/`pdf.py`, já existentes.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
@@ -221,14 +222,17 @@ def preco_na_duracao(snap: dict, horas: int) -> dict[str, Any] | None:
                 float(bases[3]), float(brutos["4h"]), produtos_total, horas, linhas_acr, bool(snap.get("nota_fiscal"))
             )
             bruto, linhas = extra["preco"], extra["valores"]
-    except (KeyError, IndexError, TypeError, ValueError):
+        total = round(bruto * (1 - d / 100), 2) if d else bruto
+        # A duração em que a comercial digitou o valor final sai com o valor exato (Q8 = B); a extra só é "a
+        # digitada" se for a mesma duração extra do orçamento.
+        alvo = f"{horas}h" if horas <= 4 else ("extra" if int(float(snap.get("duracao_custom") or 0)) == horas else None)
+        if d and alvo and snap.get("desconto_duracao") == alvo and snap.get("desconto_valor") is not None:
+            total = round(float(snap["desconto_valor"]), 2)
+    except (KeyError, IndexError, TypeError, ValueError, OverflowError):
         return None
-    total = round(bruto * (1 - d / 100), 2) if d else bruto
-    # A duração em que a comercial digitou o valor final sai com o valor exato (Q8 = B); a extra só é "a digitada"
-    # se for a mesma duração extra do orçamento.
-    alvo = f"{horas}h" if horas <= 4 else ("extra" if int(float(snap.get("duracao_custom") or 0)) == horas else None)
-    if d and alvo and snap.get("desconto_duracao") == alvo and snap.get("desconto_valor") is not None:
-        total = round(float(snap["desconto_valor"]), 2)
+    # Converge (T056): nada não finito sai daqui (vira NaN no JSON do prefill), e o final nunca passa do cheio.
+    if not all(math.isfinite(v) for v in (bruto, total, *linhas)) or total > bruto + 0.005:
+        return None
     return {"bruto": bruto, "linhas": linhas, "total": total}
 
 
@@ -257,10 +261,12 @@ def _ler_desconto(
         if _vazio(raw_valor) or _vazio(raw_dur):
             raise QuoteValidationError("desconto_valor", "Informe o valor final e a duração a que ele se refere.")
         try:
+            if isinstance(raw_valor, bool):
+                raise TypeError
             valor = float(raw_valor)
         except (TypeError, ValueError):
             raise QuoteValidationError("desconto_valor", "O valor final precisa ser um número.") from None
-        if isinstance(raw_valor, bool) or raw_dur not in mostradas:
+        if raw_dur not in mostradas:
             # As mostradas vão junto: a tela troca o seletor por elas (sem isso, ele ficava preso nas durações do
             # resultado anterior — ex.: "fechar 2h por" e a comercial deixa só um produto, que mostra um valor).
             raise QuoteValidationError(
@@ -290,15 +296,24 @@ def _ler_desconto(
     return pct, "pct", pct, None, None
 
 
-def texto_do_percentual(d: float) -> str:
+def texto_do_percentual(d: float) -> str | None:
     """O % como a proposta mostra (feature 313, Q3 = A): uma casa, para baixo, com vírgula e sem ",0".
 
     A proposta nunca promete mais desconto do que dá (4,96% → "4,9"). O ``round(d, 6)`` antes do piso evita que 10%
-    achado pelo valor digitado (9,9999999…) vire "9,9".
+    achado pelo valor digitado (9,9999999…) vire "9,9". Abaixo de 0,1% devolve ``None``: "desconto de 0%" seria
+    anunciar um desconto que não aparece — a proposta fica só com o "de/por" (converge, T055).
     """
     piso = Decimal(str(round(d, 6))).quantize(Decimal("0.1"), rounding="ROUND_FLOOR")
+    if piso <= 0:
+        return None
     texto = f"{piso:.1f}".replace(".", ",")
     return texto[:-2] if texto.endswith(",0") else texto
+
+
+def pix_vale_o_desconto(d: float | None) -> bool:
+    """O PIX à vista é o próprio valor final? (D4: vale o maior entre os 5% e o negociado.) Regra única da mensagem,
+    do quote e do PDF — comparar ``d >= 5`` por outro caminho divergia entre 4,999999 e 4,9999995 (converge, T058)."""
+    return bool(d) and round(float(d), 6) >= PIX_PCT_PADRAO
 
 
 def _is_noturno(raw_time: str) -> bool:
@@ -769,8 +784,13 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                 total_custom = desconto_valor
             else:
                 totals[int(desconto_duracao[0]) - 1] = desconto_valor
+        # Converge (T050): um desconto perto de 100% (ou "fechar por R$ 0,004") arredonda alguma duração a zero — a
+        # proposta sairia "por R$ 0,00" e o BV a repassar não tem proporção. Recusa no campo digitado.
+        if any(b > 0 and t <= 0 for b, t in zip(brutos, totals, strict=True)) or (bruto_custom and total_custom is not None and total_custom <= 0):
+            campo = "desconto_valor" if desconto_modo == "valor" else "desconto_pct"
+            raise QuoteValidationError(campo, "Este desconto zera o valor de uma das durações — use um desconto menor.")
         _linha(
-            f"Desconto ({texto_do_percentual(desconto)}%)",
+            f"Desconto ({texto_do_percentual(desconto) or 'menos de 0,1'}%)",
             [totals[i] - brutos[i] for i in range(4)],
             "pos",
             "sobre o total — apresentação, transporte, acréscimos e nota",
@@ -798,7 +818,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
 
     # Feature 313 (D4): o PIX à vista vale o maior entre o padrão (5%) e o negociado — nunca soma. Com o negociado de
     # 5% ou mais, o PIX é o próprio valor final (e o BV, o mesmo), sem refazer a conta.
-    pix_maior = bool(desconto) and round(desconto, 6) >= PIX_PCT_PADRAO
+    pix_maior = pix_vale_o_desconto(desconto)
     pix_pct = desconto if pix_maior else PIX_PCT_PADRAO
     pix = [totals[i] if pix_maior else round(brutos[i] * AVISTA_FATOR, 2) for i in range(4)]
     pix_custom = None
@@ -843,7 +863,8 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             lines.append(f"  • Logística e Transporte: {_fmt_brl(transport_total)}")
         if desconto and abs(bruto - total) >= 0.005:
             lines.append(f"  • *VALOR TOTAL: de {_fmt_brl(bruto)} por {_fmt_brl(total)}*")
-            lines.append(f"  _(desconto de {texto_do_percentual(desconto)}% aplicado)_")
+            if texto_do_percentual(desconto):
+                lines.append(f"  _(desconto de {texto_do_percentual(desconto)}% aplicado)_")
         else:
             lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
         return "\n".join(lines)

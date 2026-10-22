@@ -247,6 +247,8 @@ export function OrcamentoCalculadoraPage() {
   const [custMult, setCustMult] = useState<Record<Duracao, number>>(INITIAL_STATE.custMult);
   const [descontoModo, setDescontoModo] = useState<"pct" | "valor">(INITIAL_STATE.descontoModo);
   const [descontoPct, setDescontoPct] = useState(INITIAL_STATE.descontoPct);
+  // O que está no campo % como foi digitado ("0", "0,5"): o número sozinho apagava o "0" do começo (converge, T057).
+  const [descontoPctTexto, setDescontoPctTexto] = useState("");
   const [descontoValor, setDescontoValor] = useState(INITIAL_STATE.descontoValor);
   const [descontoDuracao, setDescontoDuracao] = useState<DuracaoDoDesconto>(INITIAL_STATE.descontoDuracao);
   const [result, setResult] = useState<CalcularOrcamentoResult | null>(null);
@@ -330,9 +332,11 @@ export function OrcamentoCalculadoraPage() {
       setDescontoValor(snap.desconto_valor);
       setDescontoDuracao(snap.desconto_duracao);
       setDescontoPct(0);
+      setDescontoPctTexto("");
     } else {
       setDescontoModo("pct");
       setDescontoPct(snap.desconto_pct_digitado ?? 0);
+      setDescontoPctTexto(snap.desconto_pct_digitado ? String(snap.desconto_pct_digitado) : "");
       setDescontoValor(0);
     }
     setResult(null);
@@ -366,6 +370,7 @@ export function OrcamentoCalculadoraPage() {
     setDescontoModo(INITIAL_STATE.descontoModo);
     setAvisoDoDesconto(null);
     setDescontoPct(INITIAL_STATE.descontoPct);
+    setDescontoPctTexto("");
     setDescontoValor(INITIAL_STATE.descontoValor);
     setDescontoDuracao(INITIAL_STATE.descontoDuracao);
     setResult(null);
@@ -495,7 +500,8 @@ export function OrcamentoCalculadoraPage() {
     return ops;
   }, [result, incluirDuracao, duracoesDoErro]);
   useEffect(() => {
-    if ((!resultadoVivo && !duracoesDoErro) || !duracoesDoDesconto.length) return;
+    if (!duracoesDoErro && (!resultadoVivo || !result)) return;
+    if (!duracoesDoDesconto.length) return;
     if (duracoesDoDesconto.some((o) => o.valor === descontoDuracao)) return;
     setDescontoDuracao(duracoesDoDesconto[0].valor);
     // O valor digitado era o preço DAQUELA duração: levá-lo para outra viraria um desconto que ninguém negociou
@@ -506,7 +512,7 @@ export function OrcamentoCalculadoraPage() {
     }
     // O modo e o valor são lidos só no momento da troca (não disparam o efeito).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resultadoVivo, duracoesDoErro, duracoesDoDesconto, descontoDuracao]);
+  }, [resultadoVivo, result, duracoesDoErro, duracoesDoDesconto, descontoDuracao]);
   const descontoTexto = resultadoVivo ? (result?.quote.desconto_pct_texto ?? null) : null;
   const totalDaDuracaoDoDesconto = (() => {
     const q = resultadoVivo ? result?.quote : undefined;
@@ -519,6 +525,10 @@ export function OrcamentoCalculadoraPage() {
   // Janela de deploy (bundle novo, backend velho): com produto selecionado e `quote.produtos` ausente,
   // o servidor NÃO aplicou o produto — gerar gravaria um orçamento sem a Visita. Trava o botão.
   const produtoSemBackend = produtos.length > 0 && !!result && result.quote.produtos === undefined;
+  // Feature 313, a mesma janela: desconto digitado e `quote.desconto_pct` ausente (a chave, não o valor) = backend
+  // de antes, que ignora o desconto — gerar gravaria o orçamento cheio (converge, T053).
+  const descontoSemBackend =
+    (descontoPct > 0 || descontoValor > 0) && !!result && result.quote.desconto_pct === undefined;
   const produtosAplicados = result?.quote.produtos ?? [];
   // Só produto no orçamento = UM valor rotulado "Preço de tabela" — decisão do SERVIDOR
   // (`quote.valor_unico`); inferir pelos `show_*` rotulava errado produto + avulso com 2h–4h desmarcadas.
@@ -843,7 +853,15 @@ export function OrcamentoCalculadoraPage() {
                     min={0}
                     className="max-w-[140px]"
                     value={duracaoCustom}
-                    onChange={(e) => setDuracaoCustom(Number(e.target.value))}
+                    onChange={(e) => {
+                      setDuracaoCustom(Number(e.target.value));
+                      // O R$ negociado para 6 h não vale para 7 h (converge, T057) — só na troca feita aqui; o
+                      // "Recalcular" põe horas e valor juntos e não passa por este caminho.
+                      if (descontoModo === "valor" && descontoDuracao === "extra" && descontoValor > 0) {
+                        setDescontoValor(0);
+                        setAvisoDoDesconto("As horas da duração extra mudaram — digite de novo o valor de fechamento.");
+                      }
+                    }}
                   />
                   <p className="mt-1 text-xs text-muted">
                     (preço = apresentação e transporte de 4h ÷ 4 × horas; os acréscimos em R$ entram uma vez; o BV é
@@ -959,10 +977,11 @@ export function OrcamentoCalculadoraPage() {
                         max={99.99}
                         step={0.01}
                         className="max-w-[120px]"
-                        value={descontoModo === "pct" && descontoPct ? descontoPct : ""}
+                        value={descontoModo === "pct" ? descontoPctTexto : ""}
                         placeholder={descontoModo === "valor" && descontoTexto ? descontoTexto : "0"}
                         onChange={(e) => {
                           setDescontoModo("pct");
+                          setDescontoPctTexto(e.target.value);
                           setDescontoPct(Number(e.target.value) || 0);
                           setAvisoDoDesconto(null);
                         }}
@@ -1011,6 +1030,7 @@ export function OrcamentoCalculadoraPage() {
                         variant="ghost"
                         onClick={() => {
                           setDescontoPct(0);
+                          setDescontoPctTexto("");
                           setDescontoValor(0);
                           setDescontoModo("pct");
                           setAvisoDoDesconto(null);
@@ -1020,7 +1040,11 @@ export function OrcamentoCalculadoraPage() {
                       </Button>
                     )}
                   </div>
-                  {resultadoVivo && descontoModo === "pct" && descontoPct > 0 && totalDaDuracaoDoDesconto != null && (
+                  {resultadoVivo &&
+                    descontoModo === "pct" &&
+                    descontoPct > 0 &&
+                    result?.quote.desconto_pct != null &&
+                    totalDaDuracaoDoDesconto != null && (
                     <p className="mt-2 text-xs text-muted">
                       Fecha {duracoesDoDesconto.find((o) => o.valor === descontoDuracao)?.rotulo ?? descontoDuracao}{" "}
                       por {brl(totalDaDuracaoDoDesconto)}.
@@ -1085,7 +1109,7 @@ export function OrcamentoCalculadoraPage() {
                         <ResultadoDaDuracao key={label} label={label} quote={result.quote} coluna={coluna} />
                       ))}
                   </div>
-                  {result.quote.desconto_pct_texto && (
+                  {resultadoVivo && result.quote.desconto_pct_texto && (
                     <p className="text-sm text-muted">
                       Desconto de {result.quote.desconto_pct_texto}% sobre o total
                       {temBv(result.quote) ? "; o BV a repassar acompanha." : "."}
@@ -1110,6 +1134,11 @@ export function OrcamentoCalculadoraPage() {
                       O servidor não aplicou o produto — recarregue a página.
                     </p>
                   )}
+                  {descontoSemBackend && (
+                    <p className="text-sm text-red" role="alert">
+                      O servidor não aplicou o desconto — recarregue a página.
+                    </p>
+                  )}
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
                       Ver memória de cálculo
@@ -1118,7 +1147,12 @@ export function OrcamentoCalculadoraPage() {
                       loading={salvar.isPending}
                       onClick={handleSalvar}
                       disabled={
-                        saved || calcPendente || calcular.isPending || calcular.isError || produtoSemBackend
+                        saved ||
+                        calcPendente ||
+                        calcular.isPending ||
+                        calcular.isError ||
+                        produtoSemBackend ||
+                        descontoSemBackend
                       }
                     >
                       {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar Orçamento"}

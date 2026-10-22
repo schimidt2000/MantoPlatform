@@ -275,7 +275,7 @@ export function OrcamentoHistoricoPage() {
                 <TableCell>
                   <Badge tone={e.has_show ? "gold" : "neutral"}>{e.has_show ? "Com show" : "Sem show"}</Badge>
                   {/* Feature 313: o desconto negociado salta à vista na lista; os totais já são os finais. */}
-                  {e.desconto_pct ? (
+                  {e.desconto_pct && textoDoPercentual(e.desconto_pct) ? (
                     <Badge tone="neutral" className="ml-1">
                       −{textoDoPercentual(e.desconto_pct)}%
                     </Badge>
