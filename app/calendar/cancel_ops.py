@@ -25,6 +25,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app import db
+from app.constants import EVENT_PAYMENT_ORIGEM_PIX
 from app.models import (
     CalendarEvent,
     CommissionPayment,
@@ -2945,7 +2946,15 @@ def recongelar_do_comercial(
     return plano
 
 
-def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User) -> None:
+def _quem(actor: User | None) -> tuple[str, str | None]:
+    """Nome e papel para o `EventLog`. Sem usuário (a leitura de PIX da 318, numa thread) é o
+    "Sistema" — o mesmo rótulo do sumiço do Google e da sincronização."""
+    if actor is None:
+        return "Sistema", "Sistema"
+    return actor.name, (", ".join(r.name for r in actor.roles)[:60] or None)
+
+
+def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User | None) -> None:
     """Depois de um comprovante gravado (decisão (c)): a guarda e o principal refeito. Não faz commit.
 
     - pago do grupo abaixo do já devolvido → 409 `pago_abaixo_do_devolvido` (em todo cancelado e
@@ -2980,20 +2989,22 @@ def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User) -> None:
         return
     _travar_linhas_de_comissao(ids, {canc.commission_seller_id, *_beneficiarios_das_linhas(ids)})
     reaplicar_cancelado(principal, motivo=MOTIVO_AJUSTE_RETIDO)
-    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    nome, papel = _quem(actor)
     texto = "Comprovante corrigido no cancelado: retido e comissão refeitos pelo pago do grupo."
     for alvo in {principal.id, event.id}:
-        db.session.add(EventLog(event_id=alvo, actor_name=actor.name, actor_role=papel, message=texto))
+        db.session.add(EventLog(event_id=alvo, actor_name=nome, actor_role=papel, message=texto))
 
 
 def gravar_comprovante_no_grupo(
     event: CalendarEvent,
     acao: str,
     *,
-    actor: User,
+    actor: User | None,
     valor: Decimal | None = None,
     arquivo=None,
     comprovante: EventPayment | None = None,
+    origem: str | None = None,
+    conta_id: int | None = None,
 ) -> EventPayment | None:
     """O núcleo das três portas de comprovante (decisão (c); contracts §9). Não faz commit.
 
@@ -3002,8 +3013,12 @@ def gravar_comprovante_no_grupo(
     `reaplicar_por_dinheiro`. Se algo recusar depois de o POST ter salvo o arquivo, o arquivo novo
     é removido aqui mesmo (a view só faz o rollback).
 
+    Feature 318: `actor=None` é o "Sistema" (a leitura de PIX roda numa thread, sem usuário);
+    `origem="pix_email"` grava sem arquivo (a prova é o aviso do banco); `conta_id` marca a conta
+    que recebeu; a ação "anexar" põe o arquivo num pagamento de PIX que ainda não tinha.
+
     Args:
-        acao: "adicionar", "editar" ou "excluir".
+        acao: "adicionar", "editar", "excluir" ou "anexar".
 
     Raises:
         CancelValidationError: 409 `cancelado`; 400 com `fields` (valor/arquivo); 409
@@ -3018,8 +3033,22 @@ def gravar_comprovante_no_grupo(
     travar_grupo(event)
     if acao == "adicionar" and event.is_cancelled and not pode_editar_venda_do_cancelado(actor):
         raise EventoCanceladoError()
+    if acao == "anexar":
+        from app.calendar.routes import _attach_payment_file
+
+        if not _attach_payment_file(comprovante, file_storage=arquivo):
+            raise CancelValidationError(
+                "Insira o arquivo do comprovante.", fields={"file": "Obrigatório"}
+            )
+        return comprovante
     if acao == "adicionar":
-        comprovante = _add_payment_record(event, amount=valor, file_storage=arquivo)
+        comprovante = _add_payment_record(
+            event,
+            amount=valor,
+            file_storage=arquivo,
+            sem_arquivo=origem == EVENT_PAYMENT_ORIGEM_PIX,
+            conta_id=conta_id,
+        )
         if comprovante is None:
             raise CancelValidationError(
                 "Informe o valor e insira o comprovante para registrar o pagamento.",

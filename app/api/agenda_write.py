@@ -33,7 +33,7 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error, trava_do_cancelado
-from app.constants import CLIENT_RELATION_TIPOS, RoleName
+from app.constants import CLIENT_RELATION_TIPOS, EVENT_PAYMENT_ORIGEM_PIX, RoleName
 from app.models import (
     CalendarEvent,
     Client,
@@ -2142,6 +2142,54 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
     return _event_detail_json(event)
 
 
+def _int_or_none(valor: Any) -> int | None:
+    try:
+        return int(valor) if valor not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _ids_do_grupo_do_evento(event: CalendarEvent) -> list[int]:
+    from app.financeiro.cobranca_ops import principal_da_venda
+
+    principal = principal_da_venda(event)
+    return [principal.id, *(e.id for e in principal.satellites or [])]
+
+
+def _pagamento_de_pix_sem_arquivo_do_grupo(event: CalendarEvent, pagamento: EventPayment) -> bool:
+    return (
+        pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX
+        and not pagamento.file_path
+        and pagamento.event_id in _ids_do_grupo_do_evento(event)
+    )
+
+
+def _pix_sem_arquivo_de_mesmo_valor(event: CalendarEvent, amount: Decimal) -> dict | None:
+    """O pagamento de PIX (sem arquivo) do grupo com o mesmo valor, como a tela precisa mostrar."""
+    from app.models import PixRecebido
+
+    pagamento = (
+        EventPayment.query.filter(
+            EventPayment.event_id.in_(_ids_do_grupo_do_evento(event)),
+            EventPayment.origem == EVENT_PAYMENT_ORIGEM_PIX,
+            EventPayment.file_path.is_(None),
+            EventPayment.amount.between(amount - Decimal("0.01"), amount + Decimal("0.01")),
+        )
+        .order_by(EventPayment.id)
+        .first()
+    )
+    if pagamento is None:
+        return None
+    pix = PixRecebido.query.filter_by(event_payment_id=pagamento.id).first()
+    return {
+        "id": pagamento.id,
+        "valor": str(pagamento.amount),
+        "conta": pagamento.conta.apelido if pagamento.conta else None,
+        "recebido_em": pix.recebido_em.isoformat(timespec="seconds") if pix else None,
+        "pagador": pix.pagador_nome if pix else None,
+    }
+
+
 @api_bp.route("/events/<int:event_id>/payments", methods=["POST"])
 @api_login_required
 def api_add_payment(event_id: int) -> Any:
@@ -2161,11 +2209,47 @@ def api_add_payment(event_id: int) -> Any:
 
     from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
+    # Feature 318: o PIX lido do aviso do banco pode já ter registrado este pagamento (sem arquivo).
+    # Sem a resposta explícita da tela ("anexar_a" ou "forcar_novo"), um comprovante do mesmo valor
+    # é devolvido como possível duplicata — contar dobrado faria a cobrança parar de cobrar.
+    conta_id = _int_or_none(request.form.get("conta_id"))
+    anexar_a = _int_or_none(request.form.get("anexar_a"))
+    if anexar_a is not None:
+        pagamento = db.session.get(EventPayment, anexar_a)
+        if pagamento is None or not _pagamento_de_pix_sem_arquivo_do_grupo(event, pagamento):
+            return json_error("Esse pagamento não aceita anexo.", 400, fields={"anexar_a": "Inválido"})
+        try:
+            gravar_comprovante_no_grupo(
+                event, "anexar", actor=current_user, arquivo=file_storage, comprovante=pagamento
+            )
+        except CancelValidationError as exc:
+            db.session.rollback()
+            return _recusa_do_cancelado(exc)
+        except DBAPIError as exc:
+            return _recusa_do_banco(exc)
+        _log_anexo(event.id, f"Anexou o comprovante ao pagamento de PIX de R$ {pagamento.amount}")
+        db.session.commit()
+        return _event_detail_json(event), 200
+    if request.form.get("forcar_novo") != "1" and amount:
+        duplicata = _pix_sem_arquivo_de_mesmo_valor(event, amount)
+        if duplicata is not None:
+            return json_error(
+                "Esse comprovante pode ser do PIX que já entrou.",
+                409,
+                codigo="possivel_duplicata",
+                pagamento=duplicata,
+            )
+
     # Feature 306 (decisão (c)): o núcleo trava o grupo, recusa o cancelado antes de salvar o
     # arquivo, grava e refaz o principal cancelado pelo pago do grupo.
     try:
         gravar_comprovante_no_grupo(
-            event, "adicionar", actor=current_user, valor=amount, arquivo=file_storage
+            event,
+            "adicionar",
+            actor=current_user,
+            valor=amount,
+            arquivo=file_storage,
+            conta_id=conta_id,
         )
     except CancelValidationError as exc:
         db.session.rollback()

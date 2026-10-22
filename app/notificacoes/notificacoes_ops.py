@@ -58,6 +58,11 @@ KIND_RECADO_NFC = "recado_nfc.novo"
 KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
 KIND_EVENTO_CANCELADO = "evento.cancelado"
 KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
+# Feature 318: o PIX lido do aviso do banco. Os destinatários reais vão explícitos pelo produtor
+# (o vendedor da venda); o catálogo é o padrão de quem decide.
+KIND_PIX_LIGADO = "pix.ligado"
+KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
+KIND_PIX_REPASSE = "pix.repasse_infinitepay"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -74,6 +79,11 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # Superadmin, que é quem cancela.
     KIND_EVENTO_CANCELADO: (RoleName.ENSAIO,),
     KIND_EVENTO_CANCELADO_ESCALA: (RoleName.CASTING,),
+    # Feature 318: "É esta?" é do vendedor (vai explícito) e do Financeiro; o repasse da
+    # InfinitePay, só de quem cuida do dinheiro — a comercial não é acionada (decisão do dono).
+    KIND_PIX_LIGADO: (RoleName.COMERCIAL,),
+    KIND_PIX_PARA_CONFERIR: (RoleName.FINANCEIRO,),
+    KIND_PIX_REPASSE: (RoleName.FINANCEIRO, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")

@@ -348,7 +348,11 @@ def c6_cancelada_e_quitada() -> None:
     canc = _venda("h1f", "6241.59", "Cecilia Cancelada Teste")
     _no_banco_escrever("UPDATE calendar_events SET cancelled_at = now() WHERE id = :e", e=canc)
     quit_ = _venda("h1g", "6241.59", "Cecilia Cancelada Teste")
-    v6._comprovante(quit_, 6241.59)
+    antigo = v6._comprovante(quit_, 6241.59)
+    # Comprovante antigo: fora da janela de conciliação (o recente É conciliado — cenário 15).
+    _no_banco_escrever(
+        "UPDATE event_payments SET created_at = created_at - interval '60 days' WHERE id = :i", i=antigo
+    )
     raw, mid = _aviso("6.241,59", "Cecilia Cancelada Teste")
     _processar(raw)
     p = _pix(mid)
