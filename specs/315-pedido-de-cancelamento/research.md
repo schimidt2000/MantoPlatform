@@ -47,7 +47,7 @@ gancho para receber o ator — quebraria o espião do `verify_306`.
 **Decisão**: coluna `deletion_request_scope = db.Column(db.String(16), nullable=True)` com os valores da 306,
 `ALCANCE_TODOS = "todos"` e `ALCANCE_SO_ESTE_DIA = "so_este_dia"` (`constants.py:481-482`). Gravado pelo servidor:
 evento sem grupo → `todos`; satélite → `so_este_dia`; principal com outro dia vivo → o que vier no corpo (obrigatório,
-400 `fields.alcance`); nulo = pedido de antes do deploy (lido como hoje: "todos" no avulso e no principal, o próprio
+400 `fields.alcance`); nulo = pedido de antes do deploy ou feito pelo caminho velho sem alcance (lido como hoje: "todos" no avulso e no principal, o próprio
 dia no satélite — só para mostrar).
 
 **Por quê**: o corpo do cancelar já fala `todos | so_este_dia`; `venda | dia` colide com `REGIME_VENDA/REGIME_DIA`
@@ -75,8 +75,13 @@ rígida que a do cancelar, senão o Comercial seria barrado por uma conta que va
 
 **Decisão**: pedir = `UPDATE calendar_events SET deletion_requested_at=:agora, …_by_id, …_reason, …_scope, …_refund
 WHERE id=:id AND deletion_requested_at IS NULL AND cancelled_at IS NULL` (molde `sumico_ops.marcar`,
-`sumico_ops.py:225-240`); 0 linha → relê: cancelado → 409 `cancelado`; senão 409 `pedido_pendente` com o nome de quem
-pediu. Recusar = `UPDATE … SET <cinco colunas> = NULL WHERE id=:id AND deletion_requested_at = :carimbo_lido`; 0 linha
+`sumico_ops.py:225-238`, com `synchronize_session=False`); `db.session.refresh(event)` nos **dois** ramos (a view
+carregou o evento antes, `agenda_write.py:911`, e o identity map guardaria o valor velho); 0 linha → cancelado → 409
+`cancelado`; senão 409 `pedido_pendente` com o nome de quem pediu. Nada no request atribui as colunas no objeto fora do
+UPDATE (o autoflush gravaria por cima). A ordem das respostas segue a da 306 (`_recusas_de_estado` antes da forma):
+409 ensaio → 409 cachê pago do próprio dia → 400 campos → 409 cachê pago dos outros dias que "todos" alcança → claim.
+O pedir não trava o grupo: um agrupar concorrente pode gravar um alcance velho (aceito; o cancelar relê o grupo sob
+trava). Recusar = `UPDATE … SET <cinco colunas> = NULL WHERE id=:id AND deletion_requested_at = :carimbo_lido`; 0 linha
 → 409 `sem_pedido` (outro Superadmin decidiu, ou o cancelamento fechou). O aviso, o histórico e a auditoria só saem
 depois do claim ganho, na mesma transação. No cancelamento, o fecho (R2) roda sob `FOR UPDATE` do grupo: se uma
 recusa commitou antes, o fecho lê o pedido já nulo e não responde; se o cancelamento trava primeiro, a recusa espera e
@@ -92,8 +97,8 @@ sobrescrevem; duas decisões ao mesmo tempo dariam ao autor duas respostas (FR-0
 distintos: `id IN (...) AND deletion_requested_at IS NOT NULL AND cancelled_at IS NULL AND (deletion_request_scope =
 'todos' OR deletion_request_scope IS NULL)`), devolve, por satélite, o carimbo do pedido do principal. Quem serializa
 o lote passa esse carimbo: `serialize_event_summary(event, pedido_da_venda=None)` vira `exclusao_solicitada` (se o
-próprio evento não tiver situação mais forte) — o mês (`agenda.py:71`), o dia (`agenda.py:104`) e a busca
-(`agenda_read.py:138`) chamam o lote uma vez; `_role_summary` do portal ganha o mesmo parâmetro (o lote roda uma vez
+próprio evento não tiver situação mais forte) — o mês (`agenda_read.py:128-138`, `build_agenda_month`), o dia (`agenda.py:104`) e a busca
+(`agenda.py:51-77`, a lista em `:71`) chamam o lote uma vez; `_role_summary` do portal ganha o mesmo parâmetro (o lote roda uma vez
 por lista, `portal_ops.py:357-400`, `:936`); o detalhe (um evento) lê o principal direto. As outras listas que mostram
 a situação (ficha da cliente, formulários, figurino, tags 3D) mostram a do próprio evento — sem lote (premissa 9 da
 spec diz "onde o selo já aparece"; a herança vale onde a equipe planeja o dia: agenda, detalhe e portal).
@@ -118,22 +123,26 @@ excluir já invalidam (`eventOps.ts:87`, `:366-368`).
 
 ## R8 — O corte da Q6 e da premissa 5
 
-**Decisão**: no detalhe (`agenda_read.py:854-862`), o bloco `deletion_request` vai a todo papel com `requested_at`
-e `alcance`; `requested_by`, `requested_by_id` e `reason` só com `flags["show_comercial"]` (o molde da 312 logo acima,
-`:852-853`); `devolucao` (modo e valor) só com `show_comercial`; `devolucao.nome`, `devolucao.pix` só com
-`show_financeiro` **ou** quando o usuário em uso é o autor (`current_user.id == deletion_requested_by_id`). Na fila
-(`cancel_ops.py:3617-3629`, que passa a ser montada pelo módulo novo ou chama um serializador dele), o mesmo corte por
-`ver_motivo` (`:3605`) — hoje os pendentes o ignoram. Chave opcional nova `pedido_bloqueado: {codigo, frase}` no
+**Decisão**: no detalhe (`agenda_read.py:854-862`, dentro de `serialize_event_detail(event, user, impersonate)`,
+`:814`), o bloco `deletion_request` vai a todo papel com `requested_at` e `alcance`; `requested_by`, `requested_by_id`
+e `reason` só com `flags["show_comercial"]` (o molde da 312 logo acima, `:852-853`); `devolucao` (modo e valor) só com
+`show_comercial`; `devolucao.nome`, `devolucao.pix` só com `show_comercial` **e** (`show_financeiro` **ou** o autor sem
+"Ver como": `user.id == deletion_requested_by_id and not impersonate`) — senão o Superadmin autor em "Ver como Casting"
+leria o PIX sem ler o motivo. `flags is None` (chamador interno) libera tudo, como hoje. Na fila
+(`listar_cancelamentos`, `cancel_ops.py:3564`; os `pendentes[]` em `:3611-3625`), o mesmo corte por `ver_motivo`
+(`:3605`) — hoje os pendentes o ignoram; a função ganha o parâmetro `usuario` (a view `agenda_write.py:985-986` passa
+`current_user`). Chave opcional nova `pedido_bloqueado: {codigo, frase}` no
 detalhe (ensaio; cachê pago) para o menu desabilitar o item com a frase do servidor.
 
 ## R9 — O alias `/solicitar-exclusao`
 
 **Decisão**: as rotas novas `POST`/`DELETE /api/events/<id>/pedido-cancelamento` são **regras a mais nas mesmas
-funções de view** (`api_solicitar_exclusao`, `api_recusar_solicitacao`, `agenda_write.py:908-948`): os nomes de
-endpoint não mudam (a classificação do 9b do `verify_312`, `LIVRE_306`, `:706-707`, continua certa sem edição). A
+funções de view** (`api_solicitar_exclusao`, `api_recusar_solicitacao`, `agenda_write.py:908-948`; dois `route` na
+mesma função registram o mesmo endpoint — conferido; sem CSRF nem limite por rota): os nomes de endpoint não mudam (a classificação do 9b do `verify_312`, `LIVRE_306`, `:706-707`, continua certa sem edição). A
 view distingue o caminho pela regra (`request.url_rule.rule`): pelo caminho velho, o corpo só com `{motivo}` é aceito
 e o pedido nasce "sem devolução informada" (o bundle velho e o cenário 12 do `verify_303`, `:2375-2377`, `:2583`); pelo
-caminho novo, a devolução é obrigatória. Respostas: o detalhe do evento (`serialize_event_detail`, molde do
+caminho novo, a devolução é obrigatória. Pelo caminho velho também **sem `alcance`**: o principal com outro dia vivo
+grava alcance nulo (lido como "todos", R3) — o diálogo velho não tem o campo e um 400 `fields.alcance` não apareceria. Respostas: o detalhe do evento (`serialize_event_detail`, molde do
 devolver-ao-google) nos dois caminhos — o bundle velho ignora o corpo e refaz o GET. A remoção do caminho velho entra
 no `docs/05`.
 
@@ -145,7 +154,11 @@ guarda autor e título do pedido; depois que ele commita, emite `evento.pedido_d
 exclusão e o sync não respondem (P18). `apagar_por_entidade` (`routes.py:354`) já apaga os avisos do pedido no
 `_delete_event`.
 
-**Por quê**: o núcleo `_delete_event_flow` (`routes.py:4540-4580`) é compartilhado com o Jinja vivo; o Jinja não é a
+**Corrida aceita**: o autor é lido antes da trava do núcleo (`routes.py:~4563`, `refresh(..., with_for_update=True)`);
+uma recusa que commita nesse meio dá ao autor "recusado" e depois "excluído". Janela de milissegundos entre dois
+Superadmins decidindo o mesmo pedido de jeitos diferentes — fica assim, registrada.
+
+**Por quê**: o núcleo `_delete_event_flow` (`routes.py:4540-4587`) é compartilhado com o Jinja vivo; o Jinja não é a
 porta da equipe e "código velho não se limpa de passagem".
 
 ## R11 — Os avisos no sino
@@ -153,11 +166,15 @@ porta da equipe e "código velho não se limpa de passagem".
 **Decisão**: dois kinds no catálogo (`notificacoes_ops.py:54-77`, receita `:16-18`):
 `evento.pedido_cancelamento` (destinatários: SUPERADMIN ativos; `urgent` se o evento é em ≤ 7 dias — o evento que
 já passou também, como nos produtores de hoje (`:272`, `:311`), `ANTECEDENCIA_URGENTE_DIAS`, `:91`; senão `info`; `dedupe_key = <kind>:<event_id>:<carimbo do pedido>`;
-`entidade=("calendar_event", id)`, `link_path=/events/<id>`; corpo: data · venda · recebido · N escalados (régua de
-`preso_ao_evento`, sem a vaga automática do técnico) · alcance · pedido por <nome> · <motivo>, cortado em 500) e
+`entidade=("calendar_event", id)`, `link_path=/events/<id>`; corpo: data · venda · recebido · N escalados (pela régua
+do **cancelamento**, `cancel_ops.elenco_dos_dias(ids)` nos dias que o pedido alcança — sem convite recusado nem a vaga de
+presença —, para o número bater com quem o cancelamento avisa; o `n_escalados` de `preso_ao_evento` conta recusados) ·
+alcance · pedido por <nome> · <motivo>, cortado em 500) e
 `evento.pedido_decidido` (`destinatarios=[autor]`, `info`, chave `<kind>:<event_id>:<decisão>:<carimbo do pedido>`;
 entidade e link menos no "excluído"). Na decisão, `marcar_lidas_por_entidade("calendar_event", id,
-"evento.pedido_cancelamento")` (`:458-474`). Na tela, ícones para os dois kinds em `NotificacaoItem.tsx:7-16` (sem
+kind="evento.pedido_cancelamento")` (`:458-474`) — sempre com o kind, senão marca também o `pedido_decidido` da mesma
+entidade. `emitir` com `destinatarios` explícitos não filtra ativo/acesso (`:153-160`): o produtor da decisão filtra
+`autor.is_active and autor.has_access and autor.id != quem_decidiu`. Na tela, ícones para os dois kinds em `NotificacaoItem.tsx:7-16` (sem
 entrada cai em `Bell`).
 
 ## R12 — Verify: harness e regressão

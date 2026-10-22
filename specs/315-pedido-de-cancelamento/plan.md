@@ -118,14 +118,14 @@ frontend/apps/internal/src/components/{CalendarGrid,DayTimelineView}.tsx   # too
 1. **Setup** — ponteiro, `env315.ps1`, migration + colunas + constantes (o verify precisa das colunas para semear);
    `flask db upgrade` no `manto_local`.
 2. **Foundational** — `verify_315.py` inteiro (cenários 1–28), rodado **vermelho** contra o código de hoje (só a
-   migration aplicada), primeira saída em `verify_315_primeira_falha.txt`. Verdes esperados: 9 (a trava da 312), 16
-   (o pedido já não tranca), 19 parcial (o 403 do autor já existe), 27 (regressão), 28.
+   migration aplicada), primeira saída em `verify_315_primeira_falha.txt`. Verdes esperados: só 27 (regressão) e 28
+   (limpeza) — os cenários usam a rota nova, que ainda não existe.
 3. **H1 — pedir** — `solicitacao_ops.solicitar` (forma, recusas, claim, histórico, auditoria), o produtor
-   `evento.pedido_cancelamento`, as rotas (nova + alias), a resposta com o detalhe. Verdes: + 1–8, 17.
+   `evento.pedido_cancelamento`, as rotas (nova + alias), a resposta com o detalhe. Verdes: + 1–5, 7–9, 16, 17, 26.
 4. **H2 — ver enquanto espera** — o corte no detalhe e na fila, `pedido_bloqueado`, a faixa com `pedidos`, o lote do
-   satélite no resumo/detalhe/portal, o portal. Verdes: + 10–15, 25.
+   satélite no resumo/detalhe/portal, o portal. Verdes: + 6, 10–12, 14, 15.
 5. **H3 — decidir** — `recusar` (claim, resposta), o fecho em `ao_cancelar` (cinco colunas, avisos lidos, resposta
-   por pedido e por dia), a resposta na exclusão, concorrência, autor sem acesso. Verdes: + 18–24, 26.
+   por pedido e por dia), a resposta na exclusão, concorrência, autor sem acesso. Verdes: + 13, 18–25.
 6. **Telas** — tipos, hooks, `PedirCancelamentoDialog`, menu e quadro do `EventHeader`, recusa com confirmação, o
    diálogo de cancelar com o pedido acima (e o texto da Q9), a faixa, o selo e os tooltips, a fila "Cancelamentos" e
    os menus, os ícones do sino. Typecheck.

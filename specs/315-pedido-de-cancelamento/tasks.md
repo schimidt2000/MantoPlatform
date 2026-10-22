@@ -39,10 +39,12 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 ## Phase 2: Foundational (bloqueia as histórias)
 
 - [ ] T004 Escrever `specs/315-pedido-de-cancelamento/verify_315.py` inteiro, cenários 1–28 da spec, importando o harness
-      da 306 como a 312 faz (`verify_312.py:7-13`, `:44-46`: `GoogleFalso`, disjuntor, e-mail falso, `_usuario`,
+      da 306 como a 312 faz (`verify_312.py:7-13`, `:46-49`: `GoogleFalso`, disjuntor, e-mail falso, `_usuario`,
       `_externo`, `_sob_mutacao` `verify_306.py:6895`); prefixo `__v315_`; eventos descartáveis em 2050; vendas de
       vários dias criadas pelos endpoints de agrupar; cachê pago marcado pelo endpoint de status; o pedido "de antes do
-      deploy" (cenário 25) semeado por SQL nas três colunas, como `verify_312.py:225-229`; sai 2 se houver backend local
+      deploy" (cenário 25) semeado por SQL nas três colunas (o molde `verify_312.py:225-229` semeia só `at` e `by_id`;
+      aqui também o `reason`); o cenário 26 exige o 403 também na rota nova (404 hoje — senão passaria contra o código de
+      hoje); o 6 confere o 409 na porta e o `pedido_bloqueado` no detalhe; sai 2 se houver backend local
       rodando; `--so=` para iterar
 - [ ] T005 Rodar o `verify_315.py` contra o código de hoje e guardar a saída em
       `specs/315-pedido-de-cancelamento/verify_315_primeira_falha.txt`. Esperado: verdes só 27 (regressão) e 28
@@ -54,89 +56,114 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 ## Phase 3: US1 — Pedir (P1) 🎯
 
 **Meta**: o Comercial pede com motivo, alcance e devolução; o pedido grava e avisa os Superadmins.
-**Teste independente**: cenários 1–8 e 17.
+**Teste independente**: cenários 1–5, 7–9, 16, 17, 26 (o 6 inteiro precisa do detalhe da US2).
 
 - [ ] T006 [US1] `app/constants.py` (ao lado de `:616-649`): `CODIGO_PEDIDO_PENDENTE = "pedido_pendente"`,
-      `CODIGO_SEM_PEDIDO = "sem_pedido"` e a união `CODIGOS_RECUSA_DO_PEDIDO` (com `cancelado`, `ensaio`, `cache_pago`);
-      os dois kinds `KIND_PEDIDO_CANCELAMENTO`, `KIND_PEDIDO_DECIDIDO` se o catálogo do sino os lê de constantes
+      `CODIGO_SEM_PEDIDO = "sem_pedido"` e a união `CODIGOS_RECUSA_DO_PEDIDO` (com `cancelado`, `ensaio`,
+      `cache_pago`). Os kinds do sino **não** moram aqui: ficam no catálogo de `notificacoes_ops.py:54-60` (T007)
 - [ ] T007 [US1] `app/notificacoes/notificacoes_ops.py`: os dois kinds no catálogo e em `DESTINATARIOS_POR_KIND`
-      (`:54-77`; receita na docstring `:16-18`); `notificar_pedido_cancelamento(event, *, carimbo, preso, autor)` no
-      molde de `notificar_evento_sumiu_google` (`:355-389`) — urgente em ≤ 7 dias ou passado (`:272`, `:311`), corpo com
-      data · venda · recebido · N escalados · alcance · quem pediu · motivo, cortado em 500; `notificar_pedido_decidido(
-      event_id, titulo, *, autor_id, decisao, texto, link)` com `destinatarios=[autor]` (`:158-160`), sem entidade no
-      "excluído"
-- [ ] T008 [US1] `app/calendar/solicitacao_ops.py` (NOVO, research R1): `ler_corpo` (forma R4, campos
-      `motivo`/`alcance`/`devolucao_*`/`venda_nova`, todos os erros de uma vez; venda virtual só motivo; Nada sem
-      nome/PIX), `alcance_do_evento` (R3: sem grupo → todos; satélite → so_este_dia; principal com outro dia vivo →
-      obrigatório), `bloqueio_do_pedido(event, alcance)` (ensaio pelo tipo; cachê pago pela régua
-      `cancel_ops._papeis_com_cache_pago(ids)` `:2203-2221` nos dias que o pedido alcança, frase `FRASE_CACHE_PAGO`
-      `:2224`), e `solicitar(event, corpo, actor, *, caminho_velho)`: `exigir_evento_vivo` (`cancel_ops.py:3113-3117`),
-      400, 409 ensaio/cache_pago, claim `UPDATE … WHERE deletion_requested_at IS NULL AND cancelled_at IS NULL` (molde
-      `sumico_ops.py:225-240`; perdeu → 409 cancelado ou pedido_pendente com o nome), `EventLog` sem `created_at`,
-      `_log_sync("cancel_requested", …)` (`routes.py:376`), o aviso por `notificar_pedido_cancelamento` com
-      `preso_ao_evento` (`sumico_ops.py:178-207`, import tardio), commit; `serializar_devolucao` tolerante a JSON
-      corrompido
-- [ ] T009 [US1] `app/api/agenda_write.py`: nas views de hoje (`:908-928`, `:932-948`) as regras novas
+      (`:54-77`; receita na docstring `:15-17`); `notificar_pedido_cancelamento(event, *, carimbo, n_escalados,
+      autor_nome)` no molde de `notificar_evento_sumiu_google` (`:355-386`) — urgente em ≤ 7 dias ou passado (`:272`,
+      `:311`), corpo com data · venda · recebido · N escalados · alcance · quem pediu · motivo, cortado em 500;
+      `notificar_pedido_decidido(event_id, *, autor, quem_decidiu_id, titulo, corpo, link)` com
+      `destinatarios=[autor]` (`:153-160` não filtra: o produtor filtra `autor.is_active and autor.has_access and
+      autor.id != quem_decidiu_id`), sem entidade e sem link no "excluído"
+- [ ] T008 [US1] `app/calendar/solicitacao_ops.py` (NOVO, research R1): `ler_corpo` (forma R4: `motivo`, `alcance`,
+      `devolucao_*`, `venda_nova` — esta proibida fora do pedido de um dia só —, todos os erros de uma vez; venda
+      virtual só motivo; Nada sem nome/PIX; pelo caminho velho sem `devolucao` e sem `alcance` → colunas nulas),
+      `alcance_do_evento` (R3), `bloqueio_do_proprio_dia(event)` (ensaio pelo tipo; cachê pago **do próprio dia** pela
+      régua `cancel_ops._papeis_com_cache_pago(ids)` `:2203-2218`, frase `FRASE_CACHE_PAGO` `:2224`),
+      `n_escalados(ids)` pela régua do cancelamento (`len(cancel_ops.elenco_dos_dias(ids))`, ~`:2180-2197`: sem
+      convite recusado e sem a vaga de presença; nos dias que o pedido alcança) e `solicitar(event, corpo, actor, *,
+      caminho_velho)` na ordem do contrato: `exigir_evento_vivo` (`cancel_ops.py:3113-3117`) → 409 ensaio → 409
+      cache_pago do próprio dia → 400 campos → 409 cache_pago dos outros dias que "todos" alcança → claim `UPDATE …
+      WHERE deletion_requested_at IS NULL AND cancelled_at IS NULL` com `synchronize_session=False` (molde
+      `sumico_ops.py:225-238`) e `db.session.refresh(event)` nos **dois** ramos (perdeu → 409 cancelado ou
+      pedido_pendente com o nome); nada no request atribui as colunas no objeto fora do UPDATE (autoflush); `EventLog`
+      sem `created_at`; `_log_sync("cancel_requested", …)` (`routes.py:376`); o aviso; commit. `serializar_devolucao`
+      tolerante a JSON corrompido
+- [ ] T009 [US1] `app/api/agenda_write.py`: nas views de hoje (`:908-930`, `:932-948`) as regras novas
       `/events/<id>/pedido-cancelamento` (POST/DELETE) além das velhas (R9 — os nomes de endpoint não mudam, o 9b do
       `verify_312` segue certo); o POST chama `solicitacao_ops.solicitar` com `caminho_velho` pela `request.url_rule`;
-      erros por `json_error(..., codigo=…)`; 200 com `serialize_event_detail` (molde do devolver-ao-google); docstrings
-      com o RBAC (papel real, `_can_request_delete` `:185-189`)
-- [ ] T010 [US1] `app/calendar/cancel_ops.py`: tirar `solicitar_exclusao` e `recusar_solicitacao` (`:3502-3541`, que
-      gravavam o `EventLog` em SP — dívida 76) e apontar quem as chamava para o módulo novo (`git grep`)
-- [ ] T011 [US1] Rodar `verify_315.py '--so=1,2,3,4,5,6,7,8,17'` — verdes; os outros seguem vermelhos; commit
+      erros por `json_error(..., codigo=…)`; 200 com `serialize_event_detail` (molde do devolver-ao-google); o DELETE
+      continua no `recusar_solicitacao` de hoje até a T018 (só ganha a rota nova e o gate `_can_delete`, papel real);
+      docstrings com o RBAC
+- [ ] T010 [US1] `app/calendar/cancel_ops.py`: tirar **só** `solicitar_exclusao` (`:3502-3521`, que gravava o
+      `EventLog` em SP — dívida 76); o único chamador é `agenda_write.py:922`. O `recusar_solicitacao` (`:3524-3541`) sai
+      na T018
+- [ ] T011 [US1] Rodar `verify_315.py '--so=1,2,3,4,5,7,8,9,16,17,26'` — verdes; os outros seguem vermelhos; commit
       `feat(315): pedir — a forma da 306, as recusas, o claim e o aviso aos Superadmins`
 
-**Checkpoint**: verdes 1–9, 16, 17, 27, 28.
+**Checkpoint**: verdes 1–5, 7–9, 16, 17, 26, 27, 28.
 
 ---
 
 ## Phase 4: US2 — Ver enquanto espera (P1)
 
 **Meta**: quadro com o corte, faixa, selo, herança do satélite e portal.
-**Teste independente**: cenários 10–15 e 25.
+**Teste independente**: cenários 6, 10–12, 14, 15 (o 13 e o 25 fecham na US3: pedem a decisão).
 
-- [ ] T012 [US2] `app/calendar/solicitacao_ops.py`: `serializar_para(event, *, flags, usuario)` — o bloco do pedido com
-      o corte de `data-model.md` (motivo/autor por `show_comercial`; modo/valor por `show_comercial`; nome/PIX por
-      `show_financeiro` ou autor); `solicitacoes_da_venda(eventos) -> dict[int, datetime]` (uma consulta pelos
-      `group_leader_id` distintos, alcance `todos` ou nulo, R6); `faixa_das_solicitacoes()` (total exato + até 100
-      `{id, title, start_at}` por urgência, sem dinheiro/motivo/autor, molde `sumico_ops.faixa_sumidos` `:542-580`)
-- [ ] T013 [US2] `app/api/agenda_read.py`: o bloco `deletion_request` (`:854-862`) pelo `serializar_para`;
-      `pedido_bloqueado` (só se `can_request_delete` e não pendente); `pedido_da_venda` no satélite (lê o principal
-      direto, um evento); `serialize_event_summary(event, pedido_da_venda=None)` (`:70-95`) com `situacao`
-      `exclusao_solicitada` herdada; a busca (`:138`) com o lote
-- [ ] T014 [US2] `app/api/agenda.py`: o mês (`:71`) e o dia (`:104`) chamam o lote uma vez; a faixa (`:160-172`) ganha
-      `pedidos` pelo mesmo gate `_ve_faixa_sumidos` (`:154-157`), com `total`/`items` intactos
-- [ ] T015 [US2] `app/calendar/cancel_ops.py`: os `pendentes[]` da fila (`:3617-3629`) pelo `serializar_para` com
-      `ver_motivo` (`:3605`) — alcance e devolução, e o corte também no "Ver como"
+- [ ] T012 [US2] `app/calendar/solicitacao_ops.py`: `serializar_para(event, *, flags, usuario, impersonando)` — o bloco
+      do pedido com o corte do `data-model.md`: motivo/autor e modo/valor por `show_comercial`; nome/PIX por
+      `show_comercial` **e** (`show_financeiro` **ou** o autor sem "Ver como"); `flags is None` (chamador interno) libera
+      tudo, como hoje; `solicitacoes_da_venda(eventos) -> dict[int, datetime]` (uma consulta pelos `group_leader_id`
+      distintos, alcance `todos` ou nulo, R6); `faixa_das_solicitacoes()` (função própria: `sumico_ops.faixa_sumidos`
+      `:542-580` fica intacta — o `verify_303.py:1955` a chama direto e confere `total` e `items` só do sumiço);
+      `escolha_do_alcance(event)` — no principal com outro dia vivo, `{dias: N, proximo: {id, start_at}}` pelo mesmo
+      critério da passagem da 306 (`cancel_ops.py:1220-1225`, pula compromisso interno), para a tela não escolher o dia
+- [ ] T013 [US2] `app/api/agenda_read.py` `serialize_event_detail(event, user, impersonate)` (`:814`, `flags`
+      `:822`): o bloco `deletion_request` (`:854-862`) pelo `serializar_para` com `user` (não `current_user`);
+      `pedido_bloqueado` (o bloqueio do próprio dia; só se `can_request_delete` e não pendente) e `escolha_do_alcance`;
+      `pedido_da_venda` e `situacao = exclusao_solicitada` no satélite que herda (lê o principal direto, um evento) —
+      tudo **antes** do retorno antecipado do ENSAIO (`:903-905`); `serialize_event_summary(event,
+      pedido_da_venda=None)` (`:70-95`) com a `situacao` herdada; o **mês** (`build_agenda_month`, `:128-138`, chamado
+      de `agenda.py:48`) com o lote
+- [ ] T014 [US2] `app/api/agenda.py`: a **busca** (`api_agenda_search`, `:51-77`, a lista em `:71`) e o **dia** (`:104`)
+      chamam o lote uma vez; a faixa (`:160-172`) ganha `pedidos` por `faixa_das_solicitacoes()`, pelo mesmo gate
+      `_ve_faixa_sumidos` (`:154-157`), com `total`/`items` intactos
+- [ ] T015 [US2] `app/calendar/cancel_ops.py` `listar_cancelamentos(*, flags, mes, devolucao)` (`:3564`): ganha
+      `usuario` (e a view `agenda_write.py:985-986` passa `current_user`); os `pendentes[]` (`:3611-3625`) pelo
+      `serializar_para` com `ver_motivo` (`:3605`) — alcance e devolução, e o corte também no "Ver como"
 - [ ] T016 [US2] `app/talent_portal/portal_ops.py`: `em_confirmacao` (`:321`) = marca ou pedido ou pedido da venda;
-      `_role_summary` (`:268-332`) recebe o lote; as listas da agenda (`:357-400`) e do histórico (`:936`) chamam o lote
-      uma vez; o comentário de `:318-320` atualizado (sem motivo; uma consulta por lista)
-- [ ] T017 [US2] Rodar `verify_315.py '--so=10,11,12,13,14,15,25'` e os de US1 — verdes; commit `feat(315): ver
-      enquanto espera — o corte da Q6, a faixa, o selo, o satélite e o portal`
+      `_role_summary` (`:268-332`) recebe o lote; `get_agenda` (o `resumo` de `:398`, sobre convites, próximos e
+      passados) e `get_historico` (`:936`) chamam o lote uma vez; o comentário de `:318-320` atualizado (sem motivo;
+      uma consulta por lista)
+- [ ] T017 [US2] Rodar `verify_315.py '--so=6,10,11,12,14,15'` e os de US1 — verdes; commit `feat(315): ver enquanto
+      espera — o corte da Q6, a faixa, o selo, o satélite e o portal`
 
-**Checkpoint**: verdes 1–17, 25, 27, 28.
+**Checkpoint**: verdes 1–12, 14–17, 26, 27, 28.
 
 ---
 
 ## Phase 5: US3 — Decidir (P1)
 
 **Meta**: recusar, cancelar e excluir fecham o pedido e respondem a quem pediu, uma vez.
-**Teste independente**: cenários 18–24 e 26.
+**Teste independente**: cenários 13, 18–25.
 
 - [ ] T018 [US3] `app/calendar/solicitacao_ops.py`: `recusar(event, *, actor, motivo)` — claim `UPDATE … SET <cinco
-      colunas>=NULL WHERE deletion_requested_at = :carimbo_lido` (perdeu → 409 `sem_pedido`), `EventLog` sem
-      `created_at`, `_log_sync("cancel_request_refused", …)`, `marcar_lidas_por_entidade` (`notificacoes_ops.py:458-474`),
-      resposta ao autor (não a quem decide sendo o autor; não a autor sem acesso), commit; a view `DELETE`
-      (`agenda_write.py:932-948`) chama com 403 para todo papel menos o Superadmin real
+      colunas>=NULL WHERE deletion_requested_at = :carimbo_lido` com `refresh(event)` (perdeu → 409 `sem_pedido`),
+      `EventLog` sem `created_at`, `_log_sync("cancel_request_refused", …)`,
+      `marcar_lidas_por_entidade("calendar_event", id, kind="evento.pedido_cancelamento")` (`notificacoes_ops.py:458-474`
+      — sempre com o kind, senão marca o `pedido_decidido`), resposta "Pedido recusado — <título>: <motivo>" (sem motivo:
+      "Pedido recusado — <título>"), commit; a view `DELETE` (`agenda_write.py:932-948`) passa a chamá-lo e o
+      `recusar_solicitacao` de `cancel_ops.py:3524-3541` sai (único chamador `agenda_write.py:942`)
 - [ ] T019 [US3] `app/calendar/solicitacao_ops.py` `fechar_no_cancelamento(dia, *, alcance, novo_principal)` e
       `app/calendar/cancel_ops.py`: `ao_cancelar` (`:1594-1602`) passa a chamá-lo (import tardio; assinatura intacta — o
-      espião do `verify_306.py:384-412`); as três linhas que zeravam o pedido em `_encerrar_os_dias` (`:2059-2061`) saem
-      (o fecho zera as cinco, lendo autor/alcance/carimbo antes); avisos lidos; resposta por pedido com o texto da forma
-      (todos / corte / passagem com o `novo_principal`); quem cancelou = `dia.cancelled_by_id` (`:2056`)
-- [ ] T020 [US3] `app/api/agenda_write.py` `api_delete_event` (`:669-718`): antes de `_delete_event_flow`, guardar autor e
-      título do pedido; depois do commit, `notificar_pedido_decidido(..., decisao="excluido", link=None)` em transação
-      própria (falha não desfaz a exclusão; `apagar_por_entidade` `routes.py:354` já apaga os avisos do pedido)
-- [ ] T021 [US3] Rodar `verify_315.py '--so=18,19,20,21,22,23,24,26'` e os anteriores — verdes; `verify_306` e
+      espião do `verify_306.py:384-412` envolve e chama o real); as três linhas que zeravam o pedido em
+      `_encerrar_os_dias` (`:2059-2061`) saem (o fecho zera as cinco, lendo autor/alcance/carimbo antes); avisos do
+      pedido lidos (com o kind); quem cancelou = `dia.cancelled_by_id` (`:2056`); as respostas, literais: avulso ou
+      "todos" → "Evento cancelado — <título> (dd/mm)"; corte de um dia → "Dia dd/mm cancelado — <título>: a venda segue
+      nos outros dias"; passagem (o 1º dia sozinho) → "Dia dd/mm cancelado — <título>: a venda passou para o dia dd/mm;
+      os outros dias seguem". O pedido legado num ensaio, que o ato apaga do banco (`:2068`), sai sem resposta (aceito:
+      ensaio não recebe pedido novo)
+- [ ] T020 [US3] `solicitacao_ops.responder_na_exclusao(autor_id, titulo, carimbo, *, quem_excluiu)` e
+      `app/api/agenda_write.py` `api_delete_event` (`:669-718`): antes de `_delete_event_flow`, guardar autor, título e
+      carimbo do pedido (o objeto morre no commit, `routes.py:4586`); depois de `deleted`, chamar
+      `responder_na_exclusao` em transação própria — "Evento excluído — <título>", sem entidade e sem link; não responde
+      se quem exclui é o autor; falha no aviso não desfaz a exclusão (`apagar_por_entidade` `routes.py:354` já apaga os
+      avisos do pedido). Corrida aceita: uma recusa que commita entre a leitura e a trava do núcleo
+      (`routes.py:~4563`) dá ao autor "recusado" e depois "excluído" — registrada no research R10
+- [ ] T021 [US3] Rodar `verify_315.py '--so=13,18,19,20,21,22,23,24,25'` e os anteriores — verdes; `verify_306` e
       `verify_312` sem regressão; commit `feat(315): decidir — recusar, o fecho no cancelamento e a resposta na exclusão`
 
 **Checkpoint**: todos os cenários 1–28 verdes.
@@ -157,7 +184,8 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       motivo em `textarea`; Tudo/Parte/Nada sem opção marcada; valor (`MoneyInput`) em Parte; nome e PIX em Tudo e
       Parte; num dia só, só Parte/Nada e o novo valor da venda; o alcance no 1º dia com outro dia vivo (escolha sem
       marcar, "Todos os N dias" / "Só este dia — a venda passa para o dia dd/mm", N e o dia seguinte do bloco `group`,
-      `agenda_read.py:706-752`); outro dia: "vale só para ele"; venda virtual: só o motivo; "o que está em jogo" com
+      `escolha_do_alcance` do detalhe — o servidor diz N e o próximo dia, a tela não calcula); outro dia: "vale só
+      para ele"; venda virtual: só o motivo; "o que está em jogo" com
       venda e recebido que a tela já tem (sem número de escalados — esse o servidor conta e vai no aviso) e as linhas do
       que o cancelamento faz (e-mail aos escalados, multa decidida pelo Superadmin, o Casting tira e avisa, ensaio cai
       junto); "Depois de enviado, só o Superadmin fecha o pedido"; botão só com tudo preenchido; erros do servidor no
@@ -172,14 +200,17 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       com motivo opcional; "Analisar e decidir" (`:474-481`) passa o pedido ao `ExcluirEventoDialog` (`:522-527`)
 - [ ] T027 [US3] `components/EventDetail/ExcluirEventoDialog.tsx`: prop opcional `pedido` mostrada depois de
       `ResumoImpacto` (`:517`), só leitura, sem copiar (motivo, alcance, devolução completa); o diálogo continua abrindo
-      vazio (`:177-186`, `:207-223`); o texto "Aparece para quem abre o evento." (`:589`) passa a dizer a régua da 1c-Q9
+      vazio (`:177-186`, `:207-223`); o pedido aparece sempre que o detalhe trouxer `deletion_request`, também quando o
+      diálogo abre pelo menu "Excluir ou cancelar"; valores por `formatBRL` (`@manto/money`); o texto "Aparece para quem
+      abre o evento." (`:589`) passa a dizer a régua da 1c-Q9
 - [ ] T028 [P] [US2] `components/FaixaSumidosGoogle.tsx` e `lib/sumidosGoogle.ts`: tipo com `pedidos?` (`:15-22`); a
       segunda frase na mesma linha de 40 px (`:77`, `:82-118`), cada uma com o seu botão (`aria-expanded`,
       `aria-controls`), o seu `aberto`/`ref`/lista (`:31-34`, `:123-160`); 1 pedido → link ao evento, N → lista com
       links; `visivel`/`useFaixaSumidosVisivel` por `total > 0 || pedidos.total > 0` (`:36-41`, `sumidosGoogle.ts:54-63`);
       frases curtas em 375 px
 - [ ] T029 [P] [US2] `components/SeloSituacao.tsx` (`:32`, `:37-55`): o ramo `exclusao_solicitada` — badge neutra
-      "Cancelamento pedido", tooltip "Cancelamento pedido em dd/mm/aaaa"; `CalendarGrid.tsx:78-82` e
+      "Cancelamento pedido", tooltip "Cancelamento pedido em dd/mm/aaaa" — e só "Cancelamento pedido" quando vier sem
+      data (as listas de `event_situacao` — ficha da cliente, formulários, figurino, tags 3D — mandam só o código); `CalendarGrid.tsx:78-82` e
       `DayTimelineView.tsx:124-127` com o tooltip do pedido no chip
 - [ ] T030 [P] [US3] `pages/EventosCancelamentosPage.tsx`: título "Cancelamentos" (`:158`), a tabela "Aguardando
       decisão" (`:174-228`) com alcance e devolução (corte pelo que vier) e o link "Decidir" (`:217-219`);
@@ -193,7 +224,9 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 ## Phase 7: Polimento
 
 - [ ] T033 Rodada inteira do `verify_315.py` duas vezes seguidas; limpeza com zero sobra
-- [ ] T034 [P] Regressão (a lista da T003) e `ruff check` nos tocados contra HEAD
+- [ ] T034 [P] Regressão (a lista da T003) e `ruff check` nos tocados contra HEAD — nota: o cenário 12 do
+      `verify_303` (`:2374-2377`, `:2582`) passa a gerar `evento.pedido_cancelamento` aos Superadmins do `manto_local`;
+      conferir que a limpeza dele (por `entity_type`, `:967`) os leva
 - [ ] T035 Tela aberta (skill `manto-conferir-tela`) pela lista do `quickstart.md` §3 — interno (desktop e 375 px) e
       portal (375×812), com o Google dublado
 - [ ] T036 [P] `docs/01` (cabeçalho e head; §2.2 as duas colunas; §3.3 os endpoints e o alias; §3.13.5 os dois kinds;
@@ -204,7 +237,8 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       Session)
 - [ ] T038 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
 - [ ] T039 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
-      **só quando o dono pedir**, à noite
+      **só quando o dono pedir**, à noite; depois do push, a sonda: um `/api/` com JSON e o `GET
+      /api/events/sumidos-google` com a chave `pedidos` trazendo o 1350 (SC-006)
 
 ---
 
@@ -226,9 +260,12 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 | Fase | Verdes | Vermelhos |
 |---|---|---|
 | Foundational (T005, contra o código de hoje) | 27, 28 | 1–26 |
-| US1 | + 1–9, 16, 17 | 10–15, 18–26 |
-| US2 | + 10–15, 25 | 18–24, 26 |
+| US1 | + 1–5, 7–9, 16, 17, 26 | 6, 10–15, 18–25 |
+| US2 | + 6, 10–12, 14, 15 | 13, 18–25 |
 | US3 | todos | — |
+
+O tasks reagrupa os cenários da spec de propósito (spec: H1 = 1–9, H2 = 10–17, H3 = 18–28): cada cenário fica verde na
+fase que constrói o que ele exige.
 
 ## Estratégia
 

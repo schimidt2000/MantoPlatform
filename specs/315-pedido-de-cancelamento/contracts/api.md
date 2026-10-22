@@ -19,12 +19,13 @@ Corpo (forma do cancelar da 306):
 - `alcance`: só no principal com outro dia vivo (obrigatório lá; enviado fora dele → 400 `fields.alcance`).
 - `devolucao`: obrigatória (menos na venda virtual, onde é ignorada); `valor` em Parte; `nome`/`pix` em Tudo e Parte.
 - `venda_nova`: obrigatória no pedido de um dia só (satélite, ou principal com `so_este_dia`); proibida fora dele.
-- Pelo **alias**: o corpo velho `{motivo}` é aceito sem `devolucao` (pedido "sem devolução informada").
+- Pelo **alias**: o corpo velho `{motivo}` é aceito sem `devolucao` e sem `alcance` (pedido "sem devolução
+  informada"; alcance nulo, lido como "todos").
 
-Ordem das respostas: 404 → 403 → 409 `cancelado` (trava da 312) → 400 `fields.{motivo, alcance, devolucao_modo,
-devolucao_valor, devolucao_nome, devolucao_pix, venda_nova}` (todos de uma vez) → 409 `ensaio` → 409 `cache_pago`
-(com os dias, frase da 306) → claim → 409 `pedido_pendente` (`message`: "Já existe um pedido de <nome> aguardando o
-Superadmin").
+Ordem das respostas (a da 306: estado antes da forma): 404 → 403 → 409 `cancelado` (trava da 312) → 409 `ensaio` → 409
+`cache_pago` do próprio dia (frase da 306) → 400 `fields.{motivo, alcance, devolucao_modo, devolucao_valor,
+devolucao_nome, devolucao_pix, venda_nova}` (todos de uma vez) → 409 `cache_pago` dos outros dias que "todos" alcança
+(com os dias) → claim → 409 `pedido_pendente` (`message`: "Já existe um pedido de <nome> aguardando o Superadmin").
 
 200: o **detalhe do evento** (`serialize_event_detail`).
 
@@ -44,12 +45,15 @@ decidido"). 200: o detalhe do evento.
   "devolucao": {"modo": "parte", "valor": "600.00", "nome": "…", "pix": "…"},
   "venda_nova": "1800.00"
 },
-"pedido_bloqueado": {"codigo": "ensaio | cache_pago", "frase": "…"}
+"pedido_bloqueado": {"codigo": "ensaio | cache_pago", "frase": "…"},
+"escolha_do_alcance": {"dias": 3, "proximo": {"id": 1, "start_at": "…"}}
 ```
 
 Corte por papel em `data-model.md` (tabela "Leitura da devolução"): para quem não trata do cancelamento o bloco traz
-só `requested_at` e `alcance`. `pedido_bloqueado` só quando o evento recusaria o pedido (ensaio; cachê pago em algum dia
-que o pedido alcançaria) e o usuário pode pedir. No satélite cujo principal tem pedido de "todos", `situacao =
+só `requested_at` e `alcance`. `pedido_bloqueado` só quando o evento recusaria o pedido pelo **próprio dia** (ensaio; cachê pago
+nele) e o usuário pode pedir — cachê pago só noutro dia não bloqueia o item: "Só este dia" vale, e "Todos os dias"
+leva o 409 com os dias. `escolha_do_alcance` só no principal com outro dia vivo: N dias vivos e o dia que receberia a
+venda (o critério da passagem da 306, que pula compromisso interno). No satélite cujo principal tem pedido de "todos", `situacao =
 exclusao_solicitada` e um bloco `pedido_da_venda: {requested_at, principal_id}` (só leitura; o pedido é do principal).
 
 ## `GET /api/events/sumidos-google` (faixa) — chave nova

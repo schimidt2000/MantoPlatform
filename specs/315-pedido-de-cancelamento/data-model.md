@@ -42,9 +42,10 @@ Saídas que gravam zeram as **cinco** colunas; a exclusão as leva junto com a l
 | `requested_at`, `alcance` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `requested_by`, `requested_by_id`, `reason` | ✓ | ✓ | ✓ | ✓ | — |
 | `devolucao.modo`, `devolucao.valor`, `venda_nova` | ✓ | ✓ | ✓ | ✓ | — |
-| `devolucao.nome`, `devolucao.pix` | — (só o autor) | ✓ | ✓ | ✓ | — |
+| `devolucao.nome`, `devolucao.pix` | — (só o autor) | ✓ | ✓ | ✓ (sem "Ver como") | — |
 
-Pelo papel **em uso** (o "Ver como" vale); o autor é comparado pelo id do usuário. O **histórico do evento** (o
+Pelo papel **em uso** (o "Ver como" vale); o autor é comparado pelo id do usuário e só conta sem "Ver como" — o
+Superadmin autor em "Ver como Casting" não lê nome nem PIX (nome/PIX exigem também `show_comercial`). O **histórico do evento** (o
 `EventLog` com o motivo) continua só do Superadmin, como hoje (`agenda_read.py:900-901`). Em **Nada**, o JSON não
 guarda nome nem PIX.
 

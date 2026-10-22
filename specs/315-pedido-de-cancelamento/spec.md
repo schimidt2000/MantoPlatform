@@ -233,9 +233,10 @@ cancelado; sem fechar o pedido em cada dia cancelado, sobra pedido aberto em eve
 
 **Pedir**
 
-- **FR-001**: Comercial e Superadmin DEVEM poder pedir o cancelamento de um evento não cancelado pelo item
-  "Solicitar cancelamento" da tela do evento (o atual "Solicitar exclusão"), com o texto "Pede ao Superadmin que
-  cancele este evento — ele recebe o aviso no sino".
+- **FR-001**: Comercial e Superadmin DEVEM poder pedir o cancelamento de um evento não cancelado — o Comercial pelo
+  item "Solicitar cancelamento" da tela do evento (o atual "Solicitar exclusão"), com o texto "Pede ao Superadmin que
+  cancele este evento — ele recebe o aviso no sino"; o Superadmin, que decide direto, pede pela API ou em "Ver como
+  Comercial" (o item não aparece para quem já pode cancelar).
 - **FR-002**: O pedido DEVE exigir motivo (texto de várias linhas).
 - **FR-003**: O pedido DEVE exigir a devolução combinada completa (Q2 = B), na forma do cancelar da 306: modo
   Tudo/Parte/Nada sem opção marcada; valor em Parte; nome e PIX de quem recebe em Tudo e Parte; num dia só, só Parte ou
@@ -246,8 +247,9 @@ cancelado; sem fechar o pedido em cada dia cancelado, sobra pedido aberto em eve
   para ele. O alcance DEVE ser gravado com o pedido e não mudar quando o 1º dia mudar.
 - **FR-005**: O pedido DEVE ser recusado, sem gravar nada nem avisar ninguém, quando: o evento está cancelado; é
   ensaio; algum dia que ele alcança tem cachê pago ao elenco (a mesma régua do cancelar); já existe pedido pendente
-  (nunca sobrescreve — o segundo recebe "Já existe um pedido de <nome>"). Para ensaio e cachê pago, a tela DEVE mostrar
-  o item desabilitado com a frase do servidor.
+  (nunca sobrescreve — o segundo recebe "Já existe um pedido de <nome>"). Para ensaio e cachê pago **no próprio dia**, a
+  tela DEVE mostrar o item desabilitado com a frase do servidor; cachê pago só noutro dia da venda deixa pedir "só este
+  dia" e recusa "todos os dias" com a lista dos dias.
 - **FR-006**: Evento marcado como "sumiu do Google" DEVE aceitar pedido sem mudar a marca; "Devolver ao Google" NÃO
   DEVE fechar o pedido.
 - **FR-007**: Pedir e recusar NÃO DEVEM chamar o Google nem mandar e-mail.
