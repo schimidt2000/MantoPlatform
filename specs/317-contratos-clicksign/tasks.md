@@ -93,18 +93,18 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
       `app/calendar/sumico_ops.py` `preso_ao_evento` (`:178-203`) conta documento ligado como "não vazio" (o sumiço do
       Google não apaga o evento); `verify_306.py` (retrato da passagem e limpeza) conferido; `verify_312` segue verde (as
       rotas `/api/contratos/` estão fora de `PREFIXOS_DA_TELA` de propósito: a trava é no núcleo)
-- [ ] T014 [US1] `app/financeiro/vendas_ops.py` `contract_status_map` + `CONTRACT_STATUS_LABELS`: com integração
+- [X] T014 [US1] `app/financeiro/vendas_ops.py` `contract_status_map` + `CONTRACT_STATUS_LABELS`: com integração
       ligada, as seis situações da venda (FR-019), e a venda sem documento cai na regra antiga do `EventContract`;
       frontend `lib/vendas.ts` (`ContractStatus`) e `pages/VendasPipelinePage.tsx` (`CONTRACT_TONE`) ampliados com
       fallback para valor desconhecido; desligada, como hoje
-- [ ] T015 [P] [US1] Frontend tipos/hook: `frontend/apps/internal/src/lib/agenda.ts` (`EventoDetalhe.contrato?`,
+- [X] T015 [P] [US1] Frontend tipos/hook: `frontend/apps/internal/src/lib/agenda.ts` (`EventoDetalhe.contrato?`,
       `EventMensagens.contrato_canal?/contrato_prazo?`) e `lib/contratos.ts` novo (tipos `ContratoDaVenda`, hooks
       `useCobrarContrato`, `useLigarContrato`, `useDesligarContrato`, `useDescartarContrato`, `useContratosAConferir`,
       invalidando `["event", id]` e `["dashboard"]`)
-- [ ] T016 [US1] `frontend/apps/internal/src/components/EventDetail/ContratoClickSign.tsx` novo (Panel "Situação do
+- [X] T016 [US1] `frontend/apps/internal/src/components/EventDetail/ContratoClickSign.tsx` novo (Panel "Situação do
       contrato": badge da situação, nome do documento, prazo/assinado em, canal, outros documentos) montado em
       `FinanceiroSection.tsx` acima do "Contrato assinado"; chip do `ResumoSection.tsx` pela situação nova com fallback
-- [ ] T017 [US1] Rodar `verify_317` (1–8, 12–15, 23–25 PASS; o 25 inclui agrupar/desagrupar e sumiço do Google) + `npm run typecheck`; commit `feat(317): …`
+- [X] T017 [US1] Rodar `verify_317` (1–8, 12–15, 23–25 PASS; o 25 inclui agrupar/desagrupar e sumiço do Google) + `npm run typecheck`; commit `feat(317): …`
 
 **Checkpoint**: o contrato aparece e é assinado na página do evento sem clique.
 
@@ -124,19 +124,19 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 - [X] T020 [US2] `app/contratos/sincronizar_ops.registrar_cobranca(doc_id, usuario)` + `app/api/contratos_write.py`
       `POST /api/contratos/<id>/cobranca` (COMERCIAL/SA; 409 `nao_cobravel`); comentário `RBAC:` no topo; import em
       `app/api/__init__.py`
-- [ ] T021 [P] [US2] `frontend/apps/internal/src/lib/eventDetail.ts`: exporta `saudacao` e cria
+- [X] T021 [P] [US2] `frontend/apps/internal/src/lib/eventDetail.ts`: exporta `saudacao` e cria
       `buildCobrancaContratoMsg(m, canal, prazo)` (WhatsApp × e-mail; texto da spec/plano); `lib/types.ts`
       `ComercialSummary.contratos?: ContratosResumo | null`
-- [ ] T022 [US2] `copyToClipboard` sai de `EventHeader.tsx:194` para `lib/clipboard.ts` (Home e evento usam o mesmo);
+- [X] T022 [US2] `copyToClipboard` sai de `EventHeader.tsx:194` para `lib/clipboard.ts` (Home e evento usam o mesmo);
       `EventHeader.tsx`: item "📝 Cobrar contrato" no bloco `if (mensagens)` (rótulo único; no cancelado o bloco inteiro
       já some — `can_confirm` zerado), `disabled` + `title` pelo `motivo_bloqueio`, copia e chama `useCobrarContrato`;
       entra na soma `pendente`; `lib/eventAttachments.ts`: os hooks de contrato passam a invalidar `["dashboard"]`
-- [ ] T023 [US2] `components/home/PainelContratos.tsx` novo (molde `PainelCobrancas`: `LinhaDaHome`, `GrupoDeLinhas`,
+- [X] T023 [US2] `components/home/PainelContratos.tsx` novo (molde `PainelCobrancas`: `LinhaDaHome`, `GrupoDeLinhas`,
       `AvisoDeFalha`, botão "Cobrar contrato" que copia e registra, "Cobrado por X em DD/MM", "Abrir evento") e
       `DashboardPage.tsx` (`SectionKey "contratos"` depois de `comercial`, card em `computeSectionStats`, painel na grade,
       `para_agir` somado em `totalPendencias` do "Tudo em dia ✓" de `:1165`); aviso "Integração com a ClickSign
       desligada" só para Superadmin quando `integracao_ligada` é falso; tipo próprio para a `mensagem` da linha
-- [ ] T024 [US2] Rodar `verify_317` (9–11, 16–17 PASS) + typecheck; tela aberta (Home 375 px, COMERCIAL × FINANCEIRO;
+- [X] T024 [US2] Rodar `verify_317` (9–11, 16–17 PASS) + typecheck; tela aberta (Home 375 px, COMERCIAL × FINANCEIRO;
       menu ⋯); commit
 
 **Checkpoint**: histórias 1 e 2 entregam o pedido central.
@@ -152,10 +152,10 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
       (`ja_ligado`, `nao_ligado`, `tipo_fora`, `alterado`)
 - [X] T026 [US3] `app/api/contratos_write.py` (`ligar/desligar/descartar`) e `app/api/contratos_read.py`
       (`GET /api/contratos/a-conferir`, COMERCIAL/FINANCEIRO/SA); `a_conferir` próximos no bloco `contrato` do detalhe
-- [ ] T027 [US3] Frontend: faixa "A conferir" (molde `SugestaoDeEventoFaixa`, `ConfirmDialog` no descartar) nas linhas da
+- [X] T027 [US3] Frontend: faixa "A conferir" (molde `SugestaoDeEventoFaixa`, `ConfirmDialog` no descartar) nas linhas da
       Home e no `ContratoClickSign.tsx`; botão "Desligar" no documento ligado; diálogo "Ligar contrato da ClickSign" na
       página do evento (lista a conferir; Combobox acima de 10)
-- [ ] T028 [US3] Rodar `verify_317` (18–20 PASS) + typecheck + tela; commit
+- [X] T028 [US3] Rodar `verify_317` (18–20 PASS) + typecheck + tela; commit
 
 ---
 
@@ -180,14 +180,14 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
       `CLICKSIGN_SYNC_ENABLED`; atrás de `MANTO_SEM_THREADS`; **dorme 60 s antes de tocar o banco** — o `startCommand`
       roda `flask db upgrade && python seed.py` sem `MANTO_SEM_THREADS` e as colunas novas ainda não existem nesse
       processo) + log na subida quando a integração está desligada, lido só da config (nunca do `SiteSetting`) (XIV)
-- [ ] T032 [US5] Rodar `verify_317` inteiro (26/26); commit
+- [X] T032 [US5] Rodar `verify_317` inteiro (26/26); commit
 
 ---
 
 ## Phase 8: Polimento e transversais
 
-- [ ] T033 `cd frontend && npm run typecheck` (três SPAs); `ruff check` nos tocados; `ruff format` nos novos
-- [ ] T034 Tela aberta de verdade (skill `manto-conferir-tela`) nas telas da spec; prints
+- [X] T033 `cd frontend && npm run typecheck` (três SPAs); `ruff check` nos tocados; `ruff format` nos novos
+- [X] T034 Tela aberta de verdade (skill `manto-conferir-tela`) nas telas da spec; prints
 - [ ] T035 `verify_299`, `verify_312` e `verify_306` (cenários de passagem/limpeza) de novo, sem regressão
 - [ ] T036 Docs: `docs/01` (integração, tabelas, endpoints, §4.3 RBAC, env/trava, comandos; corrige :203/:638),
       `docs/02` (painel e bloco; corrige :2080), `docs/03` (entrada no topo + índice), `docs/04` (contrato é da venda;

@@ -13,12 +13,18 @@ import {
 } from "../../lib/contratos";
 import { buildCobrancaContratoMsg } from "../../lib/eventDetail";
 import { mensagemDaApi } from "../../lib/formulariosAdmin";
-import { SEVERIDADE_TOM, distanciaDaData } from "../../lib/homeListas";
+import { SEVERIDADE_TOM, diaMes, distanciaDaData } from "../../lib/homeListas";
 import { formatDateTime } from "../EventDetail/parts";
 import { AvisoDeFalha, GrupoDeLinhas } from "./GrupoDeLinhas";
 import { LinhaDaHome } from "./LinhaDaHome";
 
 const CANAL = { whatsapp: "WhatsApp", email: "e-mail", sms: "SMS" } as Record<string, string>;
+
+/** Título curto para o botão de sugestão (sem o marcador de teste nem o excesso). */
+function resumir(titulo: string): string {
+  const limpo = titulo.replace(/\[[^\]]*\]/g, "").trim();
+  return limpo.length > 22 ? `${limpo.slice(0, 21)}…` : limpo;
+}
 
 /** Uma venda com contrato a cobrar, vencido, sem contrato ou já passada. */
 function LinhaDoContrato({ linha, podeCobrar }: { linha: LinhaContrato; podeCobrar: boolean }) {
@@ -46,7 +52,9 @@ function LinhaDoContrato({ linha, podeCobrar }: { linha: LinhaContrato; podeCobr
       severidade={linha.severidade}
       cabecalho={
         <>
-          <span className="min-w-0 break-words">{linha.cliente ?? linha.titulo}</span>
+          <Link to={`/events/${linha.event_id}?aba=comercial`} className="min-w-0 break-words hover:underline">
+            {linha.cliente ?? linha.titulo}
+          </Link>
           <span className="font-normal text-muted tabular-nums">evento {formatShortDate(linha.data_evento)}</span>
           <MetricBadge tone={SEVERIDADE_TOM[linha.severidade]} size="xs">
             {linha.selo}
@@ -74,16 +82,16 @@ function LinhaDoContrato({ linha, podeCobrar }: { linha: LinhaContrato; podeCobr
         </>
       }
       acoes={
-        <div className="flex flex-wrap gap-1.5">
-          {cobravel && (
-            <Button type="button" size="sm" loading={cobrar.isPending} onClick={aoCobrar}>
-              Cobrar contrato
-            </Button>
-          )}
+        // Um botão só: dois espremiam o texto na coluna estreita da Home. O nome abre o evento.
+        cobravel ? (
+          <Button type="button" size="sm" loading={cobrar.isPending} onClick={aoCobrar}>
+            Cobrar contrato
+          </Button>
+        ) : (
           <Button asChild variant="outline" size="sm">
             <Link to={`/events/${linha.event_id}?aba=comercial`}>Abrir evento</Link>
           </Button>
-        </div>
+        )
       }
     />
   );
@@ -120,9 +128,12 @@ function LinhaAConferir({ item, podeConferir }: { item: ContratoAConferir; podeC
           )}
         </>
       }
-      acoes={
-        podeConferir ? (
-          <div className="flex flex-wrap gap-1.5">
+      acoes={null}
+    >
+      {/* As escolhas vão numa linha inteira por baixo (`basis-full`): à direita, duas sugestões e
+          o descarte passavam da borda no celular. */}
+      {podeConferir && (
+          <div className="flex basis-full flex-wrap gap-1.5">
             {item.sugestoes.slice(0, 2).map((sugestao) => (
               <Button
                 key={sugestao.event_id}
@@ -133,8 +144,9 @@ function LinhaAConferir({ item, podeConferir }: { item: ContratoAConferir; podeC
                 onClick={() => ligar.mutate({ documentoId: item.documento_id, eventId: sugestao.event_id })}
                 title={sugestao.titulo}
               >
-                É de {sugestao.cliente ?? "evento"}
-                {sugestao.data_evento ? ` (${formatShortDate(sugestao.data_evento)})` : ""}
+                {/* O título distingue duas festas da mesma cliente no mesmo dia (o empate). */}
+                É de “{resumir(sugestao.titulo)}”
+                {sugestao.data_evento ? ` (${diaMes(sugestao.data_evento)})` : ""}
               </Button>
             ))}
             <Button type="button" size="sm" variant="ghost" onClick={() => setDescartando(true)}>
@@ -156,9 +168,8 @@ function LinhaAConferir({ item, podeConferir }: { item: ContratoAConferir; podeC
               }}
             />
           </div>
-        ) : null
-      }
-    />
+      )}
+    </LinhaDaHome>
   );
 }
 
