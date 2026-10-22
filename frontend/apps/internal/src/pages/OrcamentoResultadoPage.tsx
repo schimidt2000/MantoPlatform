@@ -81,7 +81,7 @@ function MensagemWhatsApp({ texto }: { texto: string }) {
       <CardHeader className="flex-row items-center justify-between gap-2 space-y-0">
         <CardTitle>Mensagem para WhatsApp</CardTitle>
         <Button size="sm" onClick={copiar}>
-          {copiado ? "Copiado!" : "Copiar mensagem"}
+          {copiado ? "Mensagem copiada" : "Copiar mensagem"}
         </Button>
       </CardHeader>
       <CardContent>
@@ -102,7 +102,7 @@ function EnvioPorEmail({ entryId }: { entryId: number }) {
   const enviar = () => {
     const alvo = destinatario.trim();
     if (!alvo.includes("@")) {
-      setErro("Digite um e-mail válido.");
+      setErro("Informe um e-mail válido.");
       return;
     }
     setErro(null);
@@ -111,7 +111,7 @@ function EnvioPorEmail({ entryId }: { entryId: number }) {
       {
         onSuccess: () => setEnviado(true),
         onError: (err) =>
-          setErro(err instanceof ApiRequestError ? err.message : "Não foi possível enviar agora."),
+          setErro(err instanceof ApiRequestError ? err.message : "Não foi possível enviar o e-mail. Tente novamente."),
       },
     );
   };
@@ -123,7 +123,7 @@ function EnvioPorEmail({ entryId }: { entryId: number }) {
       </CardHeader>
       <CardContent className="space-y-3">
         <p className="text-sm text-muted">
-          O PDF vai como anexo, a partir de contato@mantoproducoes.com.br.
+          O PDF segue como anexo, enviado por contato@mantoproducoes.com.br.
         </p>
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
@@ -137,7 +137,7 @@ function EnvioPorEmail({ entryId }: { entryId: number }) {
             className="flex-1"
           />
           <Button onClick={enviar} loading={email.isPending} disabled={enviado}>
-            {enviado ? "Enviado!" : "Enviar"}
+            {enviado ? "Enviado" : "Enviar"}
           </Button>
         </div>
         {erro && (
@@ -291,7 +291,7 @@ export function OrcamentoResultadoPage() {
             <CardTitle>Detalhamento do transporte</CardTitle>
             {quote.deslocamento_responsavel === "cliente" && (
               <p className="text-xs text-muted">
-                Deslocamento por conta da contratante — van/carro não incluído.
+                Deslocamento por conta da cliente — van/carro não incluído.
               </p>
             )}
           </CardHeader>

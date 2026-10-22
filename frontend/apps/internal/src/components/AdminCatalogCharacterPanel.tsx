@@ -308,7 +308,7 @@ export function AdminCatalogCharacterPanel({
   }
 
   function handleRemove(character: CatalogCharacter) {
-    if (!window.confirm(`Excluir o personagem "${character.name}"? Essa ação não pode ser desfeita.`)) {
+    if (!window.confirm(`Excluir o personagem "${character.name}"? Esta ação não pode ser desfeita.`)) {
       return;
     }
     deleteCharacter.mutate(character.id);
@@ -330,7 +330,7 @@ export function AdminCatalogCharacterPanel({
             </p>
             <p className="text-xs text-muted">
               Este item não tem elenco — ele se contrata sozinho, então a ficha do figurino é
-              dele mesmo. Ao montar um elenco aqui, ele vira um tema e a ficha passa a ser de
+              dele mesmo. Ao montar um elenco, ele vira um tema e a ficha passa a ser de
               cada personagem.
             </p>
             <FigurinoPicker
@@ -603,7 +603,7 @@ export function AdminCatalogCharacterPanel({
             />
           </div>
           <div>
-            <label className={LABEL}>Ficha de Figurino</label>
+            <label className={LABEL}>Ficha de figurino</label>
             <FigurinoPicker
               value={draft.figurinoSheetId}
               characterName={draft.name}

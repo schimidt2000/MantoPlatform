@@ -146,7 +146,7 @@ def create_acervo_item(
     valid_models = [f for f in (model_files or []) if _has_upload(f)]
     if not valid_models:
         raise Impressao3DValidationError(
-            "files", "Envie pelo menos um arquivo 3D (.stl, .3mf ou .zip)."
+            "files", "Insira pelo menos um arquivo 3D (.stl, .3mf ou .zip)."
         )
     _validate_extension(photo_file, "photo", ACERVO_3D_PHOTO_EXTENSIONS, "JPG ou PNG")
     for model_file in valid_models:

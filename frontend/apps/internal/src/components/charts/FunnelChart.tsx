@@ -21,7 +21,7 @@ interface FunnelChartProps {
  */
 export function FunnelChart({ stages, ratios }: FunnelChartProps) {
   if (stages.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted">Sem dado no período.</p>;
+    return <p className="py-6 text-center text-sm text-muted">Nenhum dado no período.</p>;
   }
   return (
     <ol className="grid grid-cols-2 gap-y-3 sm:flex sm:items-stretch sm:gap-0 sm:overflow-x-auto sm:pb-1" aria-label="Funil do período">

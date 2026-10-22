@@ -629,15 +629,15 @@ export function EventCreatePage() {
         {formResponseId != null && paraEvento.isLoading && <Skeleton className="mt-4 h-14 w-full" />}
         {paraEvento.isError && (
           <div className="mt-4 rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-            Não deu para trazer os dados do formulário:{" "}
-            {mensagemDaApi(paraEvento.error, "tente abrir de novo.")}
+            Não foi possível carregar os dados do formulário:{" "}
+            {mensagemDaApi(paraEvento.error, "tente novamente.")}
           </div>
         )}
         {paraEvento.data?.form_response && (
           <div className="mt-4 rounded-md bg-accent-soft px-4 py-3 text-sm text-ink" role="status">
             Preenchido a partir do formulário de{" "}
             <strong>{paraEvento.data.form_response.contact_name ?? "cliente"}</strong> — confira os
-            campos com o selo <SeloDoFormulario />. Valor, vendedor e título ficam com você.
+            campos com o selo <SeloDoFormulario />. Valor, vendedor e título precisam ser preenchidos.
           </div>
         )}
         {eventosDaCliente.length > 0 && !vinculado && (
@@ -792,7 +792,7 @@ export function EventCreatePage() {
                         <span className="text-xs text-muted">
                           {(() => {
                             const preco = precoDaDuracao(prefill.data, Number(duracaoExtra));
-                            return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, digite o valor";
+                            return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, informe o valor";
                           })()}
                         </span>
                       )}

@@ -163,7 +163,7 @@ export const CAMPANHA = {
 
 /** Dicas para a família depois do pagamento da chamada ao vivo. */
 export const DICAS_DO_DIA = [
-  "Abra o link uns minutinhos antes, para testar câmera e som.",
+  "Abra o link alguns minutos antes, para testar câmera e som.",
   "Deixe a cartinha por perto, para a criança mostrar ao Papai Noel.",
   "Um segundo celular filmando o rosto da criança guarda a melhor parte.",
 ];

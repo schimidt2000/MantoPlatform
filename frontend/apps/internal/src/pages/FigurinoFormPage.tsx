@@ -165,7 +165,7 @@ function NewFigurinoCharacterField({
           onSelect={onChange}
         />
       )}
-      <p className="mt-1 text-xs text-muted">O vínculo é gravado junto com o "Criar ficha".</p>
+      <p className="mt-1 text-xs text-muted">O vínculo é gravado ao clicar em "Criar ficha".</p>
     </div>
   );
 }
@@ -251,7 +251,7 @@ function FigurinoPhotoField({ sheetId, photoUrl }: { sheetId: number; photoUrl: 
           accept="image/jpeg,image/png,image/webp"
           className="max-w-[170px] text-xs text-ink"
           onChange={(e) => handleFile(e.target.files?.[0] ?? null)}
-          aria-label="Enviar foto"
+          aria-label="Inserir foto"
         />
         {photoUrl && (
           <>
@@ -462,7 +462,7 @@ export function FigurinoFormPage() {
             </label>
             <input
               className="h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink"
-              placeholder="Ex: Palhaço, Fada, Cantor, DJ"
+              placeholder="Ex.: Palhaço, Fada, Cantor, DJ"
               value={characterName}
               onChange={(e) => setCharacterName(e.target.value)}
               aria-label="Nome do personagem"
@@ -474,7 +474,7 @@ export function FigurinoFormPage() {
               className="mb-1 block text-xs font-medium text-muted"
               htmlFor="figurino-quantity"
             >
-              Figurinos iguais que temos
+              Figurinos iguais no acervo
             </label>
             <div className="flex items-center gap-2">
               <input
@@ -490,7 +490,7 @@ export function FigurinoFormPage() {
                   ? "Nenhum pronto — a ficha existe, o figurino ainda não."
                   : quantity === 1
                     ? "Um único figurino: dois eventos no mesmo horário não cabem."
-                    : `Dá para escalar este personagem em até ${quantity} eventos ao mesmo tempo.`}
+                    : `Este personagem pode ser escalado em até ${quantity} eventos ao mesmo tempo.`}
               </p>
             </div>
           </div>
@@ -565,7 +565,7 @@ export function FigurinoFormPage() {
                       pieceNameRefs.current[i] = el;
                     }}
                     className="h-9 flex-1 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-                    placeholder="Ex: Blazer azul, Calça preta, Sapato Oxford..."
+                    placeholder="Ex.: Blazer azul, Calça preta, Sapato Oxford…"
                     value={p.name}
                     onChange={(e) => updatePiece(i, { name: e.target.value })}
                     onKeyDown={(e) => handlePieceNameTab(e, i)}

@@ -499,7 +499,7 @@ def save_talent_photo(talent: Talent, *, photo_type: str, file_storage) -> str |
     try:
         url_path = save_file(file_storage, subfolder, filename)
     except ImagemNaoConvertida:
-        return "Não conseguimos ler esta foto. Envie em JPG, PNG ou WEBP."
+        return "Não foi possível ler esta foto. Envie em JPG, PNG ou WEBP."
     if old_path:
         delete_file(old_path)
         invalidar_variantes(old_path, current_app.config["UPLOAD_FOLDER"])

@@ -42,12 +42,12 @@ export function GerarLoteForm() {
   return (
     <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
       <label className="min-w-56 flex-1">
-        <span className="mb-1 block text-sm text-muted">Peça do Acervo (habilitada p/ NFC)</span>
+        <span className="mb-1 block text-sm text-muted">Peça do Acervo (habilitada para NFC)</span>
         <Combobox
           options={options}
           value={itemId}
           onChange={setItemId}
-          placeholder="Escolher peça…"
+          placeholder="Selecionar peça…"
           aria-label="Peça do Acervo habilitada para NFC"
         />
         {fieldError(gerar.error, "item_id") && (
@@ -78,8 +78,8 @@ export function GerarLoteForm() {
       )}
       {geradas !== null && (
         <p className="w-full text-sm text-green" aria-live="polite">
-          {geradas === 1 ? "1 tag gerada" : `${geradas} tags geradas`} — anote o Nº em cada
-          tagzinha ao gravar.
+          {geradas === 1 ? "1 tag gerada" : `${geradas} tags geradas`} — anote o nº em cada
+          tag ao gravar.
         </p>
       )}
     </form>

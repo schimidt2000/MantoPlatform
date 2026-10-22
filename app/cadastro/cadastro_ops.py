@@ -53,7 +53,7 @@ def validate_upload(
     """
     if not file or not file.filename:
         if required:
-            return None, f"Anexe {label}."
+            return None, f"Escolha {label}."
         return None, None
     ext = os.path.splitext(file.filename)[1].lower()
     if ext not in allowed_exts:

@@ -73,8 +73,8 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
             Vincular — tag nº {tag?.sequence} ({tag?.code})
           </DialogTitle>
           <DialogDescription>
-            Show contratado: vincule o evento (a cliente vem de carona). Campanha ou brinde sem
-            show: cadastre a pessoa em Clientes e vincule direto aqui. Escolher já salva; o
+            Show contratado: vincule o evento (a cliente é a do evento). Campanha ou brinde sem
+            show: cadastre a pessoa em Clientes e vincule diretamente. Selecionar já salva; o
             código gravado na tag nunca muda.
           </DialogDescription>
         </DialogHeader>

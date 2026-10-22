@@ -176,7 +176,7 @@ def editar_motivo_do_cancelado(event: CalendarEvent, *, corpo: dict[str, Any] | 
         raise CancelValidationError("Este evento não está cancelado.", status=409, codigo=CODIGO_NAO_CANCELADO)
     novo = _texto(corpo.get("motivo"))
     if not novo:
-        raise CancelValidationError("Explique o motivo do cancelamento.", field="motivo")
+        raise CancelValidationError("Informe o motivo do cancelamento.", field="motivo")
     antigo = event.cancellation_reason or ""
     dias = [
         e for e in eventos if e.id == event.id or (antigo and e.is_cancelled and e.cancellation_reason == antigo)
@@ -967,7 +967,7 @@ def traduzir_erro_de_banco(exc: Exception) -> CancelValidationError | None:
     )
     if codigo_pg == "40P01":
         return CancelValidationError(
-            "Outra pessoa mexeu neste evento ao mesmo tempo: tente de novo.",
+            "Outra pessoa alterou este evento ao mesmo tempo: tente novamente.",
             status=409,
             codigo=CODIGO_TENTE_DE_NOVO,
         )
@@ -1351,7 +1351,7 @@ def _erros_do_corte(pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> dict[s
 
     erros: dict[str, str] = {}
     if not pedido.motivo:
-        erros["motivo"] = "Explique o motivo do cancelamento."
+        erros["motivo"] = "Informe o motivo do cancelamento."
     if conta.venda_nova is None:
         erros["venda_nova"] = f"Informe o novo valor da venda do grupo: maior que zero e até {_brl(conta.venda)}."
     if pedido.imposto_enviado:
@@ -1367,7 +1367,7 @@ def _erros_do_corte(pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> dict[s
         if pedido.valor_invalido or pedido.valor is None or pedido.valor <= 0:
             erros["devolucao_valor"] = "Informe quanto devolve à cliente."
         elif pedido.valor > conta.max_devolucao:
-            erros["devolucao_valor"] = f"Acima do que dá para devolver ({_brl(conta.max_devolucao)})."
+            erros["devolucao_valor"] = f"Acima do que é possível devolver ({_brl(conta.max_devolucao)})."
         elif pedido.valor < conta.minima:
             erros["devolucao_valor"] = _frase_da_minima(conta)
     elif conta.minima > 0:
@@ -1642,7 +1642,7 @@ def _erros_do_pedido(
 
     erros: dict[str, str] = {}
     if not pedido.motivo:
-        erros["motivo"] = "Explique o motivo do cancelamento."
+        erros["motivo"] = "Informe o motivo do cancelamento."
     if pedido.venda_nova_enviada:
         erros["venda_nova"] = "O novo valor da venda só vale ao cancelar um dia do grupo."
     if regime != REGIME_VENDA:
@@ -1658,7 +1658,7 @@ def _erros_do_pedido(
         if pedido.valor_invalido or pedido.valor is None or pedido.valor <= 0:
             erros["devolucao_valor"] = "Informe quanto devolve à cliente."
         elif pedido.valor > conta.max_devolucao:
-            erros["devolucao_valor"] = f"Acima do que dá para devolver ({_brl(conta.max_devolucao)})."
+            erros["devolucao_valor"] = f"Acima do que é possível devolver ({_brl(conta.max_devolucao)})."
     elif modo == MODO_TUDO and (pedido.valor_invalido or pedido.valor is None):
         erros["devolucao_valor"] = "Recarregue a página: falta o total a devolver."
     if modo in (MODO_TUDO, MODO_PARTE) and "devolucao_modo" not in erros:
@@ -3022,7 +3022,7 @@ def gravar_comprovante_no_grupo(
         comprovante = _add_payment_record(event, amount=valor, file_storage=arquivo)
         if comprovante is None:
             raise CancelValidationError(
-                "Informe o valor e anexe o comprovante para adicionar o pagamento.",
+                "Informe o valor e insira o comprovante para registrar o pagamento.",
                 fields={"amount": "Obrigatório", "file": "Obrigatório"},
             )
     elif acao == "editar":
@@ -3353,7 +3353,7 @@ def alterar_devolucao(event: CalendarEvent, *, corpo: dict[str, Any] | None, act
         )
     if regua.teto_e_409 and total > regua.teto:
         raise CancelValidationError(
-            f"Acima do que dá para devolver neste dia ({_brl(regua.teto)}: o pago do grupo menos as "
+            f"Acima do que é possível devolver neste dia ({_brl(regua.teto)}: o pago do grupo menos as "
             "devoluções dos outros dias).",
             status=409,
             codigo=CODIGO_ACIMA_DO_TETO,
@@ -3503,7 +3503,7 @@ def solicitar_exclusao(event: CalendarEvent, *, motivo: str, actor: User) -> Non
     """Registra o pedido do Comercial. O Superadmin decide depois. Commita."""
     motivo = (motivo or "").strip()
     if not motivo:
-        raise CancelValidationError("Explique o motivo da exclusão.")
+        raise CancelValidationError("Informe o motivo da exclusão.")
     if event.is_cancelled:
         raise CancelValidationError("Este evento já está cancelado.")
 

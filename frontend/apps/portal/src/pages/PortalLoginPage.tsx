@@ -11,7 +11,7 @@ import { usePortalLogin } from "../lib/portalAuth";
 
 const loginSchema = z.object({
   login: z.string().min(1, "Informe seu CPF ou e-mail"),
-  password: z.string().min(1, "Informe a senha"),
+  password: z.string().min(1, "Informe sua senha"),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;

@@ -153,7 +153,7 @@ export function RecadosDaTag({ tagId, onFechar }: RecadosDaTagProps) {
         <DialogHeader>
           <DialogTitle>{titulo}</DialogTitle>
           <DialogDescription>
-            O que quem recebeu a luminária escreveu ao encostar o celular na peça
+            Recados de quem recebeu a luminária, escritos ao encostar o celular na peça
             {tag && ` — ${tag.item.name}`}.
           </DialogDescription>
         </DialogHeader>
@@ -187,7 +187,7 @@ export function RecadosDaTag({ tagId, onFechar }: RecadosDaTagProps) {
           <div className="flex flex-col items-center gap-2 py-8 text-center">
             <MessageSquareHeart className="h-7 w-7 text-muted" aria-hidden="true" />
             <p className="text-sm text-muted">
-              Nenhum recado ainda — quem recebeu a luminária ainda não escreveu.
+              Nenhum recado ainda — quem recebeu a luminária não deixou mensagem.
             </p>
           </div>
         )}

@@ -345,7 +345,7 @@ export function TalentDetailPage() {
         <div>
           <Button asChild variant="ghost" size="sm" className="mb-2 -ml-2">
             <Link to={`/talents${t.status === "pending" ? "?status=pending" : ""}`}>
-              ‹ {t.status === "pending" ? "Talentos Pendentes" : "Talentos Ativos"}
+              ‹ {t.status === "pending" ? "Talentos pendentes" : "Talentos ativos"}
             </Link>
           </Button>
           <h1 className="text-2xl font-semibold text-ink">{t.full_name}</h1>
@@ -852,9 +852,9 @@ export function TalentDetailPage() {
             stats={[
               { label: "Eventos", value: query.data.history.total_events },
               { label: "Personagens", value: query.data.history.characters_done.length },
-              { label: "Total Faturado", value: brl(query.data.history.total_earned) },
+              { label: "Total faturado", value: brl(query.data.history.total_earned) },
               {
-                label: "Último Evento",
+                label: "Último evento",
                 value: query.data.history.last_event
                   ? formatDate(query.data.history.last_event.start_at)
                   : "—",
@@ -903,7 +903,7 @@ export function TalentDetailPage() {
           )}
         </Section>
 
-        <Section title="Avaliações e Notas">
+        <Section title="Avaliações e notas">
           {ratingsQuery.isLoading && <Skeleton className="h-20 w-full" />}
           {ratingsQuery.data && (
             <div className="space-y-4">
@@ -937,7 +937,7 @@ export function TalentDetailPage() {
                   Avaliações gerais feitas por {t.full_name}
                 </h4>
                 {ratingsQuery.data.given.length === 0 ? (
-                  <p className="text-sm text-muted">Nenhuma avaliação dada ainda.</p>
+                  <p className="text-sm text-muted">Nenhuma avaliação feita ainda.</p>
                 ) : (
                   <ul className="space-y-2">
                     {ratingsQuery.data.given.map((r, i) => (

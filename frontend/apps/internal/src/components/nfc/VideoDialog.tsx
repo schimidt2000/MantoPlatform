@@ -229,7 +229,7 @@ export function VideoDialog({ tag, onClose }: VideoDialogProps) {
                   <div className="rounded-md border border-line bg-red-50 p-3">
                     <p className="flex items-center gap-2 text-sm font-medium text-red" role="alert">
                       <AlertTriangle className="h-4 w-4 flex-none" aria-hidden="true" />
-                      A conversão falhou — a cliente ainda não vê nada.
+                      A conversão falhou — a cliente ainda não vê o vídeo.
                     </p>
                     <p className="mt-1 text-xs text-ink">
                       {delivery.processing_error ?? "O servidor não informou o motivo."}
@@ -267,7 +267,7 @@ export function VideoDialog({ tag, onClose }: VideoDialogProps) {
                     />
                     <div className="rounded-md border border-line bg-surface-2 p-3">
                       <p className="text-sm font-medium text-ink">
-                        {delivery.title || "Sem título — a página usa a copy padrão"}
+                        {delivery.title || "Sem título — a página usa o texto padrão"}
                       </p>
                       <p className="mt-1 text-xs text-muted">
                         {formatarPeso(delivery.file_size_bytes)} ·{" "}
@@ -403,7 +403,7 @@ export function VideoDialog({ tag, onClose }: VideoDialogProps) {
                 onClick={() => setConfirmandoRemocao(true)}
               >
                 <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                Remover
+                Excluir
               </Button>
             </>
           ) : (
@@ -422,9 +422,9 @@ export function VideoDialog({ tag, onClose }: VideoDialogProps) {
           portal Radix). Erro da remoção aparece DENTRO da confirmação, que fica aberta. */}
       <ConfirmDialog
         open={confirmandoRemocao}
-        title={`Remover o vídeo da tag nº ${tag?.sequence}`}
+        title={`Excluir o vídeo da tag nº ${tag?.sequence}`}
         description="A cliente deixa de ver o vídeo ao encostar o celular na peça — a página pública volta ao conteúdo padrão. O arquivo é apagado do servidor."
-        confirmLabel="Remover vídeo"
+        confirmLabel="Excluir vídeo"
         destructive
         pending={remover.isPending}
         error={remover.error?.message ?? null}

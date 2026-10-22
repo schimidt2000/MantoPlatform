@@ -165,19 +165,19 @@ export function AvaliarPage() {
 
               <div>
                 <label className="mb-2 block text-sm font-bold text-muted" htmlFor="comment">
-                  Quer deixar um recado ou sugestão? (Opcional)
+                  Quer deixar um recado ou sugestão? (opcional)
                 </label>
                 <textarea
                   id="comment"
                   className="min-h-24 w-full rounded-md border border-line bg-panel p-3 text-sm text-ink"
-                  placeholder="Conte um pouco mais, se quiser..."
+                  placeholder="Conte um pouco mais, se quiser…"
                   value={comment}
                   onChange={(e) => setComment(e.target.value)}
                 />
               </div>
 
               <Button type="submit" size="lg" className="w-full" loading={submitFeedback.isPending}>
-                {submitFeedback.isPending ? "Enviando..." : "Enviar avaliação"}
+                {submitFeedback.isPending ? "Enviando…" : "Enviar avaliação"}
               </Button>
             </motion.div>
           )}

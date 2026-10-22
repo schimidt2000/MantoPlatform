@@ -25,7 +25,7 @@ const TONE_CLASS = { accent: "text-accent", gold: "text-gold", green: "text-gree
 export function BarListChart({ items, tone = "accent", max = 8 }: BarListChartProps) {
   const reduceMotion = useReducedMotion();
   if (items.length === 0) {
-    return <p className="py-6 text-center text-sm text-muted">Sem dado no período.</p>;
+    return <p className="py-6 text-center text-sm text-muted">Nenhum dado no período.</p>;
   }
   const ordenados = [...items].sort((a, b) => b.value - a.value);
   const visiveis = ordenados.slice(0, max);

@@ -59,7 +59,7 @@ const ROTULO_VIDEO: Record<
   pronto: {
     texto: "com vídeo",
     tone: "blue",
-    acao: "Assistir o vídeo",
+    acao: "Assistir ao vídeo",
     titulo: "Assistir sem contar acesso",
   },
   falhou: {
@@ -171,7 +171,7 @@ export function Tags3DPage() {
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Tags NFC"
-        subtitle="Uma linha por tag física. O Nº é o rótulo para anotar na tag ao gravar; a URL copiada aqui é o que se grava — ela nunca muda."
+        subtitle="Uma linha por tag física. O Nº é o rótulo para anotar na tag ao gravar; a URL copiada nesta tela é o que se grava — ela nunca muda."
         className="mb-0"
       />
 
@@ -199,8 +199,8 @@ export function Tags3DPage() {
           )}
           {query.data && tags.length === 0 && (
             <p className="text-sm text-muted">
-              Nenhuma tag ainda. Elas nascem sozinhas quando um show ganha um presente 3D de
-              peça habilitada para NFC — ou gere um lote acima.
+              Nenhuma tag cadastrada ainda. As tags são criadas automaticamente quando um show ganha um
+              presente 3D de peça habilitada para NFC — ou gere um lote acima.
             </p>
           )}
 
@@ -362,7 +362,7 @@ export function Tags3DPage() {
 
           <p className="flex items-center gap-1.5 text-xs text-muted">
             <Nfc className="h-3.5 w-3.5" aria-hidden="true" />
-            Tags não podem ser apagadas: o código gravado numa peça entregue é eterno. Desativar
+            Tags não podem ser excluídas: o código gravado numa peça entregue é eterno. Desativar
             faz a página pública mostrar o conteúdo padrão.
           </p>
         </TabsContent>

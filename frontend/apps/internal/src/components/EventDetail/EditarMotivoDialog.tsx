@@ -45,7 +45,7 @@ export function EditarMotivoDialog({ eventId, motivo, open, onOpenChange }: Edit
     setErroCampo("");
     setErro("");
     if (!texto.trim()) {
-      setErroCampo("Explique o motivo do cancelamento.");
+      setErroCampo("Informe o motivo do cancelamento.");
       return;
     }
     editar.mutate(

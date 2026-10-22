@@ -71,11 +71,11 @@ def api_resolve_bounce() -> Any:
     body = request.get_json(silent=True) or {}
     address = (body.get("email") or "").strip()
     if not address:
-        return json_error("Informe o email", 400, fields={"email": "Obrigatório"})
+        return json_error("Informe o e-mail", 400, fields={"email": "Obrigatório"})
 
     resolved = bounce_ops.resolve_email(address, current_user.id, body.get("note"))
     if not resolved:
-        return json_error("Nada pendente para esse email", 404)
+        return json_error("Nenhuma pendência para este e-mail.", 404)
     audit(
         "edit", "talent", None, address,
         f"Devolução de email resolvida ({resolved} registro(s))",

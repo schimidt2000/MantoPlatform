@@ -151,9 +151,9 @@ def api_marketing_desempenho() -> Any:
         try:
             inicio, fim = date.fromisoformat(start_raw), date.fromisoformat(end_raw)
         except ValueError:
-            return json_error("Datas inválidas (use YYYY-MM-DD)", 400, fields={"start": "YYYY-MM-DD", "end": "YYYY-MM-DD"})
+            return json_error("Datas inválidas (use AAAA-MM-DD)", 400, fields={"start": "AAAA-MM-DD", "end": "AAAA-MM-DD"})
         if inicio > fim:
-            return json_error("A data inicial precisa ser anterior à final", 400, fields={"start": "depois do fim"})
+            return json_error("A data inicial precisa ser anterior à final", 400, fields={"start": "Depois da data final"})
     else:
         try:
             weeks = int(request.args.get("weeks", DESEMPENHO_WEEKS_DEFAULT))

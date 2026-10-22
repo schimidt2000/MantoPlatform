@@ -112,7 +112,7 @@ def api_3d_acervo_delete(item_id: int) -> Any:
 
     force = request.args.get("force", "").strip().lower() in ("1", "true")
     if force and not any(r.name.upper() == RoleName.SUPERADMIN for r in current_user.roles):
-        return json_error("Apenas o super admin pode excluir uma peça já usada em eventos", 403)
+        return json_error("Apenas o Superadmin pode excluir uma peça já usada em eventos", 403)
 
     try:
         ops.delete_acervo_item(item, force=force)

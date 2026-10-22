@@ -344,7 +344,7 @@ export function VendasPipelinePage() {
                   aria-pressed={incluirLojaVirtual}
                   className="shrink-0"
                 >
-                  {incluirLojaVirtual ? "Tirar do funil" : "Incluir no funil"}
+                  {incluirLojaVirtual ? "Remover do funil" : "Incluir no funil"}
                 </Button>
               </CardHeader>
             </Card>

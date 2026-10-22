@@ -42,7 +42,7 @@ export function WishlistPage() {
             Sua lista de desejos
           </h1>
           <p className="mt-1.5 text-sm text-muted">
-            Reveja os personagens escolhidos e envie a lista pra gente pelo WhatsApp.
+            Reveja os personagens escolhidos e envie a lista para a gente pelo WhatsApp.
           </p>
         </div>
       </header>
@@ -52,8 +52,8 @@ export function WishlistPage() {
           <div className="py-16 text-center text-muted">
             <div className="mb-3 text-4xl">🤍</div>
             <div>
-              Sua lista está vazia. Volte ao catálogo e adicione os personagens que você
-              gostou.
+              Sua lista está vazia. Volte ao catálogo e adicione os seus personagens
+              favoritos.
             </div>
           </div>
         ) : (

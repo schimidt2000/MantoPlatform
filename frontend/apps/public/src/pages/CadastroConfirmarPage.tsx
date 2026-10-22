@@ -20,7 +20,7 @@ export function CadastroConfirmarPage() {
             <>
               <Skeleton className="h-[72px] w-[72px] rounded-full" />
               <Skeleton className="h-6 w-2/3" />
-              <p className="text-sm text-muted">Confirmando seu email…</p>
+              <p className="text-sm text-muted">Confirmando seu e-mail…</p>
             </>
           )}
 

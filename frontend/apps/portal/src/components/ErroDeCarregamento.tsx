@@ -37,15 +37,15 @@ export function ErroDeCarregamento({
       <div className="space-y-3 rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
         <p>
           {semRede
-            ? `Não conseguimos falar com o servidor para carregar ${oQue}. Verifique sua conexão.`
-            : `Deu um erro do nosso lado ao carregar ${oQue}. Já estamos avisados.`}
+            ? `Não foi possível conectar ao servidor para carregar ${oQue}. Verifique sua conexão.`
+            : `Houve um erro do nosso lado ao carregar ${oQue}. Nossa equipe já foi avisada.`}
         </p>
         <Button variant="outline" onClick={aoTentarDeNovo} loading={carregando}>
-          Tentar de novo
+          Tentar novamente
         </Button>
         {status !== null && (
           // O código é o que transforma "o portal não abre" num relato investigável.
-          <p className="text-xs opacity-70">Se precisar contar para a equipe: erro {status}.</p>
+          <p className="text-xs opacity-70">Se precisar informar à equipe: erro {status}.</p>
         )}
       </div>
     </div>

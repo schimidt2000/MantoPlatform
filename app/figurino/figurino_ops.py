@@ -327,7 +327,7 @@ def save_figurino_photo(sheet: FigurinoSheet, *, file_storage) -> str | None:
     try:
         sheet.photo_filename = save_file(file_storage, "figurino_photos")
     except ImagemNaoConvertida:
-        return "Não conseguimos ler esta foto. Envie em JPG, PNG ou WEBP."
+        return "Não foi possível ler esta foto. Envie em JPG, PNG ou WEBP."
     if anterior:
         delete_file(anterior)
         invalidar_variantes(anterior, current_app.config["UPLOAD_FOLDER"])
@@ -384,7 +384,7 @@ def rotate_figurino_photo(sheet: FigurinoSheet, *, direction: str) -> str | None
 
     img = imaging.abrir(open(abs_path, "rb")) if os.path.exists(abs_path) else None
     if img is None:
-        return "Não conseguimos abrir o arquivo desta foto para girar."
+        return "Não foi possível abrir o arquivo desta foto para girar."
 
     try:
         from PIL import Image

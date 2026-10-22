@@ -63,7 +63,7 @@ function MusicalCard({
         {/* Custos e margens só chegam na resposta do SUPERADMIN (FR-028). */}
         {temCustos(musical) && (
           <div className="rounded-md bg-surface-2 p-2 text-xs text-ink">
-            <p className="mb-1 font-semibold uppercase text-muted">Custos (só superadmin)</p>
+            <p className="mb-1 font-semibold uppercase text-muted">Custos (somente Superadmin)</p>
             <p>
               Margens: {musical.margin_1s.toFixed(2)}× · {musical.margin_2s.toFixed(2)}× ·{" "}
               {musical.margin_1s_days.toFixed(2)}× · {musical.margin_2s_days.toFixed(2)}×

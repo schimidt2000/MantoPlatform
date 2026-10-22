@@ -10,16 +10,16 @@ export function AdminPortalAnnouncementPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Enviar anúncio por email</CardTitle>
+          <CardTitle>Enviar anúncio por e-mail</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
           <p className="text-sm text-muted">
-            Envia um email a todas as talentos com email cadastrado, anunciando o portal.
+            Envia um e-mail a todos os talentos com e-mail cadastrado, anunciando o portal.
           </p>
           <Button
             loading={announce.isPending}
             onClick={() => {
-              if (window.confirm("Enviar o anúncio do portal para todas as talentos com email?")) {
+              if (window.confirm("Enviar o anúncio do portal para todos os talentos com e-mail?")) {
                 announce.mutate();
               }
             }}
@@ -28,7 +28,7 @@ export function AdminPortalAnnouncementPage() {
           </Button>
           {announce.data && (
             <p className="text-sm text-ink">
-              Enviado: {announce.data.sent} · Falhas: {announce.data.failed}
+              Enviados: {announce.data.sent} · Falhas: {announce.data.failed}
             </p>
           )}
           {announce.isError && (

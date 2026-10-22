@@ -218,7 +218,7 @@ def api_figurino_dismiss_missing() -> Any:
 
     ok = dismiss_missing_character(character_name_norm, dismissed_by=current_user.id)
     if not ok:
-        return json_error("Nenhum cargo pendente encontrado para esse personagem.", 400)
+        return json_error("Nenhum cargo pendente encontrado para este personagem.", 400)
 
     from app.utils import audit
 
@@ -249,7 +249,7 @@ def api_figurino_associate_missing() -> Any:
 
     updated = associate_missing_character(character_name_norm, sheet_id=sheet_id)
     if not updated:
-        return json_error("Nenhum cargo pendente encontrado para esse personagem.", 400)
+        return json_error("Nenhum cargo pendente encontrado para este personagem.", 400)
 
     from app.utils import audit
 

@@ -497,7 +497,7 @@ def add_delivery(
 
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise NfcValidationError("file", "Escolha o arquivo do vídeo.")
+        raise NfcValidationError("file", "Selecione o arquivo do vídeo.")
 
     extensao = extension_of(nome_original)
     if extensao not in NFC_DELIVERY_VIDEO_EXTENSIONS:
@@ -514,7 +514,7 @@ def add_delivery(
     if anterior is not None and anterior.processing_status in ("pendente", "processando"):
         raise NfcValidationError(
             "file",
-            "Ainda estamos preparando o vídeo anterior desta tag. Aguarde ele ficar pronto para "
+            "O vídeo anterior desta tag ainda está em preparação. Aguarde a conclusão para "
             "enviar outro.",
         )
 
@@ -950,7 +950,7 @@ def salvar_arquivo_de_sistema(file_obj: Any, *, tipo: str) -> str:
     """
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise NfcValidationError("file", "Escolha o arquivo.")
+        raise NfcValidationError("file", "Selecione o arquivo.")
     extensao = extension_of(nome_original)
 
     if tipo == "moldura":

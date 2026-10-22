@@ -59,7 +59,7 @@ export function DatasEspeciaisCard({
   const adicionarDia = () => {
     const mmdd = diaParaApi(novoDia);
     if (!mmdd) {
-      setErroDiaLocal("dia inválido — use DD/MM");
+      setErroDiaLocal("Dia inválido — use DD/MM");
       return;
     }
     if (faixa.dias.includes(mmdd)) {
@@ -188,7 +188,7 @@ export function DatasEspeciaisCard({
               variant="ghost"
               onClick={() => {
                 // Sem a sobrescrita o especial cai para o piso: no Noel, de 5.010 para 3.841.
-                if (!window.confirm(`Tirar o cachê próprio de "${nome}" em ${faixa.rotulo}? Ele passa a usar o piso.`)) return;
+                if (!window.confirm(`Remover o cachê próprio de "${nome}" em ${faixa.rotulo}? Ele passa a usar o piso.`)) return;
                 const { [nome]: _removido, ...rest } = faixa.cache;
                 set({ cache: rest });
               }}

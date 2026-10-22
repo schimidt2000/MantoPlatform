@@ -61,12 +61,12 @@ export function EncerrarFormularioDialog({
     evento.preventDefault();
     if (formularioId == null) return;
     if (!motivo) {
-      setErros({ motivo: "Escolha um motivo." });
+      setErros({ motivo: "Selecione o motivo." });
       motivoRef.current?.focus();
       return;
     }
     if (pedeFrase && !frase.trim()) {
-      setErros({ frase: "Conte em uma frase por que o formulário não vai virar evento." });
+      setErros({ frase: "Informe em uma frase por que o formulário não vai virar evento." });
       fraseRef.current?.focus();
       return;
     }
@@ -95,7 +95,7 @@ export function EncerrarFormularioDialog({
         <DialogHeader>
           <DialogTitle>Encerrar formulário</DialogTitle>
           <DialogDescription>
-            {nome ? `${nome}: o` : "O"} formulário sai da lista e continua guardado. Dá para reabrir
+            {nome ? `${nome}: o` : "O"} formulário sai da lista e continua guardado. É possível reabrir
             depois pela tela Formulários.
           </DialogDescription>
         </DialogHeader>
@@ -117,7 +117,7 @@ export function EncerrarFormularioDialog({
               aria-describedby={erros.motivo ? "encerrar-motivo-erro" : undefined}
               className={`${CONTROL} h-10 ${erros.motivo ? "border-red" : "border-line"}`}
             >
-              <option value="">Escolha…</option>
+              <option value="">Selecione…</option>
               {motivos.map((m) => (
                 <option key={m.codigo} value={m.codigo}>
                   {m.rotulo}

@@ -52,15 +52,15 @@ const CONTA_TYPES: Exclude<RecurringType, "programado">[] = [
 ];
 
 const SECTION_TITLES: Record<RecurringType, string> = {
-  variavel: "💧 Contas Variáveis",
-  debito_automatico: "🏦 Débito Automático",
-  assinatura: "💳 Assinaturas (Cartão)",
-  programado: "📆 Pagamentos Programados",
+  variavel: "💧 Contas variáveis",
+  debito_automatico: "🏦 Débito automático",
+  assinatura: "💳 Assinaturas (cartão)",
+  programado: "📆 Pagamentos programados",
 };
 
 const SECTION_HINTS: Record<RecurringType, string> = {
   variavel: "Valor oscila mês a mês (água, luz, gás) — precisa ser preenchido quando a conta chega.",
-  debito_automatico: "Valor fixo debitado direto em conta — lançamento do mês gerado sozinho.",
+  debito_automatico: "Valor fixo debitado direto em conta — lançamento do mês gerado automaticamente.",
   assinatura: "Assinaturas de SaaS e serviços cobradas no cartão de crédito.",
   programado: "Parcelas com data e valor próprios, fora do ciclo automático.",
 };
@@ -459,7 +459,7 @@ function PreencherDialog({ conta, monthRef, open, onOpenChange }: PreencherDialo
         <p className="text-sm text-muted">
           Valor real da conta em {monthLabel(monthRef)}
           {conta.expected_label ? ` · ${conta.expected_label}` : ""}. Ao salvar, o lançamento entra
-          na planilha de pagamentos e no DRE do mês.
+          na Planilha de Pagamentos e no DRE do mês.
         </p>
         <div className="mt-4 space-y-3">
           <div>

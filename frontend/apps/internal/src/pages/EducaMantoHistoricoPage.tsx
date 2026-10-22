@@ -242,10 +242,10 @@ export function EducaMantoHistoricoPage() {
         <Table className="min-w-[760px]">
           <thead>
             <TableRow head>
-              <TableCell as="th">Data/Hora</TableCell>
+              <TableCell as="th">Data/hora</TableCell>
               <TableCell as="th">Cliente</TableCell>
               <TableCell as="th">Musicais</TableCell>
-              {isSuperadmin && <TableCell as="th">Gerado Por</TableCell>}
+              {isSuperadmin && <TableCell as="th">Gerado por</TableCell>}
               <TableCell as="th" align="right">
                 Ações
               </TableCell>

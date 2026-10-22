@@ -49,7 +49,7 @@ export function AdminDesempenhoPage() {
             </CardHeader>
             <CardContent>
               {query.data.casting.length === 0 ? (
-                <p className="text-sm text-muted">Sem escalações no período.</p>
+                <p className="text-sm text-muted">Nenhuma escalação no período.</p>
               ) : (
                 <ul className="divide-y divide-line text-sm">
                   {query.data.casting.map((c) => (
@@ -69,7 +69,7 @@ export function AdminDesempenhoPage() {
             </CardHeader>
             <CardContent>
               {query.data.figurino.length === 0 ? (
-                <p className="text-sm text-muted">Sem registros no período.</p>
+                <p className="text-sm text-muted">Nenhum registro no período.</p>
               ) : (
                 <ul className="divide-y divide-line text-sm">
                   {query.data.figurino.map((f) => (
@@ -89,7 +89,7 @@ export function AdminDesempenhoPage() {
             </CardHeader>
             <CardContent>
               {query.data.vendas.length === 0 ? (
-                <p className="text-sm text-muted">Sem vendas no período.</p>
+                <p className="text-sm text-muted">Nenhuma venda no período.</p>
               ) : (
                 <ul className="divide-y divide-line text-sm">
                   {query.data.vendas.map((v) => (

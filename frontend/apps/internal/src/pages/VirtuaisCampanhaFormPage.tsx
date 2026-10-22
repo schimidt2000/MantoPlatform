@@ -317,7 +317,7 @@ export function VirtuaisCampanhaFormPage() {
               <p className="text-[12px] font-medium text-muted">Perguntas frequentes</p>
               {faq.length === 0 && (
                 <p className="text-[12px] text-muted">
-                  Nenhuma pergunta ainda — a seção não aparece na página pública.
+                  Nenhuma pergunta cadastrada ainda — a seção não aparece na página pública.
                 </p>
               )}
               {faq.map((item, index) => (
@@ -503,7 +503,7 @@ export function VirtuaisCampanhaFormPage() {
 
             <p className="text-[11px] text-muted">
               {campaign.slots_available} disponível(is) de {campaign.slots_total} horário(s).
-              Reexecutar a mesma janela não duplica nada.
+              Gerar a mesma janela novamente não duplica horários.
             </p>
 
             {campaign.slots.length > 0 && (

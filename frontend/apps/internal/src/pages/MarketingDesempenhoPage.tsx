@@ -68,7 +68,7 @@ function EstadoVazio() {
       <p className="mt-2 text-sm text-muted">
         Toda segunda-feira às 06:30 o auditor lê os exports salvos em{" "}
         <code className="rounded bg-surface-2 px-1 text-xs text-ink">scripts/marketing/inbox/</code> no computador da
-        rotina, grava o histórico aqui e manda o relatório por e-mail. Para a primeira rodada, exporte:
+        rotina, grava o histórico nesta tela e envia o relatório por e-mail. Para a primeira rodada, exporte:
       </p>
       <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink">
         <li>Meta Business Suite → Insights → <strong>Conteúdo</strong> → Exportar (CSV, últimos 90 dias)</li>
@@ -76,7 +76,7 @@ function EstadoVazio() {
         <li>Gerenciador de Anúncios → Relatórios → <strong>Detalhamento: Dia</strong> → Exportar CSV</li>
         <li>Google Ads → Campanhas → Segmento <strong>Dia</strong> → Baixar CSV</li>
       </ul>
-      <p className="mt-3 text-sm text-muted">Salve tudo na pasta até domingo à noite. Se um arquivo não for reconhecido, ele aparece aqui e no e-mail com o motivo.</p>
+      <p className="mt-3 text-sm text-muted">Salve tudo na pasta até domingo à noite. Se um arquivo não for reconhecido, ele aparece nesta tela e no e-mail com o motivo.</p>
     </Card>
   );
 }
@@ -400,7 +400,7 @@ export function MarketingDesempenhoPage() {
         subtitle={
           query.data
             ? `${dataCurta(query.data.period.start)} – ${dataCurta(query.data.period.end)} · o que os exports da Meta e do Google dizem, semana a semana`
-            : "o que os exports da Meta e do Google dizem, semana a semana"
+            : "O que os exports da Meta e do Google dizem, semana a semana"
         }
         filters={seletor}
       />

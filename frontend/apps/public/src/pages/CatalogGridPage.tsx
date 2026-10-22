@@ -48,7 +48,7 @@ export function CatalogGridPage() {
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar por nome, tema, estilo..."
+              placeholder="Buscar por nome, tema, estilo…"
               autoComplete="off"
               className="w-full rounded-full border border-line bg-panel px-5 py-3.5 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
@@ -113,8 +113,9 @@ export function CatalogGridPage() {
           {data && (
             <>
               <div className="mb-5 text-[13px] text-muted">
-                {filtered.length} personagem{filtered.length === 1 ? "" : "s"} encontrado
-                {filtered.length === 1 ? "" : "s"}
+                {filtered.length === 1
+                  ? "1 personagem encontrado"
+                  : `${filtered.length} personagens encontrados`}
               </div>
               {filtered.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">

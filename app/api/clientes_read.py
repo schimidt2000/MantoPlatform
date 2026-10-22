@@ -70,7 +70,7 @@ def api_clientes_detail(client_id: int) -> Any:
         return denied
     client, events, rel_by_event, total_sales, cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
-        return json_error("Cliente não encontrado", 404)
+        return json_error("Cliente não encontrada", 404)
     history = client_ops.list_client_form_history(client_id)
     return jsonify(
         {
