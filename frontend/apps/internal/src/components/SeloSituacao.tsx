@@ -1,4 +1,4 @@
-import { Ban, CalendarX } from "lucide-react";
+import { Ban, CalendarX, FileX } from "lucide-react";
 import { Badge, formatShortDate } from "@manto/ui";
 import type { SituacaoEvento } from "../lib/agenda";
 
@@ -11,6 +11,14 @@ export function textoDoSumico(desde: string | null | undefined): string {
   return desde
     ? `Sumiu do Google Agenda — percebido em ${formatShortDate(desde)}`
     : "Sumiu do Google Agenda";
+}
+
+/**
+ * `Cancelamento pedido em dd/mm/aaaa` (feature 315): o tooltip do selo e dos chips. Sem data (as
+ * listas que mandam só o código), só "Cancelamento pedido".
+ */
+export function textoDoPedido(desde: string | null | undefined): string {
+  return desde ? `Cancelamento pedido em ${formatShortDate(desde)}` : "Cancelamento pedido";
 }
 
 /** `Evento cancelado em dd/mm/aaaa`: o tooltip do selo do cancelado (feature 312). */
@@ -29,7 +37,8 @@ interface SeloSituacaoProps {
  * O selo único da situação do evento (features 303 e 312): "Sumiu do Google Agenda" e "Cancelado".
  * O do cancelado só é desenhado onde uma coisa VIVA ligada a ele aparece (Gastos Extras, tags NFC,
  * formulários, pedidos de figurino) — na agenda, na busca e no painel do grupo o cancelado não chega
- * do servidor. O pedido de exclusão não desenha nada (é da 2a). O ícone do sumiço é o do sino.
+ * do servidor. O pedido de cancelamento (feature 315; código `exclusao_solicitada`) é um selo neutro —
+"Cancelamento pedido" —, também no dia da venda que herda o pedido do 1º. O ícone do sumiço é o do sino.
  *
  * O tooltip é o `title` de um `span` em volta: o `Badge` não repassa atributos. Em toque não há
  * tooltip — a data é lida no banner do evento.
@@ -48,6 +57,20 @@ export function SeloSituacao({ situacao, desde, compacto = false }: SeloSituacao
         <Badge tone="red" className="gap-1">
           <Ban aria-hidden className="h-3 w-3" />
           Cancelado
+        </Badge>
+      </span>
+    );
+  }
+  if (situacao === "exclusao_solicitada") {
+    return compacto ? (
+      <span title={textoDoPedido(desde)} className="mr-1 inline-flex shrink-0 items-center align-middle text-muted">
+        <FileX role="img" aria-label="Cancelamento pedido" className="h-3 w-3" />
+      </span>
+    ) : (
+      <span title={textoDoPedido(desde)} className="inline-flex shrink-0">
+        <Badge tone="neutral" className="gap-1">
+          <FileX aria-hidden className="h-3 w-3" />
+          Cancelamento pedido
         </Badge>
       </span>
     );

@@ -16,6 +16,7 @@ import {
 import { formatBRL } from "@manto/money";
 import { useCancelamentos, type EventoCancelado, type FiltroDevolucao } from "../lib/eventOps";
 import { INPUT_CLASS } from "../components/EventDetail/parts";
+import { textoDaDevolucao } from "../components/EventDetail/QuadroDoPedido";
 
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
@@ -155,8 +156,8 @@ export function EventosCancelamentosPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
       <PageHeader
-        title="Exclusões e cancelamentos"
-        subtitle="Pedidos do Comercial e eventos cancelados, com a devolução e o retido de cada um"
+        title="Cancelamentos"
+        subtitle="Pedidos de cancelamento do Comercial e eventos cancelados, com a devolução e o retido de cada um"
         className="mb-0"
         actions={
           <Button asChild variant="ghost" size="sm">
@@ -192,7 +193,7 @@ export function EventosCancelamentosPage() {
                       Venda
                     </TableCell>
                     <TableCell as="th">Pedido por</TableCell>
-                    <TableCell as="th">Motivo</TableCell>
+                    <TableCell as="th">Motivo e devolução combinada</TableCell>
                     <TableCell as="th" align="right">
                       Ações
                     </TableCell>
@@ -212,10 +213,18 @@ export function EventosCancelamentosPage() {
                           {data(p.requested_at)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-muted">{p.reason ?? "—"}</TableCell>
+                      <TableCell className="text-muted">
+                        {p.alcance === "so_este_dia" && (
+                          <span className="block text-xs font-semibold text-ink">Só este dia da venda</span>
+                        )}
+                        {p.reason ?? (p.requested_by === undefined ? "" : "—")}
+                        {textoDaDevolucao(p) && (
+                          <span className="block text-xs text-ink">{textoDaDevolucao(p)}</span>
+                        )}
+                      </TableCell>
                       <TableCell align="right">
                         <Button asChild size="sm" variant="outline">
-                          <Link to={`/events/${p.id}`}>Abrir evento</Link>
+                          <Link to={`/events/${p.id}`}>Decidir</Link>
                         </Button>
                       </TableCell>
                     </TableRow>

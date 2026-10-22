@@ -28,6 +28,7 @@ import { CancelamentoBvBloco, type BvEntrada } from "./CancelamentoBvBloco";
 import { CancelamentoDevolucaoBloco, type DevolucaoState } from "./CancelamentoDevolucaoBloco";
 import { CancelamentoDiasBloco } from "./CancelamentoDiasBloco";
 import { MultaAoElencoBloco, type LinhaDeMulta } from "./MultaAoElencoBloco";
+import { type PedidoDeCancelamento, QuadroDoPedido } from "./QuadroDoPedido";
 
 const LABEL = "mb-1 block text-xs font-semibold uppercase text-muted";
 const FIELD =
@@ -157,6 +158,11 @@ export interface ExcluirEventoDialogProps {
   eventTitle: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Feature 315: o pedido de cancelamento pendente, mostrado só para leitura depois do impacto — o
+   * diálogo continua abrindo vazio (nada é copiado do pedido para os campos).
+   */
+  pedido?: PedidoDeCancelamento | null;
 }
 
 /**
@@ -167,7 +173,7 @@ export interface ExcluirEventoDialogProps {
  * conta da execução); Cancelar fica desabilitado até tudo estar informado; cada recusa aparece no
  * campo certo (`fields`) ou pela frase do `codigo`. Nenhuma conta de dinheiro no navegador.
  */
-export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }: ExcluirEventoDialogProps) {
+export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange, pedido }: ExcluirEventoDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const impacto = useImpactoExclusao(eventId, open);
@@ -516,6 +522,8 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
 
             <ResumoImpacto impacto={dados} />
 
+            {pedido && <QuadroDoPedido pedido={pedido} />}
+
             {dados.acao === "excluir" && dados.is_group_leader && (
               <div className="rounded-md border border-red/40 bg-surface-2 p-3 text-sm" role="alert">
                 <p className="font-semibold text-red">Este evento é o principal de um grupo comercial.</p>
@@ -586,7 +594,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                     placeholder="Ex.: cliente desistiu do evento"
                     aria-invalid={Boolean(erros.motivo)}
                   />
-                  <p className="mt-1 text-xs text-muted">Aparece para quem abre o evento.</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Aparece para Comercial, Financeiro e Superadmin; os outros papéis veem só que foi cancelado.
+                  </p>
                   {erros.motivo && (
                     <p className="mt-1 text-xs text-red" role="alert">
                       {erros.motivo}

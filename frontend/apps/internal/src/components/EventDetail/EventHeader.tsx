@@ -22,17 +22,19 @@ import {
 import {
   useDeleteEvent,
   useDevolverAoGoogle,
-  useRecusarSolicitacao,
+  useRecusarPedido,
   useSyncEvent,
   useToggleConfirm,
 } from "../../lib/eventOps";
 import { KebabMenu, type KebabMenuItem } from "../KebabMenu";
 import { EditarMotivoDialog } from "./EditarMotivoDialog";
 import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
-import { SolicitarExclusaoDialog } from "./SolicitarExclusaoDialog";
+import { PedirCancelamentoDialog } from "./PedirCancelamentoDialog";
+import { QuadroDoPedido } from "./QuadroDoPedido";
 import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBanner";
 import { formatRange } from "./parts";
 import { useRecusaDoCancelado } from "../../lib/recusaDoCancelado";
+import { useCurrentUser } from "../../lib/useAuth";
 
 /**
  * Evento marcado "Sumiu do Google Agenda" (features 303 e 306): devolva ao Google ou cancele. O
@@ -217,7 +219,8 @@ export function EventHeader({ data }: EventHeaderProps) {
   const sync = useSyncEvent(event.id);
   const confirm = useToggleConfirm(event.id);
   const remove = useDeleteEvent(event.id);
-  const recusar = useRecusarSolicitacao(event.id);
+  const recusar = useRecusarPedido(event.id);
+  const { data: usuario } = useCurrentUser();
   const feedbackLink = useFeedbackLink(event.id);
   // A devolução mora aqui, não no banner: o banner some no sucesso, e callback de `mutate` não
   // dispara em componente desmontado (TanStack Query 5).
@@ -225,6 +228,8 @@ export function EventHeader({ data }: EventHeaderProps) {
   const [exportOpen, setExportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
+  const [recusarOpen, setRecusarOpen] = useState(false);
+  const [motivoRecusa, setMotivoRecusa] = useState("");
   const [devolverOpen, setDevolverOpen] = useState(false);
   const [motivoOpen, setMotivoOpen] = useState(false);
   const [aviso, setAviso] = useState("");
@@ -361,13 +366,20 @@ export function EventHeader({ data }: EventHeaderProps) {
         onClick: () => setDeleteOpen(true),
       });
     } else if (data.flags.can_request_delete) {
+      // Feature 315: o servidor diz por que este dia não recebe pedido (ensaio, cachê pago).
+      const pedido = event.deletion_request;
+      const bloqueio = event.pedido_bloqueado;
       items.push({
-        label: "🗑 Solicitar exclusão",
+        label: "🗑 Solicitar cancelamento",
         destructive: true,
-        disabled: Boolean(event.deletion_request),
-        title: event.deletion_request
-          ? "Já existe uma solicitação aguardando o Superadmin"
-          : "Pedir ao Superadmin para excluir ou cancelar este evento",
+        disabled: Boolean(pedido || bloqueio),
+        title: pedido
+          ? pedido.requested_by
+            ? `Pedido de ${pedido.requested_by} aguardando o Superadmin`
+            : "Já existe um pedido aguardando o Superadmin"
+          : bloqueio
+            ? bloqueio.frase
+            : "Pedir ao Superadmin para cancelar este evento",
         onClick: () => setSolicitarOpen(true),
       });
     }
@@ -460,37 +472,46 @@ export function EventHeader({ data }: EventHeaderProps) {
       />
 
       {event.deletion_request && (
-        <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
-          <p className="font-semibold text-gold-ink">Exclusão solicitada — aguardando decisão</p>
+        <QuadroDoPedido
+          pedido={event.deletion_request}
+          ehAutor={usuario?.id != null && event.deletion_request.requested_by_id === usuario.id}
+          acoes={
+            canDelete && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  title={marcado ? MOTIVO_SO_DEVOLVER : undefined}
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  Analisar e decidir
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    recusar.reset();
+                    setMotivoRecusa("");
+                    setRecusarOpen(true);
+                  }}
+                >
+                  Recusar pedido
+                </Button>
+              </div>
+            )
+          }
+        />
+      )}
+      {!event.deletion_request && event.pedido_da_venda && (
+        <div className="mt-3 rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="status">
+          <p className="font-semibold text-gold-ink">Cancelamento pedido — aguardando o Superadmin</p>
           <p className="mt-0.5 text-ink">
-            {event.deletion_request.reason || "Sem motivo informado."}
-            {event.deletion_request.requested_by
-              ? ` — por ${event.deletion_request.requested_by}`
-              : ""}
-            {` em ${formatDataCurta(event.deletion_request.requested_at)}`}
+            Pedido feito no{" "}
+            <Link className="underline" to={`/events/${event.pedido_da_venda.principal_id}`}>
+              1º dia da venda
+            </Link>{" "}
+            em {formatDataCurta(event.pedido_da_venda.requested_at)}, para todos os dias.
           </p>
-          {canDelete && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                title={marcado ? MOTIVO_SO_DEVOLVER : undefined}
-                onClick={() => setDeleteOpen(true)}
-              >
-                Analisar e decidir
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                loading={recusar.isPending}
-                onClick={() =>
-                  recusar.mutate({}, { onSuccess: () => anunciar("Solicitação recusada.") })
-                }
-              >
-                Recusar solicitação
-              </Button>
-            </div>
-          )}
         </div>
       )}
 
@@ -524,7 +545,58 @@ export function EventHeader({ data }: EventHeaderProps) {
         eventTitle={event.title}
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+        pedido={event.deletion_request}
       />
+      <Dialog open={recusarOpen} onOpenChange={(aberto) => !recusar.isPending && setRecusarOpen(aberto)}>
+        <DialogContent open={recusarOpen}>
+          <DialogHeader>
+            <DialogTitle>Recusar o pedido de cancelamento</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-ink">
+            O evento segue normal e quem pediu é avisado no sino, com o motivo abaixo.
+          </p>
+          <label className="mt-2 block text-xs font-semibold uppercase text-muted" htmlFor="motivo-recusa">
+            Motivo (opcional)
+          </label>
+          <textarea
+            id="motivo-recusa"
+            rows={3}
+            value={motivoRecusa}
+            onChange={(e) => setMotivoRecusa(e.target.value)}
+            className="w-full rounded-md border border-line bg-panel p-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-blue"
+          />
+          {recusar.isError && (
+            <p className="text-sm text-red" role="alert">
+              {recusar.error?.message}
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" size="sm" onClick={() => setRecusarOpen(false)} disabled={recusar.isPending}>
+              Voltar
+            </Button>
+            <Button
+              size="sm"
+              loading={recusar.isPending}
+              onClick={() =>
+                recusar.mutate(
+                  { motivo: motivoRecusa.trim() || undefined },
+                  {
+                    onSuccess: () => {
+                      setRecusarOpen(false);
+                      anunciar("Pedido recusado — quem pediu foi avisado.");
+                    },
+                    onError: (e) => {
+                      if (e.details?.codigo === "sem_pedido") setRecusarOpen(false);
+                    },
+                  },
+                )
+              }
+            >
+              Recusar pedido
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {cancelado && data.flags.can_edit_motivo_cancelado && (
         <EditarMotivoDialog
           eventId={event.id}
@@ -533,13 +605,14 @@ export function EventHeader({ data }: EventHeaderProps) {
           onOpenChange={setMotivoOpen}
         />
       )}
-      <SolicitarExclusaoDialog
-        eventId={event.id}
-        eventTitle={event.title}
-        open={solicitarOpen}
-        onOpenChange={setSolicitarOpen}
-        onEnviado={() => anunciar("Solicitação enviada ao Superadmin.")}
-      />
+      {data.flags.can_request_delete && !data.flags.can_delete && (
+        <PedirCancelamentoDialog
+          data={data}
+          open={solicitarOpen}
+          onOpenChange={setSolicitarOpen}
+          onEnviado={() => anunciar("Pedido enviado ao Superadmin.", 4000)}
+        />
+      )}
     </header>
   );
 }

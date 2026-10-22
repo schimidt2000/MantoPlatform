@@ -173,15 +173,15 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 
 ## Phase 6: Telas (US1–US3)
 
-- [ ] T022 [P] [US1] `frontend/apps/internal/src/lib/agenda.ts` (`:435-439`): `deletion_request` com `alcance?`,
+- [X] T022 [P] [US1] `frontend/apps/internal/src/lib/agenda.ts` (`:435-439`): `deletion_request` com `alcance?`,
       `requested_by?`, `requested_by_id?`, `reason?`, `devolucao?`, `venda_nova?` opcionais; `pedido_bloqueado?`,
       `pedido_da_venda?`
-- [ ] T023 [US1] `frontend/apps/internal/src/lib/eventOps.ts` (`:441-471`): `usePedirCancelamento`/`useRecusarPedido`
+- [X] T023 [US1] `frontend/apps/internal/src/lib/eventOps.ts` (`:441-471`): `usePedirCancelamento`/`useRecusarPedido`
       no caminho novo; `setQueryData` só com o detalhe na mão (molde `:19`, `:45`; resposta sem `event` →
       `invalidateQueries`); invalida `["cancelamentos"]`, `["agenda"]`, `["agenda-dia"]`, as notificações e a faixa
       (`invalidarSumidosGoogle`, `lib/sumidosGoogle.ts:66-68`); a união `CodigoRecusaPedido`; `pedido_pendente` e
       `sem_pedido` recarregam o detalhe e anunciam (o `cancelado` já é do `aoRecusarMutacao`, `main.tsx:16-27`)
-- [ ] T024 [US1] `git mv components/EventDetail/SolicitarExclusaoDialog.tsx components/EventDetail/PedirCancelamentoDialog.tsx`:
+- [X] T024 [US1] `git mv components/EventDetail/SolicitarExclusaoDialog.tsx components/EventDetail/PedirCancelamentoDialog.tsx`:
       motivo em `textarea`; Tudo/Parte/Nada sem opção marcada; valor (`MoneyInput`) em Parte; nome e PIX em Tudo e
       Parte; num dia só, só Parte/Nada e o novo valor da venda; o alcance no 1º dia com outro dia vivo (escolha sem
       marcar, "Todos os N dias" / "Só este dia — a venda passa para o dia dd/mm", N e o dia seguinte do bloco `group`,
@@ -191,33 +191,33 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       que o cancelamento faz (e-mail aos escalados, multa decidida pelo Superadmin, o Casting tira e avisa, ensaio cai
       junto); "Depois de enviado, só o Superadmin fecha o pedido"; botão só com tudo preenchido; erros do servidor no
       campo; 375 px sem rolagem lateral
-- [ ] T025 [US2] `components/EventDetail/EventHeader.tsx`: o item do menu (`:363-373`) "Solicitar cancelamento" com o
+- [X] T025 [US2] `components/EventDetail/EventHeader.tsx`: o item do menu (`:363-373`) "Solicitar cancelamento" com o
       `title` honesto, desabilitado com pedido pendente ("Pedido de <nome> aguardando o Superadmin") ou com
       `pedido_bloqueado` (a frase); o quadro (`:462-495`): "Cancelamento pedido — aguardando o Superadmin", data, alcance;
       motivo, autor e devolução só quando vierem (fim do "Sem motivo informado.", `:466`); para o autor, "Se a cliente
       voltar atrás, avise o Superadmin — só ele fecha o pedido"; no satélite que herda, "pedido feito no 1º dia da
       venda" com link
-- [ ] T026 [US3] `components/EventDetail/EventHeader.tsx`: "Recusar pedido" (`:482-491`) por um diálogo de confirmação
+- [X] T026 [US3] `components/EventDetail/EventHeader.tsx`: "Recusar pedido" (`:482-491`) por um diálogo de confirmação
       com motivo opcional; "Analisar e decidir" (`:474-481`) passa o pedido ao `ExcluirEventoDialog` (`:522-527`)
-- [ ] T027 [US3] `components/EventDetail/ExcluirEventoDialog.tsx`: prop opcional `pedido` mostrada depois de
+- [X] T027 [US3] `components/EventDetail/ExcluirEventoDialog.tsx`: prop opcional `pedido` mostrada depois de
       `ResumoImpacto` (`:517`), só leitura, sem copiar (motivo, alcance, devolução completa); o diálogo continua abrindo
       vazio (`:177-186`, `:207-223`); o pedido aparece sempre que o detalhe trouxer `deletion_request`, também quando o
       diálogo abre pelo menu "Excluir ou cancelar"; valores por `formatBRL` (`@manto/money`); o texto "Aparece para quem
       abre o evento." (`:589`) passa a dizer a régua da 1c-Q9
-- [ ] T028 [P] [US2] `components/FaixaSumidosGoogle.tsx` e `lib/sumidosGoogle.ts`: tipo com `pedidos?` (`:15-22`); a
+- [X] T028 [P] [US2] `components/FaixaSumidosGoogle.tsx` e `lib/sumidosGoogle.ts`: tipo com `pedidos?` (`:15-22`); a
       segunda frase na mesma linha de 40 px (`:77`, `:82-118`), cada uma com o seu botão (`aria-expanded`,
       `aria-controls`), o seu `aberto`/`ref`/lista (`:31-34`, `:123-160`); 1 pedido → link ao evento, N → lista com
       links; `visivel`/`useFaixaSumidosVisivel` por `total > 0 || pedidos.total > 0` (`:36-41`, `sumidosGoogle.ts:54-63`);
       frases curtas em 375 px
-- [ ] T029 [P] [US2] `components/SeloSituacao.tsx` (`:32`, `:37-55`): o ramo `exclusao_solicitada` — badge neutra
+- [X] T029 [P] [US2] `components/SeloSituacao.tsx` (`:32`, `:37-55`): o ramo `exclusao_solicitada` — badge neutra
       "Cancelamento pedido", tooltip "Cancelamento pedido em dd/mm/aaaa" — e só "Cancelamento pedido" quando vier sem
       data (as listas de `event_situacao` — ficha da cliente, formulários, figurino, tags 3D — mandam só o código); `CalendarGrid.tsx:78-82` e
       `DayTimelineView.tsx:124-127` com o tooltip do pedido no chip
-- [ ] T030 [P] [US3] `pages/EventosCancelamentosPage.tsx`: título "Cancelamentos" (`:158`), a tabela "Aguardando
+- [X] T030 [P] [US3] `pages/EventosCancelamentosPage.tsx`: título "Cancelamentos" (`:158`), a tabela "Aguardando
       decisão" (`:174-228`) com alcance e devolução (corte pelo que vier) e o link "Decidir" (`:217-219`);
       `lib/navigation.tsx` — as duas entradas (`:388-396`, `:504-513`) "Cancelamentos"
-- [ ] T031 [P] [US3] `components/notificacoes/NotificacaoItem.tsx` (`:7-16`): ícones dos dois kinds
-- [ ] T032 Typecheck (`cd frontend && npm run typecheck`); commit `feat(315): telas — pedir, o quadro, a recusa, a faixa,
+- [X] T031 [P] [US3] `components/notificacoes/NotificacaoItem.tsx` (`:7-16`): ícones dos dois kinds
+- [X] T032 Typecheck (`cd frontend && npm run typecheck`); commit `feat(315): telas — pedir, o quadro, a recusa, a faixa,
       o selo e a fila`
 
 ---

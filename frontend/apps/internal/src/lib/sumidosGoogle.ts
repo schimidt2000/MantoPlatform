@@ -19,6 +19,11 @@ export interface FaixaSumidos {
   limit: number;
   /** Por urgência: futuros por data, depois passados do mais recente, sem data por último. */
   items: SumidoGoogle[];
+  /**
+   * Feature 315: os pedidos de cancelamento pendentes, na mesma ordem. Opcional: o backend de
+   * antes do deploy não manda; `total`/`items` acima continuam só do sumiço.
+   */
+  pedidos?: { total: number; items: SumidoGoogle[] };
 }
 
 const PREFIXO = "sumidos-google";
@@ -57,7 +62,7 @@ export function useFaixaSumidosVisivel(): boolean {
     queryKey: chave(user?.id),
     queryFn: () => apiFetch<FaixaSumidos>("/api/events/sumidos-google"),
     enabled: false,
-    select: (faixa) => faixa.pode_ver && faixa.total > 0,
+    select: (faixa) => faixa.pode_ver && (faixa.total > 0 || (faixa.pedidos?.total ?? 0) > 0),
   });
   return data ?? false;
 }
