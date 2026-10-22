@@ -12,7 +12,10 @@ import {
 import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
+import { copyToClipboard } from "../../lib/clipboard";
+import { useCobrarContrato } from "../../lib/contratos";
 import {
+  buildCobrancaContratoMsg,
   buildCobrancaMsg,
   buildCobrancaReembolsoMsg,
   buildConfirmacaoMsg,
@@ -190,16 +193,6 @@ function ExportElencoDialog({ data, open, onOpenChange }: ExportElencoDialogProp
   );
 }
 
-/** Copia um texto e devolve se a área de transferência aceitou. */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    await navigator.clipboard.writeText(text);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 export interface EventHeaderProps {
   data: EventoDetalhe;
 }
@@ -219,6 +212,7 @@ export function EventHeader({ data }: EventHeaderProps) {
   const remove = useDeleteEvent(event.id);
   const recusar = useRecusarSolicitacao(event.id);
   const feedbackLink = useFeedbackLink(event.id);
+  const cobrarContrato = useCobrarContrato(event.id);
   // A devolução mora aqui, não no banner: o banner some no sucesso, e callback de `mutate` não
   // dispara em componente desmontado (TanStack Query 5).
   const devolver = useDevolverAoGoogle(event.id);
@@ -317,6 +311,33 @@ export function EventHeader({ data }: EventHeaderProps) {
         onClick: () =>
           copiar(buildCobrancaReembolsoMsg(mensagens), "Mensagem de reembolso copiada."),
       });
+      // Feature 317: só com o bloco do contrato (servidor novo, integração respondendo). Copia
+      // primeiro (o navegador exige o gesto do clique) e depois registra quem cobrou.
+      const contrato = data.contrato;
+      if (contrato?.integracao_ligada) {
+        const documento = contrato.documento;
+        items.push({
+          label: "📝 Cobrar contrato",
+          disabled: !contrato.pode_cobrar || !documento,
+          title: contrato.pode_cobrar
+            ? "Copiar a mensagem que explica como assinar pela ClickSign"
+            : (contrato.motivo_bloqueio ?? "Sem contrato para cobrar"),
+          onClick: async () => {
+            if (!documento) return;
+            const copiou = await copyToClipboard(
+              buildCobrancaContratoMsg(mensagens, documento.canal, mensagens.contrato_prazo),
+            );
+            if (!copiou) {
+              anunciar("Não foi possível copiar.");
+              return;
+            }
+            cobrarContrato.mutate(documento.id, {
+              onSuccess: () => anunciar("Mensagem do contrato copiada. Cobrança registrada."),
+              onError: () => anunciar("Mensagem copiada, mas a cobrança não foi registrada."),
+            });
+          },
+        });
+      }
     }
     // Feature 312: no cancelado não se confirma nem se pede avaliação (o servidor recusa).
     if (!cancelado) {
@@ -378,7 +399,11 @@ export function EventHeader({ data }: EventHeaderProps) {
     tone: "neutral" as const,
   };
   const pendente =
-    sync.isPending || confirm.isPending || feedbackLink.isPending || remove.isPending;
+    sync.isPending ||
+    confirm.isPending ||
+    feedbackLink.isPending ||
+    remove.isPending ||
+    cobrarContrato.isPending;
 
   return (
     <header className="mb-4">

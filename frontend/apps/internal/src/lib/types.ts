@@ -1,6 +1,7 @@
 /** Tipos dos recursos da API consumidos pela Fundação (data-model.md). */
 
 import type { StatusCounts } from "./formulariosAdmin";
+import type { ContratosResumo } from "./contratos";
 import type { Severidade } from "./homeListas";
 
 /** Usuário autenticado — resposta de /api/auth/me e /api/auth/login. */
@@ -172,6 +173,11 @@ export interface ComercialSummary {
   corte?: string | null;
   /** Papel efetivo edita a venda (senão a ação da linha "sem valor" é "Abrir"). */
   pode_editar_venda?: boolean;
+  /**
+   * Feature 317: painel "Contratos". `undefined` = servidor antigo (não desenha); `null` = o
+   * bloco falhou (mostra o aviso, nunca "✓").
+   */
+  contratos?: ContratosResumo | null;
 }
 
 /** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */

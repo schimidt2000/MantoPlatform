@@ -380,7 +380,17 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     });
   }
 
-  if (data.contratos) {
+  if (data.contrato?.integracao_ligada) {
+    // Feature 317: a situação da ClickSign, julgada pela venda (vale igual nos dias do grupo).
+    const assinado = data.contrato.situacao === "assinado" || data.contrato.situacao === "assinado_manual";
+    lista.push({
+      key: "contrato",
+      label: "Contrato",
+      valor: data.contrato.rotulo.toLowerCase(),
+      ok: assinado,
+      tab: "comercial",
+    });
+  } else if (data.contratos) {
     const assinado = data.contratos.some((c) => c.is_signed);
     lista.push({
       key: "contrato",
