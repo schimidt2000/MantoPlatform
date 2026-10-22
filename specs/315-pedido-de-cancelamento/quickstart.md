@@ -27,7 +27,8 @@ excluir usam o Google falso). Regressão: `verify_306.py` (base 67/69), `verify_
   portal num Vite próprio), com usuários descartáveis:
   1. Comercial: "Solicitar cancelamento" num evento simples (Parte com nome/PIX; Nada), num ensaio e num evento com
      cachê pago (item desabilitado com a frase), numa venda de vários dias (o 1º dia com a escolha do alcance; outro
-     dia "vale só para ele"), numa venda virtual (só o motivo).
+     dia "vale só para ele"), numa venda virtual (só o motivo); o diálogo também em 375 px (o Comercial pede pelo
+     celular).
   2. Quadro do pedido como Comercial autor, Comercial colega, Casting e revendedor (o que cada um lê).
   3. Faixa: uma frase, duas frases, e em 375 px; o link de um pedido e a lista de vários.
   4. Selo na agenda (Mês, Dia, busca).

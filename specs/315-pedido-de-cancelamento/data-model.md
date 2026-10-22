@@ -44,13 +44,15 @@ Saídas que gravam zeram as **cinco** colunas; a exclusão as leva junto com a l
 | `devolucao.modo`, `devolucao.valor`, `venda_nova` | ✓ | ✓ | ✓ | ✓ | — |
 | `devolucao.nome`, `devolucao.pix` | — (só o autor) | ✓ | ✓ | ✓ | — |
 
-Pelo papel **em uso** (o "Ver como" vale); o autor é comparado pelo id do usuário.
+Pelo papel **em uso** (o "Ver como" vale); o autor é comparado pelo id do usuário. O **histórico do evento** (o
+`EventLog` com o motivo) continua só do Superadmin, como hoje (`agenda_read.py:900-901`). Em **Nada**, o JSON não
+guarda nome nem PIX.
 
 ## `notifications` — dois kinds
 
 | kind | destinatários | severidade | chave (dedupe) | entidade / link |
 |---|---|---|---|---|
-| `evento.pedido_cancelamento` | SUPERADMIN ativos | `urgent` se o evento é em ≤ 7 dias, senão `info` | `evento.pedido_cancelamento:<event_id>:<carimbo>` | `calendar_event` / `/events/<id>` |
+| `evento.pedido_cancelamento` | SUPERADMIN ativos | `urgent` se o evento é em ≤ 7 dias ou já passou, senão `info` | `evento.pedido_cancelamento:<event_id>:<carimbo>` | `calendar_event` / `/events/<id>` |
 | `evento.pedido_decidido` | só o autor (explícito) | `info` | `evento.pedido_decidido:<event_id>:<decisão>:<carimbo>` | idem; **sem** no "excluído" |
 
 Na decisão, os `evento.pedido_cancelamento` do evento são marcados lidos (não apagados); na exclusão,

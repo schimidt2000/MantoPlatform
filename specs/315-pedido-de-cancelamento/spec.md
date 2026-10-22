@@ -87,7 +87,9 @@ Premissas contestáveis (vêm do plano ou da reconferência); o dono só precisa
    quem decide sendo o autor não recebe a resposta.
 9. **O selo "Cancelamento pedido" aparece onde o selo de situação já aparece** (agenda Mês, Dia, Lista e busca, e as
    listas que já mostram situação do evento: ficha da cliente, formulários, figurino, tags 3D) — ele nunca leva motivo
-   nem autor, então não fere a Q6.
+   nem autor, então não fere a Q6. O dia de uma venda de vários dias que **herda** o pedido de "todos os dias" do 1º
+   dia aparece marcado onde se planeja o dia — agenda, tela do evento e portal; nas outras listas, cada evento mostra
+   a sua própria situação.
 10. **A recusa passa por confirmação, com motivo opcional** (P6) — hoje um clique errado some com o pedido.
 11. **O texto do diálogo de cancelar "Aparece para quem abre o evento."** (sobre o motivo do cancelamento) foi
     superado pela 1c-Q9 = A e é corrigido aqui, já que este item mexe no diálogo.
@@ -209,6 +211,9 @@ cancelado; sem fechar o pedido em cada dia cancelado, sobra pedido aberto em eve
 
 - **O pedido do 1350**, feito antes do deploy: aparece na fila, no quadro do evento, na faixa e no selo, sem alcance e
   "sem devolução informada"; nenhum aviso retroativo nasce.
+- **Evento marcado como "sumiu do Google" e com pedido** (é o caso do 1350): conta nas duas frases da faixa; na tela, o
+  aviso do sumiço vem primeiro e o quadro do pedido logo abaixo; na agenda, o selo é o do sumiço (a situação mais
+  forte vence, como hoje); no portal, "Evento em confirmação" (os dois dão o mesmo aviso).
 - **Autor sem acesso** (desligado depois de pedir) ou apagado: a decisão segue; a resposta simplesmente não sai.
 - **O Superadmin pede** (pela API ou em "Ver como: Comercial"): o pedido é aceito e o aviso vai a todos os
   Superadmins, inclusive a ele; se ele mesmo decidir, não recebe a resposta.
@@ -247,7 +252,7 @@ cancelado; sem fechar o pedido em cada dia cancelado, sobra pedido aberto em eve
   DEVE fechar o pedido.
 - **FR-007**: Pedir e recusar NÃO DEVEM chamar o Google nem mandar e-mail.
 - **FR-008**: Na mesma gravação do pedido, cada Superadmin ativo DEVE receber um aviso no sino (urgente se o evento é
-  em 7 dias ou menos) com a data, a venda, o recebido, os escalados (sem a vaga automática do técnico de som), o
+  em 7 dias ou menos, ou já passou) com a data, a venda, o recebido, os escalados (sem a vaga automática do técnico de som), o
   alcance, o motivo e quem pediu — nunca nome nem PIX. Pedido novo depois de uma recusa gera aviso novo.
 - **FR-009**: Pedido e recusa DEVEM ficar no histórico do evento e na auditoria (com modo e valor da devolução, nunca
   nome nem PIX), com a hora certa.

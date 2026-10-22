@@ -64,7 +64,9 @@ tudo/parte/nada; no corte, `tudo` recusado), `devolucao_valor` (Parte sem valor 
 `devolucao_nome`/`devolucao_pix` (obrigatórios em Tudo e Parte; 200/120), `venda_nova` (obrigatória no corte, > 0).
 **Venda virtual**: sem devolução — o corpo só precisa do motivo (a 306 ignora o modo, `:1653-1656`); a coluna fica
 nula. O pedido **não** confere máximo a devolver, devolução mínima do corte nem "nada pago → só Nada": é dinheiro, e
-quem confere é o cancelar na hora de cancelar.
+quem confere é o cancelar na hora de cancelar. Em **Nada**, nome e PIX não são gravados (não há a quem devolver; o
+diálogo nem os mostra) — vindos no corpo, são descartados. O pedido **não** tem `observacao`: o motivo já é o texto
+livre do pedido, e a observação da devolução é do Superadmin, no cancelar.
 
 **Por quê**: uma forma só para o mesmo dado (o Superadmin compara lado a lado); a forma do pedido não pode ser mais
 rígida que a do cancelar, senão o Comercial seria barrado por uma conta que vale para o momento do cancelamento.
@@ -108,7 +110,9 @@ sumiço** (o bundle velho escreveria "N eventos sumiram"). No componente (`Faixa
 dividem a linha de 40 px (`h-10`), cada uma com o seu botão, o seu `aberto`, o seu `ref` e a sua lista (o estado hoje
 é um só, `:31-34`); um pedido = link direto ao evento, vários = lista com links aos eventos (nunca a
 `/events/cancelamentos`, que o Comercial não abre). `useFaixaSumidosVisivel` e o `select` (`sumidosGoogle.ts:54-63`)
-passam a olhar `total > 0 || (pedidos?.total ?? 0) > 0`. Em 375 px as frases encurtam ("2 sumiram do Google · 1
+passam a olhar `total > 0 || (pedidos?.total ?? 0) > 0`. Cada frase é um botão com `aria-expanded`/`aria-controls`
+para a sua lista, e Esc e clique fora fecham a lista aberta (o comportamento de hoje, em dobro). O evento que está
+marcado **e** tem pedido (o 1350) conta nas duas frases. Em 375 px as frases encurtam ("2 sumiram do Google · 1
 pedido de cancelamento"). Os hooks de pedir e recusar invalidam a faixa (`invalidarSumidosGoogle`); o cancelar e o
 excluir já invalidam (`eventOps.ts:87`, `:366-368`).
 
@@ -147,8 +151,8 @@ porta da equipe e "código velho não se limpa de passagem".
 ## R11 — Os avisos no sino
 
 **Decisão**: dois kinds no catálogo (`notificacoes_ops.py:54-77`, receita `:16-18`):
-`evento.pedido_cancelamento` (destinatários: SUPERADMIN ativos; `urgent` se o evento é em ≤ 7 dias,
-`ANTECEDENCIA_URGENTE_DIAS`, `:91`; senão `info`; `dedupe_key = <kind>:<event_id>:<carimbo do pedido>`;
+`evento.pedido_cancelamento` (destinatários: SUPERADMIN ativos; `urgent` se o evento é em ≤ 7 dias — o evento que
+já passou também, como nos produtores de hoje (`:272`, `:311`), `ANTECEDENCIA_URGENTE_DIAS`, `:91`; senão `info`; `dedupe_key = <kind>:<event_id>:<carimbo do pedido>`;
 `entidade=("calendar_event", id)`, `link_path=/events/<id>`; corpo: data · venda · recebido · N escalados (régua de
 `preso_ao_evento`, sem a vaga automática do técnico) · alcance · pedido por <nome> · <motivo>, cortado em 500) e
 `evento.pedido_decidido` (`destinatarios=[autor]`, `info`, chave `<kind>:<event_id>:<decisão>:<carimbo do pedido>`;
