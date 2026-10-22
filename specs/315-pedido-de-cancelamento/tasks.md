@@ -283,3 +283,25 @@ fase que constrói o que ele exige.
 Uma entrega só (a noite do pedido), com uma migration aditiva, num push à noite quando o dono pedir. MVP = US1 + US3
 (pedir e decidir); a US2 entra no mesmo deploy, porque sem o corte da Q6 o pedido passaria a expor o motivo da cliente a
 toda a equipe (hoje ele já sai sem corte, com zero uso — com a porta aberta, vira vazamento real).
+
+---
+
+## Phase 8: Convergence
+
+Converge de 22/10 (duas leituras independentes — servidor e telas — conferidas contra o código). Por achado, cenário
+vermelho no `verify_315.py` antes da correção quando o achado é do servidor.
+
+- [ ] T040 Contar os escalados do aviso sem a vaga automática do técnico de som em SHOW (`solicitacao_ops.solicitar` → `elenco_dos_dias` conta o talento 42 / `SOUND_TECH_CHARACTER`; molde `sumico_ops.preso_ao_evento:189-197`) per FR-008 (contradicts)
+- [ ] T041 Dizer "sem devolução informada" no quadro e na fila quando o pedido (de antes do deploy ou pelo caminho velho) não traz devolução e a venda não é virtual — o servidor diz (`serializar_para`), a tela mostra (`QuadroDoPedido.tsx`, `EventosCancelamentosPage.tsx`) per FR-026 (missing)
+- [ ] T042 Faixa: "1 pedido de cancelamento aguarda decisão" / "N pedidos de cancelamento aguardam decisão", na faixa vermelha (`FaixaSumidosGoogle.tsx`) per FR-012 (contradicts)
+- [ ] T043 Mostrar o alcance também no "todos" ("todos os N dias da venda") no quadro, no diálogo de cancelar e na fila — texto pronto do servidor (`serializar_para`, a régua de `_texto_do_alcance`) per FR-010/FR-018/FR-024 (partial)
+- [ ] T044 Aviso do pedido feito num outro dia da venda: venda e recebido do 1º dia, nunca "sem venda" (`notificar_pedido_cancelamento`, `preso_ao_evento` do satélite) per FR-008 (partial)
+- [ ] T045 409 `cache_pago` do "todos": `dias` como `_evento_curto` (id, título, data) e a mensagem dizendo os dias, como o cancelar da 306 per FR-005 (partial)
+- [ ] T046 Pedir ou recusar num evento excluído no meio do caminho: 404 claro em vez de 500 (`refresh` de linha apagada em `solicitar`/`recusar`) per FR-022 (partial)
+- [ ] T047 `title` do item do menu: "Pede ao Superadmin que cancele este evento — ele recebe o aviso no sino" (`EventHeader.tsx`) per FR-001 (partial)
+- [ ] T048 Diálogo de pedir: dizer o que falta ao lado do "Enviar pedido" desabilitado (`PedirCancelamentoDialog.tsx`) per US1/AC3 (partial)
+- [ ] T049 409 de estado: `pedido_pendente` fecha o diálogo e anuncia no cabeçalho; `sem_pedido` anuncia "Este pedido já foi decidido" (`PedirCancelamentoDialog.tsx`, `EventHeader.tsx`) per plan V/T023 (partial)
+- [ ] T050 Excluir recarrega o sino e a fila de Cancelamentos (`useDeleteEvent`, `lib/eventOps.ts`) per FR-021 (partial)
+- [ ] T051 `situacao_desde` ao lado da `situacao` nas listas que já mostram o selo (`clientes_read.py:109`, `formularios_admin_read.py:74`, `figurino/producao_ops.py:554`, `impressoes3d/nfc_ops.py:374`) e as telas passam a data ao `SeloSituacao` per FR-013 (partial)
+- [ ] T052 Excluir usuário com pedido pendente: zerar o `deletion_requested_by_id` em vez de estourar (`admin/user_ops.delete_user`) per data-model "autor apagado" (partial)
+- [ ] T053 Comentários com o vocabulário velho ("exclusão solicitada", "pedido de exclusão") em `lib/agenda.ts:8-9`, `EventHeader.tsx:467`, `lib/eventOps.ts:92` per FR-024 (partial)
