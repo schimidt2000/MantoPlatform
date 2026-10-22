@@ -3526,6 +3526,8 @@ def listar_cancelamentos(
     flags: dict[str, Any] | None = None,
     mes: date | None = None,
     devolucao: str | None = None,
+    usuario: Any = None,
+    impersonando: bool = False,
 ) -> dict[str, Any]:
     """A página de Cancelamentos: pedidos pendentes + eventos cancelados (features 224, 306, 312).
 
@@ -3538,7 +3540,13 @@ def listar_cancelamentos(
       divergiria da coluna que a tela mostra). O evento entra em cada estado que tem; `sem` = nenhuma
       devolução. Aplicado antes do corte de 200;
     - sai o objeto `devolucao` legado (o "ciclo" da 306 passou; o bundle dela só o lia sem `resumo`).
+
+    Feature 315: cada pendente traz o bloco do pedido (alcance e devolução combinada) com o corte
+    do detalhe (`solicitacao_ops.serializar_para`, pelo papel em uso e o autor) — `usuario` e
+    `impersonando` são de quem pede a página.
     """
+    from app.calendar import solicitacao_ops
+
     pendentes = (
         CalendarEvent.query.filter(
             CalendarEvent.deletion_requested_at.isnot(None),
@@ -3574,12 +3582,10 @@ def listar_cancelamentos(
                 "title": e.title,
                 "start_at": e.start_at.isoformat() if e.start_at else None,
                 "sale_value": float(e.sale_value or 0),
-                "requested_at": e.deletion_requested_at.isoformat(),
-                "requested_by": (
-                    db.session.get(User, e.deletion_requested_by_id).name
-                    if e.deletion_requested_by_id else None
+                **(
+                    solicitacao_ops.serializar_para(e, flags=flags, usuario=usuario, impersonando=impersonando)
+                    or {}
                 ),
-                "reason": e.deletion_request_reason,
             }
             for e in pendentes
         ],

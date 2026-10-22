@@ -104,7 +104,7 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
 **Meta**: quadro com o corte, faixa, selo, herança do satélite e portal.
 **Teste independente**: cenários 6, 10–12, 14, 15 (o 13 e o 25 fecham na US3: pedem a decisão).
 
-- [ ] T012 [US2] `app/calendar/solicitacao_ops.py`: `serializar_para(event, *, flags, usuario, impersonando)` — o bloco
+- [X] T012 [US2] `app/calendar/solicitacao_ops.py`: `serializar_para(event, *, flags, usuario, impersonando)` — o bloco
       do pedido com o corte do `data-model.md`: motivo/autor e modo/valor por `show_comercial`; nome/PIX por
       `show_comercial` **e** (`show_financeiro` **ou** o autor sem "Ver como"); `flags is None` (chamador interno) libera
       tudo, como hoje; `solicitacoes_da_venda(eventos) -> dict[int, datetime]` (uma consulta pelos `group_leader_id`
@@ -112,24 +112,24 @@ corte e a herança da US2 leem o pedido que a US1 grava; o fecho da US3 lê as c
       `:542-580` fica intacta — o `verify_303.py:1955` a chama direto e confere `total` e `items` só do sumiço);
       `escolha_do_alcance(event)` — no principal com outro dia vivo, `{dias: N, proximo: {id, start_at}}` pelo mesmo
       critério da passagem da 306 (`cancel_ops.py:1220-1225`, pula compromisso interno), para a tela não escolher o dia
-- [ ] T013 [US2] `app/api/agenda_read.py` `serialize_event_detail(event, user, impersonate)` (`:814`, `flags`
+- [X] T013 [US2] `app/api/agenda_read.py` `serialize_event_detail(event, user, impersonate)` (`:814`, `flags`
       `:822`): o bloco `deletion_request` (`:854-862`) pelo `serializar_para` com `user` (não `current_user`);
       `pedido_bloqueado` (o bloqueio do próprio dia; só se `can_request_delete` e não pendente) e `escolha_do_alcance`;
       `pedido_da_venda` e `situacao = exclusao_solicitada` no satélite que herda (lê o principal direto, um evento) —
       tudo **antes** do retorno antecipado do ENSAIO (`:903-905`); `serialize_event_summary(event,
       pedido_da_venda=None)` (`:70-95`) com a `situacao` herdada; o **mês** (`build_agenda_month`, `:128-138`, chamado
       de `agenda.py:48`) com o lote
-- [ ] T014 [US2] `app/api/agenda.py`: a **busca** (`api_agenda_search`, `:51-77`, a lista em `:71`) e o **dia** (`:104`)
+- [X] T014 [US2] `app/api/agenda.py`: a **busca** (`api_agenda_search`, `:51-77`, a lista em `:71`) e o **dia** (`:104`)
       chamam o lote uma vez; a faixa (`:160-172`) ganha `pedidos` por `faixa_das_solicitacoes()`, pelo mesmo gate
       `_ve_faixa_sumidos` (`:154-157`), com `total`/`items` intactos
-- [ ] T015 [US2] `app/calendar/cancel_ops.py` `listar_cancelamentos(*, flags, mes, devolucao)` (`:3564`): ganha
+- [X] T015 [US2] `app/calendar/cancel_ops.py` `listar_cancelamentos(*, flags, mes, devolucao)` (`:3564`): ganha
       `usuario` (e a view `agenda_write.py:985-986` passa `current_user`); os `pendentes[]` (`:3611-3625`) pelo
       `serializar_para` com `ver_motivo` (`:3605`) — alcance e devolução, e o corte também no "Ver como"
-- [ ] T016 [US2] `app/talent_portal/portal_ops.py`: `em_confirmacao` (`:321`) = marca ou pedido ou pedido da venda;
+- [X] T016 [US2] `app/talent_portal/portal_ops.py`: `em_confirmacao` (`:321`) = marca ou pedido ou pedido da venda;
       `_role_summary` (`:268-332`) recebe o lote; `get_agenda` (o `resumo` de `:398`, sobre convites, próximos e
       passados) e `get_historico` (`:936`) chamam o lote uma vez; o comentário de `:318-320` atualizado (sem motivo;
       uma consulta por lista)
-- [ ] T017 [US2] Rodar `verify_315.py '--so=6,10,11,12,14,15'` e os de US1 — verdes; commit `feat(315): ver enquanto
+- [X] T017 [US2] Rodar `verify_315.py '--so=6,10,11,12,14,15'` e os de US1 — verdes; commit `feat(315): ver enquanto
       espera — o corte da Q6, a faixa, o selo, o satélite e o portal`
 
 **Checkpoint**: verdes 1–12, 14–17, 26, 27, 28.

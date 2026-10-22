@@ -1002,8 +1002,17 @@ def api_listar_cancelamentos() -> Any:
         erros["devolucao"] = "Situação da devolução desconhecida."
     if erros:
         return json_error("Corrija os filtros.", 400, fields=erros)
-    flags = _role_flags(current_user, session.get("impersonate_role"))
-    return jsonify(listar_cancelamentos(flags=flags, mes=mes, devolucao=devolucao))
+    impersonate = session.get("impersonate_role")
+    flags = _role_flags(current_user, impersonate)
+    return jsonify(
+        listar_cancelamentos(
+            flags=flags,
+            mes=mes,
+            devolucao=devolucao,
+            usuario=current_user,
+            impersonando=bool(impersonate),
+        )
+    )
 
 
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])

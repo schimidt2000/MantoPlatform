@@ -266,7 +266,10 @@ def _antes_do_evento(roles: list[EventRole]) -> dict[int, dict]:
 
 
 def _role_summary(
-    role: EventRole, has_figurino: bool = False, before_event: dict | None = None
+    role: EventRole,
+    has_figurino: bool = False,
+    before_event: dict | None = None,
+    pedido_da_venda: bool = False,
 ) -> dict:
     """Serializa uma escalação do próprio talento — inclui sempre o cachê dele.
 
@@ -285,6 +288,8 @@ def _role_summary(
             propósito: montá-lo aqui custaria uma consulta por escalação, e quem chama já tem os
             blocos da agenda inteira numa consulta só (`_antes_do_evento`). É a mesma razão pela
             qual `has_figurino` também chega pronto.
+        pedido_da_venda: O principal da venda tem pedido de cancelamento de "todos os dias"
+            (feature 315). Também de fora, pelo lote `solicitacoes_da_venda`: uma consulta por lista.
 
     Returns:
         O dicionário da escalação, tal como o portal o recebe.
@@ -316,9 +321,12 @@ def _role_summary(
         # "Convites" sem explicação. `None` = convite nunca enviado (nada a responder).
         "invite_status": role.invite_status,
         # Feature 303: o evento sumiu do Google Agenda e a produção ainda vai confirmar. Vai o
-        # código, nunca o motivo — o artista não precisa saber de "Google" —, e a tela escreve o
-        # texto. A propriedade já é "marca E não cancelado"; nenhuma consulta nova.
-        "em_confirmacao": bool(event.is_google_missing),
+        # código, nunca o motivo — o artista não precisa saber de "Google" nem de pedido —, e a
+        # tela escreve o texto. Feature 315: o pedido de cancelamento (do dia ou da venda) também
+        # é "em confirmação". As propriedades já excluem o cancelado; nenhuma consulta por item.
+        "em_confirmacao": bool(
+            event.is_google_missing or event.has_pending_deletion_request or pedido_da_venda
+        ),
         # Vai o CÓDIGO do modelo, não o rótulo pronto — mesma convenção de `payment_status` e
         # `invite_status`, que a tela também traduz. 289 das 731 escalações com talento são cargo
         # (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo, Transporte) e as três telas do
@@ -391,6 +399,10 @@ def get_agenda(talent: Talent) -> dict:
     # propósito: preparação é para o que ainda vai acontecer, e anexá-la custaria a varredura
     # sobre as centenas de linhas do histórico de um talento antigo, por nada.
     antes = _antes_do_evento(pending_invites + upcoming)
+    # Feature 315: o pedido de "todos os dias" no principal, para as três listas numa consulta.
+    from app.calendar.solicitacao_ops import solicitacoes_da_venda
+
+    da_venda = solicitacoes_da_venda([r.event for r in pending_invites + upcoming + past])
 
     # `cache_total`/`payment_status` já vêm de `_role_summary` — antes eram anexados só aqui, que
     # era exatamente a razão de o cachê sumir nas outras duas listas.
@@ -399,6 +411,7 @@ def get_agenda(talent: Talent) -> dict:
             role,
             has_figurino=role.event_id in com_ficha,
             before_event=antes.get(role.event_id) if preparacao else None,
+            pedido_da_venda=role.event_id in da_venda,
         )
 
     return {
@@ -927,13 +940,18 @@ def get_historico(talent: Talent) -> dict[str, Any]:
     )
 
     com_ficha = events_with_visible_figurino(talent, past)
+    from app.calendar.solicitacao_ops import solicitacoes_da_venda
+
+    da_venda = solicitacoes_da_venda([r.event for r in past])
 
     items = []
     total_paid = 0.0
     total_pending = 0.0
     for role in past:
         # Campos de cachê vêm de `_role_summary` (fonte única); aqui só somamos os totais.
-        item = _role_summary(role, has_figurino=role.event_id in com_ficha)
+        item = _role_summary(
+            role, has_figurino=role.event_id in com_ficha, pedido_da_venda=role.event_id in da_venda
+        )
         if item["payment_status"] == "pago":
             total_paid += item["cache_total"]
         else:
