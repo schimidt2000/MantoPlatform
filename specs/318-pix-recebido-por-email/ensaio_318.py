@@ -99,8 +99,12 @@ def main() -> int:
     dias = (date.today() - desde).days + 2
     print(f"lendo a caixa (só leitura), {dias} dias…", flush=True)
     brutos = fetch_messages(
-        cred["MAIL_USERNAME"], cred["MAIL_PASSWORD"], sender="no-reply@inter.co",
-        subject="Pix recebido", since_days=dias, limit=5000,
+        cred["MAIL_USERNAME"],
+        cred["MAIL_PASSWORD"],
+        sender="no-reply@inter.co",
+        subject="Pix recebido",
+        since_days=dias,
+        limit=5000,
     )
     avisos = [a for a in (ler_aviso_inter(b) for b in brutos) if isinstance(a, AvisoPix)]
     avisos = [a for a in avisos if a.tipo == PIX_TIPO_PIX and desde <= a.recebido_em.date() <= ate]
@@ -113,104 +117,135 @@ def main() -> int:
     def verdade(aviso: AvisoPix) -> dict | None:
         nome = pix_ops.normalizar_nome(aviso.pagador_nome)
         melhores = [
-            g for g in gabarito
-            if g["entrada_id"] not in usados and abs(g["_valor"] - aviso.valor) <= Decimal("0.01")
+            g
+            for g in gabarito
+            if g["entrada_id"] not in usados
+            and abs(g["_valor"] - aviso.valor) <= Decimal("0.01")
             and abs((g["_data"] - aviso.recebido_em.date()).days) <= 1
         ]
-        melhores.sort(key=lambda g: (
-            not pix_ops.nome_bate(nome, [g["contraparte"]]), abs((g["_data"] - aviso.recebido_em.date()).days)
-        ))
+        melhores.sort(
+            key=lambda g: (
+                not pix_ops.nome_bate(nome, [g["contraparte"]]),
+                abs((g["_data"] - aviso.recebido_em.date()).days),
+            )
+        )
         if melhores:
             usados.add(melhores[0]["entrada_id"])
             return melhores[0]
         return None
 
     app = create_app()
-    contagem: collections.Counter = collections.Counter()
-    with app.app_context():
-        conn = db.session.connection()
-        try:
-            # A conta MEI ganha número só dentro da transação (o ensaio não toca a configuração).
-            numero_mei = avisos[0].numero_conta if avisos else None
-            mei = ContaRecebimento.query.filter_by(apelido="Inter MEI").first()
-            if mei is not None and numero_mei and not mei.numero_conta:
-                mei.numero_conta = numero_mei
-            EventPayment.query.filter(
-                EventPayment.created_at >= datetime.combine(desde, datetime.min.time())
-            ).delete(synchronize_session=False)
-            db.session.flush()
-
-            original = pix_ops.vendas_abertas
-            from app.constants import RoleName
-            from app.models import Role, User
-
-            quem_confirma = User.query.join(User.roles).filter(Role.name == RoleName.SUPERADMIN).first()
-
-            def vendas_na_epoca(limite: datetime):
-                return [
-                    v for v in original()
-                    if v.principal.created_at is None or v.principal.created_at <= limite + timedelta(days=7)
-                ]
-
-            for i, aviso in enumerate(avisos, 1):
-                pix = pix_email_ops._ingerir(aviso, None)
-                pix.message_id = f"<ensaio-{i}-{pix.message_id}"[:300]
-                db.session.add(pix)
+    # Lê a caixa uma vez e roda os dois regimes: só o automático, e com o "É esta?" respondido.
+    regimes = [True] if args.simular_confirmacao else [False, True]
+    saida = 0
+    for simular in regimes:
+        usados.clear()
+        contagem: collections.Counter = collections.Counter()
+        with app.app_context():
+            conn = db.session.connection()
+            try:
+                # A conta MEI ganha número só dentro da transação (o ensaio não toca a configuração).
+                numero_mei = avisos[0].numero_conta if avisos else None
+                mei = ContaRecebimento.query.filter_by(apelido="Inter MEI").first()
+                if mei is not None and numero_mei and not mei.numero_conta:
+                    mei.numero_conta = numero_mei
+                EventPayment.query.filter(
+                    EventPayment.created_at >= datetime.combine(desde, datetime.min.time())
+                ).delete(synchronize_session=False)
                 db.session.flush()
-                if pix.estado == PIX_ESTADO_NOVO:
-                    pix_ops.vincular(pix, vendas=vendas_na_epoca(aviso.recebido_em + timedelta(hours=3)))
+
+                original = pix_ops.vendas_abertas
+                from app.constants import RoleName
+                from app.models import Role, User
+
+                quem_confirma = (
+                    User.query.join(User.roles).filter(Role.name == RoleName.SUPERADMIN).first()
+                )
+
+                def vendas_na_epoca(limite: datetime, original=original):
+                    return [
+                        v
+                        for v in original()
+                        if v.principal.created_at is None
+                        or v.principal.created_at <= limite + timedelta(days=7)
+                    ]
+
+                for i, aviso in enumerate(avisos, 1):
+                    pix = pix_email_ops._ingerir(aviso, None)
+                    pix.message_id = f"<ensaio-{i}-{pix.message_id}"[:300]
+                    db.session.add(pix)
                     db.session.flush()
+                    if pix.estado == PIX_ESTADO_NOVO:
+                        pix_ops.vincular(
+                            pix, vendas=vendas_na_epoca(aviso.recebido_em + timedelta(hours=3))
+                        )
+                        db.session.flush()
 
-                g = verdade(aviso)
-                classe = g["classificacao"] if g else "sem_gabarito"
-                certo_evento = None
-                if g and classe.startswith("casada") and g["event_id"]:
-                    ev = db.session.get(CalendarEvent, int(g["event_id"]))
-                    certo_evento = principal_da_venda(ev).id if ev else None
+                    g = verdade(aviso)
+                    classe = g["classificacao"] if g else "sem_gabarito"
+                    certo_evento = None
+                    if g and classe.startswith("casada") and g["event_id"]:
+                        ev = db.session.get(CalendarEvent, int(g["event_id"]))
+                        certo_evento = principal_da_venda(ev).id if ev else None
 
-                if pix.estado == PIX_ESTADO_LIGADO_AUTO:
-                    pagamento = db.session.get(EventPayment, pix.event_payment_id)
-                    ev = db.session.get(CalendarEvent, pagamento.event_id) if pagamento else None
-                    ligado = principal_da_venda(ev).id if ev else None
-                    if certo_evento is not None and ligado == certo_evento:
-                        contagem["auto_certo"] += 1
-                    elif certo_evento is None and classe in ("sem_gabarito", "sem_registro_no_erp"):
-                        contagem["auto_sem_gabarito"] += 1  # conferir à mão: venda que o ERP não tinha
+                    if pix.estado == PIX_ESTADO_LIGADO_AUTO:
+                        pagamento = db.session.get(EventPayment, pix.event_payment_id)
+                        ev = (
+                            db.session.get(CalendarEvent, pagamento.event_id) if pagamento else None
+                        )
+                        ligado = principal_da_venda(ev).id if ev else None
+                        if certo_evento is not None and ligado == certo_evento:
+                            contagem["auto_certo"] += 1
+                        elif certo_evento is None and classe in (
+                            "sem_gabarito",
+                            "sem_registro_no_erp",
+                        ):
+                            contagem["auto_sem_gabarito"] += (
+                                1  # conferir à mão: venda que o ERP não tinha
+                            )
+                        else:
+                            contagem["auto_errado"] += 1
+                    elif pix.estado == PIX_ESTADO_PARA_CONFERIR:
+                        sugeridos = {
+                            e for c in pix.candidatos or [] for e in c.get("event_ids") or []
+                        }
+                        if certo_evento is not None and certo_evento in sugeridos:
+                            contagem["conferir_com_a_certa"] += 1
+                            if simular and quem_confirma is not None:
+                                pix_ops.confirmar(pix.id, [certo_evento], quem_confirma)
+                                db.session.flush()
+                        elif certo_evento is not None:
+                            contagem["conferir_sem_a_certa"] += 1
+                        else:
+                            contagem["conferir_nao_venda"] += 1
+                    elif pix.estado == PIX_ESTADO_CONTA_PROPRIA:
+                        contagem["conta_propria"] += 1
                     else:
-                        contagem["auto_errado"] += 1
-                elif pix.estado == PIX_ESTADO_PARA_CONFERIR:
-                    sugeridos = {e for c in pix.candidatos or [] for e in c.get("event_ids") or []}
-                    if certo_evento is not None and certo_evento in sugeridos:
-                        contagem["conferir_com_a_certa"] += 1
-                        if args.simular_confirmacao and quem_confirma is not None:
-                            pix_ops.confirmar(pix.id, [certo_evento], quem_confirma)
-                            db.session.flush()
-                    elif certo_evento is not None:
-                        contagem["conferir_sem_a_certa"] += 1
-                    else:
-                        contagem["conferir_nao_venda"] += 1
-                elif pix.estado == PIX_ESTADO_CONTA_PROPRIA:
-                    contagem["conta_propria"] += 1
-                else:
-                    contagem["ignorado_venda" if certo_evento else "ignorado_nao_venda"] += 1
-                contagem[f"gabarito:{classe}"] += 1
-                if i % 50 == 0:
-                    print(f"  … {i}/{len(avisos)}", flush=True)
-        finally:
-            db.session.rollback()
-            conn.close()
-        sobras = PixRecebido.query.filter(PixRecebido.message_id.like("<ensaio-%")).count()
+                        contagem["ignorado_venda" if certo_evento else "ignorado_nao_venda"] += 1
+                    contagem[f"gabarito:{classe}"] += 1
+                    if i % 50 == 0:
+                        print(f"  … {i}/{len(avisos)}", flush=True)
+            finally:
+                db.session.rollback()
+                conn.close()
+            sobras = PixRecebido.query.filter(PixRecebido.message_id.like("<ensaio-%")).count()
 
-    vendas_total = sum(v for k, v in contagem.items() if k.startswith("gabarito:casada"))
-    print("\n── ensaio 318 (só contagens) ──")
-    for chave in sorted(contagem):
-        print(f"  {chave:28s} {contagem[chave]}")
-    if vendas_total:
-        print(f"\n  ligaria sozinho certo: {contagem['auto_certo']}/{vendas_total} PIX de venda "
-              f"({100 * contagem['auto_certo'] / vendas_total:.0f}%)")
-    print(f"  ligação automática ERRADA: {contagem['auto_errado']}")
-    print(f"  sobras no banco: {sobras}")
-    return 0 if contagem["auto_errado"] == 0 and sobras == 0 else 1
+        vendas_total = sum(v for k, v in contagem.items() if k.startswith("gabarito:casada"))
+        print(
+            f"\n── ensaio 318 (só contagens) — 'É esta?' respondido: {'sim' if simular else 'não'} ──"
+        )
+        for chave in sorted(contagem):
+            print(f"  {chave:28s} {contagem[chave]}")
+        if vendas_total:
+            print(
+                f"\n  ligaria sozinho certo: {contagem['auto_certo']}/{vendas_total} PIX de venda "
+                f"({100 * contagem['auto_certo'] / vendas_total:.0f}%)"
+            )
+        print(f"  ligação automática ERRADA: {contagem['auto_errado']}")
+        print(f"  sobras no banco: {sobras}")
+        if contagem["auto_errado"] or sobras:
+            saida = 1
+    return saida
 
 
 if __name__ == "__main__":

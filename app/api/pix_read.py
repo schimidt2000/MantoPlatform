@@ -81,16 +81,18 @@ def api_pix_listar() -> Any:
     aba = request.args.get("aba", "conferir")
     repasse = ve_repasse()
     itens = pix_ops.listar("ligados" if aba == "ligados" else "conferir", ver_repasse=repasse)
-    return jsonify({
-        "itens": [pix_ops.para_api(p) for p in itens],
-        "contagem_conferir": pix_ops.contagem_para_conferir(ver_repasse=repasse),
-        "flags": {
-            "pode_desfazer": repasse,
-            "pode_repasse": repasse,
-            "pode_resumo": repasse,
-            "pode_configurar": _has_role(RoleName.SUPERADMIN),
-        },
-    })
+    return jsonify(
+        {
+            "itens": [pix_ops.para_api(p) for p in itens],
+            "contagem_conferir": pix_ops.contagem_para_conferir(ver_repasse=repasse),
+            "flags": {
+                "pode_desfazer": repasse,
+                "pode_repasse": repasse,
+                "pode_resumo": repasse,
+                "pode_configurar": _has_role(RoleName.SUPERADMIN),
+            },
+        }
+    )
 
 
 @api_bp.route("/pix/saude", methods=["GET"])

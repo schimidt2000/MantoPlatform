@@ -42,7 +42,7 @@ import argparse
 import io
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from email.mime.text import MIMEText
 from email.utils import format_datetime
@@ -55,7 +55,7 @@ import verify_306 as v6  # noqa: E402 — sobe o app, o dublê, o disjuntor e o 
 
 from app import db  # noqa: E402
 from app.constants import RoleName  # noqa: E402
-from app.models import Client, EventClient, EventPayment  # noqa: E402
+from app.models import Client, EventClient  # noqa: E402
 
 app = v6.app
 estado = v6.estado
@@ -105,7 +105,7 @@ def _aviso(
     msg["From"] = "no-reply@inter.co"
     msg["To"] = "joao@mantoproducoes.com.br"
     msg["Subject"] = "Pix devolução recebida" if devolucao else "Pagamento Pix recebido"
-    quando = quando or datetime.now(timezone.utc)
+    quando = quando or datetime.now(UTC)
     msg["Date"] = format_datetime(quando)
     if dkim:
         msg["Authentication-Results"] = (
@@ -185,7 +185,10 @@ def _venda(rotulo: str, valor: str, contratante: str, *, vendedor: str = "vend",
 
 def _get(apelido: str, url: str, status: int = 200) -> dict:
     r = _cliente(apelido).get(url)
-    _garante(r.status_code == status, f"GET {url} como {apelido} → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        r.status_code == status,
+        f"GET {url} como {apelido} → {r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     return r.get_json(silent=True) or {}
 
 
@@ -202,9 +205,30 @@ def _ligar_leitura(desde: datetime | None = None) -> None:
 
 # ── preparo e limpeza ─────────────────────────────────────────────────────────────────────────
 VALORES = (
-    "7311.47", "8622.94", "4311.47", "5133.83", "3977.21", "6241.59", "2468.13", "1999.67",
-    "2127.83", "1351.29", "1801.73", "2311.29", "1234.57", "2718.28", "1618.03", "4747.47",
-    "3131.31", "5133.83", "3434.34", "2626.26", "5858.58", "2424.24", "1163.64", "3737.37",
+    "7311.47",
+    "8622.94",
+    "4311.47",
+    "5133.83",
+    "3977.21",
+    "6241.59",
+    "2468.13",
+    "1999.67",
+    "2127.83",
+    "1351.29",
+    "1801.73",
+    "2311.29",
+    "1234.57",
+    "2718.28",
+    "1618.03",
+    "4747.47",
+    "3131.31",
+    "5133.83",
+    "3434.34",
+    "2626.26",
+    "5858.58",
+    "2424.24",
+    "1163.64",
+    "3737.37",
 )
 
 
@@ -218,7 +242,9 @@ def _valores_livres() -> None:
         v=vals,
     )[0][0]
     if batidas:
-        v6._sair(f"{batidas} venda(s) do espelho com valor igual a um dos cenários — troque os valores.")
+        v6._sair(
+            f"{batidas} venda(s) do espelho com valor igual a um dos cenários — troque os valores."
+        )
 
 
 def limpar_318() -> None:
@@ -264,7 +290,8 @@ def preparar() -> None:
         "UPDATE contas_recebimento SET numero_conta = :n WHERE apelido = 'Inter MEI'", n=CONTA_MEI
     )
     _no_banco_escrever(
-        "UPDATE contas_recebimento SET numero_conta = :n WHERE apelido = 'Inter Prime'", n=CONTA_PRIME
+        "UPDATE contas_recebimento SET numero_conta = :n WHERE apelido = 'Inter Prime'",
+        n=CONTA_PRIME,
     )
     _no_banco_escrever(
         "UPDATE site_settings SET pix_pagadores_proprios = :p WHERE id = 1",
@@ -351,7 +378,8 @@ def c6_cancelada_e_quitada() -> None:
     antigo = v6._comprovante(quit_, 6241.59)
     # Comprovante antigo: fora da janela de conciliação (o recente É conciliado — cenário 15).
     _no_banco_escrever(
-        "UPDATE event_payments SET created_at = created_at - interval '60 days' WHERE id = :i", i=antigo
+        "UPDATE event_payments SET created_at = created_at - interval '60 days' WHERE id = :i",
+        i=antigo,
     )
     raw, mid = _aviso("6.241,59", "Cecilia Cancelada Teste")
     _processar(raw)
@@ -391,7 +419,9 @@ def c9_comercial_confirma() -> None:
     _garante(any(i["id"] == S["h2_pix"] for i in lista.get("itens", [])), "PIX fora da fila")
     r = _post("com", f"/api/pix/{S['h2_pix']}/confirmar", {"event_id": S["h2_a"]})
     _garante(r.status_code == 200, f"confirmar → {r.status_code} {r.get_data(as_text=True)[:200]}")
-    p = _no_banco("SELECT estado, decidido_por_id FROM pix_recebidos WHERE id = :i", i=S["h2_pix"])[0]
+    p = _no_banco("SELECT estado, decidido_por_id FROM pix_recebidos WHERE id = :i", i=S["h2_pix"])[
+        0
+    ]
     _garante(p[0] == "ligado_confirmado", f"estado {p[0]}")
     _garante(p[1] == estado["usuarios"]["com"]["id"], "decidido_por errado")
     _igual(_recebido(S["h2_a"]), "2468.13", "recebido da confirmada")
@@ -417,7 +447,9 @@ def c11_outra_venda() -> None:
     p = _pix(mid)
     _garante(sugerida in _sugeridos(p), "não sugeriu a de valor igual")
     r = _post("fin", f"/api/pix/{p['id']}/confirmar", {"event_id": certa})
-    _garante(r.status_code == 200, f"outra venda → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        r.status_code == 200, f"outra venda → {r.status_code} {r.get_data(as_text=True)[:200]}"
+    )
     _igual(_recebido(certa), "1351.29", "recebido da escolhida")
     _garante(not _pagamentos(sugerida), "a sugerida ganhou pagamento")
 
@@ -446,10 +478,15 @@ def c13_duplicata_anexar() -> None:
     eid = S["h1_evento"]  # pagamento de PIX sem arquivo, R$ 7.311,47
     pag_pix = _pagamentos(eid)[0][0]
     r = _anexar("com", eid, "7311.47")
-    _garante(r.status_code == 409 and _codigo(r) == "possivel_duplicata", f"→ {r.status_code} {_codigo(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "possivel_duplicata",
+        f"→ {r.status_code} {_codigo(r)}",
+    )
     _garante(len(_pagamentos(eid)) == 1, "criou pagamento sem perguntar")
     r2 = _anexar("com", eid, "7311.47", anexar_a=str(pag_pix))
-    _garante(r2.status_code in (200, 201), f"anexar → {r2.status_code} {r2.get_data(as_text=True)[:200]}")
+    _garante(
+        r2.status_code in (200, 201), f"anexar → {r2.status_code} {r2.get_data(as_text=True)[:200]}"
+    )
     pags = _pagamentos(eid)
     _garante(len(pags) == 1 and pags[0][2], f"arquivo não foi para o pagamento do PIX: {pags}")
     _igual(_recebido(eid), "7311.47", "recebido depois de anexar")
@@ -479,7 +516,10 @@ def c15_concilia() -> None:
     _garante(any(c.get("conciliar") == manual for c in p["candidatos"]), f"{p['candidatos']}")
     _garante(len(_pagamentos(eid)) == 1, "criou pagamento antes de perguntar")
     r = _post("com", f"/api/pix/{p['id']}/confirmar", {"event_id": eid})
-    _garante(r.status_code == 200, f"confirmar conciliação → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        r.status_code == 200,
+        f"confirmar conciliação → {r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     p = _pix(mid)
     pags = _pagamentos(eid)
     _garante(len(pags) == 1, f"criou outro pagamento: {pags}")
@@ -503,8 +543,13 @@ def c17_resumo_por_conta() -> None:
     res = _get("fin", "/api/pix/resumo-por-conta?meses=1")
     contas = {c["conta"]: c["por_mes"] for c in res.get("contas", [])}
     mes = datetime.now().strftime("%Y-%m")
-    _garante(Decimal(contas.get("Inter Prime", {}).get(mes, "0")) >= Decimal("777.77"), f"Prime: {contas}")
-    _garante(Decimal(contas.get("Inter MEI", {}).get(mes, "0")) >= Decimal("7311.47"), f"MEI: {contas}")
+    _garante(
+        Decimal(contas.get("Inter Prime", {}).get(mes, "0")) >= Decimal("777.77"),
+        f"Prime: {contas}",
+    )
+    _garante(
+        Decimal(contas.get("Inter MEI", {}).get(mes, "0")) >= Decimal("7311.47"), f"MEI: {contas}"
+    )
     r2 = _cliente("com").get("/api/pix/resumo-por-conta?meses=1")
     _garante(r2.status_code == 403, f"Comercial leu o resumo: {r2.status_code}")
 
@@ -571,7 +616,9 @@ def c22_repasse_duas_vendas() -> None:
     p = _pix(mid)
     _garante(p["tipo_sugestao"] == "repasse_infinitepay", f"{p}")
     r2 = _post("fin", f"/api/pix/{p['id']}/confirmar", {"event_ids": [a, b]})
-    _garante(r2.status_code == 200, f"duas vendas → {r2.status_code} {r2.get_data(as_text=True)[:200]}")
+    _garante(
+        r2.status_code == 200, f"duas vendas → {r2.status_code} {r2.get_data(as_text=True)[:200]}"
+    )
     _igual(_recebido(a), "600.00", "venda A")
     _igual(_recebido(b), "400.00", "venda B")
     # O cliente pagou na InfinitePay: a conta do pagamento é a dela, não o MEI do repasse.
@@ -633,7 +680,9 @@ def c27_desfazer() -> None:
     r = _post("fin", f"/api/pix/{S['h2_pix']}/desfazer")
     _garante(r.status_code == 200, f"desfazer → {r.status_code} {r.get_data(as_text=True)[:200]}")
     _garante(not _pagamentos(S["h2_a"]), "o pagamento sem arquivo ficou")
-    est = _no_banco("SELECT estado, event_payment_id FROM pix_recebidos WHERE id = :i", i=S["h2_pix"])[0]
+    est = _no_banco(
+        "SELECT estado, event_payment_id FROM pix_recebidos WHERE id = :i", i=S["h2_pix"]
+    )[0]
     _garante(est[0] == "para_conferir" and est[1] is None, f"PIX: {est}")
     # com arquivo (anexado no 13) → vira manual
     pid = _pix(S["h1_mid"])["id"]
@@ -675,7 +724,9 @@ def c28_sem_arquivo_nas_telas() -> None:
     d = _get("sa", f"/api/events/{eid}")
     itens = (d.get("pagamentos") or {}).get("items") or []
     _garante(itens and itens[0].get("file_path") is None, f"payload: {itens}")
-    _garante(itens[0].get("origem") == "pix_email" and itens[0].get("conta") == "Inter MEI", f"{itens}")
+    _garante(
+        itens[0].get("origem") == "pix_email" and itens[0].get("conta") == "Inter MEI", f"{itens}"
+    )
     _garante((itens[0].get("pix") or {}).get("automatico") is True, f"{itens}")
     r = _cliente("sa").get(f"/events/{eid}")
     _garante(r.status_code == 200, f"Jinja → {r.status_code}")
@@ -716,7 +767,9 @@ def c32_excluir_pagamento_de_pix() -> None:
     pid = _pix(mid)["pagamento"]
     _garante(pid, "não ligou")
     r = _cliente("sa").delete(f"/api/payments/{pid}")
-    _garante(r.status_code == 409 and _codigo(r) == "pagamento_de_pix", f"→ {r.status_code} {_codigo(r)}")
+    _garante(
+        r.status_code == 409 and _codigo(r) == "pagamento_de_pix", f"→ {r.status_code} {_codigo(r)}"
+    )
     _garante(len(_pagamentos(eid)) == 1, "apagou o pagamento do PIX")
 
 
@@ -791,7 +844,12 @@ CENARIOS = [
     ("H6", "28", "pagamento sem arquivo no React e no Jinja", c28_sem_arquivo_nas_telas),
     ("R", "30", "e-mail forjado não é autenticado", c30_dkim_forjado),
     ("R", "31", "um termo só no nome não liga sozinho", c31_nome_de_um_termo),
-    ("R", "32", "excluir pagamento de PIX pela tela do evento (DEVE FALHAR)", c32_excluir_pagamento_de_pix),
+    (
+        "R",
+        "32",
+        "excluir pagamento de PIX pela tela do evento (DEVE FALHAR)",
+        c32_excluir_pagamento_de_pix,
+    ),
     ("R", "33", "comprovante de outra conta não é conciliado", c33_conciliacao_outra_conta),
     ("R", "34", "repasse: 'LTDA' e escolha fora das sugestões (DEVE FALHAR)", c34_repasse_validado),
     ("R", "35", "anexar no cancelado pela Comercial (DEVE FALHAR)", c35_anexar_no_cancelado),
@@ -814,7 +872,9 @@ def main() -> int:
         try:
             limpar_318()
             v6.limpar()
-            sobras = _no_banco("SELECT count(*) FROM pix_recebidos WHERE message_id LIKE '<v318-%'")[0][0]
+            sobras = _no_banco(
+                "SELECT count(*) FROM pix_recebidos WHERE message_id LIKE '<v318-%'"
+            )[0][0]
             _garante(not sobras, f"sobraram {sobras} PIX do verify")
             sobras306 = v6._sobras_do_verify()
             _garante(not sobras306, f"a limpeza deixou: {sobras306}")

@@ -270,7 +270,9 @@ def _comprovantes_conciliaveis(pix: PixRecebido) -> list[EventPayment]:
     )
     consulta = EventPayment.query.filter(
         EventPayment.origem == EVENT_PAYMENT_ORIGEM_COMPROVANTE,
-        EventPayment.amount.between(pix.valor - PIX_TOLERANCIA_VALOR, pix.valor + PIX_TOLERANCIA_VALOR),
+        EventPayment.amount.between(
+            pix.valor - PIX_TOLERANCIA_VALOR, pix.valor + PIX_TOLERANCIA_VALOR
+        ),
         EventPayment.created_at >= desde,
         EventPayment.id.notin_(ligados),
     )
@@ -309,14 +311,23 @@ def sugestoes_de_venda(pix: PixRecebido, vendas: list | None = None) -> list[Sug
         venda = resumo_da_venda_do_evento(principal)
         nome = nome_bate(pix.pagador_norm, _nomes_da_venda(venda))
         ja = principal.id in principais_pagos or bool(_clientes_da_venda(venda) & clientes_pagos)
-        motivos = ["comprovante já anexado"] + (["nome bate"] if nome else []) + (
-            ["já pagou antes"] if ja else []
+        motivos = (
+            ["comprovante já anexado"]
+            + (["nome bate"] if nome else [])
+            + (["já pagou antes"] if ja else [])
         )
         por_principal.setdefault(
             principal.id,
-            Sugestao([principal.id], motivos, Decimal(str(pagamento.amount)), forte=True, nome=nome,
-                     ja_pagou=ja, conciliar=pagamento.id,
-                     extra={"pode_novo": principal.id in abertas}),
+            Sugestao(
+                [principal.id],
+                motivos,
+                Decimal(str(pagamento.amount)),
+                forte=True,
+                nome=nome,
+                ja_pagou=ja,
+                conciliar=pagamento.id,
+                extra={"pode_novo": principal.id in abertas},
+            ),
         )
 
     for venda in vendas:
@@ -339,7 +350,9 @@ def sugestoes_de_venda(pix: PixRecebido, vendas: list | None = None) -> list[Sug
     for s in por_principal.values():
         s.pontos = 4 * s.forte + 2 * s.ja_pagou + s.nome
         evento = db.session.get(CalendarEvent, s.event_ids[0])
-        s.distancia = abs((evento.start_at - pix.recebido_em).days) if evento and evento.start_at else 99999
+        s.distancia = (
+            abs((evento.start_at - pix.recebido_em).days) if evento and evento.start_at else 99999
+        )
     return sorted(por_principal.values(), key=lambda s: (-s.pontos, s.distancia, s.event_ids[0]))
 
 
@@ -396,18 +409,28 @@ def sugestoes_de_repasse(pix: PixRecebido, vendas: list | None = None) -> list[S
     vendas = vendas if vendas is not None else vendas_abertas()
     descartados = set(pix.descartados or [])
     cartao = [
-        v for v in vendas
-        if v.principal.payment_method == "cartao" and (v.saldo or 0) > 0
+        v
+        for v in vendas
+        if v.principal.payment_method == "cartao"
+        and (v.saldo or 0) > 0
         and v.principal.id not in descartados
     ]
-    cartao.sort(key=lambda v: abs((v.principal.start_at - pix.recebido_em).days) if v.principal.start_at else 99999)
+    cartao.sort(
+        key=lambda v: (
+            abs((v.principal.start_at - pix.recebido_em).days) if v.principal.start_at else 99999
+        )
+    )
     cartao = cartao[:30]  # teto da busca: 30 vendas, até 3 por grupo
     minimo, maximo = PIX_REPASSE_FAIXA
     achadas: list[Sugestao] = []
     for tamanho in range(1, PIX_REPASSE_MAX_VENDAS + 1):
         for grupo in combinations(cartao, tamanho):
             soma = sum((v.saldo for v in grupo), Decimal("0"))
-            if soma * minimo - PIX_TOLERANCIA_VALOR <= pix.valor <= soma * maximo + PIX_TOLERANCIA_VALOR:
+            if (
+                soma * minimo - PIX_TOLERANCIA_VALOR
+                <= pix.valor
+                <= soma * maximo + PIX_TOLERANCIA_VALOR
+            ):
                 taxa = soma - pix.valor
                 achadas.append(
                     Sugestao(
@@ -434,7 +457,9 @@ def _log(event_id: int, texto: str, usuario: User | None, pix: PixRecebido) -> N
     else:
         nome = usuario.name
         papel = ", ".join(r.name for r in usuario.roles)[:60] or None
-    db.session.add(EventLog(event_id=event_id, actor_name=nome[:100], actor_role=papel, message=texto[:500]))
+    db.session.add(
+        EventLog(event_id=event_id, actor_name=nome[:100], actor_role=papel, message=texto[:500])
+    )
 
 
 def _ligar_uma(
@@ -537,9 +562,14 @@ def vincular(pix: PixRecebido, *, vendas: list | None = None, permitir_auto: boo
         if par:
             pix.estado = PIX_ESTADO_CONTA_PROPRIA
             pix.candidatos = [{"par_prime": [p.id for p in par]}]  # não serve de par de novo
-            pix.motivo = "repasse da Prime (" + ", ".join(
-                f"PIX de {format_brl(p.valor, prefix=True)} em {p.recebido_em:%d/%m}" for p in par
-            ) + ")"
+            pix.motivo = (
+                "repasse da Prime ("
+                + ", ".join(
+                    f"PIX de {format_brl(p.valor, prefix=True)} em {p.recebido_em:%d/%m}"
+                    for p in par
+                )
+                + ")"
+            )
             return
         sugestoes = sugestoes_de_repasse(pix, vendas)[:PIX_MAX_SUGESTOES]
         if sugestoes:
@@ -586,9 +616,16 @@ def vincular(pix: PixRecebido, *, vendas: list | None = None, permitir_auto: boo
     if sugestoes:
         pix.estado = PIX_ESTADO_PARA_CONFERIR
         pix.candidatos = [s.para_json() for s in sugestoes[:PIX_MAX_SUGESTOES]]
-        pix.motivo = "e-mail não autenticado pelo Inter" if not pix.autenticado else (
-            "mais de uma venda com esse valor" if len(fortes) > 1 else "só o valor bate"
-            if fortes else "o nome bate, o valor não"
+        pix.motivo = (
+            "e-mail não autenticado pelo Inter"
+            if not pix.autenticado
+            else (
+                "mais de uma venda com esse valor"
+                if len(fortes) > 1
+                else "só o valor bate"
+                if fortes
+                else "o nome bate, o valor não"
+            )
         )
         _avisar(pix, PIX_KIND_PARA_CONFERIR, sugestoes)
         return
@@ -608,7 +645,7 @@ def _travar(pix_id: int) -> PixRecebido:
 def confirmar(
     pix_id: int, event_ids: list[int], usuario: User, *, novo: bool = False
 ) -> PixRecebido:
-    """"É esta" / "Outra venda…" (e, no repasse, as 1–3 vendas sugeridas). Sem commit.
+    """ "É esta" / "Outra venda…" (e, no repasse, as 1–3 vendas sugeridas). Sem commit.
 
     Quando a venda tem um comprovante manual do mesmo valor, `novo=False` concilia com ele ("é este
     comprovante") e `novo=True` registra outro pagamento ("é pagamento novo").
@@ -627,7 +664,11 @@ def confirmar(
             raise PixErro("Venda não encontrada.", status=404)
         principais.append(principal_da_venda(evento).id)
     principais = list(dict.fromkeys(principais))  # dois dias da mesma venda são UMA venda
-    if not principais or (not repasse and len(principais) != 1) or len(principais) > PIX_REPASSE_MAX_VENDAS:
+    if (
+        not principais
+        or (not repasse and len(principais) != 1)
+        or len(principais) > PIX_REPASSE_MAX_VENDAS
+    ):
         raise PixErro("Escolha a venda deste PIX.", status=400, codigo="venda_obrigatoria")
 
     abertas = {v.principal.id: v for v in vendas_abertas()}
@@ -651,7 +692,10 @@ def confirmar(
             cobrado += venda.saldo
             pagamentos.append(
                 _ligar_uma(
-                    pix, pid, valor=venda.saldo, usuario=usuario,
+                    pix,
+                    pid,
+                    valor=venda.saldo,
+                    usuario=usuario,
                     conta_id=infinitepay.id if infinitepay else None,
                 )
             )
@@ -671,7 +715,10 @@ def confirmar(
             raise PixErro("Essa venda não está mais em aberto.", codigo="venda_indisponivel")
         pagamentos.append(
             _ligar_uma(
-                pix, pid, valor=pix.valor, usuario=usuario,
+                pix,
+                pid,
+                valor=pix.valor,
+                usuario=usuario,
                 conciliar=conciliavel.conciliar if conciliavel else None,
             )
         )
@@ -687,7 +734,7 @@ def confirmar(
 
 
 def descartar(pix_id: int, event_id: int, usuario: User) -> PixRecebido:
-    """"Não é esta": a venda sai das sugestões; sem nenhuma, o PIX sai da fila. Sem commit."""
+    """ "Não é esta": a venda sai das sugestões; sem nenhuma, o PIX sai da fila. Sem commit."""
     from app.financeiro.cobranca_ops import principal_da_venda
 
     pix = _travar(pix_id)
@@ -708,7 +755,7 @@ def descartar(pix_id: int, event_id: int, usuario: User) -> PixRecebido:
 
 
 def nao_e_venda(pix_id: int, usuario: User) -> PixRecebido:
-    """"Não é de venda": sai da fila e não é mais reavaliado. Sem commit."""
+    """ "Não é de venda": sai da fila e não é mais reavaliado. Sem commit."""
     pix = _travar(pix_id)
     if pix.estado != PIX_ESTADO_PARA_CONFERIR:
         raise PixErro("Este PIX já foi decidido.", codigo="ja_decidido")
@@ -745,12 +792,22 @@ def desfazer(pix_id: int, usuario: User) -> PixRecebido:
         if pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX and not pagamento.file_path:
             valor = pagamento.amount
             gravar_comprovante_no_grupo(evento, "excluir", actor=usuario, comprovante=pagamento)
-            _log(evento.id, f"Desfez o PIX de {format_brl(pix.valor, prefix=True)}: pagamento de "
-                 f"{format_brl(valor, prefix=True)} excluído", usuario, pix)
+            _log(
+                evento.id,
+                f"Desfez o PIX de {format_brl(pix.valor, prefix=True)}: pagamento de "
+                f"{format_brl(valor, prefix=True)} excluído",
+                usuario,
+                pix,
+            )
         else:
             pagamento.origem = EVENT_PAYMENT_ORIGEM_COMPROVANTE
-            _log(evento.id, f"Desfez o PIX de {format_brl(pix.valor, prefix=True)}: o comprovante "
-                 "anexado fica como pagamento manual", usuario, pix)
+            _log(
+                evento.id,
+                f"Desfez o PIX de {format_brl(pix.valor, prefix=True)}: o comprovante "
+                "anexado fica como pagamento manual",
+                usuario,
+                pix,
+            )
     db.session.flush()
     pix.estado = PIX_ESTADO_NOVO
     pix.decidido_por_id = usuario.id
@@ -779,7 +836,10 @@ def listar(aba: str, *, ver_repasse: bool) -> list[PixRecebido]:
         consulta = consulta.filter(PixRecebido.estado == PIX_ESTADO_PARA_CONFERIR)
     if not ver_repasse:
         consulta = consulta.filter(
-            db.or_(PixRecebido.tipo_sugestao.is_(None), PixRecebido.tipo_sugestao != PIX_SUGESTAO_REPASSE)
+            db.or_(
+                PixRecebido.tipo_sugestao.is_(None),
+                PixRecebido.tipo_sugestao != PIX_SUGESTAO_REPASSE,
+            )
         )
     return consulta.order_by(PixRecebido.recebido_em.desc()).limit(200).all()
 
@@ -810,13 +870,15 @@ def para_api(pix: PixRecebido) -> dict:
         if not eventos:
             continue
         if pix.tipo_sugestao == PIX_SUGESTAO_REPASSE:
-            sugestoes.append({
-                "vendas": [_evento_resumo(e, None) for e in eventos],
-                "soma": c.get("valor_alvo"),
-                "taxa": c.get("taxa"),
-                "motivos": c.get("motivos") or [],
-                "event_ids": [e.id for e in eventos],
-            })
+            sugestoes.append(
+                {
+                    "vendas": [_evento_resumo(e, None) for e in eventos],
+                    "soma": c.get("valor_alvo"),
+                    "taxa": c.get("taxa"),
+                    "motivos": c.get("motivos") or [],
+                    "event_ids": [e.id for e in eventos],
+                }
+            )
         else:
             item = _evento_resumo(eventos[0], c.get("valor_alvo"))
             item["motivos"] = c.get("motivos") or []
@@ -863,7 +925,10 @@ def resumo_por_conta(meses: int) -> dict:
     linhas = (
         db.session.query(ContaRecebimento.apelido, mes, func.sum(EventPayment.amount))
         .outerjoin(ContaRecebimento, ContaRecebimento.id == EventPayment.conta_id)
-        .filter(EventPayment.created_at >= datetime.combine(inicio, datetime.min.time()) + timedelta(hours=3))
+        .filter(
+            EventPayment.created_at
+            >= datetime.combine(inicio, datetime.min.time()) + timedelta(hours=3)
+        )
         .group_by(ContaRecebimento.apelido, mes)
         .all()
     )

@@ -257,8 +257,9 @@ viram faixa de alerta na tela de PIX.
   (ou "o sistema") decidiu, com registro no histórico do evento.
 - **FR-010**: Ao anexar comprovante manual cujo valor é igual ao de um pagamento de origem PIX sem arquivo na mesma
   venda, o sistema DEVE perguntar se é o mesmo pagamento antes de criar outro.
-- **FR-011**: Quando o PIX liga a uma venda que já tem comprovante manual do mesmo valor ainda sem PIX, o sistema DEVE
-  conciliar com ele em vez de criar outro pagamento.
+- **FR-011**: Quando a venda já tem comprovante manual do mesmo valor ainda sem PIX (e não marcado com outra conta),
+  o PIX DEVE ir para "É esta?" com as duas saídas — "é o comprovante já anexado" (concilia, não cria outro) e "é
+  outro pagamento" —, nunca ligar sozinho: sinal e saldo de 50% têm valor igual (revisão adversarial, 22/10).
 - **FR-012**: O sistema DEVE tratar "Prime Dreams" no Inter MEI como descrito na História 5 (repasse da Prime ignorado;
   sobra = "É esta?" só para Financeiro/Superadmin, com vendas no cartão, nunca automático, pagamento pelo valor
   cobrado).

@@ -175,7 +175,11 @@ def reavaliar_pendentes() -> int:
     for pid in ids:
         try:
             pix = PixRecebido.query.filter_by(id=pid).with_for_update().first()
-            if pix is None or pix.estado not in (PIX_ESTADO_SEM_VENDA, PIX_ESTADO_NOVO) or pix.decidido_por_id:
+            if (
+                pix is None
+                or pix.estado not in (PIX_ESTADO_SEM_VENDA, PIX_ESTADO_NOVO)
+                or pix.decidido_por_id
+            ):
                 db.session.rollback()
                 continue
             pix.estado = PIX_ESTADO_NOVO
@@ -259,7 +263,9 @@ def saude() -> dict:
     alerta = None
     if ativo and s.pix_email_ultimo_erro:
         alerta = "erro"
-    elif ativo and (ultima is None or datetime.utcnow() - ultima > timedelta(minutes=PIX_SAUDE_PARADA_MIN)):
+    elif ativo and (
+        ultima is None or datetime.utcnow() - ultima > timedelta(minutes=PIX_SAUDE_PARADA_MIN)
+    ):
         alerta = "parada"
     return {
         "ativo": ativo,

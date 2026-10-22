@@ -246,7 +246,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
-| `event_payments` | `EventPayment` | comprovantes de pagamento com valor | `event_id` |
+| `event_payments` | `EventPayment` | comprovantes de pagamento com valor. Feature 318: `origem` (`comprovante` \| `pix_email`), `conta_id` (conta que recebeu, opcional) e `file_path` **NULL só na origem PIX** (CHECK `ck_event_payments_arquivo_ou_pix`): o pagamento criado pelo aviso do banco nasce sem arquivo | `event_id`, `conta_id` |
 | `event_installments` | `EventInstallment` | parcelas (`due_date`) | `event_id` |
 | `event_invoices` | `EventInvoice` | notas fiscais (`issue_date`) | `event_id` |
 | `event_acrescimos` | `EventAcrescimo` | acréscimos tipados (`BV`, `Taxa de urgência`, `Outro`…) | `event_id` |
@@ -510,6 +510,8 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 | `special_expenses` | `SpecialExpense` | gastos extras com fluxo de aprovação e reembolso a funcionário. `CATEGORIES`: Figurino, Escritório, Marketing, Manutenção, **Devolução a cliente** (224, `CATEGORY_DEVOLUCAO`), **Multa de cancelamento** (306, `CATEGORY_MULTA_CANCELAMENTO`) e Outros — categoria fora da lista vira "Outros" na primeira edição em Gastos Extras. `disbursement_type` ∈ `reembolso`\|`fornecedor`\|`cliente`. **Feature 306**: a devolução e a multa do cancelamento nascem **aprovadas** pelo `cancel_ops`, nunca por `create_expense`. A devolução se reconhece pela categoria, pelo evento e pela aprovação (`cancel_ops.filtro_devolucao`), não pelo `disbursement_type`; a de evento cancelado sai dos gastos extras da DRE (já está descontada no retido) e fica **travada** em Gastos Extras (§3.7). A multa é uma por escalação, `fornecedor`, a pagar ao artista (nome e `Talent.pix_key`), ligada ao dia, e conta como gasto do mês da `expense_date` (o dia do ato, ou o do lançamento depois dele) | `created_by_id`, `approved_by_id`, `reimburse_user_id`, `event_id` |
 | `recurring_expenses` | `RecurringExpense` | contas recorrentes | `created_by_id` |
 | `recurring_expense_entries` | `RecurringExpenseEntry` | parcelas geradas da conta recorrente | `recurring_id`, `filled_by_id` |
+| `contas_recebimento` | `ContaRecebimento` | feature 318: as contas da empresa que recebem de cliente (Inter MEI, Inter Prime, InfinitePay Prime, Cora Monta), semeadas **sem número**; `numero_conta` (UNIQUE) é o "na conta …" do aviso do Inter, preenchido pelo Superadmin em `/pix` — número de conta não vai para o repositório | — |
+| `pix_recebidos` | `PixRecebido` | feature 318: um aviso "Pix recebido" lido da caixa por linha (`message_id` UNIQUE = idempotência; o corpo do e-mail **não** é guardado). `estado`: `novo` · `ligado_auto` · `ligado_confirmado` · `para_conferir` · `sem_venda` · `conta_propria` · `ignorado` · `nao_entendido`; `tipo_sugestao` `venda`\|`repasse_infinitepay`; `candidatos`/`descartados`/`pagamentos_extra` em JSON; `autenticado` = DKIM do Inter aprovado pelo `mx.google.com`; `recebido_em` em horário de parede de SP | `conta_id`, `event_payment_id` (UNIQUE, SET NULL), `decidido_por_id` |
 
 ### 2.7 Clientes, Formulários, Feedback e Orçamento
 
@@ -1067,6 +1069,36 @@ Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,
 `pay_seller_month`). O Jinja legado `app/financeiro/routes.py` **não** importa deste módulo
 (decisão explícita da 187).
+
+### 3.6.1 PIX recebido — `pix_read.py` / `pix_write.py` (feature 318)
+
+Núcleo: `app/financeiro/pix_ops.py` (regra de vínculo e respostas do "É esta?"),
+`app/financeiro/pix_email_ops.py` (rodada da thread, claim, reavaliação, saúde), `app/financeiro/pix_aviso.py`
+(leitor puro do aviso do Inter). Contrato: `specs/318-pix-recebido-por-email/contracts/api-318.md`.
+
+| Método e rota | Papéis | O quê |
+|---|---|---|
+| `GET /api/pix?aba=conferir\|ligados` | COMERCIAL, FINANCEIRO, SUPERADMIN | fila "É esta?" ou ligados de 30 dias; o repasse da InfinitePay só para FINANCEIRO/SUPERADMIN; `flags` |
+| `GET /api/pix/saude` | COMERCIAL, FINANCEIRO, SUPERADMIN | última leitura, lidos/não entendidos/conta não cadastrada em 7 dias, contas vistas, `alerta` (`parada`\|`erro`) |
+| `GET /api/pix/resumo-por-conta?meses=6` | FINANCEIRO, SUPERADMIN | Σ `event_payments.amount` por conta e mês (mês de SP) |
+| `POST /api/pix/<id>/confirmar` `{event_id\|event_ids, novo?}` | COMERCIAL, FINANCEIRO, SUPERADMIN; repasse só FINANCEIRO/SUPERADMIN | liga pelo núcleo de comprovante; com comprovante manual do mesmo valor, `novo=false` concilia e `novo=true` cria outro; repasse só numa combinação sugerida |
+| `POST /api/pix/<id>/descartar` `{event_id}` · `POST /api/pix/<id>/nao-e-venda` | idem | tira a venda das sugestões / tira o PIX da fila |
+| `POST /api/pix/<id>/desfazer` | FINANCEIRO, SUPERADMIN | pagamento de PIX sem arquivo sai; com arquivo ou conciliado vira manual; o PIX volta a "para conferir" |
+| `GET`/`PATCH /api/pix/config` | SUPERADMIN | interruptor (ligar grava `pix_email_ativo_desde`), pagadores próprios, número das contas |
+
+Alterados: `POST /api/events/<id>/payments` ganha `conta_id`, `anexar_a` (arquivo no pagamento de PIX sem
+arquivo) e `forcar_novo`; sem eles, comprovante do mesmo valor de um PIX que já entrou volta **409
+`possivel_duplicata`** (checado no núcleo, sob a trava do grupo). `DELETE /api/payments/<id>` recusa com **409
+`pagamento_de_pix`** o pagamento ligado a PIX (sai pelo "Desfazer"; o Jinja recusa com flash). `GET /api/events/<id>`
+traz `pagamentos.items[].origem/conta_id/conta/pix` e `pagamentos.contas`. `/api/dashboard` → `comercial.pix_para_conferir`.
+
+**Thread `pix-email`** (`app/__init__.py`, 900 s): claim em `import_state` (`key='pix_email'`), lê por IMAP só
+leitura a caixa `MAIL_USERNAME` (`fetch_messages`, `FROM no-reply@inter.co SUBJECT "Pix recebido"`, 3 dias),
+guarda cada aviso num commit próprio e decide em outro (um aviso que quebra fica `novo`, volta na próxima rodada e
+o erro vai para `site_settings.pix_email_ultimo_erro`); reavalia por 7 dias o PIX sem venda. Config:
+`PIX_EMAIL_SWEEP_ENABLED` (default `"false" if _suppress_mail() else "true"`), `PIX_EMAIL_SWEEP_INTERVAL=900`,
+`PIX_EMAIL_LOOKBACK_DAYS=3`; e o interruptor da tela `site_settings.pix_email_ativo` (nasce desligado). A Prime chega
+à caixa por um filtro do Gmail de joao@primedreams (criado em 22/10/2026).
 
 ### 3.7 Gastos — `gastos_read.py` / `gastos_write.py`
 `GET /api/gastos`, `/api/gastos/eventos`, `/api/gastos/funcionarios`, `/api/gastos/recorrentes` ·
@@ -1915,6 +1947,7 @@ Gates por módulo (todos em `app/api/`):
 |---|---|---|
 | `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
+| `_require_vendas()` / `_require_financeiro()` / `_require_superadmin()` de `pix_read` (feature 318) | `pix_read`, `pix_write` | fila, saúde e respostas ao "É esta?": `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (repasse da InfinitePay: `ve_repasse()` = `FINANCEIRO`, `SUPERADMIN`); resumo por conta e Desfazer: `FINANCEIRO`, `SUPERADMIN`; config: `SUPERADMIN` — sempre pelo papel real |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
 | `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
 | `cancel_ops.pode_editar_venda_do_cancelado(user)` — **a regra única do cancelado** (feature 306) | gate de `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, depois do 404 (os demais → 403); nas portas de dinheiro do evento, a recusa **depois** do gate de hoje — quem passa nele e não passa na regra leva **409 `codigo: "cancelado"`** (`EventoCanceladoError`), em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê antes de decidir. Porta a porta em "RBAC do evento cancelado", abaixo | `SUPERADMIN` pelo **papel real** (`user.roles`; o "Ver como" não conta) — a régua de `_can_delete()` e `_is_superadmin()` |

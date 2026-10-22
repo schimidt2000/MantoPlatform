@@ -17,7 +17,7 @@ import {
 } from "../../lib/pix";
 
 function dinheiro(valor: string | null | undefined): string {
-  return valor == null ? "—" : formatBRL(Number(valor));
+  return valor == null ? "—" : `R$ ${formatBRL(Number(valor))}`;
 }
 
 function quando(iso: string): string {

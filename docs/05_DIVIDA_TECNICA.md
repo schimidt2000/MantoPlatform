@@ -675,6 +675,18 @@ agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e n
 | 143 | **P5** | `deduzir_duracao` com o bruto = o final (gêmeo Jinja, bundle velho) | procura o cheio em todas as durações antes do final: se o final de uma duração for igual ao cheio de outra ("3 h pelo preço de 2 h"), deduz a duração errada — só muda o BV com acréscimo em R$ | dar preferência à duração gravada no evento quando houver |
 | 144 | **P5** | a marca `versao_conta: 2` × `snapshot_v2` | o leitor refaz a conta com o `aplicar_acrescimos` de hoje e exige ± R$ 0,01: uma mudança futura de centavo nessa função, sem subir a versão, manda todo orçamento v2 para o caminho de antes sem aviso (cheio = final, o BV deixa de encolher) | qualquer mudança no núcleo sobe `VERSAO_CONTA` e trata a versão anterior; um cenário do verify segura a paridade |
 
+## Baixa da feature 318-pix-recebido-por-email (2026-10-22, branch — não mergeada)
+
+**Criadas.** (Números a partir de 148; renumerar no merge se a 310/315 tiverem entrado antes com os mesmos.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 148 | **P3** | InfinitePay fora da loja (cartão/link) | não manda aviso por e-mail; a 318 só vê o repasse manual ao MEI ("Prime Dreams"), que é paliativo ("É esta?" do Financeiro, sem nome, com taxa) | link de pagamento InfinitePay gerado pelo ERP para cada venda (`order_nsu` = venda), no webhook da 205/310 — depois da 310 |
+| 149 | **P4** | `EventInstallment.received` | nenhum código marca a parcela como recebida; a 318 trata como "não coberta" a parcela que o recebido acumulado não cobre (mesma régua do vencimento) | marcar `received` pelo recebido do grupo, ou tirar a coluna |
+| 150 | **P4** | `pix_recebidos` sem venda | o dono escolheu ignorar (sem fila); os R$ 209 mil "sem registro" de 21/10 continuariam sem tela | tela "PIX sem venda" para o Financeiro classificar (venda esquecida, aporte, empréstimo) |
+| 151 | **P4** | resumo por conta (`pix_ops.resumo_por_conta`) | agrupa pelo mês do registro do pagamento (`created_at`), não do dinheiro; comprovante manual sem conta cai em "Sem conta informada" | data do pagamento no `EventPayment` e conta obrigatória no manual, quando o dono decidir |
+| 152 | **P5** | `fetch_messages` (`imap_client.py`) | busca uma mensagem por vez (`FETCH` por id): 3 dias de avisos são segundos, mas o ensaio de 145 dias leva ~7 min | `FETCH` em lote (`1:n`) |
+
 ## Baixa da correção 316-tom-dos-textos (2026-10-22, branch)
 
 **Quitadas.** Nenhuma (só texto).
