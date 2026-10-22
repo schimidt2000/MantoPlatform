@@ -280,6 +280,18 @@ class Config:
     # larga o bastante para o passivo entrar na primeira execução.
     EMAIL_BOUNCE_LOOKBACK_DAYS = int(os.getenv("EMAIL_BOUNCE_LOOKBACK_DAYS", "90"))
 
+    # PIX recebido por e-mail (feature 318). Mesma conta e mesma App Password do bounce, por IMAP e
+    # só leitura. Mesma guarda: DESLIGADO onde o e-mail é suprimido (banco local), senão um processo
+    # apontado para o espelho leria a caixa real e ligaria PIX a vendas do espelho. Em produção
+    # ainda depende do interruptor da tela (`SiteSetting.pix_email_ativo`, nasce desligado).
+    PIX_EMAIL_SWEEP_ENABLED = os.getenv(
+        "PIX_EMAIL_SWEEP_ENABLED",
+        "false" if _suppress_mail() else "true",
+    ).lower() == "true"
+    PIX_EMAIL_SWEEP_INTERVAL = int(os.getenv("PIX_EMAIL_SWEEP_INTERVAL", "900"))
+    # Janela da busca na caixa. Reler é inofensivo (`message_id` é único).
+    PIX_EMAIL_LOOKBACK_DAYS = int(os.getenv("PIX_EMAIL_LOOKBACK_DAYS", "3"))
+
     # Cobrança automática de confirmação de convite (feature 231). Mesma guarda do bounce: fica
     # DESLIGADA quando o ambiente já suprime e-mail (banco local), senão um processo apontado para
     # o espelho cobraria artista de verdade por evento que já aconteceu. A regra de quem recebe e

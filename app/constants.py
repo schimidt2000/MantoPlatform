@@ -647,3 +647,70 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({
     CODIGO_PAGO_ABAIXO_DO_DEVOLVIDO, CODIGO_BV_NAO_ESTA_A_PAGAR, CODIGO_VALOR_MUDOU,
     CODIGO_DEVOLUCAO_TRAVADA, CODIGO_ESTADO_MUDOU,
 })
+
+# Feature 318: PIX recebido lido do aviso por e-mail do Inter e ligado à venda.
+# Origem do aviso e do comprovante. O comprovante de origem PIX pode existir sem arquivo: o aviso
+# autenticado do banco é a prova (`EventPayment.file_path` NULL só nessa origem — CHECK no banco).
+PIX_ORIGEM_EMAIL_INTER = "email_inter"
+EVENT_PAYMENT_ORIGEM_COMPROVANTE = "comprovante"
+EVENT_PAYMENT_ORIGEM_PIX = "pix_email"
+
+# Tipos de aviso que o parser reconhece. Só `pix` é comparado com vendas.
+PIX_TIPO_PIX = "pix"
+PIX_TIPO_DEVOLUCAO = "devolucao"
+PIX_TIPO_DESCONHECIDO = "desconhecido"
+
+# Estados do PIX recebido (data-model.md). `ligado_*` ⇔ há pagamento ligado.
+PIX_ESTADO_NOVO = "novo"
+PIX_ESTADO_LIGADO_AUTO = "ligado_auto"
+PIX_ESTADO_LIGADO_CONFIRMADO = "ligado_confirmado"
+PIX_ESTADO_PARA_CONFERIR = "para_conferir"
+PIX_ESTADO_SEM_VENDA = "sem_venda"
+PIX_ESTADO_CONTA_PROPRIA = "conta_propria"
+PIX_ESTADO_IGNORADO = "ignorado"
+PIX_ESTADO_NAO_ENTENDIDO = "nao_entendido"
+PIX_ESTADOS = frozenset({
+    PIX_ESTADO_NOVO, PIX_ESTADO_LIGADO_AUTO, PIX_ESTADO_LIGADO_CONFIRMADO, PIX_ESTADO_PARA_CONFERIR,
+    PIX_ESTADO_SEM_VENDA, PIX_ESTADO_CONTA_PROPRIA, PIX_ESTADO_IGNORADO, PIX_ESTADO_NAO_ENTENDIDO,
+})
+PIX_ESTADOS_LIGADOS = frozenset({PIX_ESTADO_LIGADO_AUTO, PIX_ESTADO_LIGADO_CONFIRMADO})
+
+# Tipo da sugestão: venda comum, ou repasse da InfinitePay ("Prime Dreams" no MEI sem par na Prime)
+# — este só Financeiro/Superadmin veem e nunca liga sozinho (decisão do dono, 22/10).
+PIX_SUGESTAO_VENDA = "venda"
+PIX_SUGESTAO_REPASSE = "repasse_infinitepay"
+
+# Valor "forte" é igual ao centavo; o repasse da InfinitePay fica entre 88% e 100% do valor cobrado
+# (a taxa) e pode juntar até 3 vendas; o par do repasse da Prime é procurado nos 3 dias anteriores.
+PIX_TOLERANCIA_VALOR = Decimal("0.01")
+PIX_REPASSE_FAIXA = (Decimal("0.88"), Decimal("1.00"))
+PIX_REPASSE_MAX_VENDAS = 3
+PIX_REPASSE_PRIME_DIAS = 3
+PIX_REPASSE_PRIME_MAX_SOMA = 3
+# PIX sem venda é comparado de novo por 7 dias: a cliente costuma pagar o sinal antes de a venda
+# ser cadastrada (clarify de 22/10).
+PIX_REAVALIAR_DIAS = 7
+PIX_MAX_SUGESTOES = 3
+
+# "Nome bate": termos normalizados de ≥ 3 letras, sem estas palavras de ligação/razão social;
+# dois termos em comum (ou o único termo do nome curto), ou semelhança do nome inteiro ≥ 0,85.
+PIX_NOME_STOPWORDS = frozenset({
+    "ltda", "me", "mei", "eireli", "sa", "epp", "de", "da", "do", "das", "dos", "e", "cia",
+})
+PIX_NOME_SEMELHANCA = 0.85
+
+# Saúde da leitura: sem rodada há mais disso, a tela mostra "leitura parada".
+PIX_SAUDE_PARADA_MIN = 60
+PIX_SAUDE_JANELA_DIAS = 7
+
+# Pagadores próprios (transferência entre contas da empresa). O Superadmin edita a lista na tela;
+# este é só o valor inicial da migration.
+PIX_PAGADORES_PROPRIOS_PADRAO = "Prime Dreams\nMonta Producoes"
+# O nome com que o Inter Prime e a InfinitePay repassam ao MEI (normalizado).
+PIX_PAGADOR_PRIME = "prime dreams"
+# Saudação do aviso do Inter ("Olá, PRIME") que identifica a conta Prime antes do cadastro do número.
+PIX_TITULAR_PRIME = "PRIME"
+
+PIX_KIND_LIGADO = "pix.ligado"
+PIX_KIND_PARA_CONFERIR = "pix.para_conferir"
+PIX_KIND_REPASSE = "pix.repasse_infinitepay"
