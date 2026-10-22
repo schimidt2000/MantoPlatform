@@ -49,7 +49,7 @@ function KpiCard({
   hint,
   tone,
   to,
-  linkText = "ver na planilha",
+  linkText = "Ver na planilha",
 }: {
   label: string;
   value: string;
@@ -132,7 +132,7 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
           }
           tone="neutral"
           to={linkComissoes}
-          linkText="ver em comissões"
+          linkText="Ver em comissões"
         />
         <KpiCard
           label="Lucro líquido"
@@ -483,7 +483,7 @@ function ConfirmacaoDaCorrecao({
       )}
       <p className="text-muted">
         {retido != null ? `O retido continua ${brl(retido)}. ` : ""}A comissão e o BV do retido são
-        refeitos na hora; a diferença entra no próximo repasse aberto, sem mexer no que já foi pago.
+        refeitos na hora; a diferença entra no próximo repasse aberto, sem alterar o que já foi pago.
       </p>
     </div>
   );
@@ -747,8 +747,8 @@ function OrcamentoPanel({ data }: { data: EventoDetalhe }) {
             /* feature 301 — vê tudo, mexe em nada: a venda é de quem fez o orçamento. Diz de
                quem é e qual a saída, em vez de sumir com o bloco ou oferecer botão que falha. */
             <p className="text-sm text-muted">
-              Este orçamento é de {orc.autor} — só {orc.autor} ou o superadmin podem trocar,
-              desvincular ou re-aplicar.
+              Este orçamento é de {orc.autor} — só {orc.autor} ou o Superadmin podem trocar,
+              desvincular ou reaplicar.
             </p>
           )}
         </div>
@@ -938,7 +938,7 @@ function PreContratoPanel({ data }: { data: EventoDetalhe }) {
           loading={salvar.isPending}
           onClick={() => salvar.mutate({ form_response_id: null })}
         >
-          Desligar o formulário
+          Desvincular o formulário
         </Button>
         {salvar.isError && <p className="mt-1 text-sm text-red">{salvar.error?.message}</p>}
       </Panel>
@@ -1242,7 +1242,7 @@ function GrupoPanel({ data }: { data: EventoDetalhe }) {
           <>
             <p className="text-sm text-ink">
               Este é o evento <strong>principal</strong> de{" "}
-              <strong>{grupo.display_name}</strong> — a venda do contrato inteiro está aqui.
+              <strong>{grupo.display_name}</strong> — a venda do contrato inteiro está neste evento.
             </p>
             {!grupo.group_name && (
               <p className="mt-0.5 text-xs text-muted">

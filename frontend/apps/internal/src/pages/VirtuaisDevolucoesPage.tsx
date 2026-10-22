@@ -85,7 +85,7 @@ function RefundRow({ refund }: { refund: VirtualRefund }) {
           ) : (
             <Button size="sm" variant="outline" onClick={() => setConfirmando(true)}>
               <CheckCircle2 className="size-4" />
-              Já devolvi
+              Marcar como concluída
             </Button>
           ))}
       </TableCell>
@@ -102,7 +102,7 @@ export function VirtuaisDevolucoesPage() {
     <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Devoluções — Interações Virtuais"
-        subtitle="Pagamentos que chegaram para horários já vendidos. O estorno é feito no painel da InfinitePay; aqui você marca como concluído."
+        subtitle="Pagamentos que chegaram para horários já vendidos. O estorno é feito no painel da InfinitePay; nesta tela você marca a devolução como concluída."
       />
 
       {isLoading && <Skeleton className="h-24 w-full" />}
@@ -117,7 +117,7 @@ export function VirtuaisDevolucoesPage() {
         <div className="flex flex-col items-center gap-2 rounded-lg border border-line p-10 text-center">
           <CircleDollarSign className="size-8 text-muted" />
           <p className="text-sm text-muted">
-            Nenhuma devolução pendente — nada de dinheiro parado.
+            Nenhuma devolução pendente.
           </p>
         </div>
       )}

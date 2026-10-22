@@ -407,7 +407,7 @@ function GastoFormModal({
 
   const handleCreate = () => {
     if (!receipt) {
-      setFieldErrors({ receipt: "Anexe a Nota Fiscal." });
+      setFieldErrors({ receipt: "Insira a nota fiscal." });
       return;
     }
     setFieldErrors({});
@@ -598,7 +598,7 @@ function GastoFormModal({
                   disabled={busy}
                   onClick={() => handleSave(true)}
                 >
-                  Salvar e Aprovar
+                  Salvar e aprovar
                 </Button>
               )}
             </>
@@ -764,7 +764,7 @@ function GastoRow({
           )}
           {erroDaAcao && (
             <p className="mt-1 max-w-[16rem] whitespace-normal text-xs text-red" role="alert">
-              {erroDaAcao.message || "Não foi possível concluir."}
+              {erroDaAcao.message || "Não foi possível concluir a ação."}
             </p>
           )}
         </td>
@@ -803,7 +803,7 @@ function GastosTable({
                   <th className={TH}>Descrição</th>
                   <th className={TH}>Categoria</th>
                   <th className={`${TH} text-right`}>Valor</th>
-                  <th className={TH}>Status</th>
+                  <th className={TH}>Situação</th>
                   <th className={TH}>Desembolso</th>
                   <th className={TH}>Evento</th>
                   {canManage && <th className={TH}>Autor</th>}

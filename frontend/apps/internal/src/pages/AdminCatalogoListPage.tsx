@@ -202,7 +202,7 @@ export function AdminCatalogoListPage() {
             value={status}
             onChange={(e) => setStatus(e.target.value)}
           >
-            <option value="todos">Todos os status</option>
+            <option value="todos">Todas as situações</option>
             <option value="ativo">Ativos</option>
             <option value="inativo">Inativos</option>
           </select>
@@ -314,7 +314,7 @@ export function AdminCatalogoListPage() {
           setLinkingCharacter(null);
           setLinkTargetSheetId(null);
         }}
-        title={`Vincular "${linkingCharacter?.name ?? ""}" a uma Ficha de Figurino`}
+        title={`Vincular "${linkingCharacter?.name ?? ""}" a uma ficha de figurino`}
       >
         <div className="space-y-3">
           <FigurinoPicker

@@ -81,7 +81,7 @@ function VerDialog({ entry, onClose }: { entry: OrcamentoHistoricoEntry; onClose
             </Button>
             <input
               type="email"
-              placeholder="E-mail do cliente"
+              placeholder="E-mail da cliente"
               className="h-8 w-56 rounded-md border border-line bg-panel px-2 text-xs"
               value={emailTo}
               onChange={(e) => setEmailTo(e.target.value)}

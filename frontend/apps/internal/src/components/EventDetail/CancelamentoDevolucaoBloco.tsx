@@ -11,7 +11,7 @@ function brl(v: number): string {
 }
 
 const MODOS: { modo: ModoDevolucao; rotulo: string; ajuda: string }[] = [
-  { modo: "tudo", rotulo: "Devolver tudo", ajuda: "A Manto não fica com nada." },
+  { modo: "tudo", rotulo: "Devolver tudo", ajuda: "A Manto não retém nenhum valor." },
   { modo: "parte", rotulo: "Devolver parte", ajuda: "Você informa quanto volta." },
   { modo: "nada", rotulo: "Não devolver", ajuda: "A Manto retém o que recebeu." },
 ];
@@ -63,7 +63,7 @@ export function CancelamentoDevolucaoBloco({
       <legend className="px-1 text-xs font-semibold uppercase text-muted">Devolução à cliente</legend>
       <p className="mb-2 text-sm text-ink">
         A cliente pagou <strong>{brl(pago)}</strong>
-        {maxDevolucao < pago && <> — dá para devolver até {brl(maxDevolucao)}</>}.
+        {maxDevolucao < pago && <> — é possível devolver até {brl(maxDevolucao)}</>}.
       </p>
       {pagoZero && (
         <p className="mb-2 text-xs text-gold-ink" role="note">

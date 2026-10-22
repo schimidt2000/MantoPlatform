@@ -342,12 +342,12 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
 
       <div className="grid gap-3 sm:grid-cols-2">
         {/* 6 e 7 opções: `<select>` nativo é legítimo aqui (limite do Princípio X.1 é 10). */}
-        <Field label="Status" error={fieldError(error, "status")}>
+        <Field label="Situação" error={fieldError(error, "status")}>
           <select
             className={INPUT_CLASS}
             value={status}
             onChange={(e) => setStatus(e.target.value as MarketingStatus)}
-            aria-label="Status da postagem"
+            aria-label="Situação da postagem"
           >
             {MARKETING_STATUSES.map((option) => (
               <option key={option} value={option}>

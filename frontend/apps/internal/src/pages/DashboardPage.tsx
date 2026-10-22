@@ -138,7 +138,7 @@ function BotaoCargo({ task, acao }: { task: DashboardTaskRef; acao: "dismiss" | 
       className={mutacao.isError ? "text-red" : undefined}
       onClick={() => mutacao.mutate({ roleId, eventId: task.event_id })}
     >
-      {mutacao.isError ? "Tentar de novo" : acao === "dismiss" ? "Dispensar" : "Restaurar"}
+      {mutacao.isError ? "Tentar novamente" : acao === "dismiss" ? "Dispensar" : "Restaurar"}
     </Button>
   );
 }
@@ -402,7 +402,7 @@ function EnsaioPanel({
           <PanelGroup title={`Ensaios órfãos (${summary.orphans.length})`}>
             <ListaTruncada>
               {summary.orphans.map((item) => (
-                <EnsaioEventRow key={item.event_id} item={item} extra="show original removido" />
+                <EnsaioEventRow key={item.event_id} item={item} extra="show original excluído" />
               ))}
             </ListaTruncada>
           </PanelGroup>
@@ -1315,7 +1315,7 @@ export function DashboardPage() {
                   onOpenChange={aoAlternar("confirmacoes")}
                 >
                   {data.casting.unconfirmed.length === 0 ? (
-                    <p className="py-2 text-sm text-muted">Todo mundo confirmado. ✓</p>
+                    <p className="py-2 text-sm text-muted">Todos confirmados. ✓</p>
                   ) : (
                     <>
                       {/* O robô só cobra quem JÁ recebeu convite, e só na semana do evento — quem
@@ -1478,7 +1478,7 @@ export function DashboardPage() {
             !data.financeiro && (
               <Card>
                 <CardContent className="p-5">
-                  <p className="text-sm text-muted">Tudo em dia! ✓</p>
+                  <p className="text-sm text-muted">Tudo em dia ✓</p>
                 </CardContent>
               </Card>
             )}

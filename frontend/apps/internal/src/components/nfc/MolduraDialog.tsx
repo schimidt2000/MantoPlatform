@@ -192,16 +192,16 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
   const textoRemocao =
     confirmando === "moldura"
       ? {
-          titulo: "Remover a moldura",
+          titulo: "Excluir a moldura",
           descricao:
-            "Os próximos vídeos enviados saem SEM moldura, mesmo com a caixinha marcada. Os vídeos já entregues continuam como estão.",
-          confirmar: "Remover moldura",
+            "Os próximos vídeos enviados saem SEM moldura, mesmo com a opção marcada. Os vídeos já entregues continuam como estão.",
+          confirmar: "Excluir moldura",
         }
       : {
-          titulo: "Remover o vídeo de abertura",
+          titulo: "Excluir o vídeo de abertura",
           descricao:
             "A página da luminária passa a abrir direto no menu, sem a capa. O arquivo é apagado do servidor.",
-          confirmar: "Remover abertura",
+          confirmar: "Excluir abertura",
         };
 
   function escolherMoldura(file: File) {
@@ -288,7 +288,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
         <DialogHeader>
           <DialogTitle>Moldura e vídeo de abertura</DialogTitle>
           <DialogDescription>
-            Os dois arquivos são únicos e valem para TODAS as luminárias — trocar aqui muda o que a
+            Os dois arquivos são únicos e valem para TODAS as luminárias — trocá-los muda o que a
             próxima cliente vê ao encostar o celular.
           </DialogDescription>
         </DialogHeader>
@@ -328,7 +328,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
               </Badge>
             </div>
             <p className="text-xs text-muted">
-              É gravada na borda de todo vídeo enviado com a caixinha marcada: quem recebe a
+              É gravada na borda de todo vídeo enviado com a opção marcada: quem recebe a
               luminária vê o vídeo já emoldurado.
             </p>
 
@@ -410,7 +410,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
                   className="rounded-md border border-dashed border-line-strong bg-surface-2 p-4 text-center"
                 >
                   <p className="text-sm text-ink">
-                    Nenhuma moldura cadastrada — os vídeos sairão sem moldura
+                    Nenhuma moldura cadastrada — os vídeos sairão sem moldura.
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     PNG com fundo transparente, em pé (9:16). O servidor recusa PNG opaco.
@@ -491,7 +491,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
                       onClick={() => setConfirmando("moldura")}
                     >
                       <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                      Remover
+                      Excluir
                     </Button>
                   </div>
                   {erroMoldura && (
@@ -514,7 +514,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
             </div>
             <p className="text-xs text-muted">
               Toca no primeiro acesso de qualquer luminária, antes do menu — é a abertura da marca,
-              igual para todo mundo.
+              a mesma para todas.
             </p>
 
             <AnimatePresence initial={false} mode="wait">
@@ -528,7 +528,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
                   className="rounded-md border border-dashed border-line-strong bg-surface-2 p-4 text-center"
                 >
                   <p className="text-sm text-ink">
-                    Nenhum vídeo de abertura — a página abre direto no menu
+                    Nenhum vídeo de abertura — a página abre direto no menu.
                   </p>
                   <p className="mt-1 text-xs text-muted">
                     MP4, MOV, WEBM ou M4V, em pé. Ele é convertido no servidor, sem moldura.
@@ -602,7 +602,7 @@ export function MolduraDialog({ aberto, onFechar }: MolduraDialogProps) {
                       onClick={() => setConfirmando("abertura")}
                     >
                       <Trash2 className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                      Remover
+                      Excluir
                     </Button>
                   </div>
                 </motion.div>

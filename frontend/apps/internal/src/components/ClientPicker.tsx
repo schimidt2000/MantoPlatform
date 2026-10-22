@@ -112,7 +112,7 @@ function QuickCreateClientForm({
           />
         </div>
       </div>
-      {create.isError && <p className="text-xs text-red">Não foi possível cadastrar o cliente.</p>}
+      {create.isError && <p className="text-xs text-red">Não foi possível cadastrar a cliente.</p>}
       <div className="flex justify-end gap-2">
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           Cancelar
@@ -236,7 +236,7 @@ export function ClientPicker({
         />
       ) : (
         <Button type="button" variant="outline" size="sm" onClick={() => setCreating(true)}>
-          + Cadastrar novo cliente
+          + Cadastrar nova cliente
         </Button>
       )}
     </div>

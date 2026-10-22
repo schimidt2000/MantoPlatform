@@ -50,7 +50,7 @@ function GiftRow({ gift, canManage, podeSoltar }: GiftRowProps) {
           className={`${INPUT_CLASS} w-auto`}
           value={gift.status}
           disabled={update.isPending}
-          aria-label={`Status do presente ${gift.item?.name ?? ""}`}
+          aria-label={`Situação do presente ${gift.item?.name ?? ""}`}
           onChange={(e) =>
             update.mutate({
               eventId: gift.event_id,

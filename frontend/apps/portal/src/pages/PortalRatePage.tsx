@@ -35,7 +35,7 @@ const CATEGORY_LABELS: Record<RatingGeneralCategory, string> = {
 
 /** Explicação que existia embaixo do título da categoria na tela antiga. */
 const CATEGORY_HINTS: Partial<Record<RatingGeneralCategory, string>> = {
-  texto: "Falar sobre coreografia, posicionamento, texto e interações",
+  texto: "Fale sobre coreografia, posicionamento, texto e interações",
 };
 
 const PERSON_GROUP_LABELS: Record<RatingPersonCategory, string> = {
@@ -294,7 +294,7 @@ export function PortalRatePage() {
 
       {locked && (
         <div className="rounded-md bg-blue-soft px-3 py-2 text-sm text-blue" role="status">
-          O prazo para alterar esta avaliação encerrou. Você pode consultá-la, mas não editar.
+          O prazo para alterar esta avaliação terminou. Você pode consultá-la, mas não editá-la.
         </div>
       )}
 
@@ -320,7 +320,7 @@ export function PortalRatePage() {
             value={general.comment}
             onChange={(event) => setGeneral((prev) => ({ ...prev, comment: event.target.value }))}
             placeholder={
-              commentRequired ? "Conte o que aconteceu (obrigatório)" : "Comentário (opcional)"
+              commentRequired ? "Descreva o que aconteceu (obrigatório)" : "Comentário (opcional)"
             }
             aria-label="Comentário sobre o evento"
             aria-invalid={commentRequired ? true : undefined}
@@ -333,7 +333,7 @@ export function PortalRatePage() {
           )}
 
           {savedStep === "general" && (
-            <FormSuccess>Nota geral salva. Agora conte as partes, logo abaixo.</FormSuccess>
+            <FormSuccess>Nota geral salva. Agora avalie as partes, logo abaixo.</FormSuccess>
           )}
 
           {/* Dois botões, como na tela antiga: o principal salva E leva para as partes; o de baixo
@@ -356,7 +356,7 @@ export function PortalRatePage() {
                   disabled={submitRating.isPending || general.score == null || commentRequired}
                   onClick={() => handleSubmitGeneral("sair")}
                 >
-                  Só enviar a nota geral
+                  Enviar apenas a nota geral
                 </Button>
               )}
             </div>

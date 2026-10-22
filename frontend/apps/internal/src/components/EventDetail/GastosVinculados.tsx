@@ -31,7 +31,7 @@ export function GastosVinculados({ gastos }: { gastos: EventGasto[] }) {
                   rel="noopener noreferrer"
                   className="text-blue underline"
                 >
-                  Ver
+                  Ver comprovante
                 </a>
               )}
             </span>

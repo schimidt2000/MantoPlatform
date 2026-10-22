@@ -105,7 +105,7 @@ export function AvisosFalhosBanner({
                 onClick={() => regerarSala.mutate({ orderId })}
               >
                 <RotateCcw className="size-4" />
-                Tentar criar a sala de novo
+                Criar a sala novamente
               </Button>
             </div>
           )}

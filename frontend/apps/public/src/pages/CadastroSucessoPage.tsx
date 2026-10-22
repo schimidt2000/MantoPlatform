@@ -64,7 +64,7 @@ export function CadastroSucessoPage() {
             <>
               <div className="w-full rounded-md border border-line bg-surface-2 p-3 text-left">
                 <p className="text-sm text-ink">
-                  Enviamos um email de confirmação para{" "}
+                  Enviamos um e-mail de confirmação para{" "}
                   <strong className="break-all">{email}</strong>.
                 </p>
                 <p className="mt-1 text-xs text-muted">
@@ -117,7 +117,7 @@ export function CadastroSucessoPage() {
                         setEditing(true);
                       }}
                     >
-                      Esse e-mail está errado
+                      Este e-mail está errado
                     </Button>
                     <Button
                       variant="ghost"

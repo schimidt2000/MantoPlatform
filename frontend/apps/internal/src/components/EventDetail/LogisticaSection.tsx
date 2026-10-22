@@ -193,7 +193,7 @@ function LogisticaLeitura({ data }: { data: EventoDetalhe }) {
       <dd className="text-ink">{maquiagem || "—"}</dd>
       <dt className="text-muted">Saída</dt>
       <dd className="text-ink">{saida || "—"}</dd>
-      <dt className="text-muted">Precisa ensaio</dt>
+      <dt className="text-muted">Precisa de ensaio</dt>
       <dd className="text-ink">{event.needs_rehearsal ? "Sim" : "Não"}</dd>
     </dl>
   );
@@ -235,9 +235,9 @@ function MateriaisSection({ data }: { data: EventoDetalhe }) {
                   size="sm"
                   loading={remove.isPending}
                   onClick={() => {
-                    if (window.confirm("Remover este material?")) remove.mutate(material.id);
+                    if (window.confirm("Excluir este material?")) remove.mutate(material.id);
                   }}
-                  aria-label={`Remover ${material.label ?? "material"}`}
+                  aria-label={`Excluir ${material.label ?? "material"}`}
                 >
                   ✕
                 </Button>
@@ -250,7 +250,7 @@ function MateriaisSection({ data }: { data: EventoDetalhe }) {
       {canEdit && (
         <div className="grid gap-4 border-t border-line pt-3 sm:grid-cols-2">
           <div>
-            <div className="mb-1 text-sm font-medium text-ink">📎 Enviar arquivo</div>
+            <div className="mb-1 text-sm font-medium text-ink">📎 Inserir arquivo</div>
             <p className="mb-1 text-xs text-muted">TXT / PDF / DOC / DOCX, máx. 20 MB</p>
             <input
               ref={fileRef}
@@ -285,7 +285,7 @@ function MateriaisSection({ data }: { data: EventoDetalhe }) {
                 )
               }
             >
-              Enviar arquivo
+              Inserir arquivo
             </Button>
             {addFile.isError && <p className="mt-1 text-sm text-red">{addFile.error?.message}</p>}
           </div>
@@ -363,8 +363,8 @@ function AvisoLogisticaFaltando({ data }: { data: EventoDetalhe }) {
       <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>
         {escalados === 1 ? "1 pessoa escalada" : `${escalados} pessoas escaladas`} e a logística
-        ainda não foi definida. O Portal do Artista mostra o horário de maquiagem e de saída no
-        card do evento — sem eles, quem vai trabalhar descobre por WhatsApp ou não descobre.
+        ainda não foi definida. Informe o horário de maquiagem e o de saída: o Portal do Artista
+        os mostra no card do evento.
       </span>
     </div>
   );

@@ -75,7 +75,7 @@ function RoleSwitcher({ user }: { user: AuthUser }) {
             title="Voltar ao papel real de administrador"
             className="rounded-full border border-sidebar-accent/60 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-sidebar-accent transition-colors hover:bg-sidebar-accent/15 disabled:opacity-60"
           >
-            {pending ? "..." : "Admin"}
+            {pending ? "…" : "Admin"}
           </button>
         )}
       </div>
@@ -120,7 +120,7 @@ function SidebarFooter({ user }: { user: AuthUser }) {
         className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white/55 transition-colors hover:bg-white/5 hover:text-white disabled:opacity-60"
       >
         <LogOut className="h-4 w-4" aria-hidden />
-        {logout.isPending ? "Saindo..." : "Sair"}
+        {logout.isPending ? "Saindo…" : "Sair"}
       </button>
     </div>
   );

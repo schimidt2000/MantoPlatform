@@ -206,7 +206,7 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
         {nadaComVideo && (
           <p className="text-sm text-muted">
             {busca
-              ? "Nenhum vídeo encontrado para essa busca."
+              ? "Nenhum vídeo encontrado para esta busca."
               : "Nenhuma tag tem vídeo ainda — use a lista abaixo para enviar o primeiro."}
           </p>
         )}
@@ -241,7 +241,7 @@ export function NfcVideosPanel({ tags, onManage, onShowInTable }: NfcVideosPanel
           </div>
           {semVideo.length === 0 ? (
             <p className="text-sm text-green">
-              {busca ? "Nenhuma tag sem vídeo nessa busca." : "Todas as tags ativas têm vídeo."}
+              {busca ? "Nenhuma tag sem vídeo nesta busca." : "Todas as tags ativas têm vídeo."}
             </p>
           ) : (
             <Card>

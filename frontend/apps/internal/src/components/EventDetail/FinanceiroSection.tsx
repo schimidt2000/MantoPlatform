@@ -120,11 +120,11 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
             )
           }
         >
-          Enviar contrato
+          Inserir contrato
         </Button>
       </div>
       )}
-      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível anexar o contrato.</p>}
+      {add.isError && <p className="mt-1 text-sm text-red">Não foi possível inserir o contrato.</p>}
     </Panel>
   );
 }
@@ -201,7 +201,7 @@ function PagamentoItem({
               className="text-red"
               loading={del.isPending}
               onClick={() => {
-                if (window.confirm("Excluir este comprovante de pagamento?")) del.mutate(item.id);
+                if (window.confirm("Excluir este comprovante?")) del.mutate(item.id);
               }}
             >
               Excluir
@@ -400,11 +400,11 @@ function PagamentosPanel({ data }: { data: EventoDetalhe }) {
               )
             }
           >
-            Adicionar pagamento
+            Inserir comprovante
           </Button>
           {add.isError && (
             <p className="w-full text-sm text-red" role="alert">
-              {add.error?.message || "Informe o valor e anexe o comprovante."}
+              {add.error?.message || "Informe o valor e insira o comprovante."}
             </p>
           )}
         </div>
@@ -449,7 +449,7 @@ function NotasFiscaisPanel({ data }: { data: EventoDetalhe }) {
                     rel="noopener noreferrer"
                     className="text-blue underline"
                   >
-                    Abrir
+                    Ver nota
                   </a>
                 )}
               </span>
@@ -556,11 +556,11 @@ function CollectForm({ reimbursementId, eventId }: { reimbursementId: number; ev
           )
         }
       >
-        Marcar cobrado
+        Marcar como cobrado
       </Button>
       {collect.isError && (
         <p className="w-full text-sm text-red" role="alert">
-          {collect.error?.message || "Informe o valor e anexe o comprovante."}
+          {collect.error?.message || "Informe o valor e insira o comprovante."}
         </p>
       )}
     </div>
@@ -610,7 +610,7 @@ function ReembolsosPanel({ data }: { data: EventoDetalhe }) {
                       Nota do gasto
                     </a>
                   )}
-                  {item.is_collected && <Badge tone="green" className="ml-2">cobrado</Badge>}
+                  {item.is_collected && <Badge tone="green" className="ml-2">Cobrado</Badge>}
                 </span>
                 <span className="flex items-center gap-2">
                   <span className="tabular-nums text-ink">{brl(item.amount)}</span>

@@ -53,9 +53,9 @@ function ObservationItem({
           size="sm"
           loading={del.isPending}
           onClick={() => {
-            if (window.confirm("Remover esta observação?")) del.mutate(obs.id);
+            if (window.confirm("Excluir esta observação?")) del.mutate(obs.id);
           }}
-          aria-label="Remover observação"
+          aria-label="Excluir observação"
         >
           ✕
         </Button>
@@ -220,7 +220,7 @@ export function ObservacoesSection({ data }: ObservacoesSectionProps) {
   return (
     <Panel title="Observações">
       {observations.length === 0 ? (
-        <Empty>Nenhuma observação ainda.</Empty>
+        <Empty>Nenhuma observação registrada ainda.</Empty>
       ) : (
         <ul className="divide-y divide-line">
           {observations.map((obs) => (

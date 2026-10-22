@@ -104,7 +104,7 @@ function UserRow({ user }: { user: AdminUser }) {
         >
           {user.name}
         </Link>
-        <div className="text-xs text-muted">{user.email || "sem email"}</div>
+        <div className="text-xs text-muted">{user.email || "sem e-mail"}</div>
       </TableCell>
       <TableCell className="hidden md:table-cell">
         {user.role_names.length === 0 ? (
@@ -230,7 +230,7 @@ export function AdminUsersListPage() {
       <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           className={`${INPUT} min-w-56 flex-1`}
-          placeholder="Buscar por nome ou email…"
+          placeholder="Buscar por nome ou e-mail…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           aria-label="Buscar usuário"
@@ -316,7 +316,7 @@ export function AdminUsersListPage() {
       {query.data &&
         (visible.length === 0 ? (
           <p className="rounded-md border border-line bg-panel px-4 py-6 text-center text-sm text-muted">
-            Nenhum usuário encontrado com esses filtros.
+            Nenhum usuário encontrado com estes filtros.
           </p>
         ) : (
           <div className="rounded-md border border-line bg-panel">

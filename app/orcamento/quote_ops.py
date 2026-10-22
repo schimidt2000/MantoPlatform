@@ -386,7 +386,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         raise QuoteValidationError(
             "produtos",
             f'O produto "{exc.chave}" não está mais na tabela de preços — remova-o do orçamento ou '
-            "peça ao superadmin para recriá-lo.",
+            "peça ao Superadmin para recriá-lo.",
         ) from exc
     # O coordenador do produto não é cobrado em dobro: `coordenador_qty` passa a ser o total vendido
     # (vai ao snapshot e ao teto) e só `coord_formula` entra na fórmula.

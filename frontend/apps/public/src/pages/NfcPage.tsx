@@ -557,7 +557,7 @@ export function NfcPage() {
                 required
                 aria-describedby="recado-contador recado-erro"
                 aria-invalid={erroDoTexto ? true : undefined}
-                placeholder="Conte o que essa mensagem despertou aí na sua casa..."
+                placeholder="Conte o que esta mensagem despertou na sua casa…"
                 className={`${CAMPO_BASE} min-h-28 py-3 ${erroDoTexto ? "border-red" : "border-lamp-cloud/30"}`}
               />
               <div className="mt-1 flex items-start justify-between gap-3">
@@ -601,7 +601,7 @@ export function NfcPage() {
               disabled={recado.enviando || mensagem.trim().length === 0}
               className={BOTAO_PRIMARIO}
             >
-              {recado.enviando ? "Enviando..." : "Enviar recado"}
+              {recado.enviando ? "Enviando…" : "Enviar recado"}
             </button>
             {mensagem.trim().length === 0 && (
               // Botão desabilitado sem explicação é botão morto: a frase diz o que falta.

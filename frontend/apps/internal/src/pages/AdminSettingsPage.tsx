@@ -53,7 +53,7 @@ export function AdminSettingsPage() {
           <Link to="/admin/desempenho">Desempenho</Link>
         </Button>
         <Button asChild variant="outline" size="sm">
-          <Link to="/admin/sync">Sync da agenda</Link>
+          <Link to="/admin/sync">Sincronização da agenda</Link>
         </Button>
         <Button asChild variant="outline" size="sm">
           <Link to="/admin/anuncio-portal">Anúncio do portal</Link>
@@ -143,7 +143,7 @@ export function AdminSettingsPage() {
                 />
                 <p className="mt-1 text-xs text-muted">
                   É o seu usuário na InfinitePay — o mesmo que aparece no link de cobrança. Pode
-                  colar com <code>$</code> na frente, que ele é removido.
+                  colar com <code>$</code> na frente; o sinal é removido automaticamente.
                 </p>
               </div>
               <div>
@@ -167,7 +167,7 @@ export function AdminSettingsPage() {
                 <p className="mt-1 text-xs text-muted">
                   É o segredo que autentica o aviso de pagamento da operadora — o sistema gera e
                   guarda sozinho, você não precisa copiar nada. Gerar de novo{" "}
-                  <strong>invalida o anterior</strong>: só faça isso se suspeitar que vazou.
+                  <strong>invalida o anterior</strong>: gere outro apenas se suspeitar que o atual vazou.
                 </p>
               </div>
             </CardContent>
@@ -216,7 +216,7 @@ export function AdminSettingsPage() {
                   checked={emailNotifications}
                   onChange={(e) => setEmailNotifications(e.target.checked)}
                 />
-                Notificações por email ativadas
+                Notificações por e-mail ativadas
               </label>
               <div>
                 <label className={LABEL}>WhatsApp dos formulários de pré-contrato</label>
@@ -289,7 +289,7 @@ export function AdminSettingsPage() {
           >
             Salvar configurações
           </Button>
-          {update.isError && <p className="text-sm text-red">Não foi possível salvar.</p>}
+          {update.isError && <p className="text-sm text-red">Não foi possível salvar as configurações.</p>}
         </>
       )}
     </div>

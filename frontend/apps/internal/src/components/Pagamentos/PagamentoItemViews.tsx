@@ -108,7 +108,7 @@ function StatusSelect({
   const mudar = (status: PaymentStatus) => {
     if (comissaoPaga && status !== "pago") {
       const motivo = window.prompt(
-        "Desfazer o pagamento destas comissões? Só para pagamento marcado por engano. Motivo:",
+        "Desfazer o pagamento destas comissões? Só para pagamento marcado por engano. Informe o motivo:",
       );
       if (!motivo || !motivo.trim()) return;
       setStatus.mutate({ item_type: item.type, item_id: item.id, status, motivo: motivo.trim() });
@@ -147,7 +147,7 @@ function StatusSelect({
       </span>
       {setStatus.isError && (
         <span className="text-[10px] text-red">
-          {setStatus.error?.message || "Falha ao salvar — tente de novo."}
+          {setStatus.error?.message || "Não foi possível salvar. Tente novamente."}
         </span>
       )}
     </div>
@@ -176,7 +176,7 @@ function CommissionLines({ item, toque = false }: { item: PagamentoItem; toque?:
           toque && "flex min-h-11 items-center",
         )}
       >
-        ver linhas ({linhas.length})
+        Ver linhas ({linhas.length})
       </summary>
       <ul className="mt-1 space-y-1">
         {linhas.map((l) => (

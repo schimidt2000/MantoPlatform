@@ -82,7 +82,7 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
             {manutencao && (
               <Badge tone={bloqueado ? "red" : "gold"}>
                 {bloqueado
-                  ? "⚠ Não pode ir para evento"
+                  ? "⚠ Não pode ir para o evento"
                   : `🪡 ${manutencao.abertas} conserto${manutencao.abertas === 1 ? "" : "s"} em aberto`}
               </Badge>
             )}
@@ -96,7 +96,7 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
                 to={`/figurinos/producao?ficha=${role.figurino_sheet_id}`}
                 className="text-accent hover:underline"
               >
-                ver na oficina
+                Ver na oficina
               </Link>
             </p>
           )}
@@ -125,7 +125,7 @@ function FigurinoRow({ role, eventId, canEdit }: FigurinoRowProps) {
               }
             />
             Separado
-            {toggleDone.isPending && <span className="text-xs text-muted">salvando…</span>}
+            {toggleDone.isPending && <span className="text-xs text-muted">Salvando…</span>}
           </label>
         </div>
       )}
@@ -179,7 +179,7 @@ export function FigurinoSection({ data }: FigurinoSectionProps) {
       }
     >
       {personagens.length === 0 ? (
-        <Empty>Nenhum personagem no evento.</Empty>
+        <Empty>Nenhum personagem cadastrado neste evento.</Empty>
       ) : (
         <ul className="space-y-2">
           {personagens.map((role) => (

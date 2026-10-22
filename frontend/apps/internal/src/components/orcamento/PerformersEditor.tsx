@@ -46,7 +46,7 @@ export function PerformersEditor({
           <TableRow head>
             <TableCell as="th">Tipo / Subtipo</TableCell>
             <TableCell as="th">Personagem/Nome</TableCell>
-            <TableCell as="th">Flags</TableCell>
+            <TableCell as="th">Opções</TableCell>
             <TableCell as="th">Maquiagem</TableCell>
             <TableCell as="th" align="right">
               Ações
@@ -176,7 +176,7 @@ function PerformerTableRow({
                   onChange({ ...performer, bge_subtipo: e.target.value as Performer["bge_subtipo"] })
                 }
               >
-                <option value="">Sub-tipo do BGE…</option>
+                <option value="">Subtipo do BGE…</option>
                 <option value="dinossauro">Dinossauro</option>
                 <option value="transformers">Transformers</option>
                 <option value="outro">Outro</option>

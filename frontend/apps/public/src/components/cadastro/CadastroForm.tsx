@@ -146,9 +146,9 @@ export function CadastroForm() {
 
   function validateFiles(): boolean {
     const nextErrors: Partial<Record<keyof CadastroFiles, string>> = {};
-    if (!files.photo_face) nextErrors.photo_face = "Anexe a foto do rosto.";
-    if (!files.photo_full) nextErrors.photo_full = "Anexe a foto de corpo inteiro.";
-    if (!files.doc_photo) nextErrors.doc_photo = "Anexe a foto do documento.";
+    if (!files.photo_face) nextErrors.photo_face = "Escolha a foto do rosto.";
+    if (!files.photo_full) nextErrors.photo_full = "Escolha a foto de corpo inteiro.";
+    if (!files.doc_photo) nextErrors.doc_photo = "Escolha a foto do documento.";
     setFileErrors(nextErrors);
     return Object.keys(nextErrors).length === 0;
   }
@@ -189,7 +189,7 @@ export function CadastroForm() {
           // do que ela digitou se perdeu, então a instrução certa é simplesmente reenviar.
           setServerError(
             "Não conseguimos enviar o cadastro — pode ter sido a conexão. Tudo que você " +
-              "preencheu continua aqui: toque em “Enviar cadastro” de novo. Se insistir, troque " +
+              "preencheu continua aqui: toque em “Enviar cadastro” de novo. Se o erro continuar, troque " +
               "de Wi-Fi para 4G (ou o contrário) e tente mais uma vez.",
           );
         },
@@ -408,7 +408,7 @@ export function CadastroForm() {
           <label className={LABEL}>
             Altura em metros (ex.: 1,75) <span className="text-red">*</span>
           </label>
-          <input className={FIELD} placeholder="Ex: 1,75" {...register("height")} />
+          <input className={FIELD} placeholder="Ex.: 1,75" {...register("height")} />
           <FieldError message={errors.height?.message} />
         </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -417,7 +417,7 @@ export function CadastroForm() {
               Manequim/roupa superior <span className="text-red">*</span>
             </label>
             <select className={FIELD} {...register("clothing_top")}>
-              <option value="">— selecione —</option>
+              <option value="">Selecione…</option>
               {CLOTHING_SIZE_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -431,7 +431,7 @@ export function CadastroForm() {
               Manequim/roupa inferior <span className="text-red">*</span>
             </label>
             <select className={FIELD} {...register("clothing_bottom")}>
-              <option value="">— selecione —</option>
+              <option value="">Selecione…</option>
               {CLOTHING_SIZE_OPTIONS.map((opt) => (
                 <option key={opt} value={opt}>
                   {opt}
@@ -445,7 +445,7 @@ export function CadastroForm() {
           <label className={LABEL}>
             Tamanho do sapato (numeração brasileira) <span className="text-red">*</span>
           </label>
-          <input className={FIELD} inputMode="numeric" placeholder="Ex: 38" {...register("shoe_size")} />
+          <input className={FIELD} inputMode="numeric" placeholder="Ex.: 38" {...register("shoe_size")} />
           <FieldError message={errors.shoe_size?.message} />
         </div>
         <RadioGroup
@@ -500,7 +500,7 @@ export function CadastroForm() {
       </Section>
 
       <Button type="submit" size="lg" className="w-full" loading={isSubmitting || submitCadastro.isPending}>
-        {submitCadastro.isPending ? "Enviando..." : "Enviar cadastro"}
+        {submitCadastro.isPending ? "Enviando…" : "Enviar cadastro"}
       </Button>
       <p className="text-center text-xs text-muted">
         Seus dados são usados apenas para o cadastro de talentos da Manto Produções.

@@ -231,7 +231,7 @@ def api_formularios_vincular_evento(response_id: int) -> Any:
     body = request.get_json(silent=True) or {}
     event_id = body.get("event_id")
     if not event_id:
-        return json_error("Selecione um evento válido.", 400, fields={"event_id": "obrigatório"})
+        return json_error("Selecione um evento válido.", 400, fields={"event_id": "Obrigatório"})
     try:
         event, resultado = formularios_ops.link_event(response, int(event_id))
     except formularios_ops.FormValidationError as exc:

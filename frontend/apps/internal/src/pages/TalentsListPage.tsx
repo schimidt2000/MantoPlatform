@@ -85,7 +85,7 @@ export function TalentsListPage() {
               className={`px-3 py-1.5 text-sm ${view === "bounces" ? "bg-accent text-on-color" : "text-ink"}`}
               onClick={() => setView("bounces")}
             >
-              Emails com problema {bounceCount > 0 && `(${bounceCount})`}
+              E-mails com problema {bounceCount > 0 && `(${bounceCount})`}
             </button>
           )}
         </div>

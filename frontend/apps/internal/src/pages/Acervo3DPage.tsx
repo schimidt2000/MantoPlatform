@@ -138,7 +138,7 @@ function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         <FileUpload
-          label="Foto de Preview (JPG/PNG)"
+          label="Foto de preview (JPG/PNG)"
           accept={PHOTO_ACCEPT}
           maxSizeBytes={MAX_UPLOAD_BYTES}
           required={!isEdit}
@@ -203,7 +203,7 @@ function AcervoForm({ item, onSaved, onCancel }: AcervoFormProps) {
               multiple
               accept={MODEL_ACCEPT}
               className="w-full text-sm text-ink"
-              aria-label="Adicionar arquivos 3D"
+              aria-label="Inserir arquivos 3D"
               onChange={(e) => setModelFiles(Array.from(e.target.files ?? []))}
             />
             <p className="text-xs text-muted">
@@ -471,13 +471,12 @@ export function Acervo3DPage() {
                   <span>
                     Excluir mesmo assim, removendo o presente {" "}
                     <strong>de todos os {deleting?.usage_count} evento(s)</strong> e da Fila de
-                    Impressão. Não dá para desfazer.
+                    Impressão. Não pode ser desfeito.
                   </span>
                 </label>
               ) : (
                 <p className="mt-1 text-muted">
-                  Use “Inativar” para tirá-la de circulação sem perder o histórico. Só o super
-                  admin pode excluir uma peça já usada.
+                  Use “Inativar” para tirá-la de circulação sem perder o histórico. Só o Superadmin pode excluir uma peça já usada.
                 </p>
               )}
             </div>

@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-22** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-22** · Estado do repositório: pós-correção
+> **316-tom-dos-textos** (sem migration; pronta na branch, aguardando o merge a pedido do dono — revisão de
+> português e tom em todas as superfícies: 505 trocas de texto visível em 168 arquivos, só texto; sem verify, typecheck
+> verde e telas abertas) — antes dela pós-feature
 > **313-desconto-e-pix-na-calculadora** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~04:58**, a pedido do dono,
 > fora do horário — o desconto negociado e o PIX que vale o maior na calculadora, a ordem da conta da Q7 no orçamento
 > novo, o evento com o cheio e a venda; `verify_313.py` 18/18) — antes dela pós-feature
@@ -158,6 +161,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **316-tom-dos-textos** | *(pronta, aguardando merge)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
@@ -340,6 +344,69 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
+
+> Pronta na branch, aguardando o merge a pedido do dono. Nível 2 (só texto, sem migration, sem regra de negócio).
+
+**O pedido.** "Faça uma varredura inteira no sistema interno e todas as páginas externas também por
+checagens de português. Ajuste o tom, algumas coisas parecem largadas. Exemplo: Colocar comprovante >
+inserir comprovante. No interno ajuste para operacional, eficaz e claro. Deixando em páginas externas em
+tom mais lúdico, mas ainda assim com muita clareza." O dono aprovou a amostra e pediu "revise, altere e
+faça push, com atenção para fazer sentido com o restante da página".
+
+**O guia e o glossário** ficaram em `specs/316-tom-dos-textos/spec.md` — é a fonte para texto novo:
+interno operacional (imperativo curto, confirmação é fato), público lúdico e claro, portal cordial;
+"Inserir/Ver/Excluir comprovante", "Situação" (não "Status") em cabeçalho/rótulo/filtro, "Excluir" (apaga)
+× "Remover" (sai do vínculo), "Nenhum X registrado ainda.", "e-mail", "Superadmin", "a cliente", "Ex.:", "…".
+
+**O que mudou** (505 trocas em 168 arquivos; só texto visível). Dois exemplos por família:
+- Verbo de conversa → ação: "até alguém pôr o valor" → "inserir o valor" (`ValoresBlock`); "Não dá para
+  desfazer." → "Esta ação não pode ser desfeita." (`PagamentosPage`).
+- Comprovante/anexo: "+ Adicionar comprovante" → "+ Inserir comprovante" (`PagamentoBlock`); "Adicionar
+  pagamento" → "Inserir comprovante" e "Abrir" → "Ver nota" (`FinanceiroSection`).
+- Situação: cabeçalhos de Comissões, Gastos Extras, Fila 3D, Painel de Marketing, DRE; "Todos os status"
+  → "Todas as situações"; API "Status inválido para este item" → "Situação inválida…".
+- Excluir × Remover: "Tirar da escala" → "Remover da escala" (`CastingSection`); "Remover esta
+  observação?" → "Excluir esta observação?"; vídeo/moldura da tag NFC: "Remover" → "Excluir" (apaga do
+  servidor); "Tirar do funil" → "Remover do funil".
+- Confirmações e vazios: "Pronto. A ficha já está na base de clientes." → "Ficha salva na base de
+  clientes."; "Nada aqui ainda" → "Nenhuma postagem ainda."; "Tudo em dia por aqui. 🎉" sai.
+- "aqui" apontando para a tela: "as respostas aparecem aqui" → "nesta lista" (Formulários,
+  Notificações, Tags NFC, Marketing).
+- Title Case em cartão/botão: "Dados do Evento", "Ajustes Finos", "Gerar Orçamento", "Ver Detalhes para
+  Impressão", "Salvar e Aprovar", "Resetar senha" → "Redefinir senha", "Sync" → "Sincronização".
+- Público (pontual): "uns minutinhos" → "alguns minutos" (`lojaTema`, e-mail da reserva); "Esse horário"
+  → "Este horário"; "Anexe a foto do rosto." → "Escolha a foto do rosto." (botão "Escolher arquivo");
+  "email" → "e-mail"; "..." → "…".
+- Portal: "Deu um erro do nosso lado… Já estamos avisados." → "Houve um erro do nosso lado… Nossa equipe
+  já foi avisada."; "Conte o que aconteceu" → "Descreva o que aconteceu"; "Tudo certo! Sua nova senha
+  já está valendo." → "Sua nova senha já está ativa."
+- E-mails: "Confirmar leva um toque" → "Confirmar é rápido"; "Você será solicitado(a) a criar…" → "No
+  primeiro acesso, você vai criar…"; gasto extra "Acesse o sistema" → "Acesse a plataforma".
+- API: "Explique o motivo do cancelamento." → "Informe o motivo…" (`cancel_ops`, ×4); "Esse email já
+  existe." → "Este e-mail já está cadastrado." (`user_ops`); "Outra pessoa mexeu neste evento" →
+  "alterou"; "YYYY-MM-DD" → "AAAA-MM-DD"; "Dados inválidos" → "Informe o nome e os preços do item
+  especial."
+- De passagem: o convite por WhatsApp sem acento ("Ola… Voce… Cache… Horario", `lib/eventDetail.ts`);
+  "1 avaliações" (`FeedbackSection`); e-mail interno "Olá, Olá!" para usuário sem nome (`email_service`,
+  agora "Olá, equipe!").
+
+**Como foi feito.** Dez revisores em paralelo, cada um lendo os arquivos inteiros da sua área (pages em
+três fatias, EventDetail, components, subpastas + lib, público, portal, e-mails/PDF/`@manto/ui`, API)
+e propondo `antes → depois` com unicidade conferida; revisão uma a uma (3 rejeitadas: "Oi" nas
+mensagens de WhatsApp, ponto antes do ✓, cabeçalho do CSV de comissões; 8 ajustadas); aplicação por
+substituição exata preservando CRLF e UTF-8 (+509/−510 linhas, sem mojibake, sem BOM).
+
+**Verificação.** Sem `verify_316.py` (não há regra). `npm run typecheck` (três apps) verde; `py_compile`
+nos 30 `.py`; `ruff check` só com os 3 avisos que a `main` já tinha (`producao_ops.py`). Telas abertas no
+Browser pane contra o `manto_local`: Home, evento, Pagamentos, Clientes; loja e cadastro a 375px;
+login e avaliação do portal.
+
+**Fora de escopo** (dívidas 145–147 no `docs/05`): "super admin" comparado por texto em
+`figurino_producao_write.py:223`; rótulos do menu e títulos de módulo em Title Case; cabeçalho do CSV;
+mensagens técnicas e com enum; "Google Calendar" × "Google Agenda"; o e-mail do prazo (311), o termo e
+a frase do PDF do orçamento, que são texto do dono.
 
 ### 313 — Desconto negociado e PIX que vale o maior na calculadora; o acréscimo entra uma vez e o BV é calculado sobre tudo   (313-desconto-e-pix-na-calculadora · 2026-10-21 · sem migration)
 

@@ -87,7 +87,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
       return;
     }
     if (!proof) {
-      setLocalError("Anexe o comprovante do adiantamento.");
+      setLocalError("Insira o comprovante do adiantamento.");
       return;
     }
     addAdvance.mutate(
@@ -162,7 +162,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
                         rel="noopener"
                         className="text-xs text-blue hover:underline"
                       >
-                        ver comprovante
+                        Ver comprovante
                       </a>
                     ) : (
                       <span className="text-xs text-muted">sem comprovante</span>
@@ -199,7 +199,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
                           disabled={deleteAdvance.isPending}
                           onClick={() => setConfirmingId(advance.id)}
                         >
-                          Remover
+                          Excluir
                         </Button>
                       )}
                     </span>
@@ -210,7 +210,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
           )}
           {deleteAdvance.isError && (
             <p className="mt-1 text-sm text-red" role="alert">
-              {errorMessage(deleteAdvance.error, "Não foi possível remover o adiantamento.")}
+              {errorMessage(deleteAdvance.error, "Não foi possível excluir o adiantamento.")}
             </p>
           )}
         </section>
@@ -277,7 +277,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
                 Fechar
               </Button>
               <Button type="submit" loading={addAdvance.isPending}>
-                Adicionar adiantamento
+                Registrar adiantamento
               </Button>
             </div>
           </form>
@@ -285,7 +285,7 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
           <div className="mt-4 border-t border-line pt-4">
             <p className="text-sm text-muted">
               {typeof item.id === "number"
-                ? "O salário já está totalmente adiantado — remova um lançamento acima para abrir espaço."
+                ? "O salário já está totalmente adiantado — exclua um lançamento acima para abrir espaço."
                 : "Este lançamento não aceita adiantamento."}
             </p>
             <div className="mt-3 flex justify-end">

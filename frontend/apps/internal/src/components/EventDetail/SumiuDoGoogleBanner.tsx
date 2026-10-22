@@ -39,12 +39,12 @@ export function SumiuDoGoogleBanner({ data, onDevolver, onCancelar }: SumiuDoGoo
         </span>
       </p>
       <p className="mt-0.5 text-ink">
-        O que for editado aqui fica só no sistema e vai ao Google Agenda quando o Superadmin
+        O que for editado neste evento fica só no sistema e vai ao Google Agenda quando o Superadmin
         devolver o evento.
       </p>
       {comercial && (
         <p className="mt-1 text-ink">
-          A decisão é do Superadmin — conte a ele por que o evento saiu do Google Agenda.
+          A decisão é do Superadmin — informe a ele por que o evento saiu do Google Agenda.
         </p>
       )}
       {superadmin && <ParteDoSuperadmin data={data} onDevolver={onDevolver} onCancelar={onCancelar} />}
@@ -75,7 +75,7 @@ function ParteDoSuperadmin({ data, onDevolver, onCancelar }: SumiuDoGoogleBanner
         )}
       </div>
       <p className="text-ink">
-        Devolva ao Google se o evento continua valendo; se ele foi cancelado de verdade, cancele —
+        Devolva ao Google se o evento continua valendo; se ele foi realmente cancelado, cancele —
         a devolução do dinheiro, a comissão e o BV se acertam no próprio cancelamento.
       </p>
       <div className="rounded-md border border-line bg-panel px-3 py-2">
@@ -89,7 +89,7 @@ function ParteDoSuperadmin({ data, onDevolver, onCancelar }: SumiuDoGoogleBanner
               que está no sistema.
             </li>
             <li>
-              Abra o evento que foi recriado, tire dele o que foi lançado em duplicidade (venda,
+              Abra o evento que foi recriado, remova dele o que foi lançado em duplicidade (venda,
               comprovantes, contrato, escala) e só então apague-o no Google Agenda — se for apagado
               com algo dentro, ele também fica marcado.
             </li>

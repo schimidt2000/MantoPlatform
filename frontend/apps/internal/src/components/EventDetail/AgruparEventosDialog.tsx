@@ -173,7 +173,7 @@ export function AgruparEventosDialog({ data, open, onOpenChange }: AgruparEvento
           <div className="space-y-4">
             <div>
               <label className={LABEL} htmlFor="grupo-busca">
-                Procurar eventos para agrupar
+                Buscar eventos para agrupar
               </label>
               <Input
                 id="grupo-busca"

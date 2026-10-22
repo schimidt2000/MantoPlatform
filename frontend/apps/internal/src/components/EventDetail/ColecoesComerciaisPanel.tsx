@@ -270,7 +270,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
                 {l.descricao ? <p className="mt-1 text-xs text-muted">{l.descricao}</p> : null}
                 {pago && (
                   <p className="mt-1 text-xs text-muted">
-                    BV já pago: o valor não muda e ele não sai por aqui (desmarque o pagamento na
+                    BV já pago: o valor não muda e a linha não pode ser removida (desmarque o pagamento na
                     Planilha de Pagamentos).
                   </p>
                 )}
@@ -327,7 +327,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
           <div className="space-y-1 text-xs text-muted">
             <p>
               <strong>BV em %</strong>: sobre o preço com os outros acréscimos, antes do BV e da
-              nota — com nota, R$ 1.309,52 dá BV de R$ 100,00; com um "Outro" de R$ 300 e venda de
+              nota — com nota, R$ 1.309,52 resulta em BV de R$ 100,00; com um "Outro" de R$ 300 e venda de
               R$ 1.430,00 sem nota, R$ 130,00.
             </p>
             <p>
@@ -397,7 +397,7 @@ function AcrescimosPanel({ data }: { data: EventoDetalhe }) {
         </div>
       )}
       {acrescimos.length === 0 ? (
-        <Empty>Nenhum acréscimo.</Empty>
+        <Empty>Nenhum acréscimo registrado.</Empty>
       ) : (
         <div className="divide-y divide-line">
           {acrescimos.map((a) => (

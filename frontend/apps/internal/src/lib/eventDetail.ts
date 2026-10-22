@@ -290,7 +290,7 @@ export const PORTAL_PUBLICO = "portal.mantoproducoes.com.br";
 /** Mensagem de convite individual de um talento (botão "Copiar convite" do card). */
 export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: string): string {
   const linhas = [
-    `Ola, ${role.talent?.first_name ?? ""}! Voce tem um convite da Manto Producoes. 🎉`,
+    `Olá, ${role.talent?.first_name ?? ""}! Você tem um convite da Manto Produções. 🎉`,
     "",
     `🎪 *${ctx.title}*`,
     // 40% das escalações são cargo (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo,
@@ -301,9 +301,9 @@ export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: stri
   if (ctx.dateLabel) linhas.push(`📅 ${ctx.dateLabel}`);
   if (ctx.timeLabel) linhas.push(`🕐 ${ctx.timeLabel}`);
   if (ctx.location) linhas.push(`📍 ${ctx.location}`);
-  if (cache) linhas.push(`💰 Cache: ${cache}`);
+  if (cache) linhas.push(`💰 Cachê: ${cache}`);
   if (ctx.makeupTime) {
-    linhas.push("", "💄 *Maquiagem*", `🕐 Horario: ${ctx.makeupTime}`);
+    linhas.push("", "💄 *Maquiagem*", `🕐 Horário: ${ctx.makeupTime}`);
     if (ctx.makeupLocation) linhas.push(`📍 Local: ${ctx.makeupLocation}`);
   }
   linhas.push(

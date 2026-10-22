@@ -149,7 +149,7 @@ export function DynamicForm({ formType }: DynamicFormProps) {
       ))}
 
       <Button type="submit" size="lg" className="w-full" loading={submitForm.isPending}>
-        {submitForm.isPending ? "Enviando..." : "Enviar no WhatsApp"}
+        {submitForm.isPending ? "Enviando…" : "Enviar no WhatsApp"}
       </Button>
     </form>
   );

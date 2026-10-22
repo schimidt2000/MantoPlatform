@@ -94,7 +94,7 @@ export type ProducaoSeveridade = "impede_uso" | "pode_esperar";
 
 export const PRODUCAO_SEV_LABELS: Record<ProducaoSeveridade, string> = {
   impede_uso: "Não pode ir para evento",
-  pode_esperar: "Dá para usar assim",
+  pode_esperar: "Pode ir para o evento assim",
 };
 
 export type AnexoKind = "foto" | "orcamento";

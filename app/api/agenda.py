@@ -40,7 +40,7 @@ def api_agenda() -> Any:
             if not 1 <= month <= 12:
                 raise ValueError
         except (ValueError, AttributeError):
-            return json_error("Mês inválido (use YYYY-MM)", 400)
+            return json_error("Mês inválido (use AAAA-MM)", 400)
     else:
         now = datetime.now()
         year, month = now.year, now.month
@@ -84,7 +84,7 @@ def api_agenda_day(date_str: str) -> Any:
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        return json_error("Data inválida (use YYYY-MM-DD)", 400)
+        return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
     day_start = datetime(day.year, day.month, day.day)
     day_end = datetime.fromordinal(day_start.toordinal() + 1)

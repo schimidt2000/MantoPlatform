@@ -327,7 +327,7 @@ def api_delete_role(role_id: int) -> Any:
         event, role, is_superadmin=is_superadmin, actor_name=current_user.name, tz=_TZ_SP
     )
     if not removed:
-        return json_error("Cargo com convite aceito só pode ser removido por um superadmin", 403)
+        return json_error("Cargo com convite aceito só pode ser removido pelo Superadmin", 403)
     return _event_detail_json(event)
 
 
@@ -574,7 +574,7 @@ def api_add_observation(event_id: int) -> Any:
     if obs_type not in ("text", "link", "image"):
         return json_error("Tipo de observação inválido", 400, {"obs_type": "Use texto, link ou imagem"})
     if obs_type == "image" and not (file_storage and file_storage.filename):
-        return json_error("Anexe uma imagem para a observação", 400, {"image": "Obrigatório"})
+        return json_error("Insira a imagem da observação", 400, {"image": "Obrigatório"})
 
     from app.calendar.observation_ops import add_observation
     from app.calendar.routes import _save_file_upload
@@ -1245,7 +1245,7 @@ def api_create_event() -> Any:
         outro = outro_evento_vivo_do_orcamento(orc_id, exceto_event_id=None)
         if outro is not None:
             return json_error(
-                f"Esse orçamento já virou o evento #{outro.id} ({outro.title}). "
+                f"Este orçamento já virou o evento #{outro.id} ({outro.title}). "
                 "Abra-o pelo histórico (Ver evento) ou cancele-o antes de criar outro.",
                 409,
                 event_id=outro.id,
@@ -1762,7 +1762,7 @@ def api_set_event_orcamento(event_id: int) -> Any:
             autor = (atual.user.name if atual.user else None) or "Vendedor não identificado"
             return json_error(
                 f"Este evento está vinculado ao orçamento de {autor}; "
-                "só ele ou o superadmin podem trocar, desvincular ou re-aplicar.",
+                "só ele ou o Superadmin podem trocar, desvincular ou reaplicar.",
                 409,
                 orcamento_de_outro=True,
             )
@@ -1795,7 +1795,7 @@ def api_set_event_orcamento(event_id: int) -> Any:
     except OrcamentoJaVinculado as exc:
         db.session.rollback()
         return json_error(
-            "Esse orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
+            "Este orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -2106,7 +2106,7 @@ def api_delete_contract(contract_id: int) -> Any:
     if contract is None:
         return json_error("Contrato não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir contratos", 403)
+        return json_error("Apenas o Superadmin pode excluir contratos", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
     negado = trava_do_cancelado(event)
@@ -2129,7 +2129,7 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
     if contract is None:
         return json_error("Contrato não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode alterar o status do contrato", 403)
+        return json_error("Apenas o Superadmin pode alterar a situação do contrato", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
     negado = trava_do_cancelado(event)
@@ -2189,7 +2189,7 @@ def api_edit_payment(payment_id: int) -> Any:
     if payment is None:
         return json_error("Comprovante não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode editar comprovantes", 403)
+        return json_error("Apenas o Superadmin pode editar comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
 
     body = request.get_json(silent=True) or {}
@@ -2223,7 +2223,7 @@ def api_delete_payment(payment_id: int) -> Any:
     if payment is None:
         return json_error("Comprovante não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir comprovantes", 403)
+        return json_error("Apenas o Superadmin pode excluir comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
 
     from sqlalchemy.exc import DBAPIError
@@ -2300,7 +2300,7 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
     if recusa is not None:
         return recusa
     if reimbursement.is_collected:
-        return json_error("Esse reembolso já foi marcado como cobrado", 400)
+        return json_error("Este reembolso já foi marcado como cobrado", 400)
 
     collected_amount = _decimal_from_form(request.form.get("collected_amount"))
     file_storage = request.files.get("file")
@@ -2315,7 +2315,7 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
     )
     if not ok:
         return json_error(
-            "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
+            "Informe o valor recebido e insira o comprovante para marcar como cobrado.", 400,
             {"collected_amount": "Obrigatório", "file": "Obrigatório"},
         )
     _log_anexo(
@@ -2337,7 +2337,7 @@ def api_delete_reimbursement(reimbursement_id: int) -> Any:
     if reimbursement is None:
         return json_error("Reembolso não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir reembolsos", 403)
+        return json_error("Apenas o Superadmin pode excluir reembolsos", 403)
     event = CalendarEvent.query.get(reimbursement.event_id)
 
     from app.calendar.routes import _delete_reimbursement_record
@@ -2394,7 +2394,7 @@ def api_set_role_payment_status(role_id: int) -> Any:
     status = (request.get_json(silent=True) or {}).get("payment_status", "")
     if not set_payment_status(event, role, status=status):
         return json_error(
-            "Status de pagamento inválido.", 400, {"payment_status": "Valor não aceito"}
+            "Situação de pagamento inválida.", 400, {"payment_status": "Valor não aceito"}
         )
     return _event_detail_json(event)
 
@@ -2604,7 +2604,7 @@ def api_create_ensaio(event_id: int) -> Any:
     except CancelValidationError as exc:  # feature 312: show cancelado não ganha ensaio
         return _recusa_do_cancelado(exc)
     except RuntimeError as exc:
-        return json_error(f"Erro ao criar no Google Calendar: {exc}", 502)
+        return json_error(f"Não foi possível criar o ensaio no Google Calendar: {exc}", 502)
     return _event_detail_json(event), 201
 
 
