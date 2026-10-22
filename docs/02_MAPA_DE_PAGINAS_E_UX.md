@@ -6,7 +6,7 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-21** · Em branch: **313-desconto-e-pix-na-calculadora**: o bloco "Desconto negociado"
+> Última atualização: **2026-10-21** · **313-desconto-e-pix-na-calculadora** (em produção desde 22/10 ~04:58): o bloco "Desconto negociado"
 > na calculadora (% ou "fechar [duração] por R$"), o cheio riscado, o PIX e o BV a repassar no Resultado e no orçamento
 > gerado, o selo "−N%" no histórico e o Novo evento com o cheio e a venda separados — A.7 e `/events/new`. Antes:
 > **2026-10-20** · **312-cancelado-fora-das-listas**: o cancelado sai do Dia, da busca, das fichas,

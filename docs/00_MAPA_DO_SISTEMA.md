@@ -5,9 +5,11 @@
 > cada tipo de tarefa — para você não varrer 83 KB de documentação antes de escrever a primeira
 > linha.
 >
-> Última revisão: **2026-09-08** · Estado do repositório: pós-feature **296** (revisão do harness;
-> produção no **Render** desde 28/08/2026) · Head de migration: o do cabeçalho do `docs/01`
-> (confira com `flask db heads`).
+> Última revisão: **2026-10-22** · Estado do repositório: pós-feature **313** (o desconto na calculadora, em
+> produção desde 22/10) — a revisão inteira do mapa é a da **296** (08/09, harness; produção no **Render** desde
+> 28/08/2026); de lá para cá as features 297–313 só tocaram trechos (RBAC do Financeiro e a tela do cancelado na
+> 312, a linha do Orçamento na 313) · Head de migration: o do cabeçalho do `docs/01` (confira com
+> `flask db heads`). O que está em produção, feature a feature: o índice do `docs/03`.
 
 ---
 
@@ -67,7 +69,7 @@ o `JSON.parse` estoura e o erro vira lista vazia em silêncio.
 | Loja Virtual | `app/marketing/virtuais_ops.py` (2.325 l.) | `virtuais_public/read/write/webhook.py` | `apps/public` `/catalogo/v/*` + `internal` |
 | Marketing | `app/marketing/marketing_ops.py` | `marketing_read/write.py` | `MarketingPage` |
 | Impressões 3D | `app/impressoes3d/impressoes3d_ops.py` | `impressoes3d_read/write.py` | `Acervo3D*`, `Fila3D*` |
-| Orçamento | `app/orcamento/quote_ops.py`, `pricing.py`, `settings.py`, `transport.py` | `orcamento_read/write.py` | `OrcamentoCalculadoraPage` |
+| Orçamento | `app/orcamento/quote_ops.py` (a ordem da conta em `aplicar_acrescimos`; desconto e PIX, 313), `pricing.py`, `settings.py`, `transport.py`, `produtos.py` (produtos de tabela, 309), `pdf.py`; o orçamento que vira evento em `app/calendar/orcamento_evento_ops.py` | `orcamento_read/write.py` | `OrcamentoCalculadoraPage`, `lib/desconto.ts` |
 | EducaManto | `app/educamanto/pricing_ops.py`, `package_ops.py`, `quote_ops.py` | `educamanto_read/write.py` | `EducaManto*Page` |
 | Clientes | `app/clientes/client_ops.py` | `clientes_read/write.py` | `ClientesPage` |
 | Formulários | `app/formularios/formularios_ops.py` (auto-vínculo de evento em `:582`, de cliente em `attempt_auto_link_client`) | `formularios_write.py`, `formularios_admin_*` | `apps/public` `/f/*` + `FormulariosAdminPage` |

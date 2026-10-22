@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-21** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-22** · Estado do repositório: pós-feature
+> **313-desconto-e-pix-na-calculadora** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~04:58**, a pedido do dono,
+> fora do horário — o desconto negociado e o PIX que vale o maior na calculadora, a ordem da conta da Q7 no orçamento
+> novo, o evento com o cheio e a venda; `verify_313.py` 18/18) — antes dela pós-feature
 > **312-cancelado-fora-das-listas** (sem migration; **EM PRODUÇÃO desde 21/10/2026 ~18:20**, a pedido do dono, logo
 > depois do deploy da 185b e da 299b — o cancelado sai de toda lista e
 > só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
@@ -155,7 +158,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **313-desconto-e-pix-na-calculadora** | *(em branch, não publicada)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
+| **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **299b-cobranca-a-qualquer-momento** | *(EM PRODUÇÃO 21/10 ~18:17)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
@@ -340,8 +343,9 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 313 — Desconto negociado e PIX que vale o maior na calculadora; o acréscimo entra uma vez e o BV é calculado sobre tudo   (313-desconto-e-pix-na-calculadora · 2026-10-21 · sem migration)
 
-> **Em branch, não publicada** (worktree `C:\tmp\mp313`, base `c074657b`). Merge e push só quando o dono pedir, à
-> noite (T049).
+> **EM PRODUÇÃO desde 22/10/2026 ~04:58** (merge `merge: 313 — …` sobre a `main` `c074657b`, a da 312; a pedido do
+> dono, fora do horário). A `main` não andou desde a base da branch; a rodada final repetiu `verify_313` 18/18 e o
+> retrato `main` × branch da 306 (DRE, Comercial, Home, Comissões, Planilha idênticos ao centavo).
 
 **O pedido.** Item 3b do backlog de setembro, a parte 1 (a noite do desconto; os dias adicionais são outra entrega):
 a comercial dá desconto quando a cliente "chora por desconto" e hoje não tem onde — fazia à mão ou com acréscimo

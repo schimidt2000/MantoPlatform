@@ -7,7 +7,7 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-21** · Em branch: **313-desconto-e-pix-na-calculadora** (sem migration; o desconto
+> Última atualização: **2026-10-21** · **313-desconto-e-pix-na-calculadora** (EM PRODUÇÃO desde 22/10/2026 ~04:58; sem migration; o desconto
 > negociado e o PIX que vale o maior em `/orcamento/calcular`, a ordem da conta da Q7 marcada por `versao_conta: 2` no
 > snapshot, o cheio e o final no prefill, no Novo evento e no vínculo 273, `duracoes_do_desconto` no 400 — §3.13,
 > "Feature 313"; nenhum gate muda, §4.3). Antes: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das

@@ -221,7 +221,7 @@ cenários 11, 12, 14 (7, 13 e 15 são regressão, verdes desde a Foundational).
 - [X] T047 `docs/03`: entrada nova no topo + linha no índice (a reconferência; as exceções da Q7 e quantos
       orçamentos atingem; as premissas da Session)
 - [X] T048 `/speckit-converge` e, por achado confirmado, cenário vermelho no verify antes da correção
-- [ ] T049 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
+- [X] T049 Pré-merge: `main` do dia na branch, rodada inteira e regressão de novo; `git status` limpo; merge e push
       **só quando o dono pedir**, à noite
 
 ---

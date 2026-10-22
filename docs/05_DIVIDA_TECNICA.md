@@ -655,9 +655,9 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | 133 | **P4** | Planilha de Pagamentos (`financeiro_write.py` `set-status` e `bulk-action`) | o status do cachê de uma vaga de evento cancelado ainda muda pela Planilha (fora da tela do evento, que a trava fecha) | decidir se o cachê do cancelado é editável pela Planilha (o cachê de cancelado já sai dela pela 306) |
 | ~~134~~ | ~~P4~~ | ✅ **RESOLVIDO no converge da feature 312** — `figurino_ops.associate_missing_character` não grava em vaga de cancelado e `list_sheets` não a conta entre os faltantes | — | — |
 | 135 | **P4** | listas internas sem o selo do cancelado | avaliações internas, as avaliações da ficha do talento e os comprovantes dos outros dias do grupo mostram o título do evento sem a situação (premissa 24 do plano 1c) | `event_situacao` onde a lista aparecer |
-| 136 | **P4** | `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |
+| ~~136~~ | ~~P4~~ | ✅ **RESOLVIDO com a 312 na `main`** — o retrato `main` (`c074657b`) × 313, rodado no pré-merge da 313 em 22/10, saiu idêntico (saída 0). Texto original: `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |
 
-## Baixa da feature 313-desconto-e-pix-na-calculadora (2026-10-21, branch)
+## Baixa da feature 313-desconto-e-pix-na-calculadora (2026-10-21; em produção desde 22/10 ~04:58)
 
 **Quitadas.** Nenhuma. A 100 (acréscimo negativo, que a equipe usava como desconto) continua — o desconto negociado
 agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e no Jinja.

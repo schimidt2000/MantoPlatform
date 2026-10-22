@@ -9,7 +9,7 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-10-21** (em branch, feature 313: a ordem da conta do orçamento, o desconto e o PIX na linha
+> Última revisão: **2026-10-21** (feature 313, em produção desde 22/10 ~04:58: a ordem da conta do orçamento, o desconto e o PIX na linha
 > "Orçamento" de §6, e o BV do evento pelo cheio nas invariantes do BV, §1). Antes: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
 > 6 a 10 do Financeiro, e as correções no lugar da exclusão, do grupo, da cobrança, da regra de
 > comissão, do estorno, da cascata da DRE e da comissão exibida). Antes: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
