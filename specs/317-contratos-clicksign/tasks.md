@@ -188,8 +188,8 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 - [X] T033 `cd frontend && npm run typecheck` (três SPAs); `ruff check` nos tocados; `ruff format` nos novos
 - [X] T034 Tela aberta de verdade (skill `manto-conferir-tela`) nas telas da spec; prints
-- [ ] T035 `verify_299`, `verify_312` e `verify_306` (cenários de passagem/limpeza) de novo, sem regressão
-- [ ] T036 Docs: `docs/01` (integração, tabelas, endpoints, §4.3 RBAC, env/trava, comandos; corrige :203/:638),
+- [X] T035 `verify_299`, `verify_312` e `verify_306` (cenários de passagem/limpeza) de novo, sem regressão
+- [X] T036 Docs: `docs/01` (integração, tabelas, endpoints, §4.3 RBAC, env/trava, comandos; corrige :203/:638),
       `docs/02` (painel e bloco; corrige :2080), `docs/03` (entrada no topo + índice), `docs/04` (contrato é da venda;
       vigente; aviso não decide; dependência do nome no fluxo), `docs/05` (colunas `clicksign_*` inertes; dívidas novas)
 - [ ] T037 `/speckit-converge` e portões finais; merge e deploy só quando o dono pedir (quickstart §3)
