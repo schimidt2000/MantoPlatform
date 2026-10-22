@@ -5,9 +5,10 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-10-22** · Estado do repositório: pós-correção
-> **316-tom-dos-textos** (sem migration; pronta na branch, aguardando o merge a pedido do dono — revisão de
-> português e tom em todas as superfícies: 505 trocas de texto visível em 168 arquivos, só texto; sem verify, typecheck
-> verde e telas abertas) — antes dela pós-feature
+> **316-tom-dos-textos** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~10:36** pelo merge `9e8ee232`, a pedido
+> do dono, em horário comercial — revisão de português e tom em todas as superfícies: 505 trocas de texto visível em
+> 168 arquivos, só texto; sem verify, typecheck verde e telas abertas; bundle novo `index-DKBwlFhg.js` conferido) — antes
+> dela pós-feature
 > **313-desconto-e-pix-na-calculadora** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~04:58**, a pedido do dono,
 > fora do horário — o desconto negociado e o PIX que vale o maior na calculadora, a ordem da conta da Q7 no orçamento
 > novo, o evento com o cheio e a venda; `verify_313.py` 18/18) — antes dela pós-feature
@@ -161,7 +162,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **316-tom-dos-textos** | *(pronta, aguardando merge)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
+| **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
@@ -347,7 +348,9 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 
-> Pronta na branch, aguardando o merge a pedido do dono. Nível 2 (só texto, sem migration, sem regra de negócio).
+> **EM PRODUÇÃO desde 22/10/2026 ~10:36** (merge `9e8ee232`, a pedido do dono, em horário comercial: ~2 min de 502
+> até o backend voltar com JSON; o bundle `index-DKBwlFhg.js` traz o texto novo). Nível 2 (só texto, sem migration,
+> sem regra de negócio).
 
 **O pedido.** "Faça uma varredura inteira no sistema interno e todas as páginas externas também por
 checagens de português. Ajuste o tom, algumas coisas parecem largadas. Exemplo: Colocar comprovante >

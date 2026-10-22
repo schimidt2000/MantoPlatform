@@ -1,6 +1,6 @@
 # 316 — Revisão de português e tom em todas as superfícies
 
-**Branch**: `316-tom-dos-textos` · **Created**: 2026-10-22 · **Status**: pronta, aguardando merge ·
+**Branch**: `316-tom-dos-textos` · **Created**: 2026-10-22 · **Status**: EM PRODUÇÃO desde 22/10/2026 ~10:36 (merge `9e8ee232`) ·
 **Migration**: nenhuma
 
 ## O pedido
