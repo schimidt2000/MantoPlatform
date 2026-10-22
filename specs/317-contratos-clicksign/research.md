@@ -111,6 +111,17 @@ Roda no Shell do Render com `MANTO_SEM_THREADS=1` depois do deploy.
 pelo comando, para nunca registrar a URL de uma cópia local). Eventos: `sign`, `close`, `auto_close`,
 `document_closed`, `deadline`, `cancel`, `refusal`, `add_signer`, `upload`.
 
+## Ensaio só leitura contra a conta real (22/10, quickstart §2)
+
+`flask clicksign-sincronizar --desde 2026-06-01` sem `--aplicar`, contra o `manto_local` (eventos até ~20/10):
+**237 envelopes** → **144 ligariam sozinhos**, 81 a conferir, 12 fora (artista/outros); 93 PDFs assinados a anexar.
+Dos 81: 78 "sem candidato" (52 com festa de out–dez, ausentes do espelho — em produção devem ligar; o resto, em
+geral, cancelado/vencido de festa passada ou telefone de quem assina diferente da ficha), 2 empates (mesmo
+telefone, mesmo dia, temas diferentes) e 1 com e-mail no lugar do telefone.
+
+**Decisão (R-10)**: o grupo "A conferir" da Home mostra só documento de festa de hoje em diante ou sem data
+legível — o vencido de festa que já passou não tem ação. A lista completa continua no `GET /api/contratos/a-conferir`.
+
 ## Riscos registrados
 
 - `X-Rate-Limit` 50/10 s: o retroativo pagina a 50 e dorme entre páginas.

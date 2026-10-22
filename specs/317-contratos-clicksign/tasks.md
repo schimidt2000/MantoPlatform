@@ -167,7 +167,7 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
       contagens: ligaria, a conferir, artista, outros, PDFs a anexar, anexos antigos que passam a assinado) e
       `flask clicksign-webhook --listar | --registrar <url> | --remover <id> [--aplicar]` (grava `clicksign_webhook_id` e
       o segredo; rotação com `_anterior` 24 h)
-- [ ] T030 [US4] Ensaio só leitura contra a ClickSign real (quickstart §2) com `CLICKSIGN_ALLOW_LOCAL_CALLS=true`, sem
+- [X] T030 [US4] Ensaio só leitura contra a ClickSign real (quickstart §2) com `CLICKSIGN_ALLOW_LOCAL_CALLS=true`, sem
       `--aplicar`; anotar números em `research.md`; commit
 
 ---

@@ -317,7 +317,18 @@ def contratos_da_home(vendas: list[Any], hoje: date, *, pode_cobrar_papel: bool)
                     linha["event_id"],
                 )
             )
-    a_conferir = [linha_a_conferir(d) for d in documentos_a_conferir()] if ligada else []
+    # Na Home, só o que ainda dá para resolver: festa de hoje em diante (ou data ilegível). O
+    # contrato vencido de festa que já passou não tem ação — a lista completa fica no
+    # `GET /api/contratos/a-conferir` (ensaio de 22/10: 26 dos 81 eram desse tipo).
+    a_conferir = (
+        [
+            linha_a_conferir(d)
+            for d in documentos_a_conferir()
+            if d.data_lida is None or d.data_lida >= hoje
+        ]
+        if ligada
+        else []
+    )
     agir = listas["para_cobrar"] + listas["vencidos"] + listas["sem_contrato"]
     return {
         "integracao_ligada": ligada,

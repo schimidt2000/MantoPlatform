@@ -261,7 +261,8 @@ nunca chegaria.
   contrato assinado"; cada linha com cliente, data do evento, prazo, cor pela régua da Premissa 5 e a última cobrança.
   Os três primeiros grupos levam só evento de hoje em diante; evento que já passou (desde o corte) sem contrato assinado,
   em qualquer situação, vai para "Já aconteceu". Cor de "Venda sem contrato" pela distância do evento (vermelho até 7
-  dias, amarelo 8–30); "Venceu ou foi recusado" é sempre vermelho.
+  dias, amarelo 8–30); "Venceu ou foi recusado" é sempre vermelho. "A conferir" na Home mostra só contrato de festa
+  de hoje em diante (ou com data ilegível); a lista completa fica disponível à parte (ensaio de 22/10, research R-10).
 - **FR-019**: A coluna "Contrato" da lista de vendas (`/vendas`) DEVE mostrar a mesma situação da página do evento,
   julgada pela venda (uma fonte só); com a integração desligada, continua como hoje.
 - **FR-011**: "Cobrar contrato" DEVE copiar a mensagem pronta, escolhida pelo canal do signatário (WhatsApp ou e-mail),
