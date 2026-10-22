@@ -86,6 +86,10 @@ services:
         sync: false
       - key: MARKETING_AGENT_TOKEN
         sync: false
+      # Feature 317: token da API v3 da ClickSign (conta PRIME DREAMS, token "Plataforma Manto").
+      # Vazio = integração desligada (a subida avisa no log). Nunca no banco.
+      - key: CLICKSIGN_ACCESS_TOKEN
+        sync: false
 
   # Ausência conhecida, não esquecimento: o frontend NÃO tem `healthCheckPath` nem
   # `watchPatterns`. Consequência: cada push troca o container e abre ~1 min de 502 na porta

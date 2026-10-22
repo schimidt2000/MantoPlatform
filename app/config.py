@@ -170,6 +170,27 @@ def _suppress_calendar_event_writes() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_clicksign() -> bool:
+    """Decide se este processo está proibido de falar com a ClickSign real (feature 317).
+
+    O token não vem do banco (só da env), mas o ``.env`` da máquina do dono tem o token de
+    produção, e a cópia local (``manto_local``) tem as vendas de verdade: sem a trava, um verify
+    ou uma sincronização local leria a conta real e anexaria PDF de cliente no espelho — e o
+    comando de cadastro do aviso apontaria a ClickSign para uma URL local. Princípio XIV: a
+    trava nasce no mesmo commit do cliente HTTP.
+
+    ``CLICKSIGN_SUPPRESS_CALLS=true`` trava em qualquer ambiente;
+    ``CLICKSIGN_ALLOW_LOCAL_CALLS=true`` libera o local (o ensaio só leitura do quickstart §2).
+    O núcleo relê a chave de ``current_app.config`` a cada chamada; chave ausente = travado.
+    """
+    if os.getenv("CLICKSIGN_SUPPRESS_CALLS", "").lower() == "true":
+        return True
+    if os.getenv("CLICKSIGN_ALLOW_LOCAL_CALLS", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -317,6 +338,20 @@ class Config:
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
+
+    # ClickSign (feature 317). O token SÓ vem da env (`render.yaml`, `sync: false`): o
+    # `SiteSetting` vai inteiro para o backup no Drive e para o `manto_local`, então segredo de API
+    # não mora lá (a coluna antiga `clicksign_token` fica inerte). Sem token, a integração fica
+    # desligada e a subida avisa no log. O host vai junto do token: token de sandbox com host de
+    # produção dá 401 em silêncio.
+    CLICKSIGN_ACCESS_TOKEN = os.getenv("CLICKSIGN_ACCESS_TOKEN", "").strip()
+    CLICKSIGN_API_BASE = os.getenv("CLICKSIGN_API_BASE", "https://app.clicksign.com/api/v3").rstrip("/")
+    CLICKSIGN_SUPPRESS_CALLS = _suppress_clicksign()
+    # Conferência periódica (cobre aviso perdido em deploy): 30 min, 1–2 requisições por passada.
+    CLICKSIGN_SYNC_ENABLED = os.getenv("CLICKSIGN_SYNC_ENABLED", "true").lower() == "true"
+    CLICKSIGN_SYNC_INTERVAL = int(os.getenv("CLICKSIGN_SYNC_INTERVAL", "1800"))
+    # Costura do verify: processa o aviso na própria requisição em vez de numa thread.
+    CLICKSIGN_AVISO_SINCRONO = os.getenv("CLICKSIGN_AVISO_SINCRONO", "").lower() == "true"
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

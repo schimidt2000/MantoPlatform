@@ -921,6 +921,22 @@ class SiteSetting(db.Model):
     # de lock dos dois acima — aqui ele é o que impede os 3 workers de mandarem o mesmo e-mail
     # três vezes, que é exatamente o spam que a feature existe para evitar.
     invite_reminder_run_at = db.Column(db.DateTime, nullable=True)
+    # ── Contratos da ClickSign (feature 317) ─────────────────────────────────
+    # O TOKEN da API não mora aqui (só na env `CLICKSIGN_ACCESS_TOKEN`): esta tabela vai inteira
+    # para o backup e para o `manto_local`. O segredo do aviso pode morar porque o aviso nunca
+    # decide nada — ele só dispara uma sincronização que reconsulta a ClickSign (research R-05).
+    clicksign_webhook_id = db.Column(db.String(36), nullable=True)
+    clicksign_webhook_secret = db.Column(db.String(64), nullable=True)
+    # O segredo anterior vale 24 h depois de recadastrar o aviso (molde da 310).
+    clicksign_webhook_secret_anterior = db.Column(db.String(64), nullable=True)
+    clicksign_webhook_secret_anterior_ate = db.Column(db.DateTime, nullable=True)
+    # Lock de execução única da sincronização entre os 3 workers (molde `invite_reminder_run_at`).
+    clicksign_sync_at = db.Column(db.DateTime, nullable=True)
+    # Maior `modified` já processado: a próxima passada pede "o que mudou desde aqui" (com folga).
+    clicksign_sync_cursor = db.Column(db.DateTime, nullable=True)
+    # Aviso que chegou com uma passada em curso: a passada repete antes de soltar o lock, para a
+    # assinatura não esperar a conferência de 30 min.
+    clicksign_sync_pendente = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
     # ── Tags NFC: moldura e vídeo de abertura (feature 297) ──────────────────
     # Dois arquivos ÚNICOS do sistema, guardados em `nfc_media/sistema/` com nome fixo, no mesmo
     # molde de `logo_path` acima: o banco guarda o caminho, o disco guarda o arquivo.
@@ -2105,6 +2121,119 @@ class FormResponseDismissedEvent(db.Model):
         db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     dismissed_at = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
+class ClicksignDocumento(db.Model):
+    """Um envelope da conta ClickSign, espelhado pela sincronização (feature 317).
+
+    É a fonte da situação do contrato da venda: a ClickSign é a verdade, e esta linha é a cópia
+    que a Home e o evento leem sem chamar a API. Cada envelope dos fluxos com formulário da Manto
+    tem um documento e um signatário; por isso documento e envelope moram na mesma linha.
+
+    ``event_id`` aponta sempre o **principal** da venda (ou o avulso) na hora do vínculo; a busca
+    do documento vigente olha o grupo inteiro, porque agrupar não move linhas (analyze R1).
+
+    **Sem backref, de propósito** (molde `FormResponseDismissedEvent`): a exclusão de evento passa
+    por `_clear_event_side_tables`, que devolve o documento a "a conferir" antes do DELETE; um
+    backref faria o ORM mexer na FK por conta própria.
+    """
+
+    __tablename__ = "clicksign_documentos"
+    __table_args__ = (
+        db.UniqueConstraint("envelope_id", name="uq_clicksign_documentos_envelope"),
+        db.Index("ix_clicksign_documentos_event_id", "event_id"),
+        db.Index("ix_clicksign_documentos_data_lida", "data_lida"),
+        db.Index(
+            "ix_clicksign_documentos_a_conferir",
+            "vinculo",
+            postgresql_where=db.text("vinculo = 'a_conferir'"),
+            sqlite_where=db.text("vinculo = 'a_conferir'"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    envelope_id = db.Column(db.String(36), nullable=False)
+    document_id = db.Column(db.String(36), nullable=True)
+    nome = db.Column(db.Text, nullable=True)
+    tipo = db.Column(db.String(12), nullable=False)
+    status = db.Column(db.String(12), nullable=False)
+    recusado = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    prazo = db.Column(db.DateTime, nullable=True)
+    criado_em = db.Column(db.DateTime, nullable=True)
+    modificado_em = db.Column(db.DateTime, nullable=True)
+    assinado_em = db.Column(db.DateTime, nullable=True)
+    cancelado_em = db.Column(db.DateTime, nullable=True)
+    # Do signatário só o necessário para ligar e cobrar (spec, Premissas — LGPD).
+    signatario_nome = db.Column(db.String(200), nullable=True)
+    signatario_telefone = db.Column(db.String(20), nullable=True)
+    signatario_email = db.Column(db.String(200), nullable=True)
+    canal = db.Column(db.String(10), nullable=True)
+    # O que o leitor tirou do nome do envelope (data do evento, WhatsApp de quem assina, tema).
+    data_lida = db.Column(db.Date, nullable=True)
+    telefone_lido = db.Column(db.String(20), nullable=True)
+    tema_lido = db.Column(db.String(200), nullable=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
+    )
+    vinculo = db.Column(db.String(12), nullable=False)
+    vinculo_origem = db.Column(db.String(10), nullable=True)
+    vinculo_motivo = db.Column(db.String(40), nullable=True)
+    vinculado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    vinculado_em = db.Column(db.DateTime, nullable=True)
+    contrato_anexo_id = db.Column(
+        db.Integer, db.ForeignKey("event_contracts.id", ondelete="SET NULL"), nullable=True
+    )
+    # Liga quando o documento fecha ligado; o anexo feito (ou recusado) desliga. Excluir o anexo
+    # não religa: o Superadmin que apagou o PDF não o vê voltar sozinho (analyze R11).
+    anexo_pendente = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    sincronizado_em = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
+class ClicksignDesvinculo(db.Model):
+    """Par documento × venda que a comercial desligou: a sincronização não religa sozinha.
+
+    Molde de `FormResponseDismissedEvent` (298): CASCADE nas duas pontas, sem backref.
+    """
+
+    __tablename__ = "clicksign_desvinculos"
+    __table_args__ = (
+        db.UniqueConstraint("documento_id", "event_id", name="uq_clicksign_desvinculo"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    documento_id = db.Column(
+        db.Integer, db.ForeignKey("clicksign_documentos.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    em = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
+class ClicksignCobranca(db.Model):
+    """Cada "Cobrar contrato": quem copiou a mensagem e quando (FR-011).
+
+    ``usuario_nome`` é copiado na hora para o histórico sobreviver à exclusão do usuário.
+    """
+
+    __tablename__ = "clicksign_cobrancas"
+    __table_args__ = (
+        db.Index("ix_clicksign_cobrancas_documento_em", "documento_id", "em"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    documento_id = db.Column(
+        db.Integer, db.ForeignKey("clicksign_documentos.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    usuario_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    usuario_nome = db.Column(db.String(120), nullable=False)
+    em = db.Column(db.DateTime, default=now_sp, nullable=False)
 
 
 class FormFieldDefinition(db.Model):

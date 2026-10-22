@@ -508,6 +508,99 @@ MOTIVOS_AJUSTE_COMISSAO = {
 # `NOTA_CICLO_VALOR_TARDIO`. `_comissao_existente` e a reconciliação ignoram a linha marcada.
 NOTA_COMISSAO_PROPRIA_DO_DIA = "Comissão própria do dia"
 
+# ── Contratos da ClickSign (feature 317) ──────────────────────────────────────────────────────
+# O que é cada envelope da conta: só o de cliente liga a uma venda; o de artista (contrato de
+# prestação de serviços) e os avulsos ficam fora das listas.
+CLICKSIGN_TIPO_CLIENTE = "cliente"
+CLICKSIGN_TIPO_ARTISTA = "artista"
+CLICKSIGN_TIPO_OUTRO = "outro"
+# Marca do contrato de artista no nome do envelope (depois de normalizar para NFC: a ClickSign
+# devolve "Ç" decomposto, e sem normalizar a busca falha).
+CLICKSIGN_MARCA_ARTISTA = "PRESTAÇÃO DE SERVIÇOS ARTÍSTICOS"
+
+# Estado do vínculo documento → venda (data-model §clicksign_documentos).
+VINCULO_LIGADO = "ligado"
+VINCULO_A_CONFERIR = "a_conferir"
+VINCULO_DESCARTADO = "descartado"
+VINCULO_FORA = "fora"
+VINCULO_ORIGEM_AUTO = "auto"
+VINCULO_ORIGEM_MANUAL = "manual"
+# Por que o documento ficou para conferir; a tela traduz pelo dicionário abaixo.
+CONFERIR_SEM_CANDIDATO = "sem_candidato"
+CONFERIR_EMPATE = "empate"
+CONFERIR_CANCELADA = "cancelada"
+CONFERIR_TELEFONE_DIVERGE = "telefone_diverge"
+CONFERIR_DATA_ILEGIVEL = "data_ilegivel"
+CONFERIR_SEM_TELEFONE = "sem_telefone"
+CONFERIR_DESLIGADO = "desligado"
+CONFERIR_VENDA_EXCLUIDA = "venda_excluida"
+CONFERIR_MOTIVOS = {
+    CONFERIR_SEM_CANDIDATO: "Nenhuma venda com esta data e este telefone",
+    CONFERIR_EMPATE: "Mais de uma venda com esta data e este telefone",
+    CONFERIR_CANCELADA: "A venda desta data está cancelada",
+    CONFERIR_TELEFONE_DIVERGE: "O telefone de quem assina não é o do nome do contrato",
+    CONFERIR_DATA_ILEGIVEL: "Não foi possível ler a data no nome do contrato",
+    CONFERIR_SEM_TELEFONE: "O nome do contrato não tem telefone",
+    CONFERIR_DESLIGADO: "Desligado da venda por alguém da equipe",
+    CONFERIR_VENDA_EXCLUIDA: "A venda ligada foi excluída",
+}
+
+# Situação do contrato da venda (FR-007), com o rótulo que a tela mostra.
+CONTRATO_ASSINADO = "assinado"
+CONTRATO_ASSINADO_MANUAL = "assinado_manual"
+CONTRATO_AGUARDANDO = "aguardando"
+CONTRATO_VENCIDO = "vencido"
+CONTRATO_RECUSADO = "recusado"
+CONTRATO_SEM_CONTRATO = "sem_contrato"
+CONTRATO_ROTULOS = {
+    CONTRATO_ASSINADO: "Assinado",
+    CONTRATO_ASSINADO_MANUAL: "Assinado (marcado à mão)",
+    CONTRATO_AGUARDANDO: "Aguardando assinatura",
+    CONTRATO_VENCIDO: "Venceu sem assinatura",
+    CONTRATO_RECUSADO: "Recusado pela cliente",
+    CONTRATO_SEM_CONTRATO: "Sem contrato na ClickSign",
+}
+# Por que "Cobrar contrato" fica desativado (spec, História 2, cenário 3).
+COBRAR_CONTRATO_BLOQUEIOS = {
+    CONTRATO_ASSINADO: "Contrato já assinado",
+    CONTRATO_ASSINADO_MANUAL: "Contrato já assinado",
+    CONTRATO_VENCIDO: "O contrato venceu sem assinatura. Gere um novo na ClickSign.",
+    CONTRATO_RECUSADO: "A cliente recusou o contrato. Gere um novo na ClickSign.",
+    CONTRATO_SEM_CONTRATO: "Nenhum contrato na ClickSign para esta venda",
+}
+COBRAR_CONTRATO_BLOQUEIO_SATELITE = "A cobrança deste grupo está no evento principal"
+COBRAR_CONTRATO_BLOQUEIO_CANCELADA = "O evento está cancelado"
+
+# Régua do contrato (premissa 5 da spec, confirmada no clarify): vermelho quando o prazo da
+# ClickSign vence hoje ou amanhã, amarelo em 2–3 dias; a distância do evento usa a régua da 298
+# (`FORM_COR_*`), e vale a pior das duas.
+CONTRATO_PRAZO_VERMELHO_ATE_DIAS = 1
+CONTRATO_PRAZO_AMARELO_ATE_DIAS = 3
+# "Venda sem contrato" só lista evento nos próximos 30 dias (clarify).
+CONTRATO_SEM_CONTRATO_JANELA_DIAS = 30
+
+# Autor do que a sincronização grava sozinha (histórico do evento e anexo do PDF assinado).
+CLICKSIGN_AUTOR = "ClickSign (automático)"
+CLICKSIGN_AUTOR_PAPEL = "Sistema"
+# Folga do marco da sincronização incremental: relógios e atraso de gravação na ClickSign.
+CLICKSIGN_CURSOR_FOLGA_MINUTOS = 10
+# Quanto tempo o segredo anterior do aviso continua aceito depois de recadastrar (molde 310).
+CLICKSIGN_SEGREDO_ANTERIOR_HORAS = 24
+# Tamanho máximo do corpo do aviso da ClickSign (molde do aviso da InfinitePay da 310).
+CLICKSIGN_AVISO_CORPO_MAXIMO = 64 * 1024
+# Eventos que a Manto pede no cadastro do aviso: só servem de "algo mudou" (R-01).
+CLICKSIGN_EVENTOS_DO_AVISO = (
+    "add_signer",
+    "upload",
+    "sign",
+    "close",
+    "auto_close",
+    "document_closed",
+    "deadline",
+    "cancel",
+    "refusal",
+)
+
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
 VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"

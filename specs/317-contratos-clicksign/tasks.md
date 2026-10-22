@@ -19,17 +19,17 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 ## Phase 1: Setup
 
-- [ ] T001 Constantes em `app/constants.py`: tipos (`CLICKSIGN_TIPO_CLIENTE/ARTISTA/OUTRO`), vínculos
+- [X] T001 Constantes em `app/constants.py`: tipos (`CLICKSIGN_TIPO_CLIENTE/ARTISTA/OUTRO`), vínculos
       (`ligado/a_conferir/descartado/fora`), origens, motivos de "a conferir", situações
       (`assinado/assinado_manual/aguardando/vencido/recusado/sem_contrato`), rótulos pt-BR, motivos de bloqueio do
       botão (textos da spec, História 2 cenário 3), régua do prazo (`CONTRATO_PRAZO_VERMELHO_ATE_DIAS=1`,
       `CONTRATO_PRAZO_AMARELO_ATE_DIAS=3`), `CONTRATO_SEM_CONTRATO_JANELA_DIAS=30`, autor `"ClickSign (automático)"`
-- [ ] T002 Config em `app/config.py`: `_suppress_clicksign()` no molde de `_suppress_calendar_*` (envs
+- [X] T002 Config em `app/config.py`: `_suppress_clicksign()` no molde de `_suppress_calendar_*` (envs
       `CLICKSIGN_SUPPRESS_CALLS`, `CLICKSIGN_ALLOW_LOCAL_CALLS`; banco local → travado) e `CLICKSIGN_SUPPRESS_CALLS =
       _suppress_clicksign()`, `CLICKSIGN_ACCESS_TOKEN = os.getenv(..., "").strip()`, `CLICKSIGN_API_BASE` (default
       `https://app.clicksign.com/api/v3`), `CLICKSIGN_SYNC_INTERVAL` (1800), `CLICKSIGN_SYNC_ENABLED` (true),
       `CLICKSIGN_AVISO_SINCRONO` (false); `render.yaml` ganha `CLICKSIGN_ACCESS_TOKEN` com `sync: false`
-- [ ] T003 [P] Cliente HTTP `app/integracoes/clicksign_client.py` (sem Flask; molde `infinitepay_client.py` da 310):
+- [X] T003 [P] Cliente HTTP `app/integracoes/clicksign_client.py` (sem Flask; molde `infinitepay_client.py` da 310):
       exceções `ClicksignError/Indisponivel/Recusou/Travada`, `TIMEOUT=(10, 30)`, `_get/_post/_delete(..., travada=True,
       token, base)`, respeito a `X-Rate-Limit-Remaining` (< 5 → dorme até o reset), funções `listar_envelopes(*,
       modificado_desde, modificado_ate, criado_desde, criado_ate, status, pagina)`, `signatarios(envelope_id)`,
@@ -40,17 +40,17 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T004 Modelos em `app/models.py`: `ClicksignDocumento` (com `anexo_pendente`), `ClicksignDesvinculo`,
+- [X] T004 Modelos em `app/models.py`: `ClicksignDocumento` (com `anexo_pendente`), `ClicksignDesvinculo`,
       `ClicksignCobranca` e as 7 colunas novas de `SiteSetting` (com `clicksign_sync_pendente`), conforme `data-model.md` (índice parcial também no `__table_args__`; docstrings com o porquê)
-- [ ] T005 Migration manual `migrations/versions/<rev>_contratos_clicksign.py` (`down_revision = "c5d2f7a9e306"`,
+- [X] T005 Migration manual `migrations/versions/<rev>_contratos_clicksign.py` (`down_revision = "c5d2f7a9e306"`,
       aditiva, upgrade/downgrade completos); `flask db upgrade` no `manto_local`; `flask db heads` com uma cabeça só
-- [ ] T006 Núcleo puro `app/contratos/__init__.py` + `app/contratos/contratos_ops.py`: `normalizar_nome` (NFC, sem
+- [X] T006 Núcleo puro `app/contratos/__init__.py` + `app/contratos/contratos_ops.py`: `normalizar_nome` (NFC, sem
       `.pdf`, sem ` (N)`), `ler_nome(nome) -> NomeLido(data, telefone, email, tema, razao)` aceitando `DD-MM-AAAA`,
       `DDMMAAAA`, `DMMAAAA`, festa e corporativo; `classificar(nome) -> tipo`; `canal_do_signatario(communicate_events)`;
       `vigente(documentos)`; `situacao_da_venda(vigente, assinado_manual) -> Situacao`; `cor_do_contrato(situacao,
       prazo, data_evento, hoje)`; `selo_do_contrato`; `venda_entra(principal, corte)` (cortesia entra);
       `escolher_candidato(lido, candidatos) -> (event_id | None, motivo)` com desempate pelo tema — sem I/O
-- [ ] T007 **`specs/317-contratos-clicksign/verify_317.py`** — os 26 cenários da spec, molde `verify_299.py`/
+- [X] T007 **`specs/317-contratos-clicksign/verify_317.py`** — os 26 cenários da spec, molde `verify_299.py`/
       `verify_313.py`: disjuntor em `socket.socket.connect` e `socket.create_connection` ANTES de importar o app (anota
       escapes); dublê `ContaClickSign` que substitui as funções de `clicksign_client` com envelopes/sinais/eventos/arquivo
       em memória; `CLICKSIGN_AVISO_SINCRONO=1`; semeadura `_evento/_cliente/_formulario` com prefixo próprio; login só
