@@ -4,7 +4,7 @@ import { Skeleton } from "@manto/ui";
 import { useAgendaDia, type EventoResumo } from "../lib/agenda";
 import { computeDayLayout } from "../lib/agendaLayout";
 import { eventCategory } from "../lib/eventCategory";
-import { SeloSituacao, textoDoSumico } from "./SeloSituacao";
+import { SeloSituacao, textoDoPedido, textoDoSumico } from "./SeloSituacao";
 
 export interface DayTimelineViewProps {
   /** "YYYY-MM-DD" */
@@ -124,7 +124,9 @@ export function DayTimelineView({ date }: DayTimelineViewProps) {
             const sumiu =
               event.situacao === "sumiu_do_google"
                 ? ` · ${textoDoSumico(event.situacao_desde)}`
-                : "";
+                : event.situacao === "exclusao_solicitada"
+                  ? ` · ${textoDoPedido(event.situacao_desde)}`
+                  : "";
             return (
               <Link
                 key={event.id}

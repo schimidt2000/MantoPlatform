@@ -72,6 +72,10 @@ def _response_summary(r: FormResponse, corte: datetime) -> dict:
         "event_link_locked": r.event_link_locked,
         # Feature 312 (converge): o selo também na LISTA (o evento vem no `joinedload`).
         "event_situacao": r.event.situacao if r.event else None,
+        # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+        "event_situacao_desde": (
+            r.event.situacao_desde.isoformat() if r.event and r.event.situacao_desde else None
+        ),
         "created_at": formularios_ops.iso_utc(r.created_at),
         # Feature 298: o destino (mesma regra das contagens, calculada no núcleo) e o encerramento.
         "destino": formularios_ops.destino_de(r, corte),

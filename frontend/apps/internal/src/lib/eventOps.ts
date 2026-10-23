@@ -85,11 +85,14 @@ export function useDeleteEvent(eventId: number) {
       queryClient.invalidateQueries({ queryKey: ["dashboard"] });
       // Feature 306: o marcado excluído sai da lista de sumidos sem esperar o poll.
       invalidarSumidosGoogle(queryClient);
+      // Feature 315: o pedido do evento excluído sai do sino e da fila de Cancelamentos na hora.
+      invalidarNotificacoes(queryClient);
+      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
     },
   });
 }
 
-// ── Excluir / cancelar / solicitar exclusão (feature 224) ────────────────────
+// ── Excluir / cancelar / pedir o cancelamento (features 224 e 315) ───────────
 
 /**
  * Os 18 `codigo` das recusas do cancelamento e das correções do cancelado (feature 306,
@@ -438,34 +441,81 @@ export function useLancarMultas(eventId: number) {
   });
 }
 
-/** Comercial pede a exclusão; o Superadmin decide depois. */
-export function useSolicitarExclusao(eventId: number) {
+/**
+ * Os `codigo` das recusas do pedido de cancelamento (feature 315) — a união espelha
+ * `CODIGOS_RECUSA_DO_PEDIDO` (`app/constants.py`). `cancelado` já é tratado no `aoRecusarMutacao`.
+ */
+export type CodigoRecusaPedido = "cancelado" | "ensaio" | "cache_pago" | "pedido_pendente" | "sem_pedido";
+
+/** O corpo do pedido (contracts): a forma do cancelar da 306, sem dinheiro conferido. */
+export interface PedidoCancelamentoInput {
+  motivo: string;
+  /** Só no 1º dia com outro dia vivo. */
+  alcance?: AlcanceCancelamento;
+  /** Ausente na venda virtual. Valores em número; o servidor guarda em texto decimal. */
+  devolucao?: { modo: ModoDevolucao; valor?: number; nome?: string; pix?: string };
+  /** Só no pedido de um dia só (outro dia da venda, ou o 1º com `so_este_dia`). */
+  venda_nova?: number;
+}
+
+/** Depois de pedir ou recusar: tudo que mostra o pedido (agenda, fila, faixa, sino). */
+function invalidarPedido(queryClient: ReturnType<typeof useQueryClient>, eventId: number) {
+  queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-dia"] });
+  queryClient.invalidateQueries({ queryKey: ["agenda-search"] });
+  invalidarNotificacoes(queryClient);
+  invalidarSumidosGoogle(queryClient);
+  // Um pedido de "todos os dias" muda o selo dos outros dias da venda.
+  queryClient.invalidateQueries({ queryKey: ["event"], predicate: (q) => q.queryKey[1] !== eventId });
+}
+
+/**
+ * O Comercial pede o cancelamento; só o Superadmin fecha o pedido (feature 315). A resposta é o
+ * detalhe do evento. `pedido_pendente` (alguém pediu antes) e o bloqueio recarregam o evento.
+ */
+export function usePedirCancelamento(eventId: number) {
   const queryClient = useQueryClient();
-  return useMutation<{ ok: boolean }, Error, { motivo: string }>({
+  return useMutation<EventoDetalhe, ApiRequestError, PedidoCancelamentoInput>({
     mutationFn: (input) =>
-      apiFetch(`/api/events/${eventId}/solicitar-exclusao`, {
+      apiFetch<EventoDetalhe>(`/api/events/${eventId}/pedido-cancelamento`, {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+    onSuccess: (detalhe) => {
+      if (detalhe && "event" in detalhe) queryClient.setQueryData(["event", eventId], detalhe);
+      else queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      invalidarPedido(queryClient, eventId);
+    },
+    onError: (error) => {
+      const codigo = codigoDaRecusa(error);
+      if (codigo === "pedido_pendente" || codigo === "ensaio" || codigo === "cache_pago") {
+        queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      }
     },
   });
 }
 
-/** Superadmin recusa a solicitação — o evento volta ao normal. */
-export function useRecusarSolicitacao(eventId: number) {
+/** O Superadmin recusa o pedido — o evento volta ao normal e quem pediu é avisado no sino. */
+export function useRecusarPedido(eventId: number) {
   const queryClient = useQueryClient();
-  return useMutation<{ ok: boolean }, Error, { motivo?: string }>({
+  return useMutation<EventoDetalhe, ApiRequestError, { motivo?: string }>({
     mutationFn: (input) =>
-      apiFetch(`/api/events/${eventId}/solicitar-exclusao`, {
+      apiFetch<EventoDetalhe>(`/api/events/${eventId}/pedido-cancelamento`, {
         method: "DELETE",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["event", eventId] });
-      queryClient.invalidateQueries({ queryKey: ["cancelamentos"] });
+    onSuccess: (detalhe) => {
+      if (detalhe && "event" in detalhe) queryClient.setQueryData(["event", eventId], detalhe);
+      else queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      invalidarPedido(queryClient, eventId);
+    },
+    onError: (error) => {
+      // Outra decisão chegou antes: a tela está velha.
+      if (codigoDaRecusa(error) === "sem_pedido") {
+        queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+        invalidarPedido(queryClient, eventId);
+      }
     },
   });
 }
@@ -519,8 +569,14 @@ export interface CancelamentoPendente {
   start_at: string | null;
   sale_value: number;
   requested_at: string;
-  requested_by: string | null;
-  reason: string | null;
+  /** Feature 315: o servidor corta por papel — ausente = não mostrar. */
+  requested_by?: string | null;
+  reason?: string | null;
+  alcance?: AlcanceCancelamento | null;
+  alcance_texto?: string;
+  sem_devolucao_informada?: boolean;
+  devolucao?: { modo?: ModoDevolucao | null; valor?: string; nome?: string; pix?: string } | null;
+  venda_nova?: string | null;
 }
 
 export interface EventoCancelado {

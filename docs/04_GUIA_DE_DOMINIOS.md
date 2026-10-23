@@ -9,7 +9,8 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-10-21** (feature 313, em produção desde 22/10 ~04:58: a ordem da conta do orçamento, o desconto e o PIX na linha
+> Última revisão: **2026-10-22** (feature 315, em branch: o pedido de cancelamento antes do ato, §1 "Antes do ato").
+> Antes: **2026-10-21** (feature 313, em produção desde 22/10 ~04:58: a ordem da conta do orçamento, o desconto e o PIX na linha
 > "Orçamento" de §6, e o BV do evento pelo cheio nas invariantes do BV, §1). Antes: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
 > 6 a 10 do Financeiro, e as correções no lugar da exclusão, do grupo, da cobrança, da regra de
 > comissão, do estorno, da cascata da DRE e da comissão exibida). Antes: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
@@ -208,6 +209,36 @@ mexem no congelado. **Relógio**: `cancelled_at`, `event_cancellations.created_a
 da devolução e da multa em São Paulo sem fuso (`now_sp()`); o `EventLog` da 306 (ato, passagem e
 correções) sai sem `created_at`, pelo default UTC do modelo — o do cancelamento da 224 saía 3 h antes.
 Modelo e transições: `specs/306-dinheiro-do-cancelamento/data-model.md` §5 a §8.
+
+### Antes do ato: o pedido de cancelamento (feature 315)
+
+**Fluxo.** O Comercial não cancela: pede ("Solicitar cancelamento", `POST /api/events/<id>/pedido-cancelamento`), com o
+motivo, o alcance numa venda de vários dias (no 1º dia com outro dia vivo: todos ou só este) e a devolução combinada com
+a cliente (tudo, parte com o valor, ou nada; quem recebe e PIX em tudo e parte; no pedido de um dia só, o novo valor da
+venda). Cada Superadmin é avisado no sino na mesma transação. **Só o Superadmin fecha o pedido**, de três jeitos:
+recusando (`DELETE …/pedido-cancelamento`), cancelando (o ato da 306 fecha o pedido de cada dia que encerra, em
+`cancel_ops.ao_cancelar`) ou excluindo o evento vazio; cada saída responde a quem pediu, uma vez, no sino. Devolver ao
+Google não mexe no pedido; editar o evento com pedido continua valendo (o pedido não tranca nada).
+
+**Invariantes.**
+1. O pedido mora no evento, nas cinco colunas (`deletion_requested_at/_by_id`, `deletion_request_reason`,
+   `deletion_request_scope`, `deletion_request_refund`), e **só `app/calendar/solicitacao_ops.py` as escreve**. Pedir e
+   recusar são `UPDATE` condicional (o claim): dois pedidos ao mesmo tempo dão um pedido e um 409 `pedido_pendente`;
+   duas decisões dão uma decisão e um 409 `sem_pedido` — nunca duas respostas.
+2. O pedido não confere dinheiro: o máximo, o mínimo e o "nada pago" são do cancelar, com o pago daquele momento. O
+   que o pedido recusa é estado: cancelado (trava da 312), ensaio e cachê pago ao elenco (no próprio dia; nos outros
+   dias só quando "todos" os alcança).
+3. Corte por papel na leitura (Q6): todos veem que há pedido (data e alcance); motivo, autor, modo e valor da devolução
+   só quem trata do cancelamento (`show_comercial`); quem recebe e PIX também exigem Financeiro ou ser o autor sem "Ver
+   como". O sino, o histórico e a auditoria nunca levam nome nem PIX; a faixa e o portal não levam motivo.
+4. Num pedido de "todos os dias", os outros dias da venda mostram o pedido (selo, detalhe, portal) — calculado em lote
+   por quem serializa (`solicitacoes_da_venda`), nunca na propriedade do modelo.
+5. Pedido de antes da 315 (alcance e devolução nulos) vale como "todos" e "sem devolução informada"; o caminho velho
+   `/solicitar-exclusao` continua nas mesmas views até o bundle novo ser o único (dívida em `docs/05`).
+
+**Armadilha.** O fecho no cancelamento roda dentro do ato, com o dia já travado: não há claim ali — a recusa que chegar
+depois não acha mais o carimbo. A resposta da exclusão sai **depois** do commit (o objeto morre nele): uma recusa que
+commita entre a leitura e a trava do núcleo dá ao autor "recusado" e depois "excluído" (corrida aceita, research R10).
 
 ### Depois do ato: o cancelado fora das listas (feature 312)
 

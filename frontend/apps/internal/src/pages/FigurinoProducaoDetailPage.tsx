@@ -618,7 +618,7 @@ export function FigurinoProducaoDetailPage() {
           p.event_title ? (
             <span>
               para <span className="text-ink">{p.event_title}</span>{" "}
-              <SeloSituacao situacao={p.event_situacao} />
+              <SeloSituacao situacao={p.event_situacao} desde={p.event_situacao_desde} />
             </span>
           ) : (
             "sem evento vinculado"

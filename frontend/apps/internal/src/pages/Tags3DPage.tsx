@@ -273,7 +273,7 @@ export function Tags3DPage() {
                             {tag.event ? (
                               <span className="block max-w-52">
                                 <span className="block truncate text-sm text-ink">
-                                  <SeloSituacao situacao={tag.event.situacao} compacto />
+                                  <SeloSituacao situacao={tag.event.situacao} desde={tag.event.situacao_desde} compacto />
                                   {tag.event.title}
                                 </span>
                                 {tag.event.start_at && (

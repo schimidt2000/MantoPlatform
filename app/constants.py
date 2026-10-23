@@ -647,3 +647,11 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({
     CODIGO_PAGO_ABAIXO_DO_DEVOLVIDO, CODIGO_BV_NAO_ESTA_A_PAGAR, CODIGO_VALOR_MUDOU,
     CODIGO_DEVOLUCAO_TRAVADA, CODIGO_ESTADO_MUDOU,
 })
+
+# Feature 315: as recusas do pedido de cancelamento (`app/calendar/solicitacao_ops.py`), lidas pela
+# união `CodigoRecusaPedido` (`lib/eventOps.ts`). Reusa as do cancelar que valem para o pedido.
+CODIGO_PEDIDO_PENDENTE = "pedido_pendente"
+CODIGO_SEM_PEDIDO = "sem_pedido"
+CODIGOS_RECUSA_DO_PEDIDO = frozenset({
+    CODIGO_EVENTO_CANCELADO, CODIGO_ENSAIO, CODIGO_CACHE_PAGO, CODIGO_PEDIDO_PENDENTE, CODIGO_SEM_PEDIDO,
+})

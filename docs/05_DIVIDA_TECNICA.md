@@ -495,7 +495,7 @@ fora.
 | 73 | **P3** | `event_ops.update_ensaio` e `routes.edit_ensaio` | só capturam `RuntimeError` da escrita no Google: outra exceção derruba a edição | tratar como `_sincronizar_e_trocar_tipo` |
 | ~~74~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 312** — agendar e vincular ensaio e vincular presente 3D recusam o cancelado no núcleo; a Fila 3D e as pendências não o trazem | — | — |
 | 75 | **P3** | lembrete diário de convite (`invite_reminders`, 303) | continua lembrando convite pendente de evento marcado "Sumiu do Google Agenda" | decidir com o dono se o lembrete pausa enquanto marcado |
-| 76 | **P3** | `EventLog` gravado em horário de São Paulo: `cancel_ops.solicitar_exclusao` e `recusar_solicitacao` (224) e o desfazer do pagamento de comissão da 267c (`comissoes_ops.liquidar_item_de_comissao`, `created_at=now_sp()`) | o histórico trata sem-fuso como UTC e essas linhas saem 3 h antes da hora real. O cancelar saiu da lista na 306: o histórico do ato passou a usar o default UTC | deixar o default UTC, como a 303 e a 306 fazem |
+| 76 | **P3** | `EventLog` gravado em horário de São Paulo: o desfazer do pagamento de comissão da 267c (`comissoes_ops.liquidar_item_de_comissao`, `created_at=now_sp()`) | o histórico trata sem-fuso como UTC e essas linhas saem 3 h antes da hora real. O cancelar saiu da lista na 306; o pedido e a recusa da 224 saíram na 315 (`solicitacao_ops` grava sem `created_at`) | deixar o default UTC, como a 303, a 306 e a 315 fazem |
 | 77 | **P4** | `specs/205-loja-interacoes-virtuais/verify_205.py` antes da 303 | o V7.2 antigo chamava a limpeza com a lista vazia e apagava do espelho os eventos não virtuais do mês — o espelho de quem rodou o 205 antes da 303 pode estar sem eles | refresh do espelho |
 | 78 | **P4** | `FaixaSumidosGoogle.tsx` (303) | sexta cópia do fechar-em-Esc-e-clique-fora (sino, `KebabMenu`, `FilterDropdown`…) | promover um hook `useFecharAoSair` para `@manto/ui` |
 | 79 | **P3** | `sumico_ops.limpar_mes` (303) | sem teto de consultas por execução: lista de mês vazia ou cortada com o Google no ar faz uma consulta por evento, em série; no "Limpar eventos fantasma" pode passar dos 180 s do proxy (o Flask termina, a tela diz que não concluiu) | teto por execução, ou rodar a limpeza em segundo plano |
@@ -687,3 +687,15 @@ agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e n
 | 146 | **P5** | `lib/navigation.tsx` e títulos de módulo ("Banco de Talentos", "Calculadora de Orçamento", "Planilha de Pagamentos", "Calc. Orçamento", "Config. Preços") | nome de seção em Title Case convivendo com "Gerenciar catálogo" e "Exclusões e cancelamentos"; a 316 padronizou cartão e botão, não o menu | decisão de produto: um padrão para o menu inteiro, sidebar e título de página juntos |
 | 147 | **P5** | mensagens da API com enum ou campo em texto (`"Status inválido (use: …)"`, `form_response_id inválido`, `Envie a lista completa em \`items\``), "Google Calendar" × "Google Agenda" (`agenda_write`, `event_ops`), cabeçalho do CSV de comissões (`lib/financeiro.ts`: "Status", "Qtd de Vendas") | ficaram fora da 316: as duas primeiras só aparecem com o frontend quebrado; o CSV pode ser lido por planilha externa pelo nome da coluna | tratar ao mexer em cada endpoint; o CSV só com o dono confirmando que nenhuma planilha depende do cabeçalho |
 | 150 | **P5** | `app/email_service.py` (todos os e-mails menos o de gasto extra) | texto digitado por usuário (título de evento, nome, descrição) entra no HTML sem `escape`; um "&" ou "<" no título quebra a linha e um `<a>` colado vira link no e-mail. A 319 escapou só o aviso de gasto extra | escapar em `_info_row`/`_paragraph` exige rever quem já passa HTML pronto (negrito, links) |
+
+## Baixa da feature 315-pedido-de-cancelamento (2026-10-22, branch)
+
+**Quitadas.** A parte da 224 da **76** (o pedido e a recusa gravavam o `EventLog` em horário de São Paulo; saíram com
+`cancel_ops.solicitar_exclusao` e `recusar_solicitacao`).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 148 | **P5** | `app/api/agenda_write.py` (`api_solicitar_exclusao`, `api_recusar_solicitacao`) | as rotas velhas `/api/events/<id>/solicitar-exclusao` (POST e DELETE) seguem como segunda regra das views novas, para o bundle de antes do deploy; pelo caminho velho o corpo só com o motivo vale, e o pedido nasce sem devolução e com alcance nulo | tirar as duas regras velhas quando o bundle novo for o único (alguns dias depois do deploy); o `verify_312` 9b e o `verify_315` 17 e 26 usam o caminho velho e mudam junto |
+| 149 | **P5** | `solicitacao_ops.responder_na_exclusao` × `api_delete_event` | a resposta "Evento excluído" sai depois do commit da exclusão, lida antes dela: uma recusa que commita entre a leitura e a trava do núcleo dá ao autor "recusado" e depois "excluído" (research R10) | só se aparecer na prática: ler o pedido depois da trava do núcleo, dentro de `_delete_event_flow` |

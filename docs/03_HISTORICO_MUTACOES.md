@@ -165,6 +165,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **315-pedido-de-cancelamento** | *(em branch, não publicada)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
 | **319-aviso-gasto-extra** | *(PRONTA 22/10, aguardando deploy)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
 | **316b-guia-de-texto** | *(pronta, aguardando merge)* O guia de tom e o glossário da 316 saem da spec, que ninguém abre sozinho, e entram na **constituição como Princípio XV** (v3.1.0). O XV traz o tom por superfície, o glossário único e o que um ajuste de texto não toca, e cria o portão "texto revisado pelo XV". Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos templates de plano, checklist e tarefas | 2026-10-23 | — | (aqui) | ver Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
@@ -351,6 +352,43 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 315 — O Comercial pede o cancelamento e o Superadmin decide   (315-pedido-de-cancelamento · 2026-10-22 · migration `d8b4e15f2c31`)
+
+> **Em branch, não publicada** (worktree `C:\tmp\mp315`). Nível 1. Item 2a do backlog de setembro
+> (`docs/backlog/`), sobre a 306 (o cancelar com dinheiro) e a 312 (o cancelado fora das listas).
+
+**O porquê.** O "Solicitar exclusão" da 224 existia e ninguém usava: o pedido não avisava ninguém, não dizia o que a
+cliente combinou e não fechava sozinho quando o Superadmin cancelava. A reconferência de 22/10
+(`specs/315-pedido-de-cancelamento/pesquisa/reconferencia-2026-10-22.md`) achou **um pedido real parado desde 07/10**
+(evento de 12/12, com venda), feito por uma Comercial e marcado "sumiu do Google" seis minutos depois — com seis
+avisos de sumiço no sino e nenhum lido. O pedido em si não tinha aviso nenhum.
+
+**O que mudou.**
+- **Pedir** (`POST /api/events/<id>/pedido-cancelamento`, Comercial ou Superadmin real): motivo; no 1º dia de uma
+  venda com outro dia vivo, todos os dias ou só este; a devolução combinada na forma do cancelar da 306 (Tudo/Parte/
+  Nada, valor, quem recebe e PIX; num dia só, Parte/Nada e o novo valor da venda; na venda virtual, só o motivo).
+  Recusas na ordem da 306 (cancelado → ensaio → cachê pago → campos → cachê pago dos outros dias → `pedido_pendente`).
+  Cada Superadmin ativo recebe `evento.pedido_cancelamento` na mesma transação (`urgent` em até 7 dias ou já passado).
+- **Decidir**: só o Superadmin real — recusar (`DELETE …`, motivo opcional), cancelar (o ato da 306 fecha o pedido de
+  cada dia em `ao_cancelar`) ou excluir o vazio. Quem pediu recebe uma resposta por pedido (`evento.pedido_decidido`):
+  recusado com o motivo, "Evento cancelado", "Dia dd/mm cancelado — a venda segue / passou para o dia dd/mm", "Evento
+  excluído" (sem link). Pedir e recusar por `UPDATE` condicional: duas ações ao mesmo tempo dão um vencedor e um 409.
+- **Ver**: o quadro "Cancelamento pedido — aguardando o Superadmin" com o corte da Q6 (todos veem que há pedido;
+  motivo e devolução, quem trata do cancelamento; nome e PIX, Financeiro, Superadmin e o autor); a frase dos pedidos
+  na faixa do topo; o selo neutro "Cancelamento pedido" no Mês, Dia, Lista e busca (também nos outros dias de uma
+  venda com pedido de "todos"); "Evento em confirmação" no portal; a página vira "Cancelamentos", com alcance e
+  devolução na fila.
+- **Contrato velho**: `/solicitar-exclusao` segue nas mesmas views (bundle de antes do deploy) — dívida 148. O pedido
+  de antes (o do 1350) fica "sem devolução informada", lido como "todos". Sai o `EventLog` em horário de SP da 224
+  (parte da dívida 76).
+
+**Premissas da Session 2026-10-22** (contestáveis, na spec): pedido aceito no evento marcado "sumiu do Google" e não
+decidido pelo "Devolver ao Google"; ensaio e dia com cachê pago não recebem pedido; a devolução segue a forma da 306 e
+o pedido não confere dinheiro; nome e PIX só para Superadmin, Financeiro e o autor.
+
+**Verificação.** `verify_315.py` 28/28 (primeira rodada vermelha guardada em `verify_315_primeira_falha.txt`: 2/28);
+regressão 306 67/69 (base), 312 27/27, 303 44/44, 311 8/8, 302 22/22. **Pré-merge**: a 310 (pronta, não publicada)
+também desce de `c5d2f7a9e306` — quem entrar por último na `main` repõe o `down_revision`.
 ### 319 — O aviso de gasto extra diz o que é   (319-aviso-gasto-extra · 2026-10-22 · sem migration)
 
 > **PRONTA, aguardando deploy.** Nível 2 (um e-mail, sem migration). Detalhe: `specs/319-aviso-gasto-extra/spec.md`.

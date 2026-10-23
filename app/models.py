@@ -304,6 +304,13 @@ class CalendarEvent(db.Model):
     deletion_requested_at = db.Column(db.DateTime, nullable=True)
     deletion_requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     deletion_request_reason = db.Column(db.Text, nullable=True)
+    # Feature 315: o pedido de cancelamento grava também o alcance numa venda de vários dias
+    # (`ALCANCE_TODOS` | `ALCANCE_SO_ESTE_DIA`, o vocabulário do cancelar da 306; nulo = pedido de
+    # antes do deploy ou pelo caminho velho, lido como "todos") e a devolução combinada com a
+    # cliente (JSON em texto, `solicitacao_ops`). Só `solicitacao_ops` escreve as cinco colunas, e
+    # sempre por `UPDATE` condicional — dois pedidos ao mesmo tempo não se sobrescrevem.
+    deletion_request_scope = db.Column(db.String(16), nullable=True)
+    deletion_request_refund = db.Column(db.Text, nullable=True)
 
     # Marca "Sumiu do Google Agenda" (feature 303): quando o sync percebeu que o evento não está
     # mais no Google e o manteve porque tem dinheiro preso. Horário de parede de São Paulo, sem

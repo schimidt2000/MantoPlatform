@@ -388,7 +388,7 @@ const SECTIONS: NavSectionConfig[] = [
         // Feature 312: o Financeiro lê a página de Cancelamentos (devoluções a pagar, retido do
         // mês). Para ele o item mora aqui; o Superadmin continua achando-o em Sistema.
         key: "financeiro-cancelamentos",
-        label: "Exclusões e cancelamentos", // FR-031: o nome da página
+        label: "Cancelamentos", // o nome da página (feature 315)
         href: "/events/cancelamentos",
         icon: <Trash2 />,
         isActive: (path) => path.startsWith("/events/cancelamentos"),
@@ -505,7 +505,7 @@ const SECTIONS: NavSectionConfig[] = [
         // (feature 312) e se veem aqui, no card do período e na tela de cada um —, e é aqui que se
         // vê o pedido do Comercial esperando decisão. O Financeiro a acha na seção Financeiro.
         key: "events-cancelamentos",
-        label: "Exclusões e cancelamentos",
+        label: "Cancelamentos",
         href: "/events/cancelamentos",
         icon: <Trash2 />,
         isActive: (path) => path.startsWith("/events/cancelamentos"),
