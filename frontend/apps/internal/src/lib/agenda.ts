@@ -1,5 +1,6 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import type { ContratoDaVenda } from "./contratos";
 import type { Event3DGift } from "./impressoes3d";
 import type { AvisoFalho } from "./virtuais";
 
@@ -314,6 +315,10 @@ export interface EventMensagens {
   cobranca_amount: string;
   cobranca_due: string;
   reembolso_lines: string[];
+  /** Feature 317: por onde a ClickSign pediu a assinatura (`whatsapp`, `email`, `sms`). */
+  contrato_canal?: string | null;
+  /** Feature 317: prazo do contrato, "DD/MM". */
+  contrato_prazo?: string;
 }
 
 // ── Feature 306: o resumo do cancelado (contracts §0) ─────────────────────────────────────
@@ -648,6 +653,11 @@ export interface EventoDetalhe {
   /** feature 273 — só na resposta de `PATCH /api/events/<id>/orcamento`. */
   relatorio_orcamento?: RelatorioOrcamento;
   contratos?: { id: number; file_path: string; is_signed: boolean; created_at: string | null }[];
+  /**
+   * Feature 317: situação do contrato da ClickSign, julgada pela venda. Opcional (bundle em
+   * cache); `null` = o bloco falhou no servidor (a tela mostra o aviso e segue).
+   */
+  contrato?: ContratoDaVenda | null;
   notas_fiscais?: {
     id: number;
     amount: number | null;

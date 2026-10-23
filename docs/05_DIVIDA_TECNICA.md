@@ -675,6 +675,22 @@ agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e n
 | 143 | **P5** | `deduzir_duracao` com o bruto = o final (gêmeo Jinja, bundle velho) | procura o cheio em todas as durações antes do final: se o final de uma duração for igual ao cheio de outra ("3 h pelo preço de 2 h"), deduz a duração errada — só muda o BV com acréscimo em R$ | dar preferência à duração gravada no evento quando houver |
 | 144 | **P5** | a marca `versao_conta: 2` × `snapshot_v2` | o leitor refaz a conta com o `aplicar_acrescimos` de hoje e exige ± R$ 0,01: uma mudança futura de centavo nessa função, sem subir a versão, manda todo orçamento v2 para o caminho de antes sem aviso (cheio = final, o BV deixa de encolher) | qualquer mudança no núcleo sobe `VERSAO_CONTA` e trata a versão anterior; um cenário do verify segura a paridade |
 
+## Baixa da feature 317-contratos-clicksign (2026-10-22, branch)
+
+**Quitadas.** Nenhuma da lista; a 317 corrige de passagem as menções antigas à ClickSign "viva" em `docs/01`
+e `docs/02` (a integração do CRM tinha saído na 021).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 148 | **P3** | `render.yaml` / painel do Render | **`CLICKSIGN_ACCESS_TOKEN` nasce vazio em produção** (Princípio XIV): sem ele a integração fica desligada e a Home não mostra o painel (só ao Superadmin, com o aviso) | o dono cola o token "Plataforma Manto" no `manto-backend` no deploy (quickstart §3) |
+| 149 | **P4** | `site_settings.clicksign_token` / `clicksign_sandbox` | colunas inertes desde a 021 (a 317 lê o token só da env); confundem quem lê o schema | migração destrutiva com ensaio, quando houver outra mexida em `site_settings` |
+| 150 | **P4** | `app/contratos/sincronizar_ops.candidatos` | o vínculo depende do nome que os fluxos da ClickSign montam; mudar a personalização do nome no painel faz tudo cair em "A conferir" sem aviso | quando a Manto gerar o contrato pela API (feature própria, decisão 4 do dono), gravar o id da venda no `metadata` do envelope e casar por ele |
+| 151 | **P5** | `ClicksignDocumento` × contratos de artista | o contrato de prestação de serviços artísticos é classificado e ignorado | ligar ao talento pelo telefone do signatário, se o dono quiser |
+| 152 | **P5** | migration `d3c7a1e5b317` × `e8b4a1c7d310` (310) | as duas partem de `c5d2f7a9e306`; a que for mergeada por último precisa reencadear o `down_revision` | conferir `flask db heads` no merge |
+| 153 | **P5** | `app/contratos/situacao_ops.contratos_da_home` | `sugestoes()` consulta por documento a conferir (poucos, mas é N consultas) | lote único por intervalo de datas se a lista crescer |
+
 ## Baixa da correção 316-tom-dos-textos (2026-10-22, branch)
 
 **Quitadas.** Nenhuma (só texto).

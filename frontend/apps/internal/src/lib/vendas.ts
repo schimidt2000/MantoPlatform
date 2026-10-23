@@ -3,7 +3,15 @@ import { apiFetch } from "@manto/api-client";
 import type { CancelamentosDoPeriodo, LojaVirtualResumo, PeriodFilter } from "./financeiro";
 
 /** Situação do contrato do evento — derivada de `EventContract` no servidor (feature 196). */
-export type ContractStatus = "assinado" | "pendente" | "sem_contrato";
+// Feature 317: com a ClickSign ligada, a coluna mostra a situação da venda (FR-019).
+export type ContractStatus =
+  | "assinado"
+  | "assinado_manual"
+  | "pendente"
+  | "sem_contrato"
+  | "aguardando"
+  | "vencido"
+  | "recusado";
 
 /** Situação de recebimento — mesma régua do Painel Financeiro (fonte única em `vendas_ops`). */
 export type SalePaymentStatus =

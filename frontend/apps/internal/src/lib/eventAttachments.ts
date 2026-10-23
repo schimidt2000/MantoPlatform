@@ -94,19 +94,28 @@ export interface AddContractInput {
   is_signed?: boolean;
 }
 
+// Feature 317: o anexo marcado à mão muda a situação do contrato na Home ("Venda sem contrato",
+// "Para cobrar") — por isso o contrato também invalida o painel.
 export function useAddContract(eventId: number) {
-  return useEventMutation<AddContractInput>(eventId, (input) => enviarContrato(eventId, input));
+  return useEventMutation<AddContractInput>(eventId, (input) => enviarContrato(eventId, input), {
+    mudaCobranca: true,
+  });
 }
 
 export function useDeleteContract(eventId: number) {
-  return useEventMutation<number>(eventId, (contractId) =>
-    apiFetch<EventoDetalhe>(`/api/contracts/${contractId}`, { method: "DELETE" }),
+  return useEventMutation<number>(
+    eventId,
+    (contractId) => apiFetch<EventoDetalhe>(`/api/contracts/${contractId}`, { method: "DELETE" }),
+    { mudaCobranca: true },
   );
 }
 
 export function useToggleContractSigned(eventId: number) {
-  return useEventMutation<number>(eventId, (contractId) =>
-    apiFetch<EventoDetalhe>(`/api/contracts/${contractId}/toggle-signed`, { method: "POST" }),
+  return useEventMutation<number>(
+    eventId,
+    (contractId) =>
+      apiFetch<EventoDetalhe>(`/api/contracts/${contractId}/toggle-signed`, { method: "POST" }),
+    { mudaCobranca: true },
   );
 }
 

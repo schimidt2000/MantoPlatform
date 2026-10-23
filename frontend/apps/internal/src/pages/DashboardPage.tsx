@@ -37,6 +37,7 @@ import { SEVERIDADE_TOM, diaMes, distanciaDaData } from "../lib/homeListas";
 import { BotaoMostrarTodas, GrupoDeLinhas, LIMITE_LINHAS_PAINEL, PanelGroup } from "../components/home/GrupoDeLinhas";
 import { LinhaDaHome } from "../components/home/LinhaDaHome";
 import { PainelCobrancas } from "../components/home/PainelCobrancas";
+import { PainelContratos } from "../components/home/PainelContratos";
 import { PainelSemValor } from "../components/home/PainelSemValor";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
@@ -823,6 +824,7 @@ type SectionKey =
   | "figurino"
   | "ensaio"
   | "comercial"
+  | "contratos"
   | "sem_valor"
   | "formularios"
   | "recorrentes";
@@ -877,6 +879,29 @@ function statsComerciais(c: ComercialSummary): SectionStat[] {
       urgent: pagamentos.filter(cobrancaVermelha).length,
       emDia: resumo ? pagamentos.length === 0 : undefined,
       detail: pagamentos.length > 0 ? `R$ ${formatBRL(emAberto)} em aberto` : null,
+    });
+  }
+  // Feature 317: `undefined` = servidor antigo (sem card); `null` = falhou; desligada = sem card.
+  if (c.contratos === null) {
+    stats.push(cardEmFalha("contratos", "✍️", "Contratos"));
+  } else if (c.contratos?.integracao_ligada) {
+    const k = c.contratos;
+    const linhas = [...k.para_cobrar, ...k.vencidos, ...k.sem_contrato];
+    const paraAgir = k.resumo.para_agir + k.a_conferir.length;
+    stats.push({
+      key: "contratos",
+      emoji: "✍️",
+      label: "Contratos",
+      count: paraAgir,
+      noTotal: paraAgir,
+      urgent: linhas.filter((l) => l.severidade === "vermelho").length,
+      emDia: paraAgir === 0,
+      detail:
+        k.para_cobrar.length > 0
+          ? `${k.para_cobrar.length} aguardando assinatura`
+          : k.a_conferir.length > 0
+            ? `${k.a_conferir.length} a conferir`
+            : null,
     });
   }
   if (c.sem_valor === null) {
@@ -1394,6 +1419,31 @@ export function DashboardPage() {
                 </SectorPanel>
               </div>
             )}
+
+            {/* Feature 317: `undefined` = servidor antigo (sem painel); `null` = falhou (aviso).
+                Desligada (sem token), só o Superadmin vê o painel, com o aviso. */}
+            {data.comercial &&
+              data.comercial.contratos !== undefined &&
+              (data.comercial.contratos === null ||
+                data.comercial.contratos.integracao_ligada ||
+                user?.is_superadmin) && (
+                <div {...propsSecao("contratos")}>
+                  <SectorPanel
+                    title="✍️ Contratos"
+                    count={statPorSecao.get("contratos")?.count ?? 0}
+                    falhou={statPorSecao.get("contratos")?.falhou}
+                    urgentCount={statPorSecao.get("contratos")?.urgent ?? 0}
+                    open={painelAberto("contratos")}
+                    onOpenChange={aoAlternar("contratos")}
+                  >
+                    <PainelContratos
+                      contratos={data.comercial.contratos}
+                      onTentarDeNovo={tentarDeNovo}
+                      tentando={dashboard.isFetching}
+                    />
+                  </SectorPanel>
+                </div>
+              )}
 
             {/* `undefined` = servidor antigo (sem painel); `null` = a lista falhou (aviso). */}
             {data.comercial && data.comercial.sem_valor !== undefined && (

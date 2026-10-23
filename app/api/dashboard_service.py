@@ -569,6 +569,9 @@ def build_dashboard_summary(
             "pending_payments": [],
             "cobrancas_resumo": None,
             "sem_valor": None,
+            # Feature 317: `None` aqui (e não ausente) na volta cedo abaixo — a tela mostra o
+            # aviso de falha em vez de achar que é servidor antigo (analyze R4).
+            "contratos": None,
         }
         try:
             corte = corte_dia_sp()
@@ -584,6 +587,16 @@ def build_dashboard_summary(
             "cobrancas_resumo", lambda: cobranca_ops.resumo_das_cobrancas(linhas, vendas)
         )
         bloco["sem_valor"] = _bloco("sem_valor", lambda: cobranca_ops.listar_sem_valor(vendas, hoje))
+
+        # Feature 317: o painel Contratos lê as mesmas vendas. Cobrar é COMERCIAL/SA; o FINANCEIRO
+        # vê a situação sem o botão (decisão do dono).
+        def _painel_contratos() -> dict[str, Any]:
+            from app.contratos import situacao_ops
+
+            pode_cobrar = is_superadmin or _effective_has_role(user, impersonate, RoleName.COMERCIAL)
+            return situacao_ops.contratos_da_home(vendas, hoje, pode_cobrar_papel=pode_cobrar)
+
+        bloco["contratos"] = _bloco("contratos", _painel_contratos)
         return bloco
 
     # O `_bloco` de fora fica só como rede para defeito no próprio envelope: falha das vendas e

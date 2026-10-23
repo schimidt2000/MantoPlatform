@@ -1,0 +1,137 @@
+﻿python.exe : [2026-10-23 17:48:25,741] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br 
+plataforma=https://app.mantoproducoes.com.br
+At line:1 char:457
++ ... ONUTF8='1'; & C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\pyt ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ([2026-10-23 17:...roducoes.com.br:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+[2026-10-23 17:48:27,106] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-23 17:48:28,915] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:29,226] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:29,421] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:29,634] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:29,840] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:30,060] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:30,437] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:30,656] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:30,840] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:31,059] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:31,257] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:31,461] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:31,664] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:31,881] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:32,504] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:32,892] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:33,113] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:33,324] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:33,510] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:33,682] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,020] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,194] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,354] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,543] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,688] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:34,989] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:35,160] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:35,815] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:36,037] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:36,203] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:36,447] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:36,627] WARNING in sincronizar_ops: [clicksign] anexo de v317-q adiado: verify 317: download falhou
+[2026-10-23 17:48:36,801] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:37,064] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:37,224] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:37,611] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:37,769] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:37,952] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:38,168] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:38,305] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:38,642] INFO in sincronizar_ops: [clicksign] anexo de v317-cx adiado: venda cancelada
+[2026-10-23 17:48:38,719] INFO in sincronizar_ops: [clicksign] anexo de v317-cx adiado: venda cancelada
+[2026-10-23 17:48:38,852] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:38,988] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:39,120] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-23 17:48:39,352] INFO in sincronizar_ops: [clicksign] anexo de v317-cx adiado: venda cancelada
+[2026-10-23 17:48:39,420] INFO in sincronizar_ops: [clicksign] anexo de v317-cx adiado: venda cancelada
+Feature 317 — contratos da ClickSign, contra manto_local
+  OK     1. leitura do nome com as variações reais
+  OK     2. classificação cliente × artista × outro
+  OK     3. vínculo único por data + telefone
+  OK     4. empate: tema resolve; sem tema, a conferir
+  OK     5. sem candidato e data ilegível, a conferir
+  OK     6. venda cancelada não liga
+  OK     7. grupo: situação pelo principal
+  OK     8. documento vigente
+  OK     9. situação no evento, na Home e em /vendas
+  OK     10. mensagem pelo canal e registro da cobrança
+  OK     11. botão desativado com o motivo certo
+  OK     12. PDF assinado anexado, sem duplicar, sem voltar
+  OK     13. aviso com HMAC errado (DEVE falhar)
+  OK     14. aviso repetido: uma vez, a reconsulta decide
+  OK     15. aviso que mente não decide (DEVE falhar se interpretar)
+  OK     16. FINANCEIRO não cobra nem liga (DEVE falhar)
+  OK     17. CASTING não vê o contrato (DEVE falhar)
+  OK     18. ligar à mão
+  OK     19. desligar e não religar sozinho
+  OK     20. descartar
+  OK     21. comando retroativo idempotente
+  OK     22. conferência periódica
+  OK     23. trava: nada sai da máquina
+  OK     24. sem credencial: desligada
+  OK     25. agrupar e sumiço do Google
+  OK     26. anexo que falhou e contrato antigo ligado à mão recebem o PDF
+  OK     27. 'outro' ligado à mão vale para a venda
+  OK     28. remarcação vencida não volta a assinado
+  OK     29. desligar tira o PDF; religar reanexa
+  OK     30. ligar/descartar fora de a conferir: 409 alterado
+  OK     31. PDF anexado à mão vira o anexo, sem duplicar
+  OK     32. venda cancelada não recebe PDF
+  OK     33. travas do baixar e do comando; desvínculo sem marca manual
+  OK     34. FINANCEIRO desligar/descartar e CASTING no painel (DEVE falhar)
+  OK     35. aviso durante a passada pede repetição
+  OK     36. limpeza
+
+36/36 OK · escapes de rede: 0 · listar: 51

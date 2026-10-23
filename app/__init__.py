@@ -542,6 +542,48 @@ def _start_invite_reminders(app):
     app.logger.info(f"[invite-reminders] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_clicksign_sync(app):
+    """Conferência periódica com a ClickSign (feature 317): cobre o aviso perdido em deploy.
+
+    Uma passada incremental a cada 30 min (1–2 requisições), com o lock atômico de
+    `sincronizar_ops` (os 3 workers acordam juntos). Sem token, não sobe e avisa no log — lido
+    da config, nunca do `SiteSetting`: o `startCommand` roda `flask db upgrade && python seed.py`
+    sem `MANTO_SEM_THREADS`, e nesse processo as colunas novas ainda não existem (analyze R14).
+    Pelo mesmo motivo, dorme antes de tocar o banco.
+    """
+    import os as _os
+    import threading
+
+    if not app.config.get("CLICKSIGN_ACCESS_TOKEN"):
+        app.logger.warning("[clicksign] integração desligada: CLICKSIGN_ACCESS_TOKEN vazio")
+        return
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+    if not app.config.get("CLICKSIGN_SYNC_ENABLED", True):
+        app.logger.info("[clicksign] conferência periódica desativada por configuração")
+        return
+
+    INTERVAL = app.config.get("CLICKSIGN_SYNC_INTERVAL", 1800)
+
+    def _loop():
+        import time
+        time.sleep(90)
+        from app.contratos import sincronizar_ops
+        while True:
+            try:
+                with app.app_context():
+                    resultado = sincronizar_ops.sincronizar(motivo="periodica")
+                    if resultado.get("erro"):
+                        app.logger.warning(f"[clicksign] passada periódica: {resultado['erro']}")
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[clicksign] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    threading.Thread(target=_loop, daemon=True, name="clicksign-sync").start()
+    app.logger.info(f"[clicksign] conferência periódica iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
@@ -951,6 +993,9 @@ def create_app():
 
         # ── Conversão dos vídeos das tags NFC (feature 297) ────────
         _start_nfc_video_worker(app)
+
+        # ── Conferência periódica com a ClickSign (feature 317) ────
+        _start_clicksign_sync(app)
 
         # ── Backup automático para o Google Drive (feature 264) ────
         from app.backup_drive import start_backup_thread

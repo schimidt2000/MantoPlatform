@@ -333,6 +333,19 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   - As peças de lista (`components/home/GrupoDeLinhas`, `LinhaDaHome`, `lib/homeListas.ts`) são as
     do painel de Formulários, extraídas. A linha resolvida sai ao voltar para a Home: os hooks de
     venda, comprovante, orçamento, parcela, criar, editar e cancelar invalidam `['dashboard']`.
+- **Feature 317 — painel "✍️ Contratos"** (`components/home/PainelContratos.tsx`), logo depois de
+  Cobranças, com card de mesmo nome (número = linhas vermelhas/amarelas + a conferir; embaixo "N
+  aguardando assinatura"). Mesmo gate `show_comercial`; a cortesia entra. Grupos: **Para cobrar**
+  (contrato aguardando, evento de hoje em diante — linha com o selo do prazo "Vence amanhã / em N
+  dias", "enviado por WhatsApp/e-mail", "Cobrado por Fulana em DD/MM, HH:MM" e o botão **"Cobrar
+  contrato"**, que copia a mensagem e registra a cobrança), **Venceu ou foi recusado** (sempre
+  vermelho), **Venda sem contrato** (só evento nos próximos 30 dias, régua 7/30), **A conferir** (só
+  festa de hoje em diante; botões "É de “título” (DD/MM)" para as sugestões e "Não é de nenhuma venda"
+  com confirmação) e, recolhido, **Já aconteceu sem contrato assinado**. O nome da cliente abre o
+  evento; cada linha tem um botão só (dois espremiam o texto na coluna estreita). Cores pela régua do
+  contrato (pior entre prazo — 0–1 dia vermelho, 2–3 amarelo — e evento — 7/30). FINANCEIRO vê tudo
+  sem os botões. Integração desligada: só o Superadmin vê o painel, com "Integração com a ClickSign
+  desligada". Falha → aviso com "Tentar de novo", nunca o ✓.
 - **Desde a 206 é a única `/` da plataforma.** O dashboard Jinja foi aposentado: a raiz do Flask
   responde 301 para `https://app.mantoproducoes.com.br`. Painéis atuais: Casting, Figurino,
   Comercial (cobranças), Contas recorrentes, Performance e Cargos dispensados — **menos** blocos
@@ -686,8 +699,17 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     custo de cachês, gastos extras, comissão e **lucro líquido** em verde/vermelho, + lista dos
     gastos extras aprovados; no principal vivo de um grupo, cachês, gastos e BV contam só os dias
     vivos — feature 306; no evento cancelado dá lugar ao *Resultado do cancelamento*, abaixo) ·
-    *Contrato assinado* · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado" pela regra
-    da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
+    *Situação do contrato* (feature 317, `ContratoClickSign.tsx`: selo com a situação da venda —
+    "Assinado em DD/MM", "Aguardando assinatura — vence em N dias", "Venceu sem assinatura", "Recusado
+    pela cliente", "Sem contrato na ClickSign", "Assinado (marcado à mão)" —, nome do contrato, canal,
+    prazo, última cobrança, "Não é desta venda — desligar" com confirmação, faixas "Achamos um
+    contrato que parece desta venda [É desta venda]" e o diálogo "Ligar contrato da ClickSign" com
+    filtro; igual em todos os dias do grupo) · *Contrato assinado* (o PDF que a ClickSign assinou
+    entra aqui sozinho, marcado) · *Notas fiscais* · *Comprovantes de pagamento* (badge "Quitado"
+    pela regra da 299: recebido do grupo, folga de R$ 1,00, nunca na cortesia) · *Reembolsos*.
+    Menu ⋯ (COMERCIAL/SA): **"📝 Cobrar contrato"** depois de "💸 Cobrar reembolsos", ativo só no
+    principal/avulso com contrato aguardando; desativado com o motivo no `title`; no cancelado some com
+    o bloco comercial. O chip "Contrato" do Resumo passa a mostrar a situação da venda.
   - **Hotfix 215b na aba Comercial e na edição completa**: a "Taxa de comissão (%)" fica travada
     para quem não é Superadmin ("Só o Superadmin altera a taxa."), e o "Vendedor responsável" já
     preenchido fica travado para quem não é Financeiro nem Superadmin ("Só o Financeiro ou o
@@ -2111,7 +2133,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`). **Feature 218**: a lista virou tabela com busca, filtros combináveis (papel · situação · frequência), ordenação e resumo de folha do mês; a ficha virou duas colunas e cada faixa do histórico salarial tem **corrigir/excluir inline (só SUPERADMIN)**, que realinha a planilha de pagamentos |
-| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, ClickSign, e-mail, anonimato de avaliações, WhatsApp dos formulários |
+| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, e-mail, anonimato de avaliações, WhatsApp dos formulários (a ClickSign **não** é configurada aqui: o token vem da env e o aviso se cadastra por comando — feature 317, `docs/01` §3.13.6) |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
 | `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período; **feature 306**: o cancelado sai do total do vendedor, e o retido do período aparece à parte, "+ R$ X retidos de N cancelamento(s)" |

@@ -205,7 +205,7 @@ chamam `*_ops` e serializam.
 | Banco | PostgreSQL (produção no Render — serviço `manto-postgres`, `render.yaml`; cópia local `manto_local`); SQLite só faz o app subir |
 | Frontend | React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Framer Motion + TanStack Query |
 | Pacotes internos | `@manto/ui` (design system), `@manto/api-client` (`apiFetch`/`assetUrl`), `@manto/money` (`formatBRL`/`parseBRL`) |
-| Integrações | Google Calendar API (OAuth 2.0), Google Sheets API (service account), Google Maps Distance Matrix, ClickSign, Vimeo/Drive (mídia) |
+| Integrações | Google Calendar API (OAuth 2.0), Google Sheets API (service account), Google Maps Distance Matrix, ClickSign (API v3, só leitura + aviso — feature 317, §3.13.6), InfinitePay, Vimeo/Drive (mídia) |
 | Storage | `app/storage.py` — `instance/uploads/` local e o disco persistente do `manto-backend` em produção (`USE_S3=false`; não há S3/R2) |
 
 ### 1.1 Escopo migrado vs. legado
@@ -640,7 +640,9 @@ Interações Virtuais e o segredo que autentica o aviso de pagamento — editáv
 desde a 224f; **nulos, nenhuma reserva passa do checkout**. O token é gerado pelo sistema e
 nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `tax_rate`,
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
-`clicksign_token`/`clicksign_sandbox`, `email_notifications_enabled`, `ratings_fully_anonymous`,
+`clicksign_token`/`clicksign_sandbox` (**inertes** desde a 021 — o token da 317 vem só da env), os
+`clicksign_webhook_id`/`_secret`/`_secret_anterior(_ate)` e `clicksign_sync_at`/`_cursor`/`_pendente`
+da feature 317 (§3.13.6), `email_notifications_enabled`, `ratings_fully_anonymous`,
 `release_date`, `google_token` (OAuth persistido para sobreviver a redeploy), `pricing_config`
 (JSON da calculadora — schema em `app/orcamento/settings.py`; desde a **307** tem o bloco
 `datas_especiais` `{<chave>: {rotulo, dias["MM-DD"], markup[4], cache{especial: [4]},
@@ -1646,6 +1648,53 @@ gera aviso. Correções únicas pós-deploy, dry-run por padrão e com `MANTO_SE
 em lote via `marcar_lidas_por_entidades`) e `flask formularios-cliente-do-evento [--execute]`
 (FR-020: formulários desde o corte ligados a evento com cliente e ainda sem cliente).
 
+### 3.13.6 Contratos da ClickSign — `contratos_read.py` / `contratos_write.py` / `clicksign_webhook.py` (feature 317)
+
+A Manto **lê** a conta ClickSign (PRIME DREAMS LTDA, API v3) e liga cada contrato de cliente à venda
+(principal do grupo ou avulso). Fluxo e regras de domínio em `docs/04` §Contratos da ClickSign.
+
+- **Cliente HTTP** `app/integracoes/clicksign_client.py` (sem Flask; `Authorization: <token>` puro,
+  JSON:API, `page[size]` ≤ 50, `filter[status|created|modified]` com `AAAA-MM-DD,AAAA-MM-DD`; respeita
+  `X-Rate-Limit-Remaining`). Exceções: `ClicksignRecusou` (4xx) × `ClicksignIndisponivel` ("não sei":
+  timeout, 5xx, 429) × `ClicksignTravada`. Pré-condição da conta: **"E-mail do usuário da API"**
+  preenchido em Configurações › API (sem ele, todo GET dá 403).
+- **Núcleo**: `app/contratos/contratos_ops.py` (puro: leitor do nome, classificação, escolha da venda,
+  documento vigente, situação, régua), `sincronizar_ops.py` (passada incremental, vínculo, anexo do PDF
+  assinado, ligar/desligar/descartar/cobrança) e `situacao_ops.py` (leitura em lote para evento, Home e
+  `/vendas`).
+- **Tabelas** (migration `d3c7a1e5b317`, aditiva): `clicksign_documentos` (um envelope; UNIQUE
+  `envelope_id`; `event_id` = principal, SET NULL; `vinculo` ligado/a_conferir/descartado/fora;
+  `contrato_anexo_id` → `event_contracts`), `clicksign_desvinculos` (par documento × venda que a
+  comercial desligou; CASCADE), `clicksign_cobrancas` (quem cobrou e quando; CASCADE).
+- **Config** (`app/config.py`): `CLICKSIGN_ACCESS_TOKEN` (só env, `render.yaml` `sync: false`; vazio =
+  integração desligada, aviso na subida), `CLICKSIGN_API_BASE` (default produção), trava
+  `_suppress_clicksign()` (`CLICKSIGN_SUPPRESS_CALLS` / `CLICKSIGN_ALLOW_LOCAL_CALLS`; banco local =
+  travado), `CLICKSIGN_SYNC_ENABLED`/`CLICKSIGN_SYNC_INTERVAL` (1800 s), `CLICKSIGN_AVISO_SINCRONO`
+  (costura do verify).
+- **Thread** `_start_clicksign_sync` (atrás de `MANTO_SEM_THREADS`; dorme 90 s; lock
+  `site_settings.clicksign_sync_at`; repete se `clicksign_sync_pendente`).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/clicksign` | **Público, assinado.** `Content-Hmac: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `site_settings.clicksign_webhook_secret` (ou o `_anterior` por 24 h), `compare_digest`; inválido ou sem segredo → **404**; corpo > 64 KB → 413; `60/min`. Válido → **200** e uma passada incremental fora da requisição. **O conteúdo do aviso não é lido** — só a reconsulta à ClickSign decide. |
+| `GET` | `/api/contratos/a-conferir` | Lista completa de documentos a conferir, com motivo e vendas sugeridas. |
+| `POST` | `/api/contratos/<id>/cobranca` | Registra o "Cobrar contrato" (a tela copia a mensagem). 201 `{ultima_cobranca}` · 409 `nao_cobravel` (assinado, vencido, satélite, venda cancelada, não vigente). |
+| `POST` | `/api/contratos/<id>/ligar` | `{event_id}` → liga à venda do evento (sempre o principal). 409 `ja_ligado` / `tipo_fora` / `cancelado` (trava 312 no núcleo, `exigir_evento_vivo`). |
+| `POST` | `/api/contratos/<id>/desligar` | Volta a "a conferir" e grava o par em `clicksign_desvinculos` (não religa sozinho). 409 `nao_ligado`. |
+| `POST` | `/api/contratos/<id>/descartar` | "Não é de nenhuma venda": sai da conferência para sempre. 409 `ja_ligado`. |
+
+Leitura embutida: `GET /api/events/<id>` ganha o bloco `contrato` (dentro de `show_comercial`, num
+savepoint — falha vira `null`) e `mensagens.contrato_canal`/`contrato_prazo`; `GET /api/dashboard`
+ganha `comercial.contratos` (`None` na volta cedo de falha das vendas); a coluna Contrato de `/vendas`
+(`contract_status_map`) passa a ler a situação da venda com a integração ligada (FR-019).
+
+**Comandos** (Shell do Render, `MANTO_SEM_THREADS=1`): `flask clicksign-sincronizar [--desde AAAA-MM-DD]
+[--ate] [--aplicar]` (sem `--desde`, começa em `corte_dia_sp()` = 01/06/2026; sem `--aplicar` lê, conta
+e desfaz — nem lock, nem marco; envelope que falha é pulado e o marco para nele; todo anexo pendente é varrido
+em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <id> [--aplicar]` (a URL
+sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
+segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
+
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
 guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
@@ -1945,6 +1994,9 @@ Gates por módulo (todos em `app/api/`):
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
 | `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
+| `_require_cobrar()` (feature 317) | `contratos_write`: cobrar, ligar, desligar e descartar contrato da ClickSign; no detalhe, `contrato.pode_cobrar`/`pode_conferir` seguem `can_confirm` (zerado no cancelado) e, na Home, `contratos.pode_cobrar` o papel efetivo | `COMERCIAL`, `SUPERADMIN` (papel real) — FINANCEIRO leva **403** (vê a situação, não age: decisão do dono) |
+| papéis de `show_comercial` (feature 317) | `contratos_read`: `GET /api/contratos/a-conferir`; o bloco `contrato` do detalhe e `comercial.contratos` da Home vêm no mesmo `show_comercial` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` — CASTING e os demais: 403 / sem a chave |
+| HMAC do aviso (sem papel) | `POST /api/webhooks/clicksign` | público; vale só com `Content-Hmac` correto (404 nos demais) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
