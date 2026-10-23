@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import re
 import threading
+from html import escape
 from zoneinfo import ZoneInfo
 
 from flask import current_app
@@ -903,40 +904,98 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
 
 # ── Email de alerta de gasto extra para Financeiro/Superadmin ────────────────
 
+#: Tamanho máximo da descrição no assunto: o aviso do celular corta o assunto perto daqui (319).
+_ASSUNTO_DESCRICAO_MAX = 50
+
+
+def _primeiro_nome(user) -> str:
+    return (user.name or "").split()[0] if user and user.name else ""
+
+
+def _pagamento_do_gasto(expense) -> str | None:
+    """Quem recebe o dinheiro do gasto, em uma frase curta; ``None`` se não foi informado."""
+    if expense.paid_at_creation:
+        return "já pago"
+    if expense.disbursement_type == "reembolso":
+        nome = _primeiro_nome(expense.reimburse_user)
+        return f"reembolsar {nome}" if nome else "reembolso"
+    if expense.disbursement_type == "fornecedor":
+        return f"pagar {expense.supplier_name}" if expense.supplier_name else "pagar fornecedor"
+    if expense.disbursement_type == "cliente":
+        return "devolver ao cliente"
+    return None
+
+
 def send_new_expense_alert_email(expense, users: list) -> int:
-    """Notifica FINANCEIRO/SUPERADMIN sobre um novo gasto extra pendente de aprovação."""
+    """Notifica FINANCEIRO/SUPERADMIN sobre um novo gasto extra pendente de aprovação.
+
+    O aviso do celular mostra só o assunto e a prévia (o preheader); até a 319 os dois eram
+    genéricos e dois gastos do mesmo evento chegavam como avisos idênticos. Agora o assunto leva
+    valor e descrição, e a prévia leva o resto do que decide a aprovação.
+    """
     if not users:
         return 0
 
-    event_title = expense.event.title if expense.event else None
+    event = expense.event
     amount_str = f"R$ {expense.amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    descricao = expense.description or ""
+    autor = _primeiro_nome(expense.created_by)
+    pagamento = _pagamento_do_gasto(expense)
+    comprovante = "com comprovante" if expense.receipt_path else "sem comprovante"
+    evento_str = None
+    if event:
+        evento_str = event.title
+        if event.start_at:
+            evento_str += f" — {event.start_at.strftime('%d/%m')}"
 
-    rows = _info_row("Descrição", expense.description)
-    rows += _info_row("Categoria", expense.category)
-    rows += _info_row("Valor", amount_str)
-    if event_title:
-        rows += _info_row("Evento", event_title)
+    descricao_assunto = descricao
+    if len(descricao_assunto) > _ASSUNTO_DESCRICAO_MAX:
+        descricao_assunto = descricao_assunto[: _ASSUNTO_DESCRICAO_MAX - 1].rstrip() + "…"
+    subject = f"Gasto extra {amount_str} · {descricao_assunto}"
 
-    subject_target = f"no evento {event_title}" if event_title else "sem evento vinculado"
-    content_paragraph = (
-        f"Um novo gasto extra foi cadastrado {subject_target} e está aguardando aprovação."
-    )
+    # Ordem da prévia: o que cabe na tela bloqueada primeiro; o título do evento, que costuma ser
+    # longo, vai por último para não empurrar o resto para fora.
+    partes = [expense.category]
+    if autor:
+        partes.append(f"lançado por {autor}")
+    if pagamento:
+        partes.append(pagamento)
+    partes.append(comprovante)
+    partes.append(evento_str or "sem evento")
+    # O enchimento invisível no fim impede o celular de completar a prévia com o cabeçalho e a
+    # saudação do corpo ("Manto Produções Olá, João!"), que não dizem nada.
+    preheader = escape(" · ".join(p for p in partes if p)) + "&#847;&zwnj;&nbsp;" * 90
+
+    rows = _info_row("Valor", amount_str)
+    rows += _info_row("Descrição", escape(descricao))
+    rows += _info_row("Categoria", escape(expense.category or ""))
+    if expense.expense_date:
+        rows += _info_row("Data do gasto", expense.expense_date.strftime("%d/%m/%Y"))
+    if autor:
+        rows += _info_row("Lançado por", escape(expense.created_by.name))
+    if pagamento:
+        rows += _info_row("Pagamento", escape(pagamento[0].upper() + pagamento[1:]))
+    rows += _info_row("Comprovante", "Anexado" if expense.receipt_path else "Não anexado")
+    rows += _info_row("Evento", escape(evento_str) if evento_str else "Sem evento vinculado")
+    if expense.notes:
+        rows += _info_row("Observações", escape(expense.notes))
+
+    # Interno, como o aviso de ensaio: o botão abre a plataforma, não o Portal do Artista.
+    base_plataforma = (current_app.config.get("PUBLIC_BASE_URL") or PLATFORM_BASE_URL).rstrip("/")
+    gastos_url = f"{base_plataforma}/gastos"
 
     sent = 0
     for user in users:
         if not user.email:
             continue
         content = (
-            _greeting(user.name.split()[0])
-            + _paragraph(content_paragraph)
+            _greeting(_primeiro_nome(user))
+            + _paragraph("Um gasto extra novo está aguardando a sua aprovação.")
             + _info_box(rows)
-            + _alert_box(
-                "Acesse a plataforma para revisar e aprovar o gasto.",
-                color="#fffbea", border="#f0d060", text="#7a5800",
-            )
+            + _btn("Revisar gasto →", gastos_url)
         )
-        html = _html_wrap(content, preheader="Novo gasto extra cadastrado — revise e aprove na plataforma.")
-        if _send(to=user.email, subject="Novo gasto extra cadastrado — aprovação pendente", html=html):
+        html = _html_wrap(content, preheader=preheader)
+        if _send(to=user.email, subject=subject, html=html):
             sent += 1
     return sent
 
