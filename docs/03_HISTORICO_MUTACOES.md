@@ -4,15 +4,16 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-20** · Na branch, **pronta e aguardando deploy**:
-> **310-pagamento-loja-virtual** (migration `e8b4a1c7d310`, aditiva, sobre a `c5d2f7a9e306` — o
-> pagamento da loja pela InfinitePay ligado com segurança: uma regra só decide se pagamento vira
-> venda, o aviso grava e responde, o retorno do checkout prova o pagamento, interruptor que nasce
-> desligado, "pagamentos a conferir" e cancelar pedido pago). Estado do repositório (`main`): pós-feature
-> Última atualização: **2026-10-23** · Estado do repositório: pós-correção
-> **316b-guia-de-texto** (sem migration; pronta na branch, aguardando o merge a pedido do dono — o guia de tom e
-> o glossário da 316 entram na constituição como Princípio XV, v3.1.0, com ponteiro no `CLAUDE.md` §5; só
-> documentação) — antes dela pós-correção
+> Última atualização: **2026-10-23** · Estado do repositório: pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
+> do dono, num push só, na ordem dos merges: **316b-guia-de-texto** (constituição v3.1.0, Princípio XV; só
+> documentação), **319-aviso-gasto-extra** (o e-mail de gasto extra diz o que é na notificação), **315-pedido-de-cancelamento**
+> (migration `d8b4e15f2c31`), **317-contratos-clicksign** (migration `d3c7a1e5b317`; desligada até o
+> `CLICKSIGN_ACCESS_TOKEN` entrar no Render), **318-pix-recebido-por-email** (migration `d318a4c9e2b7`; liga em
+> `/pix` depois de cadastrar as contas) e **310-pagamento-loja-virtual** (migration `e8b4a1c7d310`; interruptor nasce
+> desligado; `MANTO_PROXY_SECRET` nos dois serviços antes de ligar). As quatro migrations desciam de `c5d2f7a9e306` e
+> foram reencadeadas `c5d2f7a9e306 → d8b4e15f2c31 → d3c7a1e5b317 → d318a4c9e2b7 → e8b4a1c7d310` (uma cabeça só),
+> ensaiadas no dump de produção de 23/10 02:00 (`flask db upgrade` + `seed.py`). Dívidas renumeradas no `docs/05`:
+> 317 → 151–156, 318 → 157–161, 310 → 162–164 — antes do lote pós-correção
 > **316-tom-dos-textos** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~10:36** pelo merge `9e8ee232`, a pedido
 > do dono, em horário comercial — revisão de português e tom em todas as superfícies: 505 trocas de texto visível em
 > 168 arquivos, só texto; sem verify, typecheck verde e telas abertas; bundle novo `index-DKBwlFhg.js` conferido) — antes
@@ -170,12 +171,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **310-pagamento-loja-virtual** | *(pronta, aguardando deploy)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
-| **318-pix-recebido-por-email** | *(BRANCH, não mergeada)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
-| **317-contratos-clicksign** | *(pronta, não publicada)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
-| **315-pedido-de-cancelamento** | *(em branch, não publicada)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
-| **319-aviso-gasto-extra** | *(PRONTA 22/10, aguardando deploy)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
-| **316b-guia-de-texto** | *(pronta, aguardando merge)* O guia de tom e o glossário da 316 saem da spec, que ninguém abre sozinho, e entram na **constituição como Princípio XV** (v3.1.0). O XV traz o tom por superfície, o glossário único e o que um ajuste de texto não toca, e cria o portão "texto revisado pelo XV". Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos templates de plano, checklist e tarefas | 2026-10-23 | — | (aqui) | ver Registro |
+| **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
+| **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
+| **317-contratos-clicksign** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
+| **315-pedido-de-cancelamento** | *(EM PRODUÇÃO 23/10 ~19h, lote)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
+| **319-aviso-gasto-extra** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
+| **316b-guia-de-texto** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O guia de tom e o glossário da 316 saem da spec, que ninguém abre sozinho, e entram na **constituição como Princípio XV** (v3.1.0). O XV traz o tom por superfície, o glossário único e o que um ajuste de texto não toca, e cria o portão "texto revisado pelo XV". Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos templates de plano, checklist e tarefas | 2026-10-23 | — | (aqui) | ver Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
@@ -364,7 +365,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
 
-> **Pronta, aguardando deploy** (branch `310-pagamento-loja-virtual`, worktree `C:\tmp\mp310`). Nível 1.
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (branch `310-pagamento-loja-virtual`, worktree `C:\tmp\mp310`). Nível 1.
 > Spec, plano, contratos e roteiro em `specs/310-pagamento-loja-virtual/`. Migration aditiva
 > `e8b4a1c7d310` sobre a `c5d2f7a9e306` (306); quem mergear por último reencadeia o `down_revision`.
 
@@ -480,7 +481,7 @@ checkout presa em "Confirmando…" e o diálogo do segredo abrindo com o erro an
 campanha" (`docs/05` 88), o limitador em memória por processo (`docs/05`).
 ### 318 — O PIX que cai no Inter se liga sozinho à venda   (318-pix-recebido-por-email · 2026-10-22 · migration `d318a4c9e2b7`)
 
-> **BRANCH, NÃO MERGEADA** (worktree `C:\tmp\mp318`). Nível 1. Plano aprovado pelo dono em 22/10; decisões dele em
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (worktree `C:\tmp\mp318`). Nível 1. Plano aprovado pelo dono em 22/10; decisões dele em
 > `specs/318-pix-recebido-por-email/spec.md` (Clarifications). Merge e push só quando o dono pedir; antes do merge,
 > re-encadear o `down_revision` no head da `main` (a 310 e a 315 partem do mesmo `c5d2f7a9e306`).
 
@@ -538,7 +539,7 @@ aviso), acrescentar o nome do sócio aos pagadores próprios, **ligar**; no dia 
 primeiras ligações. Follow-up recomendado: link InfinitePay por venda (`docs/05` 148).
 ### 317 — O contrato da ClickSign se liga sozinho à venda e a comercial cobra em um clique   (317-contratos-clicksign · 2026-10-22 · migration `d3c7a1e5b317`)
 
-> **Pronta, não publicada.** Nível 1, worktree `C:\tmp\mp317`. Esteira completa (specify → clarify → plan
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote); desligada até o token entrar no Render.** Nível 1, worktree `C:\tmp\mp317`. Esteira completa (specify → clarify → plan
 > com Portão 0 → checklist 35/35 → tasks → analyze com refutação contra o código, 20 achados aplicados →
 > implement → converge). `verify_317.py` 26/26, zero conexão de saída.
 
@@ -600,7 +601,7 @@ clicksign-webhook --registrar --aplicar` (URL do endereço público); `flask cli
 01/06) → `--aplicar`; contrato de teste de ponta a ponta; avisar a comercial.
 ### 315 — O Comercial pede o cancelamento e o Superadmin decide   (315-pedido-de-cancelamento · 2026-10-22 · migration `d8b4e15f2c31`)
 
-> **Em branch, não publicada** (worktree `C:\tmp\mp315`). Nível 1. Item 2a do backlog de setembro
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (worktree `C:\tmp\mp315`). Nível 1. Item 2a do backlog de setembro
 > (`docs/backlog/`), sobre a 306 (o cancelar com dinheiro) e a 312 (o cancelado fora das listas).
 
 **O porquê.** O "Solicitar exclusão" da 224 existia e ninguém usava: o pedido não avisava ninguém, não dizia o que a
@@ -637,7 +638,7 @@ regressão 306 67/69 (base), 312 27/27, 303 44/44, 311 8/8, 302 22/22. **Pré-me
 também desce de `c5d2f7a9e306` — quem entrar por último na `main` repõe o `down_revision`.
 ### 319 — O aviso de gasto extra diz o que é   (319-aviso-gasto-extra · 2026-10-22 · sem migration)
 
-> **PRONTA, aguardando deploy.** Nível 2 (um e-mail, sem migration). Detalhe: `specs/319-aviso-gasto-extra/spec.md`.
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote).** Nível 2 (um e-mail, sem migration). Detalhe: `specs/319-aviso-gasto-extra/spec.md`.
 
 **O pedido.** O dono mandou o print da tela bloqueada: dois avisos idênticos "Novo gasto extra cadastrado —
 aprovação pendente", com a prévia repetindo o assunto e emendando "Manto Produções Olá, João!". Não dava para
@@ -652,7 +653,7 @@ texto do corpo (cabeçalho "Manto Produções" + saudação). O enchimento `&#84
 e-mail também passou a escapar o texto do usuário; os outros de `email_service.py` ainda não escapam (dívida).
 ### 316b — O guia de texto da 316 entra na constituição (Princípio XV)   (316b-guia-de-texto · 2026-10-23 · sem migration)
 
-> Pronta na branch, aguardando o merge a pedido do dono. Nível 2 (só documentação e harness).
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote).** Nível 2 (só documentação e harness).
 
 **O pedido.** "O Claude sempre, quando vai fazer algo, deve olhar a constitution ou algum arquivo do tipo
 para escrever os textos, correto? Preciso que altere nesse arquivo as diretrizes para bons textos escritos,
