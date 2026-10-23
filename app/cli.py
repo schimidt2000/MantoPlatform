@@ -1110,21 +1110,23 @@ def register_commands(app):
 
     @app.cli.command("clicksign-sincronizar")
     @click.option("--desde", type=click.DateTime(formats=["%Y-%m-%d"]), default=None,
-                  help="início (AAAA-MM-DD) do 'modificado desde'; padrão: o marco da última passada")
+                  help="início (AAAA-MM-DD) do 'modificado desde'; padrão: a data de início (01/06/2026)")
     @click.option("--ate", type=click.DateTime(formats=["%Y-%m-%d"]), default=None, help="fim (AAAA-MM-DD)")
     @click.option("--aplicar", is_flag=True, help="grava de verdade (padrão: só conta e desfaz)")
     def clicksign_sincronizar(desde, ate, aplicar: bool):
         """Traz da ClickSign os contratos modificados no período e liga às vendas (feature 317).
 
-        O retroativo desde junho é `--desde 2026-06-01`. Sem `--aplicar`, lê tudo, conta e desfaz
-        (nenhuma linha gravada, nenhum PDF baixado). Idempotente: repetir com `--aplicar` não duplica.
-        Rodar no `manto-backend` com `MANTO_SEM_THREADS=1` na frente. Numa cópia local, a trava
-        (`CLICKSIGN_ALLOW_LOCAL_CALLS`) decide se fala com a ClickSign real.
+        Sem `--desde`, o retroativo começa na data de início do sistema (`corte_dia_sp`, 01/06/2026).
+        Sem `--aplicar`, lê tudo, conta e desfaz (nenhuma linha gravada, nenhum PDF baixado, nenhum
+        marco movido). Idempotente: repetir com `--aplicar` não duplica. Rodar no `manto-backend` com
+        `MANTO_SEM_THREADS=1` na frente. Numa cópia local, a trava (`CLICKSIGN_ALLOW_LOCAL_CALLS`)
+        decide se fala com a ClickSign real.
         """
         from app.contratos import sincronizar_ops
+        from app.formularios.formularios_ops import corte_dia_sp
 
         resultado = sincronizar_ops.sincronizar(
-            desde=desde.date() if desde else None,
+            desde=desde.date() if desde else corte_dia_sp(),
             ate=ate.date() if ate else None,
             aplicar=aplicar,
             motivo="comando",
@@ -1142,24 +1144,29 @@ def register_commands(app):
         click.echo(
             f"clicksign-sincronizar [{modo}]: {resultado.get('envelopes', 0)} envelope(s), "
             f"{resultado.get('novos', 0)} novo(s); ligados {resultado.get('ligados', 0)}, "
-            f"a conferir {resultado.get('a_conferir', 0)}, fora (artista/outro) {resultado.get('fora', 0)}; "
-            f"PDFs anexados {resultado.get('anexados', 0)}, a anexar {resultado.get('anexar', 0)}."
+            f"a conferir {resultado.get('a_conferir', 0)}, artista {resultado.get('artista', 0)}, "
+            f"outros {resultado.get('outro', 0)}; PDFs anexados {resultado.get('anexados', 0)}, "
+            f"a anexar {resultado.get('anexar', 0)}, anexos antigos que passam a assinado "
+            f"{resultado.get('anexos_antigos', 0)}; envelopes pulados por erro {resultado.get('erros', 0)}."
         )
         if resultado.get("erro"):
             click.echo(f"clicksign-sincronizar: interrompido — {resultado['erro']}")
 
     @app.cli.command("clicksign-webhook")
     @click.option("--listar", is_flag=True, help="lista os avisos cadastrados na conta")
-    @click.option("--registrar", "url", default=None, help="URL pública do aviso (…/api/webhooks/clicksign)")
+    @click.option("--registrar", is_flag=True, help="cadastra o aviso no endereço público da plataforma")
     @click.option("--remover", "remover_id", default=None, help="id do aviso a remover")
     @click.option("--aplicar", is_flag=True, help="cadastra/remove de verdade (padrão: só mostra)")
-    def clicksign_webhook(listar: bool, url: str | None, remover_id: str | None, aplicar: bool):
+    def clicksign_webhook(listar: bool, registrar: bool, remover_id: str | None, aplicar: bool):
         """Cadastra o aviso da ClickSign e guarda o segredo devolvido (feature 317).
 
         Só pelo comando, nunca na subida: assim uma cópia local nunca aponta a ClickSign para si.
-        Recadastrar guarda o segredo antigo por 24 h (avisos em trânsito continuam válidos).
+        Recadastrar guarda o segredo antigo por 24 h (avisos em trânsito continuam válidos). A URL
+        sai do endereço público constante (`PUBLIC_BASE_URL`, Princípio XIV), nunca de argumento.
         """
         from datetime import timedelta
+
+        from flask import current_app
 
         from app import db
         from app.constants import (
@@ -1175,6 +1182,10 @@ def register_commands(app):
             click.echo("clicksign-webhook: integração desligada (CLICKSIGN_ACCESS_TOKEN vazio).")
             return
         conexao = _conexao()
+        if conexao["travada"]:
+            # Cópia local: nem listar, nem cadastrar — a ClickSign real não é tocada (XIV).
+            click.echo("clicksign-webhook: travado neste processo (cópia local). Nada consultado.")
+            return
         if listar:
             for aviso in clicksign_client.listar_webhooks(**conexao):
                 atributos = aviso.get("attributes") or {}
@@ -1191,10 +1202,11 @@ def register_commands(app):
             db.session.commit()
             click.echo(f"clicksign-webhook: {remover_id} removido.")
             return
-        if not url:
-            raise click.UsageError("Use --listar, --registrar <url> ou --remover <id>.")
+        if not registrar:
+            raise click.UsageError("Use --listar, --registrar ou --remover <id>.")
+        url = f"{current_app.config['PUBLIC_BASE_URL'].rstrip('/')}/api/webhooks/clicksign"
         if not url.startswith("https://") or "localhost" in url or "127.0.0.1" in url:
-            raise click.UsageError("A URL do aviso tem de ser pública e https.")
+            raise click.UsageError(f"O endereço público não serve para o aviso: {url}")
         if not aplicar:
             click.echo(f"clicksign-webhook: cadastraria {url} com os eventos "
                        f"{', '.join(CLICKSIGN_EVENTOS_DO_AVISO)}. Repita com --aplicar.")

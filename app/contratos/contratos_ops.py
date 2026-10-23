@@ -58,6 +58,8 @@ STATUS_CANCELADO = "canceled"
 STATUS_RASCUNHO = "draft"
 
 _ORDEM_DA_COR = {COR_VERMELHO: 0, COR_AMARELO: 1, COR_CINZA: 2}
+# Menor tema (sem acento e pontuação) que serve para desempatar.
+TEMA_MINIMO = 3
 
 _RE_DATA = re.compile(r"^(\d{1,2})[-./]?(\d{2})[-./]?(\d{4})$")
 _RE_TELEFONE = re.compile(r"^\(?\s*(\d{2})\s*\)?\s*(\d{4,5})\s*-?\s*(\d{4})$")
@@ -193,11 +195,11 @@ class Candidato:
 def _tema_bate(tema: str | None, candidato: Candidato) -> bool:
     """O tema do nome está contido num dos temas da venda (ou o contrário), sem acento."""
     alvo = texto_comparavel(tema)
-    if not alvo:
+    if len(alvo) < TEMA_MINIMO:
         return False
-    return any(
-        alvo in texto_comparavel(t) or texto_comparavel(t) in alvo for t in candidato.temas if t
-    )
+    # Tema da venda curto demais (título só com emoji, "15") bateria com qualquer coisa (C-20).
+    temas = [texto_comparavel(t) for t in candidato.temas if t]
+    return any(alvo in t or t in alvo for t in temas if len(t) >= TEMA_MINIMO)
 
 
 def escolher_candidato(
@@ -241,17 +243,12 @@ def documentos_da_venda(documentos: Iterable[Any]) -> list[Any]:
 def vigente(documentos: Iterable[Any]) -> Any | None:
     """O documento que diz a situação da venda (R-04).
 
-    O mais recente em processo vale (remarcação em andamento); senão, um assinado vence qualquer
-    cancelado, em qualquer ordem — o reenvio duplicado que venceu não pode fazer a comercial cobrar
-    quem já assinou; senão, o mais recente.
+    Vale o mais recente (premissa 3): o reenvio `(1)` assinado vence o original cancelado depois
+    pelo prazo, porque foi criado depois dele; e o contrato novo de uma remarcação substitui o antigo
+    assinado — se ele vencer ou for recusado, a venda precisa de assinatura de novo (analyze C-05).
     """
     ordenados = documentos_da_venda(documentos)
-    if not ordenados:
-        return None
-    if ordenados[0].status == STATUS_EM_PROCESSO:
-        return ordenados[0]
-    fechados = [d for d in ordenados if d.status == STATUS_FECHADO]
-    return fechados[0] if fechados else ordenados[0]
+    return ordenados[0] if ordenados else None
 
 
 def situacao_do_documento(documento: Any | None, assinado_manual: bool) -> str:

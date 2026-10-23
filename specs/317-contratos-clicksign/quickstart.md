@@ -27,9 +27,9 @@ leitor de nomes com os 235 envelopes reais.
 
 1. Dono: `CLICKSIGN_ACCESS_TOKEN` no `manto-backend` (Render › Environment) — o token "Plataforma Manto".
 2. Conferir a subida: log sem "integração ClickSign desligada"; `/api/` responde JSON.
-3. Shell do Render: `MANTO_SEM_THREADS=1 flask clicksign-webhook --registrar https://<domínio>/api/webhooks/clicksign`
+3. Shell do Render: `MANTO_SEM_THREADS=1 flask clicksign-webhook --registrar` (a URL sai do endereço público da plataforma)
    (dry-run) → repetir com `--aplicar`. Confere `--listar`.
-4. `MANTO_SEM_THREADS=1 flask clicksign-sincronizar --desde 2026-06-01` (dry-run) → ler os números com o dono →
+4. `MANTO_SEM_THREADS=1 flask clicksign-sincronizar` (dry-run; sem `--desde` começa em 01/06/2026) → ler os números com o dono →
    `--aplicar`.
 5. Ponta a ponta: gerar um contrato de teste num fluxo, ver em ≤ 5 min "Aguardando assinatura" no evento de teste, assinar,
    ver "Assinado" + PDF anexado. Excluir o evento de teste.

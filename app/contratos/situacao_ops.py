@@ -197,7 +197,19 @@ def bloco_do_evento(
     ultima = _ultimas_cobrancas([documento.id]).get(documento.id) if documento else None
     a_conferir: list[dict[str, Any]] = []
     if ligada and pode_conferir_papel and venda_viva:
-        for candidato in documentos_a_conferir():
+        # Só os documentos cuja data cai na janela dos dias da venda (analyze C-04): calcular as
+        # sugestões de TODOS os documentos a conferir a cada abertura de evento era o N+1.
+        from app.constants import FORM_SUGESTAO_JANELA_DIAS
+
+        janela = FORM_SUGESTAO_JANELA_DIAS
+        dias_da_venda = [e.start_at.date() for e in eventos if e.start_at]
+        perto = [
+            d
+            for d in documentos_a_conferir()
+            if d.data_lida is not None
+            and any(abs((d.data_lida - dia).days) <= janela for dia in dias_da_venda)
+        ]
+        for candidato in perto:
             linha = linha_a_conferir(candidato)
             if any(s["event_id"] == principal.id for s in linha["sugestoes"]):
                 a_conferir.append(linha)

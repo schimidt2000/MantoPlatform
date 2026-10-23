@@ -97,6 +97,10 @@ UNIQUE (`documento_id`, `event_id`) — molde `FormResponseDismissedEvent` (298)
 | `clicksign_sync_at` | DateTime | claim atômico da sincronização (3 workers gunicorn) |
 | `clicksign_sync_cursor` | DateTime | `modified` máximo já processado (início da próxima busca, com folga de 10 min) |
 | `clicksign_sync_pendente` | Boolean (NOT NULL, default false) | o aviso que chega com uma passada em curso marca; a passada repete antes de soltar o claim |
+| `clicksign_sync_fim` | DateTime | fim da última passada aplicada: a periódica dos outros workers pula (converge C-15) |
+
+Lock, marco, pendente e fim são escritos numa **conexão própria** (fora da sessão da passada): a simulação nunca
+comita nada, e o lock é renovado a cada página (converge C-09/C-10).
 
 As colunas antigas `clicksign_token` / `clicksign_sandbox` continuam **inertes** (nunca lidas; dívida no `docs/05`).
 
@@ -112,8 +116,8 @@ As colunas antigas `clicksign_token` / `clicksign_sandbox` continuam **inertes**
   interno e loja virtual; **cortesia entra** (diferente de `motivo_fora_da_venda`, que a exclui).
 - **Vigente** (R-04): `ClicksignDocumento` `tipo=cliente`, `vinculo=ligado`, `event_id IN group_events(principal)` (o
   documento ligado a um dia que depois virou satélite continua valendo para a venda — achado R1 do analyze); o de
-  `criado_em` mais recente, mas um `closed` vence qualquer `canceled` criado antes dele. Na Home, em lote por todos os
-  ids dos grupos.
+  `criado_em` **mais recente**, sempre (converge C-05: a remarcação vencida não volta a "Assinado" pelo contrato
+  antigo; o reenvio `(1)` assinado já é o mais recente). Na Home, em lote por todos os ids dos grupos.
 - **Assinado à mão**: algum `EventContract.is_signed` em qualquer dia do grupo cujo id **não** é `contrato_anexo_id` de
   nenhum documento (o PDF automático não conta como marca manual).
 - **Situação**: `assinado` · `assinado_manual` · `aguardando` · `vencido` · `recusado` · `sem_contrato`.

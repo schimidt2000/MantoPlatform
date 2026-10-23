@@ -70,7 +70,9 @@ def api_webhook_clicksign() -> Any:
     """Recebe o aviso, confere o HMAC e dispara a sincronização (o corpo não decide nada)."""
     if (request.content_length or 0) > CLICKSIGN_AVISO_CORPO_MAXIMO:
         return jsonify({"error": {"message": "Corpo grande demais"}}), 413
-    corpo = request.get_data(cache=True)
+    # Lê com teto também o corpo sem `Content-Length` (chunked): o `get_data` iria até o
+    # `MAX_CONTENT_LENGTH` global (512 MB) antes de conferir, numa rota sem sessão (C-12).
+    corpo = request.stream.read(CLICKSIGN_AVISO_CORPO_MAXIMO + 1)
     if len(corpo) > CLICKSIGN_AVISO_CORPO_MAXIMO:
         return jsonify({"error": {"message": "Corpo grande demais"}}), 413
     if not aviso_valido(corpo, request.headers.get("Content-Hmac")):

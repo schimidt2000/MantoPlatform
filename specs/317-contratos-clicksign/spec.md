@@ -63,8 +63,10 @@ Premissas contestáveis no `/speckit-clarify`; o dono só precisa dizer se disco
 3. **Documento vigente**: entre os contratos de cliente ligados à mesma venda, vale o **mais recente**. Um reenvio
    assinado não fica "vencido" porque a cópia anterior foi cancelada depois; um contrato novo (remarcação) substitui o
    antigo.
-4. **Assinado à mão continua valendo**: venda sem contrato da ClickSign, mas com anexo marcado "assinado" pelo
-   Superadmin (DocuSign, papel), aparece "Assinado (marcado à mão)". A marca manual continua só do Superadmin.
+4. **Assinado à mão continua valendo**: venda com anexo marcado "assinado" pelo Superadmin (DocuSign, papel)
+   aparece "Assinado (marcado à mão)" — inclusive quando o contrato da ClickSign ainda está em processo ou venceu
+   (a cliente assinou por fora; cobrar de novo seria erro). Contrato da ClickSign assinado vence a marca manual. A
+   marca manual continua só do Superadmin (converge 23/10, C-17).
 5. **Régua de cor** (a mesma linguagem da Home): vermelho quando o contrato vence hoje ou amanhã, ou o evento é em até
    7 dias; amarelo quando vence em 2–3 dias, ou o evento é em 8–30 dias; cinza no resto. Vale a pior das duas
    (confirmada no clarify).
@@ -249,8 +251,8 @@ nunca chegaria.
   Assinado em DD/MM · Assinado (marcado à mão) · Aguardando assinatura — vence em N dias · Venceu sem assinatura ·
   Recusado pela cliente · Sem contrato na ClickSign; e a faixa "Achamos um contrato que parece desta venda" quando houver
   sugestão a conferir.
-- **FR-008**: A situação DEVE vir do documento vigente da venda (o mais recente ligado), julgada pelo principal do grupo,
-  e cair para a marca manual do Superadmin quando não houver documento da ClickSign.
+- **FR-008**: A situação DEVE vir do documento vigente da venda (o mais recente ligado), julgada pelo principal do grupo;
+  a marca manual do Superadmin vale quando não há documento assinado da ClickSign (premissa 4).
 - **FR-009**: Ao saber que o contrato foi assinado, o sistema DEVE anexar o PDF assinado ao principal da venda, marcado
   como assinado, com autor "ClickSign (automático)", sem duplicar o que já estiver anexado do mesmo documento.
 
@@ -344,7 +346,8 @@ qualquer conexão de saída. Login só por `POST /api/auth/login`; escrita confe
 | 23 | trava: nenhuma conexão de saída com a cópia local | FR-017 | não |
 | 24 | sem credencial: integração desligada, telas respondem | FR-018 | não |
 | 25 | agrupar e desagrupar mantém a situação da venda (documento ligado a um dia que vira satélite); sumiço do Google não apaga evento com contrato ligado | FR-008 | não |
-| 26 | limpeza | registros descartáveis apagados (`roles.clear()` antes do usuário) | — |
+| 26–35 | convergência de 23/10: anexo que falhou e contrato antigo ligado à mão recebem o PDF na varredura; "outro" ligado à mão vale; remarcação vencida; desligar tira o PDF e religar reanexa; 409 `alterado`; PDF anexado à mão reconhecido; venda cancelada sem PDF; travas do `baixar` e do comando; FINANCEIRO/CASTING (**sim**, 34); aviso durante a passada | FR-001–FR-019 | 34 sim |
+| 36 | limpeza | registros descartáveis apagados (`roles.clear()` antes do usuário) | — |
 
 Conferência de tela: Home (painel Contratos, com e sem itens, 375 px), página do evento (aba Comercial, chip do Resumo,
 menu ⋯) como COMERCIAL e como FINANCEIRO; faixa "A conferir".

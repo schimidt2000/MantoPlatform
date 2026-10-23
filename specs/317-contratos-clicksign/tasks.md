@@ -207,3 +207,33 @@ $env:FLASK_ENV = 'development'; $env:MANTO_SEM_THREADS = '1'; $env:PYTHONUTF8 = 
 
 - MVP = US1 + US2 (o pedido central). US3–US5 completam a confiança e a operação; entram no mesmo deploy.
 - Commit por grupo lógico (`feat(317): …`), sempre por caminho; nunca `git add -A`.
+
+---
+
+## Phase 9: Convergence
+
+Avaliação independente de 23/10/2026 (código × spec/plan/data-model/contracts/research/tasks/constituição): 22
+achados (4 HIGH, 9 MEDIUM, 9 LOW). Detalhe com evidência em `pesquisa/converge-2026-10-23.md`.
+
+- [X] T038 Varrer `anexo_pendente` ligado em toda passada aplicada (não só nos envelopes listados) e cobrir no verify a falha de download e o documento fechado antigo ligado à mão per FR-009 (partial)
+- [X] T039 Fazer o vínculo manual valer para documento "outro" com data (tipo efetivo cliente, protegido da reclassificação) per FR-002/FR-006 (contradicts)
+- [X] T040 Isolar cada envelope na passada (savepoint, log e segue; pegar `ClicksignRecusou` também no anexo) e gravar o cursor só até o que deu certo per FR-015 (partial)
+- [X] T041 Calcular sugestões de "A conferir" sem N+1: pré-filtrar pela janela/telefone da venda e carregar telefones/temas em lote per plan: metas (contradicts)
+- [X] T042 Vigente = o mais recente (remarcação que vence ou é recusada não volta a "Assinado") per premissa 3 / R-04 (contradicts)
+- [X] T043 `desligar` limpa o anexo automático do evento errado e `ligar` reanexa na venda certa per FR-009 (partial)
+- [X] T044 Ligar/descartar só a partir de "a conferir" (409 `alterado` quando o vínculo mudou) per edge "duas pessoas…" (partial)
+- [X] T045 Retroativo: contar anexos antigos que passam a assinado e separar artista × outro; reconhecer o PDF já anexado à mão do mesmo documento em vez de duplicar per FR-014/FR-009 (partial)
+- [X] T046 Simulação sem nenhuma escrita (não marcar pendente) e verify comparando o retrato antes/depois per FR-014 (partial)
+- [X] T047 Renovar o lock a cada página, `FOR UPDATE` no upsert do envelope e `rollback` antes de soltar em qualquer exceção per FR-015 (partial)
+- [X] T048 URL do aviso montada do endereço público constante (`PUBLIC_BASE_URL`), não de argumento per Constitution XIV (contradicts)
+- [X] T049 Ler o corpo do aviso com teto (`request.stream.read`) antes do HMAC per FR-016 (partial)
+- [X] T050 Verify: falha de rede no anexo, `baixar`/comando travados sem escape, desvínculo com `vinculo_origem` nulo per US1/FR-017/FR-005 (partial)
+- [X] T051 Depois de soltar o lock, repetir se o aviso chegou no fim da passada per SC-003 (partial)
+- [X] T052 Periódica pula se a última passada é recente e não marca pendente per FR-015 (partial)
+- [X] T053 `/vendas` mostra "assinado à mão" como no evento e as mutações invalidam `vendas-dashboard` per FR-019 (partial)
+- [X] T054 Registrar na spec que a marca manual vence documento em processo/vencido (assinado fora da ClickSign) per FR-008 (contradicts)
+- [X] T055 Não anexar PDF em venda cancelada (fica pendente, com log) per FR-009 / 312 (partial)
+- [X] T056 Reler o signatário quando o envelope muda em processo per FR-001 (partial)
+- [X] T057 Ignorar tema da venda com menos de 3 caracteres no desempate per FR-004 (partial)
+- [X] T058 `clicksign-sincronizar` sem `--desde` usa 01/06/2026 per FR-014 (partial)
+- [X] T059 Verify: FINANCEIRO 403 em desligar/descartar e CASTING sem `comercial` no `/api/dashboard` per RBAC (partial)

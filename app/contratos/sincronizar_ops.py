@@ -21,6 +21,7 @@ from typing import Any
 
 from flask import current_app
 from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
 from app import db
@@ -64,6 +65,9 @@ LOCK_PRESO_MINUTOS = 10
 JANELA_SEM_MARCO_DIAS = 7
 # Quantas vezes a passada repete por causa de aviso que chegou no meio dela.
 REPETICOES_MAXIMAS = 3
+
+
+ALTERADO = "Este contrato acabou de ser alterado. A tela foi atualizada."
 
 
 class ContratoIndisponivel(Exception):
@@ -113,40 +117,67 @@ def _para_sp(valor: str | None) -> datetime | None:
 # ── Lock da passada ──────────────────────────────────────────────────────────────────────────
 
 
+def _no_lock(sql: str, **params: Any) -> int:
+    """Executa uma escrita do lock numa conexão PRÓPRIA, fora da sessão do app.
+
+    A sessão da passada não pode ser comitada pelo lock: na simulação ela é desfeita inteira, e
+    renovar o lock no meio comitaria o que a simulação gravou (analyze C-09).
+    """
+    with db.engine.begin() as conexao:
+        return conexao.execute(text(sql), params).rowcount
+
+
 def _reivindicar() -> bool:
     """Lock de execução única entre os 3 workers (molde `invite_reminders._claim_rodada`)."""
     agora = now_sp()
-    resultado = db.session.execute(
-        text(
+    return (
+        _no_lock(
             "UPDATE site_settings SET clicksign_sync_at = :agora "
-            "WHERE id = 1 AND (clicksign_sync_at IS NULL OR clicksign_sync_at < :preso)"
-        ),
-        {"agora": agora, "preso": agora - timedelta(minutes=LOCK_PRESO_MINUTOS)},
+            "WHERE id = 1 AND (clicksign_sync_at IS NULL OR clicksign_sync_at < :preso)",
+            agora=agora,
+            preso=agora - timedelta(minutes=LOCK_PRESO_MINUTOS),
+        )
+        == 1
     )
-    db.session.commit()
-    return resultado.rowcount == 1
 
 
-def _soltar() -> None:
-    db.session.execute(text("UPDATE site_settings SET clicksign_sync_at = NULL WHERE id = 1"))
-    db.session.commit()
+def _renovar() -> None:
+    """Mantém o lock vivo numa passada longa (o retroativo passa de 10 min)."""
+    _no_lock("UPDATE site_settings SET clicksign_sync_at = :agora WHERE id = 1", agora=now_sp())
+
+
+def _soltar(*, terminou: bool) -> None:
+    if terminou:
+        _no_lock(
+            "UPDATE site_settings SET clicksign_sync_at = NULL, clicksign_sync_fim = :agora "
+            "WHERE id = 1",
+            agora=now_sp(),
+        )
+    else:
+        _no_lock("UPDATE site_settings SET clicksign_sync_at = NULL WHERE id = 1")
 
 
 def marcar_pendente() -> None:
     """O aviso que chegou com uma passada em curso pede para ela repetir antes de soltar."""
-    db.session.execute(text("UPDATE site_settings SET clicksign_sync_pendente = true WHERE id = 1"))
-    db.session.commit()
+    _no_lock("UPDATE site_settings SET clicksign_sync_pendente = true WHERE id = 1")
 
 
 def _consumir_pendente() -> bool:
-    resultado = db.session.execute(
-        text(
+    return (
+        _no_lock(
             "UPDATE site_settings SET clicksign_sync_pendente = false "
             "WHERE id = 1 AND clicksign_sync_pendente = true"
         )
+        == 1
     )
-    db.session.commit()
-    return resultado.rowcount == 1
+
+
+def _passada_recente(intervalo_segundos: int) -> bool:
+    """A periódica de outro worker acabou há pouco (os 3 acordam juntos — analyze C-15)."""
+    fim = db.session.execute(
+        text("SELECT clicksign_sync_fim FROM site_settings WHERE id = 1")
+    ).scalar()
+    return fim is not None and fim > now_sp() - timedelta(seconds=intervalo_segundos * 0.9)
 
 
 def _cursor() -> datetime | None:
@@ -155,13 +186,11 @@ def _cursor() -> datetime | None:
     ).scalar()
 
 
-def _gravar_cursor(maior: datetime) -> None:
-    db.session.execute(
-        text(
-            "UPDATE site_settings SET clicksign_sync_cursor = :c "
-            "WHERE id = 1 AND (clicksign_sync_cursor IS NULL OR clicksign_sync_cursor < :c)"
-        ),
-        {"c": maior},
+def _gravar_cursor(marco: datetime) -> None:
+    _no_lock(
+        "UPDATE site_settings SET clicksign_sync_cursor = :c "
+        "WHERE id = 1 AND (clicksign_sync_cursor IS NULL OR clicksign_sync_cursor < :c)",
+        c=marco,
     )
 
 
@@ -182,47 +211,65 @@ def _principal(evento: CalendarEvent) -> CalendarEvent:
     return principal_da_venda(evento)
 
 
-def _venda(principal: CalendarEvent) -> _Venda:
-    """A venda com os telefones (ficha, contratantes, formulário) e os temas para desempatar."""
-    from app.calendar.group_ops import group_events
-    from app.formularios.pre_evento_ops import _campos, _valor
-
-    eventos = group_events(principal)
-    ids = [e.id for e in eventos]
-    telefones: set[str] = set()
-    for evento in eventos:
-        if evento.client is not None:
-            telefones.add(evento.client.phone)
-    for ec in EventClient.query.filter(EventClient.event_id.in_(ids)).all():
-        if ec.client is not None:
-            telefones.add(ec.client.phone)
-    temas = [principal.title or ""]
-    for resposta in FormResponse.query.filter(FormResponse.event_id.in_(ids)).all():
-        if resposta.contact_phone:
-            telefones.add(resposta.contact_phone)
-        tema = _valor(_campos(resposta), "tema")
-        if tema:
-            temas.append(tema)
-    chaves = {c for c in (nucleo.chave_telefone(t) for t in telefones) if c}
-    return _Venda(principal, eventos, chaves, tuple(temas))
-
-
 def _vendas_na_data(inicio: date, fim: date | None = None) -> list[_Venda]:
-    """Vendas com algum dia (principal ou satélite) no intervalo; ensaio, 🟧 e loja ficam fora."""
+    """Vendas com algum dia (principal ou satélite) no intervalo; ensaio, 🟧 e loja ficam fora.
+
+    Em lote (analyze C-04): uma consulta de eventos na janela, uma de principais com os satélites
+    e a ficha, e uma por fonte de telefone (contratantes, fichas, formulários) para todos os dias de
+    todas as vendas — nunca uma consulta por venda.
+    """
+    from sqlalchemy.orm import joinedload, selectinload
+
+    from app.formularios.pre_evento_ops import _campos, _valor
+    from app.models import Client
+
     fim = fim or inicio
     eventos = CalendarEvent.query.filter(
         func.date(CalendarEvent.start_at) >= inicio, func.date(CalendarEvent.start_at) <= fim
     ).all()
-    vistos: dict[int, _Venda] = {}
-    for evento in eventos:
-        principal = _principal(evento)
-        if principal.id in vistos:
-            continue
-        # A venda cancelada continua candidata (para dizer "cancelada"); as outras exclusões não.
-        if not principal.cancelled_at and not nucleo.venda_entra(principal):
-            continue
-        vistos[principal.id] = _venda(principal)
-    return list(vistos.values())
+    principais_ids = {e.group_leader_id or e.id for e in eventos}
+    if not principais_ids:
+        return []
+    principais = (
+        CalendarEvent.query.options(
+            selectinload(CalendarEvent.satellites), joinedload(CalendarEvent.client)
+        )
+        .filter(CalendarEvent.id.in_(principais_ids))
+        .all()
+    )
+    # A venda cancelada continua candidata (para dizer "cancelada"); as outras exclusões não.
+    principais = [p for p in principais if p.cancelled_at or nucleo.venda_entra(p)]
+    grupos = {p.id: [p, *p.satellites] for p in principais}
+    dono = {e.id: pid for pid, evs in grupos.items() for e in evs}
+    telefones: dict[int, set[str]] = {pid: set() for pid in grupos}
+    temas: dict[int, list[str]] = {p.id: [p.title or ""] for p in principais}
+    client_ids = {e.client_id: dono[e.id] for evs in grupos.values() for e in evs if e.client_id}
+    for event_id, phone in (
+        db.session.query(EventClient.event_id, Client.phone)
+        .join(Client, Client.id == EventClient.client_id)
+        .filter(EventClient.event_id.in_(dono))
+    ):
+        telefones[dono[event_id]].add(phone)
+    for client_id, phone in db.session.query(Client.id, Client.phone).filter(
+        Client.id.in_(client_ids)
+    ):
+        telefones[client_ids[client_id]].add(phone)
+    for resposta in FormResponse.query.filter(FormResponse.event_id.in_(dono)):
+        pid = dono[resposta.event_id]
+        if resposta.contact_phone:
+            telefones[pid].add(resposta.contact_phone)
+        tema = _valor(_campos(resposta), "tema")
+        if tema:
+            temas[pid].append(tema)
+    return [
+        _Venda(
+            p,
+            grupos[p.id],
+            {c for c in (nucleo.chave_telefone(t) for t in telefones[p.id]) if c},
+            tuple(temas[p.id]),
+        )
+        for p in principais
+    ]
 
 
 def _desvinculados(documento: ClicksignDocumento) -> set[int]:
@@ -355,7 +402,14 @@ def aplicar_envelope(
 ) -> tuple[ClicksignDocumento, bool]:
     """Grava um envelope (idempotente pelo id) e devolve (documento, mudou)."""
     atributos = envelope.get("attributes") or {}
-    documento = ClicksignDocumento.query.filter_by(envelope_id=envelope["id"]).first()
+    # FOR UPDATE: a periódica de outro worker (lock vencido) ou a comercial ligando à mão não
+    # escrevem a mesma linha ao mesmo tempo (analyze C-10).
+    documento = (
+        ClicksignDocumento.query.filter_by(envelope_id=envelope["id"])
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
     novo = documento is None
     modificado = _para_sp(atributos.get("modified"))
     status = atributos.get("status") or nucleo.STATUS_RASCUNHO
@@ -380,9 +434,20 @@ def aplicar_envelope(
     documento.data_lida = lido.data
     documento.telefone_lido = lido.telefone
     documento.tema_lido = lido.tema
-    documento.tipo = nucleo.classificar(documento.nome, lido)
+    # O "outro" que a comercial ligou à mão vira de cliente e não é reclassificado (analyze C-02).
+    if not (
+        documento.vinculo == VINCULO_LIGADO and documento.vinculo_origem == VINCULO_ORIGEM_MANUAL
+    ):
+        documento.tipo = nucleo.classificar(documento.nome, lido)
 
-    if novo or (documento.canal is None and documento.signatario_telefone is None):
+    # Relê o signatário quando o envelope ainda em processo mudou: a troca de signatário muda o
+    # canal da cobrança (analyze C-19).
+    em_processo = documento.status in (nucleo.STATUS_EM_PROCESSO, nucleo.STATUS_RASCUNHO)
+    if (
+        novo
+        or (mudou and em_processo)
+        or (documento.canal is None and documento.signatario_telefone is None)
+    ):
         _ler_signatario(documento, conexao)
     if mudou and documento.status in (nucleo.STATUS_FECHADO, nucleo.STATUS_CANCELADO):
         _ler_eventos(documento, conexao)
@@ -406,6 +471,37 @@ def aplicar_envelope(
     return documento, mudou
 
 
+def anexo_manual_do_mesmo_documento(documento: ClicksignDocumento) -> Any | None:
+    """O `EventContract` que alguém já anexou à mão com o PDF baixado deste documento, se houver.
+
+    A ClickSign nomeia o download `<nome do envelope> - Clicksign.pdf`; o upload passa por
+    `secure_filename` e ganha um prefixo de data. Procura nos dias da venda ligada.
+    """
+    from werkzeug.utils import secure_filename
+
+    from app.calendar.group_ops import group_events
+    from app.models import EventContract
+
+    if documento.event_id is None or not documento.nome:
+        return None
+    evento = db.session.get(CalendarEvent, documento.event_id)
+    if evento is None:
+        return None
+    alvo = secure_filename(f"{nucleo.normalizar_nome(documento.nome)} - Clicksign.pdf").lower()
+    if not alvo:
+        return None
+    usados = db.session.query(ClicksignDocumento.contrato_anexo_id).filter(
+        ClicksignDocumento.contrato_anexo_id.isnot(None)
+    )
+    for contrato in EventContract.query.filter(
+        EventContract.event_id.in_([e.id for e in group_events(evento)]),
+        EventContract.id.notin_(usados),
+    ):
+        if (contrato.file_path or "").lower().endswith(alvo):
+            return contrato
+    return None
+
+
 def anexar_assinado(documento: ClicksignDocumento, conexao: dict[str, Any]) -> bool:
     """Baixa o PDF assinado e o anexa ao evento ligado, marcado como assinado (FR-009).
 
@@ -419,6 +515,18 @@ def anexar_assinado(documento: ClicksignDocumento, conexao: dict[str, Any]) -> b
     evento = db.session.get(CalendarEvent, documento.event_id)
     if evento is None:
         return False
+    if evento.cancelled_at:
+        # A tela do cancelado é só consulta (312): o PDF fica pendente e entra se a venda voltar.
+        logger.info("[clicksign] anexo de %s adiado: venda cancelada", documento.envelope_id)
+        return False
+    manual = anexo_manual_do_mesmo_documento(documento)
+    if manual is not None:
+        # O PDF já foi baixado e anexado à mão (o "… - Clicksign.pdf" de antes da 317): vira o anexo
+        # do documento, marcado — sem baixar de novo nem duplicar (analyze C-08).
+        manual.is_signed = True
+        documento.contrato_anexo_id = manual.id
+        documento.anexo_pendente = False
+        return True
     try:
         if documento.document_id is None:
             docs = cliente.documentos(documento.envelope_id, **conexao)
@@ -430,7 +538,8 @@ def anexar_assinado(documento: ClicksignDocumento, conexao: dict[str, Any]) -> b
         if not url:
             return False
         dados = cliente.baixar(url, travada=conexao["travada"])
-    except cliente.ClicksignIndisponivel as exc:
+    except cliente.ClicksignError as exc:
+        # Indisponível ou recusado: fica pendente para a varredura da próxima passada.
         logger.warning("[clicksign] anexo de %s adiado: %s", documento.envelope_id, exc)
         return False
     nome_arquivo = (
@@ -469,11 +578,15 @@ def _uma_passada(
         "novos": 0,
         "ligados": 0,
         "a_conferir": 0,
-        "fora": 0,
+        "artista": 0,
+        "outro": 0,
         "anexados": 0,
         "anexar": 0,
+        "anexos_antigos": 0,
+        "erros": 0,
     }
     maior: datetime | None = None
+    menor_falha: datetime | None = None
     pagina = 1
     while True:
         resposta = cliente.listar_envelopes(
@@ -481,32 +594,69 @@ def _uma_passada(
         )
         envelopes = list(resposta.get("data") or [])
         for envelope in envelopes:
+            modificado = _para_sp((envelope.get("attributes") or {}).get("modified"))
             existia = (
                 ClicksignDocumento.query.filter_by(envelope_id=envelope["id"]).first() is not None
             )
-            documento, _mudou = aplicar_envelope(envelope, conexao)
+            # Um envelope que falha (4xx da ClickSign, conflito no banco) não derruba a passada nem
+            # trava o marco para sempre: desfaz só ele, registra e segue (analyze C-03).
+            try:
+                with db.session.begin_nested():
+                    documento, _mudou = aplicar_envelope(envelope, conexao)
+            except (cliente.ClicksignError, IntegrityError) as exc:
+                contagem["erros"] += 1
+                logger.warning("[clicksign] envelope %s pulado: %s", envelope.get("id"), exc)
+                if modificado and (menor_falha is None or modificado < menor_falha):
+                    menor_falha = modificado
+                continue
             contagem["envelopes"] += 1
             contagem["novos"] += 0 if existia else 1
             if documento.vinculo == VINCULO_LIGADO:
                 contagem["ligados"] += 1
             elif documento.vinculo == VINCULO_A_CONFERIR:
                 contagem["a_conferir"] += 1
+            elif documento.tipo == CLICKSIGN_TIPO_ARTISTA:
+                contagem["artista"] += 1
             else:
-                contagem["fora"] += 1
-            if documento.anexo_pendente:
-                if aplicar:
-                    contagem["anexados"] += 1 if anexar_assinado(documento, conexao) else 0
-                else:
-                    contagem["anexar"] += 1
-            if documento.modificado_em and (maior is None or documento.modificado_em > maior):
-                maior = documento.modificado_em
+                contagem["outro"] += 1
+            if modificado and (maior is None or modificado > maior):
+                maior = modificado
+        if aplicar:
+            db.session.commit()
+            _renovar()
         if len(envelopes) < cliente.TAMANHO_DA_PAGINA:
             break
         pagina += 1
-    if aplicar:
-        if maior is not None:
-            _gravar_cursor(maior)
+
+    # Varredura de TODO anexo pendente, não só dos envelopes que voltaram na listagem: o
+    # documento antigo ligado à mão e o download que falhou com o marco já passado (analyze C-01).
+    pendentes = ClicksignDocumento.query.filter(
+        ClicksignDocumento.anexo_pendente.is_(True),
+        ClicksignDocumento.vinculo == VINCULO_LIGADO,
+    ).all()
+    for documento in pendentes:
+        if not aplicar:
+            contagem["anexar"] += 1
+            if anexo_manual_do_mesmo_documento(documento) is not None:
+                contagem["anexos_antigos"] += 1
+            continue
+        manual = anexo_manual_do_mesmo_documento(documento) is not None
+        try:
+            with db.session.begin_nested():
+                anexou = anexar_assinado(documento, conexao)
+        except (cliente.ClicksignError, IntegrityError) as exc:
+            contagem["erros"] += 1
+            logger.warning("[clicksign] anexo de %s pulado: %s", documento.envelope_id, exc)
+            continue
+        if anexou:
+            contagem["anexos_antigos" if manual else "anexados"] += 1
         db.session.commit()
+
+    if aplicar:
+        db.session.commit()
+        marco = min(m for m in (maior, menor_falha) if m) if (maior or menor_falha) else None
+        if marco is not None:
+            _gravar_cursor(marco)
     else:
         db.session.rollback()
     return contagem
@@ -539,12 +689,18 @@ def sincronizar(
             cliente.listar_envelopes(pagina=1, **conexao)
         except cliente.ClicksignTravada:
             return {"travada": True}
-    if not _reivindicar():
-        marcar_pendente()
-        return {"ocupada": True}
+    periodica = motivo == "periodica"
+    if periodica and _passada_recente(current_app.config.get("CLICKSIGN_SYNC_INTERVAL", 1800)):
+        return {"recente": True}
     total: dict[str, Any] = {"motivo": motivo, "passadas": 0}
-    try:
-        for _ in range(REPETICOES_MAXIMAS):
+    for _ in range(REPETICOES_MAXIMAS):
+        if not _reivindicar():
+            # Só o aviso pede repetição: a periódica e a simulação não escrevem nada aqui.
+            if aplicar and not periodica:
+                marcar_pendente()
+            return {**total, "ocupada": True} if total["passadas"] else {"ocupada": True}
+        terminou = False
+        try:
             inicio = desde
             if inicio is None:
                 marco = _cursor()
@@ -557,14 +713,16 @@ def sincronizar(
             total["passadas"] += 1
             for chave, valor in contagem.items():
                 total[chave] = total.get(chave, 0) + valor
-            if not aplicar or not _consumir_pendente():
-                break
-    except cliente.ClicksignError as exc:
-        db.session.rollback()
-        logger.warning("[clicksign] passada (%s) interrompida: %s", motivo, exc)
-        total["erro"] = str(exc)
-    finally:
-        _soltar()
+            terminou = aplicar
+        except Exception as exc:  # noqa: BLE001 — a passada nunca deixa o lock preso
+            db.session.rollback()
+            logger.warning("[clicksign] passada (%s) interrompida: %s", motivo, exc)
+            total["erro"] = str(exc)
+        finally:
+            _soltar(terminou=terminou)
+        # O aviso que chegou durante a passada (ou entre o fim dela e o soltar) pede outra.
+        if not aplicar or total.get("erro") or not _consumir_pendente():
+            break
     return total
 
 
@@ -591,6 +749,9 @@ def ligar(documento_id: int, event_id: int, usuario: Any) -> ClicksignDocumento:
         raise ContratoIndisponivel("ja_ligado", "Este contrato já está ligado a uma venda.")
     if documento.tipo == CLICKSIGN_TIPO_ARTISTA:
         raise ContratoIndisponivel("tipo_fora", "Contrato de artista não se liga a venda.")
+    if documento.vinculo != VINCULO_A_CONFERIR:
+        # Outra pessoa acabou de descartar (borda "duas pessoas…" da spec).
+        raise ContratoIndisponivel("alterado", ALTERADO)
     evento = db.session.get(CalendarEvent, event_id, with_for_update=True)
     if evento is None:
         raise LookupError("evento")
@@ -602,6 +763,9 @@ def ligar(documento_id: int, event_id: int, usuario: Any) -> ClicksignDocumento:
     documento.vinculo = VINCULO_LIGADO
     documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
     documento.vinculo_motivo = None
+    # O "outro" (corporativo só com razão social) que a comercial reconheceu passa a contar como
+    # contrato de cliente da venda — senão sumia da conferência e não aparecia na situação (C-02).
+    documento.tipo = CLICKSIGN_TIPO_CLIENTE
     documento.event_id = principal.id
     documento.vinculado_por_id = getattr(usuario, "id", None)
     documento.vinculado_em = now_sp()
@@ -628,6 +792,7 @@ def desligar(documento_id: int, usuario: Any) -> ClicksignDocumento:
                 por_id=getattr(usuario, "id", None),
             )
         )
+    _tirar_anexo_automatico(documento)
     documento.vinculo = VINCULO_A_CONFERIR
     documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
     documento.vinculo_motivo = CONFERIR_DESLIGADO
@@ -638,6 +803,35 @@ def desligar(documento_id: int, usuario: Any) -> ClicksignDocumento:
     return documento
 
 
+def _tirar_anexo_automatico(documento: ClicksignDocumento) -> None:
+    """O PDF assinado que a sincronização anexou na venda errada sai dela (analyze C-06).
+
+    Só o registro sai: o arquivo fica no disco, como em toda exclusão de contrato. Fica no histórico
+    do evento quem tirou e por quê. Ao ligar à venda certa, o PDF é anexado de novo lá.
+    """
+    from app.models import EventContract
+
+    if documento.contrato_anexo_id is None:
+        return
+    contrato = db.session.get(EventContract, documento.contrato_anexo_id)
+    documento.contrato_anexo_id = None
+    if contrato is None:
+        return
+    db.session.add(
+        EventLog(
+            event_id=contrato.event_id,
+            actor_name=CLICKSIGN_AUTOR,
+            actor_role=CLICKSIGN_AUTOR_PAPEL,
+            message=(
+                "Retirou o contrato assinado da ClickSign desligado desta venda: "
+                f"{nucleo.normalizar_nome(documento.nome)}"
+            ),
+            created_at=datetime.utcnow(),
+        )
+    )
+    db.session.delete(contrato)
+
+
 def descartar(documento_id: int, usuario: Any) -> ClicksignDocumento:
     """ "Não é de nenhuma venda": sai da conferência para sempre."""
     documento = _documento_travado(documento_id)
@@ -645,6 +839,8 @@ def descartar(documento_id: int, usuario: Any) -> ClicksignDocumento:
         raise LookupError("documento")
     if documento.vinculo == VINCULO_LIGADO:
         raise ContratoIndisponivel("ja_ligado", "Desligue o contrato da venda antes de descartar.")
+    if documento.vinculo != VINCULO_A_CONFERIR:
+        raise ContratoIndisponivel("alterado", ALTERADO)
     documento.vinculo = VINCULO_DESCARTADO
     documento.vinculo_origem = VINCULO_ORIGEM_MANUAL
     documento.vinculado_por_id = getattr(usuario, "id", None)

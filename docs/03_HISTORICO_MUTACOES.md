@@ -395,14 +395,20 @@ confirmam, o FINANCEIRO só vê; gerar o contrato pela API fica para outra featu
 pega os dois). O `manto_local` está na revisão da 310 (`e8b4a1c7d310`): a migration da 317 foi aplicada direto
 (DDL) sem mexer no `alembic_version`. A 310 também parte de `c5d2f7a9e306`: quem mergear por último reencadeia.
 
-**Verificação.** `specs/317-contratos-clicksign/verify_317.py` 26/26 (primeira rodada 3/26 em
+**Verificação.** `specs/317-contratos-clicksign/verify_317.py` 36/36 depois do converge (26/26 antes; primeira rodada 3/26 em
 `verify_317_primeira_falha.txt`); `npm run typecheck` (três apps) e `ruff` limpos nos tocados; tela aberta como
 COMERCIAL e FINANCEIRO (evento, menu ⋯ com o texto copiado conferido, Home a 375 px sem rolagem horizontal);
 `verify_299`, `verify_312` e `verify_306` de novo.
 
+**Converge (23/10).** Avaliação independente achou 22 lacunas (4 altas: anexo que não era tentado de novo, "outro"
+ligado à mão que sumia, uma falha travando a passada inteira, N+1 nas sugestões), todas resolvidas (T038–T059,
+`pesquisa/converge-2026-10-23.md`); verify foi a 36/36. Decisões que ficaram: o documento vigente é o **mais
+recente** (remarcação vencida não volta a "Assinado"); a marca manual vence documento em processo/vencido;
+desligar tira o PDF automático da venda errada; a simulação não escreve nada.
+
 **Antes de ligar** (quickstart §3, à noite): colar `CLICKSIGN_ACCESS_TOKEN` no `manto-backend`; `flask
-clicksign-webhook --registrar https://<domínio>/api/webhooks/clicksign --aplicar`; `flask clicksign-sincronizar
---desde 2026-06-01` (simulação) → `--aplicar`; contrato de teste de ponta a ponta; avisar a comercial.
+clicksign-webhook --registrar --aplicar` (URL do endereço público); `flask clicksign-sincronizar` (simulação, desde
+01/06) → `--aplicar`; contrato de teste de ponta a ponta; avisar a comercial.
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 

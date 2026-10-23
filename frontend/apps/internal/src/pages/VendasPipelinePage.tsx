@@ -33,6 +33,7 @@ const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
 
 const CONTRACT_TONE: Record<ContractStatus, "green" | "gold" | "neutral" | "red"> = {
   assinado: "green",
+  assinado_manual: "green",
   pendente: "gold",
   sem_contrato: "neutral",
   aguardando: "gold",

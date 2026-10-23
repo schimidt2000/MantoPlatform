@@ -6,6 +6,7 @@ import type { CancelamentosDoPeriodo, LojaVirtualResumo, PeriodFilter } from "./
 // Feature 317: com a ClickSign ligada, a coluna mostra a situação da venda (FR-019).
 export type ContractStatus =
   | "assinado"
+  | "assinado_manual"
   | "pendente"
   | "sem_contrato"
   | "aguardando"

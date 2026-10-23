@@ -1671,9 +1671,11 @@ ganha `comercial.contratos` (`None` na volta cedo de falha das vendas); a coluna
 (`contract_status_map`) passa a ler a situação da venda com a integração ligada (FR-019).
 
 **Comandos** (Shell do Render, `MANTO_SEM_THREADS=1`): `flask clicksign-sincronizar [--desde AAAA-MM-DD]
-[--ate] [--aplicar]` (sem `--aplicar` lê, conta e desfaz) e `flask clicksign-webhook --listar |
---registrar <url https pública> | --remover <id> [--aplicar]` (grava `clicksign_webhook_id` e o segredo;
-recadastrar guarda o anterior 24 h). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
+[--ate] [--aplicar]` (sem `--desde`, começa em `corte_dia_sp()` = 01/06/2026; sem `--aplicar` lê, conta
+e desfaz — nem lock, nem marco; envelope que falha é pulado e o marco para nele; todo anexo pendente é varrido
+em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <id> [--aplicar]` (a URL
+sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
+segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`

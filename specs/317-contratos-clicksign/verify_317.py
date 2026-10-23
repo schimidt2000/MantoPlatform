@@ -147,6 +147,8 @@ class ContaClickSign:
     def __init__(self) -> None:
         self.envelopes: dict[str, dict] = {}
         self.chamadas = {"listar": 0, "baixar": 0}
+        # Quantos downloads seguidos falham como "não sei" (rede caída, link vencido).
+        self.falhas_baixar = 0
 
     def envelope(
         self,
@@ -259,6 +261,9 @@ class ContaClickSign:
 
     def baixar(self, url: str, **_kw) -> bytes:
         self.chamadas["baixar"] += 1
+        if self.falhas_baixar > 0:
+            self.falhas_baixar -= 1
+            raise _cliente_cs.ClicksignIndisponivel("verify 317: download falhou")
         return PDF_FALSO
 
     def listar_webhooks(self, **_kw) -> list:
@@ -442,14 +447,16 @@ def preparar() -> None:
             "clicksign_sync_at",
             "clicksign_sync_cursor",
             "clicksign_sync_pendente",
+            "clicksign_sync_fim",
         )
     }
     s.clicksign_webhook_secret = SEGREDO
     s.clicksign_sync_at = None
     s.clicksign_sync_cursor = None
     s.clicksign_sync_pendente = False
+    s.clicksign_sync_fim = None
 
-    fones = {n: f"551190000{n:04d}" for n in range(1, 20)}
+    fones = {n: f"551190000{n:04d}" for n in range(1, 32)}
     estado["fones"] = fones
     ev = estado["ids"]
     # Venda A: aguardando, prazo amanhã → vermelho; cobrável.
@@ -483,6 +490,13 @@ def preparar() -> None:
     # Avulso que vai virar dia de um grupo (cenário 25).
     _evento("g", _d(16), telefone=fones[16])
     _evento("g0", _d(16), telefone=fones[17])
+    # Converge (cenários 26–35): anexo que falha, "outro" ligado à mão, remarcação vencida, PDF
+    # anexado à mão antes, venda cancelada depois de ligada.
+    _evento("q", _d(18), telefone=fones[21])
+    _evento("o", _d(22), telefone=fones[22], titulo="Evento corporativo")
+    _evento("rm", _d(26), telefone=fones[20])
+    _evento("mn", _d(27), telefone=fones[24])
+    _evento("cx", _d(28), telefone=fones[23])
     db.session.commit()
 
     agora = datetime.combine(estado["hoje"], time(9, 0))
@@ -910,16 +924,42 @@ def cen_21() -> None:
     )
     estado["env"]["retro"] = novo
     runner = app.test_cli_runner()
+    # A simulação não escreve NADA: nem documento, nem anexo, nem marco, nem "repetir" (C-09).
+    antes = (_retrato(), conta.chamadas["baixar"])
     r = runner.invoke(args=["clicksign-sincronizar", "--desde", _d(-60).isoformat()])
     _garante(r.exit_code == 0, f"dry-run → {r.exit_code} {r.output[-300:]}")
+    _garante("SIMULA" in r.output, f"saída do dry-run → {r.output[-300:]}")
     _garante(_doc("retro") is None, "o dry-run gravou")
+    _garante((_retrato(), conta.chamadas["baixar"]) == antes, "o dry-run mudou alguma coisa")
+    retratos = []
     for _ in range(2):
         r = runner.invoke(
             args=["clicksign-sincronizar", "--desde", _d(-60).isoformat(), "--aplicar"]
         )
         _garante(r.exit_code == 0, f"--aplicar → {r.exit_code} {r.output[-300:]}")
+        retratos.append(_retrato(sem_lock=True))
     n = _no_banco("SELECT count(*) FROM clicksign_documentos WHERE envelope_id = :e", e=novo)[0]
     _garante(n == 1, f"retro gravado {n} vezes")
+    _garante(retratos[0] == retratos[1], "a segunda rodada de --aplicar mudou alguma coisa")
+
+
+def _retrato(*, sem_lock: bool = False) -> tuple:
+    """Fotografia do que a sincronização escreve (documentos, anexos, marco e lock)."""
+    docs = _no_banco_todas(
+        "SELECT envelope_id, status, vinculo, event_id, contrato_anexo_id, anexo_pendente "
+        "FROM clicksign_documentos WHERE envelope_id LIKE :p ORDER BY envelope_id",
+        p=f"{PREFIX}%",
+    )
+    anexos = _no_banco(
+        "SELECT count(*) FROM event_contracts ec JOIN calendar_events ce ON ce.id = ec.event_id "
+        "WHERE ce.google_event_id LIKE :p",
+        p=f"{PREFIX}%",
+    )[0]
+    site = _no_banco(
+        "SELECT clicksign_sync_at, clicksign_sync_cursor, clicksign_sync_pendente, "
+        "clicksign_sync_fim FROM site_settings WHERE id = 1"
+    )
+    return (tuple(map(tuple, docs)), anexos, None if sem_lock else tuple(site))
 
 
 def cen_22() -> None:
@@ -928,7 +968,15 @@ def cen_22() -> None:
     from app.contratos import sincronizar_ops
 
     with app.app_context():
+        # Nenhuma passada recente: a periódica roda.
+        db.session.execute(text("UPDATE site_settings SET clicksign_sync_fim = NULL WHERE id = 1"))
+        db.session.commit()
         sincronizar_ops.sincronizar(motivo="periodica")
+        # Logo depois, a periódica de outro worker pula, sem pedir repetição (C-15).
+        segunda = sincronizar_ops.sincronizar(motivo="periodica")
+    _garante(segunda.get("recente") is True, f"a segunda periódica rodou: {segunda}")
+    pendente = _no_banco("SELECT clicksign_sync_pendente FROM site_settings WHERE id = 1")[0]
+    _garante(pendente is False, "a periódica marcou pendente")
     _garante(
         _contrato(estado["comercial"], "f")["contrato"]["situacao"] == "assinado",
         "f não assinou na periódica",
@@ -1002,6 +1050,250 @@ def cen_25() -> None:
             preso_ao_evento(db.session.get(CalendarEvent, ev["g"])).tem_contrato,
             "evento com contrato ligado não está preso",
         )
+
+
+# ── Convergência (23/10) ─────────────────────────────────────────────────────────────────────────
+
+
+def _anexos(nome: str) -> int:
+    return _no_banco(
+        "SELECT count(*) FROM event_contracts WHERE event_id = :e", e=estado["ids"][nome]
+    )[0]
+
+
+def _so_varredura() -> dict:
+    """Uma passada que não lista nenhum envelope (o intervalo é o futuro): só a varredura de anexos."""
+    return _sincronizar(desde=_d(400), ate=_d(401))
+
+
+def cen_26() -> None:
+    """Anexo que falhou volta na passada seguinte; contrato antigo ligado à mão recebe o PDF (C-01)."""
+    fones = estado["fones"]
+    eid = conta.envelope("q", _nome_festa(_d(18), fones[21], "Lego"), status="closed")
+    estado["env"]["q"] = eid
+    conta.falhas_baixar = 1
+    _sincronizar(desde=_d(-30))
+    d = _doc("q")
+    _garante(d[4] == "ligado" and d[12] is True and d[7] is None, f"q depois da falha → {d}")
+    _so_varredura()
+    d = _doc("q")
+    _garante(d[7] is not None and d[12] is False, f"q não recebeu o PDF na varredura → {d}")
+    # Documento fechado antigo, fora da janela da listagem, ligado à mão depois.
+    velho = conta.envelope(
+        "velho",
+        _nome_festa(_d(18), fones[25], "Lego antigo"),
+        status="closed",
+        criado=datetime.combine(_d(-50), time(10, 0)),
+    )
+    estado["env"]["velho"] = velho
+    _sincronizar(desde=_d(-60), ate=_d(-40))
+    _garante(_doc("velho")[4] == "a_conferir", f"velho → {_doc('velho')}")
+    r = _chamar(
+        estado["comercial"],
+        "post",
+        f"/api/contratos/{_doc('velho')[0]}/ligar",
+        {"event_id": estado["ids"]["q"]},
+    )
+    _garante(r.status_code == 200, f"ligar velho → {r.status_code}")
+    _so_varredura()
+    _garante(
+        _doc("velho")[7] is not None,
+        f"o contrato antigo ligado à mão ficou sem PDF → {_doc('velho')}",
+    )
+
+
+def cen_27() -> None:
+    """ "Outro" (corporativo só com razão social) ligado à mão vale para a venda (C-02)."""
+    eid = conta.envelope("corp", f"{_d(22):%d%m%Y} + Empresa Só Com Razão Social")
+    estado["env"]["corp"] = eid
+    _sincronizar(desde=_d(-30))
+    d = _doc("corp")
+    _garante(d[1] == "outro" and d[4] == "a_conferir", f"corp → {d}")
+    r = _chamar(
+        estado["comercial"],
+        "post",
+        f"/api/contratos/{d[0]}/ligar",
+        {"event_id": estado["ids"]["o"]},
+    )
+    _garante(r.status_code == 200, f"ligar corp → {r.status_code}")
+    _garante(
+        _contrato(estado["comercial"], "o")["contrato"]["situacao"] == "aguardando",
+        "o sem a situação do contrato",
+    )
+    conta.mudar(eid, status="running", quando=datetime.combine(estado["hoje"], time(14, 0)))
+    _sincronizar(desde=_d(-1))
+    _garante(
+        _doc("corp")[1] == "cliente" and _doc("corp")[4] == "ligado",
+        f"corp reclassificado → {_doc('corp')}",
+    )
+
+
+def cen_28() -> None:
+    """Remarcação: o contrato novo que vence não volta a "Assinado" pelo antigo (C-05)."""
+    fones = estado["fones"]
+    agora = datetime.combine(estado["hoje"], time(9, 0))
+    conta.envelope(
+        "rm_velho",
+        _nome_festa(_d(26), fones[20], "Circo"),
+        status="closed",
+        criado=agora - timedelta(days=5),
+    )
+    conta.envelope(
+        "rm_novo",
+        _nome_festa(_d(26), fones[20], "Circo"),
+        status="canceled",
+        criado=agora - timedelta(days=1),
+    )
+    _sincronizar(desde=_d(-30))
+    sit = _contrato(estado["comercial"], "rm")["contrato"]["situacao"]
+    _garante(sit == "vencido", f"rm → {sit}")
+
+
+def cen_29() -> None:
+    """Desligar tira o PDF automático da venda; ligar de novo o reanexa (C-06)."""
+    from app.storage import delete_file
+
+    _garante(_anexos("k") == 1, f"k começa com {_anexos('k')} anexos")
+    caminho = _no_banco(
+        "SELECT file_path FROM event_contracts WHERE event_id = :e", e=estado["ids"]["k"]
+    )[0]
+    doc = _doc("k")[0]
+    r = _chamar(estado["comercial"], "post", f"/api/contratos/{doc}/desligar")
+    _garante(r.status_code == 200, f"desligar k → {r.status_code}")
+    _garante(_anexos("k") == 0, "o PDF ficou na venda de onde o contrato saiu")
+    with app.app_context():
+        delete_file(caminho)
+    r = _chamar(
+        estado["comercial"], "post", f"/api/contratos/{doc}/ligar", {"event_id": estado["ids"]["k"]}
+    )
+    _garante(r.status_code == 200, f"religar k → {r.status_code}")
+    _so_varredura()
+    _garante(_anexos("k") == 1, f"k religado com {_anexos('k')} anexos")
+
+
+def cen_30() -> None:
+    """Ligar ou descartar fora de "a conferir" dá 409 `alterado` (borda "duas pessoas")."""
+    doc = _doc("s")[0]
+    for acao, corpo in (("descartar", None), ("ligar", {"event_id": estado["ids"]["a"]})):
+        r = _chamar(estado["comercial"], "post", f"/api/contratos/{doc}/{acao}", corpo)
+        codigo = (r.get_json() or {}).get("error", {}).get("codigo")
+        _garante(
+            r.status_code == 409 and codigo == "alterado",
+            f"{acao} descartado → {r.status_code} {codigo}",
+        )
+
+
+def cen_31() -> None:
+    """O PDF já anexado à mão do mesmo documento vira o anexo, sem baixar nem duplicar (C-08)."""
+    from werkzeug.utils import secure_filename
+
+    nome = _nome_festa(_d(27), estado["fones"][24], "Moana")
+    with app.app_context():
+        db.session.add(
+            EventContract(
+                event_id=estado["ids"]["mn"],
+                file_path=f"/uploads/contracts/20260901000000_abc123_{secure_filename(nome + ' - Clicksign.pdf')}",
+                is_signed=False,
+            )
+        )
+        db.session.commit()
+    conta.envelope("mn", nome, status="closed")
+    estado["env"]["mn"] = f"{PREFIX}mn"
+    baixados = conta.chamadas["baixar"]
+    _sincronizar(desde=_d(-30))
+    _garante(conta.chamadas["baixar"] == baixados, "baixou o PDF que já estava anexado")
+    _garante(_anexos("mn") == 1, f"mn com {_anexos('mn')} anexos")
+    linha = _no_banco(
+        "SELECT is_signed FROM event_contracts WHERE event_id = :e", e=estado["ids"]["mn"]
+    )
+    _garante(
+        linha[0] is True and _doc("mn")[7] is not None, "o anexo antigo não virou o do documento"
+    )
+
+
+def cen_32() -> None:
+    """Venda cancelada depois de ligada não recebe o PDF (fica pendente) — 312."""
+    eid = conta.envelope("cx", _nome_festa(_d(28), estado["fones"][23], "Dinossauros"))
+    estado["env"]["cx"] = eid
+    _sincronizar(desde=_d(-30))
+    _garante(_doc("cx")[4] == "ligado", f"cx → {_doc('cx')}")
+    with app.app_context():
+        db.session.get(CalendarEvent, estado["ids"]["cx"]).cancelled_at = datetime.utcnow()
+        db.session.commit()
+    conta.mudar(eid, status="closed", quando=datetime.combine(estado["hoje"], time(15, 0)))
+    _sincronizar(desde=_d(-1))
+    _garante(
+        _anexos("cx") == 0 and _doc("cx")[12] is True, f"anexou na venda cancelada → {_doc('cx')}"
+    )
+
+
+def cen_33() -> None:
+    """Travas: `baixar` e o comando do aviso não saem da máquina; desvínculo segura sem a marca manual."""
+    _restaurar_cliente_real()
+    try:
+        try:
+            _cliente_cs.baixar("https://s3.exemplo/arquivo", travada=True)
+            raise AssertionError("o baixar real não travou")
+        except _cliente_cs.ClicksignTravada:
+            pass
+        r = app.test_cli_runner().invoke(args=["clicksign-webhook", "--listar"])
+        _garante(
+            r.exit_code == 0 and "travado" in r.output,
+            f"comando do aviso → {r.exit_code} {r.output[-200:]}",
+        )
+        _garante(not _ESCAPES, f"conexões de saída: {_ESCAPES}")
+    finally:
+        _instalar_duble()
+    # Desvínculo do e1 sem a marca manual: a sincronização não o devolve ao e1 (FR-005).
+    with app.app_context():
+        db.session.execute(
+            text(
+                "UPDATE clicksign_documentos SET vinculo_origem = NULL, vinculo_motivo = NULL "
+                "WHERE envelope_id = :e"
+            ),
+            {"e": estado["env"]["e1"]},
+        )
+        db.session.commit()
+    conta.mudar(
+        estado["env"]["e1"], status="running", quando=datetime.combine(estado["hoje"], time(16, 0))
+    )
+    _sincronizar(desde=_d(-1))
+    _garante(
+        _doc("e1")[3] != estado["ids"]["e1"], f"religou ao e1 apesar do desvínculo → {_doc('e1')}"
+    )
+
+
+def cen_34() -> None:
+    """FINANCEIRO não desliga nem descarta; CASTING não recebe o bloco comercial (DEVE falhar)."""
+    fin = estado["financeiro"]
+    for acao in ("desligar", "descartar"):
+        r = _chamar(fin, "post", f"/api/contratos/{_doc('a')[0]}/{acao}")
+        _garante(r.status_code == 403, f"financeiro {acao} → {r.status_code}")
+    r = _chamar(estado["casting"], "get", "/api/dashboard")
+    _garante(
+        r.status_code == 200 and r.get_json().get("comercial") is None,
+        "casting recebeu o bloco comercial",
+    )
+
+
+def cen_35() -> None:
+    """Aviso durante uma passada em curso pede repetição; ao soltar, a repetição acontece (C-14)."""
+    from app.contratos import sincronizar_ops
+
+    with app.app_context():
+        db.session.execute(
+            text("UPDATE site_settings SET clicksign_sync_at = :a WHERE id = 1"), {"a": now_sp()}
+        )
+        db.session.commit()
+    r = _aviso({"event": {"name": "sign"}})
+    _garante(r.status_code == 200, f"aviso → {r.status_code}")
+    pendente = _no_banco("SELECT clicksign_sync_pendente FROM site_settings WHERE id = 1")[0]
+    _garante(pendente is True, "o aviso com passada em curso não pediu repetição")
+    with app.app_context():
+        db.session.execute(text("UPDATE site_settings SET clicksign_sync_at = NULL WHERE id = 1"))
+        db.session.commit()
+        resultado = sincronizar_ops.sincronizar(desde=_d(-1))
+    _garante(resultado.get("passadas") == 2, f"a repetição não aconteceu: {resultado}")
 
 
 # ── Limpeza ──────────────────────────────────────────────────────────────────────────────────────
@@ -1107,6 +1399,16 @@ CENARIOS = [
     ("23. trava: nada sai da máquina", cen_23),
     ("24. sem credencial: desligada", cen_24),
     ("25. agrupar e sumiço do Google", cen_25),
+    ("26. anexo que falhou e contrato antigo ligado à mão recebem o PDF", cen_26),
+    ("27. 'outro' ligado à mão vale para a venda", cen_27),
+    ("28. remarcação vencida não volta a assinado", cen_28),
+    ("29. desligar tira o PDF; religar reanexa", cen_29),
+    ("30. ligar/descartar fora de a conferir: 409 alterado", cen_30),
+    ("31. PDF anexado à mão vira o anexo, sem duplicar", cen_31),
+    ("32. venda cancelada não recebe PDF", cen_32),
+    ("33. travas do baixar e do comando; desvínculo sem marca manual", cen_33),
+    ("34. FINANCEIRO desligar/descartar e CASTING no painel (DEVE falhar)", cen_34),
+    ("35. aviso durante a passada pede repetição", cen_35),
 ]
 
 
@@ -1127,7 +1429,7 @@ def main() -> int:
                 cenario(nome, fn)
     finally:
         with app.app_context():
-            cenario("26. limpeza", limpar)
+            cenario("36. limpeza", limpar)
 
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(

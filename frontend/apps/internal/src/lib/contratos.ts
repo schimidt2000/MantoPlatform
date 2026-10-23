@@ -113,6 +113,8 @@ function useInvalidarContrato(eventId?: number) {
   return () => {
     void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     void queryClient.invalidateQueries({ queryKey: ["contratos-a-conferir"] });
+    // A coluna Contrato de /vendas lê a mesma situação (FR-019).
+    void queryClient.invalidateQueries({ queryKey: ["vendas-dashboard"] });
     if (eventId !== undefined) void queryClient.invalidateQueries({ queryKey: ["event", eventId] });
     else void queryClient.invalidateQueries({ queryKey: ["event"] });
   };

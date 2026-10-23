@@ -937,6 +937,8 @@ class SiteSetting(db.Model):
     # Aviso que chegou com uma passada em curso: a passada repete antes de soltar o lock, para a
     # assinatura não esperar a conferência de 30 min.
     clicksign_sync_pendente = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    # Fim da última passada: a periódica dos 3 workers pula se outra acabou de rodar.
+    clicksign_sync_fim = db.Column(db.DateTime, nullable=True)
     # ── Tags NFC: moldura e vídeo de abertura (feature 297) ──────────────────
     # Dois arquivos ÚNICOS do sistema, guardados em `nfc_media/sistema/` com nome fixo, no mesmo
     # molde de `logo_path` acima: o banco guarda o caminho, o disco guarda o arquivo.

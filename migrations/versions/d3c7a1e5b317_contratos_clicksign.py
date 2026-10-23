@@ -1,4 +1,4 @@
-"""Contratos da ClickSign ligados à venda: três tabelas e sete colunas (feature 317).
+"""Contratos da ClickSign ligados à venda: três tabelas e oito colunas (feature 317).
 
 A Manto passa a espelhar os envelopes da conta ClickSign (`clicksign_documentos`), a lembrar o par
 documento × venda que a comercial desligou (`clicksign_desvinculos`) e cada "Cobrar contrato"
@@ -35,6 +35,7 @@ _COLUNAS_DO_SITE_SETTING = (
     sa.Column("clicksign_sync_at", sa.DateTime(), nullable=True),
     sa.Column("clicksign_sync_cursor", sa.DateTime(), nullable=True),
     sa.Column("clicksign_sync_pendente", sa.Boolean(), nullable=False, server_default=sa.false()),
+    sa.Column("clicksign_sync_fim", sa.DateTime(), nullable=True),
 )
 
 
