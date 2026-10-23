@@ -17,10 +17,17 @@ import { invalidarFinanceiro } from "./financeiro";
  * comprovante falhar logo depois de "evento criado".
  */
 
-export function enviarComprovante(eventId: number, { amount, file }: AddPaymentInput) {
+export function enviarComprovante(
+  eventId: number,
+  { amount, file, contaId, anexarA, forcarNovo }: AddPaymentInput,
+) {
   const form = new FormData();
   form.append("amount", String(amount));
   form.append("file", file);
+  // Feature 318: a conta que recebeu (opcional) e a resposta à "possível duplicata" com o PIX.
+  if (contaId) form.append("conta_id", String(contaId));
+  if (anexarA) form.append("anexar_a", String(anexarA));
+  if (forcarNovo) form.append("forcar_novo", "1");
   return apiFetch<EventoDetalhe>(`/api/events/${eventId}/payments`, { method: "POST", body: form });
 }
 
@@ -124,6 +131,21 @@ export function useToggleContractSigned(eventId: number) {
 export interface AddPaymentInput {
   amount: number;
   file: File;
+  /** Feature 318: conta da empresa que recebeu (opcional). */
+  contaId?: number | null;
+  /** Feature 318: anexa o arquivo ao pagamento de PIX que já entrou (não cria outro). */
+  anexarA?: number | null;
+  /** Feature 318: "Não, é outro pagamento" — cria mesmo com PIX de mesmo valor na venda. */
+  forcarNovo?: boolean;
+}
+
+/** O pagamento de PIX que o 409 `possivel_duplicata` devolve (feature 318). */
+export interface PossivelDuplicata {
+  id: number;
+  valor: string;
+  conta: string | null;
+  recebido_em: string | null;
+  pagador: string | null;
 }
 
 export function useAddPayment(eventId: number) {

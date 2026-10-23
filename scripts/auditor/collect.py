@@ -154,6 +154,9 @@ def collect_items(cur, win: tuple[datetime, datetime]) -> list[dict]:
           JOIN calendar_events e ON e.id = p.event_id
           LEFT JOIN clients c ON c.id = e.client_id
          WHERE p.created_at >= %s AND p.created_at < %s
+           -- Feature 318: pagamento de PIX lido do aviso do banco nasce sem arquivo — a prova é o
+           -- aviso autenticado, não há comprovante a ler (vale também antes da migration).
+           AND p.file_path IS NOT NULL
          ORDER BY p.id
         """,
         (a, b),

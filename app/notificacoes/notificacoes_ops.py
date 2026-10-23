@@ -61,6 +61,12 @@ KIND_EVENTO_CANCELADO = "evento.cancelado"
 KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
 KIND_EVENTO_PEDIDO_CANCELAMENTO = "evento.pedido_cancelamento"
 KIND_EVENTO_PEDIDO_DECIDIDO = "evento.pedido_decidido"
+# Feature 318: o PIX lido do aviso do banco. Os destinatários reais vão explícitos pelo produtor
+# (o vendedor da venda); o catálogo é o padrão de quem decide.
+KIND_PIX_LIGADO = "pix.ligado"
+KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
+KIND_PIX_REPASSE = "pix.repasse_infinitepay"
+KIND_PIX_SEM_COMPROVANTE = "pix.sem_comprovante"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -81,6 +87,13 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # pela lista explícita (`destinatarios=[autor]`), nunca por papel.
     KIND_EVENTO_PEDIDO_CANCELAMENTO: (RoleName.SUPERADMIN,),
     KIND_EVENTO_PEDIDO_DECIDIDO: (),
+    # Feature 318: "É esta?" é do vendedor (vai explícito) e do Financeiro; o repasse da
+    # InfinitePay, só de quem cuida do dinheiro — a comercial não é acionada (decisão do dono).
+    KIND_PIX_LIGADO: (RoleName.COMERCIAL,),
+    KIND_PIX_PARA_CONFERIR: (RoleName.FINANCEIRO,),
+    KIND_PIX_REPASSE: (RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    # A tarefa "incluir o comprovante do PIX" é do Financeiro (decisão do dono, 23/10).
+    KIND_PIX_SEM_COMPROVANTE: (RoleName.FINANCEIRO,),
 }
 
 SEVERIDADES = ("info", "urgent")

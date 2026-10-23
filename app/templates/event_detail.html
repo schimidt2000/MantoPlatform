@@ -2077,7 +2077,11 @@ document.querySelectorAll('input[name="makeup_location"]').forEach(radio => {
       {% if payments %}
         {% for p in payments %}
           <div class="flex-between gap-8" style="padding: 8px 0; border-bottom: 1px solid var(--line);">
+            {% if p.file_path %}
             <a href="{{ p.file_path }}" target="_blank" class="btn btn-sm btn-secondary">Ver comprovante</a>
+            {% else %}
+            <span class="meta">PIX{% if p.conta %} · {{ p.conta.apelido }}{% endif %}</span>
+            {% endif %}
             <div style="display:flex; align-items:center; gap:6px;">
               <span class="meta">R$ {{ (p.amount or 0) | brl }}</span>
               {% if is_superadmin %}

@@ -326,6 +326,17 @@ ato (306), não da vaga de hoje.
       da 299, e a linha que sai da EducaManto não leva a data da realização para o ramo comum.
     - **Cortesia ou permuta nunca comissiona** (dono, 15/09): a sincronização não cria linha e
       cancela a `a_pagar`, mesmo na cortesia antiga que tem valor gravado.
+12b. **PIX recebido → venda** (feature 318, `app/financeiro/pix_ops.py`). O pagamento lido do aviso do banco é
+    um `event_payments` como qualquer outro (`origem='pix_email'`, sem arquivo), gravado **sempre** pelo núcleo de
+    comprovante (`gravar_comprovante_no_grupo`, trava do grupo e recálculo da 306) — a soma do recebido não muda de
+    fórmula. Liga sozinho só com **uma** venda aberta de valor forte (saldo, sinal, parcela descoberta, total; ao
+    centavo) **e** nome do pagador batendo (≥ 2 termos ou semelhança ≥ 0,85) **ou** "já pagou antes" (PIX do mesmo
+    pagador ligado à venda/cliente), **e** DKIM do Inter aprovado pelo `mx.google.com` com remetente exato.
+    Conciliação com comprovante manual **nunca** é automática (sinal e saldo de 50% têm valor igual) e não cruza
+    contas. "Prime Dreams" no MEI: repasse do Inter Prime (par de 1–3 PIX da Prime em 3 dias, cada par usado uma vez)
+    é `conta_propria`; o resto é repasse da InfinitePay ("É esta?" só do Financeiro, pago pelo valor cobrado e com
+    a conta InfinitePay). Comprovante manual igual a PIX sem arquivo → 409 `possivel_duplicata` (sob a trava);
+    pagamento ligado a PIX não se exclui, se desfaz. O padrão "liga sozinho / É esta?" é o mesmo da 298 e da 317.
 13. **O sync nunca apaga evento com dinheiro** (feature 303, `sumico_ops.preso_ao_evento`): segura o
     evento ter venda, qualquer comprovante (mesmo sem valor), contrato, escala com talento — menos,
     em SHOW, a vaga automática do técnico de som com o técnico padrão — ou pertencer a grupo

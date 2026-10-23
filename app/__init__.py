@@ -491,6 +491,49 @@ def _start_email_bounce_sweep(app):
     app.logger.info(f"[email-bounce] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_pix_email_sweep(app):
+    """Thread que lê os avisos de PIX recebido do Inter e liga cada PIX à venda (feature 318).
+
+    Mesma caixa e mesma credencial do bounce (219), **só leitura**. Uma rodada por ciclo entre os
+    workers (`pix_email_ops.claim_sweep`). Dois interruptores: `PIX_EMAIL_SWEEP_ENABLED` (desligado
+    onde o e-mail é suprimido — o banco local, espelho com credencial real) e o da tela
+    (`SiteSetting.pix_email_ativo`, nasce desligado; lido a cada rodada dentro de `rodada()`).
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+    if not app.config.get("PIX_EMAIL_SWEEP_ENABLED", True):
+        app.logger.info("[pix-email] leitura desativada por configuração")
+        return
+    if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
+        app.logger.warning("[pix-email] MAIL_USERNAME/MAIL_PASSWORD ausentes — leitura desativada")
+        return
+
+    INTERVAL = app.config.get("PIX_EMAIL_SWEEP_INTERVAL", 900)
+
+    def _loop():
+        import time
+        time.sleep(75)  # depois do bounce: não abrir duas conexões IMAP no mesmo instante
+        from app.financeiro import pix_email_ops
+        while True:
+            try:
+                with app.app_context():
+                    if pix_email_ops.claim_sweep(INTERVAL):
+                        resumo = pix_email_ops.rodada()
+                        if resumo.get("novos") or resumo.get("religados"):
+                            app.logger.info("[pix-email] rodada: %s", resumo)
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[pix-email] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="pix-email")
+    t.start()
+    app.logger.info(f"[pix-email] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def _start_invite_reminders(app):
     """Thread que cobra confirmação de convite por e-mail (feature 231).
 
@@ -987,6 +1030,9 @@ def create_app():
 
         # ── Devoluções de email viram fila de contato do casting ───
         _start_email_bounce_sweep(app)
+
+        # ── PIX recebido (aviso do Inter) ligado à venda (feature 318) ──
+        _start_pix_email_sweep(app)
 
         # ── Cobrança de confirmação de convite ─────────────────────
         _start_invite_reminders(app)

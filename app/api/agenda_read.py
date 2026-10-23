@@ -24,9 +24,14 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import or_
+
 from app.constants import (
     EVENT_TYPE_SHOW,
     EVENT_TYPE_VIRTUAL,
+    PIX_ESTADO_LIGADO_AUTO,
+    PIX_ESTADOS_LIGADOS,
+    PIX_SUGESTAO_REPASSE,
     SITUACAO_EXCLUSAO_SOLICITADA,
     RoleName,
     now_sp,
@@ -34,6 +39,7 @@ from app.constants import (
 from app.models import (
     CalendarEvent,
     ClientFeedback,
+    ContaRecebimento,
     EventContract,
     EventInvoice,
     EventLog,
@@ -41,6 +47,7 @@ from app.models import (
     EventRating,
     EventReimbursement,
     OrcamentoHistory,
+    PixRecebido,
     SiteSetting,
     SpecialExpense,
     User,
@@ -48,6 +55,30 @@ from app.models import (
 
 if TYPE_CHECKING:
     from app.financeiro.cobranca_ops import VendaResumo
+
+
+def _pix_dos_pagamentos(ids: list[int]) -> dict[int, dict]:
+    """O PIX que criou ou conciliou cada pagamento (feature 318), para a tela dizer de onde veio."""
+    if not ids:
+        return {}
+    alvo = set(ids)
+    achados: dict[int, dict] = {}
+    candidatos = PixRecebido.query.filter(
+        PixRecebido.estado.in_(PIX_ESTADOS_LIGADOS),
+        or_(PixRecebido.event_payment_id.in_(ids), PixRecebido.tipo_sugestao == PIX_SUGESTAO_REPASSE),
+    ).all()
+    for pix in candidatos:
+        for pid in [pix.event_payment_id, *(pix.pagamentos_extra or [])]:
+            if pid in alvo:
+                achados[pid] = {
+                    "id": pix.id,
+                    "pagador": pix.pagador_nome,
+                    "recebido_em": pix.recebido_em.isoformat(timespec="seconds"),
+                    "automatico": pix.estado == PIX_ESTADO_LIGADO_AUTO,
+                    "decidido_por": pix.decidido_por.name if pix.decidido_por else None,
+                    "conta": pix.conta.apelido if pix.conta else None,
+                }
+    return achados
 
 
 def _money(value: Any) -> float | None:
@@ -1245,15 +1276,26 @@ def serialize_event_detail(
         # comprovante (`POST /events/<id>/payments` sempre foi `_CAN_EDIT_EVENT`, que inclui
         # Comercial). As ações destrutivas continuam restritas: editar valor e excluir são
         # superadmin, checado no endpoint e escondido pelo React via `flags.is_superadmin`.
+        pix_por_pagamento = _pix_dos_pagamentos([p.id for p in payments])
         data["pagamentos"] = {
             "items": [
                 {
                     "id": p.id,
                     "amount": _money(p.amount),
+                    # Feature 318: NULL no pagamento de PIX ainda sem arquivo (a prova é o aviso).
                     "file_path": p.file_path,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "origem": p.origem,
+                    "conta_id": p.conta_id,
+                    "conta": p.conta.apelido if p.conta is not None else None,
+                    "pix": pix_por_pagamento.get(p.id),
                 }
                 for p in payments
+            ],
+            # Feature 318: as contas para o campo opcional "Conta que recebeu" do comprovante.
+            "contas": [
+                {"id": c.id, "apelido": c.apelido}
+                for c in ContaRecebimento.query.filter_by(ativa=True).order_by(ContaRecebimento.id)
             ],
             "received_total": _money(sum((p.amount or 0 for p in payments), Decimal("0"))),
             # Feature 299: os comprovantes dos OUTROS eventos do grupo, um resumo por evento — o

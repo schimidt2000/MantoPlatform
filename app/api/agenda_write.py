@@ -33,10 +33,11 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error, trava_do_cancelado
-from app.constants import CLIENT_RELATION_TIPOS, RoleName
+from app.constants import CLIENT_RELATION_TIPOS, EVENT_PAYMENT_ORIGEM_PIX, RoleName
 from app.models import (
     CalendarEvent,
     Client,
+    ContaRecebimento,
     EventContract,
     EventLog,
     EventObservation,
@@ -2171,6 +2172,25 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
     return _event_detail_json(event)
 
 
+def _int_or_none(valor: Any) -> int | None:
+    try:
+        return int(valor) if valor not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _pagamento_de_pix_sem_arquivo_do_grupo(event: CalendarEvent, pagamento: EventPayment) -> bool:
+    from app.financeiro.cobranca_ops import principal_da_venda
+
+    principal = principal_da_venda(event)
+    ids = {principal.id, *(e.id for e in principal.satellites or [])}
+    return (
+        pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX
+        and not pagamento.file_path
+        and pagamento.event_id in ids
+    )
+
+
 @api_bp.route("/events/<int:event_id>/payments", methods=["POST"])
 @api_login_required
 def api_add_payment(event_id: int) -> Any:
@@ -2190,11 +2210,46 @@ def api_add_payment(event_id: int) -> Any:
 
     from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
+    # Feature 318: o PIX lido do aviso do banco pode já ter registrado este pagamento (sem arquivo).
+    # Sem a resposta explícita da tela ("anexar_a" ou "forcar_novo"), um comprovante do mesmo valor
+    # é devolvido como possível duplicata — contar dobrado faria a cobrança parar de cobrar.
+    conta_id = _int_or_none(request.form.get("conta_id"))
+    anexar_a = _int_or_none(request.form.get("anexar_a"))
+    if anexar_a is not None:
+        # Decisão do dono (23/10): incluir o comprovante do PIX é de Comercial, Financeiro e
+        # Superadmin (o POST de comprovante comum segue com `_CAN_EDIT_EVENT`).
+        if not _can_manage_sale():
+            return json_error("Sem permissão", 403)
+        pagamento = db.session.get(EventPayment, anexar_a)
+        if pagamento is None or not _pagamento_de_pix_sem_arquivo_do_grupo(event, pagamento):
+            return json_error("Esse pagamento não aceita anexo.", 400, fields={"anexar_a": "Inválido"})
+        try:
+            gravar_comprovante_no_grupo(
+                event, "anexar", actor=current_user, arquivo=file_storage, comprovante=pagamento
+            )
+        except CancelValidationError as exc:
+            db.session.rollback()
+            return _recusa_do_cancelado(exc)
+        except DBAPIError as exc:
+            return _recusa_do_banco(exc)
+        _log_anexo(event.id, f"Anexou o comprovante ao pagamento de PIX de R$ {pagamento.amount}")
+        db.session.commit()
+        return _event_detail_json(event), 200
+    if conta_id is not None and db.session.get(ContaRecebimento, conta_id) is None:
+        return json_error("Conta não encontrada.", 400, fields={"conta_id": "Inválida"})
+
     # Feature 306 (decisão (c)): o núcleo trava o grupo, recusa o cancelado antes de salvar o
-    # arquivo, grava e refaz o principal cancelado pelo pago do grupo.
+    # arquivo, grava e refaz o principal cancelado pelo pago do grupo. Feature 318: sob a mesma
+    # trava, devolve 409 `possivel_duplicata` se um PIX de mesmo valor já entrou (`checar_pix`).
     try:
         gravar_comprovante_no_grupo(
-            event, "adicionar", actor=current_user, valor=amount, arquivo=file_storage
+            event,
+            "adicionar",
+            actor=current_user,
+            valor=amount,
+            arquivo=file_storage,
+            conta_id=conta_id,
+            checar_pix=request.form.get("forcar_novo") != "1",
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -2254,6 +2309,16 @@ def api_delete_payment(payment_id: int) -> Any:
     if not _is_superadmin():
         return json_error("Apenas o Superadmin pode excluir comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
+    # Feature 318: pagamento ligado a um PIX lido do banco sai pelo "Desfazer" da tela PIX recebidos
+    # — excluir aqui deixaria o PIX "ligado" sem dinheiro e fora da fila para sempre.
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        return json_error(
+            "Este pagamento veio de um PIX lido do banco: use \"Desfazer\" em PIX recebidos.",
+            409,
+            codigo="pagamento_de_pix",
+        )
 
     from sqlalchemy.exc import DBAPIError
 

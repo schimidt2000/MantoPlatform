@@ -1902,6 +1902,30 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 ---
 
+#### `/pix` — PIX recebidos *(feature 318)*
+- **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (item "PIX recebidos" no menu Comercial — a seção
+  Financeiro não aparece para a Comercial).
+- **Objetivo**: o PIX que cai no Inter (MEI e Prime) é lido do aviso do banco e liga sozinho à venda quando é
+  óbvio; quando há dúvida, espera aqui o "É esta?" de um clique.
+- **Faixa de saúde** no topo: leitura desligada, parada há mais de 1 hora ou com erro de acesso à caixa vira
+  alerta vermelho; abaixo, lidos/não entendidos/contas vistas nos últimos 7 dias.
+- **Abas**: "Para conferir (N)" — cartões com valor, pagador, conta, data e hora (selo vermelho quando o e-mail não
+  é autenticado pelo Inter) e até 3 vendas sugeridas com selos do motivo ("valor = saldo", "valor = sinal",
+  "nome bate", "já pagou antes", "comprovante já anexado"); botões "É esta", "Não é esta" (confirmação),
+  "Outra venda…" (combobox da busca da agenda) e "Não é de venda". Com comprovante já anexado do mesmo valor:
+  "É o comprovante já anexado" / "É outro pagamento". Repasse da InfinitePay (só Financeiro/Superadmin): grupos de
+  1–3 vendas no cartão com cobrado e taxa, "É esta"/"São estas". "Ligados (30 dias)" — selo automático/confirmado
+  e "Desfazer" (Financeiro/Superadmin).
+- **Aba "Sem comprovante (N)"** (decisão do dono, 23/10): cada PIX que já entrou como recebido e espera o PDF do banco, com "Incluir comprovante" (Comercial, Financeiro, Superadmin); o sino avisa o Financeiro e leva a esta aba (`/pix?aba=sem_comprovante`); na Home, linha "📎 N PIX sem comprovante — incluir o PDF do banco".
+- **Recebido por conta** (Financeiro/Superadmin): tabela conta × últimos 6 meses (mês de SP).
+- **Configuração da leitura** (Superadmin): ligar/desligar, número de cada conta, pagadores próprios.
+- **Home**: linha amarela "💸 N PIX para conferir — é de qual venda?" com "Conferir" (some com zero).
+- **Página do evento → Comercial → Comprovantes de pagamento**: o pagamento de PIX mostra "PIX · conta · data hora ·
+  de NOME" + selo; sem arquivo, "Anexar comprovante" põe o arquivo no mesmo pagamento; o campo opcional "Conta que
+  recebeu"; comprovante do mesmo valor de um PIX que já entrou abre "Esse comprovante é do PIX que já entrou?"
+  (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
+  valor já entrou por PIX — anexe pela página do evento".
+
 ### A.6 Financeiro
 
 #### `/financeiro` — Painel Financeiro *(reconstruído na feature 189)*

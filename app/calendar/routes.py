@@ -29,6 +29,7 @@ from .service import (
 )
 from .. import db
 from app.constants import (
+    EVENT_PAYMENT_ORIGEM_PIX,
     RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS, GCAL_KIND_KEY,
     EVENT_TYPE_SHOW,
 )
@@ -1141,6 +1142,12 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     ).first()
     if not payment:
         return
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        # Feature 318: o pagamento de um PIX lido do banco sai pelo "Desfazer" (ver a API).
+        flash('Este pagamento veio de um PIX lido do banco: use "Desfazer" em PIX recebidos.', "error")
+        return
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=current_user.name,
@@ -1154,30 +1161,59 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _add_payment_record(
-    event: CalendarEvent, *, amount: Decimal | None, file_storage
+    event: CalendarEvent,
+    *,
+    amount: Decimal | None,
+    file_storage,
+    sem_arquivo: bool = False,
+    conta_id: int | None = None,
 ) -> EventPayment | None:
     """Adiciona um comprovante de pagamento ao evento (feature 153).
 
-    Paridade com `_handle_add_payment`: exige valor E arquivo.
+    Paridade com `_handle_add_payment`: exige valor E arquivo — exceto o pagamento de PIX lido do
+    aviso do banco (feature 318, `sem_arquivo=True`), cuja prova é o próprio aviso.
 
     Args:
         event: evento ao qual o pagamento pertence.
         amount: valor recebido.
         file_storage: arquivo do comprovante (``FileStorage``).
+        sem_arquivo: pagamento de origem PIX, gravado sem arquivo.
+        conta_id: conta da empresa que recebeu (feature 318), opcional.
 
     Returns:
         O ``EventPayment`` criado, ou None se faltar valor válido ou arquivo (ausente/> 10 MB).
     """
     if not amount or amount <= 0:
         return None
+    if sem_arquivo:
+        payment = EventPayment(
+            event_id=event.id,
+            file_path=None,
+            amount=amount,
+            origem=EVENT_PAYMENT_ORIGEM_PIX,
+            conta_id=conta_id,
+        )
+        db.session.add(payment)
+        return payment
     file_path = _save_bounded_upload(
         file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
     )
     if not file_path:
         return None
-    payment = EventPayment(event_id=event.id, file_path=file_path, amount=amount)
+    payment = EventPayment(event_id=event.id, file_path=file_path, amount=amount, conta_id=conta_id)
     db.session.add(payment)
     return payment
+
+
+def _attach_payment_file(payment: EventPayment, *, file_storage) -> bool:
+    """Põe o arquivo num pagamento de PIX que nasceu sem arquivo (feature 318). O valor não muda."""
+    file_path = _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not file_path:
+        return False
+    payment.file_path = file_path
+    return True
 
 
 def _edit_payment_amount(payment: EventPayment, *, amount: Decimal | None) -> bool:

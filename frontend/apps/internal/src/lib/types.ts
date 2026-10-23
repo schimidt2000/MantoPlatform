@@ -178,6 +178,10 @@ export interface ComercialSummary {
    * bloco falhou (mostra o aviso, nunca "✓").
    */
   contratos?: ContratosResumo | null;
+  /** Feature 318: PIX lidos do aviso do banco esperando "É esta?" (`null` = a contagem falhou). */
+  pix_para_conferir?: { total: number } | null;
+  /** Feature 318 (23/10): pagamentos de PIX esperando o comprovante do banco — a tarefa. */
+  pix_sem_comprovante?: { total: number } | null;
 }
 
 /** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */

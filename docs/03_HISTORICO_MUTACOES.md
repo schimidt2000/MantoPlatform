@@ -165,6 +165,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **318-pix-recebido-por-email** | *(BRANCH, não mergeada)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
 | **317-contratos-clicksign** | *(pronta, não publicada)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
 | **315-pedido-de-cancelamento** | *(em branch, não publicada)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
 | **319-aviso-gasto-extra** | *(PRONTA 22/10, aguardando deploy)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
@@ -353,6 +354,64 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 318 — O PIX que cai no Inter se liga sozinho à venda   (318-pix-recebido-por-email · 2026-10-22 · migration `d318a4c9e2b7`)
+
+> **BRANCH, NÃO MERGEADA** (worktree `C:\tmp\mp318`). Nível 1. Plano aprovado pelo dono em 22/10; decisões dele em
+> `specs/318-pix-recebido-por-email/spec.md` (Clarifications). Merge e push só quando o dono pedir; antes do merge,
+> re-encadear o `down_revision` no head da `main` (a 310 e a 315 partem do mesmo `c5d2f7a9e306`).
+
+**O pedido.** "Recebo um e-mail para cada PIX que entra nas contas. Quero uma automação que leia esses e-mails e
+ligue o pagamento ao evento/cliente sozinha" — "a ideia é que o comercial não tenha esse trabalho". Motivação: o
+cruzamento extratos × ERP de 21/10 achou R$ 209 mil de dinheiro de cliente sem registro e nenhuma informação de
+qual conta recebeu (o MEI recebeu R$ 887 mil no período).
+
+**Viabilidade (22/10, só leitura).** Só o Inter manda aviso por PIX (`no-reply@inter.co`, "Pagamento Pix
+recebido": valor, nome do pagador, número da conta — sem CPF, E2E nem hora). InfinitePay e Cora não mandam. A caixa
+joao@mantoproducoes guarda tudo (337 avisos desde 01/06) e o ERP já a lê por IMAP (bounce da 219); a Prime chega
+lá por um **filtro do Gmail de joao@primedreams criado e confirmado em 22/10**. 357/357 avisos reais entendidos pelo
+leitor, todos com DKIM do Inter.
+
+**O que mudou.**
+- *Banco*: `contas_recebimento` (4 contas, sem número — o Superadmin preenche), `pix_recebidos` (um aviso por linha,
+  `message_id` único), `event_payments.origem/conta_id` e `file_path` NULL só na origem PIX (CHECK), 5 colunas em
+  `site_settings` (interruptor nasce desligado).
+- *Backend*: `pix_aviso` (leitor puro), `pix_ops` (regra e respostas), `pix_email_ops` (rodada, claim, reavaliação
+  por 7 dias, saúde), thread `pix-email` (15 min), `/api/pix*`, duplicata e `conta_id` no POST de comprovante (no
+  núcleo, sob a trava), núcleo de comprovante aceitando "Sistema" e pagamento sem arquivo; kinds `pix.*` no sino.
+- *Frontend*: `/pix` (fila, ligados com Desfazer, recebido por conta, saúde, configuração), item no menu Comercial,
+  linha na Home, pagamento de PIX + "Anexar comprovante" + "Conta que recebeu" + pergunta de duplicata no evento.
+
+**A regra** (invariante 12b do `docs/04`): liga sozinho só com uma venda aberta de valor forte **e** nome (≥ 2
+termos) ou "já pagou antes" **e** DKIM do Inter pelo `mx.google.com` com remetente exato; conciliação com
+comprovante manual sempre pergunta; "Prime Dreams" no MEI é repasse (da Prime: ignorado; da InfinitePay: "É esta?"
+do Financeiro, pago pelo valor cobrado na conta InfinitePay); sem candidata, ignorado (decisão do dono).
+
+**Verificação.** `verify_318.py` **36/36** (29 da spec + 27b + 6 da revisão adversarial; 4 "deve falhar"), primeira
+rodada em `verify_318_primeira_falha.txt` (1/30). Mutações acusadas (DKIM, outra conta, nome de um termo, duplicata
+no núcleo, repasse pela Comercial). `npm run typecheck` verde nas três SPAs. Tela aberta em `/pix`, Home e página
+do evento (confirmar, pergunta de duplicata → anexar). Migration: upgrade/downgrade/upgrade num clone do espelho
+(`manto_local_318` — o `manto_local` compartilhado está no head da 310).
+
+**Ensaio** (`ensaio_318.py`, caixa real só leitura, 334 PIX de 01/06 a 21/10, banco com rollback, gabarito de 21/10;
+só contagens): **0 ligação automática errada**. Sem ninguém responder o "É esta?": 41/248 PIX de venda ligam
+sozinhos (17%); respondendo o "É esta?" (cada confirmação ensina o "já pagou antes"): 69/248 (28%). Somando a fila
+com a venda certa entre as sugestões, ~81% dos PIX de venda ficam a zero ou um clique. **SC-002 (≥ 1/3 sozinho) não
+foi atingido**: o freio é o nome (só ~metade dos pagadores tem o nome da cliente) e valores repetidos entre vendas.
+O ensaio não teve o nome do sócio nos pagadores próprios nem os avisos históricos da Prime (o filtro é de 22/10).
+
+**Revisão adversarial.** 13 achados, todos corrigidos (e-mail forjado com domínio parecido passava como autenticado;
+conciliação podia engolir um pagamento de mesmo valor; nome de um termo; corrida comprovante × thread; exclusão de
+pagamento de PIX deixava o PIX órfão; repasse sem validação; par da Prime reusado; "LTDA"; anexar no cancelado;
+aviso que quebrava sumia; mês do resumo em UTC; auditor; edição do evento).
+
+**Decisão de 23/10 — o comprovante é tarefa, não PDF do e-mail.** O aviso do banco não traz as informações de fato
+nem prova que o PIX não foi estornado: o PIX entra como recebido e vira a tarefa "incluir o comprovante" — sino do
+Financeiro, aba "Sem comprovante" em `/pix`, linha na Home; Comercial, Financeiro e Superadmin incluem o PDF (o
+recebido não muda; a tarefa some do sino). `verify_318.py` **37/37** (cenário 36).
+
+**Depois do deploy (dono).** Em `/pix` → Configuração: número das contas Inter MEI e Inter Prime ("na conta …" do
+aviso), acrescentar o nome do sócio aos pagadores próprios, **ligar**; no dia seguinte, conferir a faixa de saúde e as
+primeiras ligações. Follow-up recomendado: link InfinitePay por venda (`docs/05` 148).
 ### 317 — O contrato da ClickSign se liga sozinho à venda e a comercial cobra em um clique   (317-contratos-clicksign · 2026-10-22 · migration `d3c7a1e5b317`)
 
 > **Pronta, não publicada.** Nível 1, worktree `C:\tmp\mp317`. Esteira completa (specify → clarify → plan

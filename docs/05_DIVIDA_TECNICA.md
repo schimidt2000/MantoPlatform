@@ -680,16 +680,27 @@ agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e n
 **Quitadas.** Nenhuma da lista; a 317 corrige de passagem as menções antigas à ClickSign "viva" em `docs/01`
 e `docs/02` (a integração do CRM tinha saído na 021).
 
-**Criadas.**
+**Criadas.** (151–156; nasceram 148–153 na branch e foram renumeradas no merge em lote de 23/10.)
 
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
-| 148 | **P3** | `render.yaml` / painel do Render | **`CLICKSIGN_ACCESS_TOKEN` nasce vazio em produção** (Princípio XIV): sem ele a integração fica desligada e a Home não mostra o painel (só ao Superadmin, com o aviso) | o dono cola o token "Plataforma Manto" no `manto-backend` no deploy (quickstart §3) |
-| 149 | **P4** | `site_settings.clicksign_token` / `clicksign_sandbox` | colunas inertes desde a 021 (a 317 lê o token só da env); confundem quem lê o schema | migração destrutiva com ensaio, quando houver outra mexida em `site_settings` |
-| 150 | **P4** | `app/contratos/sincronizar_ops.candidatos` | o vínculo depende do nome que os fluxos da ClickSign montam; mudar a personalização do nome no painel faz tudo cair em "A conferir" sem aviso | quando a Manto gerar o contrato pela API (feature própria, decisão 4 do dono), gravar o id da venda no `metadata` do envelope e casar por ele |
-| 151 | **P5** | `ClicksignDocumento` × contratos de artista | o contrato de prestação de serviços artísticos é classificado e ignorado | ligar ao talento pelo telefone do signatário, se o dono quiser |
-| 152 | **P5** | migration `d3c7a1e5b317` × `e8b4a1c7d310` (310) | as duas partem de `c5d2f7a9e306`; a que for mergeada por último precisa reencadear o `down_revision` | conferir `flask db heads` no merge |
-| 153 | **P5** | `app/contratos/situacao_ops.contratos_da_home` | `sugestoes()` consulta por documento a conferir (poucos, mas é N consultas) | lote único por intervalo de datas se a lista crescer |
+| 151 | **P3** | `render.yaml` / painel do Render | **`CLICKSIGN_ACCESS_TOKEN` nasce vazio em produção** (Princípio XIV): sem ele a integração fica desligada e a Home não mostra o painel (só ao Superadmin, com o aviso) | o dono cola o token "Plataforma Manto" no `manto-backend` no deploy (quickstart §3) |
+| 152 | **P4** | `site_settings.clicksign_token` / `clicksign_sandbox` | colunas inertes desde a 021 (a 317 lê o token só da env); confundem quem lê o schema | migração destrutiva com ensaio, quando houver outra mexida em `site_settings` |
+| 153 | **P4** | `app/contratos/sincronizar_ops.candidatos` | o vínculo depende do nome que os fluxos da ClickSign montam; mudar a personalização do nome no painel faz tudo cair em "A conferir" sem aviso | quando a Manto gerar o contrato pela API (feature própria, decisão 4 do dono), gravar o id da venda no `metadata` do envelope e casar por ele |
+| 154 | **P5** | `ClicksignDocumento` × contratos de artista | o contrato de prestação de serviços artísticos é classificado e ignorado | ligar ao talento pelo telefone do signatário, se o dono quiser |
+| 155 | **P5** | migration `d3c7a1e5b317` × `e8b4a1c7d310` (310) | as duas partem de `c5d2f7a9e306`; a que for mergeada por último precisa reencadear o `down_revision` | conferir `flask db heads` no merge |
+| 156 | **P5** | `app/contratos/situacao_ops.contratos_da_home` | `sugestoes()` consulta por documento a conferir (poucos, mas é N consultas) | lote único por intervalo de datas se a lista crescer |
+## Baixa da feature 318-pix-recebido-por-email (2026-10-22, branch — não mergeada)
+
+**Criadas.** (157–161; nasceram 148–152 na branch e foram renumeradas no merge em lote de 23/10.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 157 | **P3** | InfinitePay fora da loja (cartão/link) | não manda aviso por e-mail; a 318 só vê o repasse manual ao MEI ("Prime Dreams"), que é paliativo ("É esta?" do Financeiro, sem nome, com taxa) | link de pagamento InfinitePay gerado pelo ERP para cada venda (`order_nsu` = venda), no webhook da 205/310 — depois da 310 |
+| 158 | **P4** | `EventInstallment.received` | nenhum código marca a parcela como recebida; a 318 trata como "não coberta" a parcela que o recebido acumulado não cobre (mesma régua do vencimento) | marcar `received` pelo recebido do grupo, ou tirar a coluna |
+| 159 | **P4** | `pix_recebidos` sem venda | o dono escolheu ignorar (sem fila); os R$ 209 mil "sem registro" de 21/10 continuariam sem tela | tela "PIX sem venda" para o Financeiro classificar (venda esquecida, aporte, empréstimo) |
+| 160 | **P4** | resumo por conta (`pix_ops.resumo_por_conta`) | agrupa pelo mês do registro do pagamento (`created_at`), não do dinheiro; comprovante manual sem conta cai em "Sem conta informada" | data do pagamento no `EventPayment` e conta obrigatória no manual, quando o dono decidir |
+| 161 | **P5** | `fetch_messages` (`imap_client.py`) | busca uma mensagem por vez (`FETCH` por id): 3 dias de avisos são segundos, mas o ensaio de 145 dias leva ~7 min | `FETCH` em lote (`1:n`) |
 
 ## Baixa da correção 316-tom-dos-textos (2026-10-22, branch)
 
