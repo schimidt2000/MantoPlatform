@@ -15,7 +15,7 @@ espelho se refaz com `flask clicksign-sincronizar`, os outros dois não voltam. 
 anexados viram `event_contracts` comuns e ficam.
 
 Revision ID: d3c7a1e5b317
-Revises: c5d2f7a9e306
+Revises: d8b4e15f2c31
 Create Date: 2026-10-22
 """
 
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d3c7a1e5b317"
-down_revision = "c5d2f7a9e306"
+down_revision = "d8b4e15f2c31"
 branch_labels = None
 depends_on = None
 

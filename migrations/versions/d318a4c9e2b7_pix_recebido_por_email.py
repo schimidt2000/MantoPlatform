@@ -23,7 +23,7 @@ pagamentos de origem PIX sem arquivo (o NOT NULL não volta com eles) — o sald
 subir.
 
 Revision ID: d318a4c9e2b7
-Revises: c5d2f7a9e306
+Revises: d3c7a1e5b317
 Create Date: 2026-10-22
 """
 
@@ -31,7 +31,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d318a4c9e2b7"
-down_revision = "c5d2f7a9e306"
+down_revision = "d3c7a1e5b317"
 branch_labels = None
 depends_on = None
 
