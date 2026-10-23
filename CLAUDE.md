@@ -114,9 +114,14 @@ conflito, ela prevalece). Como rodar, publicar e operar: `DEVELOPMENT.md`.
 
 ## 5. Código
 
-Regras de Python, TypeScript e UI: constituição §II, §V, §X–§XII — não repetidas aqui.
+Regras de Python, TypeScript e UI: constituição §II, §V, §X–§XII e §XV — não repetidas aqui.
 Comentário explica o PORQUÊ, em pt-BR. Contrato de erro da API é o envelope de `json_error`
 (`docs/00` §5).
+
+**Antes de escrever qualquer texto que o usuário lê** (botão, rótulo, toast, estado vazio, e-mail,
+PDF, mensagem de erro da API), leia a constituição §XV. Ela traz o tom de cada superfície (interno
+operacional, público lúdico e claro, portal cordial), o glossário ("Inserir comprovante",
+"Situação", Excluir × Remover) e o que um ajuste de texto não toca.
 
 ## 6. Documentação viva (ao fechar o ciclo)
 

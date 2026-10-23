@@ -1,16 +1,14 @@
 <!-- Sync Impact Report
-Version change: 2.2.0 → 3.0.0 (MAJOR: Princípio VI redefinido como esteira em dois níveis com Regra
-Zero de numeração; Portões de Qualidade reescritos; seção "Operação e Deploy (Render)" criada;
-Governança completa)
-Modified principles: II (ruff e comentários), III (camadas reais, sem repositório; Jinja legado
-qualificado; registros obrigatórios), IV (portões no lugar de "testes e tsc"), VI (esteira em dois
-níveis), VII (a constituição também é Living Spec), VIII (verify_NNN.py em specs/NNN-nome/, contra
-manto_local, antes do núcleo)
-Added sections: XIII Autorização explícita em toda rota de API; XIV Configuração com default real e
-efeito externo travado; Operação e Deploy (Render); Governança (emenda, versionamento, conformidade)
-Removed sections: nenhuma (o portão do docs/changelog.html saiu — arquivo congelado e arquivado)
-Templates requiring updates: spec/plan/tasks/checklist adaptados na mesma rodada (feature 296)
-Follow-up TODOs: nenhum
+Version change: 3.0.0 → 3.1.0 (MINOR: princípio novo XV — texto que o usuário lê, com tom por
+superfície e glossário único; portão novo "texto revisado pelo XV")
+Modified principles: V (redação: "Salvando…", "excluir, remover", mensagens de erro apontam para o XV)
+Added sections: XV Texto que o usuário lê: tom por superfície e vocabulário único (correção 316b,
+a partir da revisão de 505 textos da feature 316)
+Removed sections: nenhuma
+Templates requiring updates: plan-template (linha XV no Constitution Check), checklist-template
+(portão CHK010), tasks-template (tarefa de polimento) — atualizados na mesma rodada; CLAUDE.md §5 e
+docs/00 §5 ganham o ponteiro
+Follow-up TODOs: caixa do menu lateral e dos títulos de módulo (dívida 146 do docs/05)
 -->
 # Constituição da Plataforma Manto
 
@@ -97,17 +95,17 @@ Toda interface segue o padrão visual moderno (Tailwind + shadcn/ui), fala com o
 * **Nenhum botão fica "morto" ao ser clicado (NÃO-NEGOCIÁVEL)**: todo botão que dispara uma ação
   (salvar, criar, enviar, sincronizar, aprovar, excluir — rápida ou lenta) DEVE mudar de aparência
   de forma visível ao ser clicado (spinner interno do shadcn/ui, opacidade reduzida, texto
-  "Salvando...", estado `disabled`) até a resposta da API chegar. "Cliquei e não vi nada acontecer"
+  "Salvando…", estado `disabled`) até a resposta da API chegar. "Cliquei e não vi nada acontecer"
   é sempre um bug de UI. Um clique a mais nunca pode criar registro duplicado.
 * **Nunca limpar o que o usuário preencheu**: um erro de validação da API JAMAIS apaga os dados já
   digitados no formulário React. O formulário preserva os estados e aponta o(s) campo(s) com
   problema (`ApiRequestError.fields`).
 * **Falha de validação sempre tem feedback visível no campo**: ao bloquear um envio,
   destaque/realce o(s) campo(s) faltante(s) e leve o foco até ele. Bloquear em silêncio é proibido.
-* Ações destrutivas (deletar, remover) exigem confirmação via `Dialog`/`ConfirmDialog` do
+* Ações destrutivas (excluir, remover) exigem confirmação via `Dialog`/`ConfirmDialog` do
   `@manto/ui`.
 * Mensagens de erro são amigáveis e exibidas via Toasts/Alerts em pt-BR — nunca expor stack trace
-  ou erros brutos do banco ao usuário final.
+  ou erros brutos do banco ao usuário final. A redação de todo texto da tela segue o Princípio XV.
 
 ### VI. Spec-Driven Development em dois níveis (NÃO-NEGOCIÁVEL)
 Nenhuma mudança começa direto no código. O repositório pratica **dois níveis**; os dois têm pasta
@@ -241,6 +239,79 @@ Uma mudança de estado visual sem transição vira um "tranco".
   (localhost = não escreve) e o escape explícito `*_ALLOW_LOCAL_*=true`, **no mesmo commit** da
   feature — `manto_local` é espelho da produção e traz token e credenciais reais.
 
+### XV. Texto que o usuário lê: tom por superfície e vocabulário único
+Todo texto que chega a alguém segue o tom da superfície e o glossário abaixo: rótulo, botão,
+título, placeholder, estado vazio, toast, diálogo, texto de ajuda, e-mail (assunto e corpo), PDF,
+mensagem que a equipe copia e mensagem de erro da API (`json_error`, `fields`, exceção de domínio
+repassada à tela). Texto largado ("Colocar comprovante", "Nada aqui", "Pronto.") é defeito de UI,
+como botão morto. A regra nasceu da revisão de 505 textos da feature 316 (`docs/03` 316).
+
+**Antes de escrever ou trocar um texto, leia a tela inteira**: o título da seção, os botões ao lado,
+o que o usuário acabou de fazer. O texto novo tem de fazer sentido ali e usar o mesmo verbo do
+resto da tela. Uma mensagem de erro continua dizendo o que aconteceu e o que fazer.
+
+**Tom por superfície.**
+* **App interno** (`frontend/apps/internal`; e-mail e alerta para a equipe; erro da API que chega ao
+  interno): **operacional, eficaz e claro**.
+  * Imperativo curto com a ação na frente: "Inserir comprovante", "Informe o motivo", "Selecione o
+    talento".
+  * Confirmação é fato: "Ficha salva na base de clientes.", sem "Pronto.", "Tudo certo", "Feito!" e
+    sem exclamação.
+  * Erro no padrão "Não foi possível X. Tente novamente.".
+  * Alarme vira instrução: "Publique o primeiro post.", não "precisa de conteúdo urgente".
+  * Saem: "pra", "tá", "dá para"/"não dá para" (→ "é possível"/"não pode ser desfeito"),
+    "pôr/botar/colocar" (→ "inserir"), "mexer" (→ "alterar"), "pegar", "achar" (→ "encontrar"),
+    "alguma coisa", "nada" (→ "nenhum …"), "aqui" apontando para a tela (→ "nesta tela/lista", ou
+    omitir), "de vez", "de verdade", diminutivos e primeira pessoa do sistema ("usei", "não anexei").
+* **Site público** (`frontend/apps/public`: loja, Papai Noel, catálogo, avaliação, cadastro de
+  talento, formulários; e-mail e PDF para a cliente): **lúdico e caloroso, com muita clareza**.
+  * Pode usar "a gente", "sua criança", uma exclamação quando cabe, humor leve.
+  * Frases curtas. Instrução prática (pagamento, horário, link) é precisa.
+  * Sem gíria, sem excesso de diminutivo ("alguns minutos", não "uns minutinhos") e sem "aí" solto.
+* **Portal do artista** (`frontend/apps/portal`; e-mail para o talento): **cordial e profissional**.
+  O artista é parceiro: "você", direto, sem frieza e sem piada ("Descreva o que aconteceu", "Houve um
+  erro do nosso lado. Nossa equipe já foi avisada.").
+* **Mensagem de WhatsApp que a equipe copia** (cobrança, convite, aviso): tom de conversa da casa
+  ("Oi, Ana! …"), com português correto e acento. Não é texto de tela.
+
+**Glossário (vale nas três superfícies).**
+* **Comprovante**: "Inserir comprovante", "Ver comprovante", "Excluir comprovante" / "Excluir este
+  comprovante?".
+* **Arquivo**: o botão que sobe arquivo diz "Inserir" ("Inserir contrato", "Inserir foto");
+  "Anexar"/"Anexe" sai. Exceção: o `FileUpload` do `@manto/ui` diz "Escolher arquivo", e o texto ao
+  redor acompanha ("Escolha a foto do rosto.").
+* **Situação**, não "Status", em cabeçalho de coluna, rótulo de campo e filtro ("Todas as
+  situações"). Vale só para o texto visível: chave, enum e nome de campo da API não mudam.
+* **Excluir** apaga o registro; **Remover** tira de uma lista ou de um vínculo sem apagar ("Remover
+  da escala", "Remover do funil"). O verbo segue o efeito real do endpoint; confira antes de escrever.
+* **Verbos fixos**: Inserir (valor, arquivo), Informar (motivo, dado), Selecionar (opção), Ver (abrir
+  arquivo ou detalhe), Salvar, Cancelar, Tentar novamente (nunca "de novo").
+* **Estado vazio**: "Nenhum/Nenhuma X [cadastrado | registrado | encontrado] [ainda].", com ponto.
+* **Grafia**: "e-mail", "Superadmin", "a cliente" (no feminino: é a contratante do evento),
+  "Planilha de Pagamentos", "Ex.:", reticências como um caractere só ("…") e "este/esta" para o que
+  está na tela.
+* **Caixa**: só a primeira letra maiúscula em título de cartão, coluna, botão e rótulo ("Dados do
+  evento", "Salvar e aprovar"). Maiúscula no meio só em nome próprio e termo de domínio. O menu
+  lateral e os títulos de módulo ainda não seguem isso (dívida 146 do `docs/05`): até a decisão,
+  siga o vizinho.
+* **Contagem**: o texto concorda com o número ("1 avaliação", "3 avaliações"); "(s)" só onde o código
+  não tem o número à mão.
+* **Vocabulário de domínio** não se troca por sinônimo: Cachê, BV, Elenco, Escala/Escalar, Dispensar,
+  Talento, Figurino, Acervo 3D, Tema, Personagem, Formulário, Orçamento, Evento, Casting, Retido,
+  Devolução, Cortesia/permuta, Fora de SP, Pré-escala, Ensaio, Visita Mágica, Gasto extra,
+  Reembolso, Adiantamento, Acréscimo, Comissão.
+
+**O que nenhum ajuste de texto toca.**
+* Identificador, chave JSON, valor de enum, código de erro, status HTTP, chave de `fields`, URL e
+  `data-testid`.
+* String comparada em lógica. Exemplo: o 403 de `figurino_producao_write.py` decide por
+  `"super admin" in message` (dívida 145). Antes de trocar uma mensagem da API, procure no
+  `frontend/` com `grep` se alguém a compara.
+* Cabeçalho de CSV que uma planilha externa pode ler pelo nome da coluna.
+* Texto jurídico (Termo de Consentimento, contrato).
+* Texto assinado pelo dono: o e-mail do prazo de pagamento (311) e a frase de deslocamento do PDF do
+  orçamento, espelhada na mensagem de WhatsApp.
+
 ## Stack e Restrições Técnicas
 * **Arquitetura**: SPA desacoplada — Flask servindo API JSON em `/api/*` + três SPAs React
   (`frontend/apps/{internal,public,portal}`) sobre três pacotes
@@ -303,6 +374,9 @@ Uma tarefa só está concluída quando:
   a mudança em commit isolado.
 * [ ] **Gate de RBAC declarado** em todo endpoint novo ou alterado (Princípio XIII) e linha na
   tabela de `docs/01` §4.3.
+* [ ] **Texto revisado pelo Princípio XV** quando a mudança cria ou altera texto que o usuário lê
+  (tela, e-mail, PDF, erro da API): tom da superfície e glossário, lido na tela aberta junto dos
+  vizinhos.
 * [ ] **Documentação viva por fonte única** (`docs/00` §10): `docs/01` (contrato/schema/deploy),
   `docs/02` (tela) e `docs/03` (entrada nova no topo, append-only) sempre; `docs/00`, `docs/04` e
   `docs/05` quando a mudança tocar topologia/convenção, invariante de domínio ou dívida.
@@ -328,9 +402,17 @@ Uma tarefa só está concluída quando:
   `docs/03` é o registro. A constituição chega às skills `speckit-*` em tempo de execução — o que
   está aqui é o que o plano e as tarefas vão cobrar.
 
-**Versão**: 3.0.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-09-08
+**Versão**: 3.1.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-10-23
 
 **Changelog**
+* **3.1.0** (2026-10-23): Princípio XV, texto que o usuário lê (correção 316b). A revisão de 505
+  textos da feature 316 fixou um tom por superfície (interno operacional; público lúdico e claro;
+  portal cordial; WhatsApp copiado em tom de conversa) e um glossário único (Inserir/Ver/Excluir
+  comprovante, Situação, Excluir × Remover, verbos fixos, estado vazio, grafia, caixa, contagem),
+  além do que um ajuste de texto não toca. Até aqui isso vivia só em `specs/316-…/spec.md`, que
+  nenhuma sessão abre sozinha. Portão novo "texto revisado pelo XV". Redação do V ("Salvando…",
+  "excluir, remover", ponteiro para o XV). Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos
+  templates de plano, checklist e tarefas.
 * **3.0.0** (2026-09-08): Revisão do harness (feature 296) após a migração Railway → Render
   (28/08/2026; `docs/03` 264) e após seis semanas em que a esteira praticada divergiu da declarada
   (última esteira completa: 255). Princípio VI redefinido como esteira em dois níveis com Regra Zero

@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-22** · Estado do repositório: pós-correção
+> Última atualização: **2026-10-23** · Estado do repositório: pós-correção
+> **316b-guia-de-texto** (sem migration; pronta na branch, aguardando o merge a pedido do dono — o guia de tom e
+> o glossário da 316 entram na constituição como Princípio XV, v3.1.0, com ponteiro no `CLAUDE.md` §5; só
+> documentação) — antes dela pós-correção
 > **316-tom-dos-textos** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~10:36** pelo merge `9e8ee232`, a pedido
 > do dono, em horário comercial — revisão de português e tom em todas as superfícies: 505 trocas de texto visível em
 > 168 arquivos, só texto; sem verify, typecheck verde e telas abertas; bundle novo `index-DKBwlFhg.js` conferido) — antes
@@ -162,6 +165,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **316b-guia-de-texto** | *(pronta, aguardando merge)* O guia de tom e o glossário da 316 saem da spec, que ninguém abre sozinho, e entram na **constituição como Princípio XV** (v3.1.0). O XV traz o tom por superfície, o glossário único e o que um ajuste de texto não toca, e cria o portão "texto revisado pelo XV". Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos templates de plano, checklist e tarefas | 2026-10-23 | — | (aqui) | ver Registro |
 | **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
 | **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
@@ -345,6 +349,41 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 316b — O guia de texto da 316 entra na constituição (Princípio XV)   (316b-guia-de-texto · 2026-10-23 · sem migration)
+
+> Pronta na branch, aguardando o merge a pedido do dono. Nível 2 (só documentação e harness).
+
+**O pedido.** "O Claude sempre, quando vai fazer algo, deve olhar a constitution ou algum arquivo do tipo
+para escrever os textos, correto? Preciso que altere nesse arquivo as diretrizes para bons textos escritos,
+seguindo o padrão do que fizemos."
+
+**Por quê.** A entrada da 316 diz que o guia e o glossário ficaram na spec da 316 e que ela é a fonte para
+texto novo. Mas nenhuma sessão abre aquela spec por conta própria. O que entra em toda sessão é o
+`CLAUDE.md`, que aponta para a constituição por número de princípio, e a constituição é o que o plano e o
+checklist cobram. **Esta entrada corrige a da 316: a fonte agora é a constituição, Princípio XV.**
+
+**O que mudou.**
+- **Constituição 3.1.0, Princípio XV, "Texto que o usuário lê"**. Traz:
+  - o alcance: tela, e-mail, PDF, mensagem copiada, erro da API;
+  - a regra de ler a tela inteira antes de escrever;
+  - o tom por superfície: interno operacional, público lúdico e claro, portal cordial, WhatsApp copiado
+    em tom de conversa;
+  - o glossário: Inserir/Ver/Excluir comprovante, Situação, Excluir × Remover, verbos fixos, estado vazio,
+    grafia, caixa, contagem e vocabulário de domínio;
+  - o que não se toca: identificador, enum, string comparada em lógica, CSV, texto jurídico e texto
+    assinado pelo dono.
+- **Portão novo** "texto revisado pelo XV". **Redação do V**: "Salvando…", "excluir, remover".
+- **Ponteiros**:
+  - `CLAUDE.md` §5: "antes de escrever qualquer texto que o usuário lê, leia a constituição §XV";
+  - `docs/00` §5;
+  - linha XV no Constitution Check do `plan-template`;
+  - CHK010 no `checklist-template`;
+  - tarefa de polimento no `tasks-template`;
+  - nota de "guia vigente" na spec da 316.
+
+**Verificação.** Só documentação. O XV foi conferido contra o que a 316 decidiu: os 505 textos, as 3
+recusas e as dívidas 145–147 do `docs/05`.
 
 ### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
 

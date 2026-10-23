@@ -179,6 +179,9 @@ de `@manto/money`. Arquivo servido pelo Flask sempre via `assetUrl()` de `@manto
 Toda ação tem loading/erro/sucesso via TanStack Query; erro da API nunca apaga o que o usuário
 digitou — aponte no campo (`ApiRequestError.fields`).
 
+**Texto que o usuário lê** (tela, e-mail, PDF, mensagem de erro da API): tom por superfície e
+glossário único na constituição, Princípio XV (correção 316b).
+
 **Comentário explica o PORQUÊ** (a armadilha, a razão da escolha), nunca o óbvio. Tudo em pt-BR.
 
 **Contrato de erro da API** — envelope único `{"error": {"message": str, "fields": {campo: msg}}}`

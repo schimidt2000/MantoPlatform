@@ -3,6 +3,10 @@
 **Branch**: `316-tom-dos-textos` · **Created**: 2026-10-22 · **Status**: EM PRODUÇÃO desde 22/10/2026 ~10:36 (merge `9e8ee232`) ·
 **Migration**: nenhuma
 
+> **Guia vigente**: desde a correção 316b (23/10/2026), o tom por superfície e o glossário desta
+> spec vivem na constituição, Princípio XV — é lá que se atualiza. Esta spec fica como o registro
+> da revisão.
+
 ## O pedido
 
 O dono (22/10): "faça uma varredura inteira no sistema interno e todas as páginas externas também
