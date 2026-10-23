@@ -55,7 +55,34 @@ class InfinitePayIndisponivel(InfinitePayError):
 
 
 class InfinitePayRecusou(InfinitePayError):
-    """A operadora respondeu, mas recusou a requisição (4xx com corpo compreensível)."""
+    """A operadora respondeu, mas recusou a requisição (4xx com corpo compreensível).
+
+    Feature 310: carrega o ``code`` da operadora (``body.error``, ex.:
+    ``external_checkout_not_enabled``) e o status HTTP. Antes só a ``message`` sobrevivia, e o
+    motivo real de toda reserva cair em 502 ficava num warning do log.
+    """
+
+    def __init__(self, message: str, *, code: str | None = None, status: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
+
+class InfinitePayTravada(InfinitePayIndisponivel):
+    """Este processo está proibido de falar com a operadora (feature 310, constituição XIV).
+
+    É subclasse de "não sei" de propósito: travado, nada é efetivado nem cancelado — o pedido só
+    fica retido, como numa queda da operadora.
+    """
+
+
+#: Resultado da reconsulta (feature 310, research R4). ``nao_sei`` não é valor: é a exceção
+#: ``InfinitePayIndisponivel``.
+RESULTADO_PAGO = "pago"
+RESULTADO_NAO_PAGO = "nao_pago"
+#: `200 {"success": false}` ou 404 "Not found": a operadora não achou cobrança paga com esses dados.
+#: Provado em produção (teste 0, 20/10/2026) para pedido não pago consultado só por handle+order_nsu.
+RESULTADO_NAO_ENCONTRADO = "nao_encontrado"
 
 
 def reais_para_centavos(valor: Decimal) -> int:
@@ -100,10 +127,18 @@ def centavos_para_reais(centavos: Any) -> Decimal:
         raise InfinitePayIndisponivel(f"Valor ilegível na resposta: {centavos!r}") from exc
 
 
-def _post(url: str, payload: dict) -> dict:
-    """Faz o POST e devolve o JSON, traduzindo toda falha de transporte em exceção deste módulo."""
+def _post(url: str, payload: dict, *, travada: bool = True, api_key: str | None = None) -> dict:
+    """Faz o POST e devolve o JSON, traduzindo toda falha de transporte em exceção deste módulo.
+
+    ``travada`` vem da configuração do processo (``INFINITEPAY_SUPPRESS_CALLS``), lida pela camada
+    ``_ops`` a cada chamada e passada aqui — este módulo não importa Flask (Princípio III). O
+    default é travado: quem esquecer de passar não cobra ninguém por engano.
+    """
+    if travada:
+        raise InfinitePayTravada("Pagamento travado neste ambiente (cópia de teste).")
+    headers = {"X-Api-Key": api_key} if api_key else None
     try:
-        response = requests.post(url, json=payload, timeout=TIMEOUT_SECONDS)
+        response = requests.post(url, json=payload, timeout=TIMEOUT_SECONDS, headers=headers)
     except requests.Timeout as exc:
         logger.warning("[infinitepay] timeout em %s: %s", url, exc)
         raise InfinitePayIndisponivel("A operadora não respondeu a tempo.") from exc
@@ -123,7 +158,11 @@ def _post(url: str, payload: dict) -> dict:
 
     if response.status_code >= 400:
         message = body.get("message") if isinstance(body, dict) else None
-        raise InfinitePayRecusou(message or f"Operadora recusou (HTTP {response.status_code}).")
+        code = body.get("error") if isinstance(body, dict) else None
+        raise InfinitePayRecusou(
+            message or code or f"Operadora recusou (HTTP {response.status_code}).",
+            code=code, status=response.status_code,
+        )
 
     if not isinstance(body, dict):
         raise InfinitePayIndisponivel("Formato inesperado na resposta da operadora.")
@@ -139,8 +178,15 @@ def criar_link_pagamento(
     redirect_url: str,
     webhook_url: str,
     customer: dict | None = None,
+    travada: bool = True,
+    api_key: str | None = None,
+    valid_until: str | None = None,
 ) -> dict:
     """Cria o link de pagamento de um pedido e devolve para onde mandar a família.
+
+    Feature 310: com ``api_key`` (API nova da InfinitePay), o link leva ``options.valid_until`` (o
+    fim da reserva, ISO com fuso) e ``single_payment`` — vence junto com a reserva e aceita um
+    pagamento só. Sem chave, exatamente o pacote provado em produção no teste A.
 
     Args:
         handle: A "InfiniteTag" da conta (``SiteSetting.infinitepay_handle``).
@@ -149,7 +195,10 @@ def criar_link_pagamento(
         description: Texto do item que a família vê no checkout.
         redirect_url: Para onde a operadora devolve a família (a página do pedido).
         webhook_url: Endereço secreto que recebe o aviso de pagamento.
-        customer: ``{"name", "email", "phone_number"}`` opcional, para pré-preencher o checkout.
+        customer: ``{"email", "phone_number"}`` — nunca o nome da criança (feature 310, R-15).
+        travada: Trava do processo (ver ``_post``).
+        api_key: ``INFINITEPAY_API_KEY``, quando configurada.
+        valid_until: Fim da reserva em ISO 8601 com fuso; só usado com ``api_key``.
 
     Returns:
         ``{"payment_url": str}``.
@@ -173,8 +222,13 @@ def criar_link_pagamento(
     }
     if customer:
         payload["customer"] = customer
+    if api_key:
+        opcoes: dict[str, Any] = {"single_payment": True}
+        if valid_until:
+            opcoes["valid_until"] = valid_until
+        payload["options"] = opcoes
 
-    body = _post(LINKS_ENDPOINT, payload)
+    body = _post(LINKS_ENDPOINT, payload, travada=travada, api_key=api_key)
     url = body.get("url")
     if not url:
         raise InfinitePayIndisponivel("A operadora não devolveu o link de pagamento.")
@@ -187,6 +241,8 @@ def consultar_pagamento(
     order_nsu: str,
     transaction_nsu: str | None = None,
     slug: str | None = None,
+    travada: bool = True,
+    api_key: str | None = None,
 ) -> dict:
     """Reconsulta uma cobrança na operadora. **É a fonte de verdade sobre pagamento.**
 
@@ -201,8 +257,11 @@ def consultar_pagamento(
         slug: Identificador da fatura (``invoice_slug``), quando conhecido.
 
     Returns:
-        ``{"paid": bool, "amount": Decimal | None, "paid_amount": Decimal | None,
-        "capture_method": str | None, "raw": dict}``.
+        ``{"resultado": "pago" | "nao_pago" | "nao_encontrado", "paid": bool,
+        "amount": Decimal | None, "paid_amount": Decimal | None, "capture_method": str | None,
+        "raw": dict}``. ``nao_encontrado`` é a resposta ``{"success": false}`` (ou 404 "Not
+        found") — sem os identificadores do aviso/retorno, a operadora não distingue "não pago" de
+        "não achei" (teste 0 em produção, feature 310).
 
     Raises:
         InfinitePayIndisponivel: Operadora fora do ar, lenta ou com resposta ilegível — significa
@@ -216,7 +275,17 @@ def consultar_pagamento(
     if slug:
         payload["slug"] = slug
 
-    body = _post(PAYMENT_CHECK_ENDPOINT, payload)
+    try:
+        body = _post(PAYMENT_CHECK_ENDPOINT, payload, travada=travada, api_key=api_key)
+    except InfinitePayRecusou as exc:
+        if exc.status == 404:
+            return {"resultado": RESULTADO_NAO_ENCONTRADO, "paid": False, "amount": None,
+                    "paid_amount": None, "capture_method": None, "raw": {"status": 404}}
+        raise
+
+    if body.get("success") is False and "paid" not in body:
+        return {"resultado": RESULTADO_NAO_ENCONTRADO, "paid": False, "amount": None,
+                "paid_amount": None, "capture_method": None, "raw": body}
 
     if "paid" not in body:
         # Sem o campo que decide tudo, a resposta não serve para liberar nem para negar produto.
@@ -224,6 +293,7 @@ def consultar_pagamento(
 
     paid = bool(body.get("paid"))
     return {
+        "resultado": RESULTADO_PAGO if paid else RESULTADO_NAO_PAGO,
         "paid": paid,
         "amount": centavos_para_reais(body["amount"]) if body.get("amount") is not None else None,
         "paid_amount": (

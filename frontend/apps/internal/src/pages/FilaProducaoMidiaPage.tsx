@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
-import { AlertTriangle, MessageCircle, Upload, Video } from "lucide-react";
+import { AlertTriangle, Ban, MessageCircle, Upload, Video } from "lucide-react";
 import {
   AvatarThumb,
   Badge,
   Button,
+  ConfirmDialog,
   Input,
   PageHeader,
   Skeleton,
@@ -14,11 +15,13 @@ import {
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { AvisosFalhosBanner } from "../components/AvisosFalhosBanner";
+import { useCurrentUser } from "../lib/useAuth";
 import {
   PRODUCAO_STATUSES,
   PRODUCAO_STATUS_LABELS,
   PRODUCAO_STATUS_TONES,
   useAtualizarStatusEntrega,
+  useCancelarPedidoPago,
   useEnviarVideo,
   useFilaProducao,
   type ProducaoStatus,
@@ -57,6 +60,15 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
   const enviarVideo = useEnviarVideo();
   const inputArquivo = useRef<HTMLInputElement>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // Feature 310 (FR-034): a família desistiu — cancelar tira o horário, o evento e a entrega, e
+  // abre a devolução. Sem botão, isso era SQL na mão.
+  const cancelar = useCancelarPedidoPago();
+  // A fila é de Comercial, Casting e Superadmin; cancelar é só de Comercial e Superadmin (o
+  // servidor recusa os outros com 403) — o botão só aparece para quem pode usar.
+  const { data: usuario } = useCurrentUser();
+  const podeCancelar = (usuario?.roles ?? []).some((r) => r === "COMERCIAL" || r === "SUPERADMIN");
+  const [cancelando, setCancelando] = useState(false);
+  const [motivo, setMotivo] = useState("");
 
   const gravado = delivery.modality === "gravado";
 
@@ -216,7 +228,58 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
               </a>
             </Button>
           )}
+
+          {podeCancelar && delivery.status !== "finalizado" && (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="Cancelar e abrir devolução"
+              title="Cancelar e abrir devolução"
+              onClick={() => {
+                cancelar.reset();
+                setMotivo("");
+                setCancelando(true);
+              }}
+            >
+              <Ban className="size-4 text-red" />
+            </Button>
+          )}
         </div>
+        <ConfirmDialog
+          open={cancelando}
+          title="Cancelar e abrir devolução?"
+          destructive
+          description={
+            <div className="space-y-2 text-left">
+              <p>
+                O pedido <strong>{delivery.order_nsu}</strong> de {delivery.child_name} sai da
+                agenda, da fila e dos relatórios, e uma devolução abre na tela de Devoluções. O
+                Pix é devolvido por vocês, no painel da InfinitePay.
+              </p>
+              <label className="block text-[12px] font-medium text-ink" htmlFor={`motivo-${delivery.id}`}>
+                Motivo
+              </label>
+              <textarea
+                id={`motivo-${delivery.id}`}
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2 text-[13px] text-ink"
+                rows={2}
+                value={motivo}
+                onChange={(e) => setMotivo(e.target.value)}
+                placeholder="Ex.: a família desistiu pelo WhatsApp"
+              />
+            </div>
+          }
+          confirmLabel="Cancelar pedido"
+          pending={cancelar.isPending}
+          error={cancelar.isError ? cancelar.error.message : null}
+          onConfirm={() =>
+            cancelar.mutate(
+              { orderId: delivery.order_id, motivo },
+              { onSuccess: () => setCancelando(false) },
+            )
+          }
+          onOpenChange={setCancelando}
+        />
       </TableCell>
     </TableRow>
   );

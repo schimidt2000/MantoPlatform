@@ -7,7 +7,14 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-22** · Em branch: **315-pedido-de-cancelamento** (migration **`d8b4e15f2c31`** — head:
+> Última atualização: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10;
+> migration **`e8b4a1c7d310`**, aditiva — head: interruptor `virtuais_pagamento_ativo` e o segredo
+> anterior do aviso em `site_settings`, §2.10; colunas novas da loja em `virtual_*`, §2.10.1; o aviso
+> que grava e responde, o retorno do checkout, "pagamentos a conferir", cancelar pedido pago e os 503/
+> 400 novos, §3.13.4; `virtuais_pagamento_ativo`/`virtuais_pedidos_aguardando` e o 400 com campo em
+> `/api/admin/settings`, §3.11; `INFINITEPAY_SUPPRESS_CALLS`, `INFINITEPAY_API_KEY`,
+> `X-Manto-Client-Ip` e a máscara do segredo, §3.13.4 e §5.2.1; gate dos endpoints novos, §4.3).
+> Antes: **2026-10-22** · **315-pedido-de-cancelamento** (migration **`d8b4e15f2c31`** — head:
 > `calendar_events.deletion_request_scope` e `deletion_request_refund`, §2.2; `POST/DELETE
 > /api/events/<id>/pedido-cancelamento` com o caminho velho `/solicitar-exclusao` nas mesmas views, a chave `pedidos` da
 > faixa, o bloco do pedido com corte por papel no detalhe e na fila, a herança do pedido de "todos" no dia da venda, §3.3;
@@ -450,9 +457,10 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
   de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo. A
   trava irmã da feature 303, **`CALENDAR_SUPPRESS_EVENT_WRITES`**
   (`config._suppress_calendar_event_writes`; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`), cobre
-  **só** duas escritas: a devolução de evento marcado ao Google e, desde a feature 306, a remoção
+  **só** estas escritas: a devolução de evento marcado ao Google e, desde a feature 306, a remoção
   do Google no cancelamento (os dias e os ensaios do ato, `cancel_ops._remover_do_google`;
-  travada, o ato cancela no sistema e só avisa na tela) — ver §5.4.
+  travada, o ato cancela no sistema e só avisa na tela) — ver §5.4. Desde a 310 cobre também o
+  evento de venda da loja virtual (criar na venda, apagar no cancelamento de pedido pago; §3.13.4).
 - **O fluxo depende do tipo** (225b): `FIGURINO_PROD_FLUXOS` define a ordem por `kind` e
   `producao_ops._transicoes_do_fluxo` **deriva** as transições dela — nunca escrever duas
   tabelas. Manutenção pula `aprovado`; nem SUPERADMIN consegue aprovar uma.
@@ -639,8 +647,18 @@ Pontos que valem para quem for ler esses dados:
 fábrica; `event.commission_rate` continua sobrepondo os dois),
 `infinitepay_handle`/`infinitepay_webhook_token` (conta que recebe as vendas da Loja de
 Interações Virtuais e o segredo que autentica o aviso de pagamento — editáveis em Configurações
-desde a 224f; **nulos, nenhuma reserva passa do checkout**. O token é gerado pelo sistema e
-nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `tax_rate`,
+desde a 224f. O token é gerado pelo sistema e
+nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`. **Desde a 310** a tag é
+validada (`config_ops._INFINITETAG`, `^[a-z0-9][a-z0-9_.-]{1,62}$`, depois de tirar o `$` e passar
+para minúsculas — URL colada ou espaço viram 400 no campo) e a troca grava auditoria com o valor
+antigo e o novo; regerar o token move o atual para `infinitepay_webhook_token_anterior`, aceito até
+`infinitepay_webhook_token_anterior_ate` (**24 h**, `VIRTUAL_TOKEN_ANTERIOR_HORAS`), porque trocar
+derrubava o aviso de todo link já aberto; e `virtuais_pagamento_ativo` é o **interruptor** da loja,
+que nasce **desligado** (migration `server_default false`): a venda só abre com tag, token **e**
+interruptor ligados (`virtuais_ops._pagamento_ligado`). Desligado ou sem configuração, a reserva
+responde **503** "As reservas estão fechadas por enquanto." sem travar horário e publicar campanha é
+recusado; aviso, retorno e reconsulta de pedidos já abertos continuam fechando. Ligar e desligar o
+interruptor, regerar o segredo e trocar a tag ficam no `AuditLog`), `tax_rate`,
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
 `clicksign_token`/`clicksign_sandbox` (**inertes** desde a 021 — o token da 317 vem só da env), os
 `clicksign_webhook_id`/`_secret`/`_secret_anterior(_ate)` e `clicksign_sync_at`/`_cursor`/`_pendente`
@@ -663,6 +681,39 @@ engenharia reversa da 307 — "Papai Noel" `[712, 800, 850, 900]` → `[600, 650
 do Noel" `[423, 480, 510, 540]` → `[270, 320, 345, 370]`, só quando estiverem exatamente nesses
 valores; a troca 600→712 de `_migrar_307` foi removida: cachê é cachê, o preço da Visita vem do
 produto), `calendar_sync_cache`, `calendar_auto_sync_at`, `whatsapp_form_number`.
+
+Desde a **310**, `config_ops.update_settings` só muda o que veio no envio para
+`educamanto_seller_id`, `email_notifications_enabled`, `whatsapp_form_number` e `release_date`: o
+upload do logo manda só o arquivo, e as atribuições incondicionais desligavam de carona todos os
+e-mails (a confirmação de compra da loja inclusive), o WhatsApp e a data de corte.
+
+### 2.10.1 Loja de Interações Virtuais — colunas de pagamento (feature 310)
+
+Migration **`e8b4a1c7d310`** (`down_revision = c5d2f7a9e306`), aditiva: todas as colunas têm default
+ou aceitam nulo, e o código anterior lê e grava no banco migrado.
+
+| Tabela | Coluna | Para quê |
+|---|---|---|
+| `virtual_campaigns` | `listada` bool not null default `true` | campanha publicada **fora da vitrine** (só pelo link) — teste real de baixo valor e oferta fechada; `listar_vitrine` filtra |
+| `virtual_orders` | `unverified_reason` varchar(24) | por que o pedido foi liberado sem prova: `nao_sei` (operadora não respondeu nas 3 tentativas) ou `divergente` (pago com valor menor); nulo com `expired_unverified` = legado da 205. Abandono de checkout não marca nada |
+| | `payment_link_error` varchar(200) | código da recusa da operadora ao criar o link (`external_checkout_not_enabled`…; `travado_neste_ambiente` no local). Pedido com ele não conta no teto por origem |
+| | `receipt_url` varchar(500) | comprovante da operadora, gravado só depois de a reconsulta provar o pagamento |
+| | `conferido_em`, `conferido_por` | o "a conferir" do pedido resolvido pela equipe (irreversível, auditado) |
+| `virtual_payment_notifications` | `state` varchar(12) not null default `'pendente'` | `pendente` → `processando` → `decidido`: claim por linha do processamento fora da requisição |
+| | `attempts` int not null default 0, `last_attempt_at` | política de reprocessamento (0/1/2 min, depois a cada 10 min, até 48 h) |
+| | `resolvido_em`, `resolvido_por` | o "a conferir" do aviso resolvido |
+
+- **Backfill** na própria migration: aviso antigo com `outcome` vira `state='decidido'`, para a
+  varredura não reprocessar o histórico da 205.
+- `transaction_nsu` continua `UNIQUE`, e o aviso com **segredo errado** grava `transaction_nsu = NULL`
+  (outcome `token_invalido`): gravar o NSU deixava um aviso legítimo posterior cair como "duplicado".
+- Desfechos do aviso em `constants.VIRTUAL_AVISO_*`: finais `efetivado`, `devolucao_aberta`,
+  `conflito`, `duplicado`, `divergente`, `orfao`, `token_invalido`; não finais `retido` e
+  `pendente_prova`. Motivos novos de devolução: `pagamento_em_dobro`, `pagamento_sem_pedido_ativo`,
+  `horario_passou`, `sem_vaga_de_video`, `desistencia` (rótulos em `VIRTUAL_REFUND_REASON_LABELS`).
+- Constantes de prazo: `VIRTUAL_ANTECEDENCIA_RESERVA_HORAS = 2` (reservar),
+  `VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO = 30` (pagar), `VIRTUAL_SALA_ALERTA_HORAS = 6`,
+  `VIRTUAL_SALA_RETRY_LONGO_MIN = 10`, `VIRTUAL_AVISO_REPROCESSA_HORAS = 48`.
 
 ### 2.11 Migrations
 
@@ -1212,6 +1263,14 @@ FKs sem `ondelete`) não se exclui. Mesmo status e formato dos outros bloqueios:
 `POST /api/admin/sync/run`, `/portal-announcement`, `/migrar-arquivos/start`,
 `/importar-catalogo/start`.
 
+Feature 310: `GET /api/admin/settings` acrescenta `virtuais_pagamento_ativo` e
+`virtuais_pedidos_aguardando` (pedidos `reservado`/`aguardando` — a tela mostra o número antes de
+regerar o segredo). `PATCH /api/admin/settings` aceita `virtuais_pagamento_ativo` (bool); InfiniteTag
+inválida → **400** com `fields.infinitepay_handle` (`config_ops.ConfigValidationError`, com rollback);
+`infinitepay_regenerate_token` passa o atual a `_anterior` por 24 h; e `educamanto_seller_id`,
+`email_notifications_enabled`, `whatsapp_form_number` e `release_date` só mudam se vierem no envio
+(§2.10).
+
 `POST /api/admin/sync/run` com `action: "cleanup_past"` (feature 303): cada linha de `results[]`
 traz `removed`, `marcados`, `movidos`, `desmarcados`, `inconclusivos` e `falhas` (números), com
 `ok` falso quando há falha ou erro de consulta (`err`); a `message` diz as seis somas no texto fixo
@@ -1517,7 +1576,7 @@ no máximo 5 itens, descartando predições sem `description`.
 - **`publish_date` automática**: `PATCH {"status": "publicado"}` sem data preenche hoje — é o que
   faz o post contar para as metas de frequência (ver §2.9.1).
 
-### 3.13.4 Loja de Interações Virtuais — `virtuais_*.py` (feature 205, parcial: US1)
+### 3.13.4 Loja de Interações Virtuais — `virtuais_*.py` (feature 205; pagamento ligado na 310)
 
 Canal B2C que vende chamadas de vídeo de 10 min e vídeos gravados com Personagens do catálogo.
 Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
@@ -1528,14 +1587,14 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 | `GET` | `/api/virtuais/campanhas` | Lista campanhas com vendidos, faturado, horários restantes e capacidade de vídeo consumida. |
 | `POST` | `/api/virtuais/campanhas` | Cria campanha (JSON ou multipart com `cover`). Nasce em `rascunho`. |
 | `GET` | `/api/virtuais/campanhas/<id>/admin` | Detalhe completo + `slots` + `available_gift_items` (o Acervo 3D ativo inteiro, para o seletor). |
-| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). |
-| `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. |
+| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). Desde a 310 aceita `listada` (bool): desligado, a campanha publicada some da vitrine e só abre pelo link. |
+| `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. Desde a 310 também exige o pagamento configurado **e ligado** (tag, token e interruptor): senão **400** no campo `pagamento` — publicar com o pagamento desligado punha no ar uma campanha em que a família preenchia a ficha para receber erro no fim. |
 | `PUT` | `/api/virtuais/campanhas/<id>/acervo` | `{"item_ids": [...]}` — substitui a seleção inteira. Peça inativa é recusada. |
 | `POST` | `/api/virtuais/campanhas/<id>/horarios` | `{date, start, end}` → `{created, skipped}`. **Idempotente**: reexecutar a mesma janela devolve tudo em `skipped`. Teto de 500 slots por chamada. |
 | `DELETE` | `/api/virtuais/horarios/<id>` | Remove horário **livre**; reservado/vendido devolve **409**. |
 | `GET` | `/api/virtuais/campanhas/<slug>` | **Público.** Landing. Rascunho → 404; pausada → **410**. |
-| `GET` | `/api/virtuais/campanhas/<slug>/horarios` | **Público.** Só horários disponíveis e futuros; nunca revela quem reservou. |
-| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path** (`SiteSetting.infinitepay_webhook_token`). Só valida o segredo e delega. Segredo errado → **404** (403 confirmaria a existência do endereço). Processamento entra na US3. |
+| `GET` | `/api/virtuais/campanhas/<slug>/horarios` | **Público.** Só horários disponíveis que começam **a mais de 2 h** (`VIRTUAL_ANTECEDENCIA_RESERVA_HORAS`, desde a 310 — a equipe lê as dicas e o artista se prepara); nunca revela quem reservou. |
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Reescrita na 310 — ver o bloco "Pagamento ligado com segurança" abaixo. |
 
 - **RBAC**: os endpoints administrativos exigem `COMERCIAL` **ou** `SUPERADMIN`
   (`require_virtuais_access()` em `virtuais_read.py`, chamada no início de cada view conforme §4.3).
@@ -1550,8 +1609,8 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento. `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada) · `429` limite anti-abuso · `502` operadora fora (a reserva já foi desfeita). |
-| `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. |
+| `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento (desde a 310 com `seconds_left`). `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada; desde a 310 também "Este horário fecha 2 horas antes. Escolha outro.") · `429` limite anti-abuso · **`503`** "As reservas estão fechadas por enquanto." com o pagamento desligado ou sem configuração (310; nada é travado) · `502` operadora fora, recusa da operadora ("Não conseguimos abrir o pagamento. A equipe já foi avisada…", código gravado em `payment_link_error`, sino para a equipe) ou "Pagamento travado neste ambiente (cópia de teste)." — em todos a reserva já foi desfeita. |
+| `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. Desde a 310: `seconds_left` (segundos até a trava vencer, calculados no servidor — `locked_until` é hora de parede sem fuso e o aparelho em Manaus contava 75 min) e `confirming` (há aviso de pagamento deste pedido ainda sem decisão). `locked_until` continua no payload para o bundle antigo em cache. |
 | `GET` | `/api/virtuais/enderecos/autocomplete` | **Público, com teto por origem.** Variante sem login de `/api/maps/address-autocomplete`; reusa `app.maps.address_autocomplete`. |
 
 - **Concorrência**: toda mudança de posse do slot passa por `with_for_update()`. Dois visitantes
@@ -1570,18 +1629,20 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Só valida o segredo e delega a `processar_notificacao_pagamento()`. Segredo errado → `404` (e a tentativa fica registrada). Todos os demais casos → `200`. |
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Na 205c validava, processava e respondia na mesma requisição; desde a 310 grava e responde (bloco abaixo). |
 | `GET` | `/api/virtuais/devolucoes?status=` | Devoluções a executar no painel da operadora. |
 | `PATCH` | `/api/virtuais/devolucoes/<id>` | `{"status": "concluida"}` depois de devolver o dinheiro. |
 | `POST` | `/api/virtuais/pedidos/<id>/sala` | Tenta obter a sala que ficou pendente no Google. |
 
-- **O aviso não decide nada.** `processar_notificacao_pagamento()` registra a notificação (a
-  unicidade de `transaction_nsu` barra a reentrega), trava o slot, **reconsulta a cobrança** e só
-  então decide. Desfechos possíveis: `efetivado`, `duplicado`, `recusado`, `conflito`, `retido`,
-  `orfao` — todos gravados em `virtual_payment_notifications`.
-- **A efetivação é atômica**: evento (`event_type='VIRTUAL'`, `source='platform'`, `sale_value`),
-  ficha, `EventRole` pré-escalado, `VirtualMediaDelivery`, presente 3D na fila existente e baixa de
-  estoque nascem juntos. Falha → rollback e notificação como `retido`.
+- **O aviso não decide nada.** O corpo só identifica o pedido; quem prova é a **reconsulta da
+  cobrança** na operadora. Na 205c, `processar_notificacao_pagamento()` fazia tudo na requisição; desde
+  a 310 ela é só um atalho de compatibilidade (scripts e verifies antigos) e a decisão é de
+  `decidir_pagamento` (bloco abaixo). Desfechos gravados em `virtual_payment_notifications` (§2.10.1).
+- **A efetivação é atômica no banco**: evento (`event_type='VIRTUAL'`, `source='platform'`,
+  `sale_value`), ficha, `EventRole` pré-escalado, `VirtualMediaDelivery`, presente 3D na fila
+  existente e baixa de estoque nascem num commit só. Desde a 310 o evento nasce com id local
+  (`virtual-local-<nsu>`) e sala pendente, e o Google e o e-mail vêm **depois** do commit
+  (`_pos_venda`): a disputa se decide no banco e o perdedor não deixa evento órfão no Google.
 - **Sala do Meet** vem da Calendar API (`conferenceData` + `conferenceDataVersion=1`) e fica em
   `VirtualOrder.meet_url`. **Não confundir** com `CalendarEvent.google_html_link`, que abre o
   Calendar e exige login. Criação pendente → `meet_pending=True`, venda válida, pendência
@@ -1614,6 +1675,64 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 - **Segregação financeira (FR-052–055): implementada** na feature 205e. `app/api/financeiro_read.py`
   trata `incluir_loja_virtual` e `resumo_loja_virtual` tanto no pipeline de vendas quanto na DRE
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
+
+**Pagamento ligado com segurança** — feature 310 (pronta, aguardando deploy). A máquina de estados
+e as invariantes estão em `docs/04` §4; a tela, em `docs/02`.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, segredo no path, `60 per minute` por IP do cliente.** Corpo acima de **64 KB** → **413** antes do parse. O token vale se for o atual **ou** o anterior dentro das 24 h (`token_do_aviso_valido`, `hmac.compare_digest`); sem segredo configurado nada é aceito. Token certo: `registrar_aviso` grava o aviso como `pendente`, dispara `processar_aviso` numa thread curta e responde **200** `{"success": true, "message": null}` — a reconsulta, a decisão, o Google e o e-mail levam segundos e a InfinitePay pede resposta em menos de 1 s. Reentrega de aviso sem desfecho final volta para a fila (antes caía como "duplicado"). Token errado → **404** (403 confirmaria o endereço) e `registrar_aviso_invalido` grava um resumo de até 2 KB **com `transaction_nsu = NULL`**, para não ocupar o NSU de um aviso legítimo. Erro ao gravar → 200 mesmo assim (500 faria a operadora reenviar em loop). Se a thread morre, a varredura reprocessa o que ficou `pendente` |
+| `POST` | `/api/virtuais/pedidos/<public_token>/retorno` | **Público, `20 per minute` por IP do cliente.** A página do pedido manda os identificadores que a InfinitePay põe na URL de retorno (`order_nsu`, `slug`, `transaction_nsu`, `capture_method`, `receipt_url`). `order_nsu` diferente do do token → **404** "Pedido não encontrado." (nada gravado). Sem `slug`/`transaction_nsu`, ou pedido já pago → **200** com o resumo atual. Com eles → reconsulta + `decidir_pagamento` (`origem=retorno`) → **200** com o resumo, que pode já vir `pago` ou `cancelado`. Operadora fora, travada ou cobrança ainda não achada → 200 com o resumo, e os identificadores ficam num registro de aviso PRÓPRIO (`"origem": "retorno"` no corpo; nunca no pedido; no máximo um pendente por pedido) que a varredura de avisos reconsulta; retorno com valor divergente nasce decidido em "a conferir" com sino. Se o aviso autenticado da mesma transação chegar depois, ele sobrescreve esse registro (um retorno forjado com o NSU de outra família não sequestra o aviso dela). É a segunda prova de pagamento além do aviso: sem os identificadores a reconsulta não distingue "não pago" de "não achei" (teste 0 em produção) |
+| `POST` | `/api/virtuais/pedidos/<public_token>/abandonar` | **Público, `20 per minute`.** A família desiste de uma reserva ainda não paga (FR-020a da 205, que mandava "abandonar" sem existir como; 310). Exige `{"client_token"}` da aba que criou a reserva (`prova_da_aba`, tempo constante) — sem ela **404**: o link do pedido circula, e só ele não desfaz a reserva de ninguém. Antes de liberar, reconsulta a cobrança como a varredura: "pago" ou operadora fora → **409**. Sem sinal de pagamento (nenhum identificador provado e nenhum aviso ou retorno esperando decisão) → `_liberar_reserva` e **200** com o resumo (`expirado`). Com sinal → **409** "Já recebemos um sinal de pagamento deste pedido…". Pedido que já não está ativo → 200 sem efeito |
+| `GET` | `/api/virtuais/vitrine` | **Público.** Desde a 310 lista só campanhas publicadas com `listada = true`; a fora da vitrine abre normalmente pelo link |
+| `GET` | `/api/virtuais/pagamentos-a-conferir` | `{"itens": [...]}` dos últimos 30 dias, não resolvidos, mais recentes primeiro (`listar_a_conferir`). Três origens: aviso `divergente`/`orfao` ou esgotado em 48 h sem desfecho (`tipo: "aviso"`); pedido liberado sem prova, `unverified_reason` `nao_sei`/`divergente`, enquanto seguir `expirado` — se o pagamento atrasado virou venda ou devolução, sai da lista (`tipo: "pedido"`); recusa da operadora ao criar o link, agrupada por código com `ocorrencias` (`tipo: "falha_link"`). Cada item traz `order_nsu`, campanha, motivo, valor do pedido e o pago (quando o aviso informou), `invoice_slug`, `transaction_nsu`, `receipt_url` e `criado_em` — o que a equipe precisa para achar a cobrança no app. Abandono de checkout nunca entra |
+| `PATCH` | `/api/virtuais/pagamentos-a-conferir/<tipo>/<id>` | `{"resolvido": true, "nota"?}` → grava `resolvido_em/por` (aviso) ou `conferido_em/por` (pedido; na `falha_link` resolve o grupo inteiro do mesmo código) + `AuditLog`. Irreversível. Sem `resolvido: true` → 400 com campo; id ou tipo inexistente → 404 |
+| `POST` | `/api/virtuais/pedidos/<id>/cancelar` | `{"motivo": "…"}` (obrigatório → 400 no campo; cortado em 300). Só pedido `pago` (senão **409**); presente 3D que já saiu de `pendente` na fila → **409** "combine com a produção antes". Trava pedido → horário; o horário volta a `livre` só se começar depois de 2 h, senão fica vendido sem dono; saem presente, entrega, escala e evento local (a venda some dos relatórios), o evento do Google é apagado depois do commit respeitando `CALENDAR_SUPPRESS_EVENT_WRITES`; nasce a devolução `desistencia` pendente e a família recebe o e-mail de cancelamento. Resposta `{"refund": …}` |
+
+- **RBAC**: `pagamentos-a-conferir` (GET e PATCH) e `cancelar` usam `require_virtuais_access()` —
+  `COMERCIAL`, `SUPERADMIN`, o mesmo gate das devoluções. O retorno é público por token não
+  adivinhável e só aceita identificadores do próprio pedido.
+- **Sino**: `notificacoes_ops.notificar_virtual_atencao` (kind `virtual.atencao`, para `COMERCIAL` e
+  `SUPERADMIN`, link `/virtuais/devolucoes`) avisa devolução nova (dedupe por pedido e motivo), item
+  "a conferir" novo (por item), recusa de link (por código e hora) e venda sem sala a menos de 6 h
+  da chamada (por pedido).
+- **Pacote à operadora** (`_gerar_link_pagamento`): descrição "<título> — pedido <order_nsu>" e
+  `customer` só com `email` e `phone_number` (dígitos). O nome da criança deixou de ir como comprador
+  e na descrição — dado de menor a terceiro sem necessidade. Recusa (4xx) não é repetida; só
+  indisponibilidade entra no retry.
+- **Trava fora da produção**: `INFINITEPAY_SUPPRESS_CALLS` (`config._suppress_infinitepay`) é
+  verdadeira com banco em localhost/sqlite ou com `INFINITEPAY_SUPPRESS_CALLS=true`; escape
+  `INFINITEPAY_ALLOW_LOCAL_CALLS=true` (cobra de verdade). Travado, o cliente levanta
+  `InfinitePayTravada` (subclasse de "não sei") antes de qualquer requisição: o link não nasce (o
+  `webhook_url` local apontaria para a produção), a reconsulta não sai, nada é efetivado nem
+  cancelado. A camada `_ops` lê a chave a cada chamada e a passa ao cliente, que não importa Flask;
+  chave ausente = travado. `CALENDAR_SUPPRESS_EVENT_WRITES` passa a cobrir também a criação do evento
+  de venda da loja (`_criar_evento_google`) e a remoção no cancelamento de pedido pago: travada, a
+  venda existe com id local e sala pendente.
+- **`INFINITEPAY_API_KEY`** (opcional, segredo, `sync: false` no `render.yaml`; nunca no
+  `SiteSetting`, que vai para o backup e o espelho). Com ela o link leva `X-Api-Key` e
+  `options{valid_until: fim da trava com -03:00, single_payment: true}` — vence junto com a reserva
+  e aceita um pagamento só. Sem ela, o pacote provado no teste A. O `create_app()` registra no log do
+  deploy `[infinitepay] travada=… api_key=configurada|ausente (link sem validade)`.
+- **IP do cliente**: o `frontend/server.js` põe `X-Manto-Client-Ip` = último item do
+  `X-Forwarded-For` que recebe (o IP que a borda do Render viu — lido ANTES do `proxy.web`, porque o
+  `xfwd` do http-proxy acrescenta o socket ao cabeçalho), sobrescrevendo o que o cliente mandar com
+  esse nome (§5.2.1), e `X-Manto-Proxy-Secret` = `MANTO_PROXY_SECRET`. `api_utils.ip_do_cliente()`
+  só aceita o IP informado junto com a prova certa (`hmac.compare_digest`); sem ela, `remote_addr`.
+  Sem `MANTO_PROXY_SECRET` no backend o cabeçalho é aceito sem prova e o boot avisa `[proxy]` no
+  log — o backend tem URL pública, e quem o chamasse direto trocando o cabeçalho escapava de todo
+  limite, o de login inclusive (achado da revisão da 310). A reserva loga `[virtuais] origem:
+  hash=<8> publico=sim|nao`, sem o IP. `ip_do_cliente()` e é a `key_func` do `Limiter` — portanto de **todo** `@limiter.limit` do
+  sistema (login, portal, cadastro, formulários, NFC, loja) — e a origem anti-abuso da reserva. Antes o
+  limitador via o IP da infraestrutura — o `ProxyFix(x_for=1)` confia em um salto e o caminho tem
+  pelo menos dois — e o limite valia para a loja inteira (e o do login, para a empresa inteira). Só
+  vale com o `MANTO_PROXY_SECRET` igual nos dois serviços.
+- **Segredo fora dos logs**: o caminho do aviso **é** o segredo. `_MascaraSegredoDoAviso`
+  (`app/__init__.py`) filtra `gunicorn.access` e `werkzeug` trocando o trecho depois de
+  `/webhooks/infinitepay/` por `***` (`api_utils.mascarar_url_webhook`), sem tocar no
+  `startCommand`; o `server.js` mascara o mesmo trecho no `console.error` do proxy.
+- **Costura de verificação**: `VIRTUAIS_AVISO_SINCRONO` na config faz a rota processar o aviso na
+  própria requisição (só o `verify_205` e o `verify_310` ligam).
 
 ### 3.13.5 Notificações internas — `notificacoes_read.py` / `notificacoes_write.py` (feature 272)
 
@@ -2044,6 +2163,9 @@ Gates por módulo (todos em `app/api/`):
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
+| `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções) | `COMERCIAL`, `SUPERADMIN` |
+| `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |
@@ -2380,6 +2502,15 @@ sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do host
 requisição para o próprio serviço frontend, em laço. `xfwd: true` envia os `X-Forwarded-*`. Falha
 de conexão com o backend responde **502**, sem derrubar os SPAs.
 
+Desde a **310**, o `proxyReq` põe **`X-Manto-Client-Ip`** = último item do `X-Forwarded-For` recebido
+(ou `req.socket.remoteAddress`), sobrescrevendo o que o cliente mandar com esse nome: é a chave do
+limitador do Flask (`ip_do_cliente()`, §3.13.4). Sem ele o Flask via o IP da infraestrutura e todo
+limite valia para todo mundo junto. O IP é lido no handler, antes do `proxy.web` (o `xfwd` acrescenta
+o socket ao `X-Forwarded-For` antes do `proxyReq`), e vai junto `X-Manto-Proxy-Secret` =
+`MANTO_PROXY_SECRET` — sem a prova o Flask ignora o IP informado, porque o backend também tem URL
+pública. A variável precisa do MESMO valor nos dois serviços. O `console.error` do proxy mascara `/webhooks/infinitepay/<segredo>` como
+`***` (`mascararUrl`).
+
 > ⚠️ **O proxy só entra em ação com `VITE_API_BASE_URL` vazia no build.** Com ela preenchida,
 > `API_BASE`/`assetUrl()` geram URL absoluta do Flask e o browser fura o proxy — inclusive para
 > `/uploads` e `/figurinos/<id>/print`.
@@ -2435,7 +2566,9 @@ flask db upgrade && python seed.py && gunicorn run:app \
   no `sys.path`. Plano B quando o classificador bloqueia um script por SSH: Shell do painel do Render.
 - **Access log** (desde 26/08/2026): `IP MÉTODO CAMINHO STATUS BYTES MICROSSEGUNDOS`. Antes disso
   nenhuma requisição de produção era registrada; `%(b)s` (bytes) é o campo que nomeia o culpado num
-  incidente de lentidão.
+  incidente de lentidão. O caminho do aviso de pagamento carrega o segredo: desde a 310 um filtro
+  de logging no processo (`_MascaraSegredoDoAviso`, `app/__init__.py`) o troca por `***` — tirar o
+  `%(U)s` do formato exigiria mexer no `startCommand`.
 - **Concorrência**: teto `workers × threads` = **36 requisições simultâneas**. Cada download de mídia
   segura uma thread do primeiro ao último byte, na velocidade de quem assiste — com 4 threads, dois
   ou três vídeos travavam um worker inteiro e o site parava **sem gerar um único 5xx** (incidente
@@ -2471,15 +2604,16 @@ commit isolado. (`npm install` está no blueprint; `npm ci` seria mais seguro �
 `/google/callback`, nunca a local; `AUDIT_AGENT_TOKEN` e `MARKETING_AGENT_TOKEN` **não foram
 preenchidos** na migração — os agentes semanais respondem 404 desde 28/08 (`docs/05`); `TALENTS_*`,
 `FIGURINO_DRIVE_FOLDER_ID` e `GOOGLE_SHEETS_CREDENTIALS` ficaram vazios de propósito (integrações
-de planilha aposentadas). Rate limit em memória por worker e threads de background ×3 são
-trade-offs herdados, documentados acima.
+de planilha aposentadas). `INFINITEPAY_API_KEY` (310) é opcional e também `sync: false`: ausente, a
+loja funciona com o link sem validade (`docs/05`). Rate limit em memória por worker e threads de
+background ×3 são trade-offs herdados, documentados acima.
 
 ### 5.4 Dev local
 
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google (303) e a remoção do Google no cancelamento (306; travada, o ato cancela no sistema e avisa na tela) — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar e excluir evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
+| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google (303), a remoção do Google no cancelamento (306; travada, o ato cancela no sistema e avisa na tela) e o evento de venda da loja virtual (310: criar e apagar) — e `_suppress_infinitepay` (`INFINITEPAY_SUPPRESS_CALLS`, feature 310; escape `INFINITEPAY_ALLOW_LOCAL_CALLS=true`, que cobra de verdade) impede link e reconsulta na InfinitePay com a tag e o segredo reais do espelho — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar e excluir evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
 | Frontend portal | `cd frontend && npm run dev:portal` |

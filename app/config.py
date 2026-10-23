@@ -151,7 +151,9 @@ def _suppress_calendar_event_writes() -> bool:
     produção o importaria 5 minutos depois.
 
     Cobre a devolução e, desde a feature 306, a remoção do cancelamento (os dias e os ensaios do
-    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). A sincronização, a
+    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). Desde a 310, também
+    a criação e a remoção do evento de venda da loja virtual (``virtuais_ops._criar_evento_google``
+    e o cancelamento de pedido pago): travado, a venda existe com id local e sala pendente. A sincronização, a
     limpeza e o "Sincronizar" de um evento continuam lendo o Google real no ambiente local, e
     criar, editar e excluir evento continuam escrevendo sem trava (dívida registrada no
     ``docs/05``). O núcleo lê a chave de
@@ -186,6 +188,26 @@ def _suppress_clicksign() -> bool:
     if os.getenv("CLICKSIGN_SUPPRESS_CALLS", "").lower() == "true":
         return True
     if os.getenv("CLICKSIGN_ALLOW_LOCAL_CALLS", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
+def _suppress_infinitepay() -> bool:
+    """Decide se este processo está proibido de falar com a InfinitePay (feature 310, XIV).
+
+    O `manto_local` é espelho da produção e traz a InfiniteTag e o segredo do aviso reais; o
+    `PUBLIC_BASE_URL` local resolve para a produção. Sem esta trava, reservar na cópia local criava
+    um link de pagamento de verdade, com o aviso apontando para a produção, e a varredura local
+    reconsultava e efetivava pedidos reais. Cobre criar link e reconsultar; o cliente lê a chave a
+    cada chamada (chave ausente = travado).
+
+    ``INFINITEPAY_SUPPRESS_CALLS=true`` trava em qualquer ambiente;
+    ``INFINITEPAY_ALLOW_LOCAL_CALLS=true`` libera o local — e então cobra de verdade.
+    """
+    if os.getenv("INFINITEPAY_SUPPRESS_CALLS", "").lower() == "true":
+        return True
+    if os.getenv("INFINITEPAY_ALLOW_LOCAL_CALLS", "").lower() == "true":
         return False
     db_url = _db_url()
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
@@ -364,6 +386,18 @@ class Config:
     CLICKSIGN_SYNC_INTERVAL = int(os.getenv("CLICKSIGN_SYNC_INTERVAL", "1800"))
     # Costura do verify: processa o aviso na própria requisição em vez de numa thread.
     CLICKSIGN_AVISO_SINCRONO = os.getenv("CLICKSIGN_AVISO_SINCRONO", "").lower() == "true"
+    # Trava da InfinitePay fora da produção (feature 310). Ver `_suppress_infinitepay`.
+    INFINITEPAY_SUPPRESS_CALLS = _suppress_infinitepay()
+    # API Key da InfinitePay (feature 310, R12). Opcional e SEGREDO: só por variável de ambiente
+    # (`render.yaml` com `sync: false`), nunca no SiteSetting, que vai para o backup e para o
+    # espelho. Vazia = fluxo legado provado em produção (link sem validade); com valor, o link vence
+    # junto com a reserva e aceita um pagamento só.
+    INFINITEPAY_API_KEY = os.getenv("INFINITEPAY_API_KEY", "").strip()
+    # Segredo entre o Node e o Flask (feature 310, revisão): só a requisição que traz este valor
+    # em `X-Manto-Proxy-Secret` tem o `X-Manto-Client-Ip` aceito. O backend tem URL pública
+    # (*.onrender.com); sem a prova, quem chamasse direto trocava o cabeçalho a cada requisição e
+    # escapava de todo limite — o de login inclusive. Mesmo valor nos dois serviços do Render.
+    MANTO_PROXY_SECRET = os.getenv("MANTO_PROXY_SECRET", "").strip()
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

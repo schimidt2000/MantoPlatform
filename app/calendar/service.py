@@ -349,6 +349,8 @@ def insert_event(
     conference_request_id: str | None = None,
     *,
     all_day: bool = False,
+    private_props: dict[str, str] | None = None,
+    timeout: float | None = None,
 ) -> dict:
     """Cria um evento no Google Calendar. Retorna o dict do evento criado (inclui 'id').
 
@@ -359,6 +361,11 @@ def insert_event(
         all_day: Evento de dia inteiro (feature 303, devolução ao Google): manda só as datas.
             O fim já está exclusivo no banco (`parse_event_datetime` grava o `end.date` do
             Google), então não se soma um dia.
+        private_props: ``extendedProperties.private`` (feature 310): marca invisível que a
+            sincronização lê para reconhecer o evento como da loja virtual.
+        timeout: Prazo em segundos da conversa com o Google (feature 310, FR-016). Sem ele vale o
+            padrão da biblioteca (60 s); a venda da loja passa um prazo curto porque roda no
+            caminho do aviso e do retorno, com a família esperando.
 
     A criação da sala é assíncrona do lado do Google: a resposta pode voltar com
     ``conferenceData.createRequest.status.statusCode == "pending"`` e **sem** ``hangoutLink``.
@@ -368,7 +375,14 @@ def insert_event(
     creds = load_credentials()
     if not creds:
         raise RuntimeError("Google não conectado. Acesse /google/connect primeiro.")
-    service = build("calendar", "v3", credentials=creds)
+    if timeout:
+        import httplib2
+        from google_auth_httplib2 import AuthorizedHttp
+
+        service = build("calendar", "v3",
+                        http=AuthorizedHttp(creds, http=httplib2.Http(timeout=timeout)))
+    else:
+        service = build("calendar", "v3", credentials=creds)
     body = {
         "summary": title,
         "description": description,
@@ -380,6 +394,8 @@ def insert_event(
         body["end"] = {"date": end_dt.date().isoformat()}
     if location:
         body["location"] = location
+    if private_props:
+        body["extendedProperties"] = {"private": dict(private_props)}
 
     # `conferenceDataVersion=1` é obrigatório para o Google aceitar `conferenceData` — sem ele a
     # API ignora o pedido em silêncio e devolve um evento sem sala.

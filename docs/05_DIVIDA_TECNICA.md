@@ -1,5 +1,9 @@
 # 05 — Dívida Técnica
 
+> **2026-10-20 (feature 310, pronta e aguardando deploy)**: itens 133 (limitador em memória por
+> processo), 134 (História 9 desligada até a `INFINITEPAY_API_KEY`) e 135 (prova do proxy desligada até o
+> `MANTO_PROXY_SECRET`), na baixa da 310 ao fim.
+>
 > **2026-09-08 (feature 296)**: §10 resolvida; pendências operacionais 21-33 registradas ao fim do §10.
 >
 > Achados de uma auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript,
@@ -690,6 +694,7 @@ e `docs/02` (a integração do CRM tinha saído na 021).
 | 154 | **P5** | `ClicksignDocumento` × contratos de artista | o contrato de prestação de serviços artísticos é classificado e ignorado | ligar ao talento pelo telefone do signatário, se o dono quiser |
 | 155 | **P5** | migration `d3c7a1e5b317` × `e8b4a1c7d310` (310) | as duas partem de `c5d2f7a9e306`; a que for mergeada por último precisa reencadear o `down_revision` | conferir `flask db heads` no merge |
 | 156 | **P5** | `app/contratos/situacao_ops.contratos_da_home` | `sugestoes()` consulta por documento a conferir (poucos, mas é N consultas) | lote único por intervalo de datas se a lista crescer |
+
 ## Baixa da feature 318-pix-recebido-por-email (2026-10-22, branch — não mergeada)
 
 **Criadas.** (157–161; nasceram 148–152 na branch e foram renumeradas no merge em lote de 23/10.)
@@ -726,3 +731,18 @@ e `docs/02` (a integração do CRM tinha saído na 021).
 |---|---|---|---|---|
 | 148 | **P5** | `app/api/agenda_write.py` (`api_solicitar_exclusao`, `api_recusar_solicitacao`) | as rotas velhas `/api/events/<id>/solicitar-exclusao` (POST e DELETE) seguem como segunda regra das views novas, para o bundle de antes do deploy; pelo caminho velho o corpo só com o motivo vale, e o pedido nasce sem devolução e com alcance nulo | tirar as duas regras velhas quando o bundle novo for o único (alguns dias depois do deploy); o `verify_312` 9b e o `verify_315` 17 e 26 usam o caminho velho e mudam junto |
 | 149 | **P5** | `solicitacao_ops.responder_na_exclusao` × `api_delete_event` | a resposta "Evento excluído" sai depois do commit da exclusão, lida antes dela: uma recusa que commita entre a leitura e a trava do núcleo dá ao autor "recusado" e depois "excluído" (research R10) | só se aparecer na prática: ler o pedido depois da trava do núcleo, dentro de `_delete_event_flow` |
+
+## Baixa da feature 310-pagamento-loja-virtual (2026-10-20, branch)
+
+**Quitada.** O limite anti-abuso deixou de valer para a loja inteira: o limitador lia o IP da
+infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do_cliente()`, `docs/01`
+§3.13.4). A 88 ("Nova campanha") continua aberta, fora do escopo da 310.
+
+**Criadas.** (162–164; nasceram 133–135 na branch e foram renumeradas no merge em lote de 23/10.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 162 | **P4** | `app/__init__.py` (`Limiter(key_func=ip_do_cliente, default_limits=[])`, sem `storage_uri`) | o Flask-Limiter guarda as contagens **em memória, por processo**: cada um dos 3 workers do gunicorn conta separado, e o limite efetivo de cada família fica até ~3× o nominal (reservar 20/min vira até ~60/min; o aviso, 60 → ~180). O próprio Flask-Limiter avisa no start ("in-memory storage… not recommended for production"). Aceito pela 310: a 310 corrigiu de quem é o balde (o cliente, não a loja inteira), não o tamanho | backend compartilhado (`storage_uri` num Redis, ou no Postgres) — serviço novo no Render, decisão do dono |
+| 163 | **P3** | `INFINITEPAY_API_KEY` no painel do `manto-backend` (Render) | a **História 9 da 310** (link que vence junto com a reserva e aceita um pagamento só) está **desligada** até o dono colar a chave: sem ela o link nasce sem validade e a família ainda pode pagar um horário que já voltou para a vitrine — o pagamento atrasado vira venda ou devolução pela regra única, mas a devolução é trabalho manual no app. O código já suporta (`render.yaml` declara a chave com `sync: false`); o log do deploy diz `[infinitepay] … api_key=ausente (link sem validade)` | o dono cria a chave na InfinitePay e cola no painel do Render (nunca pelo chat); mudar env redeploya, então fora do horário |
+| 164 | **P2** | `MANTO_PROXY_SECRET` nos painéis do `manto-frontend` e do `manto-backend` (Render) | a prova de que o IP do cliente veio do Node (revisão T059 da 310) fica **desligada** até o dono criar a variável com o MESMO valor nos dois serviços: sem ela o backend aceita `X-Manto-Client-Ip` sem prova, e quem chama `manto-backend.onrender.com` direto trocando o cabeçalho escapa de todo limite de taxa — o de login inclusive. O boot avisa `[proxy] MANTO_PROXY_SECRET ausente` | o dono cria um valor aleatório e cola nos dois painéis — frontend primeiro, backend depois (ao contrário, por alguns minutos todo mundo cai no mesmo balde); fora do horário |
+

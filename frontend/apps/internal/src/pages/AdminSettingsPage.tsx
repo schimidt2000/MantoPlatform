@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Button, Card, CardContent, CardHeader, CardTitle, PageHeader, Skeleton } from "@manto/ui";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ConfirmDialog,
+  PageHeader,
+  Skeleton,
+} from "@manto/ui";
+import { ApiRequestError } from "@manto/api-client";
 import { useAdminSettings, useUpdateAdminSettings } from "../lib/adminConfig";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
@@ -16,6 +26,8 @@ export function AdminSettingsPage() {
   const [educamantoCommission, setEducamantoCommission] = useState("");
   const [infinitepayHandle, setInfinitepayHandle] = useState("");
   const [regenerarToken, setRegenerarToken] = useState(false);
+  const [pagamentoAtivo, setPagamentoAtivo] = useState(false);
+  const [confirmarSegredo, setConfirmarSegredo] = useState(false);
   const [address, setAddress] = useState("");
   const [margin, setMargin] = useState("");
   const [mapsKey, setMapsKey] = useState("");
@@ -31,6 +43,7 @@ export function AdminSettingsPage() {
       setFatorR(String(query.data.fator_r_threshold ?? ""));
       setEducamantoCommission(String(query.data.educamanto_commission_rate ?? ""));
       setInfinitepayHandle(query.data.infinitepay_handle ?? "");
+      setPagamentoAtivo(Boolean(query.data.virtuais_pagamento_ativo));
       setAddress(query.data.manto_address);
       setMargin(String(query.data.departure_margin_minutes ?? ""));
       setMapsKey(query.data.google_maps_api_key);
@@ -40,6 +53,40 @@ export function AdminSettingsPage() {
       setReleaseDate(query.data.release_date ?? "");
     }
   }, [query.data]);
+
+  const erroDoCampo =
+    update.error instanceof ApiRequestError ? update.error.fields ?? {} : {};
+
+  /** Monta o envio da tela inteira. A data de corte vai mesmo vazia: vazio é "limpar" (310). */
+  const payload = () => ({
+    default_commission_rate: commission ? Number(commission) : undefined,
+    tax_rate: taxRate ? Number(taxRate) : undefined,
+    fator_r_threshold: fatorR ? Number(fatorR) : undefined,
+    educamanto_commission_rate: educamantoCommission ? Number(educamantoCommission) : undefined,
+    infinitepay_handle: infinitepayHandle || undefined,
+    infinitepay_regenerate_token: regenerarToken || undefined,
+    // Só quando mudou: uma aba aberta antes de alguém desligar a loja religava tudo num Salvar
+    // qualquer de outro campo.
+    virtuais_pagamento_ativo:
+      pagamentoAtivo !== Boolean(query.data?.virtuais_pagamento_ativo) ? pagamentoAtivo : undefined,
+    manto_address: address,
+    departure_margin_minutes: margin ? Number(margin) : undefined,
+    google_maps_api_key: mapsKey,
+    email_notifications_enabled: emailNotifications,
+    whatsapp_form_number: whatsappNumber,
+    google_review_url: googleReviewUrl,
+    release_date: releaseDate,
+  });
+
+  // A caixa "gerar segredo novo" voltava a ser enviada em todo Salvar seguinte e trocava o
+  // segredo de novo (feature 310): depois de salvar, ela desmarca.
+  const salvar = () =>
+    update.mutate(payload(), {
+      onSuccess: () => {
+        setRegenerarToken(false);
+        setConfirmarSegredo(false);
+      },
+    });
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-6">
@@ -133,6 +180,24 @@ export function AdminSettingsPage() {
               <CardTitle>Pagamento da Loja de Interações Virtuais</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
+              {/* Feature 310: salvar a tag ligava a venda de toda campanha publicada. Agora há
+                  um interruptor — desligado, não nasce link novo, mas pedidos já abertos fecham. */}
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4"
+                  checked={pagamentoAtivo}
+                  onChange={(e) => setPagamentoAtivo(e.target.checked)}
+                />
+                <span>
+                  <strong>Pagamento da loja ligado</strong>
+                  <span className="block text-xs text-muted">
+                    Desligado, nenhuma família consegue reservar (a campanha mostra "reservas
+                    fechadas") e nenhuma campanha pode ser publicada. Pagamentos de pedidos já
+                    abertos continuam sendo confirmados.
+                  </span>
+                </span>
+              </label>
               <div>
                 <label className={LABEL}>InfiniteTag (conta que recebe)</label>
                 <input
@@ -140,7 +205,11 @@ export function AdminSettingsPage() {
                   value={infinitepayHandle}
                   placeholder="mantoproducoes"
                   onChange={(e) => setInfinitepayHandle(e.target.value)}
+                  aria-invalid={Boolean(erroDoCampo.infinitepay_handle)}
                 />
+                {erroDoCampo.infinitepay_handle && (
+                  <p className="mt-1 text-[12px] text-red">{erroDoCampo.infinitepay_handle}</p>
+                )}
                 <p className="mt-1 text-xs text-muted">
                   É o seu usuário na InfinitePay — o mesmo que aparece no link de cobrança. Pode
                   colar com <code>$</code> na frente; o sinal é removido automaticamente.
@@ -166,8 +235,9 @@ export function AdminSettingsPage() {
                 </label>
                 <p className="mt-1 text-xs text-muted">
                   É o segredo que autentica o aviso de pagamento da operadora — o sistema gera e
-                  guarda sozinho, você não precisa copiar nada. Gerar de novo{" "}
-                  <strong>invalida o anterior</strong>: gere outro apenas se suspeitar que o atual vazou.
+                  guarda sozinho, você não precisa copiar nada. Gerar de novo troca o segredo;
+                  o anterior ainda vale por 24 horas para os links já abertos. Só faça isso se
+                  suspeitar que vazou.
                 </p>
               </div>
             </CardContent>
@@ -267,29 +337,36 @@ export function AdminSettingsPage() {
 
           <Button
             loading={update.isPending}
-            onClick={() =>
-              update.mutate({
-                default_commission_rate: commission ? Number(commission) : undefined,
-                tax_rate: taxRate ? Number(taxRate) : undefined,
-                fator_r_threshold: fatorR ? Number(fatorR) : undefined,
-                educamanto_commission_rate: educamantoCommission
-                  ? Number(educamantoCommission)
-                  : undefined,
-                infinitepay_handle: infinitepayHandle || undefined,
-                infinitepay_regenerate_token: regenerarToken || undefined,
-                manto_address: address,
-                departure_margin_minutes: margin ? Number(margin) : undefined,
-                google_maps_api_key: mapsKey,
-                email_notifications_enabled: emailNotifications,
-                whatsapp_form_number: whatsappNumber,
-                google_review_url: googleReviewUrl,
-                release_date: releaseDate || undefined,
-              })
-            }
+            onClick={() => {
+              if (!regenerarToken) return salvar();
+              // O diálogo mostra o erro da mutação: sem limpar, abriria com o erro do Salvar anterior.
+              update.reset();
+              setConfirmarSegredo(true);
+            }}
           >
             Salvar configurações
           </Button>
-          {update.isError && <p className="text-sm text-red">Não foi possível salvar as configurações.</p>}
+          {update.isError && (
+            <p className="text-sm text-red">
+              {update.error instanceof ApiRequestError
+                ? update.error.message
+                : "Não foi possível salvar as configurações."}
+            </p>
+          )}
+          <ConfirmDialog
+            open={confirmarSegredo}
+            title="Gerar um segredo novo?"
+            description={
+              `Há ${query.data.virtuais_pedidos_aguardando ?? 0} pedido(s) aguardando pagamento. ` +
+              "O segredo anterior continua aceito por 24 horas, então os links já abertos seguem " +
+              "funcionando — mas só troque se suspeitar que o segredo vazou."
+            }
+            confirmLabel="Gerar e salvar"
+            pending={update.isPending}
+            error={update.isError ? update.error?.message || "Não foi possível salvar as configurações." : null}
+            onConfirm={salvar}
+            onOpenChange={setConfirmarSegredo}
+          />
         </>
       )}
     </div>

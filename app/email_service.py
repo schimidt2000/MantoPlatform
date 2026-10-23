@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import logging
 import re
+import smtplib
 import threading
 from html import escape
 from zoneinfo import ZoneInfo
 
+import flask_mail
 from flask import current_app
 from flask_mail import Mail, Message
 
@@ -19,6 +21,31 @@ from app.constants import DEPARTURE_DEFAULT_LOCATION
 
 log = logging.getLogger(__name__)
 mail = Mail()
+
+#: Prazo da conversa com o SMTP (feature 310, FR-016). O flask-mail 0.10 abre `smtplib.SMTP` sem
+#: timeout: um servidor de e-mail parado prendia para sempre quem esperava o envio — na loja, a
+#: thread do aviso de pagamento e o retorno do checkout, com a família olhando a tela.
+SMTP_TIMEOUT_S = 20
+
+
+class _ConexaoComPrazo(flask_mail.Connection):
+    def configure_host(self):  # noqa: ANN201 — mesma assinatura do flask-mail
+        state = self.mail
+        if state.use_ssl:
+            host = smtplib.SMTP_SSL(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        else:
+            host = smtplib.SMTP(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        host.set_debuglevel(int(state.debug))
+        if state.use_tls:
+            host.starttls()
+        if state.username and state.password:
+            host.login(state.username, state.password)
+        return host
+
+
+# `Mail.connect()` instancia `Connection` pelo nome do módulo do flask-mail: trocar o nome lá é o
+# que faz TODO envio (não só o da loja) ter prazo.
+flask_mail.Connection = _ConexaoComPrazo
 
 _TZ = ZoneInfo("America/Sao_Paulo")
 
@@ -1308,6 +1335,53 @@ def send_virtual_order_confirmed_email(order) -> bool:
     )
 
 
+def _motivo_da_devolucao_virtual(order) -> str | None:
+    """Motivo da devolução mais recente do pedido, ou ``None`` (fonte do corpo e do assunto)."""
+    from app.models import VirtualRefundRequest
+
+    # Pedido sem id (pré-visualização do e-mail com objeto montado na mão) cai na frase padrão.
+    order_id = getattr(order, "id", None)
+    devolucao = (
+        VirtualRefundRequest.query.filter_by(order_id=order_id)
+        .order_by(VirtualRefundRequest.id.desc())
+        .first()
+        if order_id
+        else None
+    )
+    return devolucao.reason if devolucao else None
+
+
+def _motivo_do_cancelamento_virtual(order) -> str:
+    """A frase do porquê, pelo motivo da devolução mais recente (feature 310).
+
+    Antes havia uma frase só ("o horário foi confirmado para outra família"), e a 310 criou
+    cancelamentos por outros motivos — dizer à família um motivo falso é pior que não dizer.
+    """
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado, como combinado com a nossa equipe."
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return (
+            "Precisamos te dar uma notícia chata: o seu pagamento chegou quando o horário da "
+            "chamada já estava começando, e não dava mais tempo de preparar tudo."
+        )
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return (
+            "Precisamos te dar uma notícia chata: os vídeos esgotaram antes de o seu pagamento "
+            "chegar até nós."
+        )
+    return (
+        "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
+        "confirmado para outra família antes do seu pagamento chegar até nós."
+    )
+
+
 def send_virtual_order_cancelled_email(order) -> bool:
     """Avisa o cancelamento por horário indisponível e a devolução em andamento (FR-043a).
 
@@ -1320,10 +1394,7 @@ def send_virtual_order_cancelled_email(order) -> bool:
     campanha = order.campaign
     content = (
         _virtuais_saudacao()
-        + _paragraph(
-            "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
-            "confirmado para outra família antes do seu pagamento chegar até nós."
-        )
+        + _paragraph(_motivo_do_cancelamento_virtual(order))
         + _paragraph(
             f"Seu pedido foi cancelado e a devolução de {_virtuais_valor(order)} já está em "
             "andamento. Assim que ela for concluída, o valor volta pelo mesmo meio de pagamento."
@@ -1339,15 +1410,36 @@ def send_virtual_order_cancelled_email(order) -> bool:
         )
     )
 
+    # Assunto e preheader seguem o mesmo motivo do corpo (feature 310): a família que desistiu
+    # não pode ler na caixa de entrada que "o horário foi confirmado para outra família".
+    assunto, preheader = _cabecalho_do_cancelamento_virtual(order)
     return _send(
         to=order.contact_email,
-        subject="Sobre a sua reserva — precisamos remarcar",
-        html=_html_wrap(
-            content,
-            preheader="O horário foi confirmado para outra família; a devolução está em andamento.",
-            tema=TEMA_LOJA_VIRTUAL,
-        ),
+        subject=assunto,
+        html=_html_wrap(content, preheader=preheader, tema=TEMA_LOJA_VIRTUAL),
     )
+
+
+def _cabecalho_do_cancelamento_virtual(order) -> tuple[str, str]:
+    """(assunto, preheader) do e-mail de cancelamento, pelo motivo da devolução (feature 310)."""
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
+    andamento = "a devolução está em andamento."
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado", f"Cancelamos como combinado; {andamento}"
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return ("Sobre a sua reserva — precisamos remarcar",
+                f"O pagamento chegou em cima da hora da chamada; {andamento}")
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return ("Sobre o seu vídeo — a devolução está em andamento",
+                f"Os vídeos esgotaram antes de o seu pagamento chegar; {andamento}")
+    return ("Sobre a sua reserva — precisamos remarcar",
+            f"O horário foi confirmado para outra família; {andamento}")
 
 
 def send_virtual_video_ready_email(order) -> bool:

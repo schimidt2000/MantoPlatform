@@ -361,12 +361,44 @@ VIRTUAL_REFUND_STATUS_CONCLUIDA = "concluida"
 # operadora não respondeu — a família pode ter pago em dia e perdido o horário mesmo assim.
 VIRTUAL_REFUND_REASON_CONFLITO = "conflito_horario"
 VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO = "conflito_sem_confirmacao"
+# Feature 310: todo pagamento provado termina em venda ou numa devolução com motivo — nunca em
+# dinheiro sem dono no sistema (spec R-01).
+VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO = "pagamento_em_dobro"
+VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO = "pagamento_sem_pedido_ativo"
+VIRTUAL_REFUND_REASON_HORARIO_PASSOU = "horario_passou"
+VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO = "sem_vaga_de_video"
+VIRTUAL_REFUND_REASON_DESISTENCIA = "desistencia"
 VIRTUAL_REFUND_REASON_LABELS = {
     VIRTUAL_REFUND_REASON_CONFLITO: "Horário já vendido a outra família",
     VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO: (
         "Horário liberado sem confirmação da operadora — a família pode ter pago no prazo"
     ),
+    VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO: "Segundo pagamento de um pedido já pago",
+    VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO: "Pagamento de um pedido já cancelado",
+    VIRTUAL_REFUND_REASON_HORARIO_PASSOU: "Pagamento chegou quando o horário já tinha começado",
+    VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO: "Vídeos gravados esgotaram antes do pagamento",
+    VIRTUAL_REFUND_REASON_DESISTENCIA: "Cancelado pela equipe (desistência da família)",
 }
+
+# Desfechos do aviso de pagamento (feature 310, R-06). Os finais encerram o aviso; os outros são
+# reprocessados pela varredura até virarem final ou "a conferir".
+VIRTUAL_AVISO_EFETIVADO = "efetivado"
+VIRTUAL_AVISO_DEVOLUCAO = "devolucao_aberta"
+VIRTUAL_AVISO_CONFLITO = "conflito"
+VIRTUAL_AVISO_DUPLICADO = "duplicado"
+VIRTUAL_AVISO_DIVERGENTE = "divergente"
+VIRTUAL_AVISO_ORFAO = "orfao"
+VIRTUAL_AVISO_RETIDO = "retido"
+VIRTUAL_AVISO_PENDENTE_PROVA = "pendente_prova"
+VIRTUAL_AVISO_RECUSADO_TOKEN = "token_invalido"
+VIRTUAL_AVISO_FINAIS = frozenset({
+    VIRTUAL_AVISO_EFETIVADO, VIRTUAL_AVISO_DEVOLUCAO, VIRTUAL_AVISO_CONFLITO,
+    VIRTUAL_AVISO_DUPLICADO, VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO,
+    VIRTUAL_AVISO_RECUSADO_TOKEN,
+})
+VIRTUAL_AVISO_STATE_PENDENTE = "pendente"
+VIRTUAL_AVISO_STATE_PROCESSANDO = "processando"
+VIRTUAL_AVISO_STATE_DECIDIDO = "decidido"
 
 # ── Destino do formulário (feature 298) ───────────────────────────────────────────────────────
 # Corte padrão de "o que é tarefa": a data de início do sistema (`SiteSetting.release_date`) manda;
@@ -619,6 +651,23 @@ VIRTUAL_NOTIFICATION_LABELS = {
 # Duração fixa de uma chamada ao vivo e janela do "soft lock" do horário (FR-017).
 VIRTUAL_SLOT_MINUTES = 10
 VIRTUAL_SOFT_LOCK_MINUTES = 15
+# Feature 310. Reservar só até 2 h antes (decisão do dono, 19/10/2026: a equipe lê as dicas e o
+# artista se prepara). No PAGAMENTO a folga é outra, 30 min: quem reservou 2h01 antes e pagou 15 min
+# depois cumpriu a regra e não pode virar devolução (research R1.6).
+VIRTUAL_ANTECEDENCIA_RESERVA_HORAS = 2
+VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO = 30
+# Sala do Meet: depois das 3 tentativas da política, retenta a cada 10 min até o horário; faltando
+# menos de 6 h sem sala, a equipe é avisada (R11).
+VIRTUAL_SALA_RETRY_LONGO_MIN = 10
+VIRTUAL_SALA_ALERTA_HORAS = 6
+# Prazo (s) da criação do evento da venda no Google (feature 310, FR-016): o caminho do aviso e do
+# retorno não pode ficar 60 s × 3 tentativas pendurado com a família esperando.
+VIRTUAL_GOOGLE_TIMEOUT_S = 20
+# Aviso de pagamento sem desfecho: reprocessado por até 48 h, depois vira "a conferir" (R-06).
+VIRTUAL_AVISO_REPROCESSA_HORAS = 48
+VIRTUAL_AVISO_RETRY_LONGO_MIN = 10
+# Segredo anterior do aviso continua aceito por 24 h depois de regerar (R-12).
+VIRTUAL_TOKEN_ANTERIOR_HORAS = 24
 
 # Política única de retry para chamadas externas (FR-056): 3 tentativas nos minutos 0, 1 e 2.
 # O intervalo curto é deliberado — protege contra vender horário já pago sem prender estoque no

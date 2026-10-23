@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from flask import (
@@ -17,7 +18,6 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from datetime import datetime
 from .config import AVISOS_DE_URL, Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
 from .constants import RoleName
@@ -29,7 +29,37 @@ migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# Feature 310 (R8): a chave do limite é o IP do cliente informado pelo Node, não o
+# `remote_addr` (que atrás do proxy é o IP da infraestrutura — limite da loja inteira).
+from .api_utils import ip_do_cliente as _ip_do_cliente  # noqa: E402
+from .api_utils import mascarar_url_webhook  # noqa: E402
+
+limiter = Limiter(key_func=_ip_do_cliente, default_limits=[])
+
+
+class _MascaraSegredoDoAviso(logging.Filter):
+    """Segredo do aviso de pagamento fora do log de acesso do gunicorn (feature 310, R-13).
+
+    O formato de acesso do `render.yaml` grava o caminho (`%(U)s`), e o caminho do aviso É o
+    segredo. Mexer no `startCommand` para tirar o caminho já derrubou a produção; o filtro age
+    dentro do processo, sem tocar no start.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        from .api_utils import mascarar_url_webhook
+
+        if isinstance(record.args, dict):
+            record.args = {
+                k: mascarar_url_webhook(v) if isinstance(v, str) else v
+                for k, v in record.args.items()
+            }
+        elif isinstance(record.args, tuple):
+            record.args = tuple(
+                mascarar_url_webhook(v) if isinstance(v, str) else v for v in record.args
+            )
+        if isinstance(record.msg, str):
+            record.msg = mascarar_url_webhook(record.msg)
+        return True
 
 
 def _is_revendedor_only(user) -> bool:
@@ -631,6 +661,13 @@ def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
     app.config.from_object(Config)
+    # Feature 310: máscara do segredo do aviso nos logs de acesso (gunicorn) e da aplicação. O
+    # `app.logger` entra porque o "Exception on <caminho>" do Flask num 500 grava o caminho — e o
+    # caminho do aviso É o segredo.
+    for _log in (logging.getLogger("gunicorn.access"), logging.getLogger("gunicorn.error"),
+                 logging.getLogger("werkzeug"), app.logger):
+        if not any(isinstance(f, _MascaraSegredoDoAviso) for f in _log.filters):
+            _log.addFilter(_MascaraSegredoDoAviso())
     app.jinja_env.filters['urlencode'] = _url_quote
 
     # Hotfix 269b: os endereços que saem para gente de fora ficam registrados no log do deploy —
@@ -642,6 +679,19 @@ def create_app():
         "[links externos] portal=%s plataforma=%s",
         app.config.get("PORTAL_URL"), app.config.get("PUBLIC_BASE_URL"),
     )
+    # Feature 310 (constituição XIV): estado da InfinitePay no log do deploy. A API Key ausente é
+    # estado válido (fluxo legado), mas precisa ser visível — foi o silêncio que fez tokens sumirem
+    # na migração para o Render.
+    app.logger.info(
+        "[infinitepay] travada=%s api_key=%s",
+        app.config.get("INFINITEPAY_SUPPRESS_CALLS"),
+        "configurada" if app.config.get("INFINITEPAY_API_KEY") else "ausente (link sem validade)",
+    )
+    if not app.config.get("MANTO_PROXY_SECRET") and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar "
+            "o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend."
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl
@@ -733,7 +783,8 @@ def create_app():
             elapsed = time.monotonic() - started
             if elapsed >= _SLOW_REQUEST_S:
                 app.logger.warning(
-                    f"[slow] {elapsed:.1f}s {request.method} {request.path} -> {resp.status_code}"
+                    f"[slow] {elapsed:.1f}s {request.method} "
+                    f"{mascarar_url_webhook(request.path)} -> {resp.status_code}"
                 )
         return resp
 
