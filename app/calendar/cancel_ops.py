@@ -3050,6 +3050,9 @@ def gravar_comprovante_no_grupo(
             raise CancelValidationError(
                 "Insira o arquivo do comprovante.", fields={"file": "Obrigatório"}
             )
+        from app.financeiro import pix_ops
+
+        pix_ops.comprovante_incluido(comprovante)  # a tarefa "incluir o comprovante" some do sino
         return comprovante
     if acao == "adicionar" and checar_pix and valor:
         # Feature 318: sob a trava do grupo (a thread do PIX grava sob a mesma trava), um comprovante

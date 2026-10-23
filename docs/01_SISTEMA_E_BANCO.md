@@ -1079,6 +1079,7 @@ Núcleo: `app/financeiro/pix_ops.py` (regra de vínculo e respostas do "É esta?
 | Método e rota | Papéis | O quê |
 |---|---|---|
 | `GET /api/pix?aba=conferir\|ligados` | COMERCIAL, FINANCEIRO, SUPERADMIN | fila "É esta?" ou ligados de 30 dias; o repasse da InfinitePay só para FINANCEIRO/SUPERADMIN; `flags` |
+| `GET /api/pix/sem-comprovante` | COMERCIAL, FINANCEIRO, SUPERADMIN | a tarefa (23/10): pagamentos de PIX sem arquivo; incluir = `POST /api/events/<id>/payments` com `anexar_a` (só COMERCIAL, FINANCEIRO, SUPERADMIN); o sino `pix.sem_comprovante` vai ao FINANCEIRO e é marcado lido quando o arquivo entra |
 | `GET /api/pix/saude` | COMERCIAL, FINANCEIRO, SUPERADMIN | última leitura, lidos/não entendidos/conta não cadastrada em 7 dias, contas vistas, `alerta` (`parada`\|`erro`) |
 | `GET /api/pix/resumo-por-conta?meses=6` | FINANCEIRO, SUPERADMIN | Σ `event_payments.amount` por conta e mês (mês de SP) |
 | `POST /api/pix/<id>/confirmar` `{event_id\|event_ids, novo?}` | COMERCIAL, FINANCEIRO, SUPERADMIN; repasse só FINANCEIRO/SUPERADMIN | liga pelo núcleo de comprovante; com comprovante manual do mesmo valor, `novo=false` concilia e `novo=true` cria outro; repasse só numa combinação sugerida |

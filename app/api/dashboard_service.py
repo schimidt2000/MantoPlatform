@@ -594,6 +594,13 @@ def build_dashboard_summary(
             return {"total": pix_ops.contagem_para_conferir(ver_repasse=ve_repasse)}
 
         bloco["pix_para_conferir"] = _bloco("pix_para_conferir", _pix)
+
+        def _sem_comprovante() -> dict[str, Any]:
+            from app.financeiro import pix_ops
+
+            return {"total": pix_ops.contagem_sem_comprovante()}
+
+        bloco["pix_sem_comprovante"] = _bloco("pix_sem_comprovante", _sem_comprovante)
         return bloco
 
     # O `_bloco` de fora fica só como rede para defeito no próprio envelope: falha das vendas e

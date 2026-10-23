@@ -63,6 +63,7 @@ KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
 KIND_PIX_LIGADO = "pix.ligado"
 KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
 KIND_PIX_REPASSE = "pix.repasse_infinitepay"
+KIND_PIX_SEM_COMPROVANTE = "pix.sem_comprovante"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -84,6 +85,8 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     KIND_PIX_LIGADO: (RoleName.COMERCIAL,),
     KIND_PIX_PARA_CONFERIR: (RoleName.FINANCEIRO,),
     KIND_PIX_REPASSE: (RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    # A tarefa "incluir o comprovante do PIX" é do Financeiro (decisão do dono, 23/10).
+    KIND_PIX_SEM_COMPROVANTE: (RoleName.FINANCEIRO,),
 }
 
 SEVERIDADES = ("info", "urgent")

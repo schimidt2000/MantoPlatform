@@ -397,6 +397,11 @@ conciliação podia engolir um pagamento de mesmo valor; nome de um termo; corri
 pagamento de PIX deixava o PIX órfão; repasse sem validação; par da Prime reusado; "LTDA"; anexar no cancelado;
 aviso que quebrava sumia; mês do resumo em UTC; auditor; edição do evento).
 
+**Decisão de 23/10 — o comprovante é tarefa, não PDF do e-mail.** O aviso do banco não traz as informações de fato
+nem prova que o PIX não foi estornado: o PIX entra como recebido e vira a tarefa "incluir o comprovante" — sino do
+Financeiro, aba "Sem comprovante" em `/pix`, linha na Home; Comercial, Financeiro e Superadmin incluem o PDF (o
+recebido não muda; a tarefa some do sino). `verify_318.py` **37/37** (cenário 36).
+
 **Depois do deploy (dono).** Em `/pix` → Configuração: número das contas Inter MEI e Inter Prime ("na conta …" do
 aviso), acrescentar o nome do sócio aos pagadores próprios, **ligar**; no dia seguinte, conferir a faixa de saúde e as
 primeiras ligações. Follow-up recomendado: link InfinitePay por venda (`docs/05` 148).

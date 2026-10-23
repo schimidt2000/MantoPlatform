@@ -49,6 +49,11 @@ período, o que importa para o contador.
   recomendado: o pagamento **fica como comprovante manual** (o arquivo prova o pagamento), só perde o vínculo, e o PIX
   volta a "para conferir".
 
+- **Q (23/10): o comprovante pode ser gerado do e-mail?** → **A**: não — "pegar do email é ruim mesmo, porque não tem
+  as informações de fato e não comprova que, de fato, aconteceu". O PIX entra como recebido e **gera uma tarefa para o
+  Financeiro incluir o comprovante** (PDF do banco); "Comercial, financeiro e superadmin podem incluir o comprovante na
+  venda, sem PDF automático a partir do email".
+
 ### Fatos da viabilidade (22/10/2026, leitura sem escrita)
 
 - Só o **Inter** manda e-mail por PIX recebido (remetente `no-reply@inter.co`, assunto "Pagamento Pix recebido"):
@@ -272,6 +277,9 @@ viram faixa de alerta na tela de PIX.
 - **FR-017**: O sino DEVE avisar o vendedor da venda sugerida e o Financeiro quando um PIX fica para conferir, e o
   vendedor quando um PIX liga sozinho à sua venda; repasse da InfinitePay avisa só Financeiro/Superadmin.
 - **FR-018**: A Home da comercial DEVE mostrar quantos PIX estão para conferir, com atalho para a fila.
+- **FR-020** (23/10): Todo pagamento criado por PIX DEVE virar a tarefa "incluir o comprovante": aviso no sino do
+  Financeiro, aba "Sem comprovante" em `/pix` e linha na Home; Comercial, Financeiro e Superadmin incluem o arquivo (o
+  recebido não muda) e a tarefa some do sino. Nenhum PDF é gerado a partir do e-mail.
 - **FR-019**: O sistema NÃO DEVE escrever em serviço externo nem alterar a caixa de e-mail (só leitura); no banco
   local de desenvolvimento a leitura nasce desligada.
 

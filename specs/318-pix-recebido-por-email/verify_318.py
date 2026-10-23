@@ -812,6 +812,51 @@ def c35_anexar_no_cancelado() -> None:
     _garante(_pagamentos(eid)[0][2] is None, "o arquivo entrou")
 
 
+# ── T: a tarefa "incluir o comprovante" (decisão do dono, 23/10) ──────────────────────────────
+def c36_tarefa_do_comprovante() -> None:
+    eid = _venda("t1", "6363.63", "Tarefa Comprovante Teste")
+    raw, mid = _aviso("6.363,63", "Tarefa Comprovante Teste")
+    _processar(raw)
+    pag = _pix(mid)["pagamento"]
+    _garante(pag, "não ligou")
+    fin = estado["usuarios"]["fin"]["id"]
+    noti = _no_banco(
+        "SELECT read_at FROM notifications WHERE kind = 'pix.sem_comprovante' AND user_id = :u "
+        "AND entity_type = 'event_payment' AND entity_id = :p",
+        u=fin,
+        p=pag,
+    )
+    _garante(len(noti) == 1 and noti[0][0] is None, f"Financeiro sem a tarefa no sino: {noti}")
+    lista = _get("com", "/api/pix/sem-comprovante")
+    _garante(
+        any(i["pagamento_id"] == pag for i in lista.get("itens", [])), "fora da lista da tarefa"
+    )
+    _garante(
+        _cliente("cast").get("/api/pix/sem-comprovante").status_code == 403, "Casting leu a tarefa"
+    )
+    painel = _get("com", "/api/dashboard")
+    _garante(
+        ((painel.get("comercial") or {}).get("pix_sem_comprovante") or {}).get("total", 0) >= 1,
+        "Home sem a contagem",
+    )
+    r = _anexar("cast", eid, "6363.63", anexar_a=str(pag))
+    _garante(r.status_code == 403, f"Casting incluiu o comprovante: {r.status_code}")
+    r = _anexar("com", eid, "6363.63", anexar_a=str(pag))
+    _garante(
+        r.status_code in (200, 201),
+        f"Comercial incluir → {r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
+    _garante(_pagamentos(eid)[0][2], "o arquivo não entrou")
+    _igual(_recebido(eid), "6363.63", "recebido não muda ao incluir o comprovante")
+    lista = _get("fin", "/api/pix/sem-comprovante")
+    _garante(all(i["pagamento_id"] != pag for i in lista.get("itens", [])), "continua na tarefa")
+    lida = _no_banco(
+        "SELECT read_at FROM notifications WHERE kind = 'pix.sem_comprovante' AND entity_id = :p",
+        p=pag,
+    )
+    _garante(lida and all(x[0] is not None for x in lida), f"a tarefa não saiu do sino: {lida}")
+
+
 CENARIOS = [
     ("H1", "1", "valor + nome, venda única → liga sozinho", c1_valor_e_nome),
     ("H1", "2", "o mesmo e-mail duas vezes", c2_idempotente),
@@ -853,6 +898,12 @@ CENARIOS = [
     ("R", "33", "comprovante de outra conta não é conciliado", c33_conciliacao_outra_conta),
     ("R", "34", "repasse: 'LTDA' e escolha fora das sugestões (DEVE FALHAR)", c34_repasse_validado),
     ("R", "35", "anexar no cancelado pela Comercial (DEVE FALHAR)", c35_anexar_no_cancelado),
+    (
+        "T",
+        "36",
+        "tarefa do comprovante: sino do Financeiro, lista, Casting não inclui (DEVE FALHAR)",
+        c36_tarefa_do_comprovante,
+    ),
 ]
 
 

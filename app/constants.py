@@ -714,3 +714,7 @@ PIX_TITULAR_PRIME = "PRIME"
 PIX_KIND_LIGADO = "pix.ligado"
 PIX_KIND_PARA_CONFERIR = "pix.para_conferir"
 PIX_KIND_REPASSE = "pix.repasse_infinitepay"
+# Decisão do dono (23/10): o PIX entra como recebido, mas o comprovante oficial (PDF do banco) é
+# tarefa de gente — o Financeiro é avisado, e Comercial/Financeiro/Superadmin anexam.
+PIX_KIND_SEM_COMPROVANTE = "pix.sem_comprovante"
+PIX_ENTIDADE_PAGAMENTO = "event_payment"

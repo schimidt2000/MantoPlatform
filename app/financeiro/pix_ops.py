@@ -507,6 +507,8 @@ def _ligar_uma(
             f"Pagamento de {format_brl(valor, prefix=True)} registrado pelo PIX de "
             f"{pix.pagador_nome or '—'} ({_rotulo_conta(pix)}, {pix.recebido_em:%d/%m %H:%M})"
         )
+        db.session.flush()
+        _avisar_sem_comprovante(pix, pagamento, evento)
     _log(evento.id, texto + (" — automático" if usuario is None else ""), usuario, pix)
     return pagamento
 
@@ -792,6 +794,10 @@ def desfazer(pix_id: int, usuario: User) -> PixRecebido:
         if pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX and not pagamento.file_path:
             valor = pagamento.amount
             gravar_comprovante_no_grupo(evento, "excluir", actor=usuario, comprovante=pagamento)
+            from app.constants import PIX_ENTIDADE_PAGAMENTO
+            from app.notificacoes import notificacoes_ops as notif
+
+            notif.apagar_por_entidade(PIX_ENTIDADE_PAGAMENTO, pid)  # a tarefa do pagamento que saiu
             _log(
                 evento.id,
                 f"Desfez o PIX de {format_brl(pix.valor, prefix=True)}: pagamento de "
@@ -993,3 +999,70 @@ def pix_do_pagamento(pagamento_id: int) -> PixRecebido | None:
         if pagamento_id in (candidato.pagamentos_extra or []):
             return candidato
     return None
+
+
+# ── tarefa "incluir o comprovante" (decisão do dono, 23/10) ─────────────────────────────────────
+def _avisar_sem_comprovante(
+    pix: PixRecebido, pagamento: EventPayment, evento: CalendarEvent
+) -> None:
+    """O PIX entrou como recebido; o comprovante oficial do banco ainda falta — avisa o Financeiro."""
+    from app.constants import PIX_ENTIDADE_PAGAMENTO, PIX_KIND_SEM_COMPROVANTE
+    from app.notificacoes import notificacoes_ops as notif
+
+    notif.emitir(
+        PIX_KIND_SEM_COMPROVANTE,
+        title=(
+            f"Incluir o comprovante do PIX de {format_brl(pagamento.amount, prefix=True)} — "
+            f"{evento.title}"[:200]
+        ),
+        body=f"{pix.pagador_nome or '—'} · {_rotulo_conta(pix)} · {pix.recebido_em:%d/%m/%Y %H:%M}",
+        link_path="/pix?aba=sem_comprovante",
+        entidade=(PIX_ENTIDADE_PAGAMENTO, pagamento.id),
+        dedupe_key=f"{PIX_KIND_SEM_COMPROVANTE}:{pagamento.id}",
+    )
+
+
+def comprovante_incluido(pagamento: EventPayment) -> None:
+    """O arquivo chegou: a tarefa some do sino de todo mundo. Sem commit."""
+    from app.constants import PIX_ENTIDADE_PAGAMENTO, PIX_KIND_SEM_COMPROVANTE
+    from app.notificacoes import notificacoes_ops as notif
+
+    notif.marcar_lidas_por_entidade(
+        PIX_ENTIDADE_PAGAMENTO, pagamento.id, kind=PIX_KIND_SEM_COMPROVANTE
+    )
+
+
+def sem_comprovante() -> list[dict]:
+    """Os pagamentos registrados por PIX que ainda esperam o comprovante do banco (a tarefa)."""
+    pagamentos = (
+        EventPayment.query.filter(
+            EventPayment.origem == EVENT_PAYMENT_ORIGEM_PIX, EventPayment.file_path.is_(None)
+        )
+        .order_by(EventPayment.created_at.asc())
+        .limit(300)
+        .all()
+    )
+    itens = []
+    for pagamento in pagamentos:
+        evento = db.session.get(CalendarEvent, pagamento.event_id)
+        pix = pix_do_pagamento(pagamento.id)
+        itens.append(
+            {
+                "pagamento_id": pagamento.id,
+                "event_id": pagamento.event_id,
+                "titulo": evento.title if evento else None,
+                "data": evento.start_at.date().isoformat() if evento and evento.start_at else None,
+                "valor": str(pagamento.amount) if pagamento.amount is not None else None,
+                "conta": pagamento.conta.apelido if pagamento.conta else None,
+                "pagador": pix.pagador_nome if pix else None,
+                "recebido_em": pix.recebido_em.isoformat(timespec="seconds") if pix else None,
+                "automatico": bool(pix and pix.estado == PIX_ESTADO_LIGADO_AUTO),
+            }
+        )
+    return itens
+
+
+def contagem_sem_comprovante() -> int:
+    return EventPayment.query.filter(
+        EventPayment.origem == EVENT_PAYMENT_ORIGEM_PIX, EventPayment.file_path.is_(None)
+    ).count()

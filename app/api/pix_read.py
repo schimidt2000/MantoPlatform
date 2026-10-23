@@ -95,6 +95,16 @@ def api_pix_listar() -> Any:
     )
 
 
+@api_bp.route("/pix/sem-comprovante", methods=["GET"])
+@api_login_required
+def api_pix_sem_comprovante() -> Any:
+    """A tarefa: pagamentos registrados por PIX esperando o comprovante do banco (decisão de 23/10)."""
+    negado = _require_vendas()
+    if negado:
+        return negado
+    return jsonify({"itens": pix_ops.sem_comprovante()})
+
+
 @api_bp.route("/pix/saude", methods=["GET"])
 @api_login_required
 def api_pix_saude() -> Any:

@@ -1394,6 +1394,26 @@ export function DashboardPage() {
               </div>
             )}
 
+            {/* Feature 318 (23/10): a tarefa de incluir o comprovante do banco dos PIX que já entraram. */}
+            {data.comercial?.pix_sem_comprovante && data.comercial.pix_sem_comprovante.total > 0 && (
+              <div className="overflow-hidden rounded-lg border border-line">
+                <LinhaDaHome
+                  severidade="cinza"
+                  cabecalho={
+                    <span>
+                      📎 {data.comercial.pix_sem_comprovante.total} PIX sem comprovante — incluir o PDF do banco
+                    </span>
+                  }
+                  detalhe="O valor já conta como recebido; falta anexar o comprovante."
+                  acoes={
+                    <Button asChild size="sm" variant="outline">
+                      <Link to="/pix?aba=sem_comprovante">Incluir</Link>
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+
             {/* Feature 299: o painel "Comercial" virou dois, "Cobranças" e "Sem valor", cada um
                 com o nome do seu card. O contador do painel aberto mostra todas as linhas. */}
             {data.comercial && (

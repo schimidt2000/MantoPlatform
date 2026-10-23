@@ -2187,6 +2187,10 @@ def api_add_payment(event_id: int) -> Any:
     conta_id = _int_or_none(request.form.get("conta_id"))
     anexar_a = _int_or_none(request.form.get("anexar_a"))
     if anexar_a is not None:
+        # Decisão do dono (23/10): incluir o comprovante do PIX é de Comercial, Financeiro e
+        # Superadmin (o POST de comprovante comum segue com `_CAN_EDIT_EVENT`).
+        if not _can_manage_sale():
+            return json_error("Sem permissão", 403)
         pagamento = db.session.get(EventPayment, anexar_a)
         if pagamento is None or not _pagamento_de_pix_sem_arquivo_do_grupo(event, pagamento):
             return json_error("Esse pagamento não aceita anexo.", 400, fields={"anexar_a": "Inválido"})

@@ -1860,6 +1860,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   "É o comprovante já anexado" / "É outro pagamento". Repasse da InfinitePay (só Financeiro/Superadmin): grupos de
   1–3 vendas no cartão com cobrado e taxa, "É esta"/"São estas". "Ligados (30 dias)" — selo automático/confirmado
   e "Desfazer" (Financeiro/Superadmin).
+- **Aba "Sem comprovante (N)"** (decisão do dono, 23/10): cada PIX que já entrou como recebido e espera o PDF do banco, com "Incluir comprovante" (Comercial, Financeiro, Superadmin); o sino avisa o Financeiro e leva a esta aba (`/pix?aba=sem_comprovante`); na Home, linha "📎 N PIX sem comprovante — incluir o PDF do banco".
 - **Recebido por conta** (Financeiro/Superadmin): tabela conta × últimos 6 meses (mês de SP).
 - **Configuração da leitura** (Superadmin): ligar/desligar, número de cada conta, pagadores próprios.
 - **Home**: linha amarela "💸 N PIX para conferir — é de qual venda?" com "Conferir" (some com zero).

@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
 import { Card, CardContent, PageHeader, Skeleton, Tabs, TabsList, TabsTrigger } from "@manto/ui";
 import { CartaoPixLigado, CartaoPixParaConferir } from "../components/pix/CartaoPix";
 import { ConfigPixPainel, ResumoPorConta, SaudeDaLeitura } from "../components/pix/PainelPix";
+import { ListaSemComprovante, usePixSemComprovante } from "../components/pix/SemComprovante";
 import { usePixLista, type AbaPix } from "../lib/pix";
 
 /**
@@ -10,9 +12,17 @@ import { usePixLista, type AbaPix } from "../lib/pix";
  * sozinho ("É esta?"), o que ligou nos últimos 30 dias e — para Financeiro/Superadmin — o recebido
  * por conta. O Superadmin configura a leitura aqui mesmo.
  */
+type Aba = AbaPix | "sem_comprovante";
+
 export function PixRecebidosPage() {
-  const [aba, setAba] = useState<AbaPix>("conferir");
-  const lista = usePixLista(aba);
+  // `?aba=sem_comprovante` é o link do sino ("Incluir o comprovante do PIX…").
+  const [params] = useSearchParams();
+  const inicial = params.get("aba");
+  const [aba, setAba] = useState<Aba>(
+    inicial === "sem_comprovante" || inicial === "ligados" ? inicial : "conferir",
+  );
+  const lista = usePixLista(aba === "ligados" ? "ligados" : "conferir");
+  const semComprovante = usePixSemComprovante();
   const flags = lista.data?.flags;
 
   return (
@@ -24,16 +34,21 @@ export function PixRecebidosPage() {
       />
       <SaudeDaLeitura />
 
-      <Tabs value={aba} onValueChange={(v) => setAba(v as AbaPix)}>
+      <Tabs value={aba} onValueChange={(v) => setAba(v as Aba)}>
         <TabsList>
           <TabsTrigger value="conferir">
             Para conferir{lista.data ? ` (${lista.data.contagem_conferir})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="sem_comprovante">
+            Sem comprovante{semComprovante.data ? ` (${semComprovante.data.itens.length})` : ""}
           </TabsTrigger>
           <TabsTrigger value="ligados">Ligados (30 dias)</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {lista.isLoading ? (
+      {aba === "sem_comprovante" ? (
+        <ListaSemComprovante />
+      ) : lista.isLoading ? (
         <Skeleton className="h-32 w-full" />
       ) : lista.isError ? (
         <p role="alert" className="text-sm text-red">
