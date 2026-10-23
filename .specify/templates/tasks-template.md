@@ -100,6 +100,7 @@ certos.
 
 - [ ] TXXX `cd frontend && npm run typecheck` limpo (três SPAs) e `ruff check` nos arquivos tocados
 - [ ] TXXX Tela aberta de verdade (Browser pane); superfície pública em viewport mobile
+- [ ] TXXX Texto novo ou alterado revisado pelo Princípio XV (tom da superfície + glossário), na tela aberta junto dos vizinhos
 - [ ] TXXX Gates de RBAC na tabela de `docs/01` §4.3
 - [ ] TXXX Docs por fonte única: `docs/01`, `docs/02`, `docs/03` (entrada no topo) — `docs/00`,
       `docs/04`, `docs/05` se aplicável
