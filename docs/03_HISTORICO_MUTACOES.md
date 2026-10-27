@@ -4,7 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-23** · Estado do repositório: pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
+> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **314-gastos-extras-filtros** (sem
+> migration; **EM PRODUÇÃO desde 27/10/2026 ~19h**, a pedido do dono, fora do horário — a `/gastos` na tela inteira,
+> sem rolagem lateral, com a situação de cada gasto vinda do servidor, "Pagos" e "Rejeitados" recolhidos e filtros como
+> em Pagamentos; `verify_314.py` 8/8) — antes dela pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
 > do dono, num push só, na ordem dos merges: **316b-guia-de-texto** (constituição v3.1.0, Princípio XV; só
 > documentação), **319-aviso-gasto-extra** (o e-mail de gasto extra diz o que é na notificação), **315-pedido-de-cancelamento**
 > (migration `d8b4e15f2c31`), **317-contratos-clicksign** (migration `d3c7a1e5b317`; desligada até o
@@ -171,7 +174,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **314-gastos-extras-filtros** | *(branch, não mergeada)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
+| **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
 | **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
 | **317-contratos-clicksign** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
@@ -366,7 +369,8 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 314 — Gastos Extras na tela inteira, com filtros e os pagos recolhidos   (314-gastos-extras-filtros · 2026-10-27 · sem migration)
 
-> **Branch `314-gastos-extras-filtros`, worktree `C:\tmp\mp314` — não mergeada.** Nível 1. Spec, plano,
+> **EM PRODUÇÃO desde 27/10/2026 ~19h** pelo merge `merge: 314 — …` sobre a `main` `e60aae53`, a pedido do dono,
+> fora do horário (sem migration; dívidas 165–167). Nível 1. Spec, plano,
 > pesquisa (D1–D9), contrato e roteiro em `specs/314-gastos-extras-filtros/`. `verify_314` 8/8.
 
 **O pedido.** O dono mandou um print em 21/10. A tabela ficava numa coluna de largura fixa com um vazio à
