@@ -16,8 +16,8 @@ mesclada) em 27/10/2026 e o mapa da tela feito em 21/10.
   campos já chegam e não haveria mudança de backend. Mas seria a regra da planilha num segundo lugar, livre para
   divergir na próxima mudança dela.
 - **Ponte de deploy**: `situacao?` é opcional no tipo TS (armadilha 21). Sem a chave (backend antigo por alguns
-  minutos), o gasto é tratado como pede-ação e fica na lista principal, com o selo antigo. Nunca some num grupo
-  recolhido.
+  minutos), pendente e rejeitado saem do `status`, que não depende da regra. Todo aprovado vira "a pagar" e fica na
+  lista principal. Nenhum aprovado some num grupo recolhido sem a regra do servidor (`situacaoDe`, `lib/gastos.ts`).
 
 ## D2. A regra
 

@@ -43,6 +43,20 @@ from app.storage import (
 
 logger = logging.getLogger(__name__)
 
+# Situação do gasto na tela de Gastos Extras (feature 314) — ver `situacao_do_gasto`.
+SITUACAO_AGUARDANDO_APROVACAO = "aguardando_aprovacao"
+SITUACAO_A_PAGAR = "a_pagar"
+SITUACAO_NO_BANCO = "no_banco"
+SITUACAO_PAGO = "pago"
+SITUACAO_REJEITADO = "rejeitado"
+SITUACOES = (
+    SITUACAO_AGUARDANDO_APROVACAO,
+    SITUACAO_A_PAGAR,
+    SITUACAO_NO_BANCO,
+    SITUACAO_PAGO,
+    SITUACAO_REJEITADO,
+)
+
 
 class GastoValidationError(Exception):
     """Erro de validação de negócio (campo obrigatório/inválido)."""
@@ -200,6 +214,33 @@ def expense_totals(expenses: list[SpecialExpense]) -> dict[str, dict[str, float 
             totals[key]["count"] += 1
             totals[key]["total"] += amount
     return totals
+
+
+def situacao_do_gasto(expense: SpecialExpense) -> str:
+    """Onde o gasto está, numa palavra só, para a tela de Gastos Extras (feature 314).
+
+    A primeira regra que casa vence: rejeitado; pendente (mesmo marcado "já pago" no cadastro, ainda
+    não foi aprovado); pago; no banco; a pagar. "Pago" junta três casos porque os dois últimos nunca
+    entram na Planilha de Pagamentos (`api_financeiro_pagamentos` só leva o aprovado com desembolso
+    e sem `paid_at_creation`) e, sem regra própria, ficariam "a pagar" para sempre: o que a planilha
+    marcou pago, o pago no cadastro e o aprovado sem ninguém a pagar (resposta do dono, 27/10/2026).
+    `payment_status` desconhecido cai em "a pagar", que fica à vista: mostrar demais, nunca esconder.
+
+    Args:
+        expense: O gasto, com as colunas já carregadas (não consulta nada).
+
+    Returns:
+        Um dos valores de `SITUACOES`.
+    """
+    if expense.status == "rejeitado":
+        return SITUACAO_REJEITADO
+    if expense.status == "pendente":
+        return SITUACAO_AGUARDANDO_APROVACAO
+    if expense.paid_at_creation or not expense.disbursement_type or expense.payment_status == "pago":
+        return SITUACAO_PAGO
+    if expense.payment_status == "no_banco":
+        return SITUACAO_NO_BANCO
+    return SITUACAO_A_PAGAR
 
 
 def search_events_by_date(day: date) -> list[CalendarEvent]:

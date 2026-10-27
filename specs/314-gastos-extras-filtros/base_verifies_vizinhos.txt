@@ -1,0 +1,12 @@
+Base dos verifies vizinhos (T002b), 27/10/2026, worktree C:\tmp\mp314, HEAD c5b0d74a (main e60aae53 + docs da 314),
+contra o manto_local. A rodada guardou só a cauda da saída (resumo por bloco).
+
+verify_306: 67/69 cenários OK (94/96 linhas) — B1 11/12, B3 5/6, o resto cheio. É a base conhecida desde a 306b
+  (os 2 que faltam, 14b e 20, exigem a main de antes da 306 — memória da 306). O processo subiu ANTES de
+  `situacao_do_gasto` existir no disco: é a base sem a 314.
+
+verify_312: 27/27 cenários OK. ⚠️ O processo subiu DEPOIS da edição de `gastos_ops.py`/`gastos_read.py` (as duas
+  rodaram em sequência e a edição entrou no meio): já é a rodada COM a chave `situacao`. Como deu 27/27, base e
+  depois coincidem — não há o que comparar a mais.
+
+Depois do núcleo (T023), a comparação é: 306 = 67/69 com os mesmos dois de fora; 312 = 27/27.
