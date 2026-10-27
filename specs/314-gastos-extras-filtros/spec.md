@@ -144,7 +144,10 @@ de gestão.
 - **Aprovado sem ninguém a pagar** (sem tipo de desembolso). Esses gastos nunca entram na planilha de Pagamentos,
   então nunca viram "pagos" lá. No espelho local há 2 assim. Sem regra própria, ficariam para sempre na lista
   principal (ver FR-004).
-- **Pago no cadastro** ("já pago" ao lançar, feature 128). Também nunca passa pela planilha. Conta como pago.
+- **Pago no cadastro** ("já pago" ao lançar, feature 128). Também nunca passa pela planilha. Conta como pago, mas só
+  depois de aprovado: o pendente marcado "já pago" ainda está aguardando aprovação.
+- **Pessoa sem nenhum gasto** (o não gestor que nunca lançou): a página diz "Nenhum gasto registrado ainda." e não
+  mostra filtros vazios nem grupos.
 - **"No banco"**: a planilha marcou que o pagamento foi agendado no banco mas ainda não confirmou. Fica na lista
   principal e mostra "no banco".
 - **Devolução à cliente de evento cancelado** (travada, 306) e **multa de cancelamento**: seguem as regras atuais de
@@ -178,19 +181,24 @@ de gestão.
   ficar num cartão recolhido próprio, "Rejeitados", com quantidade e total, que abre e fecha como o de Pagos.
 - **FR-006**: Os cartões de resumo do topo DEVEM ser filtros clicáveis, como em Pagamentos: clicar num cartão
   mostra só aquela situação. Um cartão neutro ("Todos") limpa o filtro. O cartão ativo fica marcado e há um "Limpar
-  filtro" visível.
+  filtro" visível. Os cartões são, nesta ordem: Todos, Aguardando aprovação, A pagar, No banco, Pagos, Rejeitados.
+  Com uma situação escolhida, a página mostra só ela, aberta, sem grupos recolhidos. Escolher "Pagos" mostra os
+  pagos direto, sem precisar abrir o grupo.
 - **FR-007**: A página DEVE oferecer busca por texto sem diferença de acento ou maiúscula, com vários termos que
   precisam casar todos, sobre descrição, observação, quem recebe, evento e autor. O comportamento é o da busca de
   Pagamentos.
 - **FR-008**: A página DEVE oferecer filtro por categoria, por tipo de desembolso (reembolso, fornecedor, devolução
   à cliente, sem desembolso) e por mês da data do gasto. A página abre com todos os meses. O mês é um filtro
   opcional, com ‹ › para andar entre meses e um jeito visível de voltar a "todos os meses".
-- **FR-009**: Os filtros DEVEM valer para todos os grupos ao mesmo tempo (principal, Pagos, Rejeitados), e os
-  números dos cartões DEVEM refletir o recorte filtrado.
+- **FR-009**: Os filtros DEVEM valer para todos os grupos ao mesmo tempo (principal, Pagos, Rejeitados). Os números
+  dos cartões DEVEM refletir o recorte da busca, da categoria, do desembolso e do mês, mas não o da situação:
+  escolher "A pagar" não zera os outros cartões, como em Pagamentos.
 - **FR-010**: A página DEVE mostrar "N de M gastos em exibição" e o total em R$ do que está em exibição, num aviso
   lido por leitor de tela, como em Pagamentos.
 - **FR-011**: Os filtros (busca, categoria, desembolso, mês e situação) DEVEM ficar no endereço da página, para que
-  recarregar ou compartilhar o link mantenha o recorte. Trocar filtro não empilha histórico do navegador.
+  recarregar ou compartilhar o link mantenha o recorte. Trocar filtro não empilha histórico do navegador. Valor
+  desconhecido no endereço (categoria que não existe, mês malformado) é ignorado: a página abre como se aquele
+  filtro não estivesse lá.
 - **FR-012**: Quando nenhum gasto casa com o filtro, a página DEVE dizer isso e oferecer limpar o filtro.
 - **FR-013**: Todas as ações de hoje DEVEM continuar, com as mesmas regras de quem pode e do estado travado: Aprovar,
   Rejeitar, Editar, Vincular evento, Excluir, Ver nota fiscal, o aviso de devolução travada, o selo de evento
@@ -201,6 +209,11 @@ de gestão.
   filtros e um resumo dos próprios números. Nenhum total da empresa chega a essa pessoa.
 - **FR-016**: Os valores DEVEM aparecer no padrão brasileiro pela fonte única de formatação (Princípio IX), e
   abrir/recolher grupos DEVE ter transição suave que respeita "reduzir movimento" (Princípio XI).
+- **FR-017**: Carregando, a página DEVE mostrar o esqueleto. Se a lista não carregar, DEVE mostrar "Não foi possível
+  carregar os gastos.", como hoje, com o mesmo invólucro de largura da página carregada.
+- **FR-018**: Cada cartão-filtro DEVE ser um botão que diz se está ligado (anunciado a leitor de tela). Cada grupo
+  recolhido DEVE ser um botão que diz se está aberto. As ações em ícone DEVEM ter nome acessível e dica com o mesmo
+  texto ("Ver nota fiscal", "Editar", "Vincular evento", "Excluir"). Tudo DEVE ser alcançável por teclado.
 
 ### Entidades
 
@@ -244,8 +257,8 @@ travada inteira. Repetir em 1366 px com um usuário sem papel de gestão.
 
 - **SC-001**: Em telas de 1366 px ou mais, aprovar um gasto pendente leva 1 clique a partir da abertura da página,
   sem rolagem lateral (hoje: rolar a tabela inteira até o rodapé, depois para o lado).
-- **SC-002**: Ao abrir a página com os dados de hoje, a lista principal mostra só os gastos que pedem ação (no print,
-  da ordem de 18 pendentes mais os aprovados ainda não pagos), não os 186.
+- **SC-002**: Ao abrir a página, a lista principal mostra exatamente os gastos aguardando aprovação, a pagar e no
+  banco (no print de 21/10: os 18 pendentes mais os aprovados ainda não pagos), e não os 186.
 - **SC-003**: 100% dos gastos aparecem em exatamente um grupo. A soma dos grupos é igual ao total da página.
 - **SC-004**: Achar um gasto conhecido pelo nome do fornecedor ou do evento leva menos de 10 segundos (digitar na
   busca), sem rolar a lista.
@@ -277,5 +290,7 @@ o shape do `GET /api/gastos` só se o payload mudar, `docs/05` (risca/registra d
 - O filtro e a busca rodam na tela sobre a lista que já chega inteira, como em Pagamentos (feature 226). Com ~200
   gastos isso é instantâneo.
 - A ordem dentro de cada grupo continua a de hoje: data do gasto, mais recente primeiro.
+- O "Ver como" segue como hoje nesta tela: quem decide gestor × não gestor é o servidor, pelo papel real
+  (`gastos_ops.is_financeiro`). Nada muda aqui.
 - Os números do print (186 · 18 pendentes · 164 aprovados · 4 rejeitados) são de produção em 21/10. O espelho local
   está mais antigo (135 gastos, de 27/05 a 30/09/2026) e serve ao verify, não à contagem.
