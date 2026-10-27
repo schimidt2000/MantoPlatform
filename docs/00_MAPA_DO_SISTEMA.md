@@ -179,6 +179,14 @@ de `@manto/money`. Arquivo servido pelo Flask sempre via `assetUrl()` de `@manto
 Toda ação tem loading/erro/sucesso via TanStack Query; erro da API nunca apaga o que o usuário
 digitou — aponte no campo (`ApiRequestError.fields`).
 
+**Lista e arquivo (feature 320)** — busca, filtros, aba e página de lista moram no **endereço**
+(`useSearchParams`, sempre `replace`), e a lista chama `useRestaurarRolagem` (`@manto/ui`) para
+voltar no mesmo ponto; o link lista → detalhe leva `state={DA_LISTA}` e o "Voltar" do detalhe usa
+`LinkVoltarParaLista`/`useVoltarParaLista` (`apps/*/src/lib/navegacao.tsx`). Arquivo do sistema no
+app interno **nunca** abre em outra aba: use `LinkDeArquivo` (`components/ArquivoViewer.tsx`), que
+abre o `VisualizadorDeArquivo` — no iPhone com o sistema na Tela de Início, "outra aba" é uma janela
+sem saída.
+
 **Texto que o usuário lê** (tela, e-mail, PDF, mensagem de erro da API): tom por superfície e
 glossário único na constituição, Princípio XV (correção 316b).
 

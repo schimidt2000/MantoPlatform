@@ -1,7 +1,7 @@
 # Feature 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivos no app instalado)
 
 **Branch**: `320-voltar-sem-perder-o-lugar` (da `main`, worktree `C:\tmp\mp320`) · **Created**: 2026-10-27 ·
-**Status**: Rascunho · **Migration**: nenhuma · **Nível**: 1 (feature) — constituição, Princípio VI
+**Status**: PRONTA, aguardando deploy · **Migration**: nenhuma · **Nível**: 1 (feature) — constituição, Princípio VI
 (três superfícies: app interno, catálogo público e todas as telas que abrem arquivo)
 
 **Input**: pedido do dono: "ao voltar a página no catálogo e no banco de talentos, eu não volto
@@ -251,7 +251,7 @@ Desvio registrado no Rastreamento de complexidade do `plan.md`.
 | 1 | Catálogo público: busca + categoria, rola, abre tema, "← Voltar ao catálogo" | busca, categoria e card aberto visíveis | não |
 | 2 | Idem, voltando pelo histórico do navegador | mesmo resultado | não |
 | 3 | Catálogo público aberto direto num endereço com busca/categoria | lista já filtrada | não |
-| 4 | Gerenciador: filtros + rolagem → editar pelo card e pelo menu → voltar/salvar | filtros e rolagem de antes | não |
+| 4 | Gerenciador: filtros + rolagem → editar pelo card ("‹ Catálogo") e pelo menu "Editar" (voltar do navegador) | filtros e rolagem de antes (o pós-salvar usa o mesmo `useVoltarParaLista` e não é exercitado: escreveria no catálogo) | não |
 | 5 | Talentos: aba + pesquisa + filtro + página + rolagem → ficha → voltar | tudo como antes | não |
 | 6 | Talentos: `/talents?status=pending` | abre em "Pendentes" | não |
 | 7 | Gastos extras (iPhone): "Ver" em comprovante foto e em PDF | visualizador dentro do sistema; mesma URL de página; "Voltar" visível; PDF com páginas desenhadas | não |

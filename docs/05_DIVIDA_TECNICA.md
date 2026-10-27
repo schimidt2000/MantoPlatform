@@ -746,3 +746,17 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 163 | **P3** | `INFINITEPAY_API_KEY` no painel do `manto-backend` (Render) | a **História 9 da 310** (link que vence junto com a reserva e aceita um pagamento só) está **desligada** até o dono colar a chave: sem ela o link nasce sem validade e a família ainda pode pagar um horário que já voltou para a vitrine — o pagamento atrasado vira venda ou devolução pela regra única, mas a devolução é trabalho manual no app. O código já suporta (`render.yaml` declara a chave com `sync: false`); o log do deploy diz `[infinitepay] … api_key=ausente (link sem validade)` | o dono cria a chave na InfinitePay e cola no painel do Render (nunca pelo chat); mudar env redeploya, então fora do horário |
 | 164 | **P2** | `MANTO_PROXY_SECRET` nos painéis do `manto-frontend` e do `manto-backend` (Render) | a prova de que o IP do cliente veio do Node (revisão T059 da 310) fica **desligada** até o dono criar a variável com o MESMO valor nos dois serviços: sem ela o backend aceita `X-Manto-Client-Ip` sem prova, e quem chama `manto-backend.onrender.com` direto trocando o cabeçalho escapa de todo limite de taxa — o de login inclusive. O boot avisa `[proxy] MANTO_PROXY_SECRET ausente` | o dono cria um valor aleatório e cola nos dois painéis — frontend primeiro, backend depois (ao contrário, por alguns minutos todo mundo cai no mesmo balde); fora do horário |
 
+
+## Baixa da feature 320-voltar-sem-perder-o-lugar (2026-10-27, branch)
+
+**Quitada.** O comprovante de gasto extra deixou de usar o caminho cru (`receipt_url` sem
+`assetUrl`): todo arquivo do app interno passa pelo `LinkDeArquivo`, que aplica a regra única.
+
+**Criadas.** (165–168; renumerar no merge se outra branch tiver usado esses números.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 165 | **P4** | listas do interno fora da 320 (Agenda já tinha; Eventos, Clientes, Figurinos, Pagamentos, Orçamentos…) | só catálogo (público e gerenciador) e banco de talentos guardam filtros no endereço e voltam na mesma rolagem; nas outras, voltar de um detalhe ainda cai no topo, e parte delas guarda filtro em `useState` | aplicar o mesmo par (`useSearchParams` + `useRestaurarRolagem`) tela a tela, quando o dono apontar a próxima |
+| 166 | **P4** | links de página pública abertos do interno (formulário "Abrir" em `FormulariosAdminPage`, "Abrir página ↗" do personagem, `/gastos/recorrentes` no Dashboard, impressão de figurino) | no app instalado (iPhone pela Tela de Início) continuam abrindo "em outra aba" — uma janela sem botão de voltar, a mesma armadilha que a 320 tirou dos arquivos | abrir na mesma janela no modo app (`estaComoAppInstalado()`) com caminho de volta, como o item "Catálogo" do menu |
+| 167 | **P5** | `frontend/apps/internal/e2e/` + `playwright.config.ts` (feature 180) | a suíte e2e parou na 186 (precisa de `E2E_USER_*` e ninguém roda); a 320 usou o Playwright por fora, num `verify_320_navegador.mjs` | decidir: reviver a suíte (usuário descartável como o `verify_320.py`) ou apagar |
+| 168 | **P5** | build do `public` e do `portal` | o `VisualizadorDeArquivo` sai do `index.ts` do `@manto/ui`, e o Vite emite o chunk do pdf.js (366 kB) e o worker (1,4 MB) também nesses dois apps, que não abrem PDF — arquivo no `dist`, nunca baixado | subpath de export (`@manto/ui/visualizador`) se o tamanho do deploy incomodar |

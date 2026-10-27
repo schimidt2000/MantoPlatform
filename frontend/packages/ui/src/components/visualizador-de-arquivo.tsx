@@ -200,7 +200,9 @@ function BotaoBaixar({ arquivo, nome }: { arquivo: ArquivoParaVisualizar; nome: 
   }
 
   return (
-    <Button variant="outline" size="sm" loading={baixando} onClick={() => void baixar()}>
+    // Tamanho padrão (44px): é alvo de toque no celular.
+    <Button variant="outline" loading={baixando} onClick={() => void baixar()} className="px-3">
+
       <Download className="h-4 w-4" aria-hidden="true" />
       Baixar
     </Button>

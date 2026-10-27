@@ -19,8 +19,8 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 ## Phase 1: Setup
 
-- [ ] T001 Adicionar `pdfjs-dist` na versão exata `4.10.38` às `dependencies` de `frontend/packages/ui/package.json` e rodar `npm install` em `frontend/` (atualiza `frontend/package-lock.json`); conferir que o `npm run build` do interno ainda passa
-- [ ] T002 [P] Subir o backend local sem Google (porta 5000) e os Vite do worktree em segundo plano (interno 5320, público 5321) conforme `quickstart.md`; o `.claude/launch.json` versionado não muda
+- [X] T001 Adicionar `pdfjs-dist` na versão exata `4.10.38` às `dependencies` de `frontend/packages/ui/package.json` e rodar `npm install` em `frontend/` (atualiza `frontend/package-lock.json`); conferir que o `npm run build` do interno ainda passa
+- [X] T002 [P] Subir o backend local sem Google (porta 5000) e os Vite do worktree em segundo plano (interno 5320, público 5321) conforme `quickstart.md`; o `.claude/launch.json` versionado não muda
 
 ---
 
@@ -28,13 +28,13 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase.
 
-- [ ] T003 Escrever `specs/320-voltar-sem-perder-o-lugar/verify_320.py`: cria usuário descartável SUPERADMIN no `manto_local` (`FLASK_ENV=development`, `MANTO_SEM_THREADS=1`), confere login por `POST /api/auth/login` contra o Flask local, escolhe dados reais (2 gastos com comprovante JPG e PDF cujo arquivo existe em `instance/uploads`, ≥ 40 talentos ativos, ≥ 1 pendente, catálogo público com ≥ 20 temas), chama `node verify_320_navegador.mjs` com esses dados por variável de ambiente e apaga o usuário no `finally` (`roles.clear()` antes)
-- [ ] T004 Escrever `specs/320-voltar-sem-perder-o-lugar/verify_320_navegador.mjs` (Playwright de `frontend/node_modules`): cenários 1–11 da tabela da spec, cada um com PASS/FAIL e motivo; viewport 390×844 com toque nos cenários 7–10; `navigator.standalone = true` por `addInitScript` no 10; modo contraprova (`--contraprova`) que roda 1, 5 e 7 e exige falha
-- [ ] T005 Rodar o verify contra o Vite da `main` (checkout principal) e guardar a saída em `specs/320-voltar-sem-perder-o-lugar/verify_320_primeira_falha.txt` — tem de falhar em 1, 2, 4, 5, 6, 7, 8 e 10 pelos motivos certos
-- [ ] T006 [P] Criar `useRestaurarRolagem` em `frontend/packages/ui/src/lib/rolagem.ts` conforme `contracts/ui.md` (sessionStorage `manto:rolagem`, 50 entradas, tentativa por até 1,5 s, desiste se a pessoa rolar) e exportar em `frontend/packages/ui/src/index.ts`
-- [ ] T007 [P] Criar `estaComoAppInstalado` em `frontend/packages/ui/src/lib/app-instalado.ts` e exportar em `frontend/packages/ui/src/index.ts`
-- [ ] T008 [P] Criar `frontend/apps/internal/src/lib/navegacao.tsx`: `DA_LISTA` (estado `{ daLista: true }`), `useVoltarParaLista(fallback)` e `RolarAoTopoEmNovaPagina`; montar `RolarAoTopoEmNovaPagina` dentro do `BrowserRouter` em `frontend/apps/internal/src/App.tsx`
-- [ ] T009 [P] Criar `frontend/apps/public/src/lib/navegacao.tsx` com o mesmo trio e montar `RolarAoTopoEmNovaPagina` em `frontend/apps/public/src/App.tsx`
+- [X] T003 Escrever `specs/320-voltar-sem-perder-o-lugar/verify_320.py`: cria usuário descartável SUPERADMIN no `manto_local` (`FLASK_ENV=development`, `MANTO_SEM_THREADS=1`), confere login por `POST /api/auth/login` contra o Flask local, escolhe dados reais (2 gastos com comprovante JPG e PDF cujo arquivo existe em `instance/uploads`, ≥ 40 talentos ativos, ≥ 1 pendente, catálogo público com ≥ 20 temas), chama `node verify_320_navegador.mjs` com esses dados por variável de ambiente e apaga o usuário no `finally` (`roles.clear()` antes)
+- [X] T004 Escrever `specs/320-voltar-sem-perder-o-lugar/verify_320_navegador.mjs` (Playwright de `frontend/node_modules`): cenários 1–11 da tabela da spec, cada um com PASS/FAIL e motivo; viewport 390×844 com toque nos cenários 7–10; `navigator.standalone = true` por `addInitScript` no 10; modo contraprova (`--contraprova`) que roda 1, 5 e 7 e exige falha
+- [X] T005 Rodar o verify contra o Vite da `main` (checkout principal) e guardar a saída em `specs/320-voltar-sem-perder-o-lugar/verify_320_primeira_falha.txt` — tem de falhar em 1, 2, 4, 5, 6, 7, 8 e 10 pelos motivos certos
+- [X] T006 [P] Criar `useRestaurarRolagem` em `frontend/packages/ui/src/lib/rolagem.ts` conforme `contracts/ui.md` (sessionStorage `manto:rolagem`, 50 entradas, tentativa por até 1,5 s, desiste se a pessoa rolar) e exportar em `frontend/packages/ui/src/index.ts`
+- [X] T007 [P] Criar `estaComoAppInstalado` em `frontend/packages/ui/src/lib/app-instalado.ts` e exportar em `frontend/packages/ui/src/index.ts`
+- [X] T008 [P] Criar `frontend/apps/internal/src/lib/navegacao.tsx`: `DA_LISTA` (estado `{ daLista: true }`), `useVoltarParaLista(fallback)` e `RolarAoTopoEmNovaPagina`; montar `RolarAoTopoEmNovaPagina` dentro do `BrowserRouter` em `frontend/apps/internal/src/App.tsx`
+- [X] T009 [P] Criar `frontend/apps/public/src/lib/navegacao.tsx` com o mesmo trio e montar `RolarAoTopoEmNovaPagina` em `frontend/apps/public/src/App.tsx`
 
 **Checkpoint**: verify escrito e falhando na `main`; peças compartilhadas prontas.
 
@@ -46,14 +46,14 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 **Teste independente**: cenários 1–4 e 11 do verify.
 
-- [ ] T010 [P] [US1] `frontend/apps/public/src/pages/CatalogGridPage.tsx`: `search` → `?q`, `activeCategory` → `?categoria` (`useSearchParams`, `replace: true`); `useRestaurarRolagem(location.key, { restaurar: navigationType === "POP", pronto: Boolean(data) })`
-- [ ] T011 [P] [US1] `frontend/apps/public/src/components/ProductCard.tsx`: `state={DA_LISTA}` no link do tema
-- [ ] T012 [US1] `frontend/apps/public/src/pages/ProductDetailPage.tsx`: os dois "← Voltar ao catálogo" usam `useVoltarParaLista("/")` (botão/link com `onClick` que preserva o `href` para abrir em outra aba)
-- [ ] T013 [P] [US1] `frontend/apps/public/src/pages/CategoryDetailPage.tsx`: "←" usa `useVoltarParaLista("/categorias")`; `useRestaurarRolagem` com `pronto` = dados da categoria; links de categoria em `frontend/apps/public/src/pages/CategoriesPage.tsx` levam `DA_LISTA`
-- [ ] T014 [US1] `frontend/apps/internal/src/pages/AdminCatalogoListPage.tsx`: `q`, `categoria`, `situacao`, `visao` no endereço (`data-model.md` §1; `visao` ausente = `localStorage`, escolher também grava no `localStorage`); busca digitada fica local e vai ao endereço junto com a pausa de 300 ms; `useRestaurarRolagem` com `pronto` = `query.data` presente e não atualizando
-- [ ] T015 [P] [US1] `frontend/apps/internal/src/components/CatalogCardGrid.tsx` e `CatalogTreeView.tsx`: links de edição com `state={DA_LISTA}`; "Editar" do menu troca `window.location.assign` por `navigate(..., { state: DA_LISTA })`
-- [ ] T016 [US1] `frontend/apps/internal/src/pages/AdminCatalogoFormPage.tsx`: atalho "‹ Catálogo" e o pós-salvar da edição usam `useVoltarParaLista("/admin/catalogo")`
-- [ ] T017 [US1] Rodar cenários 1–4 e 11 do verify até passarem
+- [X] T010 [P] [US1] `frontend/apps/public/src/pages/CatalogGridPage.tsx`: `search` → `?q`, `activeCategory` → `?categoria` (`useSearchParams`, `replace: true`); `useRestaurarRolagem(location.key, { restaurar: navigationType === "POP", pronto: Boolean(data) })`
+- [X] T011 [P] [US1] `frontend/apps/public/src/components/ProductCard.tsx`: `state={DA_LISTA}` no link do tema
+- [X] T012 [US1] `frontend/apps/public/src/pages/ProductDetailPage.tsx`: os dois "← Voltar ao catálogo" usam `useVoltarParaLista("/")` (botão/link com `onClick` que preserva o `href` para abrir em outra aba)
+- [X] T013 [P] [US1] `frontend/apps/public/src/pages/CategoryDetailPage.tsx`: "←" usa `useVoltarParaLista("/categorias")`; `useRestaurarRolagem` com `pronto` = dados da categoria; links de categoria em `frontend/apps/public/src/pages/CategoriesPage.tsx` levam `DA_LISTA`
+- [X] T014 [US1] `frontend/apps/internal/src/pages/AdminCatalogoListPage.tsx`: `q`, `categoria`, `situacao`, `visao` no endereço (`data-model.md` §1; `visao` ausente = `localStorage`, escolher também grava no `localStorage`); busca digitada fica local e vai ao endereço junto com a pausa de 300 ms; `useRestaurarRolagem` com `pronto` = `query.data` presente e não atualizando
+- [X] T015 [P] [US1] `frontend/apps/internal/src/components/CatalogCardGrid.tsx` e `CatalogTreeView.tsx`: links de edição com `state={DA_LISTA}`; "Editar" do menu troca `window.location.assign` por `navigate(..., { state: DA_LISTA })`
+- [X] T016 [US1] `frontend/apps/internal/src/pages/AdminCatalogoFormPage.tsx`: atalho "‹ Catálogo" e o pós-salvar da edição usam `useVoltarParaLista("/admin/catalogo")`
+- [X] T017 [US1] Rodar cenários 1–4 e 11 do verify até passarem
 
 ---
 
@@ -61,10 +61,10 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 **Teste independente**: cenários 5, 6 e 11.
 
-- [ ] T018 [US2] `frontend/apps/internal/src/pages/TalentsListPage.tsx`: `status`, `aba`, `q`, `pagina` e filtros avançados no endereço (`data-model.md` §1, `replace: true`); busca local com pausa para o endereço (padrão `AgendaPage.tsx:33-63`); painel de filtros começa aberto se houver filtro no endereço; `useRestaurarRolagem` com `pronto` = `query.data`; página acima do total → última página existente
-- [ ] T019 [P] [US2] `frontend/apps/internal/src/components/TalentMosaic.tsx`: link da ficha com `state={DA_LISTA}`
-- [ ] T020 [US2] `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: atalho do topo e o pós-rejeitar usam `useVoltarParaLista` com fallback `/talents` ou `/talents?status=pending`
-- [ ] T021 [US2] Rodar cenários 5, 6 e 11 até passarem
+- [X] T018 [US2] `frontend/apps/internal/src/pages/TalentsListPage.tsx`: `status`, `aba`, `q`, `pagina` e filtros avançados no endereço (`data-model.md` §1, `replace: true`); busca local com pausa para o endereço (padrão `AgendaPage.tsx:33-63`); painel de filtros começa aberto se houver filtro no endereço; `useRestaurarRolagem` com `pronto` = `query.data`; página acima do total → última página existente
+- [X] T019 [P] [US2] `frontend/apps/internal/src/components/TalentMosaic.tsx`: link da ficha com `state={DA_LISTA}`
+- [X] T020 [US2] `frontend/apps/internal/src/pages/TalentDetailPage.tsx`: atalho do topo e o pós-rejeitar usam `useVoltarParaLista` com fallback `/talents` ou `/talents?status=pending`
+- [X] T021 [US2] Rodar cenários 5, 6 e 11 até passarem
 
 ---
 
@@ -72,14 +72,14 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 **Teste independente**: cenários 7–9.
 
-- [ ] T022 [P] [US3] `frontend/packages/ui/src/components/pdf-paginas.tsx`: importa `pdfjs-dist` (worker via `?url`), desenha cada página num `<canvas>` (densidade ≤ 2) quando chega perto da tela, `Skeleton` no lugar, `onErro` para o pai; exportado só como `default` para `React.lazy`
-- [ ] T023 [US3] `frontend/packages/ui/src/components/visualizador-de-arquivo.tsx`: tela cheia sobre Radix Dialog (z-[60], `AnimatePresence` + `useReducedMotion`), barra fixa "Voltar" / nome / "Baixar", foto, PDF por `lazy(() => import("./pdf-paginas"))`, sem prévia, erro com "Tentar novamente"; "Baixar" com folha de compartilhar em tela de toque e `<a download>` no resto; exportar em `frontend/packages/ui/src/index.ts`
-- [ ] T024 [US3] `frontend/apps/internal/src/components/ArquivoViewer.tsx`: `ArquivoViewerProvider` (marca `arquivoAberto` no histórico, fecha no POP, limpa marca órfã ao recarregar), `useAbrirArquivo`, `LinkDeArquivo` (`forwardRef`, `assetUrl`, externo segue em outra aba, Ctrl/⌘/Shift/meio deixam o navegador agir); montar o provedor em `frontend/apps/internal/src/App.tsx`
-- [ ] T025 [US3] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: "Ver" → `LinkDeArquivo caminho={expense.receipt_url}`
-- [ ] T026 [P] [US3] `frontend/apps/internal/src/components/EventDetail/GastosVinculados.tsx` e `FinanceiroSection.tsx` (contrato, comprovante, nota, nota do gasto, comprovante de recebimento) → `LinkDeArquivo`
-- [ ] T027 [P] [US3] `frontend/apps/internal/src/components/EventDetail/LogisticaSection.tsx` (só material arquivo), `frontend/apps/internal/src/components/Pagamentos/SalaryAdvancesDialog.tsx`, `frontend/apps/internal/src/pages/VirtuaisDevolucoesPage.tsx` → `LinkDeArquivo`
-- [ ] T028 [P] [US3] `frontend/apps/internal/src/pages/FigurinoProducaoDetailPage.tsx` (3 pontos), `RevisaoAssetPage.tsx` ("Ver PDF"), `TalentDetailPage.tsx` (2 pontos, "Ver PDF") → `LinkDeArquivo`
-- [ ] T029 [US3] Rodar cenários 7–9 até passarem
+- [X] T022 [P] [US3] `frontend/packages/ui/src/components/pdf-paginas.tsx`: importa `pdfjs-dist` (worker via `?url`), desenha cada página num `<canvas>` (densidade ≤ 2) quando chega perto da tela, `Skeleton` no lugar, `onErro` para o pai; exportado só como `default` para `React.lazy`
+- [X] T023 [US3] `frontend/packages/ui/src/components/visualizador-de-arquivo.tsx`: tela cheia sobre Radix Dialog (z-[60], `AnimatePresence` + `useReducedMotion`), barra fixa "Voltar" / nome / "Baixar", foto, PDF por `lazy(() => import("./pdf-paginas"))`, sem prévia, erro com "Tentar novamente"; "Baixar" com folha de compartilhar em tela de toque e `<a download>` no resto; exportar em `frontend/packages/ui/src/index.ts`
+- [X] T024 [US3] `frontend/apps/internal/src/components/ArquivoViewer.tsx`: `ArquivoViewerProvider` (marca `arquivoAberto` no histórico, fecha no POP, limpa marca órfã ao recarregar), `useAbrirArquivo`, `LinkDeArquivo` (`forwardRef`, `assetUrl`, externo segue em outra aba, Ctrl/⌘/Shift/meio deixam o navegador agir); montar o provedor em `frontend/apps/internal/src/App.tsx`
+- [X] T025 [US3] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: "Ver" → `LinkDeArquivo caminho={expense.receipt_url}`
+- [X] T026 [P] [US3] `frontend/apps/internal/src/components/EventDetail/GastosVinculados.tsx` e `FinanceiroSection.tsx` (contrato, comprovante, nota, nota do gasto, comprovante de recebimento) → `LinkDeArquivo`
+- [X] T027 [P] [US3] `frontend/apps/internal/src/components/EventDetail/LogisticaSection.tsx` (só material arquivo), `frontend/apps/internal/src/components/Pagamentos/SalaryAdvancesDialog.tsx`, `frontend/apps/internal/src/pages/VirtuaisDevolucoesPage.tsx` → `LinkDeArquivo`
+- [X] T028 [P] [US3] `frontend/apps/internal/src/pages/FigurinoProducaoDetailPage.tsx` (3 pontos), `RevisaoAssetPage.tsx` ("Ver PDF"), `TalentDetailPage.tsx` (2 pontos, "Ver PDF") → `LinkDeArquivo`
+- [X] T029 [US3] Rodar cenários 7–9 até passarem
 
 ---
 
@@ -87,19 +87,19 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 **Teste independente**: cenário 10.
 
-- [ ] T030 [P] [US4] `frontend/packages/ui/src/components/app-layout.tsx`: item `external` sem `target` quando `estaComoAppInstalado()`; ajustar o `hint` do item em `frontend/apps/internal/src/lib/navigation.tsx` só se o texto ficar falso
-- [ ] T031 [P] [US4] `frontend/apps/public/src/components/VoltarAoSistema.tsx` (só no app instalado; "← Voltar ao sistema"; `history.back()` ou `/`), montado em `frontend/apps/public/src/App.tsx` só nas rotas do catálogo
-- [ ] T032 [US4] Rodar o cenário 10 até passar
+- [X] T030 [P] [US4] `frontend/packages/ui/src/components/app-layout.tsx`: item `external` sem `target` quando `estaComoAppInstalado()`; ajustar o `hint` do item em `frontend/apps/internal/src/lib/navigation.tsx` só se o texto ficar falso
+- [X] T031 [P] [US4] `frontend/apps/public/src/components/VoltarAoSistema.tsx` (só no app instalado; "← Voltar ao sistema"; `history.back()` ou `/`), montado em `frontend/apps/public/src/App.tsx` só nas rotas do catálogo
+- [X] T032 [US4] Rodar o cenário 10 até passar
 
 ---
 
 ## Phase 7: Polish e portões
 
-- [ ] T033 Verify completo `12/12` (com contraprova contra a `main`); saída em `specs/320-voltar-sem-perder-o-lugar/verify_320_resultado.txt`
-- [ ] T034 [P] `cd frontend && npm run typecheck` e `npm run build` (o chunk do pdf.js e o worker aparecem só no interno)
-- [ ] T035 Conferência de tela no Browser pane (skill `manto-conferir-tela`), viewport de iPhone: os 6 passos do `quickstart.md`
-- [ ] T036 [P] Docs: `docs/02` (catálogo público, gerenciador, banco de talentos, visualizador), `docs/00` §5 (convenção: estado de lista no endereço; arquivo sempre por `LinkDeArquivo`), `docs/03` (entrada no topo + índice), `docs/05` (dívidas: e2e da 180 parado; outras listas sem restauração)
-- [ ] T037 Commits por caminho (`feat(320): …`, `docs(320): …`), nunca `git add -A`
+- [X] T033 Verify completo `12/12` (com contraprova contra a `main`); saída em `specs/320-voltar-sem-perder-o-lugar/verify_320_resultado.txt`
+- [X] T034 [P] `cd frontend && npm run typecheck` e `npm run build` (o chunk do pdf.js e o worker saem à parte; os três apps os emitem, só baixados quando um PDF abre — dívida 168)
+- [X] T035 Conferência de tela no Browser pane (skill `manto-conferir-tela`), viewport de iPhone: os 6 passos do `quickstart.md`
+- [X] T036 [P] Docs: `docs/02` (catálogo público, gerenciador, banco de talentos, visualizador), `docs/00` §5 (convenção: estado de lista no endereço; arquivo sempre por `LinkDeArquivo`), `docs/03` (entrada no topo + índice), `docs/05` (dívidas: e2e da 180 parado; outras listas sem restauração)
+- [X] T037 Commits por caminho (`feat(320): …`, `docs(320): …`), nunca `git add -A`
 
 ---
 

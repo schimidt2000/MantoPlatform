@@ -232,7 +232,18 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
 - Menu do usuário exibe os papéis; superadmin real tem o seletor **"Ver como"** (impersonação de
   `CASTING`/`FIGURINO`/`COMERCIAL`/`FINANCEIRO`/`ENSAIO`) — com impersonação ativa, o shell passa
   a contar **apenas** o papel simulado.
-- Link **"Catálogo"** é `external: true` → abre `/catalogo/` (vitrine pública) em outra aba.
+- Link **"Catálogo"** é `external: true` → abre `/catalogo/` (vitrine pública) em outra aba —
+  **exceto no app instalado** (feature 320: iPhone pela Tela de Início ou "Instalar app" do
+  Chrome/Edge, `estaComoAppInstalado()`), em que abre na mesma janela e o catálogo mostra a faixa
+  "← Voltar ao sistema".
+- **Visualizador de arquivo** (feature 320): todo "Ver"/link de arquivo do sistema (comprovante,
+  nota, contrato, documento do talento, material, figurino, revisão) abre por cima da tela atual,
+  em tela cheia, com "Voltar" e "Baixar" fixos no alto; foto em `<img>`, PDF desenhado pelo pdf.js
+  (carregado só quando um PDF abre), outros tipos com "Este tipo de arquivo não tem prévia." O voltar
+  do navegador/gesto fecha o visualizador e mantém a tela no mesmo ponto; Ctrl/⌘-clique ainda abre
+  em outra aba. "Baixar" no celular abre a folha de compartilhar do aparelho. Link de outro site
+  (comprovante da InfinitePay, material em link) segue abrindo fora.
+- Navegação nova para outra tela começa do **topo** (feature 320); voltar pelo histórico não sobe.
   **Feature 239**: saiu da seção Comercial (onde vivia ao lado de "Gerenciar catálogo") e subiu
   para a 1ª seção do menu, logo após Agenda, com `isVisible: everyone` — visível a **todos os
   papéis internos, inclusive `REVENDEDOR_EDUCAMANTO`** (o catálogo já é público, sem exigir
@@ -935,6 +946,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   falhas e link de WhatsApp com a mensagem já escrita. `Resolver` fecha o endereço inteiro.
   O `view` da aba é **estado separado** do `status` do diretório de propósito: alternar para a fila
   e voltar não pode perder página, busca nem filtros aplicados.
+- **Voltar sem perder o lugar** (feature 320): aba, busca, página e filtros moram no endereço
+  (`?status=pending`, `?aba=emails`, `?q=`, `?pagina=`, filtros com o nome do parâmetro da API —
+  `?language=…&ja_trabalhou=1`); voltar da ficha (atalho do topo, voltar do navegador ou depois de
+  rejeitar) devolve a lista igual e na mesma rolagem. O `?status=pending` que a ficha manda passou a
+  abrir a aba Pendentes (antes era ignorado).
 - **API**: `GET /api/talents/directory` · `GET /api/talents/bounces` ·
   `POST /api/talents/bounces/resolve`.
 
@@ -1895,6 +1911,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **UX**:
   - **Alternador de visualização Cards ⇄ Árvore ⇄ Personagens**, persistido em `localStorage`
     (`manto_admin_catalogo_view`); trocar o modo limpa a seleção.
+  - **Voltar sem perder o lugar** (feature 320): busca, categoria, situação e modo de visão no
+    endereço (`?q=&categoria=<id>&situacao=ativo|inativo&visao=cards|arvore|personagens`; sem `visao`,
+    vale o `localStorage`); abrir um produto (nome do card, linha da árvore ou "Editar" do menu — que
+    deixou de recarregar o app) e voltar, ou salvar a edição, devolve a lista igual e na mesma rolagem.
   - **Cards** (`CatalogCardGrid`): grade de Temas com capa, status e **kebab menu** (`KebabMenu`)
     de ações por card.
   - **Árvore** (`CatalogTreeView`): Tema expansível com os Personagens filhos recuados e guia de
@@ -2239,10 +2259,18 @@ Todas as telas são **mobile-first** (Princípio VIII).
   `srcset` 320/480/640 + `sizes` da grade real (`grid-cols-2 sm:3 lg:4`; no celular a coluna real,
   `calc(50vw - 32px)`) — o navegador pede 320/480 no celular e 640 no desktop em vez do original. Na grade de categoria (`large`) o `sizes`
   é o da grade de 2/3 colunas.
+- **Voltar sem perder o lugar** (feature 320): busca e categoria no endereço
+  (`/catalogo/?q=princesa&categoria=Shows` — dá para copiar o link já filtrado); abrir um tema e
+  voltar ("← Voltar ao catálogo" ou o voltar do navegador) devolve a lista igual, com o tema aberto
+  à vista. Tema aberto por link direto: "← Voltar ao catálogo" leva ao início.
+- **App instalado** (feature 320): faixa fixa "← Voltar ao sistema" no alto das páginas do catálogo
+  (não na loja `/v`, cadastro, formulários, avaliação nem NFC); recua tudo o que a pessoa navegou no
+  catálogo e volta à tela interna de onde saiu. A cliente no navegador comum não vê a faixa.
 - **API**: `GET /api/catalogo`.
 
 #### `/catalogo/categorias` e `/catalogo/categoria/:slug`
-- Navegação por categoria com contagem de itens.
+- Navegação por categoria com contagem de itens. A página da categoria volta na mesma rolagem, e
+  "← Todas as categorias" volta pelo histórico quando a pessoa veio da lista (feature 320).
 
 #### `/catalogo/:slug` — Página do Tema *(feature 185)*
 - **UX**:

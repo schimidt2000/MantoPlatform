@@ -171,6 +171,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **320-voltar-sem-perder-o-lugar** | *(PRONTA, aguardando deploy)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
 | **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
 | **317-contratos-clicksign** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
@@ -362,6 +363,56 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivo no app instalado)   (320-voltar-sem-perder-o-lugar · 2026-10-27 · sem migration)
+
+> **PRONTA, aguardando deploy.** Nível 1 (três superfícies + dependência nova). Detalhe:
+> `specs/320-voltar-sem-perder-o-lugar/` (spec, plan, research, contracts/ui.md, verify).
+
+**O pedido.** O dono: ao pesquisar no catálogo, entrar num tema e voltar, cai no início da lista e
+"perde o fio da meada"; o mesmo no banco de talentos. E a equipe usa o sistema "como app" (iPhone,
+ícone na Tela de Início, sem a barra do Safari): ao abrir um comprovante de gasto extra, não há como
+voltar — precisa fechar o app. Decidiu: os dois catálogos, iPhone, todo arquivo do interno.
+
+**Causas.** Filtros em `useState` (somem ao desmontar); `BrowserRouter` sem restauração de rolagem
+(o navegador tenta no `popstate`, com a tela do detalhe ainda curta, e corta a posição); os
+"Voltar" faziam PUSH para a lista em vez de voltar; o "Editar" do menu do card fazia
+`window.location.assign` (recarregava o app); todo arquivo abria com `target="_blank"`.
+
+**O que mudou (só frontend).**
+- `@manto/ui`: `useRestaurarRolagem(chave, {restaurar, pronto})` (posição por `location.key` no
+  `sessionStorage`, reaplicada depois que a lista aparece, por até 1,5 s); `estaComoAppInstalado()`;
+  `VisualizadorDeArquivo` (tela cheia z-[60], foto, PDF por `pdf-paginas.tsx` com `pdfjs-dist@4.10.38`
+  sob demanda, "Baixar" pela folha de compartilhar no celular); item `external` do menu sem
+  `target` no app instalado.
+- Interno: `lib/navegacao.tsx` (`DA_LISTA`, `useVoltarParaLista`, `LinkVoltarParaLista`,
+  `RolarAoTopoEmNovaPagina`); `components/ArquivoViewer.tsx` (`ArquivoViewerProvider`, `LinkDeArquivo`)
+  nos 15 links de arquivo (gastos, financeiro do evento, gastos vinculados, logística, adiantamentos,
+  devoluções, figurino, revisão, documento do talento — "Abrir PDF" virou "Ver PDF"). Listas:
+  `AdminCatalogoListPage` e `TalentsListPage` com estado no endereço.
+- Público: grade e categoria com estado no endereço e rolagem; "← Voltar" pelo histórico;
+  `VoltarAoSistema` no app instalado.
+
+**Verificação.** `verify_320.py` (usuário e dois gastos descartáveis com PNG e PDF gerados na pasta
+local, login pela API, limpeza) + `verify_320_navegador.mjs` (Playwright/Chromium, viewport de
+iPhone): 12/12; contraprova na `main`: 1, 5 e 7 falham. Primeira rodada antes do núcleo: 0/11.
+
+**Pegadinhas.**
+- O "ir ao topo" e a assinatura da rolagem rodam em `useLayoutEffect`, e nada se grava ao desmontar:
+  na troca de tela o navegador já cortou a rolagem para a altura da página nova, e esse valor
+  sobrescreveria a posição boa. O alvo da restauração é lido na montagem, antes de qualquer evento.
+- `setSearchParams` com `replace` troca a `location.key` e apaga o `state` se não for repassado —
+  as listas e a ficha do talento repassam `state: location.state` para não perder a marca `daLista`.
+- Abrir arquivo = PUSH do mesmo endereço com `state.arquivoAberto`; o voltar do navegador fecha. O
+  arquivo aberto vive no React (recarregar não reabre), e a marca órfã é limpa com `replace`.
+- O `manto_local` estava marcado na cabeça (310) sem a migration da 318 (PIX): o lote de 23/10
+  reencadeou as migrations e o espelho já tinha a 310 antiga. Corrigido com `stamp 317` → `upgrade
+  318` → `stamp 310`. Sintoma: login 500 por `site_settings.pix_email_ativo`.
+- Os comprovantes do `manto_local` só existem na produção, e os arquivos soltos em
+  `instance/uploads/expenses` são texto com extensão `.jpg`/`.pdf` — o visualizador mostrou o erro
+  certo; o verify gera os próprios.
+- Em dev, o Vite otimiza o `pdfjs-dist` na primeira importação e recarrega a página (o primeiro PDF
+  pode falhar uma vez); não acontece no build.
 
 ### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
 
