@@ -25,8 +25,11 @@ export function GastosVinculados({ gastos }: { gastos: EventGasto[] }) {
               <span className="text-xs text-muted tabular-nums">{formatDay(gasto.expense_date)}</span>
               <span className="tabular-nums text-ink">{brl(gasto.amount)}</span>
               {gasto.receipt_path && (
+                // `receipt_path` do gasto extra é relativo à pasta de uploads ("expenses/…"), ao
+                // contrário dos outros arquivos do evento; sem o prefixo o link abria
+                // `/events/<id>/expenses/…` (feature 320).
                 <LinkDeArquivo
-                  caminho={gasto.receipt_path}
+                  caminho={`/uploads/${gasto.receipt_path}`}
                   className="text-blue underline"
                 >
                   Ver comprovante

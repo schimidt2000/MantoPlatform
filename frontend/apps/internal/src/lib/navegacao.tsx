@@ -51,9 +51,16 @@ export const LinkVoltarParaLista = forwardRef<HTMLAnchorElement, Omit<LinkProps,
   },
 );
 
+/**
+ * Já houve navegação dentro deste carregamento do app? A primeira tela de um carregamento também
+ * chega como "POP" no React Router — e não é um "voltar": abrir o app de novo numa lista não pode
+ * devolver a rolagem de uma visita antiga.
+ */
+let houveNavegacao = false;
+
 /** A chegada atual foi um "voltar"/"avançar" do histórico (e não um clique em link)? */
 export function useChegouPeloHistorico(): boolean {
-  return useNavigationType() === "POP";
+  return useNavigationType() === "POP" && houveNavegacao;
 }
 
 /**
@@ -62,12 +69,14 @@ export function useChegouPeloHistorico(): boolean {
  * ANTES das `<Routes>`: telas que rolam até um item ao abrir (`Tags3DPage`) rodam depois.
  */
 export function RolarAoTopoEmNovaPagina() {
-  const { pathname } = useLocation();
+  const { pathname, key } = useLocation();
   const tipo = useNavigationType();
   const anterior = useRef(pathname);
+  const chaveInicial = useRef(key);
   useLayoutEffect(() => {
+    if (key !== chaveInicial.current) houveNavegacao = true;
     if (pathname !== anterior.current && tipo !== "POP") window.scrollTo(0, 0);
     anterior.current = pathname;
-  }, [pathname, tipo]);
+  }, [pathname, key, tipo]);
   return null;
 }

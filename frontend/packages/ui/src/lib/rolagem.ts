@@ -60,9 +60,12 @@ export interface OpcoesRestaurarRolagem {
  * escrita gera uma chave nova) só muda onde a posição é guardada.
  */
 export function useRestaurarRolagem(chave: string, { restaurar, pronto }: OpcoesRestaurarRolagem): void {
-  const chaveAtual = useRef(chave);
-  chaveAtual.current = chave;
-  const chaveDaChegada = useRef(chave);
+  // A chave leva o caminho junto: os dois apps (interno e catálogo) dividem o mesmo
+  // sessionStorage, e a primeira entrada de cada carregamento tem a mesma chave ("default").
+  const comCaminho = `${window.location.pathname}#${chave}`;
+  const chaveAtual = useRef(comCaminho);
+  chaveAtual.current = comCaminho;
+  const chaveDaChegada = useRef(comCaminho);
   const deveRestaurar = useRef(restaurar);
   const jaRestaurou = useRef(false);
   const alvo = useRef(0);

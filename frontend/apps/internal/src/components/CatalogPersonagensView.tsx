@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Plus, Shirt, TriangleAlert, X } from "lucide-react";
 import { assetUrl, ApiRequestError } from "@manto/api-client";
 import { Button, cn, Foto } from "@manto/ui";
+import { DA_LISTA } from "../lib/navegacao";
 import {
   useCatalogPersonagens,
   useReuseCharacter,
@@ -183,6 +184,7 @@ function PersonagemRow({
                 <Link
                   key={tema.tema_id}
                   to={`/admin/catalogo/${tema.tema_id}/editar`}
+                  state={DA_LISTA}
                   className={cn(
                     "rounded-md border border-line px-1.5 py-0.5 text-[11px] hover:border-accent hover:text-accent",
                     todasInativas ? "text-muted line-through" : "text-ink",

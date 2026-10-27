@@ -57,6 +57,14 @@ export function VisualizadorDeArquivo({ arquivo, onFechar }: VisualizadorDeArqui
   const ultimo = useRef<ArquivoParaVisualizar | null>(null);
   if (arquivo) ultimo.current = arquivo;
   const atual = arquivo ?? ultimo.current;
+  // Sem `Trigger`, o Radix não sabe para onde devolver o foco ao fechar e larga no `body`: guarda
+  // quem tinha o foco (o "Ver") no momento em que o visualizador abriu.
+  const origem = useRef<HTMLElement | null>(null);
+  const estavaAberto = useRef(false);
+  if (arquivo && !estavaAberto.current && typeof document !== "undefined") {
+    origem.current = document.activeElement as HTMLElement | null;
+  }
+  estavaAberto.current = arquivo !== null;
 
   return (
     <DialogPrimitive.Root open={arquivo !== null} onOpenChange={(aberto) => !aberto && onFechar()}>
@@ -68,6 +76,10 @@ export function VisualizadorDeArquivo({ arquivo, onFechar }: VisualizadorDeArqui
               forceMount
               aria-describedby={undefined}
               data-visualizador-arquivo=""
+              onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                origem.current?.focus();
+              }}
             >
               <motion.div
                 className="fixed inset-0 z-[60] flex flex-col bg-bg focus:outline-none"
@@ -111,7 +123,10 @@ function Conteudo({ arquivo, onFechar }: { arquivo: ArquivoParaVisualizar; onFec
         <BotaoBaixar arquivo={arquivo} nome={nome} />
       </header>
 
-      <div className="min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-2 p-3 sm:p-6">
+      <div
+        data-rolagem-do-visualizador=""
+        className="min-h-0 flex-1 overflow-auto overscroll-contain bg-surface-2 p-3 sm:p-6"
+      >
         {erro ? (
           <Aviso
             icone={<TriangleAlert className="h-8 w-8 text-red" aria-hidden="true" />}
@@ -133,7 +148,8 @@ function Conteudo({ arquivo, onFechar }: { arquivo: ArquivoParaVisualizar; onFec
             src={arquivo.url}
             alt={nome}
             onError={() => setErro(true)}
-            className="mx-auto h-auto max-w-full rounded-md bg-white shadow-sm"
+            // Inteira na tela (retrato alto inclusive); o zoom é o de pinça do aparelho.
+            className="mx-auto max-h-full max-w-full rounded-md bg-white object-contain shadow-sm"
           />
         ) : tipo === "pdf" ? (
           <Suspense fallback={<Skeleton className="mx-auto h-[70vh] w-full max-w-[900px]" />}>
@@ -162,34 +178,52 @@ function Aviso({ icone, texto, children }: { icone: ReactNode; texto: string; ch
   );
 }
 
+/** Tela de toque com folha de compartilhar de arquivo (iPhone, Android)? */
+function podeCompartilharArquivo(): boolean {
+  if (typeof window === "undefined" || typeof navigator.canShare !== "function") return false;
+  return window.matchMedia?.("(pointer: coarse)").matches ?? false;
+}
+
 /**
  * No celular, "Baixar" abre a folha de compartilhar do aparelho (Salvar em Arquivos, Fotos,
  * WhatsApp). Um `<a download>` no app da Tela de Início pode abrir o arquivo na própria janela —
  * a armadilha de novo. No computador, download comum.
+ *
+ * O arquivo é buscado quando o visualizador abre, não no toque: o Safari só aceita `share` chamado
+ * direto do toque, e um `await fetch` antes faz ele recusar.
  */
 function BotaoBaixar({ arquivo, nome }: { arquivo: ArquivoParaVisualizar; nome: string }) {
-  const [baixando, setBaixando] = useState(false);
+  const [compartilhar] = useState(podeCompartilharArquivo);
+  const [pronto, setPronto] = useState<File | null>(null);
+  const [preparando, setPreparando] = useState(compartilhar);
 
-  async function baixar() {
-    const toque = window.matchMedia?.("(pointer: coarse)").matches ?? false;
-    if (toque && typeof navigator.canShare === "function") {
-      setBaixando(true);
-      try {
-        const resposta = await fetch(arquivo.url, { credentials: "same-origin" });
-        if (resposta.ok) {
-          const blob = await resposta.blob();
-          const file = new File([blob], nome, { type: blob.type });
-          if (navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file] });
-            return;
-          }
-        }
-      } catch (e) {
-        // Cancelar a folha de compartilhar não é erro.
-        if (e instanceof DOMException && e.name === "AbortError") return;
-      } finally {
-        setBaixando(false);
-      }
+  useEffect(() => {
+    if (!compartilhar) return;
+    let vivo = true;
+    setPronto(null);
+    setPreparando(true);
+    fetch(arquivo.url, { credentials: "same-origin" })
+      .then((resposta) => (resposta.ok ? resposta.blob() : Promise.reject(new Error(String(resposta.status)))))
+      .then((blob) => {
+        if (vivo) setPronto(new File([blob], nome, { type: blob.type }));
+      })
+      .catch(() => {
+        // Sem o arquivo em mãos, o toque cai no download comum (abaixo).
+      })
+      .finally(() => {
+        if (vivo) setPreparando(false);
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [arquivo.url, nome, compartilhar]);
+
+  function baixar() {
+    if (pronto && navigator.canShare({ files: [pronto] })) {
+      // Cancelar a folha não é erro; e nenhum erro aqui pode cair no `<a download>`, que no app
+      // da Tela de Início prenderia a pessoa.
+      navigator.share({ files: [pronto] }).catch(() => undefined);
+      return;
     }
     const link = document.createElement("a");
     link.href = arquivo.url;
@@ -201,8 +235,7 @@ function BotaoBaixar({ arquivo, nome }: { arquivo: ArquivoParaVisualizar; nome: 
 
   return (
     // Tamanho padrão (44px): é alvo de toque no celular.
-    <Button variant="outline" loading={baixando} onClick={() => void baixar()} className="px-3">
-
+    <Button variant="outline" loading={preparando} onClick={baixar} className="px-3">
       <Download className="h-4 w-4" aria-hidden="true" />
       Baixar
     </Button>

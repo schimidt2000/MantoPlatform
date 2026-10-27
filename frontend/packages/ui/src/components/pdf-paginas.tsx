@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist";
-import workerUrl from "pdfjs-dist/build/pdf.worker.min.mjs?url";
+// Build "legacy" de propósito: o padrão usa `Promise.withResolvers`, que só existe a partir do
+// iOS 17.4 — e iPhone 8/X param no iOS 16. O legacy traz os polyfills.
+import { GlobalWorkerOptions, getDocument, type PDFDocumentProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
+import workerUrl from "pdfjs-dist/legacy/build/pdf.worker.min.mjs?url";
 import { Skeleton } from "./skeleton";
 
 /**
@@ -93,11 +95,14 @@ function Pagina({ documento, numero, largura, proporcao, onErro }: PaginaProps) 
 
   useEffect(() => {
     if (perto || !canvas.current) return;
+    // A raiz é a área que rola do visualizador, não a janela: a margem de antecipação só vale
+    // para a raiz, e quem corta a página é a área do visualizador.
+    const raiz = canvas.current.closest("[data-rolagem-do-visualizador]");
     const observador = new IntersectionObserver(
       (entradas) => {
         if (entradas.some((e) => e.isIntersecting)) setPerto(true);
       },
-      { rootMargin: MARGEM_DE_ANTECIPACAO },
+      { root: raiz, rootMargin: MARGEM_DE_ANTECIPACAO },
     );
     observador.observe(canvas.current);
     return () => observador.disconnect();

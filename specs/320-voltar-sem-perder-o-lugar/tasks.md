@@ -120,3 +120,25 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 
 MVP = US1 (o pedido mais repetido: catálogo). Entrega única, porém: as quatro histórias vão juntas
 num deploy só, fora do horário, quando o dono pedir.
+
+---
+
+## Phase 8: Convergence
+
+Leitura independente do código contra spec/plano/contrato (27/10). Os achados viraram as tarefas
+abaixo, já feitas nesta mesma rodada; o verify foi rodado de novo no fim.
+
+- [X] T038 Prefixar `/uploads/` no comprovante de gasto vinculado em `frontend/apps/internal/src/components/EventDetail/GastosVinculados.tsx` (a API manda `receipt_path` relativo, "expenses/…"; o link abria `/events/<id>/expenses/…`) per FR-015 (partial)
+- [X] T039 Não restaurar rolagem na primeira tela de um carregamento (o React Router a marca como POP) e prefixar a chave com o caminho em `frontend/packages/ui/src/lib/rolagem.ts` e nos dois `lib/navegacao.tsx` per FR-005 (contradicts)
+- [X] T040 "Baixar" no celular: buscar o arquivo ao abrir e chamar `share` direto do toque, sem cair no `<a download>` em erro, em `frontend/packages/ui/src/components/visualizador-de-arquivo.tsx` per FR-012 (partial)
+- [X] T041 Usar o build legacy do pdf.js (iOS < 17.4 sem `Promise.withResolvers`) em `frontend/packages/ui/src/components/pdf-paginas.tsx` per FR-010 (partial)
+- [X] T042 Devolver o foco ao "Ver" ao fechar o visualizador (`onCloseAutoFocus`) em `visualizador-de-arquivo.tsx` per Casos de borda/Teclado (missing)
+- [X] T043 Marcar `DA_LISTA` nos links da visão Personagens (`CatalogPersonagensView.tsx`) e da fila de e-mails (`BounceQueue.tsx`) per FR-006 (partial)
+- [X] T044 Raiz do `IntersectionObserver` = área que rola do visualizador (antecipação das páginas do PDF) em `pdf-paginas.tsx` per Casos de borda/PDF longo (partial)
+- [X] T045 Toque duplo no "Ver" não empilha dois passos de "voltar" em `frontend/apps/internal/src/components/ArquivoViewer.tsx` per FR-011 (partial)
+- [X] T046 "← Voltar ao sistema" só quando há entrada antes do catálogo (cliente que salvou o catálogo na Tela de Início não vê) em `frontend/apps/public/src/components/VoltarAoSistema.tsx`; contrato atualizado para `history.go(-(idx+1))` per FR-017 (partial)
+- [X] T047 Foto inteira na tela (`max-h-full object-contain`) em `visualizador-de-arquivo.tsx` per História 3 (partial)
+
+Ficaram fora, de propósito: largura do PDF ao girar o aparelho e liberar páginas já desenhadas em
+PDF muito longo (o comprovante típico tem 1–3 páginas); downloads `<a download>` de arquivo 3D
+(`Acervo3DPage`, `Fila3DPage`) — são download, não "abrir", e não prendem a janela.

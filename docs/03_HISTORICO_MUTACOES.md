@@ -413,6 +413,17 @@ iPhone): 12/12; contraprova na `main`: 1, 5 e 7 falham. Primeira rodada antes do
   certo; o verify gera os próprios.
 - Em dev, o Vite otimiza o `pdfjs-dist` na primeira importação e recarrega a página (o primeiro PDF
   pode falhar uma vez); não acontece no build.
+- pdf.js pelo build **legacy** (`pdfjs-dist/legacy/build/pdf.mjs`): o padrão usa
+  `Promise.withResolvers`, que não existe antes do iOS 17.4 (iPhone 8/X ficam no 16).
+- "Baixar" no iPhone: o Safari só aceita `navigator.share` chamado direto do toque — o arquivo é
+  buscado quando o visualizador abre, e erro no compartilhar não cai no `<a download>` (que no app da
+  Tela de Início abriria o arquivo na janela, sem volta).
+- O React Router marca a primeira tela de cada carregamento como "POP": sem cuidado, abrir o app
+  de novo numa lista restaurava a rolagem de uma visita antiga. Só é "voltar" depois de alguma
+  navegação no carregamento (`useChegouPeloHistorico`).
+- Achado de passagem: "Ver comprovante" dos gastos vinculados no detalhe do evento estava quebrado
+  desde sempre — a API manda `receipt_path` relativo ("expenses/…") e o link abria
+  `/events/<id>/expenses/…`. Corrigido no front com o prefixo `/uploads/`.
 
 ### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
 

@@ -118,6 +118,8 @@ observação.
   `/categorias`): `useVoltarParaLista`.
 - `RolarAoTopoEmNovaPagina` no `App`.
 - `VoltarAoSistema`: só com `estaComoAppInstalado()`; botão fixo "← Voltar ao sistema" (tom público,
-  claro); clique → `history.back()` se `history.length > 1`, senão `window.location.assign("/")`.
+  claro); só aparece se houver entrada antes do catálogo (`history.length > idx + 1`, com o `idx` que
+  o React Router grava); clique → `history.go(-(idx + 1))` — pula o que a pessoa navegou dentro do
+  catálogo e cai na tela do sistema —, senão `window.location.assign("/")`.
   Mostrado nas páginas do catálogo (grade, categorias, categoria, tema, lista de desejos), não na
   loja `/v`, no cadastro, nos formulários, na avaliação nem na NFC.

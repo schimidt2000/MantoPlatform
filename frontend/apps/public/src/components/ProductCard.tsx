@@ -7,7 +7,8 @@ import { WishlistButton } from "./WishlistButton";
 interface ProductCardProps {
   item: CatalogItemSummary;
   /** Tamanho maior de foto/nome — usado na grade de uma categoria (feature 133/140). */
-  large?: boolean;  /**
+  large?: boolean;
+  /**
    * O card está numa lista (grade geral ou categoria): o "← Voltar" do tema volta para ela pelo
    * histórico, no mesmo ponto (feature 320). Os relacionados do detalhe não marcam.
    */

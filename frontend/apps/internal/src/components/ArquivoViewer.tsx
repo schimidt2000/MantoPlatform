@@ -42,15 +42,18 @@ export function ArquivoViewerProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const [aberto, setAberto] = useState<{ marca: number; arquivo: ArquivoParaVisualizar } | null>(null);
   const proximaMarca = useRef(1);
+  const algumAberto = useRef(false);
   const marcaAtual = marcaDe(location.state);
+  if (!aberto) algumAberto.current = false;
 
   // Voltar do navegador/gesto: a marca saiu do histórico → fecha.
   useEffect(() => {
     if (aberto && marcaAtual !== aberto.marca) setAberto(null);
   }, [aberto, marcaAtual]);
 
-  // Recarregou com a marca no histórico: não há arquivo para mostrar; limpa para o próximo
-  // "voltar" não ser um passo morto.
+  // Recarregou com a marca no histórico: não há arquivo para mostrar. Tira a marca (senão o
+  // próximo "Ver" acharia que já há um aberto); a entrada repetida da mesma tela continua lá — um
+  // "voltar" a mais, que o histórico do navegador não deixa apagar.
   const conferiuNaMontagem = useRef(false);
   useEffect(() => {
     if (conferiuNaMontagem.current) return;
@@ -63,6 +66,10 @@ export function ArquivoViewerProvider({ children }: { children: ReactNode }) {
 
   const abrir = useCallback(
     (arquivo: ArquivoParaVisualizar) => {
+      // Toque duplo no "Ver" não empilha dois passos de "voltar" (ref, não estado: o segundo
+      // toque chega antes de a tela renderizar de novo).
+      if (algumAberto.current) return;
+      algumAberto.current = true;
       const marca = proximaMarca.current++;
       setAberto({ marca, arquivo });
       const base = location.state && typeof location.state === "object" ? location.state : {};
