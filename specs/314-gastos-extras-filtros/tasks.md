@@ -42,8 +42,11 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
       inteira, comparada à soma por `situacao` do payload; cenário 4 aprova pela API (`POST
       /api/gastos/<id>/aprovar`); cenário 7 troca `gastos_ops.situacao_do_gasto` por uma versão quebrada (pago no
       cadastro → `a_pagar`) e exige que o cenário 2 caia; limpeza no `finally` (`rollback`, `roles.clear()`, apaga
-      gastos `[verify314]` e usuários) conferida por conexão separada. Rodar AGORA: deve falhar no cenário 1 por
+      gastos `[verify314]`, as linhas de `AuditLog` `entity_type="gasto"` deles — a aprovação do cenário 4 grava — e
+      os usuários) conferida por conexão separada. Rodar AGORA: deve falhar no cenário 1 por
       falta de `situacao` — salvar a saída em `specs/314-gastos-extras-filtros/verify_314_primeira_falha.txt`
+- [ ] T002b Base dos verifies vizinhos ANTES de qualquer mudança de backend: rodar `verify_306.py` e `verify_312.py`
+      neste worktree e anotar o placar em `specs/314-gastos-extras-filtros/base_verifies_vizinhos.txt`
 - [ ] T003 [P] `frontend/apps/internal/src/lib/gastos.ts`: `GastoSituacao` (`"aguardando_aprovacao" | "a_pagar" |
       "no_banco" | "pago" | "rejeitado"`); `situacao?: GastoSituacao` em `GastoExtra` (opcional — armadilha 21);
       `situacaoDe(e)` com a ponte de deploy de `research.md` D1 (sem a chave: pendente → aguardando, rejeitado →
@@ -64,8 +67,10 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
 cancelado: travada." inteiras.
 
 - [ ] T004 [US1] `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx` (novo): `useAcoesDoGasto(expense)`
-      (aprovar/rejeitar/excluir/vincular com as mesmas regras de hoje — `travado`, `canDelete`, `window.prompt`,
-      `window.confirm`, erro da ação), `SituacaoBadge` (rótulo + tom de `lib/gastos.ts`; "com edições" quando
+      (aprovar/rejeitar/excluir/vincular com as mesmas regras de hoje — `travado`, `canDelete`, `window.prompt` no
+      motivo da rejeição, erro da ação); "Excluir" abre o `ConfirmDialog` do `@manto/ui` ("Excluir este gasto?",
+      descrição e valor no corpo, botão `loading` e erro dentro do diálogo — FR-013, Princípio V; achado C1),
+      `SituacaoBadge` (rótulo + tom de `lib/gastos.ts`; "com edições" quando
       `approved_with_edits`), `GastoRow` (7 colunas do plano: Data · Gasto [descrição, categoria · observação, "por
       <autor>" só gestão, `MarketingBatchDetail`] · Valor · Situação · Desembolso · Evento [`line-clamp-2` +
       `title`, `SeloSituacao` cancelado] · Ações [Aprovar/Rejeitar com texto; Ver nota fiscal, Editar, Vincular
@@ -179,7 +184,8 @@ conferência e apagado depois).
       ou enum renomeado
 - [ ] T023 `verify_314.py` verde de ponta a ponta + rodar os verifies vizinhos que leem `GET /api/gastos` ou
       `_expense_dict`: `specs/306-dinheiro-do-cancelamento/verify_306.py` e
-      `specs/312-cancelado-fora-das-listas/verify_312.py` (comparar com a base conhecida: 306 = 67/69, 312 = 27/27)
+      `specs/312-cancelado-fora-das-listas/verify_312.py`, comparando com a base medida em T002b (não com números de
+      outra data — a `main` andou 86 commits desde 21/10)
 - [ ] T024 Docs por fonte única: `docs/01` (shape do `GET /api/gastos` com `situacao`); `docs/02` (`/gastos`: layout,
       grupos, filtros, URL; §Espaçamento ganha a exceção de largura da 314); `docs/03` (entrada no topo + linha no
       índice); `docs/05` (candidatos: `totals` sem consumidor; `window.prompt`/`window.confirm` da tela)

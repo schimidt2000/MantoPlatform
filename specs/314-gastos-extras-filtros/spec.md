@@ -155,8 +155,8 @@ de gestão.
 - **Data futura** (o print mostra um gasto de 30/10/2026): o filtro de mês o encontra no mês dele; sem filtro de
   mês, ele aparece normalmente.
 - **Grupo recolhido vazio** (ex.: zero rejeitados): o cartão some, ou mostra "nenhum", e não abre lista vazia.
-- **Filtro que esvazia a lista principal mas casa com Pagos**: a página diz "nenhum gasto pendente com esse filtro"
-  e mostra quantos casaram nos grupos recolhidos.
+- **Filtro que esvazia a lista principal mas casa com Pagos**: a página diz "Nenhum gasto aguardando ação." no
+  lugar da lista principal, e os grupos recolhidos aparecem embaixo com quantos casaram.
 - **Ação que muda o grupo** (aprovar, rejeitar, excluir, editar): o gasto muda de grupo sem a página perder os
   filtros nem o grupo aberto.
 - **Bloco do auditor de marketing** (256) sob a descrição: continua visível na linha e no cartão.
@@ -202,7 +202,9 @@ de gestão.
 - **FR-012**: Quando nenhum gasto casa com o filtro, a página DEVE dizer isso e oferecer limpar o filtro.
 - **FR-013**: Todas as ações de hoje DEVEM continuar, com as mesmas regras de quem pode e do estado travado: Aprovar,
   Rejeitar, Editar, Vincular evento, Excluir, Ver nota fiscal, o aviso de devolução travada, o selo de evento
-  cancelado e o bloco do auditor de marketing. Nenhuma ação muda de regra nesta feature.
+  cancelado e o bloco do auditor de marketing. Nenhuma ação muda de regra nesta feature. A confirmação de "Excluir"
+  passa a ser um diálogo da casa que mostra a descrição e o valor do gasto ("Excluir este gasto?"), no lugar do
+  alerta do navegador (Princípio V).
 - **FR-014**: Depois de qualquer ação, o gasto DEVE ir para o grupo da nova situação sem recarregar a página e sem
   perder filtros nem o grupo aberto.
 - **FR-015**: Quem não gerencia DEVE continuar vendo só os próprios gastos, com a mesma página, os mesmos grupos e
@@ -270,8 +272,9 @@ travada inteira. Repetir em 1366 px com um usuário sem papel de gestão.
 - Paginação no servidor ou filtro no servidor: a lista inteira (186 hoje) chega numa requisição, e o recorte é na
   tela, como em Pagamentos.
 - Mudar regras de quem aprova, rejeita, edita ou exclui, ou a trava da devolução de cancelado (306/312).
-- Trocar o `window.prompt` do motivo de rejeição e o `window.confirm` da exclusão por diálogos do `@manto/ui`. É
-  dívida da tela, não pedido. Vira candidata no `docs/05` se o plano confirmar.
+- Trocar o `window.prompt` do motivo de rejeição por um diálogo do `@manto/ui`. Rejeitar não apaga, então não cai no
+  Princípio V; é dívida da tela e vira candidata no `docs/05`. (A exclusão, que apaga, passa ao `ConfirmDialog`
+  nesta feature: a ação é reescrita aqui e o Princípio V exige o diálogo — achado C1 do `/speckit-analyze`.)
 - Seleção em massa (aprovar vários de uma vez) e exportar CSV.
 - A página de Gastos Recorrentes (`/gastos/recorrentes`) e a página de Pagamentos.
 - Marcar como pago a partir desta página: o pagamento continua sendo feito na planilha de Pagamentos.

@@ -88,5 +88,6 @@ demais, nunca esconde.
 
 ## D9. O que fica igual
 
-`window.prompt` (motivo da rejeição) e `window.confirm` (exclusão) ficam: são dívida de tela, não pedido (spec,
-Fora de escopo). Viram candidatos no `docs/05`. O formulário de criar/editar não muda.
+O `window.prompt` (motivo da rejeição) fica: é dívida de tela, não pedido, e vira candidato no `docs/05`. O
+`window.confirm` da exclusão **sai**: a ação é reescrita nesta feature, e o Princípio V exige `ConfirmDialog` para
+ação destrutiva (achado C1 do `/speckit-analyze`, 27/10). O formulário de criar/editar não muda.
