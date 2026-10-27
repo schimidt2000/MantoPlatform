@@ -1,0 +1,34 @@
+﻿[320] cenário 1 — catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem
+[320]   FALHOU: a busca voltou "" em vez de "a"
+[320] cenário 2 — catálogo público: voltar do navegador devolve busca, categoria e rolagem
+[320]   FALHOU: a busca voltou "" em vez de "a"
+[320] cenário 3 — catálogo público: endereço com busca e categoria abre filtrado
+[320]   FALHOU: a busca não veio do endereço
+[320] cenário 4 — gerenciador: voltar do card e do menu 'Editar' devolve filtros e rolagem
+[320]   FALHOU: a busca voltou ""
+[320] cenário 5 — talentos: voltar da ficha devolve busca, filtro, página e rolagem
+[320]   FALHOU: a busca voltou ""
+[320] cenário 6 — talentos: /talents?status=pending abre em Pendentes
+[320]   FALHOU: abriu em Ativos
+[320] cenário 11 — navegação nova pelo menu começa do topo
+[320]   FALHOU: a lista aberta pelo menu não começou do topo (scrollY=600)
+[320] cenário 7 — gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema
+[320]   FALHOU: o visualizador não abriu
+[320] cenário 8 — visualizador: 'Voltar' e voltar do navegador fecham no mesmo ponto
+[320]   FALHOU: depende do cenário 7
+[320] cenário 10 — app instalado: menu 'Catálogo' na mesma janela e '← Voltar ao sistema'
+[320]   FALHOU: o item 'Catálogo' ainda abre em outra aba
+cenário 12 pulado: sem VERIFY_320_MAIN_INTERNO/VERIFY_320_MAIN_PUBLICO
+FAIL  1 — catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem: a busca voltou "" em vez de "a"
+FAIL  2 — catálogo público: voltar do navegador devolve busca, categoria e rolagem: a busca voltou "" em vez de "a"
+FAIL  3 — catálogo público: endereço com busca e categoria abre filtrado: a busca não veio do endereço
+FAIL  4 — gerenciador: voltar do card e do menu 'Editar' devolve filtros e rolagem: a busca voltou ""
+FAIL  5 — talentos: voltar da ficha devolve busca, filtro, página e rolagem: a busca voltou ""
+FAIL  6 — talentos: /talents?status=pending abre em Pendentes: abriu em Ativos
+FAIL  7 — gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema: o visualizador não abriu
+FAIL  8 — visualizador: 'Voltar' e voltar do navegador fecham no mesmo ponto: depende do cenário 7
+FAIL  9 — nenhum link de arquivo do sistema abre em outra aba: frontend/apps/internal/src/pages/FigurinoProducaoDetailPage.tsx:349; frontend/apps/internal/src/pages/FigurinoProducaoDetailPage.tsx:550; frontend/apps/internal/src/pages/FigurinoProducaoDetailPage.tsx:701; frontend/apps/internal/src/pages/GastosExtrasPage.tsx:720; frontend/apps/internal/src/pages/TalentDetailPage.tsx:498; frontend/apps/internal/src/pages/TalentDetailPage.tsx:677; frontend/apps/internal/src/pages/VirtuaisDevolucoesPage.tsx:150; frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:67; frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:254; frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:574; frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:732; frontend/apps/internal/src/components/EventDetail/FinanceiroSection.tsx:761; frontend/apps/internal/src/components/EventDetail/GastosVinculados.tsx:28; frontend/apps/internal/src/components/EventDetail/LogisticaSection.tsx:224; frontend/apps/internal/src/components/Pagamentos/SalaryAdvancesDialog.tsx:159
+FAIL 10 — app instalado: menu 'Catálogo' na mesma janela e '← Voltar ao sistema': o item 'Catálogo' ainda abre em outra aba
+FAIL 11 — navegação nova pelo menu começa do topo: a lista aberta pelo menu não começou do topo (scrollY=600)
+
+0/11

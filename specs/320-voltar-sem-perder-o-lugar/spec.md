@@ -241,7 +241,8 @@ A feature é 100% de navegador (histórico, rolagem, sobreposição): não há r
 para o `test_client` exercitar. O `verify_320.py` cria um usuário descartável, escolhe os dados e
 entrega a navegação ao `verify_320_navegador.mjs`, que roda num navegador de verdade com o Playwright
 que já está em `frontend/node_modules` (feature 180), contra o Vite + Flask sobre `manto_local`.
-Login **só** por `POST /api/auth/login`; a única escrita é o usuário descartável, apagado no
+Login **só** por `POST /api/auth/login`; as únicas escritas são o usuário descartável e dois
+gastos extras descartáveis com comprovante (foto e PDF que existem no disco local), apagados no
 `finally`. Viewport de iPhone (390×844, toque) nos cenários do visualizador e do app instalado.
 Desvio registrado no Rastreamento de complexidade do `plan.md`.
 
