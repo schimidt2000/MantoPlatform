@@ -104,8 +104,8 @@ para alguém mantém o mesmo recorte.
 **Por que esta prioridade**: o dono pediu "esses filtros" e nomeou Pagamentos como referência. Só funciona sobre
 a página da História 1.
 
-**Verificação**: conferência de tela (busca sem acento, combinação de filtros, limpar filtros, URL) + cenário 5 do
-`verify_314.py`.
+**Verificação**: conferência de tela (busca sem acento, combinação de filtros, limpar filtros, URL); os números dos
+cartões vêm da situação provada nos cenários 2 e 3 do `verify_314.py`.
 
 **Cenários de aceite**:
 
@@ -129,7 +129,7 @@ Passa a ter a mesma largura, os mesmos grupos e os mesmos filtros, e um resumo d
 **Por que esta prioridade**: a mesma página serve as duas pessoas. Não pode ficar quebrada para quem não é
 Financeiro.
 
-**Verificação**: cenários 6 e 7 do `verify_314.py` (o 7 deve falhar) + conferência de tela com um usuário sem papel
+**Verificação**: cenários 5 e 6 do `verify_314.py` (o 6 deve falhar) + conferência de tela com um usuário sem papel
 de gestão.
 
 **Cenários de aceite**:
@@ -225,14 +225,16 @@ separada. Limpeza no `finally`.
 
 | # | Cenário | O que prova | Deve falhar? |
 |---|---|---|---|
-| 1 | Financeiro descartável pede `GET /api/gastos` | cada gasto traz o que a página precisa para derivar a situação (status, situação do pagamento, pago no cadastro, tipo de desembolso) e o número de gastos bate com o banco por conexão separada | não |
-| 2 | Semeia um gasto em cada situação (aguardando, a pagar, no banco, pago pela planilha, pago no cadastro, aprovado sem desembolso, rejeitado) | cada um chega com a situação certa e cai no grupo certo pela regra da página (FR-003/FR-004) | não |
-| 3 | O resumo da empresa (contagem e soma por situação) | bate com a soma feita no banco por conexão separada, centavo a centavo | não |
-| 4 | Aprovar pela API um gasto semeado "aguardando aprovação" | no GET seguinte ele chega com a nova situação (FR-014, lado servidor) | não |
-| 5 | Mesmas buscas da tela (acento, vários termos) sobre os gastos semeados | a função de busca reaproveitada de Pagamentos casa o que deve e só isso | não |
-| 6 | Usuário de Casting descartável com 2 gastos próprios pede a lista | recebe só os 2, sem resumo da empresa | não |
-| 7 | O mesmo usuário de Casting tenta ver um gasto de outro ou o resumo da empresa | não recebe: o gasto alheio e o total geral não aparecem | **sim** |
-| 8 | limpeza | gastos semeados, arquivos de comprovante e usuários descartáveis apagados (`roles.clear()` antes do usuário) | — |
+| 1 | Financeiro descartável pede `GET /api/gastos` | todo gasto traz uma `situacao` entre as cinco, e o número de gastos bate com o banco por conexão separada | não |
+| 2 | Semeia um gasto em cada caso (aguardando, a pagar, no banco, pago pela planilha, pago no cadastro, aprovado sem desembolso, rejeitado, e pendente já pago no cadastro) | cada um chega com a situação certa (FR-003/FR-004; `research.md` D2) | não |
+| 3 | Soma por situação dos itens do payload | bate, centavo a centavo, com a mesma regra escrita em SQL e rodada por conexão separada sobre o banco inteiro (SC-003: cada gasto em um grupo só) | não |
+| 4 | Aprovar pela API dois semeados "aguardando" (um com reembolso, um sem desembolso) | no GET seguinte um chega `a_pagar` e o outro `pago` (FR-014, lado servidor) | não |
+| 5 | Usuário de Casting descartável com 2 gastos próprios pede a lista | recebe só os 2, com `situacao`, e sem `totals` | não |
+| 6 | O mesmo usuário de Casting procura os gastos semeados pelo Financeiro e o total da empresa | não estão no payload dele | **sim** |
+| 7 | Mutação: a regra trocada (pago no cadastro deixa de contar como pago) | o cenário 2 cai — prova que o verify morde; o oráculo é o SQL do cenário 3, nunca a função mutada | **sim** |
+| 8 | limpeza | gastos semeados e usuários descartáveis apagados (`roles.clear()` antes do usuário), conferido por conexão separada | — |
+
+A busca (acento, vários termos) é TypeScript reaproveitado de Pagamentos e se confere na tela.
 
 Conferência de tela (UI interna, skill `manto-conferir-tela`): `/gastos` como Superadmin em 1920, 1366 e 375 px.
 Conferir sem rolagem lateral, grupos recolhidos, filtros na URL, aprovar e ver o gasto mudar de grupo, e devolução
@@ -248,7 +250,7 @@ travada inteira. Repetir em 1366 px com um usuário sem papel de gestão.
 - **SC-004**: Achar um gasto conhecido pelo nome do fornecedor ou do evento leva menos de 10 segundos (digitar na
   busca), sem rolar a lista.
 - **SC-005**: Um link copiado com filtros, aberto noutra aba, mostra o mesmo recorte.
-- **SC-006**: Nenhum gasto de outra pessoa e nenhum total da empresa chega a quem não gerencia (cenário 7 do verify).
+- **SC-006**: Nenhum gasto de outra pessoa e nenhum total da empresa chega a quem não gerencia (cenário 6 do verify).
 
 ## Fora de escopo
 
