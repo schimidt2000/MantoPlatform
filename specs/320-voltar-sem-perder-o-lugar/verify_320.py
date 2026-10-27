@@ -6,8 +6,8 @@ do lado do banco e entrega a navegação ao `verify_320_navegador.mjs` (Playwrig
 
   - cria um usuário SUPERADMIN descartável no `manto_local` (login dele só por
     `POST /api/auth/login`, feito pelo navegador);
-  - cria dois gastos extras descartáveis com comprovante em foto e em PDF (arquivos que existem no
-    disco do Flask local — os do banco só existem na produção);
+  - cria dois gastos extras descartáveis com comprovante em foto (PNG) e em PDF de 2 páginas,
+    gravados na pasta de uploads do Flask local (os do banco só existem na produção);
   - roda o cenário 9 aqui mesmo (varredura do código: nenhum link de arquivo do sistema abre em
     outra aba);
   - roda o navegador contra o Vite do worktree (cenários 1–8, 10, 11) e, se houver Vite da `main`,
@@ -35,8 +35,10 @@ import json
 import os
 import re
 import secrets
+import struct
 import subprocess
 import sys
+import zlib
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -83,6 +85,8 @@ def limpar() -> None:
             u.roles.clear()
             db.session.delete(u)
         db.session.commit()
+    for nome in ARQUIVOS.values():
+        (UPLOADS / "expenses" / nome).unlink(missing_ok=True)
 
 
 def criar_usuario() -> int:
@@ -95,22 +99,64 @@ def criar_usuario() -> int:
         return user.id
 
 
+def _png(largura: int = 240, altura: int = 160) -> bytes:
+    """PNG de verdade (faixas coloridas), sem depender do Pillow."""
+    linhas = b"".join(
+        b"\x00" + bytes((40 + (y * 3) % 200, 90, 160 - (y % 100)) * largura) for y in range(altura)
+    )
+
+    def bloco(tipo: bytes, dados: bytes) -> bytes:
+        return struct.pack(">I", len(dados)) + tipo + dados + struct.pack(">I", zlib.crc32(tipo + dados))
+
+    cabecalho = struct.pack(">IIBBBBB", largura, altura, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + bloco(b"IHDR", cabecalho) + bloco(b"IDAT", zlib.compress(linhas)) + bloco(b"IEND", b"")
+
+
+def _pdf(paginas: int = 2) -> bytes:
+    """PDF de verdade com texto em cada página (offsets do xref calculados)."""
+    objetos: list[bytes] = [b"<< /Type /Catalog /Pages 2 0 R >>"]
+    filhos = " ".join(f"{3 + 2 * i} 0 R" for i in range(paginas))
+    objetos.append(f"<< /Type /Pages /Kids [{filhos}] /Count {paginas} >>".encode())
+    fonte = 3 + 2 * paginas
+    for i in range(paginas):
+        conteudo = f"BT /F1 28 Tf 72 700 Td (Comprovante 320 - pagina {i + 1}) Tj ET".encode()
+        objetos.append(
+            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents {4 + 2 * i} 0 R "
+            f"/Resources << /Font << /F1 {fonte} 0 R >> >> >>".encode()
+        )
+        objetos.append(b"<< /Length %d >>\nstream\n" % len(conteudo) + conteudo + b"\nendstream")
+    objetos.append(b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>")
+    saida = bytearray(b"%PDF-1.4\n")
+    offsets = []
+    for n, corpo in enumerate(objetos, start=1):
+        offsets.append(len(saida))
+        saida += f"{n} 0 obj\n".encode() + corpo + b"\nendobj\n"
+    inicio_xref = len(saida)
+    saida += f"xref\n0 {len(objetos) + 1}\n0000000000 65535 f \n".encode()
+    saida += b"".join(f"{o:010d} 00000 n \n".encode() for o in offsets)
+    saida += f"trailer\n<< /Size {len(objetos) + 1} /Root 1 0 R >>\nstartxref\n{inicio_xref}\n%%EOF\n".encode()
+    return bytes(saida)
+
+
+ARQUIVOS = {"fotos": f"{PREFIX}foto.png", "pdfs": f"{PREFIX}comprovante.pdf"}
+
+
 def criar_gastos(user_id: int) -> dict[str, list[str]]:
-    """Dois gastos descartáveis com comprovante (foto e PDF) que EXISTE no disco do Flask local.
+    """Dois gastos descartáveis com comprovante (foto e PDF) gravado no disco do Flask local.
 
     Os comprovantes do `manto_local` apontam para arquivos que só existem na produção (0 de 135 no
-    disco em 27/10/2026), então o verify aponta para arquivos soltos que estão na pasta local. Data
-    antiga de propósito: o gasto cai no fim da lista e a tela precisa estar rolada para vê-lo.
+    disco em 27/10/2026), e os soltos na pasta local são de mentira (texto com extensão .jpg/.pdf).
+    O verify grava os dele e apaga no `finally`. Data antiga de propósito: o gasto cai no fim da
+    lista e a tela precisa estar rolada para vê-lo.
     """
     pasta = UPLOADS / "expenses"
-    foto = next((p for p in sorted(pasta.glob("*")) if p.suffix.lower() in (".jpg", ".jpeg", ".png")), None)
-    pdf = next((p for p in sorted(pasta.glob("*.pdf"))), None)
-    caminhos = {"fotos": [], "pdfs": []}
+    pasta.mkdir(parents=True, exist_ok=True)
+    (pasta / ARQUIVOS["fotos"]).write_bytes(_png())
+    (pasta / ARQUIVOS["pdfs"]).write_bytes(_pdf())
+    caminhos: dict[str, list[str]] = {"fotos": [], "pdfs": []}
     with app.app_context():
-        for arquivo, chave in ((foto, "fotos"), (pdf, "pdfs")):
-            if arquivo is None:
-                continue
-            caminho = f"expenses/{arquivo.name}"
+        for chave, nome in ARQUIVOS.items():
+            caminho = f"expenses/{nome}"
             db.session.add(
                 SpecialExpense(
                     description=f"{PREFIX}{chave}",
@@ -218,8 +264,10 @@ def main() -> int:
     finally:
         limpar()
         with app.app_context():
-            sobrou = User.query.filter(User.email.like(f"{PREFIX}%")).count() + (
-                SpecialExpense.query.filter(SpecialExpense.description.like(f"{PREFIX}%")).count()
+            sobrou = (
+                User.query.filter(User.email.like(f"{PREFIX}%")).count()
+                + SpecialExpense.query.filter(SpecialExpense.description.like(f"{PREFIX}%")).count()
+                + sum((UPLOADS / "expenses" / n).exists() for n in ARQUIVOS.values())
             )
         if sobrou:
             print(f"LIMPEZA FALHOU: {sobrou} usuário(s) {PREFIX} no banco")

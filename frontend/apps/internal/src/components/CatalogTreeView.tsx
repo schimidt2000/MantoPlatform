@@ -6,6 +6,7 @@ import { assetUrl } from "@manto/api-client";
 import { Foto } from "@manto/ui";
 import { KebabMenu } from "./KebabMenu";
 import type { CatalogCharacterSummary, CatalogListItem } from "../lib/adminCatalogo";
+import { DA_LISTA } from "../lib/navegacao";
 
 interface CatalogTreeViewProps {
   items: CatalogListItem[];
@@ -137,6 +138,7 @@ export function CatalogTreeView({
               </div>
               <Link
                 to={`/admin/catalogo/${item.id}/editar`}
+                state={DA_LISTA}
                 className="min-w-0 flex-1 truncate text-sm font-medium text-ink hover:underline"
               >
                 {item.name}

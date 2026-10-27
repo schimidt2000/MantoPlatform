@@ -25,6 +25,7 @@ import {
   formatTimecode,
   type VideoPlayerHandle,
 } from "../components/revisao";
+import { LinkDeArquivo } from "../components/ArquivoViewer";
 
 export function RevisaoAssetPage() {
   const params = useParams<{ spaceId: string; assetId: string }>();
@@ -188,9 +189,9 @@ export function RevisaoAssetPage() {
                   />
                 )}
                 {url && asset.media_type === "pdf" && (
-                  <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue underline">
-                    Abrir PDF em nova aba
-                  </a>
+                  <LinkDeArquivo caminho={url} className="text-blue underline">
+                    Ver PDF
+                  </LinkDeArquivo>
                 )}
               </CardContent>
             </Card>

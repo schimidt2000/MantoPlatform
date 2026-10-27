@@ -1,6 +1,7 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { Skeleton } from "@manto/ui";
+import { useMemo } from "react";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Skeleton, useRestaurarRolagem } from "@manto/ui";
+import { useChegouPeloHistorico } from "../lib/navegacao";
 import { useCatalogList } from "../lib/catalogo";
 import { ProductCard } from "../components/ProductCard";
 
@@ -13,8 +14,28 @@ function normalize(value: string): string {
 
 export function CatalogGridPage() {
   const { data, isLoading, isError } = useCatalogList();
-  const [search, setSearch] = useState("");
-  const [activeCategory, setActiveCategory] = useState("");
+  // Busca e categoria moram no endereço (feature 320): voltar de um tema, recarregar ou abrir o
+  // link copiado reproduz a mesma lista. `replace` para não criar um "voltar" por letra digitada.
+  const [params, setParams] = useSearchParams();
+  const search = params.get("q") ?? "";
+  const activeCategory = params.get("categoria") ?? "";
+  const location = useLocation();
+  const voltou = useChegouPeloHistorico();
+  useRestaurarRolagem(location.key, { restaurar: voltou, pronto: Boolean(data) });
+
+  function setFiltro(chave: "q" | "categoria", valor: string) {
+    setParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        if (valor) proximo.set(chave, valor);
+        else proximo.delete(chave);
+        return proximo;
+      },
+      { replace: true, state: location.state },
+    );
+  }
+  const setSearch = (valor: string) => setFiltro("q", valor);
+  const setActiveCategory = (valor: string) => setFiltro("categoria", valor);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -120,7 +141,7 @@ export function CatalogGridPage() {
               {filtered.length > 0 ? (
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {filtered.map((item) => (
-                    <ProductCard key={item.id} item={item} />
+                    <ProductCard key={item.id} item={item} deLista />
                   ))}
                 </div>
               ) : (

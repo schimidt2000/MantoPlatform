@@ -17,6 +17,7 @@ import {
   type PagamentoItem,
 } from "../../lib/financeiro";
 import { brl, formatDate, todayIso } from "../../lib/pagamentos";
+import { LinkDeArquivo } from "../ArquivoViewer";
 
 /** Espelha `ALLOWED_DOCUMENT_EXTENSIONS` (`app/storage.py`): foto do papel ou PDF. */
 const PROOF_ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.heic,.heif";
@@ -156,14 +157,12 @@ export function SalaryAdvancesDialog({ item, open, onClose }: SalaryAdvancesDial
                     <span className="font-bold tabular-nums text-ink">{brl(advance.amount)}</span>
                     <span className="text-xs text-muted">{formatDate(advance.date)}</span>
                     {proofUrl ? (
-                      <a
-                        href={proofUrl}
-                        target="_blank"
-                        rel="noopener"
+                      <LinkDeArquivo
+                        caminho={advance.proof ?? ""}
                         className="text-xs text-blue hover:underline"
                       >
                         Ver comprovante
-                      </a>
+                      </LinkDeArquivo>
                     ) : (
                       <span className="text-xs text-muted">sem comprovante</span>
                     )}

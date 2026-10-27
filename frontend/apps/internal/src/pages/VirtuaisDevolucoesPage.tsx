@@ -26,6 +26,7 @@ import {
   type PagamentoAConferir,
   type VirtualRefund,
 } from "../lib/virtuais";
+import { LinkDeArquivo } from "../components/ArquivoViewer";
 
 /**
  * Devoluções da Loja de Interações Virtuais (feature 205, US3).
@@ -147,14 +148,12 @@ function AConferirRow({ item }: { item: PagamentoAConferir }) {
         <div className="font-mono text-[11px] text-ink">{item.invoice_slug ?? "—"}</div>
         <div className="font-mono text-[11px] text-muted">{item.transaction_nsu ?? "—"}</div>
         {item.receipt_url && (
-          <a
-            href={item.receipt_url}
-            target="_blank"
-            rel="noopener noreferrer"
+          <LinkDeArquivo
+            caminho={item.receipt_url}
             className="inline-flex items-center gap-1 text-[11px] text-primary underline"
           >
             comprovante <ExternalLink className="size-3" />
-          </a>
+          </LinkDeArquivo>
         )}
       </TableCell>
       <TableCell align="right">

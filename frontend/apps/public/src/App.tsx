@@ -16,6 +16,8 @@ import { VitrineVirtualPage } from "./pages/VitrineVirtualPage";
 import { NfcPage } from "./pages/NfcPage";
 import { LojaLayout } from "./components/loja/LojaLayout";
 import { WishlistFloat } from "./components/WishlistFloat";
+import { VoltarAoSistema } from "./components/VoltarAoSistema";
+import { RolarAoTopoEmNovaPagina } from "./lib/navegacao";
 
 // Prefixo de rota condicional ao build de produção (feature 186, US6) — mesmo app servido sob
 // `/catalogo/*` no mesmo serviço Railway do app interno (ver `frontend/server.js`); em dev
@@ -43,6 +45,10 @@ export function App() {
 
   return (
     <BrowserRouter basename={rootSurface ? undefined : CATALOGO_BASENAME}>
+      {/* Antes das rotas: o "ir ao topo" roda antes do tema que rola até um personagem
+          (`?personagem=`), e a faixa do app instalado fica no alto da página (feature 320). */}
+      <RolarAoTopoEmNovaPagina />
+      {!rootSurface && <VoltarAoSistema />}
       <Routes>
         <Route path="/" element={<CatalogGridPage />} />
         <Route path="/categorias" element={<CategoriesPage />} />

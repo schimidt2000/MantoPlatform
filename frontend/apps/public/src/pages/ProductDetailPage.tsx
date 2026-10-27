@@ -7,6 +7,7 @@ import { ProductGallery } from "../components/ProductGallery";
 import { WishlistButton } from "../components/WishlistButton";
 import { ProductCard } from "../components/ProductCard";
 import { CharacterGrid } from "../components/CharacterGrid";
+import { LinkVoltarParaLista } from "../lib/navegacao";
 
 export function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -47,12 +48,12 @@ export function ProductDetailPage() {
       <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 text-center">
         <div className="mb-3 text-4xl">🎭</div>
         <p className="mb-6 text-muted">Este personagem não foi encontrado.</p>
-        <Link
+        <LinkVoltarParaLista
           to="/"
           className="inline-flex items-center gap-2 rounded-full border border-line px-6 py-3 text-sm font-semibold text-accent-dark hover:border-accent"
         >
           ← Voltar ao catálogo
-        </Link>
+        </LinkVoltarParaLista>
       </div>
     );
   }
@@ -61,9 +62,10 @@ export function ProductDetailPage() {
     <div className="pb-24">
       <div className="border-b border-line px-6 py-5">
         <div className="mx-auto max-w-[1180px]">
-          <Link to="/" className="text-[13.5px] font-semibold text-muted hover:text-accent">
+          {/* Veio da lista: volta para ela no mesmo ponto, com a busca (feature 320). */}
+          <LinkVoltarParaLista to="/" className="text-[13.5px] font-semibold text-muted hover:text-accent">
             ← Voltar ao catálogo
-          </Link>
+          </LinkVoltarParaLista>
         </div>
       </div>
 

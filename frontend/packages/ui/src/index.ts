@@ -15,6 +15,15 @@ export { ThemeSwitch } from "./components/theme-switch";
 export type { ThemeSwitchProps } from "./components/theme-switch";
 export { useTheme, toggleTheme } from "./lib/theme";
 export type { Theme, RevealOrigin } from "./lib/theme";
+export { useRestaurarRolagem } from "./lib/rolagem";
+export type { OpcoesRestaurarRolagem } from "./lib/rolagem";
+export { estaComoAppInstalado } from "./lib/app-instalado";
+export { VisualizadorDeArquivo, tipoDeArquivo } from "./components/visualizador-de-arquivo";
+export type {
+  ArquivoParaVisualizar,
+  TipoDeArquivo,
+  VisualizadorDeArquivoProps,
+} from "./components/visualizador-de-arquivo";
 export { PageHeader } from "./components/page-header";
 export type { PageHeaderProps, BreadcrumbItem } from "./components/page-header";
 export { DenseCard } from "./components/dense-card";

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
 import { Button, Card, CardContent, CardHeader, CardTitle, Skeleton } from "@manto/ui";
 import {
@@ -20,6 +20,7 @@ import {
   type NewPhotoSlot,
 } from "../components/CatalogPhotoManager";
 import { RichTextEditor } from "../components/RichTextEditor";
+import { LinkVoltarParaLista, useVoltarParaLista } from "../lib/navegacao";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -30,6 +31,7 @@ export function AdminCatalogoFormPage() {
   const isEdit = id !== undefined;
   const navigate = useNavigate();
   const location = useLocation();
+  const voltarParaLista = useVoltarParaLista("/admin/catalogo");
   // Chegou aqui direto do "Criar produto" — mostra o aviso apontando o painel de elenco/fichas.
   // Derivado do location a CADA render (não num useState inicial): a rota /novo e esta usam o
   // mesmo elemento no Router, então o componente não remonta na navegação pós-criação.
@@ -147,7 +149,8 @@ export function AdminCatalogoFormPage() {
     mutation.mutate(input, {
       onSuccess: (saved) => {
         if (isEdit) {
-          navigate("/admin/catalogo");
+          // Volta para a lista no mesmo ponto quando veio dela (feature 320).
+          voltarParaLista();
           return;
         }
         // Criação aterrissa na EDIÇÃO do produto recém-criado (feature 254): é onde vivem o
@@ -175,7 +178,7 @@ export function AdminCatalogoFormPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4 sm:p-6">
       <Button asChild variant="ghost" size="sm">
-        <Link to="/admin/catalogo">‹ Catálogo</Link>
+        <LinkVoltarParaLista to="/admin/catalogo">‹ Catálogo</LinkVoltarParaLista>
       </Button>
 
       <header>

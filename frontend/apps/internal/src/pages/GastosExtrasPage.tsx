@@ -20,6 +20,7 @@ import {
   type GastoMarketingBatch,
 } from "../lib/gastos";
 import { SeloSituacao } from "../components/SeloSituacao";
+import { LinkDeArquivo } from "../components/ArquivoViewer";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -717,14 +718,12 @@ function GastoRow({
         {canManage && <td className={TD}>{expense.created_by_name ?? "—"}</td>}
         <td className={TD}>
           {expense.receipt_url ? (
-            <a
-              href={expense.receipt_url}
-              target="_blank"
-              rel="noreferrer"
+            <LinkDeArquivo
+              caminho={expense.receipt_url}
               className="text-xs text-accent hover:underline"
             >
               Ver
-            </a>
+            </LinkDeArquivo>
           ) : (
             <span className="text-muted">—</span>
           )}

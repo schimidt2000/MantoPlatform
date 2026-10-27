@@ -349,6 +349,9 @@ try {
   if (quer(7) || quer(8)) {
     const ctx = await novoContexto(browser, IPHONE, { appInstalado: true });
     const page = await ctx.newPage();
+    const errosDoConsole = [];
+    page.on("console", (m) => m.type() === "error" && errosDoConsole.push(m.text().slice(0, 200)));
+    page.on("pageerror", (e) => errosDoConsole.push(e.message.slice(0, 200)));
     await page.goto(`${INTERNO}/gastos`);
     await page.locator("table").first().waitFor({ timeout: 20000 });
     const foto = await linkDeComprovante(page, DADOS.comprovantes?.fotos ?? []);
@@ -359,13 +362,19 @@ try {
       garante(foto && pdf, "não há comprovante em foto e em PDF com arquivo local");
       yFoto = await abrirNoVisualizador(page, ctx, foto);
       const img = page.locator(`${VISUALIZADOR} img`);
-      await img.waitFor({ timeout: 10000 });
+      await img.waitFor({ timeout: 10000 }).catch(async () => {
+        const texto = (await page.locator(VISUALIZADOR).innerText().catch(() => "")).replace(/\s+/g, " ");
+        throw new Falha(`a foto não apareceu no visualizador (mostrou: "${texto.slice(0, 160)}")`);
+      });
       garante(await img.evaluate((el) => el.complete && el.naturalWidth > 0), "a foto não carregou");
       await page.locator(VISUALIZADOR).getByRole("button", { name: "Voltar" }).click();
       await page.waitForTimeout(800);
       yPdf = await abrirNoVisualizador(page, ctx, pdf);
       const canvas = page.locator(`${VISUALIZADOR} canvas`).first();
-      await canvas.waitFor({ timeout: 20000 });
+      await canvas.waitFor({ timeout: 20000 }).catch(async () => {
+        const texto = (await page.locator(VISUALIZADOR).innerText().catch(() => "")).replace(/\s+/g, " ");
+        throw new Falha(`o PDF não apareceu (mostrou: "${texto.slice(0, 160)}"; console: ${errosDoConsole.slice(-3).join(" | ")})`);
+      });
       await page.waitForTimeout(1500);
       const desenhado = await canvas.evaluate((c) => {
         if (!c.width || !c.height) return false;

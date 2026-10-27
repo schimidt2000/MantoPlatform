@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@manto/ui";
-import { ApiRequestError, assetUrl } from "@manto/api-client";
+import { ApiRequestError } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
 import type { EventoDetalhe } from "../../lib/agenda";
 import {
@@ -28,6 +28,7 @@ import {
 } from "../../lib/eventAttachments";
 import { ContratoClickSign } from "./ContratoClickSign";
 import { Empty, INPUT_CLASS, Panel, brl, formatDateTime, formatDay } from "./parts";
+import { LinkDeArquivo } from "../ArquivoViewer";
 
 const MONEY_INPUT_CLASS = "h-11 w-32 rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -64,14 +65,12 @@ function ContratosPanel({ data }: { data: EventoDetalhe }) {
               key={contrato.id}
               className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-sm"
             >
-              <a
-                href={assetUrl(contrato.file_path)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <LinkDeArquivo
+                caminho={contrato.file_path}
                 className="text-blue underline"
               >
                 Ver contrato
-              </a>
+              </LinkDeArquivo>
               <span className="flex items-center gap-2">
                 <span className={contrato.is_signed ? "text-green" : "text-muted"}>
                   {contrato.is_signed ? "Assinado" : "Pendente"}
@@ -251,14 +250,12 @@ function PagamentoItem({
       </span>
       <span className="flex items-center gap-2">
         {item.file_path ? (
-          <a
-            href={assetUrl(item.file_path)}
-            target="_blank"
-            rel="noopener noreferrer"
+          <LinkDeArquivo
+            caminho={item.file_path}
             className="text-blue underline"
           >
             Ver comprovante
-          </a>
+          </LinkDeArquivo>
         ) : (
           podeAnexar && <AnexarAoPix eventId={eventId} item={item} />
         )}
@@ -571,14 +568,12 @@ function NotasFiscaisPanel({ data }: { data: EventoDetalhe }) {
                   {nota.status === "emitida" ? "Emitida" : "A emitir"}
                 </Badge>
                 {nota.file && (
-                  <a
-                    href={assetUrl(nota.file)}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <LinkDeArquivo
+                    caminho={nota.file}
                     className="text-blue underline"
                   >
                     Ver nota
-                  </a>
+                  </LinkDeArquivo>
                 )}
               </span>
             </li>
@@ -729,14 +724,12 @@ function ReembolsosPanel({ data }: { data: EventoDetalhe }) {
                 <span className="text-ink">
                   {item.description}
                   {item.invoice_file_path && (
-                    <a
-                      href={assetUrl(item.invoice_file_path)}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <LinkDeArquivo
+                      caminho={item.invoice_file_path}
                       className="ml-2 text-blue underline"
                     >
                       Nota do gasto
-                    </a>
+                    </LinkDeArquivo>
                   )}
                   {item.is_collected && <Badge tone="green" className="ml-2">Cobrado</Badge>}
                 </span>
@@ -758,14 +751,12 @@ function ReembolsosPanel({ data }: { data: EventoDetalhe }) {
                 </span>
               </div>
               {item.is_collected && item.receipt_file_path ? (
-                <a
-                  href={assetUrl(item.receipt_file_path)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <LinkDeArquivo
+                  caminho={item.receipt_file_path}
                   className="text-sm text-blue underline"
                 >
                   Comprovante de recebimento ({brl(item.collected_amount)})
-                </a>
+                </LinkDeArquivo>
               ) : !item.is_collected && podeLancar ? (
                 <CollectForm reimbursementId={item.id} eventId={eventId} />
               ) : null}

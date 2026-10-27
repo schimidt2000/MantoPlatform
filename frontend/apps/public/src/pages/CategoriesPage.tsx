@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { DA_LISTA } from "../lib/navegacao";
 import { Skeleton } from "@manto/ui";
 import { assetSrcSet, assetUrl } from "@manto/api-client";
 import { useCategories } from "../lib/catalogo";
@@ -44,6 +45,7 @@ export function CategoriesPage() {
               <Link
                 key={category.id}
                 to={`/categoria/${category.slug}`}
+                state={DA_LISTA}
                 className="group relative aspect-[3/4] overflow-hidden rounded-lg bg-bg-alt shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg"
               >
                 {category.cover_image_url && (

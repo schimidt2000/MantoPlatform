@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Button, PageHeader, Skeleton } from "@manto/ui";
+import { useEffect, useState } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { Button, PageHeader, Skeleton, useRestaurarRolagem } from "@manto/ui";
 import { useEmailBounces, useTalentDirectory } from "../lib/talents";
 import { useCurrentUser } from "../lib/useAuth";
 import { BounceQueue } from "../components/BounceQueue";
@@ -9,19 +10,64 @@ import {
   TalentFilterPanel,
   type TalentAdvancedFilters,
 } from "../components/TalentFilterPanel";
+import { useChegouPeloHistorico } from "../lib/navegacao";
 
 /** Aba visível: as duas do diretório, mais a fila de emails devolvidos (feature 219). */
 type View = "active" | "pending" | "bounces";
 
+/** Filtros de lista no endereço com o MESMO nome do parâmetro da API (`lib/talents.ts`). */
+const FILTROS_DE_LISTA = ["language", "race", "top", "bottom", "shoe", "passport", "tag"] as const;
+
+function filtrosDaUrl(params: URLSearchParams): TalentAdvancedFilters {
+  const op = params.get("height_op");
+  return {
+    ...EMPTY_ADVANCED_FILTERS,
+    ...Object.fromEntries(FILTROS_DE_LISTA.map((chave) => [chave, params.getAll(chave)])),
+    character: params.get("character") ?? "",
+    heightOp: op === "lte" || op === "eq" ? op : "gte",
+    heightValue: params.get("height_value") ?? "",
+    jaTrabalhou: params.get("ja_trabalhou") === "1",
+  };
+}
+
+function temFiltroAvancado(f: TalentAdvancedFilters): boolean {
+  return (
+    f.jaTrabalhou ||
+    Boolean(f.character) ||
+    Boolean(f.heightValue) ||
+    FILTROS_DE_LISTA.some((chave) => f[chave].length > 0)
+  );
+}
+
 export function TalentsListPage() {
-  const [status, setStatus] = useState<"active" | "pending">("active");
+  // Aba, busca, página e filtros no endereço (feature 320): voltar da ficha devolve a mesma lista,
+  // e o `?status=pending` que a ficha já mandava passa a valer. Sempre `replace`: mudar filtro
+  // não cria um passo de "voltar".
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const status: "active" | "pending" = params.get("status") === "pending" ? "pending" : "active";
   // `view` é separado de `status` de propósito: alternar para a fila não pode refazer a busca do
   // diretório, senão voltar para "Ativos" perderia página, busca e filtros aplicados.
-  const [view, setView] = useState<View>("active");
-  const [q, setQ] = useState("");
-  const [page, setPage] = useState(1);
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<TalentAdvancedFilters>(EMPTY_ADVANCED_FILTERS);
+  const view: View = params.get("aba") === "emails" ? "bounces" : status;
+  const q = params.get("q") ?? "";
+  const page = Math.max(1, Number(params.get("pagina")) || 1);
+  const filters = filtrosDaUrl(params);
+  const [showFilters, setShowFilters] = useState(() => temFiltroAvancado(filters));
+
+  function mudar(mudancas: Record<string, string | string[] | null>) {
+    setParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        for (const [chave, valor] of Object.entries(mudancas)) {
+          proximo.delete(chave);
+          for (const v of Array.isArray(valor) ? valor : [valor]) if (v) proximo.append(chave, v);
+        }
+        return proximo;
+      },
+      { replace: true, state: location.state },
+    );
+  }
+  const setPage = (valor: number) => mudar({ pagina: valor > 1 ? String(valor) : null });
 
   const { data: me } = useCurrentUser();
   // A fila expõe telefone e email de quem contatar: mesmo gate do endpoint (CASTING/SUPERADMIN).
@@ -47,9 +93,26 @@ export function TalentsListPage() {
   });
 
   const applyFilters = (next: TalentAdvancedFilters) => {
-    setFilters(next);
-    setPage(1);
+    mudar({
+      ...Object.fromEntries(FILTROS_DE_LISTA.map((chave) => [chave, next[chave]])),
+      character: next.character || null,
+      height_op: next.heightValue && next.heightOp !== "gte" ? next.heightOp : null,
+      height_value: next.heightValue || null,
+      ja_trabalhou: next.jaTrabalhou ? "1" : null,
+      pagina: null,
+    });
   };
+
+  // Página que deixou de existir (talentos saíram do filtro enquanto a pessoa estava na ficha):
+  // mostra a última que existe.
+  const totalPaginas = query.data?.pages;
+  useEffect(() => {
+    if (totalPaginas && page > totalPaginas) setPage(totalPaginas);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPaginas, page]);
+
+  const voltou = useChegouPeloHistorico();
+  useRestaurarRolagem(location.key, { restaurar: voltou, pronto: Boolean(query.data) });
 
   return (
     <div className="mx-auto max-w-[1600px] p-4 sm:p-6">
@@ -62,28 +125,20 @@ export function TalentsListPage() {
         <div className="flex rounded-md border border-line-strong">
           <button
             className={`px-3 py-1.5 text-sm ${view === "active" ? "bg-accent text-on-color" : "text-ink"}`}
-            onClick={() => {
-              setView("active");
-              setStatus("active");
-              setPage(1);
-            }}
+            onClick={() => mudar({ status: null, aba: null, pagina: null })}
           >
             Ativos
           </button>
           <button
             className={`px-3 py-1.5 text-sm ${view === "pending" ? "bg-accent text-on-color" : "text-ink"}`}
-            onClick={() => {
-              setView("pending");
-              setStatus("pending");
-              setPage(1);
-            }}
+            onClick={() => mudar({ status: "pending", aba: null, pagina: null })}
           >
             Pendentes {query.data && query.data.pending_count > 0 && `(${query.data.pending_count})`}
           </button>
           {canSeeBounces && (
             <button
               className={`px-3 py-1.5 text-sm ${view === "bounces" ? "bg-accent text-on-color" : "text-ink"}`}
-              onClick={() => setView("bounces")}
+              onClick={() => mudar({ aba: "emails" })}
             >
               E-mails com problema {bounceCount > 0 && `(${bounceCount})`}
             </button>
@@ -95,10 +150,7 @@ export function TalentsListPage() {
               className="h-10 min-w-40 flex-1 rounded-md border border-line bg-panel px-3 text-sm text-ink"
               placeholder="Buscar por nome ou nome artístico…"
               value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => mudar({ q: e.target.value || null, pagina: null })}
               aria-label="Buscar talento"
             />
             {view === "active" && (
@@ -150,7 +202,7 @@ export function TalentsListPage() {
                 variant="outline"
                 size="sm"
                 disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                onClick={() => setPage(page - 1)}
               >
                 ‹ Anterior
               </Button>
@@ -161,7 +213,7 @@ export function TalentsListPage() {
                 variant="outline"
                 size="sm"
                 disabled={page >= query.data.pages}
-                onClick={() => setPage((p) => p + 1)}
+                onClick={() => setPage(page + 1)}
               >
                 Próxima ›
               </Button>
