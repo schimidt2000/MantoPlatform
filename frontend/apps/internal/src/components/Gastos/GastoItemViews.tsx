@@ -144,12 +144,13 @@ function Desembolso({ expense }: { expense: GastoExtra }) {
   );
 }
 
-function Evento({ expense }: { expense: GastoExtra }) {
+function Evento({ expense, recortado }: { expense: GastoExtra; recortado: boolean }) {
   if (!expense.event_title) return <span className="text-muted">—</span>;
   return (
-    // O título do evento carrega o elenco inteiro ("(R&I) CARRO VERMELHO + CARRO AMARELO + …") e
-    // quebrava em cinco linhas, empurrando a linha a 300px: duas linhas e o nome inteiro na dica.
-    <span className="line-clamp-2" title={expense.event_title}>
+    // Na tabela, o título do evento carrega o elenco inteiro ("(R&I) CARRO VERMELHO + CARRO AMARELO +
+    // …") e quebrava em cinco linhas, empurrando a linha a 300px: duas linhas e o nome inteiro na
+    // dica. No cartão do celular vai inteiro — dica não abre com o dedo (achado G8 do converge).
+    <span className={recortado ? "line-clamp-2" : undefined} title={recortado ? expense.event_title : undefined}>
       {/* Feature 312: o gasto ligado a um evento cancelado (a devolução, a multa) leva o selo. */}
       {expense.event_cancelled && <SeloSituacao situacao="cancelado" compacto />}
       {expense.event_title}
@@ -184,7 +185,9 @@ function AcoesDoGasto({ expense, canManage, onEdit, compacto, onToggleLink }: Ac
   const canDelete = !travado && (canManage || expense.status === "pendente");
   const pendenteDeGestao = canManage && expense.status === "pendente";
   const erroDaAcao = (approve.error ?? reject.error) as Error | null;
-  const erroDaExclusao = del.isError ? (del.error as Error | null)?.message || "Não foi possível excluir o gasto." : null;
+  const erroDaExclusao = del.isError
+    ? (del.error as Error | null)?.message || "Não foi possível excluir o gasto. Tente novamente."
+    : null;
 
   const handleReject = () => {
     // `null` = a pessoa clicou em Cancelar no prompt. Antes da 314 o `?? ""` rejeitava mesmo assim.
@@ -318,7 +321,7 @@ function GastoRow({ expense, canManage, onEdit }: ItemProps) {
           <Desembolso expense={expense} />
         </td>
         <td className="px-2 py-2 [overflow-wrap:anywhere]">
-          <Evento expense={expense} />
+          <Evento expense={expense} recortado />
         </td>
         <td className="px-2 py-2">
           <AcoesDoGasto
@@ -367,7 +370,7 @@ function GastoCard({ expense, canManage, onEdit }: ItemProps) {
         </dd>
         <dt className="text-muted">Evento</dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">
-          <Evento expense={expense} />
+          <Evento expense={expense} recortado={false} />
         </dd>
         {canManage && (
           <>

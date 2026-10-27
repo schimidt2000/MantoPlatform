@@ -14,16 +14,16 @@ está anotada na linha.
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_314.py` verde contra `manto_local`, escrita conferida por conexão separada, um cenário que falha
-- [ ] CHK004 Tela aberta de verdade (1920, 1366, 1280, 375; Superadmin e Casting; Pagamentos também)
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
+- [x] CHK003 `verify_314.py` verde contra `manto_local`, escrita conferida por conexão separada, um cenário que falha
+- [x] CHK004 Tela aberta de verdade (1920, 1366, 1280, 375; Superadmin e Casting; Pagamentos também)
 - [x] CHK005 Migration manual — não se aplica: `models.py` não muda (data-model.md)
 - [x] CHK006 `scripts/validar_startcommand.py` — não se aplica: `render.yaml` não muda
-- [ ] CHK007 Gate de RBAC: endpoint alterado só no payload; `docs/01` §4.3 sem linha nova, shape do `GET /api/gastos` atualizado
-- [ ] CHK008 Docs por fonte única: `docs/01` (shape), `docs/02` (`/gastos` + exceção de largura no §Espaçamento), `docs/03`; `docs/05` (candidatos D3/D9)
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo ou alterado revisado pelo Princípio XV, lido na tela aberta
+- [x] CHK007 Gate de RBAC: endpoint alterado só no payload; `docs/01` §4.3 sem linha nova, shape do `GET /api/gastos` atualizado
+- [x] CHK008 Docs por fonte única: `docs/01` (shape), `docs/02` (`/gastos` + exceção de largura no §Espaçamento), `docs/03`; `docs/05` (candidatos D3/D9)
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps
+- [x] CHK010 Texto novo ou alterado revisado pelo Princípio XV, lido na tela aberta
 - [ ] CHK011 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
 
 ## Completude dos requisitos

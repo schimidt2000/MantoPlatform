@@ -703,7 +703,7 @@ export function GastosExtrasPage() {
 
           <p aria-live="polite" className="sr-only">
             {filtroAtivo
-              ? `${emExibicao.length} de ${expenses.length} gastos em exibição.`
+              ? `${emExibicao.length} de ${contagem(expenses.length)} em exibição, ${brl(soma(emExibicao))}.`
               : "Nenhum filtro ativo."}
           </p>
 
@@ -739,7 +739,9 @@ export function GastosExtrasPage() {
                 </CardHeader>
                 <CardContent className="p-0">
                   {aVista.length === 0 ? (
-                    <p className="p-6 text-center text-sm text-muted">Nenhum gasto aguardando ação.</p>
+                    <p className="p-6 text-center text-sm text-muted">
+                      Nenhum gasto aguardando aprovação ou pagamento.
+                    </p>
                   ) : (
                     <ListaDeGastos expenses={aVista} {...listaProps} />
                   )}

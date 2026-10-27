@@ -138,6 +138,8 @@ export const DESEMBOLSO_FILTRO_LABELS: Record<DesembolsoFiltro, string> = {
   nenhum: "Sem desembolso",
 };
 
+const DESEMBOLSOS_FILTRO: readonly string[] = Object.keys(DESEMBOLSO_FILTRO_LABELS);
+
 /** O recorte da tela, que mora na URL (`busca`, `categoria`, `desembolso`, `mes`, `situacao`). */
 export interface FiltrosDeGastos {
   busca: string;
@@ -163,7 +165,8 @@ export function lerFiltrosDaUrl(params: URLSearchParams, categorias: readonly st
   return {
     busca: params.get("busca") ?? "",
     categoria: categoria && categorias.includes(categoria) ? categoria : null,
-    desembolso: desembolso && desembolso in DESEMBOLSO_FILTRO_LABELS ? (desembolso as DesembolsoFiltro) : null,
+    // Lista fechada, não `in`: `in` aceita o que vem do protótipo (`?desembolso=constructor` esvaziava a lista).
+    desembolso: desembolso && DESEMBOLSOS_FILTRO.includes(desembolso) ? (desembolso as DesembolsoFiltro) : null,
     mes: mes && MES_VALIDO.test(mes) ? mes : null,
     situacao: situacao && (SITUACAO_ORDEM as string[]).includes(situacao) ? (situacao as GastoSituacao) : null,
   };

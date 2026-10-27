@@ -409,7 +409,13 @@ retomada em 27/10.
 **Verificação.**
 - `verify_314` 8/8 contra o `manto_local`. A primeira falha está em `verify_314_primeira_falha.txt`. O oráculo é
   a regra em SQL por conexão separada, com mutação que derruba o cenário 2.
-- Vizinhos: 306 67/69 (a base de sempre) e 312 27/27 (`base_verifies_vizinhos.txt`).
+- Vizinhos: 306 67/69 (a base de sempre, igual antes e depois) e 312 27/27 (`base_verifies_vizinhos.txt`).
+- **Converge.** Um leitor independente conferiu 71 itens (FR, SC, cenários, bordas, princípios e comportamentos da
+  tela antiga) e achou 17 lacunas: nenhuma crítica ou alta, 1 média e 16 baixas. A média era a rolagem lateral de
+  8 px a 375 px com mês escolhido. Entre as baixas: `?desembolso=constructor` passava pelo `in`, a contagem não
+  concordava no anúncio do leitor de tela e o evento saía cortado no cartão do celular. Viraram as tarefas
+  T026–T035, todas feitas; caixa alta e movimento ficaram como dívida 167, e as constantes de status na regra não
+  mudaram, para acompanhar o módulo.
 - Tela no Browser pane: Superadmin e Casting, Pagamentos sem regressão, nenhum erro no console. O aviso de
   devolução travada **não** foi visto com dado real, porque o espelho não tem devolução de cancelado; ele quebra
   linha na célula.

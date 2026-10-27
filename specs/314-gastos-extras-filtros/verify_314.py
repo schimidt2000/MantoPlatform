@@ -325,16 +325,22 @@ def c7_mutacao_derruba_o_cenario_2() -> None:
     _garante(original is not None, "gastos_ops.situacao_do_gasto não existe")
     gastos_ops.situacao_do_gasto = _situacao_quebrada
     try:
-        try:
-            _confere_casos()
-        except AssertionError as exc:
-            _garante("pago_cadastro" in str(exc), f"caiu, mas pelo motivo errado: {exc}")
-            return
-        raise AssertionError(
-            "com a regra quebrada o cenário 2 continuou verde — o verify não morde"
-        )
+        _deve_cair(_confere_casos, "cenário 2", "pago_cadastro")
+        # O oráculo independente (a regra em SQL) também tem de acusar: o pago no cadastro semeado
+        # sai de "pago" e entra em "a_pagar" na soma da API, e o SQL não muda.
+        _deve_cair(c3_soma_por_situacao_bate_com_o_sql, "cenário 3", "SQL")
     finally:
         gastos_ops.situacao_do_gasto = original
+
+
+def _deve_cair(cenario_fn: Callable[[], None], nome: str, motivo: str) -> None:
+    """Roda um cenário que TEM de falhar sob a mutação, e pelo motivo esperado."""
+    try:
+        cenario_fn()
+    except AssertionError as exc:
+        _garante(motivo in str(exc), f"{nome} caiu, mas pelo motivo errado: {exc}")
+        return
+    raise AssertionError(f"com a regra quebrada o {nome} continuou verde — o verify não morde")
 
 
 def limpar() -> None:

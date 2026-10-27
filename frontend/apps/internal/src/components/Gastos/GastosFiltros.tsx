@@ -95,7 +95,9 @@ export function GastosFiltros({
         </select>
         {/* As setas existem para o celular, onde acertar o seletor nativo de mês com o dedo é a
             parte mais difícil (mesma lição de Pagamentos). */}
-        <div className="flex items-center gap-1">
+        {/* `flex-wrap`: com mês escolhido, setas + campo + "Todos os meses" somam 367px e passavam de
+            375px no celular (rolagem lateral — achado G1 do converge). */}
+        <div className="flex flex-wrap items-center gap-1">
           <Button
             variant="outline"
             size="sm"

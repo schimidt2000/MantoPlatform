@@ -10,3 +10,6 @@ verify_312: 27/27 cenários OK. ⚠️ O processo subiu DEPOIS da edição de `g
   depois coincidem — não há o que comparar a mais.
 
 Depois do núcleo (T023), a comparação é: 306 = 67/69 com os mesmos dois de fora; 312 = 27/27.
+
+Depois (T023), HEAD 881ef41a: verify_306 67/69 — os mesmos dois de fora (14b e 20, cenários de mutação que exigem a
+main de antes da 306); verify_314 8/8 na mesma rodada, em sequência. Nenhuma regressão.

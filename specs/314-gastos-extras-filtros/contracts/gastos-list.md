@@ -24,7 +24,9 @@ Cada item de `expenses[]` ganha uma chave:
 |---|---|---|---|
 | `situacao` | string | `aguardando_aprovacao` · `a_pagar` · `no_banco` · `pago` · `rejeitado` | derivada por `gastos_ops.situacao_do_gasto`; nunca nula vinda do backend novo |
 
-No React: `situacao?: GastoSituacao` (opcional, armadilha 21). Sem a chave, o gasto fica na lista principal.
+No React: `situacao?: GastoSituacao` (opcional, armadilha 21). Sem a chave (`situacaoDe`, `lib/gastos.ts`), pendente
+→ aguardando aprovação e rejeitado → rejeitado (o `status` basta), e todo aprovado → a pagar, à vista: nenhum
+aprovado vai para "Pagos" sem a regra do servidor.
 
 As respostas de escrita que devolvem `_expense_dict` (`POST /api/gastos/<id>/aprovar`, `/rejeitar`, `PATCH
 /api/gastos/<id>`, `/vincular-evento`) passam a trazer `situacao` também, porque usam o mesmo serializer. A tela não

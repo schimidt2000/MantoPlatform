@@ -109,8 +109,9 @@ cartões vêm da situação provada nos cenários 2 e 3 do `verify_314.py`.
 
 **Cenários de aceite**:
 
-1. **Dado** a lista, **Quando** se digita "lalamove", **Então** só aparecem os gastos com esse termo na descrição,
-   no desembolso, no evento ou no autor, sem diferença de acento ou maiúscula, e a contagem e o total se ajustam.
+1. **Dado** a lista, **Quando** se digita "lalamove", **Então** só aparecem os gastos com esse termo em algum dos
+   campos da busca (FR-007: descrição, desembolso, evento, autor e os demais), sem diferença de acento ou
+   maiúscula, e a contagem e o total se ajustam.
 2. **Dado** o filtro "Figurino" na categoria e um mês escolhido, **Quando** se aplica, **Então** só aparecem os
    gastos daquela categoria com data naquele mês, em todos os grupos (principal, Pagos, Rejeitados).
 3. **Dado** um filtro ativo, **Quando** se clica em "Limpar filtros", **Então** a página volta ao estado de abertura.
@@ -155,8 +156,9 @@ de gestão.
 - **Data futura** (o print mostra um gasto de 30/10/2026): o filtro de mês o encontra no mês dele; sem filtro de
   mês, ele aparece normalmente.
 - **Grupo recolhido vazio** (ex.: zero rejeitados): o cartão some, ou mostra "nenhum", e não abre lista vazia.
-- **Filtro que esvazia a lista principal mas casa com Pagos**: a página diz "Nenhum gasto aguardando ação." no
-  lugar da lista principal, e os grupos recolhidos aparecem embaixo com quantos casaram.
+- **Filtro que esvazia a lista principal mas casa com Pagos**: a página diz "Nenhum gasto aguardando aprovação ou
+  pagamento." (o mesmo nome do título da lista, no formato de estado vazio do Princípio XV) no lugar da lista
+  principal, e os grupos recolhidos aparecem embaixo com quantos casaram.
 - **Ação que muda o grupo** (aprovar, rejeitar, excluir, editar): o gasto muda de grupo sem a página perder os
   filtros nem o grupo aberto.
 - **Bloco do auditor de marketing** (256) sob a descrição: continua visível na linha e no cartão.
@@ -185,8 +187,9 @@ de gestão.
   Com uma situação escolhida, a página mostra só ela, aberta, sem grupos recolhidos. Escolher "Pagos" mostra os
   pagos direto, sem precisar abrir o grupo.
 - **FR-007**: A página DEVE oferecer busca por texto sem diferença de acento ou maiúscula, com vários termos que
-  precisam casar todos, sobre descrição, observação, quem recebe, evento e autor. O comportamento é o da busca de
-  Pagamentos.
+  precisam casar todos, sobre descrição, observação, categoria, quem recebe, PIX, evento, autor, data (dd/mm/aaaa e
+  ISO), rótulo da situação e valor (formatado e cru). O comportamento é o da busca de Pagamentos (`research.md` D6).
+  Buscar "pago" casa com todo gasto na situação pago, de propósito.
 - **FR-008**: A página DEVE oferecer filtro por categoria, por tipo de desembolso (reembolso, fornecedor, devolução
   à cliente, sem desembolso) e por mês da data do gasto. A página abre com todos os meses. O mês é um filtro
   opcional, com ‹ › para andar entre meses e um jeito visível de voltar a "todos os meses".
@@ -204,7 +207,8 @@ de gestão.
   Rejeitar, Editar, Vincular evento, Excluir, Ver nota fiscal, o aviso de devolução travada, o selo de evento
   cancelado e o bloco do auditor de marketing. Nenhuma ação muda de regra nesta feature. A confirmação de "Excluir"
   passa a ser um diálogo da casa que mostra a descrição e o valor do gasto ("Excluir este gasto?"), no lugar do
-  alerta do navegador (Princípio V).
+  alerta do navegador (Princípio V). "Cancelar" no pedido do motivo da rejeição desiste da rejeição. Antes da 314, o
+  gasto era rejeitado assim mesmo, e isso era defeito, não regra (achado G9 do converge).
 - **FR-014**: Depois de qualquer ação, o gasto DEVE ir para o grupo da nova situação sem recarregar a página e sem
   perder filtros nem o grupo aberto.
 - **FR-015**: Quem não gerencia DEVE continuar vendo só os próprios gastos, com a mesma página, os mesmos grupos e
@@ -245,8 +249,8 @@ separada. Limpeza no `finally`.
 | 3 | Soma por situação dos itens do payload | bate, centavo a centavo, com a mesma regra escrita em SQL e rodada por conexão separada sobre o banco inteiro (SC-003: cada gasto em um grupo só) | não |
 | 4 | Aprovar pela API dois semeados "aguardando" (um com reembolso, um sem desembolso) | no GET seguinte um chega `a_pagar` e o outro `pago` (FR-014, lado servidor) | não |
 | 5 | Usuário de Casting descartável com 2 gastos próprios pede a lista | recebe só os 2, com `situacao`, e sem `totals` | não |
-| 6 | O mesmo usuário de Casting procura os gastos semeados pelo Financeiro e o total da empresa | não estão no payload dele | **sim** |
-| 7 | Mutação: a regra trocada (pago no cadastro deixa de contar como pago) | o cenário 2 cai — prova que o verify morde; o oráculo é o SQL do cenário 3, nunca a função mutada | **sim** |
+| 6 | O mesmo usuário de Casting procura os gastos semeados pelo Financeiro e o total da empresa, e tenta aprovar o próprio gasto pendente | não estão no payload dele; aprovar dá 403 e o banco (conexão separada) continua "pendente" | **sim** |
+| 7 | Mutação: a regra trocada (pago no cadastro deixa de contar como pago) | o cenário 2 (tabela esperada do verify) E o 3 (a regra em SQL) caem pelo motivo certo — prova que o verify morde; nenhum oráculo chama a função mutada | **sim** |
 | 8 | limpeza | gastos semeados e usuários descartáveis apagados (`roles.clear()` antes do usuário), conferido por conexão separada | — |
 
 A busca (acento, vários termos) é TypeScript reaproveitado de Pagamentos e se confere na tela.

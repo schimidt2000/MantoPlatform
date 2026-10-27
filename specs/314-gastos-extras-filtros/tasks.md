@@ -182,14 +182,14 @@ conferência e apagado depois).
 - [X] T022 Texto pelo Princípio XV lido na tela aberta: "Situação", rótulos das situações, "Ver nota fiscal",
       "Excluir", "Nenhum gasto encontrado.", "Limpar filtros", concordância "1 gasto"/"N gastos"; nenhuma chave
       ou enum renomeado
-- [ ] T023 `verify_314.py` verde de ponta a ponta + rodar os verifies vizinhos que leem `GET /api/gastos` ou
+- [X] T023 `verify_314.py` verde de ponta a ponta + rodar os verifies vizinhos que leem `GET /api/gastos` ou
       `_expense_dict`: `specs/306-dinheiro-do-cancelamento/verify_306.py` e
       `specs/312-cancelado-fora-das-listas/verify_312.py`, comparando com a base medida em T002b (não com números de
       outra data — a `main` andou 86 commits desde 21/10)
 - [X] T024 Docs por fonte única: `docs/01` (shape do `GET /api/gastos` com `situacao`); `docs/02` (`/gastos`: layout,
       grupos, filtros, URL; §Espaçamento ganha a exceção de largura da 314); `docs/03` (entrada no topo + linha no
       índice); `docs/05` (candidatos: `totals` sem consumidor; `window.prompt`/`window.confirm` da tela)
-- [ ] T025 `quickstart.md` executado de ponta a ponta
+- [X] T025 `quickstart.md` executado de ponta a ponta
 
 **Nota do implement (27/10).** As quatro histórias mexem em `GastosExtrasPage.tsx` em sequência, por isso a página
 foi escrita uma vez com as quatro (T006+T011+T017+T019). As conferências de tela T007, T012, T018 e T020 rodaram
@@ -217,3 +217,18 @@ ficaram 165 e 166 (ver T024).
 - **MVP**: US1 + US2 (as duas P1 — a queixa do layout e o "card de pagas"), verify verde, tela aberta
 - **Incremental**: US3 (filtros) sobre a página nova; US4 é conferência
 - Commits `feat(314):` por história, sempre por caminho; merge e push só quando o dono pedir (fora do horário)
+
+---
+
+## Phase 8: Convergence
+
+- [X] T026 Deixar o grupo do mês quebrar linha em `frontend/apps/internal/src/components/Gastos/GastosFiltros.tsx` para não haver rolagem lateral a 375 px com mês escolhido; medir `scrollWidth <= innerWidth` em `/gastos?mes=2026-09` a 375 px per FR-002, US1/AC3 (contradicts)
+- [X] T027 Aceitar em `lerFiltrosDaUrl` (`frontend/apps/internal/src/lib/gastos.ts`) só valores próprios do desembolso (lista fechada, não o operador `in`, que aceita `constructor`) per FR-011 (partial)
+- [X] T028 Incluir o total em R$ na linha `aria-live` e fazer a contagem concordar com o número ("0 de 1 gasto") em `frontend/apps/internal/src/pages/GastosExtrasPage.tsx` per FR-010, Constitution XV (partial)
+- [X] T029 Completar o erro de exclusão com "Tente novamente." em `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx` per Constitution XV (contradicts)
+- [X] T030 Trocar "Nenhum gasto aguardando ação." por "Nenhum gasto aguardando aprovação ou pagamento." em `GastosExtrasPage.tsx` e no caso de borda da `spec.md` per Constitution XV (contradicts)
+- [X] T031 Mostrar o título do evento inteiro no cartão do celular (o `line-clamp-2` + `title` fica só na tabela) em `GastoItemViews.tsx` per US1 "nada fica cortado" (partial)
+- [X] T032 Rodar também a comparação do cenário 3 (SQL) sob a mutação do cenário 7 em `specs/314-gastos-extras-filtros/verify_314.py` per spec §Verificação cenário 7 (partial)
+- [X] T033 Registrar na `spec.md` o que o código já faz e a spec não diz — "Cancelar" no motivo da rejeição não rejeita (FR-013), índice de busca com categoria, PIX, data, situação e valor (FR-007, US3/AC1), a recusa de aprovar no cenário 6 — e corrigir `contracts/gastos-list.md` (rejeitado sem `situacao` vai a Rejeitados) per Constitution VII (unrequested)
+- [X] T034 Registrar no `docs/05` (167): rótulos em CSS `uppercase` nos cartões-filtro e cabeçalhos de tabela (padrão de Pagamentos, junto da 146) e falta de transição na linha de vínculo de evento e na troca de grupo (XI; só o `AccordionRow` anima) per Constitution XV caixa, XI (contradicts)
+- [X] T035 Marcar os portões CHK001–CHK011 de `checklists/ux.md` que a rodada cumpriu e apagar `frontend/apps/internal/vite.config.mp314.ts` ao fim da conferência de tela per tasks T023/T025 (partial)
