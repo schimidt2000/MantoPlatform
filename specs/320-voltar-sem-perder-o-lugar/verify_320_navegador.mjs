@@ -227,7 +227,7 @@ const VISUALIZADOR = "[data-visualizador-arquivo]";
 
 async function linkDeComprovante(page, caminhos) {
   for (const caminho of caminhos) {
-    const link = page.locator(`a[href$="${caminho}"]`).first();
+    const link = page.locator(`a[href$="${caminho}"]:visible`).first();
     if ((await link.count()) === 0) continue;
     const r = await page.request.get(`${INTERNO}/uploads/${caminho}`);
     if (r.ok()) return link;
@@ -353,7 +353,9 @@ try {
     page.on("console", (m) => m.type() === "error" && errosDoConsole.push(m.text().slice(0, 200)));
     page.on("pageerror", (e) => errosDoConsole.push(e.message.slice(0, 200)));
     await page.goto(`${INTERNO}/gastos`);
-    await page.locator("table").first().waitFor({ timeout: 20000 });
+    // Desde a 314 o celular mostra cartões (a tabela fica escondida até `xl`): espera o link
+    // VISÍVEL de um comprovante, não a tabela.
+    await page.locator('a[href*="/uploads/expenses/__v320_"]:visible').first().waitFor({ timeout: 20000 });
     const foto = await linkDeComprovante(page, DADOS.comprovantes?.fotos ?? []);
     const pdf = await linkDeComprovante(page, DADOS.comprovantes?.pdfs ?? []);
     let yFoto = null;

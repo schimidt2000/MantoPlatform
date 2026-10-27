@@ -40,80 +40,12 @@ import {
   type PagamentoBucket,
   type PagamentoFilter,
 } from "../lib/pagamentos";
+import { CartaoFiltro } from "../components/CartaoFiltro";
 import { PagamentoCard, PagamentoRow } from "../components/Pagamentos/PagamentoItemViews";
 import { SalaryAdvancesDialog } from "../components/Pagamentos/SalaryAdvancesDialog";
 
-interface TotalCardProps {
-  label: string;
-  value: number;
-  /** Nº de itens da faixa — mostra ao operador o tamanho do filtro antes do clique. */
-  count: number;
-  /** Faixa filtrada ao clicar; `null` = card "Total no período" (limpa o filtro). */
-  bucket: PagamentoBucket | null;
-  active: boolean;
-  /** Há um filtro ativo em OUTRO card — este fica apagado para não competir. */
-  dimmed: boolean;
-  /** Ajuste de grade (ex.: o card neutro ocupando a linha inteira no celular). */
-  className?: string;
-  onClick: () => void;
-}
-
-/**
- * Card de KPI que também é o seletor de filtro da tabela (feature de usabilidade 2026-07-28).
- * Clicar filtra; clicar de novo no card ativo limpa. Cores e destaque vêm de `BUCKET_TONE`,
- * então o card e as linhas que ele revela têm sempre a mesma cor.
- */
-function TotalCard({
-  label,
-  value,
-  count,
-  bucket,
-  active,
-  dimmed,
-  className,
-  onClick,
-}: TotalCardProps) {
-  const tone = bucket ? BUCKET_TONE[bucket] : null;
-  return (
-    // As classes vão TODAS no `Card` (que passa por `cn`/twMerge e resolve `border` vs
-    // `border-2`, `bg-panel` vs `bg-green-50/50`); o `Slot` do `asChild` só concatena o
-    // className do filho, sem desempatar conflito de utilitário.
-    <Card
-      asChild
-      className={cn(
-        "border-2 p-3 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-4",
-        active
-          ? tone
-            ? `${tone.cardActive} shadow-md`
-            : "border-accent bg-accent-soft shadow-md"
-          : "border-line bg-panel hover:border-accent/40 hover:shadow-md",
-        dimmed && "opacity-60 grayscale-[35%] hover:opacity-100 hover:grayscale-0",
-        className,
-      )}
-    >
-      {/* `span`, não `p`: o conteúdo de um `<button>` só aceita phrasing content. */}
-      <button type="button" onClick={onClick} aria-pressed={active}>
-        <span className="block text-[10px] font-bold uppercase tracking-wide text-muted sm:text-[11px]">
-          {label}
-        </span>
-        <span
-          className={cn(
-            "mt-1 block text-base font-bold tabular-nums sm:text-lg",
-            tone?.text ?? "text-ink",
-          )}
-        >
-          {brl(value)}
-        </span>
-        <span className="mt-0.5 block text-[10px] font-semibold text-muted">
-          {count} {count === 1 ? "item" : "itens"}
-          {/* O card neutro fica "ativo" quando NÃO há filtro — anunciar "filtro ativo" nele
-              dizia o contrário do que acontece. */}
-          {active && bucket ? " · filtro ativo" : ""}
-        </span>
-      </button>
-    </Card>
-  );
-}
+/** Contagem dos cartões-filtro desta tela (o cartão é compartilhado com Gastos Extras). */
+const UNIDADE_ITEM = ["item", "itens"] as const;
 
 interface PagamentoBulkBarProps {
   count: number;
@@ -474,23 +406,25 @@ export function PagamentosPage() {
           {/* "Total no período" ocupa a linha inteira no celular; as 4 faixas ficam num 2×2
               embaixo dele, em vez de um card órfão no fim da grade. */}
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5">
-            <TotalCard
+            <CartaoFiltro
               label="Total no período"
               value={data.totals.total}
               count={items.length}
-              bucket={null}
+              tone={null}
               active={filter === null}
               dimmed={false}
+              unidade={UNIDADE_ITEM}
               className="col-span-2 sm:col-span-1"
               onClick={() => handleFilterClick(null)}
             />
             {BUCKET_ORDER.map((bucket) => (
-              <TotalCard
+              <CartaoFiltro
                 key={bucket}
                 label={BUCKET_LABELS[bucket]}
                 value={data.totals[bucket]}
                 count={counts[bucket]}
-                bucket={bucket}
+                tone={BUCKET_TONE[bucket]}
+                unidade={UNIDADE_ITEM}
                 active={filter === bucket}
                 dimmed={filter !== null && filter !== bucket}
                 onClick={() => handleFilterClick(bucket)}

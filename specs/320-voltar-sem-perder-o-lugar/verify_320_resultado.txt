@@ -29,3 +29,5 @@ PASS 11 — navegação nova pelo menu começa do topo
 PASS 12 — contraprova: 1, 5 e 7 falham na main: 1: catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem: a busca voltou "" em vez de "a"; 5: talentos: voltar da ficha devolve busca, filtro, página e rolagem: a busca voltou ""; 7: gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema: o visualizador não abriu
 
 12/12
+
+27/10/2026 ~19h10 — depois do merge da main com a 314 (a /gastos virou cartões no celular; o cenário 7 passou a esperar o link visível): 11/11 (contraprova pulada; já registrada acima).

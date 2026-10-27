@@ -1,7 +1,7 @@
 # Feature 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivos no app instalado)
 
 **Branch**: `320-voltar-sem-perder-o-lugar` (da `main`, worktree `C:\tmp\mp320`) · **Created**: 2026-10-27 ·
-**Status**: PRONTA, aguardando deploy · **Migration**: nenhuma · **Nível**: 1 (feature) — constituição, Princípio VI
+**Status**: EM PRODUÇÃO desde 27/10/2026 ~19h10 · **Migration**: nenhuma · **Nível**: 1 (feature) — constituição, Princípio VI
 (três superfícies: app interno, catálogo público e todas as telas que abrem arquivo)
 
 **Input**: pedido do dono: "ao voltar a página no catálogo e no banco de talentos, eu não volto

@@ -4,7 +4,14 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-23** · Estado do repositório: pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
+> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **320-voltar-sem-perder-o-lugar** (sem
+> migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
+> voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
+> "Baixar", e o app da Tela de Início do iPhone não prende mais; `verify_320.py` 12/12; dívidas 168–171) — antes dela
+> pós-feature **314-gastos-extras-filtros** (sem
+> migration; **EM PRODUÇÃO desde 27/10/2026 ~19h**, a pedido do dono, fora do horário — a `/gastos` na tela inteira,
+> sem rolagem lateral, com a situação de cada gasto vinda do servidor, "Pagos" e "Rejeitados" recolhidos e filtros como
+> em Pagamentos; `verify_314.py` 8/8) — antes dela pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
 > do dono, num push só, na ordem dos merges: **316b-guia-de-texto** (constituição v3.1.0, Princípio XV; só
 > documentação), **319-aviso-gasto-extra** (o e-mail de gasto extra diz o que é na notificação), **315-pedido-de-cancelamento**
 > (migration `d8b4e15f2c31`), **317-contratos-clicksign** (migration `d3c7a1e5b317`; desligada até o
@@ -171,7 +178,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **320-voltar-sem-perder-o-lugar** | *(PRONTA, aguardando deploy)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
+| **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
+| **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
 | **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
 | **317-contratos-clicksign** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
@@ -366,7 +374,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivo no app instalado)   (320-voltar-sem-perder-o-lugar · 2026-10-27 · sem migration)
 
-> **PRONTA, aguardando deploy.** Nível 1 (três superfícies + dependência nova). Detalhe:
+> **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 (dívidas 168–171 no `docs/05`; eram 165–168 na branch). Nível 1 (três superfícies + dependência nova). Detalhe:
 > `specs/320-voltar-sem-perder-o-lugar/` (spec, plan, research, contracts/ui.md, verify).
 
 **O pedido.** O dono: ao pesquisar no catálogo, entrar num tema e voltar, cai no início da lista e
@@ -424,6 +432,62 @@ iPhone): 12/12; contraprova na `main`: 1, 5 e 7 falham. Primeira rodada antes do
 - Achado de passagem: "Ver comprovante" dos gastos vinculados no detalhe do evento estava quebrado
   desde sempre — a API manda `receipt_path` relativo ("expenses/…") e o link abria
   `/events/<id>/expenses/…`. Corrigido no front com o prefixo `/uploads/`.
+### 314 — Gastos Extras na tela inteira, com filtros e os pagos recolhidos   (314-gastos-extras-filtros · 2026-10-27 · sem migration)
+
+> **EM PRODUÇÃO desde 27/10/2026 ~19h** pelo merge `merge: 314 — …` sobre a `main` `e60aae53`, a pedido do dono,
+> fora do horário (sem migration; dívidas 165–167). Nível 1. Spec, plano,
+> pesquisa (D1–D9), contrato e roteiro em `specs/314-gastos-extras-filtros/`. `verify_314` 8/8.
+
+**O pedido.** O dono mandou um print em 21/10. A tabela ficava numa coluna de largura fixa com um vazio à
+direita, as Ações saíam cortadas (os botões só como bordas roxas; o aviso "Devolução de cancelado: travada." como
+"D… ca…") e a rolagem lateral ficava no rodapé de 186 linhas. Nas palavras dele: "esse scroll lateral é
+horrível. Eu nem consigo fazer scroll. Por que ele não ocupa a tela inteira? [...] E não tem filtro nenhum. [...]
+as coisas que já estão pagas podem todas colapsar para um card de pagas e ficarem só as pendentes [...] mais ou
+menos como funciona na página de pagamentos". A sessão de 21/10 caiu no meio das perguntas e a feature foi
+retomada em 27/10.
+
+**Respostas do dono (27/10).**
+- Recolhe em "Pagos" só o pago de fato: pela Planilha, no cadastro, ou aprovado sem ninguém a pagar.
+- A pagar e no banco ficam à vista.
+- Rejeitados têm cartão recolhido próprio.
+- A tela abre em todos os meses.
+
+**O que mudou.**
+- **Situação no núcleo.** `gastos_ops.situacao_do_gasto`, servida como `situacao` no `GET /api/gastos`
+  (`docs/01` §3.7). A tela agrupa, colore e filtra por ela.
+- **Tela inteira.** Raiz sem `max-w` (exceção registrada no `docs/02` §Espaçamento). Tabela `table-fixed` de 7
+  colunas, que soma 800 px fixos + Gasto, sem rolagem lateral de 1280 px para cima (medido: 1920, 1366, 1280).
+  Cartões abaixo de `xl` (medido em 375).
+- **Abertura.** Aguardando + a pagar + no banco. "Pagos" e "Rejeitados" em `AccordionRow` recolhido, com
+  quantidade e total.
+- **Filtros.** Cartões-filtro, com o `TotalCard` de Pagamentos extraído para `components/CartaoFiltro.tsx`.
+  Busca de Pagamentos, categoria, desembolso e mês. O estado vive na URL.
+- **Ações.** "Excluir" passa ao `ConfirmDialog` (achado C1 do analyze, Princípio V). O "Cancelar" do motivo da
+  rejeição deixou de rejeitar.
+
+**Pegadinhas.**
+- **A planilha não resolve todo aprovado.** O aprovado sem desembolso e o pago no cadastro nunca entram em
+  Pagamentos, então nunca viram "pago" por lá. Sem regra própria, ficariam "a pagar" para sempre, e por isso
+  contam como pagos (D2).
+- **`scrollWidth` não pega tudo.** O selo "Aguardando aprovação" em `nowrap` invadia a coluna Desembolso a
+  1366 px sem gerar rolagem, porque a célula não corta. A conferência mediu cada elemento contra a própria célula.
+- **Área de toque.** O `AccordionRow` põe o respiro no invólucro, não no botão, e a área de clique tinha 20 px.
+- **Cartões sem o filtro de situação.** Os cartões somam o recorte sem a situação: senão, escolher "A pagar"
+  zeraria os outros cartões.
+
+**Verificação.**
+- `verify_314` 8/8 contra o `manto_local`. A primeira falha está em `verify_314_primeira_falha.txt`. O oráculo é
+  a regra em SQL por conexão separada, com mutação que derruba o cenário 2.
+- Vizinhos: 306 67/69 (a base de sempre, igual antes e depois) e 312 27/27 (`base_verifies_vizinhos.txt`).
+- **Converge.** Um leitor independente conferiu 71 itens (FR, SC, cenários, bordas, princípios e comportamentos da
+  tela antiga) e achou 17 lacunas: nenhuma crítica ou alta, 1 média e 16 baixas. A média era a rolagem lateral de
+  8 px a 375 px com mês escolhido. Entre as baixas: `?desembolso=constructor` passava pelo `in`, a contagem não
+  concordava no anúncio do leitor de tela e o evento saía cortado no cartão do celular. Viraram as tarefas
+  T026–T035, todas feitas; caixa alta e movimento ficaram como dívida 167, e as constantes de status na regra não
+  mudaram, para acompanhar o módulo.
+- Tela no Browser pane: Superadmin e Casting, Pagamentos sem regressão, nenhum erro no console. O aviso de
+  devolução travada **não** foi visto com dado real, porque o espelho não tem devolução de cancelado; ele quebra
+  linha na célula.
 
 ### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
 

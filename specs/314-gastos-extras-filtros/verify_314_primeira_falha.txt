@@ -1,0 +1,16 @@
+verify_314 — primeira rodada, ANTES do núcleo (27/10/2026 ~14:44, HEAD c5b0d74a: main e60aae53 + docs da 314),
+contra o manto_local. Falha pelos motivos certos: o payload não traz `situacao`.
+
+verify_314 — Gastos Extras: situação do gasto e RBAC da lista
+  FALHA  1 todo gasto tem situação e a contagem bate: gasto sem `situacao` válida: [4265, 4264, 4263, 4262, 4261] (de 149)
+  FALHA  2 cada caso da regra na situação certa: aguardando: None (esperado aguardando_aprovacao); pendente_ja_pago: None (esperado aguardando_aprovacao); a_pagar: None (esperado a_pagar); no_banco: None (esperado no_banco); pago_planilha: None (esperado pago); pago_cadastro: None (esperado pago); sem_desembolso: None (esperado pago); rejeitado: None (esperado rejeitado)
+  FALHA  3 soma por situação = regra em SQL: API {None: (149, Decimal('101576.81'))} × SQL {'rejeitado': (4, Decimal('1352.85')), 'pago': (128, Decimal('92460.40')), 'no_banco': (1, Decimal('131.45')), 'a_pagar': (1, Decimal('130.45')), 'aguardando_aprovacao': (15, Decimal('7501.66'))}
+  FALHA  4 aprovar muda a situação: aprovado com reembolso chegou None
+  FALHA  5 Casting vê só os seus, sem totals: situações do Casting {4265: None, 4264: None}
+  OK     6 (deve falhar) Casting não alcança o alheio
+  FALHA  7 (deve falhar) mutação derruba o cenário 2: o cenário 2 não passou sem mutação — a mutação não prova nada
+  OK     8 limpeza
+2/8 OK
+
+O 6 já passa: o gate de hoje (`list_expenses(user)` + `totals` só para gestão) não muda nesta feature — ele
+é a prova de que o campo novo não abriu nada. O 8 prova que a limpeza não deixa resto.

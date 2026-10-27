@@ -96,7 +96,7 @@ núcleo, e rodados contra a `main` para falhar pelos motivos certos.
 ## Phase 7: Polish e portões
 
 - [X] T033 Verify completo `12/12` (com contraprova contra a `main`); saída em `specs/320-voltar-sem-perder-o-lugar/verify_320_resultado.txt`
-- [X] T034 [P] `cd frontend && npm run typecheck` e `npm run build` (o chunk do pdf.js e o worker saem à parte; os três apps os emitem, só baixados quando um PDF abre — dívida 168)
+- [X] T034 [P] `cd frontend && npm run typecheck` e `npm run build` (o chunk do pdf.js e o worker saem à parte; os três apps os emitem, só baixados quando um PDF abre — dívida 171)
 - [X] T035 Conferência de tela no Browser pane (skill `manto-conferir-tela`), viewport de iPhone: os 6 passos do `quickstart.md`
 - [X] T036 [P] Docs: `docs/02` (catálogo público, gerenciador, banco de talentos, visualizador), `docs/00` §5 (convenção: estado de lista no endereço; arquivo sempre por `LinkDeArquivo`), `docs/03` (entrada no topo + índice), `docs/05` (dívidas: e2e da 180 parado; outras listas sem restauração)
 - [X] T037 Commits por caminho (`feat(320): …`, `docs(320): …`), nunca `git add -A`

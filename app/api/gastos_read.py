@@ -59,6 +59,8 @@ def _expense_dict(e, batches: dict[int, object] | None = None) -> dict:
         "created_at": e.created_at.isoformat(),
         "approved_by_name": e.approved_by.name if e.approved_by else None,
         "approved_at": e.approved_at.isoformat() if e.approved_at else None,
+        # Feature 314: onde o gasto está (a tela agrupa e filtra por isto); regra no núcleo.
+        "situacao": gastos_ops.situacao_do_gasto(e),
     }
 
 
