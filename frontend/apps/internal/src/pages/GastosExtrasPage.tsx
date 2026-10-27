@@ -549,7 +549,8 @@ function GrupoRecolhido({
 }: ListaProps & { situacao: GastoSituacao; expenses: GastoExtra[] }) {
   return (
     <AccordionRow
-      className="[&>div:first-child]:px-4 [&>div:first-child]:py-3"
+      // O respiro vai no botão (não no invólucro) para a área de toque ter ≥ 44px, não só o texto.
+      className="[&>div:first-child>button]:px-4 [&>div:first-child>button]:py-3"
       contentClassName="p-0"
       summary={
         <span className="flex flex-wrap items-baseline gap-x-2 text-sm">

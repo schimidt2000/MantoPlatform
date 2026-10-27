@@ -39,10 +39,12 @@ interface ItemProps {
 export function SituacaoBadge({ expense }: { expense: GastoExtra }) {
   const situacao = situacaoDe(expense);
   return (
-    <span className="inline-flex flex-col items-start gap-0.5">
+    <span className="inline-flex max-w-full flex-col items-start gap-0.5">
+      {/* Quebra em vez de `nowrap`: "Aguardando aprovação" não cabe na coluna de 112px e, sem
+          quebrar, o selo invadia a coluna Desembolso (a célula não corta, então não vira rolagem). */}
       <span
         className={cn(
-          "whitespace-nowrap rounded-md border px-2 py-0.5 text-xs font-medium",
+          "max-w-full rounded-md border px-2 py-0.5 text-xs font-medium leading-tight",
           SITUACAO_TONE[situacao].select,
         )}
       >
