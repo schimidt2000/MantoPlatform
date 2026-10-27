@@ -2130,10 +2130,39 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `.../salary/<id>/advance`, `.../salary/advance/<id>/delete` · `GET .../export`. Nem a 194 nem a
   226 criaram ou alteraram endpoint — as duas são de apresentação sobre o payload existente.
 
-#### `/gastos` — Gastos Extras
+#### `/gastos` — Gastos Extras *(refeita na feature 314)*
 - **Acesso**: staff para lançar; aprovar/rejeitar em `_require_financeiro()`.
 - **UX**: fluxo criar → aprovar/rejeitar → reembolsar, com vínculo opcional a evento (feature 179
   trouxe RBAC e edição).
+
+- **Feature 314 — tela inteira, cartões-filtro, filtros e pagos recolhidos.**
+  - **Largura e layout.** A raiz não tem `max-w` (exceção ao §Espaçamento, pedida pelo dono). A partir de `xl`
+    a lista é uma tabela `table-fixed` de 7 colunas, sem `min-w` e sem rolagem lateral: Data · Gasto (descrição,
+    categoria · observação, "por autor" para a gestão, bloco do auditor) · Valor · Situação · Desembolso · Evento
+    (duas linhas + nome inteiro na dica) · Ações. Abaixo de `xl`, cartões (`components/Gastos/GastoItemViews.tsx`),
+    o padrão de Pagamentos.
+  - **Situação.** Cada gasto tem uma situação, vinda do servidor (`situacao`, `docs/01` §3.7): aguardando
+    aprovação (dourado), a pagar (vermelho), no banco (azul), pago (verde) e rejeitado (neutro). As cores são as de
+    Pagamentos.
+  - **Abertura.** Mostra "Aguardando aprovação ou pagamento", com aguardando, a pagar e no banco. Embaixo, "Pagos"
+    e "Rejeitados" recolhidos (`AccordionRow`), com quantidade e total. O grupo aberto continua aberto quando a
+    lista revalida depois de uma ação. Pago inclui o pago no cadastro e o aprovado sem desembolso, que nunca
+    passam pela Planilha.
+  - **Cartões-filtro.** Todos + as cinco situações, com o `CartaoFiltro` extraído de Pagamentos. Somam o recorte
+    da busca, categoria, desembolso e mês, sem o da situação. Escolher uma situação mostra só ela, aberta.
+  - **Filtros** (`GastosFiltros.tsx`):
+    - busca sem acento e com várias palavras, a de Pagamentos;
+    - "Todas as categorias";
+    - "Todos os desembolsos" (Reembolso, Fornecedor, Devolução à cliente, Sem desembolso);
+    - mês com ‹ ›, abrindo em todos os meses, e "Todos os meses" para voltar.
+  - **Estado na URL.** O estado vive em `?busca=&categoria=&desembolso=&mes=&situacao=` (`replace`). Valor
+    desconhecido é ignorado. Sem resultado aparece "Nenhum gasto encontrado." + "Limpar filtros". Quem não tem
+    gasto nenhum vê "Nenhum gasto registrado ainda.".
+  - **Ações.** Seguem as regras de antes. "Excluir" pede confirmação no `ConfirmDialog` ("Excluir este gasto?",
+    com descrição e valor) em vez do `window.confirm`. "Cancelar" no motivo da rejeição não rejeita mais (antes,
+    o `?? ""` rejeitava assim mesmo). Na tabela, Ver nota fiscal, Editar, Vincular evento e Excluir são ícones de
+    32px com nome e dica.
+  - **Não gestor.** Mesma tela, só com os próprios gastos e números, sem autor nem ações de gestão.
 
 - **Feature 256**: gasto gerado pelo auditor de marketing mostra, abaixo da descrição, o bloco
   "Gerado pelo auditor de marketing — <plataforma> <mês>" com as linhas por campanha, o total
@@ -2456,6 +2485,11 @@ A raiz de toda página é:
 `max-w-6xl` para listas e tabelas, `max-w-5xl` para formulários, `max-w-lg` para telas de um
 campo só. **Os ramos de carregamento e de erro levam o mesmo invólucro** — senão o esqueleto
 aparece deslocado e a tela "pula" quando os dados chegam.
+
+**Exceção: `/gastos` (feature 314) não tem `max-w`** (`<div className="space-y-4 p-4 sm:p-6">`). O dono pediu
+"tem que ocupar a tela inteira, lateralmente", e o teto mais largo da casa (`max-w-[1600px]`) ainda deixaria o
+vazio do print num monitor de 1920+. Uma tela sem teto precisa de tabela que cresça e encolha sem `min-w`
+(`table-fixed` com uma coluna flexível) e de cartões abaixo de `xl`. Sem isso, a rolagem lateral volta.
 
 ### Escolher uma ficha de figurino
 

@@ -1,5 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import { formatBRL } from "@manto/money";
+import { BUCKET_TONE, matchesSearch, normalizeSearch, rawAmount, type BucketTone } from "./pagamentos";
 
 export type ExpenseStatus = "pendente" | "aprovado" | "rejeitado";
 /** `cliente` = devolução à cliente: nasce só pelo cancelamento do evento (feature 306). */
@@ -44,6 +46,174 @@ export interface GastoExtra {
    */
   locked?: boolean;
   event_cancelled?: boolean;
+  /**
+   * Feature 314: situação única do gasto nesta tela, calculada no servidor
+   * (`gastos_ops.situacao_do_gasto`). Opcional porque backend e bundle ficam em versões diferentes
+   * por alguns minutos em todo deploy — sem ela, vale `situacaoDe`.
+   */
+  situacao?: GastoSituacao;
+}
+
+/** Feature 314 — onde o gasto está: esperando aprovação, no caminho do pagamento, resolvido ou recusado. */
+export type GastoSituacao = "aguardando_aprovacao" | "a_pagar" | "no_banco" | "pago" | "rejeitado";
+
+/** Ordem dos cartões-filtro e de leitura da tela. */
+export const SITUACAO_ORDEM: GastoSituacao[] = [
+  "aguardando_aprovacao",
+  "a_pagar",
+  "no_banco",
+  "pago",
+  "rejeitado",
+];
+
+/** As que pedem ação: ficam na lista principal. Pagos e rejeitados abrem recolhidos. */
+export const SITUACOES_A_VISTA: ReadonlySet<GastoSituacao> = new Set([
+  "aguardando_aprovacao",
+  "a_pagar",
+  "no_banco",
+]);
+
+/** Rótulo de um gasto (selo da linha). */
+export const SITUACAO_LABELS: Record<GastoSituacao, string> = {
+  aguardando_aprovacao: "Aguardando aprovação",
+  a_pagar: "A pagar",
+  no_banco: "No banco",
+  pago: "Pago",
+  rejeitado: "Rejeitado",
+};
+
+/** Rótulo do cartão-filtro e do grupo (vários gastos). */
+export const SITUACAO_LABELS_GRUPO: Record<GastoSituacao, string> = {
+  aguardando_aprovacao: "Aguardando aprovação",
+  a_pagar: "A pagar",
+  no_banco: "No banco",
+  pago: "Pagos",
+  rejeitado: "Rejeitados",
+};
+
+/**
+ * Cores por situação. A pagar, no banco e pago repetem as de Pagamentos (pendente, no banco, pago),
+ * para o mesmo gasto ter a mesma cor nas duas telas. Aguardando usa o `gold` de atenção. Rejeitado
+ * é neutro: é um fim, não pede nada.
+ */
+export const SITUACAO_TONE: Record<GastoSituacao, BucketTone> = {
+  aguardando_aprovacao: BUCKET_TONE.futuro,
+  a_pagar: BUCKET_TONE.pendente,
+  no_banco: BUCKET_TONE.no_banco,
+  pago: BUCKET_TONE.pago,
+  rejeitado: {
+    row: "",
+    cardActive: "border-line-strong bg-surface-2 ring-2 ring-line",
+    text: "text-muted",
+    select: "border-line bg-surface-2 text-muted",
+  },
+};
+
+/**
+ * Situação do gasto para a tela. Com o backend da 314 é sempre `situacao`. Sem ela (bundle novo,
+ * backend velho, nos minutos do deploy), o aprovado cai do lado seguro, "a pagar", à vista: sem a
+ * regra do servidor não se sabe se ele já foi pago, e um gasto escondido por engano é pior que um a
+ * mais na lista. Pendente e rejeitado não dependem da regra.
+ */
+export function situacaoDe(expense: GastoExtra): GastoSituacao {
+  if (expense.situacao) return expense.situacao;
+  if (expense.status === "pendente") return "aguardando_aprovacao";
+  if (expense.status === "rejeitado") return "rejeitado";
+  return "a_pagar";
+}
+
+/** A data do gasto chega pura ("2026-10-17"): recorte de string, nunca `new Date` (armadilha 1). */
+export function formatarDataGasto(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+
+/** Filtro de desembolso da tela; `nenhum` = gasto sem ninguém a pagar. */
+export type DesembolsoFiltro = "reembolso" | "fornecedor" | "cliente" | "nenhum";
+
+export const DESEMBOLSO_FILTRO_LABELS: Record<DesembolsoFiltro, string> = {
+  reembolso: "Reembolso",
+  fornecedor: "Fornecedor",
+  cliente: "Devolução à cliente",
+  nenhum: "Sem desembolso",
+};
+
+const DESEMBOLSOS_FILTRO: readonly string[] = Object.keys(DESEMBOLSO_FILTRO_LABELS);
+
+/** O recorte da tela, que mora na URL (`busca`, `categoria`, `desembolso`, `mes`, `situacao`). */
+export interface FiltrosDeGastos {
+  busca: string;
+  categoria: string | null;
+  desembolso: DesembolsoFiltro | null;
+  /** "AAAA-MM"; `null` = todos os meses (a abertura — nenhum pendente antigo some). */
+  mes: string | null;
+  situacao: GastoSituacao | null;
+}
+
+const MES_VALIDO = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+/**
+ * Lê o recorte da URL. Valor desconhecido (categoria que não existe, mês malformado, situação
+ * inventada) vira "sem esse filtro" (FR-011): um link velho ou digitado errado abre a tela inteira,
+ * nunca uma lista vazia sem explicação.
+ */
+export function lerFiltrosDaUrl(params: URLSearchParams, categorias: readonly string[]): FiltrosDeGastos {
+  const categoria = params.get("categoria");
+  const desembolso = params.get("desembolso");
+  const mes = params.get("mes");
+  const situacao = params.get("situacao");
+  return {
+    busca: params.get("busca") ?? "",
+    categoria: categoria && categorias.includes(categoria) ? categoria : null,
+    // Lista fechada, não `in`: `in` aceita o que vem do protótipo (`?desembolso=constructor` esvaziava a lista).
+    desembolso: desembolso && DESEMBOLSOS_FILTRO.includes(desembolso) ? (desembolso as DesembolsoFiltro) : null,
+    mes: mes && MES_VALIDO.test(mes) ? mes : null,
+    situacao: situacao && (SITUACAO_ORDEM as string[]).includes(situacao) ? (situacao as GastoSituacao) : null,
+  };
+}
+
+/**
+ * Texto pesquisável de um gasto — a busca varre o DADO, não o DOM, então vale igual para a tabela e
+ * para o cartão. O valor entra formatado ("1.234,56") e cru ("1234,56"), como em Pagamentos.
+ */
+export function searchIndexOfGasto(expense: GastoExtra): string {
+  return normalizeSearch(
+    [
+      formatarDataGasto(expense.expense_date),
+      expense.expense_date,
+      expense.description,
+      expense.notes,
+      expense.category,
+      expense.payee_name,
+      expense.payee_pix,
+      expense.event_title ?? "",
+      expense.created_by_name ?? "",
+      SITUACAO_LABELS[situacaoDe(expense)],
+      formatBRL(expense.amount),
+      rawAmount(expense.amount),
+    ].join(" "),
+  );
+}
+
+/**
+ * Aplica busca, categoria, desembolso e mês — de propósito NÃO a situação: os cartões-filtro somam
+ * este recorte, e escolher "A pagar" não pode zerar os outros cartões (FR-009).
+ */
+export function filtrarGastos(
+  expenses: GastoExtra[],
+  filtros: FiltrosDeGastos,
+  terms: string[],
+  indice: ReadonlyMap<number, string>,
+): GastoExtra[] {
+  return expenses.filter((e) => {
+    if (filtros.categoria && e.category !== filtros.categoria) return false;
+    if (filtros.desembolso === "nenhum" && e.disbursement_type) return false;
+    if (filtros.desembolso && filtros.desembolso !== "nenhum" && e.disbursement_type !== filtros.desembolso) {
+      return false;
+    }
+    if (filtros.mes && !e.expense_date.startsWith(filtros.mes)) return false;
+    return terms.length === 0 || matchesSearch(indice.get(e.id) ?? "", terms);
+  });
 }
 
 export interface GastosTotal {

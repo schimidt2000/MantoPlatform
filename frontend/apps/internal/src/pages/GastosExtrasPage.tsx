@@ -1,32 +1,44 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { ApiRequestError } from "@manto/api-client";
-import { Button, Card, CardContent, DenseCard, FileUpload, PageHeader, Skeleton } from "@manto/ui";
-import { formatBRL, MoneyInput } from "@manto/money";
-import { Modal } from "../components/Modal";
-import { hojeYmd } from "../lib/horaLocal";
 import {
-  useApproveGasto,
+  AccordionRow,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  FileUpload,
+  PageHeader,
+  Skeleton,
+} from "@manto/ui";
+import { MoneyInput } from "@manto/money";
+import { Modal } from "../components/Modal";
+import { CartaoFiltro } from "../components/CartaoFiltro";
+import { ListaDeGastos } from "../components/Gastos/GastoItemViews";
+import { GastosFiltros, type MudancaDeFiltro } from "../components/Gastos/GastosFiltros";
+import { hojeYmd } from "../lib/horaLocal";
+import { brl, searchTerms } from "../lib/pagamentos";
+import {
+  SITUACAO_LABELS_GRUPO,
+  SITUACAO_ORDEM,
+  SITUACAO_TONE,
+  SITUACOES_A_VISTA,
+  filtrarGastos,
+  lerFiltrosDaUrl,
+  searchIndexOfGasto,
+  situacaoDe,
   useCreateGasto,
-  useDeleteGasto,
   useGastosEventos,
   useGastosExtras,
   useGastosFuncionarios,
-  useLinkGastoEvento,
-  useRejectGasto,
   useUpdateGasto,
   type GastoExtra,
-  type GastosTotals,
-  type GastoMarketingBatch,
+  type GastoSituacao,
 } from "../lib/gastos";
-import { SeloSituacao } from "../components/SeloSituacao";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
-const TH = "px-3 py-2";
-const TD = "px-3 py-2 align-top";
-
-type DisplayStatus = "pendente" | "aprovado" | "aprovado_com_edicoes" | "rejeitado";
 
 /** As chaves de `fields` que o formulário mostra no próprio campo; as outras vão ao rodapé. */
 const CAMPOS_COM_LUGAR = new Set([
@@ -39,109 +51,6 @@ const CAMPOS_COM_LUGAR = new Set([
   "expense_date",
   "event_id",
 ]);
-
-function displayStatus(expense: GastoExtra): DisplayStatus {
-  if (expense.status === "aprovado" && expense.approved_with_edits) return "aprovado_com_edicoes";
-  return expense.status;
-}
-
-const STATUS_LABEL: Record<DisplayStatus, string> = {
-  pendente: "Pendente",
-  aprovado: "Aprovado",
-  aprovado_com_edicoes: "Aprovado c/ edições",
-  rejeitado: "Rejeitado",
-};
-
-const STATUS_CLASS: Record<DisplayStatus, string> = {
-  // `bg-amber-soft`/`text-amber` NÃO EXISTEM na paleta (o design system usa `gold` no lugar de
-  // `amber`): o Tailwind nunca gerou essas duas classes, então o badge "Pendente" vinha sem
-  // fundo e herdando a cor do texto ao redor. `gold-soft`/`gold-ink` é o par real.
-  pendente: "bg-gold-soft text-gold-ink",
-  aprovado: "bg-green-soft text-green",
-  aprovado_com_edicoes: "bg-blue-soft text-blue",
-  rejeitado: "bg-red-soft text-red",
-};
-
-function brl(v: number): string {
-  return `R$ ${formatBRL(v)}`;
-}
-
-function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y}`;
-}
-
-function StatusBadge({ expense }: { expense: GastoExtra }) {
-  const status = displayStatus(expense);
-  return (
-    <span className={`rounded-md px-2 py-0.5 text-xs whitespace-nowrap ${STATUS_CLASS[status]}`}>
-      {STATUS_LABEL[status]}
-    </span>
-  );
-}
-
-function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <DenseCard stats={[{ label, value }]}>
-      {sub && <p className="text-xs text-muted">{sub}</p>}
-    </DenseCard>
-  );
-}
-
-function KpiGrid({ totals }: { totals: GastosTotals }) {
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      <KpiCard label="Todos" value={brl(totals.todos.total)} sub={`${totals.todos.count} gasto(s)`} />
-      <KpiCard label="Pendentes" value={brl(totals.pendente.total)} sub={`${totals.pendente.count} gasto(s)`} />
-      <KpiCard label="Aprovados" value={brl(totals.aprovado.total)} sub={`${totals.aprovado.count} gasto(s)`} />
-      <KpiCard label="Rejeitados" value={brl(totals.rejeitado.total)} sub={`${totals.rejeitado.count} gasto(s)`} />
-    </div>
-  );
-}
-
-function EventoVincular({ expense }: { expense: GastoExtra }) {
-  const [date, setDate] = useState(expense.expense_date);
-  const eventos = useGastosEventos(date);
-  const link = useLinkGastoEvento();
-
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <input
-        type="date"
-        className="h-8 rounded-md border border-line bg-panel px-2"
-        value={date}
-        onChange={(e) => setDate(e.target.value)}
-      />
-      <select
-        className="h-8 rounded-md border border-line bg-panel px-2"
-        value={expense.event_id ?? ""}
-        onChange={(e) => link.mutate({ id: expense.id, event_id: e.target.value ? Number(e.target.value) : null })}
-        disabled={link.isPending}
-      >
-        <option value="">Sem evento vinculado</option>
-        {/* Feature 312: a lista do dia não oferece o cancelado; o vínculo que já existe (a devolução,
-            a multa) aparece como opção fixa, em vez de o select dizer "Sem evento vinculado". */}
-        {expense.event_id != null &&
-          !eventos.data?.events.some((ev) => ev.id === expense.event_id) && (
-            <option value={expense.event_id}>
-              {expense.event_title ?? `Evento #${expense.event_id}`}
-              {expense.event_cancelled ? " (cancelado)" : ""}
-            </option>
-          )}
-        {eventos.data?.events.map((ev) => (
-          <option key={ev.id} value={ev.id}>
-            {ev.label}
-          </option>
-        ))}
-      </select>
-      {link.isError && (
-        <p className="w-full text-red" role="alert">
-          {(link.error as Error | null)?.message || "Não foi possível vincular o evento."}
-        </p>
-      )}
-    </div>
-  );
-}
 
 interface GastoFormValues {
   description: string;
@@ -612,224 +521,102 @@ function GastoFormModal({
   );
 }
 
-/**
- * Detalhe do gasto gerado pelo auditor de marketing (feature 256): quanto cada campanha pesou
- * no mês e se o lote já congelou (gasto aprovado/rejeitado — diferenças viram achado no
- * relatório, nunca alteração silenciosa).
- */
-function MarketingBatchDetail({ batch }: { batch: GastoMarketingBatch }) {
-  const [ano, mes] = batch.month_ref.split("-");
-  return (
-    <div className="mt-2 rounded-md border border-line bg-surface px-3 py-2 text-xs">
-      <div className="flex flex-wrap items-center gap-2 font-medium text-ink">
-        Gerado pelo auditor de marketing — {batch.platform} {mes}/{ano}
-        <span className={`rounded-full px-2 py-0.5 text-[11px] ${batch.frozen ? "bg-surface-2 text-muted" : "bg-gold-soft text-gold-ink"}`}>
-          {batch.frozen ? "congelado" : "atualiza até aprovar"}
-        </span>
-      </div>
-      <ul className="mt-1 space-y-0.5">
-        {batch.lines.map((line) => (
-          <li key={line.campaign_name} className="flex justify-between gap-3">
-            <span className="truncate text-muted">{line.campaign_name}</span>
-            <span className="whitespace-nowrap tabular-nums text-ink">{brl(Number(line.amount))}</span>
-          </li>
-        ))}
-      </ul>
-      <p className="mt-1 text-muted">
-        Reportado pelas plataformas: {brl(Number(batch.reported_total))}
-        {batch.run_id && ` · rodada ${batch.run_id}`}
-      </p>
-    </div>
-  );
+const UNIDADE_GASTO = ["gasto", "gastos"] as const;
+
+function contagem(n: number): string {
+  return `${n} ${n === 1 ? "gasto" : "gastos"}`;
 }
 
-function GastoRow({
-  expense,
-  canManage,
-  onEdit,
-}: {
-  expense: GastoExtra;
+function soma(lista: GastoExtra[]): number {
+  return lista.reduce((acc, e) => acc + e.amount, 0);
+}
+
+interface ListaProps {
   canManage: boolean;
   onEdit: (expense: GastoExtra) => void;
-}) {
-  const approve = useApproveGasto();
-  const reject = useRejectGasto();
-  const del = useDeleteGasto();
-  const [showLink, setShowLink] = useState(false);
-
-  // Feature 306: a devolução de um evento cancelado não se exclui nem se religa aqui (o servidor
-  // recusa com 409); a correção do valor é pelo "Alterar devolução" na tela do evento.
-  const travado = Boolean(expense.locked);
-  const canDelete = !travado && (canManage || expense.status === "pendente");
-  const erroDaAcao = (del.error ?? approve.error ?? reject.error) as Error | null;
-
-  const handleReject = () => {
-    const motivo = window.prompt("Motivo da rejeição (opcional):") ?? "";
-    reject.mutate({ id: expense.id, motivo });
-  };
-
-  const handleDelete = () => {
-    if (!window.confirm(`Excluir o gasto "${expense.description}"?`)) return;
-    del.mutate(expense.id);
-  };
-
-  return (
-    <>
-      <tr className="border-b border-line align-top text-sm">
-        <td className={`${TD} whitespace-nowrap`}>{formatDate(expense.expense_date)}</td>
-        <td className={TD}>
-          {expense.description}
-          {expense.notes && <p className="text-xs text-muted">{expense.notes}</p>}
-          {expense.marketing_batch && <MarketingBatchDetail batch={expense.marketing_batch} />}
-        </td>
-        <td className={TD}>{expense.category}</td>
-        <td className={`${TD} whitespace-nowrap text-right tabular-nums`}>{brl(expense.amount)}</td>
-        <td className={TD}>
-          <StatusBadge expense={expense} />
-        </td>
-        <td className={TD}>
-          {expense.disbursement_type ? (
-            <>
-              {expense.payee_name}
-              <span className="ml-1 text-xs text-muted">
-                (
-                {expense.disbursement_type === "reembolso"
-                  ? "reembolso"
-                  : expense.disbursement_type === "cliente"
-                    ? "devolução à cliente"
-                    : "fornecedor"}
-                )
-              </span>
-            </>
-          ) : (
-            <span className="text-muted">—</span>
-          )}
-        </td>
-        <td className={TD}>
-          {expense.event_title ?? <span className="text-muted">—</span>}
-          {/* Feature 312: o gasto ligado a um evento cancelado (a devolução, a multa) leva o selo. */}
-          {expense.event_cancelled && (
-            <span className="ml-1">
-              <SeloSituacao situacao="cancelado" compacto />
-            </span>
-          )}
-        </td>
-        {canManage && <td className={TD}>{expense.created_by_name ?? "—"}</td>}
-        <td className={TD}>
-          {expense.receipt_url ? (
-            <a
-              href={expense.receipt_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-accent hover:underline"
-            >
-              Ver
-            </a>
-          ) : (
-            <span className="text-muted">—</span>
-          )}
-        </td>
-        <td className={`${TD} whitespace-nowrap`}>
-          <div className="flex flex-wrap gap-2">
-            {canManage && expense.status === "pendente" && (
-              <>
-                <Button size="sm" loading={approve.isPending} onClick={() => approve.mutate(expense.id)}>
-                  Aprovar
-                </Button>
-                <Button size="sm" variant="ghost" loading={reject.isPending} onClick={handleReject}>
-                  Rejeitar
-                </Button>
-              </>
-            )}
-            {canManage && (
-              <>
-                <Button size="sm" variant="ghost" onClick={() => onEdit(expense)}>
-                  Editar
-                </Button>
-                {!travado && (
-                  <Button size="sm" variant="ghost" onClick={() => setShowLink((v) => !v)}>
-                    Vincular evento
-                  </Button>
-                )}
-              </>
-            )}
-            {canDelete && (
-              <Button size="sm" variant="ghost" loading={del.isPending} onClick={handleDelete}>
-                Excluir
-              </Button>
-            )}
-          </div>
-          {travado && (
-            <p className="mt-1 whitespace-normal text-xs text-muted">Devolução de cancelado: travada.</p>
-          )}
-          {erroDaAcao && (
-            <p className="mt-1 max-w-[16rem] whitespace-normal text-xs text-red" role="alert">
-              {erroDaAcao.message || "Não foi possível concluir a ação."}
-            </p>
-          )}
-        </td>
-      </tr>
-      {showLink && !travado && (
-        <tr className="border-b border-line bg-surface-2/50">
-          <td colSpan={canManage ? 10 : 9} className="px-3 py-2">
-            <EventoVincular expense={expense} />
-          </td>
-        </tr>
-      )}
-    </>
-  );
 }
 
-function GastosTable({
+/**
+ * "Pagos" e "Rejeitados" na abertura (feature 314): recolhidos, com quantidade e total, abrindo com
+ * um clique. O `AccordionRow` guarda o aberto/fechado e não desmonta quando a lista revalida depois
+ * de uma ação, então o grupo que a pessoa abriu continua aberto (FR-014).
+ */
+function GrupoRecolhido({
+  situacao,
   expenses,
   canManage,
   onEdit,
-}: {
-  expenses: GastoExtra[];
-  canManage: boolean;
-  onEdit: (expense: GastoExtra) => void;
-}) {
+}: ListaProps & { situacao: GastoSituacao; expenses: GastoExtra[] }) {
   return (
-    <Card>
-      <CardContent className="p-0">
-        {expenses.length === 0 ? (
-          <p className="p-6 text-center text-sm text-muted">Nenhum gasto registrado ainda.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[960px] border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-line text-left text-xs font-medium uppercase text-muted">
-                  <th className={TH}>Data</th>
-                  <th className={TH}>Descrição</th>
-                  <th className={TH}>Categoria</th>
-                  <th className={`${TH} text-right`}>Valor</th>
-                  <th className={TH}>Situação</th>
-                  <th className={TH}>Desembolso</th>
-                  <th className={TH}>Evento</th>
-                  {canManage && <th className={TH}>Autor</th>}
-                  <th className={TH}>Nota Fiscal</th>
-                  <th className={TH}>Ações</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expenses.map((e) => (
-                  <GastoRow key={e.id} expense={e} canManage={canManage} onEdit={onEdit} />
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <AccordionRow
+      // O respiro vai no botão (não no invólucro) para a área de toque ter ≥ 44px, não só o texto.
+      className="[&>div:first-child>button]:px-4 [&>div:first-child>button]:py-3"
+      contentClassName="p-0"
+      summary={
+        <span className="flex flex-wrap items-baseline gap-x-2 text-sm">
+          <span className={`font-semibold ${SITUACAO_TONE[situacao].text}`}>{SITUACAO_LABELS_GRUPO[situacao]}</span>
+          <span className="tabular-nums text-muted">
+            {contagem(expenses.length)} · {brl(soma(expenses))}
+          </span>
+        </span>
+      }
+    >
+      <ListaDeGastos expenses={expenses} canManage={canManage} onEdit={onEdit} />
+    </AccordionRow>
   );
 }
 
 export function GastosExtrasPage() {
   const query = useGastosExtras();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<GastoExtra | null>(null);
 
   const canManage = query.data?.can_manage ?? false;
+  const categorias = useMemo(() => query.data?.categories ?? [], [query.data]);
+  const expenses = useMemo(() => query.data?.expenses ?? [], [query.data]);
+
+  // Estado na URL (como Pagamentos, feature 267): recarregar ou mandar o link mantém o recorte.
+  const filtros = lerFiltrosDaUrl(searchParams, categorias);
+  function atualizarUrl(mudancas: Record<string, string | null>) {
+    const proximo = new URLSearchParams(searchParams);
+    for (const [chave, valor] of Object.entries(mudancas)) {
+      if (valor) proximo.set(chave, valor);
+      else proximo.delete(chave);
+    }
+    setSearchParams(proximo, { replace: true });
+  }
+  const mudarFiltro = (mudanca: MudancaDeFiltro) => atualizarUrl(mudanca);
+  const limparFiltros = () =>
+    atualizarUrl({ busca: null, categoria: null, desembolso: null, mes: null, situacao: null });
+  /** Clique no cartão: alterna a situação; o cartão "Todos" (ou reclicar o ativo) limpa. */
+  const escolherSituacao = (situacao: GastoSituacao | null) =>
+    atualizarUrl({ situacao: situacao === null || filtros.situacao === situacao ? null : situacao });
+
+  /** Índice de busca por gasto, montado uma vez por resposta da API (não por tecla). */
+  const indice = useMemo(() => new Map(expenses.map((e) => [e.id, searchIndexOfGasto(e)])), [expenses]);
+  const terms = useMemo(() => searchTerms(filtros.busca), [filtros.busca]);
+  const { categoria, desembolso, mes } = filtros;
+  // O recorte sem a situação: é ele que os cartões somam (FR-009).
+  const recorte = useMemo(
+    () => filtrarGastos(expenses, { busca: "", categoria, desembolso, mes, situacao: null }, terms, indice),
+    [expenses, categoria, desembolso, mes, terms, indice],
+  );
+  const porSituacao = useMemo(() => {
+    const grupos: Record<GastoSituacao, GastoExtra[]> = {
+      aguardando_aprovacao: [],
+      a_pagar: [],
+      no_banco: [],
+      pago: [],
+      rejeitado: [],
+    };
+    recorte.forEach((e) => grupos[situacaoDe(e)].push(e));
+    return grupos;
+  }, [recorte]);
+  const aVista = useMemo(() => recorte.filter((e) => SITUACOES_A_VISTA.has(situacaoDe(e))), [recorte]);
+
+  const filtroAtivo = Boolean(filtros.busca || categoria || desembolso || mes || filtros.situacao);
+  const emExibicao = filtros.situacao ? porSituacao[filtros.situacao] : recorte;
 
   const openCreate = () => {
     setEditing(null);
@@ -841,8 +628,13 @@ export function GastosExtrasPage() {
     setModalOpen(true);
   };
 
+  const listaProps: ListaProps = { canManage, onEdit: openEdit };
+
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
+    // Feature 314: sem `mx-auto max-w-*` — a página ocupa a largura inteira ao lado do menu, a
+    // pedido do dono (exceção ao padrão do docs/02 §Espaçamento). Os ramos de carregamento e de
+    // erro estão dentro do mesmo invólucro, então a tela não "pula" quando os dados chegam.
+    <div className="space-y-4 p-4 sm:p-6">
       <PageHeader
         title="Gastos Extras"
         subtitle={canManage ? "Gestão de gastos avulsos da empresa" : "Registre e acompanhe seus gastos avulsos"}
@@ -850,10 +642,9 @@ export function GastosExtrasPage() {
       />
 
       {query.isLoading && (
-        <div className="space-y-2">
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} className="h-14 w-full" />
-          ))}
+        <div className="space-y-4">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-96 w-full" />
         </div>
       )}
 
@@ -863,17 +654,118 @@ export function GastosExtrasPage() {
         </div>
       )}
 
-      {query.data && (
+      {query.data && expenses.length === 0 && (
+        <Card>
+          <CardContent className="p-6 text-center text-sm text-muted">Nenhum gasto registrado ainda.</CardContent>
+        </Card>
+      )}
+
+      {query.data && expenses.length > 0 && (
         <>
-          {canManage && query.data.totals && <KpiGrid totals={query.data.totals} />}
-          <GastosTable expenses={query.data.expenses} canManage={canManage} onEdit={openEdit} />
+          {/* "Todos" ocupa a linha inteira no celular; as cinco situações ficam embaixo. */}
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-6">
+            <CartaoFiltro
+              label="Todos"
+              value={soma(recorte)}
+              count={recorte.length}
+              tone={null}
+              active={filtros.situacao === null}
+              dimmed={false}
+              unidade={UNIDADE_GASTO}
+              className="col-span-2 sm:col-span-1"
+              onClick={() => escolherSituacao(null)}
+            />
+            {SITUACAO_ORDEM.map((situacao) => (
+              <CartaoFiltro
+                key={situacao}
+                label={SITUACAO_LABELS_GRUPO[situacao]}
+                value={soma(porSituacao[situacao])}
+                count={porSituacao[situacao].length}
+                tone={SITUACAO_TONE[situacao]}
+                active={filtros.situacao === situacao}
+                dimmed={filtros.situacao !== null && filtros.situacao !== situacao}
+                unidade={UNIDADE_GASTO}
+                onClick={() => escolherSituacao(situacao)}
+              />
+            ))}
+          </div>
+
+          <GastosFiltros
+            filtros={filtros}
+            categorias={categorias}
+            onChange={mudarFiltro}
+            filtroAtivo={filtroAtivo}
+            emExibicao={emExibicao.length}
+            totalGastos={expenses.length}
+            somaEmExibicao={soma(emExibicao)}
+            onLimpar={limparFiltros}
+          />
+
+          <p aria-live="polite" className="sr-only">
+            {filtroAtivo
+              ? `${emExibicao.length} de ${contagem(expenses.length)} em exibição, ${brl(soma(emExibicao))}.`
+              : "Nenhum filtro ativo."}
+          </p>
+
+          {emExibicao.length === 0 ? (
+            <Card>
+              <CardContent className="space-y-3 p-6 text-center text-sm text-muted">
+                <p>Nenhum gasto encontrado.</p>
+                <Button variant="outline" size="sm" onClick={limparFiltros}>
+                  Limpar filtros
+                </Button>
+              </CardContent>
+            </Card>
+          ) : filtros.situacao ? (
+            // Com uma situação escolhida, só ela, aberta — "Pagos" aparece direto, sem abrir grupo.
+            <Card>
+              <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
+                <CardTitle className="text-base">
+                  {SITUACAO_LABELS_GRUPO[filtros.situacao]} ({emExibicao.length})
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => escolherSituacao(null)}>
+                  Limpar filtro · {SITUACAO_LABELS_GRUPO[filtros.situacao]} ✕
+                </Button>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ListaDeGastos expenses={emExibicao} {...listaProps} />
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Aguardando aprovação ou pagamento ({aVista.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="p-0">
+                  {aVista.length === 0 ? (
+                    <p className="p-6 text-center text-sm text-muted">
+                      Nenhum gasto aguardando aprovação ou pagamento.
+                    </p>
+                  ) : (
+                    <ListaDeGastos expenses={aVista} {...listaProps} />
+                  )}
+                </CardContent>
+              </Card>
+              {(porSituacao.pago.length > 0 || porSituacao.rejeitado.length > 0) && (
+                <Card className="overflow-hidden">
+                  {porSituacao.pago.length > 0 && (
+                    <GrupoRecolhido situacao="pago" expenses={porSituacao.pago} {...listaProps} />
+                  )}
+                  {porSituacao.rejeitado.length > 0 && (
+                    <GrupoRecolhido situacao="rejeitado" expenses={porSituacao.rejeitado} {...listaProps} />
+                  )}
+                </Card>
+              )}
+            </>
+          )}
         </>
       )}
 
       <GastoFormModal
         mode={editing ? "edit" : "create"}
         expense={editing}
-        categories={query.data?.categories ?? []}
+        categories={categorias}
         open={modalOpen}
         onClose={() => setModalOpen(false)}
       />
