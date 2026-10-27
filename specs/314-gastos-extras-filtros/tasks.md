@@ -25,7 +25,7 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
 
 ## Phase 1: Setup
 
-- [ ] T001 Dependências do frontend no worktree: `npm ci` em `C:\tmp\mp314\frontend` (o worktree nasceu sem
+- [X] T001 Dependências do frontend no worktree: `npm ci` em `C:\tmp\mp314\frontend` (o worktree nasceu sem
       `node_modules`); conferir que `npm run typecheck` roda limpo ANTES de qualquer mudança (linha de base)
 
 ---
@@ -34,7 +34,7 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T002 **`specs/314-gastos-extras-filtros/verify_314.py`** — os 8 cenários da tabela "Verificação" da spec,
+- [X] T002 **`specs/314-gastos-extras-filtros/verify_314.py`** — os 8 cenários da tabela "Verificação" da spec,
       pelo esqueleto da skill `manto-verify`: usuários descartáveis (Financeiro e Casting) criados por conexão
       própria, login só por `POST /api/auth/login`, requisições fora de `app.app_context()`; 9 gastos semeados por
       ORM com descrição marcada `[verify314]` (os casos de `research.md` D2 + 2 do Casting); oráculo do cenário 3 =
@@ -45,9 +45,9 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
       gastos `[verify314]`, as linhas de `AuditLog` `entity_type="gasto"` deles — a aprovação do cenário 4 grava — e
       os usuários) conferida por conexão separada. Rodar AGORA: deve falhar no cenário 1 por
       falta de `situacao` — salvar a saída em `specs/314-gastos-extras-filtros/verify_314_primeira_falha.txt`
-- [ ] T002b Base dos verifies vizinhos ANTES de qualquer mudança de backend: rodar `verify_306.py` e `verify_312.py`
+- [X] T002b Base dos verifies vizinhos ANTES de qualquer mudança de backend: rodar `verify_306.py` e `verify_312.py`
       neste worktree e anotar o placar em `specs/314-gastos-extras-filtros/base_verifies_vizinhos.txt`
-- [ ] T003 [P] `frontend/apps/internal/src/lib/gastos.ts`: `GastoSituacao` (`"aguardando_aprovacao" | "a_pagar" |
+- [X] T003 [P] `frontend/apps/internal/src/lib/gastos.ts`: `GastoSituacao` (`"aguardando_aprovacao" | "a_pagar" |
       "no_banco" | "pago" | "rejeitado"`); `situacao?: GastoSituacao` em `GastoExtra` (opcional — armadilha 21);
       `situacaoDe(e)` com a ponte de deploy de `research.md` D1 (sem a chave: pendente → aguardando, rejeitado →
       rejeitado, resto → `a_pagar`, nunca recolhido); `SITUACAO_LABELS`, `SITUACAO_ORDEM`, `SITUACAO_TONE`
@@ -66,7 +66,7 @@ página das duas. A US4 (não gestor) é conferência com pouca mudança.
 (`document.documentElement.scrollWidth <= innerWidth` e nenhum `overflow-x` na lista); ações e "Devolução de
 cancelado: travada." inteiras.
 
-- [ ] T004 [US1] `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx` (novo): `useAcoesDoGasto(expense)`
+- [X] T004 [US1] `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx` (novo): `useAcoesDoGasto(expense)`
       (aprovar/rejeitar/excluir/vincular com as mesmas regras de hoje — `travado`, `canDelete`, `window.prompt` no
       motivo da rejeição, erro da ação); "Excluir" abre o `ConfirmDialog` do `@manto/ui` ("Excluir este gasto?",
       descrição e valor no corpo, botão `loading` e erro dentro do diálogo — FR-013, Princípio V; achado C1),
@@ -78,15 +78,15 @@ cancelado: travada." inteiras.
       (celular: descrição + valor, selo, data · categoria, desembolso, evento, autor, ações com texto). Linha de
       vínculo (`EventoVincular`) abre embaixo da linha/cartão como hoje. Mover `MarketingBatchDetail`,
       `EventoVincular`, `formatDate` e o rótulo do desembolso de `GastosExtrasPage.tsx` para cá
-- [ ] T005 [US1] `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx`: `ListaDeGastos({ expenses,
+- [X] T005 [US1] `frontend/apps/internal/src/components/Gastos/GastoItemViews.tsx`: `ListaDeGastos({ expenses,
       canManage, onEdit })` = cartões `p-3 xl:hidden grid gap-2 md:grid-cols-2 [&>*]:min-w-0` + tabela `hidden
       xl:block` com `w-full table-fixed`, `colgroup` (`w-24`, flex, `w-28`, `w-28`, `w-36`, `w-40`, `w-44`), células
       `px-2`, `[overflow-wrap:anywhere]` em Gasto/Desembolso/Evento, cabeçalho "Situação" — **sem** `min-w-*` e sem
       `overflow-x-auto`
-- [ ] T006 [US1] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: raiz `space-y-4 p-4 sm:p-6` (sem `mx-auto
+- [X] T006 [US1] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: raiz `space-y-4 p-4 sm:p-6` (sem `mx-auto
       max-w-*`) também nos ramos de carregamento e erro (FR-017); trocar `GastosTable`/`GastoRow`/`StatusBadge` pela
       `ListaDeGastos`; apagar o que migrou para `GastoItemViews.tsx`; `GastoFormModal` fica
-- [ ] T007 [US1] Tela aberta (skill `manto-conferir-tela`) em 1920/1366/1280/375 como Superadmin — medir a rolagem
+- [X] T007 [US1] Tela aberta (skill `manto-conferir-tela`) em 1920/1366/1280/375 como Superadmin — medir a rolagem
       lateral pelo JS e tirar print de 1366 e 375
 
 **Checkpoint**: a queixa nº 1 resolvida sozinha (sem grupos nem filtros ainda).
@@ -101,19 +101,19 @@ cancelado: travada." inteiras.
 **Verificação da história (obrigatória)**: cenários 1–4 e 7 do `verify_314.py` em PASS; tela: abertura só com os
 três que pedem ação, abrir/fechar os grupos, aprovar e ver o gasto mudar de grupo sem recarregar.
 
-- [ ] T008 [US2] `app/gastos/gastos_ops.py`: constantes `SITUACAO_AGUARDANDO_APROVACAO`, `SITUACAO_A_PAGAR`,
+- [X] T008 [US2] `app/gastos/gastos_ops.py`: constantes `SITUACAO_AGUARDANDO_APROVACAO`, `SITUACAO_A_PAGAR`,
       `SITUACAO_NO_BANCO`, `SITUACAO_PAGO`, `SITUACAO_REJEITADO` (+ tupla `SITUACOES`) no topo; `situacao_do_gasto(
       expense: SpecialExpense) -> str` com a ordem de `research.md` D2, docstring Google com o porquê (o que nunca vai
       à Planilha de Pagamentos conta como resolvido — ponteiro para `api_financeiro_pagamentos`)
-- [ ] T009 [US2] `app/api/gastos_read.py`: `_expense_dict` ganha `"situacao": gastos_ops.situacao_do_gasto(e)`;
+- [X] T009 [US2] `app/api/gastos_read.py`: `_expense_dict` ganha `"situacao": gastos_ops.situacao_do_gasto(e)`;
       `ruff check app/gastos/gastos_ops.py app/api/gastos_read.py`
-- [ ] T010 [US2] Rodar `verify_314.py`: cenários 1–4 e 7 em PASS (5 e 6 também, já que o gate não muda)
-- [ ] T011 [US2] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: separar `aVista` (`SITUACOES_A_VISTA`) de
+- [X] T010 [US2] Rodar `verify_314.py`: cenários 1–4 e 7 em PASS (5 e 6 também, já que o gate não muda)
+- [X] T011 [US2] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: separar `aVista` (`SITUACOES_A_VISTA`) de
       `pagos` e `rejeitados` por `situacaoDe`; lista principal = `ListaDeGastos(aVista)`; embaixo, um `AccordionRow`
       (`@manto/ui`, fechado, chave estável) por grupo não vazio com resumo "Pagos — N gastos · R$ X" /
       "Rejeitados — N gastos · R$ X" (contagem concorda com o número) e a `ListaDeGastos` do grupo dentro; lista
       principal vazia com grupos cheios → "Nenhum gasto aguardando ação." acima dos grupos
-- [ ] T012 [US2] Tela aberta: abertura, abrir/fechar "Pagos" (com e sem "reduzir movimento"), aprovar um gasto
+- [X] T012 [US2] Tela aberta: abertura, abrir/fechar "Pagos" (com e sem "reduzir movimento"), aprovar um gasto
       descartável do `manto_local` e vê-lo mudar de grupo com o grupo aberto continuando aberto
 
 **Checkpoint**: o pedido do dono ("as pagas colapsam num card") entregue sobre a US1.
@@ -128,30 +128,30 @@ três que pedem ação, abrir/fechar os grupos, aprovar e ver o gasto mudar de g
 combinação de filtros; "Limpar filtros"; recarregar mantém; valor inválido na URL é ignorado; filtro sem resultado
 diz "Nenhum gasto encontrado.". Pagamentos com os cartões iguais aos de antes.
 
-- [ ] T013 [P] [US3] `frontend/apps/internal/src/components/CartaoFiltro.tsx` (novo): o `TotalCard` de
+- [X] T013 [P] [US3] `frontend/apps/internal/src/components/CartaoFiltro.tsx` (novo): o `TotalCard` de
       `PagamentosPage.tsx` extraído — props `label`, `value`, `count`, `tone: BucketTone | null` (null = cartão
       neutro), `active`, `dimmed`, `unidade: [singular, plural]`, `className`, `onClick`; mesmas classes,
       `aria-pressed` e o "· filtro ativo" só quando `active && tone` (D5)
-- [ ] T014 [US3] `frontend/apps/internal/src/pages/PagamentosPage.tsx`: trocar o `TotalCard` local pelo
+- [X] T014 [US3] `frontend/apps/internal/src/pages/PagamentosPage.tsx`: trocar o `TotalCard` local pelo
       `CartaoFiltro` (`tone={bucket ? BUCKET_TONE[bucket] : null}`, `unidade={["item", "itens"]}`); apagar o local
-- [ ] T015 [P] [US3] `frontend/apps/internal/src/lib/gastos.ts`: `searchIndexOfGasto(e)` (data dd/mm/aaaa e ISO,
+- [X] T015 [P] [US3] `frontend/apps/internal/src/lib/gastos.ts`: `searchIndexOfGasto(e)` (data dd/mm/aaaa e ISO,
       descrição, observação, categoria, quem recebe, PIX, evento, autor, rótulo da situação, `formatBRL` e
       `rawAmount` do valor) sobre `normalizeSearch`; `DESEMBOLSO_FILTRO` (`reembolso`, `fornecedor`, `cliente`,
       `nenhum` + rótulos); `lerFiltrosDaUrl(params, categories)` que descarta valor desconhecido (FR-011) e
       `filtrarGastos(expenses, filtros, terms, index)` (sem a situação — FR-009)
-- [ ] T016 [US3] `frontend/apps/internal/src/components/Gastos/GastosFiltros.tsx` (novo): busca (ícone + limpar,
+- [X] T016 [US3] `frontend/apps/internal/src/components/Gastos/GastosFiltros.tsx` (novo): busca (ícone + limpar,
       como Pagamentos, placeholder "Buscar por descrição, quem recebe, evento, autor, valor…"); `<select>`
       "Todas as categorias"; `<select>` "Todos os desembolsos"; mês (‹ › `aria-label` "Mês anterior"/"Mês
       seguinte", `Input type="month"` `aria-label` "Mês do gasto", botão "Todos os meses" quando há mês; setas sem
       mês partem de `currentMonth()`); "N de M gastos · R$ X" quando há filtro; "Limpar filtros"
-- [ ] T017 [US3] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: estado na URL (`useSearchParams`,
+- [X] T017 [US3] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx`: estado na URL (`useSearchParams`,
       `replace: true`, helper `atualizarUrl` como em Pagamentos) para `busca`, `categoria`, `desembolso`, `mes`,
       `situacao`; índice de busca em `useMemo` por resposta; grade de `CartaoFiltro` (`grid-cols-2 sm:grid-cols-3
       xl:grid-cols-6`: Todos + as 5 situações, com contagem e soma do recorte sem a situação); com situação escolhida,
       só ela, aberta, sem grupos (FR-006); linha `sr-only` `aria-live` "N de M gastos em exibição." (FR-010);
       estado vazio do recorte "Nenhum gasto encontrado." + "Limpar filtros" (FR-012); sem gasto nenhum →
       "Nenhum gasto registrado ainda." sem filtros nem grupos; o `KpiGrid` antigo sai
-- [ ] T018 [US3] Tela aberta: o roteiro do `quickstart.md` §3 passos 3–6 e 8 + Pagamentos (cartões, filtro ativo,
+- [X] T018 [US3] Tela aberta: o roteiro do `quickstart.md` §3 passos 3–6 e 8 + Pagamentos (cartões, filtro ativo,
       "Limpar filtro") em 1366 e 375
 
 **Checkpoint**: histórias 1–3 entregues; Pagamentos sem regressão.
@@ -166,10 +166,10 @@ diz "Nenhum gasto encontrado.". Pagamentos com os cartões iguais aos de antes.
 tela em 1366 com um usuário de Casting do `manto_local` (ou o descartável do verify mantido de propósito durante a
 conferência e apagado depois).
 
-- [ ] T019 [US4] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx` + `GastoItemViews.tsx`: sem `canManage`,
+- [X] T019 [US4] `frontend/apps/internal/src/pages/GastosExtrasPage.tsx` + `GastoItemViews.tsx`: sem `canManage`,
       nada de autor nem Aprovar/Rejeitar/Editar/Vincular; os cartões-filtro valem para o não gestor (somam a lista
       dele); subtítulo de hoje mantido
-- [ ] T020 [US4] Tela aberta como não gestor em 1366 e 375
+- [X] T020 [US4] Tela aberta como não gestor em 1366 e 375
 
 **Checkpoint**: as quatro histórias funcionam juntas e sozinhas.
 
@@ -177,19 +177,25 @@ conferência e apagado depois).
 
 ## Phase 7: Polimento e transversais
 
-- [ ] T021 `cd frontend && npm run typecheck` limpo (três SPAs) e `ruff check app/gastos/gastos_ops.py
+- [X] T021 `cd frontend && npm run typecheck` limpo (três SPAs) e `ruff check app/gastos/gastos_ops.py
       app/api/gastos_read.py`; `ruff format` só no `verify_314.py`
-- [ ] T022 Texto pelo Princípio XV lido na tela aberta: "Situação", rótulos das situações, "Ver nota fiscal",
+- [X] T022 Texto pelo Princípio XV lido na tela aberta: "Situação", rótulos das situações, "Ver nota fiscal",
       "Excluir", "Nenhum gasto encontrado.", "Limpar filtros", concordância "1 gasto"/"N gastos"; nenhuma chave
       ou enum renomeado
 - [ ] T023 `verify_314.py` verde de ponta a ponta + rodar os verifies vizinhos que leem `GET /api/gastos` ou
       `_expense_dict`: `specs/306-dinheiro-do-cancelamento/verify_306.py` e
       `specs/312-cancelado-fora-das-listas/verify_312.py`, comparando com a base medida em T002b (não com números de
       outra data — a `main` andou 86 commits desde 21/10)
-- [ ] T024 Docs por fonte única: `docs/01` (shape do `GET /api/gastos` com `situacao`); `docs/02` (`/gastos`: layout,
+- [X] T024 Docs por fonte única: `docs/01` (shape do `GET /api/gastos` com `situacao`); `docs/02` (`/gastos`: layout,
       grupos, filtros, URL; §Espaçamento ganha a exceção de largura da 314); `docs/03` (entrada no topo + linha no
       índice); `docs/05` (candidatos: `totals` sem consumidor; `window.prompt`/`window.confirm` da tela)
 - [ ] T025 `quickstart.md` executado de ponta a ponta
+
+**Nota do implement (27/10).** As quatro histórias mexem em `GastosExtrasPage.tsx` em sequência, por isso a página
+foi escrita uma vez com as quatro (T006+T011+T017+T019). As conferências de tela T007, T012, T018 e T020 rodaram
+juntas sobre a página inteira, em 1920/1366/1280/375 e com Superadmin e Casting descartáveis. Os dois achados
+(selo invadindo a coluna; grupo com 20 px de altura) foram corrigidos em `881ef41a`. Os números da `docs/05`
+ficaram 165 e 166 (ver T024).
 
 ---
 

@@ -746,3 +746,15 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 163 | **P3** | `INFINITEPAY_API_KEY` no painel do `manto-backend` (Render) | a **História 9 da 310** (link que vence junto com a reserva e aceita um pagamento só) está **desligada** até o dono colar a chave: sem ela o link nasce sem validade e a família ainda pode pagar um horário que já voltou para a vitrine — o pagamento atrasado vira venda ou devolução pela regra única, mas a devolução é trabalho manual no app. O código já suporta (`render.yaml` declara a chave com `sync: false`); o log do deploy diz `[infinitepay] … api_key=ausente (link sem validade)` | o dono cria a chave na InfinitePay e cola no painel do Render (nunca pelo chat); mudar env redeploya, então fora do horário |
 | 164 | **P2** | `MANTO_PROXY_SECRET` nos painéis do `manto-frontend` e do `manto-backend` (Render) | a prova de que o IP do cliente veio do Node (revisão T059 da 310) fica **desligada** até o dono criar a variável com o MESMO valor nos dois serviços: sem ela o backend aceita `X-Manto-Client-Ip` sem prova, e quem chama `manto-backend.onrender.com` direto trocando o cabeçalho escapa de todo limite de taxa — o de login inclusive. O boot avisa `[proxy] MANTO_PROXY_SECRET ausente` | o dono cria um valor aleatório e cola nos dois painéis — frontend primeiro, backend depois (ao contrário, por alguns minutos todo mundo cai no mesmo balde); fora do horário |
 
+
+## Baixa da feature 314-gastos-extras-filtros (2026-10-27, branch)
+
+**Quitada.** A `/gastos` deixou de rolar para o lado e de cortar as ações (10 colunas com `min-w-[960px]` num
+`max-w-6xl`). A exclusão em Gastos Extras saiu do `window.confirm` para o `ConfirmDialog` (Princípio V).
+
+**Criadas.** (165–166.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 165 | **P5** | `GET /api/gastos` → `totals` (`gastos_ops.expense_totals`) | desde a 314 nenhuma tela lê `totals`: os cartões somam a lista já recortada na tela. O servidor ainda soma e manda o bloco à gestão | tirar `totals` do payload (e `expense_totals`) depois de confirmar que nenhum script externo o lê |
+| 166 | **P5** | `GastoItemViews.tsx` (`handleReject`) | o motivo da rejeição ainda vem de `window.prompt`: sem o estilo da casa, sem campo, e no celular o diálogo nativo cobre a tela. A 314 só corrigiu o "Cancelar", que rejeitava assim mesmo | diálogo do `@manto/ui` com campo de motivo (opcional), `loading` no botão e erro no diálogo |

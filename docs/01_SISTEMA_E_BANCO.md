@@ -1182,6 +1182,22 @@ ele, → **400** `fields.disbursement_type` ("Devolução à cliente nasce pelo 
 evento"). `GET /api/gastos` ganha `locked` e `event_cancelled` em cada gasto, e `categories` traz
 "Multa de cancelamento".
 
+**`GET /api/gastos` (feature 314).** Cada gasto ganha `situacao`, que diz onde ele está, numa palavra:
+`aguardando_aprovacao` · `a_pagar` · `no_banco` · `pago` · `rejeitado`. Também vem nas respostas de escrita que usam
+o mesmo `_expense_dict`. A regra é uma só, `gastos_ops.situacao_do_gasto`, e a primeira que casa vence:
+
+1. rejeitado;
+2. pendente (mesmo com `paid_at_creation`);
+3. **pago**: `payment_status = "pago"`, **ou** `paid_at_creation`, **ou** sem `disbursement_type`;
+4. `no_banco`;
+5. `a_pagar`.
+
+Os dois últimos casos do "pago" nunca entram na Planilha de Pagamentos (`api_financeiro_pagamentos` só leva o
+aprovado com desembolso e sem `paid_at_creation`), então só a regra os resolve. Gate, parâmetros e `totals` não
+mudam. `totals` (gestão) segue com as chaves `todos`/`pendente`/`aprovado`/`rejeitado` e, desde a 314, a tela não o
+lê: os cartões somam a lista recortada (dívida 165). Sem parâmetros: busca, categoria, desembolso, mês e situação
+recortam na tela.
+
 **`GET /api/gastos/recorrentes` (payload, feature 189).** Além de `grupos`/`month_ref`/
 `is_current_month`/`type_labels`/`frequency_labels`/`alerts`, devolve `ref_year`, `ref_month`,
 `weekday_labels`, `somas` (estimativa mensal por tipo, só contas ativas) e
