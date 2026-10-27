@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
-import { Button, PageHeader, Skeleton } from "@manto/ui";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { Button, PageHeader, Skeleton, useRestaurarRolagem } from "@manto/ui";
 import {
   useAdminCatalogo,
   useDeleteCatalogItem,
@@ -18,20 +18,49 @@ import { CatalogTreeView } from "../components/CatalogTreeView";
 import { CatalogPersonagensView } from "../components/CatalogPersonagensView";
 import { CatalogBulkActionBar } from "../components/CatalogBulkActionBar";
 import { Modal } from "../components/Modal";
+import { useChegouPeloHistorico } from "../lib/navegacao";
 
 type ViewMode = "cards" | "tree" | "personagens";
 const VIEW_MODE_KEY = "manto_admin_catalogo_view";
+/** Nome no endereço (`?visao=`) de cada modo — o endereço fala português, o código não muda. */
+const VISAO_NA_URL: Record<ViewMode, string> = { cards: "cards", tree: "arvore", personagens: "personagens" };
 
 function loadViewMode(): ViewMode {
   const saved = window.localStorage.getItem(VIEW_MODE_KEY);
   return saved === "tree" || saved === "personagens" ? saved : "cards";
 }
 
+function viewModeDaUrl(valor: string | null): ViewMode | null {
+  const achado = (Object.keys(VISAO_NA_URL) as ViewMode[]).find((m) => VISAO_NA_URL[m] === valor);
+  return achado ?? null;
+}
+
 export function AdminCatalogoListPage() {
-  const [q, setQ] = useState("");
-  const [categoria, setCategoria] = useState("");
-  const [status, setStatus] = useState("todos");
-  const [viewMode, setViewModeState] = useState<ViewMode>(loadViewMode);
+  // Filtros e modo de visão no endereço (feature 320): voltar da edição, salvar ou recarregar
+  // devolve a mesma lista. Sempre `replace` — mudar filtro não cria um passo de "voltar".
+  const [params, setParams] = useSearchParams();
+  const location = useLocation();
+  const categoria = params.get("categoria") ?? "";
+  const status = params.get("situacao") ?? "todos";
+  const viewMode = viewModeDaUrl(params.get("visao")) ?? loadViewMode();
+  const q = params.get("q") ?? "";
+
+  function setFiltros(mudancas: Record<string, string | null>) {
+    setParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        for (const [chave, valor] of Object.entries(mudancas)) {
+          if (valor) proximo.set(chave, valor);
+          else proximo.delete(chave);
+        }
+        return proximo;
+      },
+      { replace: true, state: location.state },
+    );
+  }
+  const setCategoria = (valor: string) => setFiltros({ categoria: valor });
+  const setStatus = (valor: string) => setFiltros({ situacao: valor === "todos" ? null : valor });
+  const setQ = (valor: string) => setFiltros({ q: valor || null });
   const [selectedTemaIds, setSelectedTemaIds] = useState<Set<number>>(new Set());
   const [selectedCharacterIds, setSelectedCharacterIds] = useState<Set<number>>(new Set());
   const [linkingCharacter, setLinkingCharacter] = useState<CatalogCharacterSummary | null>(null);
@@ -39,7 +68,8 @@ export function AdminCatalogoListPage() {
   // A pausa vale só para o que vai ao SERVIDOR. O mesmo `q` alimenta o filtro client-side da
   // visão Personagens (`busca={q}`, mais abaixo), que continua instantâneo — atrasar aquilo
   // seria travar a digitação de graça.
-  const [buscaComPausa, setBuscaComPausa] = useState("");
+  // Começa já com a busca do endereço: na volta da edição a lista sai na hora, sem a pausa.
+  const [buscaComPausa, setBuscaComPausa] = useState(() => q.trim());
   useEffect(() => {
     const t = setTimeout(() => setBuscaComPausa(q.trim()), 300);
     return () => clearTimeout(t);
@@ -63,7 +93,7 @@ export function AdminCatalogoListPage() {
   const [linkTargetSheetId, setLinkTargetSheetId] = useState<number | null>(null);
 
   function setViewMode(mode: ViewMode) {
-    setViewModeState(mode);
+    setFiltros({ visao: VISAO_NA_URL[mode] });
     window.localStorage.setItem(VIEW_MODE_KEY, mode);
     setSelectedTemaIds(new Set());
     setSelectedCharacterIds(new Set());
@@ -119,6 +149,8 @@ export function AdminCatalogoListPage() {
   }
 
   const items: CatalogListItem[] = query.data?.items ?? [];
+  const voltou = useChegouPeloHistorico();
+  useRestaurarRolagem(location.key, { restaurar: voltou, pronto: Boolean(query.data) });
   // Enquanto o que está na tela ainda é o filtro ANTERIOR (placeholder, ou a pausa da busca que
   // ainda não disparou), a lista não pode dizer "nenhum produto" nem contar fichas como se fosse a
   // atual: esmaece e avisa (revisão pré-deploy da 300).

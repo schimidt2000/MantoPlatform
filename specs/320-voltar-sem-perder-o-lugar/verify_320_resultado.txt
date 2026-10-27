@@ -1,0 +1,33 @@
+﻿[320] cenário 1 — catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem
+[320] cenário 2 — catálogo público: voltar do navegador devolve busca, categoria e rolagem
+[320] cenário 3 — catálogo público: endereço com busca e categoria abre filtrado
+[320] cenário 4 — gerenciador: voltar do card e do menu 'Editar' devolve filtros e rolagem
+[320] cenário 5 — talentos: voltar da ficha devolve busca, filtro, página e rolagem
+[320] cenário 6 — talentos: /talents?status=pending abre em Pendentes
+[320] cenário 11 — navegação nova pelo menu começa do topo
+[320] cenário 7 — gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema
+[320] cenário 8 — visualizador: 'Voltar' e voltar do navegador fecham no mesmo ponto
+[320] cenário 10 — app instalado: menu 'Catálogo' na mesma janela e '← Voltar ao sistema'
+[320] cenário 1 — catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem
+[320]   FALHOU: a busca voltou "" em vez de "a"
+[320] cenário 5 — talentos: voltar da ficha devolve busca, filtro, página e rolagem
+[320]   FALHOU: a busca voltou ""
+[320] cenário 7 — gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema
+[320]   FALHOU: o visualizador não abriu
+[320] (contraprova: os cenários acima TÊM de falhar)
+PASS  1 — catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem
+PASS  2 — catálogo público: voltar do navegador devolve busca, categoria e rolagem
+PASS  3 — catálogo público: endereço com busca e categoria abre filtrado
+PASS  4 — gerenciador: voltar do card e do menu 'Editar' devolve filtros e rolagem
+PASS  5 — talentos: voltar da ficha devolve busca, filtro, página e rolagem
+PASS  6 — talentos: /talents?status=pending abre em Pendentes
+PASS  7 — gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema
+PASS  8 — visualizador: 'Voltar' e voltar do navegador fecham no mesmo ponto
+PASS  9 — nenhum link de arquivo do sistema abre em outra aba
+PASS 10 — app instalado: menu 'Catálogo' na mesma janela e '← Voltar ao sistema'
+PASS 11 — navegação nova pelo menu começa do topo
+PASS 12 — contraprova: 1, 5 e 7 falham na main: 1: catálogo público: '← Voltar ao catálogo' devolve busca, categoria e rolagem: a busca voltou "" em vez de "a"; 5: talentos: voltar da ficha devolve busca, filtro, página e rolagem: a busca voltou ""; 7: gastos (iPhone): comprovante em foto e em PDF abre dentro do sistema: o visualizador não abriu
+
+12/12
+
+27/10/2026 ~19h10 — depois do merge da main com a 314 (a /gastos virou cartões no celular; o cenário 7 passou a esperar o link visível): 11/11 (contraprova pulada; já registrada acima).

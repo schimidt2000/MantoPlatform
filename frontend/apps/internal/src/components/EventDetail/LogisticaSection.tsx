@@ -1,7 +1,6 @@
 import { useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Badge, Button } from "@manto/ui";
-import { assetUrl } from "@manto/api-client";
 import type { EventoDetalhe } from "../../lib/agenda";
 import {
   useAddMaterialFile,
@@ -11,6 +10,7 @@ import {
 } from "../../lib/eventDetail";
 import { useSaveLogistics } from "../../lib/eventOps";
 import { Empty, INPUT_CLASS, Panel, makeupLocationLabel } from "./parts";
+import { LinkDeArquivo } from "../ArquivoViewer";
 
 /** Card do trajeto: tempo/distância em cache do Google Maps + saída sugerida. */
 function TrajetoCard({ data }: { data: EventoDetalhe }) {
@@ -221,14 +221,12 @@ function MateriaisSection({ data }: { data: EventoDetalhe }) {
         <ul className="mb-3 divide-y divide-line">
           {materiais.map((material) => (
             <li key={material.id} className="flex items-center justify-between gap-2 py-1.5">
-              <a
-                href={assetUrl(material.url ?? material.file_path)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <LinkDeArquivo
+                caminho={material.url ?? material.file_path ?? ""}
                 className="truncate text-sm text-blue underline"
               >
                 {material.material_type === "link" ? "🔗" : "📄"} {material.label || material.url}
-              </a>
+              </LinkDeArquivo>
               {canEdit && (
                 <Button
                   variant="ghost"

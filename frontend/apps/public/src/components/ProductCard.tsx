@@ -1,12 +1,18 @@
 import { Link } from "react-router-dom";
 import { assetSrcSet, assetUrl } from "@manto/api-client";
 import type { CatalogItemSummary } from "../lib/catalogo";
+import { DA_LISTA } from "../lib/navegacao";
 import { WishlistButton } from "./WishlistButton";
 
 interface ProductCardProps {
   item: CatalogItemSummary;
   /** Tamanho maior de foto/nome — usado na grade de uma categoria (feature 133/140). */
   large?: boolean;
+  /**
+   * O card está numa lista (grade geral ou categoria): o "← Voltar" do tema volta para ela pelo
+   * histórico, no mesmo ponto (feature 320). Os relacionados do detalhe não marcam.
+   */
+  deLista?: boolean;
 }
 
 /**
@@ -22,11 +28,12 @@ const SIZES_CATEGORIA = "(min-width: 640px) 33vw, calc(50vw - 34px)";
 const LARGURAS_CARD = [320, 480, 640] as const;
 
 /** Card de produto reutilizado pela grade geral, grade de categoria e relacionados do detalhe. */
-export function ProductCard({ item, large = false }: ProductCardProps) {
+export function ProductCard({ item, large = false, deLista = false }: ProductCardProps) {
   return (
     <div className="relative">
       <Link
         to={`/${item.slug}`}
+        state={deLista ? DA_LISTA : undefined}
         className="block overflow-hidden rounded-lg bg-panel shadow-sm transition-transform hover:-translate-y-1 hover:shadow-lg"
       >
         <div className="aspect-[4/5] overflow-hidden bg-bg-alt">

@@ -2,6 +2,8 @@ import { BrowserRouter, Navigate, Route, Routes, useParams } from "react-router-
 import { RequireAuth } from "./components/RequireAuth";
 import { isRevendedorOnly, useCurrentUser } from "./lib/useAuth";
 import { AppShell } from "./components/AppShell";
+import { ArquivoViewerProvider } from "./components/ArquivoViewer";
+import { RolarAoTopoEmNovaPagina } from "./lib/navegacao";
 import { LoginPage } from "./pages/LoginPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { AgendaPage } from "./pages/AgendaPage";
@@ -84,92 +86,97 @@ function HomeOuAgenda() {
 export function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        {/* Layout route (feature 173): todas as rotas autenticadas dentro do shell. */}
-        <Route
-          element={
-            <RequireAuth>
-              <AppShell />
-            </RequireAuth>
-          }
-        >
-          <Route path="/" element={<HomeOuAgenda />} />
-          <Route path="/agenda" element={<AgendaPage />} />
-          <Route path="/events/new" element={<EventCreatePage />} />
-          {/* Declarada ANTES de `/events/:id` — `:id` casaria com "cancelamentos". */}
-          <Route path="/events/cancelamentos" element={<EventosCancelamentosPage />} />
-          <Route path="/events/:id/edit" element={<EventEditPage />} />
-          <Route path="/events/:id" element={<EventDetailPage />} />
-          <Route path="/talents" element={<TalentsListPage />} />
-          <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
-          <Route path="/formularios" element={<FormulariosAdminPage />} />
-          {/* Acessível pelo sino, sem item de menu (feature 272). */}
-          <Route path="/notificacoes" element={<NotificacoesPage />} />
-          <Route path="/talents/:id" element={<TalentDetailPage />} />
-          <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
-          <Route path="/3d/acervo" element={<Acervo3DPage />} />
-          <Route path="/3d/fila" element={<Fila3DPage />} />
-          <Route path="/3d/tags" element={<Tags3DPage />} />
-          <Route path="/virtuais/campanhas" element={<VirtuaisCampanhasPage />} />
-          <Route path="/virtuais/campanhas/:id" element={<VirtuaisCampanhaFormPage />} />
-          <Route path="/virtuais/devolucoes" element={<VirtuaisDevolucoesPage />} />
-          <Route path="/virtuais/producao" element={<FilaProducaoMidiaPage />} />
-          <Route path="/marketing/painel" element={<MarketingPainelPage />} />
-          <Route path="/marketing/metas" element={<MarketingMetasPage />} />
-          <Route path="/marketing/desempenho" element={<MarketingDesempenhoPage />} />
-          <Route path="/figurinos" element={<FigurinoListPage />} />
-          {/* Declaradas ANTES das dinâmicas: "/figurinos/producao/12" não pode cair em
-              "/figurinos/:id/edit" (mesmo cuidado que "/events/cancelamentos" exigiu na 224). */}
-          <Route path="/figurinos/producao" element={<FigurinoProducaoListPage />} />
-          <Route path="/figurinos/producao/:id" element={<FigurinoProducaoDetailPage />} />
-          {/* 225f — `/compras` teve item de menu próprio por um dia; virou aba da mesma tela.
-              O redirect fica porque a rota já circulou em links e favoritos, e porque é ele que
-              mantém "abrir direto nas compras" possível a partir de qualquer lugar. */}
-          <Route path="/compras" element={<Navigate to="/figurinos/producao?tipo=compra" replace />} />
-          <Route path="/figurinos/new" element={<FigurinoFormPage />} />
-          <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />
-          <Route path="/vendas" element={<VendasPipelinePage />} />
-          <Route path="/financeiro" element={<FinanceiroDashboardPage />} />
-          <Route path="/financeiro/comissoes" element={<ComissoesPage />} />
-          <Route path="/financeiro/pagamentos" element={<PagamentosPage />} />
-          <Route path="/pix" element={<PixRecebidosPage />} />
-          <Route path="/gastos" element={<GastosExtrasPage />} />
-          <Route path="/gastos/recorrentes" element={<GastosRecorrentesPage />} />
-          <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />
-          <Route path="/orcamento/historico" element={<OrcamentoHistoricoPage />} />
-          <Route path="/orcamento/configuracoes" element={<OrcamentoConfigPrecosPage />} />
-          {/* Depois das rotas fixas: `/orcamento/:id` casaria "historico" e "configuracoes". */}
-          <Route path="/orcamento/:id" element={<OrcamentoResultadoPage />} />
-          <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
-          <Route path="/educamanto/musicais" element={<EducaMantoMusicaisPage />} />
-          <Route path="/educamanto/musicais/novo" element={<EducaMantoMusicalFormPage />} />
-          <Route path="/educamanto/musicais/:id/editar" element={<EducaMantoMusicalFormPage />} />
-          <Route path="/educamanto/historico" element={<EducaMantoHistoricoPage />} />
-          <Route path="/clientes" element={<ClientsListPage />} />
-          <Route path="/clientes/avaliacoes" element={<ClientFeedbackPage />} />
-          <Route path="/clientes/:id" element={<ClientDetailPage />} />
-          <Route path="/rh" element={<RhDashboardPage />} />
-          <Route path="/admin/usuarios" element={<AdminUsersListPage />} />
-          <Route path="/admin/usuarios/novo" element={<AdminUserCreatePage />} />
-          <Route path="/admin/usuarios/:id" element={<AdminUserEditPage />} />
-          <Route path="/admin/configuracoes" element={<AdminSettingsPage />} />
-          <Route path="/admin/logs" element={<AdminLogsPage />} />
-          <Route path="/admin/desempenho" element={<AdminDesempenhoPage />} />
-          <Route path="/admin/sync" element={<AdminSyncPage />} />
-          <Route path="/admin/anuncio-portal" element={<AdminPortalAnnouncementPage />} />
-          <Route path="/admin/migrar-arquivos" element={<AdminMigrarArquivosPage />} />
-          <Route path="/admin/importar-catalogo" element={<AdminImportarCatalogoPage />} />
-          <Route path="/admin/catalogo" element={<AdminCatalogoListPage />} />
-          <Route path="/admin/catalogo/novo" element={<AdminCatalogoFormPage />} />
-          <Route path="/admin/catalogo/:id/editar" element={<AdminCatalogoFormPage />} />
-          <Route path="/revisao" element={<RevisaoListPage />} />
-          <Route path="/revisao/novo" element={<RevisaoSpaceCreatePage />} />
-          <Route path="/revisao/:id" element={<RevisaoSpacePage />} />
-          <Route path="/revisao/:spaceId/asset/:assetId" element={<RevisaoAssetPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      {/* Antes das rotas de propósito: o "ir ao topo" roda antes das telas que rolam até um
+          item ao abrir (feature 320). */}
+      <RolarAoTopoEmNovaPagina />
+      <ArquivoViewerProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          {/* Layout route (feature 173): todas as rotas autenticadas dentro do shell. */}
+          <Route
+            element={
+              <RequireAuth>
+                <AppShell />
+              </RequireAuth>
+            }
+          >
+            <Route path="/" element={<HomeOuAgenda />} />
+            <Route path="/agenda" element={<AgendaPage />} />
+            <Route path="/events/new" element={<EventCreatePage />} />
+            {/* Declarada ANTES de `/events/:id` — `:id` casaria com "cancelamentos". */}
+            <Route path="/events/cancelamentos" element={<EventosCancelamentosPage />} />
+            <Route path="/events/:id/edit" element={<EventEditPage />} />
+            <Route path="/events/:id" element={<EventDetailPage />} />
+            <Route path="/talents" element={<TalentsListPage />} />
+            <Route path="/casting/avaliacoes" element={<AvaliacaoCastingPage />} />
+            <Route path="/formularios" element={<FormulariosAdminPage />} />
+            {/* Acessível pelo sino, sem item de menu (feature 272). */}
+            <Route path="/notificacoes" element={<NotificacoesPage />} />
+            <Route path="/talents/:id" element={<TalentDetailPage />} />
+            <Route path="/talents/:id/edit" element={<TalentEditRedirect />} />
+            <Route path="/3d/acervo" element={<Acervo3DPage />} />
+            <Route path="/3d/fila" element={<Fila3DPage />} />
+            <Route path="/3d/tags" element={<Tags3DPage />} />
+            <Route path="/virtuais/campanhas" element={<VirtuaisCampanhasPage />} />
+            <Route path="/virtuais/campanhas/:id" element={<VirtuaisCampanhaFormPage />} />
+            <Route path="/virtuais/devolucoes" element={<VirtuaisDevolucoesPage />} />
+            <Route path="/virtuais/producao" element={<FilaProducaoMidiaPage />} />
+            <Route path="/marketing/painel" element={<MarketingPainelPage />} />
+            <Route path="/marketing/metas" element={<MarketingMetasPage />} />
+            <Route path="/marketing/desempenho" element={<MarketingDesempenhoPage />} />
+            <Route path="/figurinos" element={<FigurinoListPage />} />
+            {/* Declaradas ANTES das dinâmicas: "/figurinos/producao/12" não pode cair em
+                "/figurinos/:id/edit" (mesmo cuidado que "/events/cancelamentos" exigiu na 224). */}
+            <Route path="/figurinos/producao" element={<FigurinoProducaoListPage />} />
+            <Route path="/figurinos/producao/:id" element={<FigurinoProducaoDetailPage />} />
+            {/* 225f — `/compras` teve item de menu próprio por um dia; virou aba da mesma tela.
+                O redirect fica porque a rota já circulou em links e favoritos, e porque é ele que
+                mantém "abrir direto nas compras" possível a partir de qualquer lugar. */}
+            <Route path="/compras" element={<Navigate to="/figurinos/producao?tipo=compra" replace />} />
+            <Route path="/figurinos/new" element={<FigurinoFormPage />} />
+            <Route path="/figurinos/:id/edit" element={<FigurinoFormPage />} />
+            <Route path="/vendas" element={<VendasPipelinePage />} />
+            <Route path="/financeiro" element={<FinanceiroDashboardPage />} />
+            <Route path="/financeiro/comissoes" element={<ComissoesPage />} />
+            <Route path="/financeiro/pagamentos" element={<PagamentosPage />} />
+            <Route path="/pix" element={<PixRecebidosPage />} />
+            <Route path="/gastos" element={<GastosExtrasPage />} />
+            <Route path="/gastos/recorrentes" element={<GastosRecorrentesPage />} />
+            <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />
+            <Route path="/orcamento/historico" element={<OrcamentoHistoricoPage />} />
+            <Route path="/orcamento/configuracoes" element={<OrcamentoConfigPrecosPage />} />
+            {/* Depois das rotas fixas: `/orcamento/:id` casaria "historico" e "configuracoes". */}
+            <Route path="/orcamento/:id" element={<OrcamentoResultadoPage />} />
+            <Route path="/educamanto" element={<EducaMantoCalculadoraPage />} />
+            <Route path="/educamanto/musicais" element={<EducaMantoMusicaisPage />} />
+            <Route path="/educamanto/musicais/novo" element={<EducaMantoMusicalFormPage />} />
+            <Route path="/educamanto/musicais/:id/editar" element={<EducaMantoMusicalFormPage />} />
+            <Route path="/educamanto/historico" element={<EducaMantoHistoricoPage />} />
+            <Route path="/clientes" element={<ClientsListPage />} />
+            <Route path="/clientes/avaliacoes" element={<ClientFeedbackPage />} />
+            <Route path="/clientes/:id" element={<ClientDetailPage />} />
+            <Route path="/rh" element={<RhDashboardPage />} />
+            <Route path="/admin/usuarios" element={<AdminUsersListPage />} />
+            <Route path="/admin/usuarios/novo" element={<AdminUserCreatePage />} />
+            <Route path="/admin/usuarios/:id" element={<AdminUserEditPage />} />
+            <Route path="/admin/configuracoes" element={<AdminSettingsPage />} />
+            <Route path="/admin/logs" element={<AdminLogsPage />} />
+            <Route path="/admin/desempenho" element={<AdminDesempenhoPage />} />
+            <Route path="/admin/sync" element={<AdminSyncPage />} />
+            <Route path="/admin/anuncio-portal" element={<AdminPortalAnnouncementPage />} />
+            <Route path="/admin/migrar-arquivos" element={<AdminMigrarArquivosPage />} />
+            <Route path="/admin/importar-catalogo" element={<AdminImportarCatalogoPage />} />
+            <Route path="/admin/catalogo" element={<AdminCatalogoListPage />} />
+            <Route path="/admin/catalogo/novo" element={<AdminCatalogoFormPage />} />
+            <Route path="/admin/catalogo/:id/editar" element={<AdminCatalogoFormPage />} />
+            <Route path="/revisao" element={<RevisaoListPage />} />
+            <Route path="/revisao/novo" element={<RevisaoSpaceCreatePage />} />
+            <Route path="/revisao/:id" element={<RevisaoSpacePage />} />
+            <Route path="/revisao/:spaceId/asset/:assetId" element={<RevisaoAssetPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ArquivoViewerProvider>
     </BrowserRouter>
   );
 }

@@ -46,6 +46,7 @@ import {
   type ProducaoStatus,
 } from "../lib/figurinoProducao";
 import { SeloSituacao } from "../components/SeloSituacao";
+import { LinkDeArquivo } from "../components/ArquivoViewer";
 
 const INPUT_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 
@@ -346,14 +347,12 @@ function Orcamentos({
       <ul className="space-y-1">
         {orcamentos.map((o) => (
           <li key={o.id} className="flex items-center gap-2 text-sm">
-            <a
-              href={assetUrl(o.url)}
-              target="_blank"
-              rel="noreferrer"
+            <LinkDeArquivo
+              caminho={o.url}
               className="flex-1 truncate text-ink hover:text-accent"
             >
               {o.supplier_name || o.original_name || "Orçamento"}
-            </a>
+            </LinkDeArquivo>
             {o.amount != null && (
               <span
                 className={
@@ -547,14 +546,14 @@ function Historico({
           <li key={log.id} className="border-l-2 border-line pl-3">
             <p className="text-sm text-ink">{log.message}</p>
             {log.photo_url && (
-              <a href={assetUrl(log.photo_url)} target="_blank" rel="noreferrer">
+              <LinkDeArquivo caminho={log.photo_url}>
                 <img
                   src={assetUrl(log.photo_url)}
                   alt={log.message}
                   loading="lazy"
                   className="mt-2 max-h-56 rounded-md border border-line object-cover"
                 />
-              </a>
+              </LinkDeArquivo>
             )}
             <p className="mt-1 text-xs text-muted">
               {log.actor_name} · {dataHoraBR(log.created_at)}
@@ -698,14 +697,14 @@ export function FigurinoProducaoDetailPage() {
               <h3 className="mb-2 text-sm font-semibold text-ink">Fotos</h3>
               <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                 {fotos.map((f) => (
-                  <a key={f.id} href={assetUrl(f.url)} target="_blank" rel="noreferrer">
+                  <LinkDeArquivo key={f.id} caminho={f.url}>
                     <img
                       src={assetUrl(f.url)}
                       alt={f.caption ?? "Foto do andamento"}
                       loading="lazy"
                       className="aspect-square w-full rounded-md border border-line object-cover"
                     />
-                  </a>
+                  </LinkDeArquivo>
                 ))}
               </div>
             </Card>

@@ -1,12 +1,16 @@
-import { Link, useParams } from "react-router-dom";
-import { Skeleton } from "@manto/ui";
+import { Link, useLocation, useParams } from "react-router-dom";
+import { Skeleton, useRestaurarRolagem } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useCategoryDetail } from "../lib/catalogo";
 import { ProductCard } from "../components/ProductCard";
+import { LinkVoltarParaLista, useChegouPeloHistorico } from "../lib/navegacao";
 
 export function CategoryDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const { data, isLoading, error } = useCategoryDetail(slug);
+  const location = useLocation();
+  const voltou = useChegouPeloHistorico();
+  useRestaurarRolagem(location.key, { restaurar: voltou, pronto: Boolean(data) });
 
   const notFound = error instanceof ApiRequestError && error.status === 404;
 
@@ -29,9 +33,12 @@ export function CategoryDetailPage() {
     <div className="pb-24">
       <div className="border-b border-line px-6 py-5">
         <div className="mx-auto max-w-[1180px]">
-          <Link to="/categorias" className="text-[13.5px] font-semibold text-muted hover:text-accent">
+          <LinkVoltarParaLista
+            to="/categorias"
+            className="text-[13.5px] font-semibold text-muted hover:text-accent"
+          >
             ← Todas as categorias
-          </Link>
+          </LinkVoltarParaLista>
         </div>
       </div>
 
@@ -63,7 +70,7 @@ export function CategoryDetailPage() {
         {data && (
           <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
             {data.items.map((item) => (
-              <ProductCard key={item.id} item={item} large />
+              <ProductCard key={item.id} item={item} large deLista />
             ))}
           </div>
         )}

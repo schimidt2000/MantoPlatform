@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **314-gastos-extras-filtros** (sem
+> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **320-voltar-sem-perder-o-lugar** (sem
+> migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
+> voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
+> "Baixar", e o app da Tela de Início do iPhone não prende mais; `verify_320.py` 12/12; dívidas 168–171) — antes dela
+> pós-feature **314-gastos-extras-filtros** (sem
 > migration; **EM PRODUÇÃO desde 27/10/2026 ~19h**, a pedido do dono, fora do horário — a `/gastos` na tela inteira,
 > sem rolagem lateral, com a situação de cada gasto vinda do servidor, "Pagos" e "Rejeitados" recolhidos e filtros como
 > em Pagamentos; `verify_314.py` 8/8) — antes dela pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
@@ -174,6 +178,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
 | **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
@@ -367,6 +372,66 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivo no app instalado)   (320-voltar-sem-perder-o-lugar · 2026-10-27 · sem migration)
+
+> **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 (dívidas 168–171 no `docs/05`; eram 165–168 na branch). Nível 1 (três superfícies + dependência nova). Detalhe:
+> `specs/320-voltar-sem-perder-o-lugar/` (spec, plan, research, contracts/ui.md, verify).
+
+**O pedido.** O dono: ao pesquisar no catálogo, entrar num tema e voltar, cai no início da lista e
+"perde o fio da meada"; o mesmo no banco de talentos. E a equipe usa o sistema "como app" (iPhone,
+ícone na Tela de Início, sem a barra do Safari): ao abrir um comprovante de gasto extra, não há como
+voltar — precisa fechar o app. Decidiu: os dois catálogos, iPhone, todo arquivo do interno.
+
+**Causas.** Filtros em `useState` (somem ao desmontar); `BrowserRouter` sem restauração de rolagem
+(o navegador tenta no `popstate`, com a tela do detalhe ainda curta, e corta a posição); os
+"Voltar" faziam PUSH para a lista em vez de voltar; o "Editar" do menu do card fazia
+`window.location.assign` (recarregava o app); todo arquivo abria com `target="_blank"`.
+
+**O que mudou (só frontend).**
+- `@manto/ui`: `useRestaurarRolagem(chave, {restaurar, pronto})` (posição por `location.key` no
+  `sessionStorage`, reaplicada depois que a lista aparece, por até 1,5 s); `estaComoAppInstalado()`;
+  `VisualizadorDeArquivo` (tela cheia z-[60], foto, PDF por `pdf-paginas.tsx` com `pdfjs-dist@4.10.38`
+  sob demanda, "Baixar" pela folha de compartilhar no celular); item `external` do menu sem
+  `target` no app instalado.
+- Interno: `lib/navegacao.tsx` (`DA_LISTA`, `useVoltarParaLista`, `LinkVoltarParaLista`,
+  `RolarAoTopoEmNovaPagina`); `components/ArquivoViewer.tsx` (`ArquivoViewerProvider`, `LinkDeArquivo`)
+  nos 15 links de arquivo (gastos, financeiro do evento, gastos vinculados, logística, adiantamentos,
+  devoluções, figurino, revisão, documento do talento — "Abrir PDF" virou "Ver PDF"). Listas:
+  `AdminCatalogoListPage` e `TalentsListPage` com estado no endereço.
+- Público: grade e categoria com estado no endereço e rolagem; "← Voltar" pelo histórico;
+  `VoltarAoSistema` no app instalado.
+
+**Verificação.** `verify_320.py` (usuário e dois gastos descartáveis com PNG e PDF gerados na pasta
+local, login pela API, limpeza) + `verify_320_navegador.mjs` (Playwright/Chromium, viewport de
+iPhone): 12/12; contraprova na `main`: 1, 5 e 7 falham. Primeira rodada antes do núcleo: 0/11.
+
+**Pegadinhas.**
+- O "ir ao topo" e a assinatura da rolagem rodam em `useLayoutEffect`, e nada se grava ao desmontar:
+  na troca de tela o navegador já cortou a rolagem para a altura da página nova, e esse valor
+  sobrescreveria a posição boa. O alvo da restauração é lido na montagem, antes de qualquer evento.
+- `setSearchParams` com `replace` troca a `location.key` e apaga o `state` se não for repassado —
+  as listas e a ficha do talento repassam `state: location.state` para não perder a marca `daLista`.
+- Abrir arquivo = PUSH do mesmo endereço com `state.arquivoAberto`; o voltar do navegador fecha. O
+  arquivo aberto vive no React (recarregar não reabre), e a marca órfã é limpa com `replace`.
+- O `manto_local` estava marcado na cabeça (310) sem a migration da 318 (PIX): o lote de 23/10
+  reencadeou as migrations e o espelho já tinha a 310 antiga. Corrigido com `stamp 317` → `upgrade
+  318` → `stamp 310`. Sintoma: login 500 por `site_settings.pix_email_ativo`.
+- Os comprovantes do `manto_local` só existem na produção, e os arquivos soltos em
+  `instance/uploads/expenses` são texto com extensão `.jpg`/`.pdf` — o visualizador mostrou o erro
+  certo; o verify gera os próprios.
+- Em dev, o Vite otimiza o `pdfjs-dist` na primeira importação e recarrega a página (o primeiro PDF
+  pode falhar uma vez); não acontece no build.
+- pdf.js pelo build **legacy** (`pdfjs-dist/legacy/build/pdf.mjs`): o padrão usa
+  `Promise.withResolvers`, que não existe antes do iOS 17.4 (iPhone 8/X ficam no 16).
+- "Baixar" no iPhone: o Safari só aceita `navigator.share` chamado direto do toque — o arquivo é
+  buscado quando o visualizador abre, e erro no compartilhar não cai no `<a download>` (que no app da
+  Tela de Início abriria o arquivo na janela, sem volta).
+- O React Router marca a primeira tela de cada carregamento como "POP": sem cuidado, abrir o app
+  de novo numa lista restaurava a rolagem de uma visita antiga. Só é "voltar" depois de alguma
+  navegação no carregamento (`useChegouPeloHistorico`).
+- Achado de passagem: "Ver comprovante" dos gastos vinculados no detalhe do evento estava quebrado
+  desde sempre — a API manda `receipt_path` relativo ("expenses/…") e o link abria
+  `/events/<id>/expenses/…`. Corrigido no front com o prefixo `/uploads/`.
 ### 314 — Gastos Extras na tela inteira, com filtros e os pagos recolhidos   (314-gastos-extras-filtros · 2026-10-27 · sem migration)
 
 > **EM PRODUÇÃO desde 27/10/2026 ~19h** pelo merge `merge: 314 — …` sobre a `main` `e60aae53`, a pedido do dono,

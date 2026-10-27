@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { DA_LISTA } from "../lib/navegacao";
 import { Badge, Button, CopyButton, Skeleton, Table, TableCell, TableRow } from "@manto/ui";
 import {
   useEmailBounces,
@@ -57,6 +58,7 @@ function BounceRow({ item }: { item: EmailBounceItem }) {
         {item.talent_id ? (
           <Link
             to={`/talents/${item.talent_id}`}
+            state={DA_LISTA}
             className="font-medium text-ink hover:text-accent hover:underline"
           >
             {item.talent_name}

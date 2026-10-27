@@ -6,6 +6,7 @@ import {
   useRejectTalent,
   type TalentSummary,
 } from "../lib/talents";
+import { DA_LISTA } from "../lib/navegacao";
 
 const WARNING_COLORS: Record<string, string> = {
   leve: "bg-gold",
@@ -28,7 +29,11 @@ function MosaicCard({ talent, isPending }: { talent: TalentSummary; isPending: b
 
   return (
     <div className="overflow-hidden rounded-lg border border-line bg-panel shadow-sm">
-      <Link to={`/talents/${talent.id}`} className="group relative block aspect-[3/4] bg-surface-2">
+      <Link
+        to={`/talents/${talent.id}`}
+        state={DA_LISTA}
+        className="group relative block aspect-[3/4] bg-surface-2"
+      >
         <Foto
           // Grade `2 / sm 3 / md 4 / xl 5 / 2xl 6` colunas (abaixo): o card tem ~200-270px, e
           // baixar a foto de rosto inteira para isso era ~6× de área jogada fora (feature 270).

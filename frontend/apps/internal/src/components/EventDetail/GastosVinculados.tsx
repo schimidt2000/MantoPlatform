@@ -1,6 +1,6 @@
-import { assetUrl } from "@manto/api-client";
 import type { EventGasto } from "../../lib/agenda";
 import { brl, formatDay } from "./parts";
+import { LinkDeArquivo } from "../ArquivoViewer";
 
 /**
  * "Gastos extras vinculados (aprovados)" (FR-061): a lista que o `KpiGrid` mostra no evento vivo e
@@ -25,14 +25,15 @@ export function GastosVinculados({ gastos }: { gastos: EventGasto[] }) {
               <span className="text-xs text-muted tabular-nums">{formatDay(gasto.expense_date)}</span>
               <span className="tabular-nums text-ink">{brl(gasto.amount)}</span>
               {gasto.receipt_path && (
-                <a
-                  href={assetUrl(gasto.receipt_path)}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                // `receipt_path` do gasto extra é relativo à pasta de uploads ("expenses/…"), ao
+                // contrário dos outros arquivos do evento; sem o prefixo o link abria
+                // `/events/<id>/expenses/…` (feature 320).
+                <LinkDeArquivo
+                  caminho={`/uploads/${gasto.receipt_path}`}
                   className="text-blue underline"
                 >
                   Ver comprovante
-                </a>
+                </LinkDeArquivo>
               )}
             </span>
           </li>

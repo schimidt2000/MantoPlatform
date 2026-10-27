@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
+import { useLocation, useParams, useSearchParams, Link } from "react-router-dom";
 import {
   Button,
   Card,
@@ -28,6 +28,8 @@ import {
   type TalentPortalConta,
   type TalentUpdateInput,
 } from "../lib/talents";
+import { LinkVoltarParaLista, useVoltarParaLista } from "../lib/navegacao";
+import { LinkDeArquivo } from "../components/ArquivoViewer";
 
 function brl(v: number | null | undefined): string {
   return `R$ ${formatBRL(v ?? 0)}`;
@@ -258,7 +260,8 @@ function AcessoAoPortal({
 export function TalentDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
-  const navigate = useNavigate();
+  const location = useLocation();
+  const voltarAosPendentes = useVoltarParaLista("/talents?status=pending");
   const [searchParams, setSearchParams] = useSearchParams();
   const mode: "read" | "edit" = searchParams.get("edit") === "1" ? "edit" : "read";
   const setMode = (next: "read" | "edit") => {
@@ -269,7 +272,8 @@ export function TalentDetailPage() {
         else sp.delete("edit");
         return sp;
       },
-      { replace: true },
+      // `state` junto: a marca "veio da lista" não pode se perder ao entrar/sair da edição.
+      { replace: true, state: location.state },
     );
   };
 
@@ -344,9 +348,10 @@ export function TalentDetailPage() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <Button asChild variant="ghost" size="sm" className="mb-2 -ml-2">
-            <Link to={`/talents${t.status === "pending" ? "?status=pending" : ""}`}>
+            {/* Veio da lista: volta no mesmo ponto, com busca e filtros (feature 320). */}
+            <LinkVoltarParaLista to={`/talents${t.status === "pending" ? "?status=pending" : ""}`}>
               ‹ {t.status === "pending" ? "Talentos pendentes" : "Talentos ativos"}
-            </Link>
+            </LinkVoltarParaLista>
           </Button>
           <h1 className="text-2xl font-semibold text-ink">{t.full_name}</h1>
           {t.artistic_name && <p className="text-sm text-muted">{t.artistic_name}</p>}
@@ -398,7 +403,7 @@ export function TalentDetailPage() {
               loading={reject.isPending}
               onClick={() => {
                 if (window.confirm(`Rejeitar o cadastro de "${t.full_name}"? Isso exclui o registro.`)) {
-                  reject.mutate(id, { onSuccess: () => navigate("/talents?status=pending") });
+                  reject.mutate(id, { onSuccess: voltarAosPendentes });
                 }
               }}
             >
@@ -495,14 +500,12 @@ export function TalentDetailPage() {
                 />
               </div>
             ) : t.doc_photo_path && t.doc_photo_path.toLowerCase().endsWith(".pdf") ? (
-              <a
-                href={assetUrl(t.doc_photo_path)}
-                target="_blank"
-                rel="noopener noreferrer"
+              <LinkDeArquivo
+                caminho={t.doc_photo_path}
                 className="text-sm text-blue underline"
               >
-                Abrir PDF
-              </a>
+                Ver PDF
+              </LinkDeArquivo>
             ) : t.doc_photo_path ? (
               <Foto
                 src={assetUrl(t.doc_photo_path)}
@@ -674,14 +677,12 @@ export function TalentDetailPage() {
                   <>
                     <dt className="text-muted">Documento</dt>
                     <dd>
-                      <a
-                        href={assetUrl(t.doc_photo_path)}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <LinkDeArquivo
+                        caminho={t.doc_photo_path}
                         className="text-blue underline"
                       >
-                        Abrir PDF
-                      </a>
+                        Ver PDF
+                      </LinkDeArquivo>
                     </dd>
                   </>
                 )}

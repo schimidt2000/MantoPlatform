@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { FileText, Link2, Pencil, Trash2 } from "lucide-react";
 import { Button, ConfirmDialog, cn } from "@manto/ui";
 import { SeloSituacao } from "../SeloSituacao";
+import { LinkDeArquivo } from "../ArquivoViewer";
 import { brl } from "../../lib/pagamentos";
 import {
   SITUACAO_LABELS,
@@ -199,15 +200,13 @@ function AcoesDoGasto({ expense, canManage, onEdit, compacto, onToggleLink }: Ac
   const verNota = expense.receipt_url ? (
     compacto ? (
       <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0">
-        <a href={expense.receipt_url} target="_blank" rel="noreferrer" aria-label="Ver nota fiscal" title="Ver nota fiscal">
+        <LinkDeArquivo caminho={expense.receipt_url} aria-label="Ver nota fiscal" title="Ver nota fiscal">
           <FileText className="h-4 w-4" aria-hidden />
-        </a>
+        </LinkDeArquivo>
       </Button>
     ) : (
       <Button asChild size="sm" variant="outline">
-        <a href={expense.receipt_url} target="_blank" rel="noreferrer">
-          Ver nota fiscal
-        </a>
+        <LinkDeArquivo caminho={expense.receipt_url}>Ver nota fiscal</LinkDeArquivo>
       </Button>
     )
   ) : null;

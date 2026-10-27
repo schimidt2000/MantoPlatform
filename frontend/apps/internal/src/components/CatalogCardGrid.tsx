@@ -1,8 +1,9 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { assetUrl } from "@manto/api-client";
 import { Card, CardContent, Foto } from "@manto/ui";
 import { KebabMenu } from "./KebabMenu";
 import type { CatalogListItem } from "../lib/adminCatalogo";
+import { DA_LISTA } from "../lib/navegacao";
 
 interface CatalogCardGridProps {
   items: CatalogListItem[];
@@ -25,6 +26,7 @@ export function CatalogCardGrid({
   onToggleActive,
   onDelete,
 }: CatalogCardGridProps) {
+  const navigate = useNavigate();
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
       {items.map((item) => (
@@ -53,6 +55,7 @@ export function CatalogCardGrid({
               <div className="flex items-start justify-between gap-2">
                 <Link
                   to={`/admin/catalogo/${item.id}/editar`}
+                  state={DA_LISTA}
                   className="font-medium text-ink hover:underline"
                 >
                   {item.name}
@@ -60,7 +63,12 @@ export function CatalogCardGrid({
                 <KebabMenu
                   label={`Mais ações para ${item.name}`}
                   items={[
-                    { label: "Editar", onClick: () => window.location.assign(`/admin/catalogo/${item.id}/editar`) },
+                    // `navigate`, não `window.location`: recarregar o app jogava fora a lista e o lugar
+                    // dela (feature 320).
+                    {
+                      label: "Editar",
+                      onClick: () => navigate(`/admin/catalogo/${item.id}/editar`, { state: DA_LISTA }),
+                    },
                     { label: item.is_active ? "Inativar" : "Ativar", onClick: () => onToggleActive(item) },
                     { label: "Excluir", onClick: () => onDelete(item), destructive: true },
                   ]}

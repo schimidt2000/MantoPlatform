@@ -7,6 +7,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import { cn } from "../lib/cn";
+import { estaComoAppInstalado } from "../lib/app-instalado";
 
 /** Item de navegação do shell — `active` é calculado pelo app (o pacote não conhece o router). */
 export interface NavItemData {
@@ -89,6 +90,8 @@ function SidebarNav({
   renderLink,
   onNavigate,
 }: Pick<AppLayoutProps, "sections" | "renderLink"> & { onNavigate: () => void }) {
+  // O modo da janela não muda com ela aberta: lê uma vez.
+  const [comoApp] = useState(estaComoAppInstalado);
   return (
     <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-4">
       {sections.map((section, index) => (
@@ -103,12 +106,14 @@ function SidebarNav({
           )}
           {section.items.map((item) =>
             item.external ? (
+              // No app instalado (iPhone pela Tela de Início) "outra aba" vira uma janela sem saída:
+              // abre na mesma janela, e o catálogo mostra "← Voltar ao sistema" (feature 320).
               <a
                 key={item.key}
                 href={item.href}
-                target="_blank"
+                target={comoApp ? undefined : "_blank"}
                 rel="noopener"
-                title={item.hint}
+                title={comoApp ? undefined : item.hint}
                 className={navItemClass(item.active)}
               >
                 <NavItemContent item={item} />
