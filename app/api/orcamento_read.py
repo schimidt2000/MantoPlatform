@@ -146,7 +146,19 @@ def _entry_summary(e: OrcamentoHistory, evento: Any = None, *, is_sa: bool = Fal
         "has_show": e.has_show,
         "user_name": e.user.name if e.user else None,
         "pode_excluir": bool(is_sa or e.user_id == current_user.id),
+        # Feature 313: o selo "−N%" — o desconto aplicado, lido do snapshot (um `json.loads` por linha, até 300).
+        "desconto_pct": _desconto_do_snapshot(e.form_snapshot),
     }
+
+
+def _desconto_do_snapshot(form_snapshot: str | None) -> float | None:
+    """O % de desconto aplicado a um orçamento salvo (feature 313), ou ``None`` sem desconto / snapshot ilegível."""
+    try:
+        snap = json.loads(form_snapshot or "{}")
+        d = float(snap.get("desconto_aplicado") or 0) if isinstance(snap, dict) else 0.0
+    except (TypeError, ValueError):
+        return None
+    return d if 0 < d < 100 else None
 
 
 @api_bp.route("/orcamento/historico")

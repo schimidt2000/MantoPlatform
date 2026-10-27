@@ -151,7 +151,9 @@ def _suppress_calendar_event_writes() -> bool:
     produção o importaria 5 minutos depois.
 
     Cobre a devolução e, desde a feature 306, a remoção do cancelamento (os dias e os ensaios do
-    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). A sincronização, a
+    ato, ``cancel_ops._remover_do_google``; travado, o ato só avisa na tela). Desde a 310, também
+    a criação e a remoção do evento de venda da loja virtual (``virtuais_ops._criar_evento_google``
+    e o cancelamento de pedido pago): travado, a venda existe com id local e sala pendente. A sincronização, a
     limpeza e o "Sincronizar" de um evento continuam lendo o Google real no ambiente local, e
     criar, editar e excluir evento continuam escrevendo sem trava (dívida registrada no
     ``docs/05``). O núcleo lê a chave de
@@ -165,6 +167,47 @@ def _suppress_calendar_event_writes() -> bool:
     if os.getenv("CALENDAR_SUPPRESS_EVENT_WRITES", "").lower() == "true":
         return True
     if os.getenv("CALENDAR_ALLOW_LOCAL_EVENT_WRITES", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
+def _suppress_clicksign() -> bool:
+    """Decide se este processo está proibido de falar com a ClickSign real (feature 317).
+
+    O token não vem do banco (só da env), mas o ``.env`` da máquina do dono tem o token de
+    produção, e a cópia local (``manto_local``) tem as vendas de verdade: sem a trava, um verify
+    ou uma sincronização local leria a conta real e anexaria PDF de cliente no espelho — e o
+    comando de cadastro do aviso apontaria a ClickSign para uma URL local. Princípio XIV: a
+    trava nasce no mesmo commit do cliente HTTP.
+
+    ``CLICKSIGN_SUPPRESS_CALLS=true`` trava em qualquer ambiente;
+    ``CLICKSIGN_ALLOW_LOCAL_CALLS=true`` libera o local (o ensaio só leitura do quickstart §2).
+    O núcleo relê a chave de ``current_app.config`` a cada chamada; chave ausente = travado.
+    """
+    if os.getenv("CLICKSIGN_SUPPRESS_CALLS", "").lower() == "true":
+        return True
+    if os.getenv("CLICKSIGN_ALLOW_LOCAL_CALLS", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
+def _suppress_infinitepay() -> bool:
+    """Decide se este processo está proibido de falar com a InfinitePay (feature 310, XIV).
+
+    O `manto_local` é espelho da produção e traz a InfiniteTag e o segredo do aviso reais; o
+    `PUBLIC_BASE_URL` local resolve para a produção. Sem esta trava, reservar na cópia local criava
+    um link de pagamento de verdade, com o aviso apontando para a produção, e a varredura local
+    reconsultava e efetivava pedidos reais. Cobre criar link e reconsultar; o cliente lê a chave a
+    cada chamada (chave ausente = travado).
+
+    ``INFINITEPAY_SUPPRESS_CALLS=true`` trava em qualquer ambiente;
+    ``INFINITEPAY_ALLOW_LOCAL_CALLS=true`` libera o local — e então cobra de verdade.
+    """
+    if os.getenv("INFINITEPAY_SUPPRESS_CALLS", "").lower() == "true":
+        return True
+    if os.getenv("INFINITEPAY_ALLOW_LOCAL_CALLS", "").lower() == "true":
         return False
     db_url = _db_url()
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
@@ -280,6 +323,18 @@ class Config:
     # larga o bastante para o passivo entrar na primeira execução.
     EMAIL_BOUNCE_LOOKBACK_DAYS = int(os.getenv("EMAIL_BOUNCE_LOOKBACK_DAYS", "90"))
 
+    # PIX recebido por e-mail (feature 318). Mesma conta e mesma App Password do bounce, por IMAP e
+    # só leitura. Mesma guarda: DESLIGADO onde o e-mail é suprimido (banco local), senão um processo
+    # apontado para o espelho leria a caixa real e ligaria PIX a vendas do espelho. Em produção
+    # ainda depende do interruptor da tela (`SiteSetting.pix_email_ativo`, nasce desligado).
+    PIX_EMAIL_SWEEP_ENABLED = os.getenv(
+        "PIX_EMAIL_SWEEP_ENABLED",
+        "false" if _suppress_mail() else "true",
+    ).lower() == "true"
+    PIX_EMAIL_SWEEP_INTERVAL = int(os.getenv("PIX_EMAIL_SWEEP_INTERVAL", "900"))
+    # Janela da busca na caixa. Reler é inofensivo (`message_id` é único).
+    PIX_EMAIL_LOOKBACK_DAYS = int(os.getenv("PIX_EMAIL_LOOKBACK_DAYS", "3"))
+
     # Cobrança automática de confirmação de convite (feature 231). Mesma guarda do bounce: fica
     # DESLIGADA quando o ambiente já suprime e-mail (banco local), senão um processo apontado para
     # o espelho cobraria artista de verdade por evento que já aconteceu. A regra de quem recebe e
@@ -317,6 +372,32 @@ class Config:
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
+
+    # ClickSign (feature 317). O token SÓ vem da env (`render.yaml`, `sync: false`): o
+    # `SiteSetting` vai inteiro para o backup no Drive e para o `manto_local`, então segredo de API
+    # não mora lá (a coluna antiga `clicksign_token` fica inerte). Sem token, a integração fica
+    # desligada e a subida avisa no log. O host vai junto do token: token de sandbox com host de
+    # produção dá 401 em silêncio.
+    CLICKSIGN_ACCESS_TOKEN = os.getenv("CLICKSIGN_ACCESS_TOKEN", "").strip()
+    CLICKSIGN_API_BASE = os.getenv("CLICKSIGN_API_BASE", "https://app.clicksign.com/api/v3").rstrip("/")
+    CLICKSIGN_SUPPRESS_CALLS = _suppress_clicksign()
+    # Conferência periódica (cobre aviso perdido em deploy): 30 min, 1–2 requisições por passada.
+    CLICKSIGN_SYNC_ENABLED = os.getenv("CLICKSIGN_SYNC_ENABLED", "true").lower() == "true"
+    CLICKSIGN_SYNC_INTERVAL = int(os.getenv("CLICKSIGN_SYNC_INTERVAL", "1800"))
+    # Costura do verify: processa o aviso na própria requisição em vez de numa thread.
+    CLICKSIGN_AVISO_SINCRONO = os.getenv("CLICKSIGN_AVISO_SINCRONO", "").lower() == "true"
+    # Trava da InfinitePay fora da produção (feature 310). Ver `_suppress_infinitepay`.
+    INFINITEPAY_SUPPRESS_CALLS = _suppress_infinitepay()
+    # API Key da InfinitePay (feature 310, R12). Opcional e SEGREDO: só por variável de ambiente
+    # (`render.yaml` com `sync: false`), nunca no SiteSetting, que vai para o backup e para o
+    # espelho. Vazia = fluxo legado provado em produção (link sem validade); com valor, o link vence
+    # junto com a reserva e aceita um pagamento só.
+    INFINITEPAY_API_KEY = os.getenv("INFINITEPAY_API_KEY", "").strip()
+    # Segredo entre o Node e o Flask (feature 310, revisão): só a requisição que traz este valor
+    # em `X-Manto-Proxy-Secret` tem o `X-Manto-Client-Ip` aceito. O backend tem URL pública
+    # (*.onrender.com); sem a prova, quem chamasse direto trocava o cabeçalho a cada requisição e
+    # escapava de todo limite — o de login inclusive. Mesmo valor nos dois serviços do Render.
+    MANTO_PROXY_SECRET = os.getenv("MANTO_PROXY_SECRET", "").strip()
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

@@ -315,6 +315,41 @@ def api_virtuais_concluir_devolucao(refund_id: int) -> Any:
     return jsonify(ops.serialize_refund(refund))
 
 
+@api_bp.route("/virtuais/pagamentos-a-conferir/<tipo>/<int:item_id>", methods=["PATCH"])
+@api_login_required
+def api_virtuais_resolver_a_conferir(tipo: str, item_id: int) -> Any:
+    """Marca um pagamento "a conferir" como resolvido (feature 310, R-07): irreversível."""
+    denied = require_virtuais_access()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    if data.get("resolvido") is not True:
+        return json_error("Envie resolvido: true.", 400, fields={"resolvido": "Obrigatório."})
+    if not ops.resolver_a_conferir(tipo, item_id, quem=current_user.name or "",
+                                   nota=str(data.get("nota") or "")):
+        return json_error("Item não encontrado", 404)
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/virtuais/pedidos/<int:order_id>/cancelar", methods=["POST"])
+@api_login_required
+def api_virtuais_cancelar_pedido(order_id: int) -> Any:
+    """Cancela um pedido pago e abre a devolução (feature 310, FR-034)."""
+    denied = require_virtuais_access()
+    if denied:
+        return denied
+    data = request.get_json(silent=True) or {}
+    try:
+        devolucao = ops.cancelar_pedido_pago(
+            order_id, motivo=str(data.get("motivo") or "")[:300], quem=current_user.name or ""
+        )
+    except ops.VirtuaisValidationError as exc:
+        return json_error(exc.message, 400, fields={exc.field: exc.message})
+    except ops.VirtuaisConflitoError as exc:
+        return json_error(str(exc), 409)
+    return jsonify({"refund": ops.serialize_refund(devolucao)})
+
+
 @api_bp.route("/virtuais/horarios/<int:slot_id>", methods=["DELETE"])
 @api_login_required
 def api_virtuais_remover_horario(slot_id: int) -> Any:

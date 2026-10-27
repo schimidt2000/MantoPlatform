@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useMemo, useRef, useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AvatarThumb, Combobox } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -9,6 +9,11 @@ import {
   apiMoneyToNumber,
   fieldErrorsFrom,
   getClientToken,
+  lembrarReservaDaAba,
+  renovarClientToken,
+  tokenDaAbaPara,
+  useAbandonarReserva,
+  useContagemDeSegundos,
   useCampanhaVirtual,
   useHorariosVirtuais,
   useReservar,
@@ -72,30 +77,6 @@ function rotuloDoDia(dia: string): string {
   return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
-/** Conta o tempo restante do soft lock (FR-019). */
-function useContagemRegressiva(ate: string | null): string | null {
-  const [restante, setRestante] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!ate) {
-      setRestante(null);
-      return;
-    }
-    const alvo = new Date(ate).getTime();
-    const tick = () => {
-      const segundos = Math.max(0, Math.floor((alvo - Date.now()) / 1000));
-      const m = String(Math.floor(segundos / 60)).padStart(2, "0");
-      const s = String(segundos % 60).padStart(2, "0");
-      setRestante(`${m}:${s}`);
-    };
-    tick();
-    const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
-  }, [ate]);
-
-  return restante;
-}
-
 export function CampanhaVirtualPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -119,9 +100,13 @@ export function CampanhaVirtualPage() {
   const [endereco, setEndereco] = useState("");
   const [erros, setErros] = useState<Record<string, string>>({});
   const [avisoTopo, setAvisoTopo] = useState<string | null>(null);
+  // 429 do mesmo telefone: o servidor manda o token da reserva que já existe, para a família
+  // retomar ou abandonar (FR-020a da 205) — antes só lia "abandone-a" sem ter como.
+  const [reservaExistente, setReservaExistente] = useState<string | null>(null);
+  const abandonar = useAbandonarReserva();
 
   const refs = useRef<Record<string, HTMLElement | null>>({});
-  const lockRestante = useContagemRegressiva(reservar.data?.locked_until ?? null);
+  const lockRestante = useContagemDeSegundos(reservar.data?.seconds_left);
 
   const precoInteracao = useMemo(() => {
     if (!campanha) return 0;
@@ -147,6 +132,7 @@ export function CampanhaVirtualPage() {
   const enviar = () => {
     setErros({});
     setAvisoTopo(null);
+    setReservaExistente(null);
     reservar.mutate(
       {
         modality: modalidade,
@@ -162,6 +148,10 @@ export function CampanhaVirtualPage() {
       },
       {
         onSuccess: (data) => {
+          // Feature 310 (FR-036): a próxima reserva nesta aba (outro horário, o irmão) é um
+          // pedido novo, não o link deste. Antes de trocar, guarda a prova para "abandonar".
+          lembrarReservaDaAba(data.public_token, getClientToken());
+          renovarClientToken();
           // O link da operadora abre em seguida; a família volta para a página do pedido.
           if (data.payment_url) window.location.href = data.payment_url;
           else navigate(`/v/pedido/${data.public_token}`);
@@ -182,13 +172,16 @@ export function CampanhaVirtualPage() {
           const status = (erro as { status?: number }).status;
           if (status === 409) {
             setAvisoTopo(
-              erro.message || "Esse horário acabou de ser reservado. Escolha outro, por favor.",
+              erro.message || "Este horário acabou de ser reservado. Escolha outro, por favor.",
             );
             setSlotId(null);
             void recarregarHorarios();
           } else if (status === 429) {
             setAvisoTopo(erro.message);
-          } else if (status === 502) {
+            const existente = (erro as { details?: Record<string, unknown> }).details
+              ?.existing_order_token;
+            setReservaExistente(typeof existente === "string" ? existente : null);
+          } else if (status === 502 || status === 503) {
             setAvisoTopo(erro.message);
           }
         },
@@ -281,6 +274,38 @@ export function CampanhaVirtualPage() {
             role="status"
           >
             {avisoTopo}
+            {reservaExistente && (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <Link to={`/v/pedido/${reservaExistente}`} className={BOTAO_SECUNDARIO}>
+                  Ver a reserva que já tenho
+                </Link>
+                {/* Só a aba que criou a reserva tem a prova para abandoná-la. */}
+                {tokenDaAbaPara(reservaExistente) && (
+                  <button
+                    type="button"
+                    className={BOTAO_SECUNDARIO}
+                    disabled={abandonar.isPending}
+                    onClick={() =>
+                      abandonar.mutate(
+                        {
+                          token: reservaExistente,
+                          clientToken: tokenDaAbaPara(reservaExistente) ?? "",
+                        },
+                        {
+                          onSuccess: () => enviar(),
+                          onError: (erro) => {
+                            setReservaExistente(null);
+                            setAvisoTopo(erro.message);
+                          },
+                        },
+                      )
+                    }
+                  >
+                    {abandonar.isPending ? "Abandonando…" : "Abandonar e reservar este"}
+                  </button>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

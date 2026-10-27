@@ -34,7 +34,7 @@ export function NewCommentForm({ playerRef, onSubmit, isPending }: NewCommentFor
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted">
           {capturedTime != null
-            ? `Comentário será marcado em @ ${formatTimecode(capturedTime)}`
+            ? `O comentário será marcado em @ ${formatTimecode(capturedTime)}`
             : "Clique no campo para marcar o ponto atual do vídeo."}
         </p>
         {capturedTime != null && (

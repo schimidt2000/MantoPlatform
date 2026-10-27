@@ -33,10 +33,11 @@ from flask_login import current_user
 from app.api import api_bp
 from app.api.agenda_read import serialize_event_detail
 from app.api_utils import api_login_required, json_error, trava_do_cancelado
-from app.constants import CLIENT_RELATION_TIPOS, RoleName
+from app.constants import CLIENT_RELATION_TIPOS, EVENT_PAYMENT_ORIGEM_PIX, RoleName
 from app.models import (
     CalendarEvent,
     Client,
+    ContaRecebimento,
     EventContract,
     EventLog,
     EventObservation,
@@ -327,7 +328,7 @@ def api_delete_role(role_id: int) -> Any:
         event, role, is_superadmin=is_superadmin, actor_name=current_user.name, tz=_TZ_SP
     )
     if not removed:
-        return json_error("Cargo com convite aceito só pode ser removido por um superadmin", 403)
+        return json_error("Cargo com convite aceito só pode ser removido pelo Superadmin", 403)
     return _event_detail_json(event)
 
 
@@ -574,7 +575,7 @@ def api_add_observation(event_id: int) -> Any:
     if obs_type not in ("text", "link", "image"):
         return json_error("Tipo de observação inválido", 400, {"obs_type": "Use texto, link ou imagem"})
     if obs_type == "image" and not (file_storage and file_storage.filename):
-        return json_error("Anexe uma imagem para a observação", 400, {"image": "Obrigatório"})
+        return json_error("Insira a imagem da observação", 400, {"image": "Obrigatório"})
 
     from app.calendar.observation_ops import add_observation
     from app.calendar.routes import _save_file_upload
@@ -700,6 +701,10 @@ def api_delete_event(event_id: int) -> Any:
             409,
         )
 
+    from app.calendar import solicitacao_ops
+
+    # Feature 315: quem pediu é respondido depois do commit — o objeto morre nele.
+    pedido = solicitacao_ops.pedido_antes_da_exclusao(event)
     try:
         deleted, aviso = _delete_event_flow(
             event,
@@ -715,6 +720,7 @@ def api_delete_event(event_id: int) -> Any:
         return json_error(
             "Desagrupe os eventos satélites antes de excluir este evento", 409
         )
+    solicitacao_ops.responder_na_exclusao(pedido, quem_excluiu_id=current_user.id)
     return jsonify({"ok": True, "aviso": aviso})
 
 
@@ -905,48 +911,63 @@ def api_devolver_ao_google(event_id: int) -> Any:
     return jsonify(result)
 
 
+@api_bp.route("/events/<int:event_id>/pedido-cancelamento", methods=["POST"])
 @api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["POST"])
 @api_login_required
 def api_solicitar_exclusao(event_id: int) -> Any:
-    """Comercial pede a exclusão; o Superadmin decide (feature 224). Corpo: `{motivo}`."""
+    """O Comercial pede o cancelamento; só o Superadmin decide (features 224 e 315).
+
+    RBAC: Comercial ou Superadmin pelo papel real (`_can_request_delete`). Corpo (contracts):
+    `{motivo, alcance?, devolucao: {modo, valor?, nome?, pix?}, venda_nova?}`. O caminho velho
+    (`/solicitar-exclusao`, o bundle de antes do deploy) aceita o corpo só com o motivo. Recusas
+    pelo envelope do cancelado (`codigo`: cancelado, ensaio, cache_pago, pedido_pendente; 400 por
+    campo). 200: o detalhe do evento.
+    """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
     if not _can_request_delete():
         return json_error("Sem permissão", 403)
-    # Converge (312): o cancelado é só consulta — a trava, com o código que recarrega a tela.
-    negado = trava_do_cancelado(event)
-    if negado:
-        return negado
 
-    from app.calendar.cancel_ops import CancelValidationError, solicitar_exclusao
+    from app.calendar import solicitacao_ops
+    from app.calendar.cancel_ops import CancelValidationError
 
-    body = request.get_json(silent=True) or {}
+    caminho_velho = bool(request.url_rule and request.url_rule.rule.endswith("/solicitar-exclusao"))
     try:
-        solicitar_exclusao(event, motivo=body.get("motivo") or "", actor=current_user)
+        solicitacao_ops.solicitar(
+            event, request.get_json(silent=True), current_user, caminho_velho=caminho_velho
+        )
     except CancelValidationError as exc:
-        return json_error(exc.message, 400, fields={"motivo": exc.message})
-    return jsonify({"ok": True})
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    return jsonify(serialize_event_detail(event, current_user, session.get("impersonate_role")))
 
 
+@api_bp.route("/events/<int:event_id>/pedido-cancelamento", methods=["DELETE"])
 @api_bp.route("/events/<int:event_id>/solicitar-exclusao", methods=["DELETE"])
 @api_login_required
 def api_recusar_solicitacao(event_id: int) -> Any:
-    """Superadmin recusa a solicitação de exclusão (feature 224)."""
+    """O Superadmin recusa o pedido de cancelamento (features 224 e 315). Corpo: `{motivo?}`.
+
+    RBAC: só Superadmin pelo papel real (`_can_delete`) — o autor do pedido também leva 403 (Q5 = D).
+    409 `sem_pedido` quando outra decisão já fechou o pedido. 200: o detalhe do evento.
+    """
     event = CalendarEvent.query.get(event_id)
     if event is None:
         return json_error("Evento não encontrado", 404)
     if not _can_delete():
         return json_error("Sem permissão", 403)
 
-    from app.calendar.cancel_ops import CancelValidationError, recusar_solicitacao
+    from app.calendar import solicitacao_ops
+    from app.calendar.cancel_ops import CancelValidationError
 
     body = request.get_json(silent=True) or {}
     try:
-        recusar_solicitacao(event, actor=current_user, motivo=body.get("motivo") or "")
+        solicitacao_ops.recusar(event, actor=current_user, motivo=body.get("motivo") or "")
     except CancelValidationError as exc:
-        return json_error(exc.message, 400)
-    return jsonify({"ok": True})
+        db.session.rollback()
+        return _recusa_do_cancelado(exc)
+    return jsonify(serialize_event_detail(event, current_user, session.get("impersonate_role")))
 
 
 @api_bp.route("/events/cancelamentos")
@@ -982,8 +1003,17 @@ def api_listar_cancelamentos() -> Any:
         erros["devolucao"] = "Situação da devolução desconhecida."
     if erros:
         return json_error("Corrija os filtros.", 400, fields=erros)
-    flags = _role_flags(current_user, session.get("impersonate_role"))
-    return jsonify(listar_cancelamentos(flags=flags, mes=mes, devolucao=devolucao))
+    impersonate = session.get("impersonate_role")
+    flags = _role_flags(current_user, impersonate)
+    return jsonify(
+        listar_cancelamentos(
+            flags=flags,
+            mes=mes,
+            devolucao=devolucao,
+            usuario=current_user,
+            impersonando=bool(impersonate),
+        )
+    )
 
 
 @api_bp.route("/events/<int:event_id>/sync", methods=["POST"])
@@ -1245,7 +1275,7 @@ def api_create_event() -> Any:
         outro = outro_evento_vivo_do_orcamento(orc_id, exceto_event_id=None)
         if outro is not None:
             return json_error(
-                f"Esse orçamento já virou o evento #{outro.id} ({outro.title}). "
+                f"Este orçamento já virou o evento #{outro.id} ({outro.title}). "
                 "Abra-o pelo histórico (Ver evento) ou cancele-o antes de criar outro.",
                 409,
                 event_id=outro.id,
@@ -1762,7 +1792,7 @@ def api_set_event_orcamento(event_id: int) -> Any:
             autor = (atual.user.name if atual.user else None) or "Vendedor não identificado"
             return json_error(
                 f"Este evento está vinculado ao orçamento de {autor}; "
-                "só ele ou o superadmin podem trocar, desvincular ou re-aplicar.",
+                "só ele ou o Superadmin podem trocar, desvincular ou reaplicar.",
                 409,
                 orcamento_de_outro=True,
             )
@@ -1795,7 +1825,7 @@ def api_set_event_orcamento(event_id: int) -> Any:
     except OrcamentoJaVinculado as exc:
         db.session.rollback()
         return json_error(
-            "Esse orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
+            "Este orçamento já está vinculado a outro evento.", 409, event_id=exc.event_id
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -2106,7 +2136,7 @@ def api_delete_contract(contract_id: int) -> Any:
     if contract is None:
         return json_error("Contrato não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir contratos", 403)
+        return json_error("Apenas o Superadmin pode excluir contratos", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
     negado = trava_do_cancelado(event)
@@ -2129,7 +2159,7 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
     if contract is None:
         return json_error("Contrato não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode alterar o status do contrato", 403)
+        return json_error("Apenas o Superadmin pode alterar a situação do contrato", 403)
     event = CalendarEvent.query.get(contract.event_id)
 
     negado = trava_do_cancelado(event)
@@ -2140,6 +2170,25 @@ def api_toggle_contract_signed(contract_id: int) -> Any:
     _toggle_contract_signed(contract)
     db.session.commit()
     return _event_detail_json(event)
+
+
+def _int_or_none(valor: Any) -> int | None:
+    try:
+        return int(valor) if valor not in (None, "") else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _pagamento_de_pix_sem_arquivo_do_grupo(event: CalendarEvent, pagamento: EventPayment) -> bool:
+    from app.financeiro.cobranca_ops import principal_da_venda
+
+    principal = principal_da_venda(event)
+    ids = {principal.id, *(e.id for e in principal.satellites or [])}
+    return (
+        pagamento.origem == EVENT_PAYMENT_ORIGEM_PIX
+        and not pagamento.file_path
+        and pagamento.event_id in ids
+    )
 
 
 @api_bp.route("/events/<int:event_id>/payments", methods=["POST"])
@@ -2161,11 +2210,46 @@ def api_add_payment(event_id: int) -> Any:
 
     from app.calendar.cancel_ops import CancelValidationError, gravar_comprovante_no_grupo
 
+    # Feature 318: o PIX lido do aviso do banco pode já ter registrado este pagamento (sem arquivo).
+    # Sem a resposta explícita da tela ("anexar_a" ou "forcar_novo"), um comprovante do mesmo valor
+    # é devolvido como possível duplicata — contar dobrado faria a cobrança parar de cobrar.
+    conta_id = _int_or_none(request.form.get("conta_id"))
+    anexar_a = _int_or_none(request.form.get("anexar_a"))
+    if anexar_a is not None:
+        # Decisão do dono (23/10): incluir o comprovante do PIX é de Comercial, Financeiro e
+        # Superadmin (o POST de comprovante comum segue com `_CAN_EDIT_EVENT`).
+        if not _can_manage_sale():
+            return json_error("Sem permissão", 403)
+        pagamento = db.session.get(EventPayment, anexar_a)
+        if pagamento is None or not _pagamento_de_pix_sem_arquivo_do_grupo(event, pagamento):
+            return json_error("Esse pagamento não aceita anexo.", 400, fields={"anexar_a": "Inválido"})
+        try:
+            gravar_comprovante_no_grupo(
+                event, "anexar", actor=current_user, arquivo=file_storage, comprovante=pagamento
+            )
+        except CancelValidationError as exc:
+            db.session.rollback()
+            return _recusa_do_cancelado(exc)
+        except DBAPIError as exc:
+            return _recusa_do_banco(exc)
+        _log_anexo(event.id, f"Anexou o comprovante ao pagamento de PIX de R$ {pagamento.amount}")
+        db.session.commit()
+        return _event_detail_json(event), 200
+    if conta_id is not None and db.session.get(ContaRecebimento, conta_id) is None:
+        return json_error("Conta não encontrada.", 400, fields={"conta_id": "Inválida"})
+
     # Feature 306 (decisão (c)): o núcleo trava o grupo, recusa o cancelado antes de salvar o
-    # arquivo, grava e refaz o principal cancelado pelo pago do grupo.
+    # arquivo, grava e refaz o principal cancelado pelo pago do grupo. Feature 318: sob a mesma
+    # trava, devolve 409 `possivel_duplicata` se um PIX de mesmo valor já entrou (`checar_pix`).
     try:
         gravar_comprovante_no_grupo(
-            event, "adicionar", actor=current_user, valor=amount, arquivo=file_storage
+            event,
+            "adicionar",
+            actor=current_user,
+            valor=amount,
+            arquivo=file_storage,
+            conta_id=conta_id,
+            checar_pix=request.form.get("forcar_novo") != "1",
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -2189,7 +2273,7 @@ def api_edit_payment(payment_id: int) -> Any:
     if payment is None:
         return json_error("Comprovante não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode editar comprovantes", 403)
+        return json_error("Apenas o Superadmin pode editar comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
 
     body = request.get_json(silent=True) or {}
@@ -2223,8 +2307,18 @@ def api_delete_payment(payment_id: int) -> Any:
     if payment is None:
         return json_error("Comprovante não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir comprovantes", 403)
+        return json_error("Apenas o Superadmin pode excluir comprovantes", 403)
     event = CalendarEvent.query.get(payment.event_id)
+    # Feature 318: pagamento ligado a um PIX lido do banco sai pelo "Desfazer" da tela PIX recebidos
+    # — excluir aqui deixaria o PIX "ligado" sem dinheiro e fora da fila para sempre.
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        return json_error(
+            "Este pagamento veio de um PIX lido do banco: use \"Desfazer\" em PIX recebidos.",
+            409,
+            codigo="pagamento_de_pix",
+        )
 
     from sqlalchemy.exc import DBAPIError
 
@@ -2300,7 +2394,7 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
     if recusa is not None:
         return recusa
     if reimbursement.is_collected:
-        return json_error("Esse reembolso já foi marcado como cobrado", 400)
+        return json_error("Este reembolso já foi marcado como cobrado", 400)
 
     collected_amount = _decimal_from_form(request.form.get("collected_amount"))
     file_storage = request.files.get("file")
@@ -2315,7 +2409,7 @@ def api_collect_reimbursement(reimbursement_id: int) -> Any:
     )
     if not ok:
         return json_error(
-            "Informe o valor recebido e anexe o comprovante para marcar como cobrado.", 400,
+            "Informe o valor recebido e insira o comprovante para marcar como cobrado.", 400,
             {"collected_amount": "Obrigatório", "file": "Obrigatório"},
         )
     _log_anexo(
@@ -2337,7 +2431,7 @@ def api_delete_reimbursement(reimbursement_id: int) -> Any:
     if reimbursement is None:
         return json_error("Reembolso não encontrado", 404)
     if not _is_superadmin():
-        return json_error("Apenas o super admin pode excluir reembolsos", 403)
+        return json_error("Apenas o Superadmin pode excluir reembolsos", 403)
     event = CalendarEvent.query.get(reimbursement.event_id)
 
     from app.calendar.routes import _delete_reimbursement_record
@@ -2394,7 +2488,7 @@ def api_set_role_payment_status(role_id: int) -> Any:
     status = (request.get_json(silent=True) or {}).get("payment_status", "")
     if not set_payment_status(event, role, status=status):
         return json_error(
-            "Status de pagamento inválido.", 400, {"payment_status": "Valor não aceito"}
+            "Situação de pagamento inválida.", 400, {"payment_status": "Valor não aceito"}
         )
     return _event_detail_json(event)
 
@@ -2604,7 +2698,7 @@ def api_create_ensaio(event_id: int) -> Any:
     except CancelValidationError as exc:  # feature 312: show cancelado não ganha ensaio
         return _recusa_do_cancelado(exc)
     except RuntimeError as exc:
-        return json_error(f"Erro ao criar no Google Calendar: {exc}", 502)
+        return json_error(f"Não foi possível criar o ensaio no Google Calendar: {exc}", 502)
     return _event_detail_json(event), 201
 
 

@@ -45,7 +45,7 @@ function LinhaSemValorRow({ linha, podeEditarVenda }: { linha: LinhaSemValor; po
       detalhe={[valor, recebido].filter(Boolean).join(" · ")}
       acoes={
         <Button asChild variant={podeEditarVenda ? "default" : "outline"} size="sm">
-          <Link to={destino}>{podeEditarVenda ? "Pôr o valor" : "Abrir"}</Link>
+          <Link to={destino}>{podeEditarVenda ? "Inserir valor" : "Abrir"}</Link>
         </Button>
       }
     />
@@ -92,7 +92,7 @@ export function PainelSemValor({
       ) : (
         <div className="space-y-3">
           {resumo.a_acontecer.length > 0 && (
-            <GrupoDeLinhas titulo="Ainda vai acontecer" itens={resumo.a_acontecer} chave={(l) => l.event_id}>
+            <GrupoDeLinhas titulo="Ainda por acontecer" itens={resumo.a_acontecer} chave={(l) => l.event_id}>
               {linha}
             </GrupoDeLinhas>
           )}

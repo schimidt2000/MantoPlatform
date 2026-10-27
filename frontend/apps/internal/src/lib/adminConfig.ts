@@ -13,8 +13,12 @@ export interface AdminSettings {
   infinitepay_handle: string;
   /** O token do webhook nunca trafega — só se ele já existe. */
   infinitepay_webhook_configured: boolean;
-  /** Enviar `true` gera um token novo (invalida o endereço anterior). */
+  /** Enviar `true` gera um token novo; o anterior continua aceito por 24 h (feature 310). */
   infinitepay_regenerate_token?: boolean;
+  /** Interruptor da loja (feature 310): desligado, não nasce link novo. Nasce desligado. */
+  virtuais_pagamento_ativo: boolean;
+  /** Pedidos com link aberto — mostrado antes de regerar o segredo (feature 310). */
+  virtuais_pedidos_aguardando?: number;
   tax_rate: number | null;
   fator_r_threshold: number | null;
   manto_address: string;

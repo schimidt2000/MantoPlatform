@@ -1,0 +1,971 @@
+﻿python.exe : C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: 
+RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported 
+version!
+At line:1 char:502
++ ... ONUTF8='1'; & C:\Users\schim\Desktop\Manto_Platform\.venv\Scripts\pyt ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (C:\Users\schim\...ported version!:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  warnings.warn(
+[2026-10-20 15:18:13,533] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br 
+plataforma=https://app.mantoproducoes.com.br
+[2026-10-20 15:18:13,533] INFO in __init__: [infinitepay] travada=True api_key=ausente (link sem validade)
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the 
+in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for 
+production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about 
+configuring the storage backend.
+  warnings.warn(
+[2026-10-20 15:18:14,978] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:255: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+
+── B1 ────────────────────────────────────────────────────────────
+OK        1.0 B conseguiu reservar o horário vencido de A
+[2026-10-20 15:18:15,979] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:15,979] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:15,979] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-09d788dc058e 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:15,979] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:15,979] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:15,979] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-09d788dc058e 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:15,979] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:15,979] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:15,979] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-09d788dc058e 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:15,979] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-78-09d788dc058e 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+FALHA     1.1 A não vira venda (devolução aberta)  [{'id': 507, 'status': 'pago', 'slot_id': 1130, 'event_id': 17883, 'tx': 'tx-c06290-c96882f6', 'slug': 'sl-e7febee8', 'total': Decimal('100.00'), 'unverified': False}]
+OK        1.2 horário continua de B
+[2026-10-20 15:18:16,039] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,039] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:16,039] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-0be3d712b988 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,039] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,039] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:16,039] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-0be3d712b988 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,039] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,039] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 0
+[2026-10-20 15:18:16,039] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-78-0be3d712b988 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,039] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-78-0be3d712b988 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,045] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-78-0be3d712b988'}
+FALHA     1.3 no máximo 1 pago no horário  [2]
+FALHA     1.4 invariantes  [['horário 1130 com 2 pedidos pagos', 'pedido pago 507 com horário vendido/508']]
+[2026-10-20 15:18:16,118] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,118] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 1
+[2026-10-20 15:18:16,119] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-79-5aecbccf923a 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,119] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,119] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 1
+[2026-10-20 15:18:16,119] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-79-5aecbccf923a 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,119] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,119] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 1
+[2026-10-20 15:18:16,119] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-79-5aecbccf923a 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,119] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-79-5aecbccf923a 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,135] INFO in virtuais_ops: [virtuais] reserva 205-79-938636914ecc liberada: lock vencido e 
+cobrança não paga
+FALHA     2.1 nenhum pedido pago com horário livre ou de outro  [['pedido pago 509 com horário livre/None']]
+[2026-10-20 15:18:16,310] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,310] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 2
+[2026-10-20 15:18:16,311] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-80-9396a3f1f7de 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,311] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,311] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 2
+[2026-10-20 15:18:16,311] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-80-9396a3f1f7de 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,311] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,311] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 2
+[2026-10-20 15:18:16,311] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-80-9396a3f1f7de 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,311] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-80-9396a3f1f7de 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,316] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-80-9396a3f1f7de'}
+[2026-10-20 15:18:16,318] INFO in virtuais_ops: [virtuais] reserva 205-80-9396a3f1f7de liberada: lock vencido e 
+cobrança não paga
+FALHA     3.1 A termina pago (venda não regride)  [{'id': 511, 'status': 'expirado', 'slot_id': 1132, 'event_id': 17886, 'tx': 'tx-c06290-9f917786', 'slug': 'sl-0bbed24e', 'total': Decimal('100.00'), 'unverified': False}]
+OK        3.2 invariantes
+[2026-10-20 15:18:16,375] INFO in virtuais_ops: [virtuais] reserva 205-81-174a8be04c3c liberada: lock vencido e 
+cobrança não paga
+[2026-10-20 15:18:16,412] INFO in virtuais_ops: [virtuais] reserva 205-81-102aed94dd34 liberada: lock vencido e 
+cobrança não paga
+[2026-10-20 15:18:16,449] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,449] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,449] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-174a8be04c3c 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,449] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,449] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,449] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-174a8be04c3c 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,449] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,449] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,449] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-174a8be04c3c 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,450] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-81-174a8be04c3c 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,455] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-81-174a8be04c3c'}
+[2026-10-20 15:18:16,488] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,488] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,489] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-102aed94dd34 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,489] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,489] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,489] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-102aed94dd34 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,489] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,489] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 3
+[2026-10-20 15:18:16,489] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-81-102aed94dd34 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,489] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-81-102aed94dd34 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,495] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-81-102aed94dd34'}
+FALHA     4.1 1 pago no horário  [2]
+FALHA     4.2 o outro em devolução  [[] []]
+FALHA     4.3 invariantes  [['horário 1133 com 2 pedidos pagos', 'pedido pago 513 com horário vendido/None', 'pedido pago 512 com horário vendido/None']]
+[2026-10-20 15:18:16,572] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,572] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 4
+[2026-10-20 15:18:16,572] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-82-bbb4b36a79e3 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,572] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,572] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 4
+[2026-10-20 15:18:16,573] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-82-bbb4b36a79e3 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,573] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,573] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 4
+[2026-10-20 15:18:16,573] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-82-bbb4b36a79e3 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,573] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-82-bbb4b36a79e3 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,576] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-82-bbb4b36a79e3'}
+FALHA     5.1 vira devolução horario_passou  [{'id': 514, 'status': 'pago', 'slot_id': 1134, 'event_id': 17889, 'tx': 'tx-c06290-5049b79d', 'slug': 'sl-b61bc906', 'total': Decimal('100.00'), 'unverified': False} []]
+[2026-10-20 15:18:16,640] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,640] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,640] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-06521c3821f1 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,640] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,640] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,640] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-06521c3821f1 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,640] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,640] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,640] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-06521c3821f1 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,640] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-83-06521c3821f1 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,645] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-83-06521c3821f1'}
+[2026-10-20 15:18:16,669] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,669] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,670] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-7d38ae316397 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,670] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,670] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,670] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-7d38ae316397 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,670] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,670] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 5
+[2026-10-20 15:18:16,670] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-83-7d38ae316397 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,670] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-83-7d38ae316397 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,674] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-83-7d38ae316397'}
+FALHA     6.1 vendidos <= capacidade  [2/1 (reservas 201,201)]
+Exception in thread Thread-4 (varrer):
+[2026-10-20 15:18:16,734] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,734] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 6
+[2026-10-20 15:18:16,734] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-84-e082de2b1bdc 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,734] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,734] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 6
+[2026-10-20 15:18:16,734] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-84-e082de2b1bdc 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,734] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,734] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 6
+[2026-10-20 15:18:16,734] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-84-e082de2b1bdc 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,735] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-84-e082de2b1bdc 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,739] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-84-e082de2b1bdc'}
+Traceback (most recent call last):
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in 
+_exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in 
+do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UniqueViolation: duplicar valor da chave viola a restrição de unicidade 
+"uq_virtual_media_deliveries_order_id"
+DETAIL:  Chave (order_id)=(517) já existe.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "C:\Users\schim\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 1081, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\schim\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 1023, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py", line 355, in varrer
+    return ops.expirar_reservas()
+           ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\tmp\mp310\app\marketing\virtuais_ops.py", line 1113, in expirar_reservas
+    efetivar_pedido(order, consulta=consulta)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\tmp\mp310\app\marketing\virtuais_ops.py", line 1320, in efetivar_pedido
+    db.session.commit()
+    ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\scoping.py", line 597, in commit
+    return self._proxied.commit()
+           ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2030, in commit
+    trans.commit(_to_root=True)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<string>", line 2, in commit
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in 
+_go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1311, in commit
+    self._prepare_impl()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in 
+_go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1286, in 
+_prepare_impl
+    self.session.flush()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4331, in flush
+    self._flush(objects)
+    ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4466, in _flush
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in 
+__exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4427, in _flush
+    flush_context.execute()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in 
+execute
+    rec.execute(self)
+    ~~~~~~~~~~~^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in 
+execute
+    util.preloaded.orm_persistence.save_obj(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.mapper,
+        ^^^^^^^^^^^^
+        uow.states_for_mapper_hierarchy(self.mapper, False, False),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        uow,
+        ^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in 
+save_obj
+    _emit_insert_statements(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        base_mapper,
+        ^^^^^^^^^^^^
+    ...<3 lines>...
+        insert,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1233, in 
+_emit_insert_statements
+    result = connection.execute(
+        statement,
+        params,
+        execution_options=execution_options,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 527, in 
+_execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in 
+_execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in 
+_execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in 
+_exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in 
+_handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in 
+_exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in 
+do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+sqlalchemy.exc.IntegrityError: (psycopg.errors.UniqueViolation) duplicar valor da chave viola a restrição de unicidade 
+"uq_virtual_media_deliveries_order_id"
+DETAIL:  Chave (order_id)=(517) já existe.
+[SQL: INSERT INTO virtual_media_deliveries (order_id, status, due_date, video_path, video_mime, video_size_bytes, 
+video_published_at, last_upload_error, deadline_alert_at, updated_by_id, created_at, updated_at) VALUES 
+(%(order_id)s::INTEGER, %(status)s::VARCHAR, %(due_date)s::DATE, %(video_path)s::VARCHAR, %(video_mime)s::VARCHAR, 
+%(video_size_bytes)s::BIGINT, %(video_published_at)s::TIMESTAMP WITHOUT TIME ZONE, %(last_upload_error)s::VARCHAR, 
+%(deadline_alert_at)s::TIMESTAMP WITHOUT TIME ZONE, %(updated_by_id)s::INTEGER, %(created_at)s::TIMESTAMP WITHOUT TIME 
+ZONE, %(updated_at)s::TIMESTAMP WITHOUT TIME ZONE) RETURNING virtual_media_deliveries.id]
+[parameters: {'order_id': 517, 'status': 'pendente', 'due_date': None, 'video_path': None, 'video_mime': None, 
+'video_size_bytes': None, 'video_published_at': None, 'last_upload_error': None, 'deadline_alert_at': None, 
+'updated_by_id': None, 'created_at': datetime.datetime(2026, 10, 20, 15, 18, 16, 724957), 'updated_at': 
+datetime.datetime(2026, 10, 20, 15, 18, 16, 724959)}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+OK        7.1 um pago
+FALHA     7.2 Google chamado no máximo 1×  [2]
+OK        7.3 invariantes
+[2026-10-20 15:18:16,820] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,820] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 7
+[2026-10-20 15:18:16,820] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-85-47c7023a84bd 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,820] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,820] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 7
+[2026-10-20 15:18:16,820] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-85-47c7023a84bd 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,820] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:16,820] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 7
+[2026-10-20 15:18:16,820] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-85-47c7023a84bd 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,820] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-85-47c7023a84bd 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:16,824] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-85-47c7023a84bd'}
+[2026-10-20 15:18:16,826] INFO in virtuais_ops: [virtuais] reserva 205-85-47c7023a84bd liberada: lock vencido e 
+cobrança não paga
+FALHA     3.1 A termina pago (venda não regride)  [{'id': 518, 'status': 'expirado', 'slot_id': 1136, 'event_id': 17894, 'tx': 'tx-c06290-4d948557', 'slug': 'sl-a482f5bb', 'total': Decimal('100.00'), 'unverified': False}]
+OK        3.2 invariantes
+Exception in thread Thread-7 (varrer):
+Traceback (most recent call last):
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in 
+_exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in 
+do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+psycopg.errors.UniqueViolation: duplicar valor da chave viola a restrição de unicidade 
+"uq_virtual_media_deliveries_order_id"
+DETAIL:  Chave (order_id)=(519) já existe.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+[2026-10-20 15:18:16,891] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+  File "C:\Users\schim\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 1081, in _bootstrap_inner
+    self._context.run(self.run)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\schim\AppData\Local\Python\pythoncore-3.14-64\Lib\threading.py", line 1023, in run
+    self._target(*self._args, **self._kwargs)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2026-10-20 15:18:16,892] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 8
+  File "C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py", line 355, in varrer
+    return ops.expirar_reservas()
+           ~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\tmp\mp310\app\marketing\virtuais_ops.py", line 1113, in expirar_reservas
+    efetivar_pedido(order, consulta=consulta)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+[2026-10-20 15:18:16,892] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-86-d40a04ef3524 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+  File "C:\tmp\mp310\app\marketing\virtuais_ops.py", line 1320, in efetivar_pedido
+    db.session.commit()
+    ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\scoping.py", line 597, in commit
+    return self._proxied.commit()
+           ~~~~~~~~~~~~~~~~~~~~^^
+[2026-10-20 15:18:16,892] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 2030, in commit
+    trans.commit(_to_root=True)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "<string>", line 2, in commit
+[2026-10-20 15:18:16,892] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 8
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in 
+_go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1311, in commit
+    self._prepare_impl()
+    ~~~~~~~~~~~~~~~~~~^^
+[2026-10-20 15:18:16,892] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-86-d40a04ef3524 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+  File "<string>", line 2, in _prepare_impl
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\state_changes.py", line 137, in 
+_go
+    ret_value = fn(self, *arg, **kw)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 1286, in 
+_prepare_impl
+    self.session.flush()
+    ~~~~~~~~~~~~~~~~~~^^
+[2026-10-20 15:18:16,893] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4331, in flush
+    self._flush(objects)
+    ~~~~~~~~~~~^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4466, in _flush
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+[2026-10-20 15:18:16,893] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 8
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 224, in 
+__exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4427, in _flush
+    flush_context.execute()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+[2026-10-20 15:18:16,893] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-86-d40a04ef3524 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 466, in 
+execute
+    rec.execute(self)
+    ~~~~~~~~~~~^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 642, in 
+execute
+    util.preloaded.orm_persistence.save_obj(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self.mapper,
+        ^^^^^^^^^^^^
+        uow.states_for_mapper_hierarchy(self.mapper, False, False),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        uow,
+        ^^^^
+    )
+    ^
+[2026-10-20 15:18:16,893] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-86-d40a04ef3524 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 93, in 
+save_obj
+    _emit_insert_statements(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        base_mapper,
+        ^^^^^^^^^^^^
+    ...<3 lines>...
+        insert,
+        ^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 1233, in 
+_emit_insert_statements
+    result = connection.execute(
+        statement,
+        params,
+        execution_options=execution_options,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1419, in execute
+    return meth(
+        self,
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\sql\elements.py", line 527, in 
+_execute_on_connection
+    return connection._execute_clauseelement(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1641, in 
+_execute_clauseelement
+    ret = self._execute_context(
+        dialect,
+    ...<8 lines>...
+        cache_hit=cache_hit,
+    )
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1846, in 
+_execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1986, in 
+_exec_single_context
+    self._handle_dbapi_exception(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 2363, in 
+_handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\base.py", line 1967, in 
+_exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\sqlalchemy\engine\default.py", line 952, in 
+do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\psycopg\cursor.py", line 117, in execute
+    raise ex.with_traceback(None)
+sqlalchemy.exc.IntegrityError: (psycopg.errors.UniqueViolation) duplicar valor da chave viola a restrição de unicidade 
+"uq_virtual_media_deliveries_order_id"
+DETAIL:  Chave (order_id)=(519) já existe.
+[SQL: INSERT INTO virtual_media_deliveries (order_id, status, due_date, video_path, video_mime, video_size_bytes, 
+video_published_at, last_upload_error, deadline_alert_at, updated_by_id, created_at, updated_at) VALUES 
+(%(order_id)s::INTEGER, %(status)s::VARCHAR, %(due_date)s::DATE, %(video_path)s::VARCHAR, %(video_mime)s::VARCHAR, 
+%(video_size_bytes)s::BIGINT, %(video_published_at)s::TIMESTAMP WITHOUT TIME ZONE, %(last_upload_error)s::VARCHAR, 
+%(deadline_alert_at)s::TIMESTAMP WITHOUT TIME ZONE, %(updated_by_id)s::INTEGER, %(created_at)s::TIMESTAMP WITHOUT TIME 
+ZONE, %(updated_at)s::TIMESTAMP WITHOUT TIME ZONE) RETURNING virtual_media_deliveries.id]
+[parameters: {'order_id': 519, 'status': 'pendente', 'due_date': None, 'video_path': None, 'video_mime': None, 
+'video_size_bytes': None, 'video_published_at': None, 'last_upload_error': None, 'deadline_alert_at': None, 
+'updated_by_id': None, 'created_at': datetime.datetime(2026, 10, 20, 15, 18, 16, 881662), 'updated_at': 
+datetime.datetime(2026, 10, 20, 15, 18, 16, 881665)}]
+(Background on this error at: https://sqlalche.me/e/20/gkpj)
+[2026-10-20 15:18:16,899] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-86-d40a04ef3524'}
+OK        7.1 um pago
+FALHA     7.2 Google chamado no máximo 1×  [2]
+OK        7.3 invariantes
+FALHA     R-22 1 rodadas de concorrência sem venda dupla  [1 rodada(s) com falha]
+
+── B2 ────────────────────────────────────────────────────────────
+FALHA     8.1 retorno responde 200  [404]
+FALHA     8.2 pedido pago pelo retorno  [{'id': 520, 'status': 'aguardando', 'slot_id': 1138, 'event_id': None, 'tx': None, 'slug': None, 'total': Decimal('100.00'), 'unverified': False}]
+OK        8.3 em menos de 60 s
+FALHA     8.4 recibo guardado  [[(None,)]]
+OK        9.1 404
+OK        9.2 nada gravado em A
+[2026-10-20 15:18:17,057] INFO in virtuais_ops: [virtuais] reserva 205-89-bf874d44b8d0 liberada: lock vencido e 
+cobrança não paga
+OK        10.1 abandono expira na primeira consulta
+OK        10.2 abandono não entra em 'a conferir'
+[2026-10-20 15:18:17,112] INFO in virtuais_ops: [virtuais] reserva 205-89-89491d84e389 liberada: tolerância esgotada 
+sem resposta da operadora
+FALHA     10.3 operadora fora esgotada → nao_sei (a conferir)  [[(None, 'expirado')]]
+[2026-10-20 15:18:17,148] INFO in virtuais_ops: [virtuais] reserva 205-90-c3ce888f9ac3 liberada: lock vencido e 
+cobrança não paga
+[2026-10-20 15:18:17,163] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-dacb70a2: retido (Operadora 
+indisponível: fora (dublê))
+[2026-10-20 15:18:17,163] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'retido', 'order_nsu': 
+'205-90-c3ce888f9ac3'}
+BLOQUEADO 11 aviso retido de pedido expirado, operadora volta → reprocessado até decidir  [virtuais_ops.reprocessar_avisos ainda não existe]
+[2026-10-20 15:18:17,219] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,219] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 13
+[2026-10-20 15:18:17,219] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-91-a3a59c077bac 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,219] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,219] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 13
+[2026-10-20 15:18:17,219] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-91-a3a59c077bac 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,219] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,219] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 13
+[2026-10-20 15:18:17,219] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-91-a3a59c077bac 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,219] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-91-a3a59c077bac 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,223] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-91-a3a59c077bac'}
+[2026-10-20 15:18:17,234] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'duplicado', 
+'order_nsu': '205-91-a3a59c077bac'}
+OK        12.1 pedido segue pago
+FALHA     12.2 devolução pagamento_em_dobro  [[]]
+[2026-10-20 15:18:17,280] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-642cef6b: recusado (Valor 
+divergente: operadora 1.00, pedido 100.00.)
+[2026-10-20 15:18:17,280] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'recusado', 
+'order_nsu': '205-92-337ed74b92a3'}
+OK        13.1 aviso com valor menor não vira venda
+[2026-10-20 15:18:17,322] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,322] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 14
+[2026-10-20 15:18:17,322] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-92-befbfaf3ad93 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,322] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,322] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 14
+[2026-10-20 15:18:17,322] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-92-befbfaf3ad93 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,323] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,323] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 14
+[2026-10-20 15:18:17,323] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-92-befbfaf3ad93 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,323] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-92-befbfaf3ad93 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+FALHA     13.2 varredura com paid_amount 0 não vira venda  [{'id': 528, 'status': 'pago', 'slot_id': 1146, 'event_id': 17898, 'tx': 'tx-c06290-bbd0ec5b', 'slug': 'sl-177f9df2', 'total': Decimal('100.00'), 'unverified': False}]
+[2026-10-20 15:18:17,369] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-c6e58146: retido (Operadora 
+indisponível: fora (dublê))
+[2026-10-20 15:18:17,369] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'retido', 'order_nsu': 
+'205-93-aa6e8fada1a6'}
+[2026-10-20 15:18:17,373] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'duplicado', 
+'order_nsu': '205-93-aa6e8fada1a6'}
+FALHA     14.1 reentrega decidiu: pago  [{'id': 529, 'status': 'aguardando', 'slot_id': 1147, 'event_id': None, 'tx': 'tx-c06290-c6e58146', 'slug': 'sl-d2e9f250', 'total': Decimal('100.00'), 'unverified': False}]
+[2026-10-20 15:18:17,427] WARNING in virtuais_ops: [virtuais] notificação forjado-c06290: recusado (A operadora 
+informou que a cobrança não está paga.)
+[2026-10-20 15:18:17,427] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'recusado', 
+'order_nsu': '205-94-ee7370178eca'}
+[2026-10-20 15:18:17,445] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-9e64e04a: recusado (A operadora 
+informou que a cobrança não está paga.)
+[2026-10-20 15:18:17,445] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'recusado', 
+'order_nsu': '205-94-ee7370178eca'}
+FALHA     15.1 o pagamento verdadeiro confirma  [{'id': 530, 'status': 'aguardando', 'slot_id': 1148, 'event_id': None, 'tx': 'forjado-c06290', 'slug': 'forjado', 'total': Decimal('100.00'), 'unverified': False}]
+FALHA     15.2 identificador gravado é o verdadeiro  [forjado-c06290]
+
+── B3 ────────────────────────────────────────────────────────────
+OK        16.1 trava ligada no manto_local
+OK        16.2 travado: nenhuma requisição
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:758: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+FALHA     17.1 reserva recusada com 503  [201]
+[2026-10-20 15:18:17,554] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,554] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 17
+[2026-10-20 15:18:17,554] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-95-f218ca0dd6ed 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,554] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,554] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 17
+[2026-10-20 15:18:17,554] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-95-f218ca0dd6ed 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,554] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:17,554] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 17
+[2026-10-20 15:18:17,554] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-95-f218ca0dd6ed 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,554] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-95-f218ca0dd6ed 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:17,560] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-95-f218ca0dd6ed'}
+OK        17.2 aviso do pedido aberto segue
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:770: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  SiteSetting.query.get(1).virtuais_pagamento_ativo = True
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:778: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:782: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  c = VirtualCampaign.query.get(cid)
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:791: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+FALHA     18.1 publicação recusada
+[2026-10-20 15:18:17,763] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+FALHA     19.1 o anterior guardado  [[(None,)]]
+[2026-10-20 15:18:17,784] WARNING in virtuais_ops: [virtuais] notificação t19-c06290: recusado (Segredo do endereço 
+inválido.)
+FALHA     19.2 o segredo anterior ainda é aceito  [404]
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:807: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+OK        19.3 segredo trocado de fato
+[2026-10-20 15:18:17,937] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+FALHA     20.1 tag inválida → 400  [200]
+FALHA     20.2 auditoria com antigo e novo  [[]]
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:824: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  SiteSetting.query.get(1).infinitepay_handle = "verify-310"
+[2026-10-20 15:18:18,104] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+[2026-10-20 15:18:18,290] WARNING in imaging: imaging: falha ao decodificar (cannot identify image file <_io.BytesIO 
+object at 0x0000021AED610A90>)
+[2026-10-20 15:18:18,291] WARNING in storage: compressão de imagem falhou; mantendo original (.png)
+FALHA     21.1 nada mudou de carona  [(True, '5511900000310', datetime.date(2026, 6, 1)) → (False, None, None)]
+[2026-10-20 15:18:18,321] WARNING in virtuais_ops: [virtuais] criar link de pagamento falhou (tentativa 1/3): External 
+checkout is not enabled
+[2026-10-20 15:18:18,321] WARNING in virtuais_ops: [virtuais] criar link de pagamento falhou (tentativa 2/3): External 
+checkout is not enabled
+[2026-10-20 15:18:18,322] WARNING in virtuais_ops: [virtuais] criar link de pagamento falhou (tentativa 3/3): External 
+checkout is not enabled
+[2026-10-20 15:18:18,323] INFO in virtuais_ops: [virtuais] reserva 205-97-ef48fee8404a liberada: falha ao gerar o link 
+de pagamento
+OK        22.1 502
+FALHA     22.2 código gravado  [[(None,)]]
+OK        22.3 sem repetir a chamada recusada
+[2026-10-20 15:18:21,394] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:21,394] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 20
+[2026-10-20 15:18:21,394] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-98-4b3da9ba6234 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:21,394] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:21,394] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 20
+[2026-10-20 15:18:21,394] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-98-4b3da9ba6234 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:21,394] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:21,394] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 20
+[2026-10-20 15:18:21,394] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-98-4b3da9ba6234 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:21,395] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-98-4b3da9ba6234 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:21,401] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-98-4b3da9ba6234'}
+FALHA     23.1 resposta em menos de 1 s  [3.05s]
+OK        23.2 processamento concluiu
+[2026-10-20 15:18:21,548] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+OK        24.1 403
+
+── B4 ────────────────────────────────────────────────────────────
+[2026-10-20 15:18:21,670] WARNING in virtuais_ops: [virtuais] pedido 205-99-992479c1b148 bloqueado por tentativas de 
+acesso
+OK        25.1 a primeira estourou
+FALHA     25.2 a outra não  [429]
+BLOQUEADO 26 IP forjado à esquerda do XFF não vale (deve falhar)  [api_utils.ip_do_cliente ainda não existe]
+
+── B5 ────────────────────────────────────────────────────────────
+FALHA     27.1 nome da criança fora do pacote  [{'handle': 'verify-310', 'order_nsu': '205-100-0e5e009080ed', 'total': Decimal('100.00'), 'description': 'Verify310 c06290 22 — Maria Secreta', 'redirect_url': 'https://app.mantoproducoes.com.br/catal]
+FALHA     27.2 customer sem name  [{'name': 'Maria Secreta', 'email': 'v310-c06290@example.com', 'phone_number': '11933179310'}]
+OK        27.3 cliente real monta itens em centavos
+BLOQUEADO 28 token do aviso mascarado nos logs  [api_utils.mascarar_url_webhook ainda não existe]
+[2026-10-20 15:18:21,808] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-5b0af83f: recusado (Segredo do 
+endereço inválido.)
+OK        29.1 404
+[2026-10-20 15:18:21,822] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'duplicado', 
+'order_nsu': '205-101-efc6f2c69367'}
+FALHA     29.2 o aviso real ainda confirma  [{'id': 537, 'status': 'aguardando', 'slot_id': 1155, 'event_id': None, 'tx': None, 'slug': None, 'total': Decimal('100.00'), 'unverified': False}]
+
+── B6 ────────────────────────────────────────────────────────────
+[2026-10-20 15:18:21,887] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-f64fe9fb: recusado (Valor 
+divergente: operadora 50.00, pedido 100.00.)
+[2026-10-20 15:18:21,887] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'recusado', 
+'order_nsu': '205-102-4f6350a6cd93'}
+[2026-10-20 15:18:22,036] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+FALHA     30.1 aparece com o NSU  [404 0]
+[2026-10-20 15:18:22,182] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+FALHA     31.1 403  [404]
+[2026-10-20 15:18:22,274] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,274] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: Sobre a sua reserva — precisamos remarcar
+[2026-10-20 15:18:22,274] WARNING in virtuais_ops: [virtuais] aviso cancelamento do pedido 205-103-4f386781b55d falhou 
+(tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,274] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,274] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: Sobre a sua reserva — precisamos remarcar
+[2026-10-20 15:18:22,274] WARNING in virtuais_ops: [virtuais] aviso cancelamento do pedido 205-103-4f386781b55d falhou 
+(tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,274] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,274] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: Sobre a sua reserva — precisamos remarcar
+[2026-10-20 15:18:22,274] WARNING in virtuais_ops: [virtuais] aviso cancelamento do pedido 205-103-4f386781b55d falhou 
+(tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,274] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-103-4f386781b55d 
+(cancelamento): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,278] WARNING in virtuais_ops: [virtuais] notificação tx-c06290-61d41d52: conflito (Horário já 
+vendido a outra pessoa — devolução aberta.)
+[2026-10-20 15:18:22,278] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'conflito', 
+'order_nsu': '205-103-4f386781b55d'}
+FALHA     32.1 sino ganhou aviso  [0→0]
+[2026-10-20 15:18:22,350] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,350] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 26
+[2026-10-20 15:18:22,350] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-104-a1eedd75c65d 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,350] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,350] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 26
+[2026-10-20 15:18:22,350] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-104-a1eedd75c65d 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,350] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,350] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 26
+[2026-10-20 15:18:22,350] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-104-a1eedd75c65d 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,350] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-104-a1eedd75c65d 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,357] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-104-a1eedd75c65d'}
+[2026-10-20 15:18:22,500] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — 
+órfão recolhido de .mantoproducoes.com.br
+FALHA     36.1 200  [404]
+FALHA     36.2 desistência pendente  [[]]
+FALHA     36.3 horário de volta  [vendido]
+FALHA     36.4 evento apagado  [1]
+
+── B7 ────────────────────────────────────────────────────────────
+FALHA     33.1 reserva traz seconds_left ~900  [None]
+FALHA     33.2 pedido traz seconds_left  [{'campaign': {'recorded_delivery_days': 7, 'slug': 'verify310-c06290-27', 'title': 'Verify310 c06290 27', 'whatsapp_phon]
+FALHA     34.1 pedidos diferentes  [205-106-1a4d225b4307 205-106-1a4d225b4307]
+FALHA     35.1 campo confirming presente  [['campaign', 'locked_until', 'meet_pending', 'meet_url', 'modality', 'payment_url', 'phone_hint', 'requires_verification', 'start_at', 'status', 'total_value']]
+
+── B8 ────────────────────────────────────────────────────────────
+[2026-10-20 15:18:22,749] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 1/3): Google fora (dublê)
+[2026-10-20 15:18:22,750] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 2/3): Google fora (dublê)
+[2026-10-20 15:18:22,750] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 3/3): Google fora (dublê)
+[2026-10-20 15:18:22,750] WARNING in virtuais_ops: [virtuais] falha ao criar evento do pedido 205-108-719ff00e948d: 
+criar evento no Google do pedido 205-108-719ff00e948d falhou após 3 tentativas.
+[2026-10-20 15:18:22,770] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,771] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 30
+[2026-10-20 15:18:22,771] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-108-719ff00e948d 
+falhou (tentativa 1/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,771] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,771] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 30
+[2026-10-20 15:18:22,771] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-108-719ff00e948d 
+falhou (tentativa 2/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,771] INFO in email_service: Envio de e-mail suprimido neste ambiente (MAIL_SUPPRESS_SEND).
+[2026-10-20 15:18:22,771] INFO in email_service: Email desativado nas configurações — pulando envio para 
+v310-c06290@example.com: 🎄 Reserva confirmada — Verify310 c06290 30
+[2026-10-20 15:18:22,771] WARNING in virtuais_ops: [virtuais] aviso compra_confirmada do pedido 205-108-719ff00e948d 
+falhou (tentativa 3/3): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,771] WARNING in virtuais_ops: [virtuais] falha ao avisar pedido 205-108-719ff00e948d 
+(compra_confirmada): O serviço de e-mail recusou o envio.
+[2026-10-20 15:18:22,777] INFO in virtuais_webhook: [virtuais] webhook processado: {'outcome': 'efetivado', 
+'order_nsu': '205-108-719ff00e948d'}
+[2026-10-20 15:18:22,802] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 1/3): Google fora (dublê)
+[2026-10-20 15:18:22,802] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 2/3): Google fora (dublê)
+[2026-10-20 15:18:22,802] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 3/3): Google fora (dublê)
+[2026-10-20 15:18:22,805] WARNING in virtuais_ops: [virtuais] retentativa de sala do pedido 205-108-719ff00e948d 
+falhou: criar evento no Google do pedido 205-108-719ff00e948d falhou após 3 tentativas.
+[2026-10-20 15:18:22,815] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 1/3): Google fora (dublê)
+[2026-10-20 15:18:22,815] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 2/3): Google fora (dublê)
+[2026-10-20 15:18:22,815] WARNING in virtuais_ops: [virtuais] criar evento no Google do pedido 205-108-719ff00e948d 
+falhou (tentativa 3/3): Google fora (dublê)
+[2026-10-20 15:18:22,819] WARNING in virtuais_ops: [virtuais] retentativa de sala do pedido 205-108-719ff00e948d 
+falhou: criar evento no Google do pedido 205-108-719ff00e948d falhou após 3 tentativas.
+FALHA     37.1 sala criada depois das 3 tentativas  [(None, True)]
+BLOQUEADO 38 evento da loja no Google não é importado pela sincronização  [calendar.routes._eh_evento_da_loja ainda não existe]
+
+── B9 ────────────────────────────────────────────────────────────
+OK        39.1 header
+OK        39.2 options
+OK        40.1 sem options nem header
+
+── B10 ────────────────────────────────────────────────────────────
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:1179: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  c = VirtualCampaign.query.get(cid)
+FALHA     41.1 fora da vitrine
+OK        41.2 abre pelo link
+BLOQUEADO 42 limpeza de venda de teste  [limpar_venda_teste.py ainda não existe]
+C:\tmp\mp310\specs\310-pagamento-loja-virtual\verify_310.py:1256: LegacyAPIWarning: The Query.get() method is 
+considered legacy as of the 1.x series of SQLAlchemy and becomes a legacy construct in 2.0. The method is now 
+available as Session.get() (deprecated since: 2.0) (Background on SQLAlchemy 2.0 at: https://sqlalche.me/e/b8d9)
+  s = SiteSetting.query.get(1)
+OK        44.1 limpeza
+OK        44.2 nenhuma conexão externa escapou
+
+32 OK · 49 FALHA · 5 BLOQUEADO (de 86)

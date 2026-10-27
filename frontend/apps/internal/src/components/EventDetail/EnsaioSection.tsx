@@ -242,7 +242,7 @@ function EnsaioOwnPanel({ data, canEdit }: { data: EventoDetalhe; canEdit: boole
       ) : (
         <div className="space-y-2">
           <p className="text-sm text-red">
-            ⚠ Ensaio órfão — o show original não existe mais. Vincule a um show ou cancele.
+            ⚠ Ensaio órfão — o show original não existe mais. Vincule a um show ou cancele o ensaio.
           </p>
           {canEdit && (
             <div className="space-y-2">

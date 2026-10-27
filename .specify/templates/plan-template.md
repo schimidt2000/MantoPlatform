@@ -66,6 +66,7 @@ pública nova precisa entrar em `BACKEND_PREFIXES` de `frontend/server.js`]
 | XII. Combobox / Maps | [se lista > 10 itens ou endereço] |
 | XIII. RBAC declarado | papéis por endpoint; linha em `docs/01` §4.3 |
 | XIV. Config / efeito externo | env nova com default real; trava `_suppress_*` se escreve fora |
+| XV. Texto por superfície | [se cria/altera texto visível: superfície e tom; termos do glossário usados; nada que o frontend compare] |
 | Stack | migration à mão (`down_revision` = head); sem Jinja novo; sem segredo |
 | Operação e Deploy | [toca `startCommand`? migração destrutiva → ensaio em banco descartável] |
 

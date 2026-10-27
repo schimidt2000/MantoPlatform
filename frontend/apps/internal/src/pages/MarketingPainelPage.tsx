@@ -126,7 +126,7 @@ function PostsTable({
             <TableCell as="th">Postagem</TableCell>
             <TableCell as="th">Responsável</TableCell>
             <TableCell as="th">Plataforma</TableCell>
-            <TableCell as="th">Status</TableCell>
+            <TableCell as="th">Situação</TableCell>
             <TableCell as="th">Prazo</TableCell>
             <TableCell as="th">Publicação</TableCell>
             <TableCell as="th">Revisão</TableCell>

@@ -1,12 +1,13 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import type { ContratoDaVenda } from "./contratos";
 import type { Event3DGift } from "./impressoes3d";
 import type { AvisoFalho } from "./virtuais";
 
 /**
  * Situação única do evento (feature 303), com a precedência resolvida no servidor:
- * cancelado > sumiu do Google > exclusão solicitada. A tela lê este valor e nunca recombina
- * `cancelled_at`, a marca e o pedido de exclusão.
+ * cancelado > sumiu do Google > cancelamento pedido (`exclusao_solicitada`, o código de antes). A tela lê
+ * este valor e nunca recombina `cancelled_at`, a marca e o pedido de cancelamento.
  */
 export type SituacaoEvento = "cancelado" | "sumiu_do_google" | "exclusao_solicitada";
 
@@ -314,6 +315,10 @@ export interface EventMensagens {
   cobranca_amount: string;
   cobranca_due: string;
   reembolso_lines: string[];
+  /** Feature 317: por onde a ClickSign pediu a assinatura (`whatsapp`, `email`, `sms`). */
+  contrato_canal?: string | null;
+  /** Feature 317: prazo do contrato, "DD/MM". */
+  contrato_prazo?: string;
 }
 
 // ── Feature 306: o resumo do cancelado (contracts §0) ─────────────────────────────────────
@@ -431,12 +436,33 @@ export interface EventoDetalhe {
     cancelled_at: string | null;
     cancelled_by: string | null;
     cancellation_reason: string | null;
-    /** Solicitação de exclusão do Comercial ainda não decidida pelo Superadmin. */
+    /**
+     * Pedido de cancelamento ainda não decidido pelo Superadmin (features 224 e 315). Todos veem a
+     * data e o alcance; o resto vem só para quem trata do cancelamento (o servidor corta por papel:
+     * motivo, autor e devolução com `show_comercial`; nome e PIX também com Financeiro ou para o
+     * autor). Tudo além de `requested_at` é opcional: chave ausente = não mostrar.
+     */
     deletion_request: {
       requested_at: string;
-      requested_by: string | null;
-      reason: string | null;
+      /** `null` = pedido de antes da 315 (ou pelo caminho velho): vale como "todos". */
+      alcance?: "todos" | "so_este_dia" | null;
+      /** O alcance em texto pronto ("todos os 3 dias da venda"); ausente no evento avulso. */
+      alcance_texto?: string;
+      /** Pedido de antes do deploy ou pelo caminho velho, fora da venda virtual. */
+      sem_devolucao_informada?: boolean;
+      requested_by?: string | null;
+      requested_by_id?: number | null;
+      reason?: string | null;
+      /** Valores em texto decimal ("600.00"). Sem `nome`/`pix` para quem não os lê. */
+      devolucao?: { modo?: ModoDevolucao | null; valor?: string; nome?: string; pix?: string } | null;
+      venda_nova?: string | null;
     } | null;
+    /** Feature 315: por que este dia não recebe pedido — o menu mostra a frase desabilitado. */
+    pedido_bloqueado?: { codigo: "ensaio" | "cache_pago"; frase: string } | null;
+    /** Feature 315: no 1º dia com outro dia vivo, os N dias e o dia que receberia a venda. */
+    escolha_do_alcance?: { dias: number; proximo: { id: number; start_at: string | null } | null } | null;
+    /** Feature 315: o 1º dia da venda tem pedido de "todos os dias" (este dia só o mostra). */
+    pedido_da_venda?: { requested_at: string; principal_id: number } | null;
     /**
      * O resumo do cancelado (feature 306): só no evento cancelado e com `show_comercial`.
      * Opcional: sem ele (backend antigo), a aba Comercial mostra o `KpiGrid` de antes.
@@ -627,6 +653,11 @@ export interface EventoDetalhe {
   /** feature 273 — só na resposta de `PATCH /api/events/<id>/orcamento`. */
   relatorio_orcamento?: RelatorioOrcamento;
   contratos?: { id: number; file_path: string; is_signed: boolean; created_at: string | null }[];
+  /**
+   * Feature 317: situação do contrato da ClickSign, julgada pela venda. Opcional (bundle em
+   * cache); `null` = o bloco falhou no servidor (a tela mostra o aviso e segue).
+   */
+  contrato?: ContratoDaVenda | null;
   notas_fiscais?: {
     id: number;
     amount: number | null;
@@ -677,7 +708,26 @@ export interface EventoDetalhe {
     seller: string | null;
   };
   pagamentos?: {
-    items: { id: number; amount: number | null; file_path: string; created_at: string | null }[];
+    items: {
+      id: number;
+      amount: number | null;
+      /** Feature 318: `null` no pagamento de PIX ainda sem arquivo (a prova é o aviso do banco). */
+      file_path: string | null;
+      created_at: string | null;
+      origem?: "comprovante" | "pix_email";
+      conta_id?: number | null;
+      conta?: string | null;
+      pix?: {
+        id: number;
+        pagador: string | null;
+        recebido_em: string;
+        automatico: boolean;
+        decidido_por: string | null;
+        conta: string | null;
+      } | null;
+    }[];
+    /** Feature 318: as contas para o campo opcional "Conta que recebeu". */
+    contas?: { id: number; apelido: string }[];
     received_total: number | null;
     /**
      * Feature 299 — um resumo por evento dos comprovantes dos OUTROS eventos do grupo (no

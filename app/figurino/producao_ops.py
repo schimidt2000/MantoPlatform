@@ -552,6 +552,12 @@ def serialize_producao(
         "event_id": producao.event_id,
         "event_title": producao.event.title if producao.event else None,
         "event_situacao": producao.event.situacao if producao.event else None,  # feature 312: o selo
+        # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+        "event_situacao_desde": (
+            producao.event.situacao_desde.isoformat()
+            if producao.event and producao.event.situacao_desde
+            else None
+        ),
         "event_start_at": (
             producao.event.start_at.isoformat()
             if producao.event and producao.event.start_at
@@ -659,13 +665,13 @@ def create_producao(
     if e_manutencao:
         if ficha is None:
             raise ProducaoValidationError(
-                "figurino_sheet_id", "Escolha de qual figurino é o conserto."
+                "figurino_sheet_id", "Selecione o figurino do conserto."
             )
         # A gravidade é obrigatória na manutenção porque é ela que decide se a peça pode ir para
         # o próximo evento — a informação que faz o registro valer alguma coisa.
         if gravidade not in FIGURINO_SEVERIDADES:
             raise ProducaoValidationError(
-                "severity", "Diga se a peça ainda pode ser usada assim como está."
+                "severity", "Informe se a peça ainda pode ser usada como está."
             )
     else:
         gravidade = None
@@ -756,7 +762,7 @@ def update_producao(
         ficha = _resolver_ficha(campos["figurino_sheet_id"])
         if producao.is_manutencao and ficha is None:
             raise ProducaoValidationError(
-                "figurino_sheet_id", "Um conserto precisa dizer de qual figurino é."
+                "figurino_sheet_id", "Selecione o figurino do conserto."
             )
         producao.figurino_sheet_id = ficha.id if ficha else None
 
@@ -764,7 +770,7 @@ def update_producao(
         nova = (campos["severity"] or "").strip() or None
         if nova not in FIGURINO_SEVERIDADES:
             raise ProducaoValidationError(
-                "severity", "Diga se a peça ainda pode ser usada assim como está."
+                "severity", "Informe se a peça ainda pode ser usada como está."
             )
         if nova != producao.severity:
             mudancas.append(f"gravidade → {FIGURINO_SEV_LABELS[nova].lower()}")
@@ -867,7 +873,7 @@ def mudar_status(
             else ""
         )
         raise ProducaoValidationError(
-            "status", f"Não dá para ir de “{de}” para “{para}”.{extra}"
+            "status", f"Não é possível ir de “{de}” para “{para}”.{extra}"
         )
 
     if novo_status == FIGURINO_PROD_APROVADO and not pode_aprovar(actor):
@@ -877,7 +883,7 @@ def mudar_status(
         raise ProducaoValidationError("status", "Sem permissão para mover este pedido.")
 
     if novo_status == FIGURINO_PROD_CANCELADO and not (motivo or "").strip():
-        raise ProducaoValidationError("motivo", "Diga por que o pedido está sendo cancelado.")
+        raise ProducaoValidationError("motivo", "Informe o motivo do cancelamento do pedido.")
 
     # Feature 237: o pedido de ficha só conclui apontando para a ficha criada — é o elo que
     # faz o solicitante encontrá-la; concluir sem vínculo deixaria o loop aberto de novo.
@@ -974,7 +980,7 @@ def add_anexo(
     if kind not in FIGURINO_ANEXO_KINDS:
         raise ProducaoValidationError("kind", "Tipo de anexo desconhecido.")
     if not file_obj or not getattr(file_obj, "filename", ""):
-        raise ProducaoValidationError("file", "Escolha um arquivo.")
+        raise ProducaoValidationError("file", "Selecione um arquivo.")
     _validar_extensao(file_obj, kind)
 
     subfolder = (

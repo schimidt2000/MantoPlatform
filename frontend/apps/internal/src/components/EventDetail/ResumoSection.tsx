@@ -207,7 +207,7 @@ function DadosForm({
           }}
         />
         <p className="mt-1 text-xs text-muted">
-          É o mesmo texto que vai para o Google Agenda. Sem edição aqui, a formatação original é
+          É o mesmo texto que vai para o Google Agenda. Sem edição neste campo, a formatação original é
           preservada.
         </p>
       </div>
@@ -380,7 +380,17 @@ function calcularPendencias(data: EventoDetalhe): Pendencia[] {
     });
   }
 
-  if (data.contratos) {
+  if (data.contrato?.integracao_ligada) {
+    // Feature 317: a situação da ClickSign, julgada pela venda (vale igual nos dias do grupo).
+    const assinado = data.contrato.situacao === "assinado" || data.contrato.situacao === "assinado_manual";
+    lista.push({
+      key: "contrato",
+      label: "Contrato",
+      valor: data.contrato.rotulo.toLowerCase(),
+      ok: assinado,
+      tab: "comercial",
+    });
+  } else if (data.contratos) {
     const assinado = data.contratos.some((c) => c.is_signed);
     lista.push({
       key: "contrato",

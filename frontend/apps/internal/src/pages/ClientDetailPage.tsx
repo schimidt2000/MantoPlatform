@@ -68,7 +68,7 @@ export function ClientDetailPage() {
 
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar o cliente.
+          Não foi possível carregar a cliente.
         </div>
       )}
 
@@ -86,7 +86,7 @@ export function ClientDetailPage() {
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Excluir o cliente "${query.data.name}"? Os eventos associados serão desvinculados, não excluídos.`,
+                        `Excluir a cliente "${query.data.name}"? Os eventos associados serão desvinculados, não excluídos.`,
                       )
                     ) {
                       del.mutate(id, { onSuccess: () => navigate("/clientes") });
@@ -241,7 +241,7 @@ export function ClientDetailPage() {
                             <Link to={`/events/${f.event_id}`} className="text-ink hover:underline">
                               {f.event_title}
                             </Link>{" "}
-                            <SeloSituacao situacao={f.event_situacao} />
+                            <SeloSituacao situacao={f.event_situacao} desde={f.event_situacao_desde} />
                           </>
                         ) : (
                           <Link

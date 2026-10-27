@@ -12,14 +12,14 @@ export function AdminImportarCatalogoPage() {
       {query.isLoading && <Skeleton className="h-40 w-full" />}
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar o status.
+          Não foi possível carregar a situação da importação.
         </div>
       )}
 
       {query.data && (
         <Card>
           <CardHeader>
-            <CardTitle>Status</CardTitle>
+            <CardTitle>Situação</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-ink">{query.data.total_items} item(ns) já importado(s).</p>

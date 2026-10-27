@@ -42,7 +42,7 @@ function HistoricoRow({ item }: { item: PortalHistoricoItem }) {
           <div className="shrink-0 text-right">
             <p className="text-sm font-semibold text-ink">R$ {formatBRL(item.cache_total)}</p>
             <p className={`text-xs ${paid ? "text-green" : "text-muted"}`}>
-              {paid ? "pago" : "pendente"}
+              {paid ? "Pago" : "A receber"}
             </p>
           </div>
         </div>

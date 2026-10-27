@@ -77,7 +77,7 @@ export function NotificacoesPanel({ id, aberto, onFechar }: NotificacoesPanelPro
               onClick={() => maiorId && marcarTodas.mutate(maiorId)}
               className="text-xs font-semibold text-accent hover:underline disabled:cursor-not-allowed disabled:opacity-50 disabled:no-underline"
             >
-              {marcarTodas.isPending ? "Marcando..." : "Marcar todas como lidas"}
+              {marcarTodas.isPending ? "Marcando…" : "Marcar todas como lidas"}
             </button>
           </div>
           {marcarTodas.isError && (
@@ -115,7 +115,7 @@ export function NotificacoesPanel({ id, aberto, onFechar }: NotificacoesPanelPro
             {!lista.isLoading && !lista.isError && itens.length === 0 && (
               // O vazio de um sistema novo precisa ensinar o que vai aparecer.
               <p className="px-4 py-8 text-center text-sm text-muted">
-                Nada por aqui. Quando chegar uma resposta de formulário, uma avaliação de cliente
+                Nenhuma notificação ainda. Quando chegar uma resposta de formulário, uma avaliação de cliente
                 ou uma recusa de convite, o aviso aparece neste sino.
               </p>
             )}

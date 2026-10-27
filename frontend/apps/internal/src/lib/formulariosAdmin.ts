@@ -39,6 +39,8 @@ export interface FormResponseSummary {
   closed_at?: string | null;
   /** Feature 312: a situação do evento ligado (o selo do cancelado), na lista e no detalhe. */
   event_situacao?: SituacaoEvento | null;
+  /** Feature 315: desde quando vale a situação (o tooltip do selo). */
+  event_situacao_desde?: string | null;
 }
 
 export interface FormResponseDetail extends FormResponseSummary {

@@ -162,8 +162,98 @@ def divisor_da_nota() -> Decimal:
     return Decimal(str(NF_DIVISOR))
 
 
+def snapshot_v2(entry: OrcamentoHistory | None) -> dict | None:
+    """O snapshot de um orçamento cotado pela regra da 313 (`versao_conta` 2), se ele se sustenta; senão ``None``.
+
+    O `/salvar` grava o snapshot que o navegador devolve (research R2 da 305), então as bases e os cheios só valem
+    se contam a mesma história: 4 bases finitas ≥ 0, cada cheio ≥ a coluna gravada e igual (± R$ 0,01) ao que a
+    conta da Q7 dá sobre a base; os acréscimos e o produto finitos; cada coluna = o cheio com o desconto aplicado
+    (± R$ 0,01; a duração digitada = o valor digitado) e o valor digitado da extra até o cheio dela (converge,
+    T056). Fora disso, o leitor segue o caminho de antes (o erro inofensivo).
+    """
+    from app.orcamento.quote_ops import VERSAO_CONTA, _linhas_do_snapshot_313, aplicar_acrescimos
+
+    if entry is None:
+        return None
+    snap = snapshot_do_orcamento(entry)
+    if snap.get("versao_conta") != VERSAO_CONTA:
+        return None
+    try:
+        brutos = snap.get("brutos") or {}
+        d = float(snap.get("desconto_aplicado") or 0)
+        if not 0 <= d < 100:
+            return None
+        personalizado = bool(snap.get("personalizado_ativo"))
+        bases = snap.get("bases")
+        if not personalizado and (not isinstance(bases, list) or len(bases) != 4):
+            return None
+        linhas = _linhas_do_snapshot_313(snap)
+        if not all(math.isfinite(float(linha["value"])) for linha in linhas):
+            return None
+        if not math.isfinite(float(snap.get("produtos_total") or 0)):
+            return None
+        digitada, valor_digitado = snap.get("desconto_duracao"), snap.get("desconto_valor")
+        if valor_digitado is not None:
+            valor_digitado = float(valor_digitado)
+            if not math.isfinite(valor_digitado) or valor_digitado <= 0 or not d:
+                return None
+            if digitada == "extra":
+                cheio_extra = float(brutos["custom"])
+                if not math.isfinite(cheio_extra) or valor_digitado > cheio_extra + 0.005:
+                    return None
+            elif digitada not in ("1h", "2h", "3h", "4h"):
+                return None
+        for i, duracao in enumerate(DURACOES_TABELA):
+            bruto = float(brutos[f"{duracao}h"])
+            coluna = float(getattr(entry, f"total_{duracao}h") or 0)
+            if not math.isfinite(bruto) or bruto + 0.005 < coluna:
+                return None
+            # A coluna gravada é o cheio com o desconto: um `desconto_aplicado` forjado não bate com ela.
+            esperado = valor_digitado if digitada == f"{duracao}h" else round(bruto * (1 - d / 100), 2)
+            if abs(esperado - coluna) > 0.01:
+                return None
+            if not personalizado:
+                base = float(bases[i])
+                if not math.isfinite(base) or base < 0:
+                    return None
+                conta = aplicar_acrescimos(base, linhas, bool(snap.get("nota_fiscal")))["preco"]
+                if abs(conta - bruto) > 0.01:
+                    return None
+    except (KeyError, TypeError, ValueError):
+        return None
+    return snap
+
+
+def _bruto_da_duracao(entry: OrcamentoHistory, duracao: int) -> Decimal | None:
+    """O preço CHEIO da duração (antes do desconto, feature 313) — o denominador do BV e da dedução de duração.
+
+    Orçamento de antes da 313 (ou snapshot que não se sustenta): o mesmo número de `_total_da_duracao` — lá o
+    cheio e o final são iguais.
+    """
+    from app.orcamento.quote_ops import preco_na_duracao
+
+    snap = snapshot_v2(entry)
+    if snap is None:
+        return _total_da_duracao(entry, duracao)
+    conta = preco_na_duracao(snap, duracao)
+    bruto = _dec(conta["bruto"]) if conta else None
+    return bruto if bruto is not None and bruto > 0 else None
+
+
 def _total_da_duracao(entry: OrcamentoHistory, duracao: int) -> Decimal | None:
-    """O total que o Novo evento mostra para a duração: a coluna (1–4h) ou a régua linear do prefill."""
+    """O total que o Novo evento mostra para a duração: a coluna (1–4h) ou a régua linear do prefill.
+
+    Feature 313: é o valor FINAL (com o desconto) — a venda que o vínculo grava. Orçamento da versão 2 acima de 4h
+    sai pela conta da Q7 (`preco_na_duracao`); o de antes, pela régua de sempre.
+    """
+    if duracao not in DURACOES_TABELA:
+        snap = snapshot_v2(entry)
+        if snap is not None:
+            from app.orcamento.quote_ops import preco_na_duracao
+
+            conta = preco_na_duracao(snap, duracao)
+            total = _dec(conta["total"]) if conta else None
+            return total if total is not None and total > 0 else None
     if duracao in DURACOES_TABELA:
         total = _dec(getattr(entry, f"total_{duracao}h", None))
     else:
@@ -280,6 +370,33 @@ def _linhas_na_duracao(
     ]
 
 
+def _linhas_v2(snap: dict, linhas: list[dict], duracao: int, cheio: Decimal) -> list[dict]:
+    """As linhas de um orçamento da versão 2 na duração (feature 313): 1–4h pelo `valores_brl` (a mesma fonte do
+    `bv_*` da calculadora, em Decimal); acima de 4h pela conta da Q7 (`preco_na_duracao`) — o R$ uma vez, o BV sobre a
+    base com os outros acréscimos. Sem conta inversa."""
+    from app.orcamento.quote_ops import preco_na_duracao
+
+    extra = preco_na_duracao(snap, duracao) if duracao not in DURACOES_TABELA else None
+    saida = []
+    for k, linha in enumerate(linhas):
+        if duracao in DURACOES_TABELA:
+            valor = _valor_gravado(linha, duracao - 1, cheio)
+        else:
+            bruto = extra["linhas"][k] if extra and k < len(extra["linhas"]) else None
+            valor = _q(_dec(bruto)) if _dec(bruto) is not None else None
+        if valor is None or valor <= 0:
+            continue
+        saida.append({
+            "tipo": linha["tipo"],
+            "descricao": linha["descricao"],
+            "is_bv": linha["is_bv"],
+            "is_percent": linha["is_percent"],
+            "percentual": linha["value"] if linha["is_percent"] else None,
+            "amount_brl": valor,
+        })
+    return saida
+
+
 def acrescimos_do_orcamento(entry: OrcamentoHistory | None, duracao: int) -> dict:
     """O que o orçamento somou ao preço, linha a linha, na duração (B1 da feature 305). Pura.
 
@@ -300,10 +417,15 @@ def acrescimos_do_orcamento(entry: OrcamentoHistory | None, duracao: int) -> dic
         if entry is None or isinstance(duracao, bool) or not isinstance(duracao, int) or duracao < 1:
             return vazio
         snap = snapshot_do_orcamento(entry)
-        total = _total_da_duracao(entry, duracao)
+        # Feature 313: o total aqui é o CHEIO — é o denominador da proporção do BV (o final com desconto daria a
+        # razão 1 e o BV não encolheria). Orçamento de antes: igual ao de sempre.
+        total = _bruto_da_duracao(entry, duracao)
         if snap.get("personalizado_ativo"):
             return {"total": total, "personalizado": True, "linhas": []}
         linhas = _linhas_do_snapshot(snap)
+        v2 = snapshot_v2(entry)
+        if v2 is not None and linhas and total is not None:
+            return {"total": total, "personalizado": False, "linhas": _linhas_v2(v2, linhas, duracao, total)}
         total_tabela = _total_da_duracao(entry, min(duracao, 4))
         if not linhas or total is None or total_tabela is None:
             return {"total": total, "personalizado": False, "linhas": []}
@@ -360,10 +482,13 @@ def deduzir_duracao(
         custom = 0
     candidatas = list(DURACOES_TABELA) + ([custom] if custom > 4 else [])
     if valor is not None and valor > 0:
-        for d in candidatas:
-            total = _total_da_duracao(entry, d)
-            if total is not None and abs(total - valor) <= _CENTAVO:
-                return d, "pelo valor"
+        # Feature 313: o "valor antes do desconto" casa com o cheio; sem casar, com o final (o bruto vazio, o gêmeo
+        # Jinja e a aba com o bundle antigo gravam bruto = final). Orçamento de antes: os dois são o mesmo número.
+        for medida in (_bruto_da_duracao, _total_da_duracao):
+            for d in candidatas:
+                total = medida(entry, d)
+                if total is not None and abs(total - valor) <= _CENTAVO:
+                    return d, "pelo valor"
     if horas_agenda in DURACOES_TABELA or (custom > 4 and horas_agenda == custom):
         return horas_agenda, "pelo horário"
     return None, "duração não identificada"
@@ -902,7 +1027,8 @@ def aplicar_valores_do_orcamento(
         return None
     valor = Decimal(str(total)).quantize(Decimal("0.01"))
     event.sale_value = valor
-    event.sale_value_gross = valor
+    # Feature 313: o "valor antes do desconto" é o cheio do orçamento (o legado sem a chave: o próprio total).
+    event.sale_value_gross = Decimal(str(pre.get(f"bruto_{duracao}h") or total)).quantize(Decimal("0.01"))
     event.transport_value = Decimal(str(pre.get("transport_value") or 0))
     event.acrescimo_value = Decimal(str(pre.get("acrescimo_value") or 0))
     event.with_invoice = bool(pre.get("with_invoice"))

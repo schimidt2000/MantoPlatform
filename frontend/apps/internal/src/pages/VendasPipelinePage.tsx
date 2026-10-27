@@ -31,10 +31,14 @@ const PERIOD_OPTIONS: { value: PeriodFilter; label: string }[] = [
   { value: "30d", label: "Últimos 30 dias" },
 ];
 
-const CONTRACT_TONE: Record<ContractStatus, "green" | "gold" | "neutral"> = {
+const CONTRACT_TONE: Record<ContractStatus, "green" | "gold" | "neutral" | "red"> = {
   assinado: "green",
+  assinado_manual: "green",
   pendente: "gold",
   sem_contrato: "neutral",
+  aguardando: "gold",
+  vencido: "red",
+  recusado: "red",
 };
 
 const PAYMENT_TONE: Record<SalePaymentStatus, "green" | "gold" | "red" | "accent" | "neutral"> = {
@@ -174,7 +178,7 @@ function SaleRow({ venda, showSeller }: { venda: VendaFechada; showSeller: boole
         <TableCell className="text-ink">{venda.seller_name ?? "Sem vendedor"}</TableCell>
       )}
       <TableCell className="whitespace-nowrap">
-        <Badge tone={CONTRACT_TONE[venda.contract_status]}>
+        <Badge tone={CONTRACT_TONE[venda.contract_status] ?? "neutral"}>
           {venda.contract_status_label.toUpperCase()}
         </Badge>
       </TableCell>
@@ -344,7 +348,7 @@ export function VendasPipelinePage() {
                   aria-pressed={incluirLojaVirtual}
                   className="shrink-0"
                 >
-                  {incluirLojaVirtual ? "Tirar do funil" : "Incluir no funil"}
+                  {incluirLojaVirtual ? "Remover do funil" : "Incluir no funil"}
                 </Button>
               </CardHeader>
             </Card>

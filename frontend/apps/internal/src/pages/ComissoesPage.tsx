@@ -185,7 +185,7 @@ function SellerSummaryRow({ row, month }: { row: CommissionMonthSummaryRow; mont
         actions={
           isPending && (
             <Button size="sm" onClick={() => setDialogOpen(true)}>
-              Pagar Mês ({brl(row.pending_amount)})
+              Pagar mês ({brl(row.pending_amount)})
             </Button>
           )
         }
@@ -199,7 +199,7 @@ function SellerSummaryRow({ row, month }: { row: CommissionMonthSummaryRow; mont
                 <th className="px-3 py-1.5">Tipo</th>
                 <th className="px-3 py-1.5">Ciclo</th>
                 <th className="px-3 py-1.5 text-right">Valor</th>
-                <th className="px-3 py-1.5">Status</th>
+                <th className="px-3 py-1.5">Situação</th>
                 <th className="px-3 py-1.5">Pago em</th>
               </tr>
             </thead>
@@ -272,7 +272,7 @@ function DetailView({
           onChange={(e) => setStatusFilter(e.target.value as CommissionStatus | "todos")}
           className="h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink"
         >
-          <option value="todos">Todos os status</option>
+          <option value="todos">Todas as situações</option>
           <option value="a_pagar">A pagar</option>
           <option value="no_banco">No banco</option>
           <option value="pago">Pago</option>
@@ -291,7 +291,7 @@ function DetailView({
                 <th className="px-3 py-2">Tipo</th>
                 <th className="px-3 py-2">Ciclo</th>
                 <th className="px-3 py-2 text-right">Valor</th>
-                <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Situação</th>
                 <th className="px-3 py-2">Pago em</th>
               </tr>
             </thead>
@@ -384,7 +384,7 @@ export function ComissoesPage() {
               size="sm"
               onClick={() => exportComissoesCsv(query.data!.by_seller, month)}
             >
-              Exportar Relatório (CSV)
+              Exportar relatório (CSV)
             </Button>
           </>
         )}
@@ -451,8 +451,8 @@ export function ComissoesPage() {
                     filtro que o link semeou. */}
                 <Tabs defaultValue={eventoParam ? "detalhamento" : "resumo"} className="p-3">
                   <TabsList>
-                    <TabsTrigger value="resumo">Resumo por Vendedor</TabsTrigger>
-                    <TabsTrigger value="detalhamento">Detalhamento de Vendas</TabsTrigger>
+                    <TabsTrigger value="resumo">Resumo por vendedor</TabsTrigger>
+                    <TabsTrigger value="detalhamento">Detalhamento de vendas</TabsTrigger>
                   </TabsList>
                   <TabsContent value="resumo">
                     <SummaryBySellerView rows={query.data.by_seller} month={query.data.month} />
@@ -484,7 +484,7 @@ export function ComissoesPage() {
                           <th className="px-3 py-2">Tipo</th>
                           <th className="px-3 py-2">Ciclo</th>
                           <th className="px-3 py-2 text-right">Valor</th>
-                          <th className="px-3 py-2">Status</th>
+                          <th className="px-3 py-2">Situação</th>
                           <th className="px-3 py-2">Pago em</th>
                         </tr>
                       </thead>

@@ -25,6 +25,7 @@ import {
   type OrcamentoHistoricoEntry,
   type OrcamentoHistoricoFilters,
 } from "../lib/orcamento";
+import { textoDoPercentual } from "../lib/desconto";
 
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
@@ -80,7 +81,7 @@ function VerDialog({ entry, onClose }: { entry: OrcamentoHistoricoEntry; onClose
             </Button>
             <input
               type="email"
-              placeholder="E-mail do cliente"
+              placeholder="E-mail da cliente"
               className="h-8 w-56 rounded-md border border-line bg-panel px-2 text-xs"
               value={emailTo}
               onChange={(e) => setEmailTo(e.target.value)}
@@ -273,6 +274,12 @@ export function OrcamentoHistoricoPage() {
                 <TableCell className="text-ink">{e.event_location || "—"}</TableCell>
                 <TableCell>
                   <Badge tone={e.has_show ? "gold" : "neutral"}>{e.has_show ? "Com show" : "Sem show"}</Badge>
+                  {/* Feature 313: o desconto negociado salta à vista na lista; os totais já são os finais. */}
+                  {e.desconto_pct && textoDoPercentual(e.desconto_pct) ? (
+                    <Badge tone="neutral" className="ml-1">
+                      −{textoDoPercentual(e.desconto_pct)}%
+                    </Badge>
+                  ) : null}
                 </TableCell>
                 <TableCell align="right">{brl(e.total_1h)}</TableCell>
                 <TableCell align="right">{brl(e.total_2h)}</TableCell>

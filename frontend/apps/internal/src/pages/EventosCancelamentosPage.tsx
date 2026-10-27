@@ -16,6 +16,7 @@ import {
 import { formatBRL } from "@manto/money";
 import { useCancelamentos, type EventoCancelado, type FiltroDevolucao } from "../lib/eventOps";
 import { INPUT_CLASS } from "../components/EventDetail/parts";
+import { textoDaDevolucao } from "../components/EventDetail/QuadroDoPedido";
 
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
@@ -36,7 +37,7 @@ function diaMes(iso: string | null | undefined): string {
 }
 
 const STATUS_DEVOLUCAO: Record<string, { label: string; tone: "green" | "gold" | "blue" }> = {
-  pago: { label: "devolvido", tone: "green" },
+  pago: { label: "devolvida", tone: "green" },
   no_banco: { label: "no banco", tone: "blue" },
   nao_pago: { label: "a devolver", tone: "gold" },
 };
@@ -155,8 +156,8 @@ export function EventosCancelamentosPage() {
   return (
     <div className="mx-auto max-w-6xl space-y-4 p-4 sm:p-6">
       <PageHeader
-        title="Exclusões e cancelamentos"
-        subtitle="Pedidos do Comercial e eventos cancelados, com a devolução e o retido de cada um"
+        title="Cancelamentos"
+        subtitle="Pedidos de cancelamento do Comercial e eventos cancelados, com a devolução e o retido de cada um"
         className="mb-0"
         actions={
           <Button asChild variant="ghost" size="sm">
@@ -192,7 +193,7 @@ export function EventosCancelamentosPage() {
                       Venda
                     </TableCell>
                     <TableCell as="th">Pedido por</TableCell>
-                    <TableCell as="th">Motivo</TableCell>
+                    <TableCell as="th">Motivo e devolução combinada</TableCell>
                     <TableCell as="th" align="right">
                       Ações
                     </TableCell>
@@ -212,10 +213,20 @@ export function EventosCancelamentosPage() {
                           {data(p.requested_at)}
                         </span>
                       </TableCell>
-                      <TableCell className="text-muted">{p.reason ?? "—"}</TableCell>
+                      <TableCell className="text-muted">
+                        {(p.alcance_texto || p.alcance === "so_este_dia") && (
+                          <span className="block text-xs font-semibold text-ink first-letter:uppercase">
+                            {p.alcance_texto ?? "só este dia da venda"}
+                          </span>
+                        )}
+                        {p.reason ?? (p.requested_by === undefined ? "" : "—")}
+                        {textoDaDevolucao(p) && (
+                          <span className="block text-xs text-ink">{textoDaDevolucao(p)}</span>
+                        )}
+                      </TableCell>
                       <TableCell align="right">
                         <Button asChild size="sm" variant="outline">
-                          <Link to={`/events/${p.id}`}>Abrir evento</Link>
+                          <Link to={`/events/${p.id}`}>Decidir</Link>
                         </Button>
                       </TableCell>
                     </TableRow>

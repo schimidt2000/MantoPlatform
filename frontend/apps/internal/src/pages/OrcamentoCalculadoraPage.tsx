@@ -36,9 +36,11 @@ import {
   type Acrescimo,
   type CalcularOrcamentoInput,
   type CalcularOrcamentoResult,
+  type DuracaoDoDesconto,
   type Performer,
   type Quote,
 } from "../lib/orcamento";
+import { linhasDoBv, pixDe, temBv } from "../lib/desconto";
 
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const INPUT = "h-10 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
@@ -85,7 +87,48 @@ const INITIAL_STATE = {
   personalizadoCriterio: "valor_final" as "valor_final" | "multiplicador",
   custValores: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
   custMult: { "1h": 0, "2h": 0, "3h": 0, "4h": 0 } as Record<Duracao, number>,
+  // Feature 313 (Q8 = B): o desconto é bilateral — a comercial digita o % OU o valor final de uma duração; quem foi
+  // digitado por último manda (`descontoModo`), e o outro a tela mostra pela resposta do servidor.
+  descontoModo: "pct" as "pct" | "valor",
+  descontoPct: 0,
+  descontoValor: 0,
+  descontoDuracao: "2h" as DuracaoDoDesconto,
 };
+
+/**
+ * Uma duração no card Resultado (feature 313): o valor final, o cheio riscado quando há desconto, o PIX à vista e —
+ * com BV — o BV a repassar a quem indicou (já com o desconto). Números do servidor; quote antigo sem as chaves mostra
+ * só o total.
+ */
+function ResultadoDaDuracao({
+  label,
+  quote,
+  coluna,
+}: {
+  label: string;
+  quote: Quote;
+  coluna: "1h" | "2h" | "3h" | "4h" | "custom";
+}) {
+  const total = coluna === "custom" ? (quote.total_custom ?? 0) : quote[`total_${coluna}`];
+  const bruto = coluna === "custom" ? quote.bruto_custom : quote[`bruto_${coluna}`];
+  const pix = pixDe(quote, coluna);
+  const bv = linhasDoBv(quote, coluna, brl);
+  return (
+    <div className="rounded-md bg-surface-2 p-3 text-center">
+      <p className="text-xs uppercase text-muted">{label}</p>
+      {bruto != null && Math.abs(bruto - total) >= 0.005 && (
+        <p className="text-xs text-muted line-through">{brl(bruto)}</p>
+      )}
+      <p className="whitespace-nowrap text-lg font-semibold text-ink">{brl(total)}</p>
+      {pix != null && <p className="text-xs text-muted">PIX à vista: {brl(pix)}</p>}
+      {bv.map((linha) => (
+        <p key={linha} className="text-xs text-muted">
+          {linha}
+        </p>
+      ))}
+    </div>
+  );
+}
 
 /** Painel de alerta "Já na agenda neste dia" — evita venda em dobro de um personagem. */
 function AgendaNoDiaAlert({ date }: { date: string }) {
@@ -160,7 +203,7 @@ function DataEspecialAlert({
           ? `Orçamento personalizado: o valor digitado vence — confira se cobre a tabela de ${faixa.rotulo}.`
           : "Vale para qualquer orçamento nesta data — o preço já é o da tabela especial."}
         {natal && !personalizado
-          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não some o acréscimo "Outro".'
+          ? ' Use o item "Ajudante do Noel" (não ator cara limpa) e não inclua o acréscimo "Outro".'
           : ""}
       </p>
     </motion.div>
@@ -202,8 +245,18 @@ export function OrcamentoCalculadoraPage() {
   const [personalizadoCriterio, setPersonalizadoCriterio] = useState(INITIAL_STATE.personalizadoCriterio);
   const [custValores, setCustValores] = useState<Record<Duracao, number>>(INITIAL_STATE.custValores);
   const [custMult, setCustMult] = useState<Record<Duracao, number>>(INITIAL_STATE.custMult);
+  const [descontoModo, setDescontoModo] = useState<"pct" | "valor">(INITIAL_STATE.descontoModo);
+  const [descontoPct, setDescontoPct] = useState(INITIAL_STATE.descontoPct);
+  // O que está no campo % como foi digitado ("0", "0,5"): o número sozinho apagava o "0" do começo (converge, T057).
+  const [descontoPctTexto, setDescontoPctTexto] = useState("");
+  const [descontoValor, setDescontoValor] = useState(INITIAL_STATE.descontoValor);
+  const [descontoDuracao, setDescontoDuracao] = useState<DuracaoDoDesconto>(INITIAL_STATE.descontoDuracao);
   const [result, setResult] = useState<CalcularOrcamentoResult | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  // Feature 313: o "fechar por R$" apontou para uma duração que o orçamento não mostra — o servidor diz quais mostra
+  // (`duracoes_do_desconto` no erro) e o seletor passa a elas; sem isso ficava preso no resultado anterior.
+  const [duracoesDoErro, setDuracoesDoErro] = useState<DuracaoDoDesconto[] | null>(null);
+  const [avisoDoDesconto, setAvisoDoDesconto] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   // Feature 307: do payload mudar até a resposta chegar, `result` é de outra conta — durante os
   // 400 ms do debounce `calcular.isPending` ainda é false, e "Gerar Orçamento" salvaria o preço
@@ -272,6 +325,20 @@ export function OrcamentoCalculadoraPage() {
     setDuracaoCustom(Number(snap.duracao_custom) || 0);
     setAcrescimos(snap.acrescimos ?? []);
     setPersonalizadoAtivo(Boolean(snap.personalizado_ativo));
+    // Feature 313: o desconto reabre como foi digitado; orçamento de antes (sem as chaves) reabre SEM desconto —
+    // sem zerar aqui, ele herdaria o que estava digitado na tela.
+    if (snap.desconto_valor && snap.desconto_duracao) {
+      setDescontoModo("valor");
+      setDescontoValor(snap.desconto_valor);
+      setDescontoDuracao(snap.desconto_duracao);
+      setDescontoPct(0);
+      setDescontoPctTexto("");
+    } else {
+      setDescontoModo("pct");
+      setDescontoPct(snap.desconto_pct_digitado ?? 0);
+      setDescontoPctTexto(snap.desconto_pct_digitado ? String(snap.desconto_pct_digitado) : "");
+      setDescontoValor(0);
+    }
     setResult(null);
     setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -300,6 +367,12 @@ export function OrcamentoCalculadoraPage() {
     setPersonalizadoCriterio(INITIAL_STATE.personalizadoCriterio);
     setCustValores(INITIAL_STATE.custValores);
     setCustMult(INITIAL_STATE.custMult);
+    setDescontoModo(INITIAL_STATE.descontoModo);
+    setAvisoDoDesconto(null);
+    setDescontoPct(INITIAL_STATE.descontoPct);
+    setDescontoPctTexto("");
+    setDescontoValor(INITIAL_STATE.descontoValor);
+    setDescontoDuracao(INITIAL_STATE.descontoDuracao);
     setResult(null);
     setFieldErrors({});
     setSaved(false);
@@ -339,6 +412,10 @@ export function OrcamentoCalculadoraPage() {
       cust_mult_2h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["2h"]) : undefined,
       cust_mult_3h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["3h"]) : undefined,
       cust_mult_4h: personalizadoAtivo && personalizadoCriterio === "multiplicador" ? String(custMult["4h"]) : undefined,
+      // Feature 313: só o campo do modo ativo vai — o outro é leitura da resposta (sem laço de recálculo).
+      desconto_pct: descontoModo === "pct" && descontoPct > 0 ? descontoPct : undefined,
+      desconto_valor: descontoModo === "valor" && descontoValor > 0 ? descontoValor : undefined,
+      desconto_duracao: descontoModo === "valor" && descontoValor > 0 ? descontoDuracao : undefined,
     }),
     [
       performers,
@@ -363,6 +440,10 @@ export function OrcamentoCalculadoraPage() {
       personalizadoCriterio,
       custValores,
       custMult,
+      descontoModo,
+      descontoPct,
+      descontoValor,
+      descontoDuracao,
     ],
   );
 
@@ -377,10 +458,15 @@ export function OrcamentoCalculadoraPage() {
     const timer = setTimeout(() => {
       calcular.mutate(payload, {
         onSuccess: (data) => {
-          if (meu === seq.current) setResult(data);
+          if (meu !== seq.current) return;
+          setResult(data);
+          setDuracoesDoErro(null);
         },
         onError: (err) => {
-          if (meu === seq.current && err instanceof ApiRequestError && err.fields) setFieldErrors(err.fields);
+          if (meu !== seq.current || !(err instanceof ApiRequestError)) return;
+          if (err.fields) setFieldErrors(err.fields);
+          const ds = err.details.duracoes_do_desconto;
+          setDuracoesDoErro(Array.isArray(ds) && ds.length ? (ds as DuracaoDoDesconto[]) : null);
         },
         onSettled: () => {
           if (meu === seq.current) setCalcPendente(false);
@@ -398,10 +484,51 @@ export function OrcamentoCalculadoraPage() {
   // Feature 309: avisos da conta (Noel avulso sem produto, preço estimado) — mesma regra: só do
   // resultado que corresponde ao payload atual.
   const avisosAtivos = resultadoVivo ? (result?.quote.avisos ?? []) : [];
+  // Feature 313: as durações que aceitam "fechar por R$" são as que a proposta mostra (decisão do servidor: o
+  // só-produto mostra um valor, a extra só quando existe); sem resultado ainda, as marcadas.
+  const duracoesDoDesconto = useMemo((): { valor: DuracaoDoDesconto; rotulo: string }[] => {
+    if (duracoesDoErro) return duracoesDoErro.map((d) => ({ valor: d, rotulo: d === "extra" ? "duração extra" : d }));
+    const q = result?.quote;
+    if (!q) return DURACOES.filter((d) => incluirDuracao.includes(d)).map((d) => ({ valor: d, rotulo: d }));
+    if (q.valor_unico) return [{ valor: "1h", rotulo: "Preço de tabela" }];
+    const mostra: Record<Duracao, boolean> = { "1h": q.show_1h, "2h": q.show_2h, "3h": q.show_3h, "4h": q.show_4h };
+    const ops: { valor: DuracaoDoDesconto; rotulo: string }[] = DURACOES.filter((d) => mostra[d]).map((d) => ({
+      valor: d,
+      rotulo: d,
+    }));
+    if (q.total_custom) ops.push({ valor: "extra", rotulo: `${q.duracao_custom}h` });
+    return ops;
+  }, [result, incluirDuracao, duracoesDoErro]);
+  useEffect(() => {
+    if (!duracoesDoErro && (!resultadoVivo || !result)) return;
+    if (!duracoesDoDesconto.length) return;
+    if (duracoesDoDesconto.some((o) => o.valor === descontoDuracao)) return;
+    setDescontoDuracao(duracoesDoDesconto[0].valor);
+    // O valor digitado era o preço DAQUELA duração: levá-lo para outra viraria um desconto que ninguém negociou
+    // (R$ 600 das 2h aplicado ao preço de tabela de R$ 2.500 = 76%). Zera e avisa.
+    if (descontoModo === "valor" && descontoValor > 0) {
+      setDescontoValor(0);
+      setAvisoDoDesconto("A duração do “fechar por R$” saiu do orçamento — selecione a duração e informe o valor novamente.");
+    }
+    // O modo e o valor são lidos só no momento da troca (não disparam o efeito).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resultadoVivo, result, duracoesDoErro, duracoesDoDesconto, descontoDuracao]);
+  const descontoTexto = resultadoVivo ? (result?.quote.desconto_pct_texto ?? null) : null;
+  const totalDaDuracaoDoDesconto = (() => {
+    const q = resultadoVivo ? result?.quote : undefined;
+    if (!q) return null;
+    if (descontoDuracao === "extra") return q.total_custom ?? null;
+    return { "1h": q.total_1h, "2h": q.total_2h, "3h": q.total_3h, "4h": q.total_4h }[descontoDuracao];
+  })();
+  const errosDoDesconto = ["desconto_pct", "desconto_valor"].map((k) => fieldErrors[k]).filter(Boolean);
   const tabelaDeProdutos = opcoes.data?.settings.produtos ?? {};
   // Janela de deploy (bundle novo, backend velho): com produto selecionado e `quote.produtos` ausente,
   // o servidor NÃO aplicou o produto — gerar gravaria um orçamento sem a Visita. Trava o botão.
   const produtoSemBackend = produtos.length > 0 && !!result && result.quote.produtos === undefined;
+  // Feature 313, a mesma janela: desconto digitado e `quote.desconto_pct` ausente (a chave, não o valor) = backend
+  // de antes, que ignora o desconto — gerar gravaria o orçamento cheio (converge, T053).
+  const descontoSemBackend =
+    (descontoPct > 0 || descontoValor > 0) && !!result && result.quote.desconto_pct === undefined;
   const produtosAplicados = result?.quote.produtos ?? [];
   // Só produto no orçamento = UM valor rotulado "Preço de tabela" — decisão do SERVIDOR
   // (`quote.valor_unico`); inferir pelos `show_*` rotulava errado produto + avulso com 2h–4h desmarcadas.
@@ -467,12 +594,12 @@ export function OrcamentoCalculadoraPage() {
       )}
 
       {opcoes.data && (
-        <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+        <div className="grid gap-4 lg:grid-cols-3 lg:items-start [&>*]:min-w-0">
           {/* ── Coluna esquerda — Dados e Segurança (1/3) ────────────────────── */}
           <div className="space-y-4 lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle>Dados do Evento</CardTitle>
+                <CardTitle>Dados do evento</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div>
@@ -700,13 +827,15 @@ export function OrcamentoCalculadoraPage() {
                   acrescimos={acrescimos}
                   onChange={setAcrescimos}
                   tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                  tipoBv={opcoes.data.acrescimo_tipo_bv}
+                  ajuda="O acréscimo em R$ entra uma vez, em qualquer duração; o BV é calculado sobre o valor com os acréscimos (o BV em reais também entra uma vez) e acompanha o desconto. O BV é um repasse — não aparece para o cliente — e o PIX de quem recebe é informado no evento."
                 />
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Ajustes Finos</CardTitle>
+                <CardTitle>Ajustes finos</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex flex-wrap items-center gap-2">
@@ -724,9 +853,20 @@ export function OrcamentoCalculadoraPage() {
                     min={0}
                     className="max-w-[140px]"
                     value={duracaoCustom}
-                    onChange={(e) => setDuracaoCustom(Number(e.target.value))}
+                    onChange={(e) => {
+                      setDuracaoCustom(Number(e.target.value));
+                      // O R$ negociado para 6 h não vale para 7 h (converge, T057) — só na troca feita aqui; o
+                      // "Recalcular" põe horas e valor juntos e não passa por este caminho.
+                      if (descontoModo === "valor" && descontoDuracao === "extra" && descontoValor > 0) {
+                        setDescontoValor(0);
+                        setAvisoDoDesconto("As horas da duração extra mudaram — informe novamente o valor de fechamento.");
+                      }
+                    }}
                   />
-                  <p className="mt-1 text-xs text-muted">(preço = 4h + N × 4h × markup × 4h)</p>
+                  <p className="mt-1 text-xs text-muted">
+                    (preço = apresentação e transporte de 4h ÷ 4 × horas; os acréscimos em R$ entram uma vez; o BV é
+                    calculado sobre tudo isso; a nota no fim. O produto de tabela não muda com as horas.)
+                  </p>
                 </div>
 
                 <div>
@@ -775,6 +915,7 @@ export function OrcamentoCalculadoraPage() {
                   </label>
                   {personalizadoAtivo && (
                     <div className="space-y-3 border-t border-line p-3">
+                      <p className="text-xs text-muted">O desconto negociado (abaixo) incide também sobre estes valores.</p>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -816,13 +957,125 @@ export function OrcamentoCalculadoraPage() {
                     </div>
                   )}
                 </div>
+
+                {/* Feature 313 (D3, Q1 = A, Q8 = B): o desconto negociado, sobre o total — em % ou pelo valor final. */}
+                <div className="rounded-md border border-line p-3">
+                  <p className="text-sm font-medium text-ink">Desconto negociado</p>
+                  <p className="mb-3 text-xs text-muted">
+                    Sobre o total (transporte, acréscimos e nota inclusos). O PIX à vista de 5% continua sozinho e vale
+                    o maior entre ele e este desconto.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-3">
+                    <div>
+                      <label className={LABEL} htmlFor="desconto-pct">
+                        Desconto (%)
+                      </label>
+                      <Input
+                        id="desconto-pct"
+                        type="number"
+                        min={0}
+                        max={99.99}
+                        step={0.01}
+                        className="max-w-[120px]"
+                        value={descontoModo === "pct" ? descontoPctTexto : ""}
+                        placeholder={descontoModo === "valor" && descontoTexto ? descontoTexto : "0"}
+                        onChange={(e) => {
+                          setDescontoModo("pct");
+                          setDescontoPctTexto(e.target.value);
+                          setDescontoPct(Number(e.target.value) || 0);
+                          setAvisoDoDesconto(null);
+                        }}
+                        aria-invalid={Boolean(fieldErrors.desconto_pct)}
+                      />
+                    </div>
+                    <div>
+                      <label className={LABEL} htmlFor="desconto-duracao">
+                        ou fechar
+                      </label>
+                      <select
+                        id="desconto-duracao"
+                        className={`${INPUT} w-auto`}
+                        value={descontoDuracao}
+                        onChange={(e) => {
+                          setDescontoDuracao(e.target.value as DuracaoDoDesconto);
+                          setAvisoDoDesconto(null);
+                        }}
+                      >
+                        {duracoesDoDesconto.map((o) => (
+                          <option key={o.valor} value={o.valor}>
+                            {o.rotulo}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={LABEL} htmlFor="desconto-valor">
+                        por (R$)
+                      </label>
+                      <MoneyInput
+                        id="desconto-valor"
+                        className={`${INPUT} max-w-[160px]`}
+                        value={descontoModo === "valor" ? descontoValor : 0}
+                        onValueChange={(v) => {
+                          setDescontoModo("valor");
+                          setDescontoValor(v);
+                          setAvisoDoDesconto(null);
+                        }}
+                        aria-invalid={Boolean(fieldErrors.desconto_valor)}
+                      />
+                    </div>
+                    {(descontoPct > 0 || descontoValor > 0) && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setDescontoPct(0);
+                          setDescontoPctTexto("");
+                          setDescontoValor(0);
+                          setDescontoModo("pct");
+                          setAvisoDoDesconto(null);
+                        }}
+                      >
+                        Sem desconto
+                      </Button>
+                    )}
+                  </div>
+                  {resultadoVivo &&
+                    descontoModo === "pct" &&
+                    descontoPct > 0 &&
+                    result?.quote.desconto_pct != null &&
+                    totalDaDuracaoDoDesconto != null && (
+                    <p className="mt-2 text-xs text-muted">
+                      Fecha {duracoesDoDesconto.find((o) => o.valor === descontoDuracao)?.rotulo ?? descontoDuracao}{" "}
+                      por {brl(totalDaDuracaoDoDesconto)}.
+                    </p>
+                  )}
+                  {descontoModo === "valor" && descontoValor > 0 && descontoTexto && (
+                    <p className="mt-2 text-xs text-muted">
+                      = {descontoTexto}% de desconto, aplicado também nas outras durações.
+                    </p>
+                  )}
+                  {avisoDoDesconto && (
+                    <p className="mt-2 text-sm text-ink" role="status">
+                      {avisoDoDesconto}
+                    </p>
+                  )}
+                  {errosDoDesconto.map((msg) => (
+                    <p key={msg} className="mt-2 text-sm text-red" role="alert">
+                      {msg}
+                    </p>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
             {calcular.isError && !Object.keys(fieldErrors).length && (
               <p className="text-sm text-red">Não foi possível calcular o orçamento.</p>
             )}
-            {Object.values(fieldErrors).map((msg) => (
+            {Object.entries(fieldErrors)
+              .filter(([campo]) => campo !== "desconto_pct" && campo !== "desconto_valor")
+              .map(([, msg]) => msg)
+              .map((msg) => (
               <p key={msg} className="text-sm text-red">
                 {msg}
               </p>
@@ -834,21 +1087,34 @@ export function OrcamentoCalculadoraPage() {
                   <CardTitle>Resultado</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className={`grid grid-cols-2 gap-3 sm:grid-cols-4 transition-opacity ${calcular.isPending ? "opacity-50" : ""}`}>
-                    {([
-                      [valorUnico ? "Preço de tabela" : "1 Hora", result.quote.show_1h, result.quote.total_1h],
-                      ["2 Horas", result.quote.show_2h, result.quote.total_2h],
-                      ["3 Horas", result.quote.show_3h, result.quote.total_3h],
-                      ["4 Horas", result.quote.show_4h, result.quote.total_4h],
-                    ] as const)
+                  {/* Feature 313: fora do resultado vivo (debounce, conta velha, erro) os números ficam esmaecidos e
+                      marcados — o card não mostra a conta anterior como se valesse para a entrada nova. */}
+                  {!resultadoVivo && (
+                    <p className="text-xs text-muted" role="status">
+                      {calcular.isError ? "Corrija os campos para recalcular." : "Recalculando…"}
+                    </p>
+                  )}
+                  <div className={`grid grid-cols-2 gap-3 lg:grid-cols-4 transition-opacity ${resultadoVivo ? "" : "opacity-50"}`}>
+                    {(
+                      [
+                        [valorUnico ? "Preço de tabela" : "1 Hora", result.quote.show_1h, "1h"],
+                        ["2 Horas", result.quote.show_2h, "2h"],
+                        ["3 Horas", result.quote.show_3h, "3h"],
+                        ["4 Horas", result.quote.show_4h, "4h"],
+                        [`${result.quote.duracao_custom} Horas`, Boolean(result.quote.total_custom) && !valorUnico, "custom"],
+                      ] as const
+                    )
                       .filter(([, show]) => show)
-                      .map(([label, , total]) => (
-                        <div key={label} className="rounded-md bg-surface-2 p-3 text-center">
-                          <p className="text-xs uppercase text-muted">{label}</p>
-                          <p className="text-lg font-semibold text-ink">{brl(total)}</p>
-                        </div>
+                      .map(([label, , coluna]) => (
+                        <ResultadoDaDuracao key={label} label={label} quote={result.quote} coluna={coluna} />
                       ))}
                   </div>
+                  {resultadoVivo && result.quote.desconto_pct_texto && (
+                    <p className="text-sm text-muted">
+                      Desconto de {result.quote.desconto_pct_texto}% sobre o total
+                      {temBv(result.quote) ? "; o BV a repassar acompanha." : "."}
+                    </p>
+                  )}
                   {/* Feature 307: o resultado diz quando caiu numa faixa de data especial. */}
                   {result.quote.data_especial && (
                     <p className="text-sm text-muted">
@@ -868,7 +1134,12 @@ export function OrcamentoCalculadoraPage() {
                       O servidor não aplicou o produto — recarregue a página.
                     </p>
                   )}
-                  <div className="flex items-center justify-between gap-2">
+                  {descontoSemBackend && (
+                    <p className="text-sm text-red" role="alert">
+                      O servidor não aplicou o desconto — recarregue a página.
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Button variant="outline" onClick={() => setMemoriaOpen(true)}>
                       Ver memória de cálculo
                     </Button>
@@ -876,10 +1147,15 @@ export function OrcamentoCalculadoraPage() {
                       loading={salvar.isPending}
                       onClick={handleSalvar}
                       disabled={
-                        saved || calcPendente || calcular.isPending || calcular.isError || produtoSemBackend
+                        saved ||
+                        calcPendente ||
+                        calcular.isPending ||
+                        calcular.isError ||
+                        produtoSemBackend ||
+                        descontoSemBackend
                       }
                     >
-                      {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar Orçamento"}
+                      {saved ? "Orçamento salvo" : calcPendente || calcular.isPending ? "Recalculando…" : "Gerar orçamento"}
                     </Button>
                   </div>
                 </CardContent>

@@ -60,7 +60,12 @@ PASSWORD = "verify-205-senha"
 RUN_ID = secrets.token_hex(4)
 
 app = create_app()
+# Feature 310: o aviso de pagamento é processado numa thread; aqui, na própria requisição. E o
+# Google é dublê neste script, então a trava de escrita de evento pode ser aberta.
+app.config["VIRTUAIS_AVISO_SINCRONO"] = True
+app.config["CALENDAR_SUPPRESS_EVENT_WRITES"] = False
 results: list[tuple[str, bool, str]] = []
+SETTINGS_ORIGINAIS: dict = {}
 
 
 def check(name: str, ok: bool, detail: str = "") -> None:
@@ -98,6 +103,8 @@ def limpar_campanha(camp_id: int) -> None:
     for pedido in VirtualOrder.query.filter_by(campaign_id=camp_id).all():
         _PNc.query.filter_by(order_id=pedido.id).delete(synchronize_session=False)
         _RRc.query.filter_by(order_id=pedido.id).delete(synchronize_session=False)
+        # Feature 310: o aviso com segredo errado não tem pedido nem NSU de transação.
+        _PNc.query.filter_by(order_nsu=pedido.order_nsu).delete(synchronize_session=False)
         if pedido.event_id:
             eventos_para_apagar.append(pedido.event_id)
         db.session.delete(pedido)
@@ -162,6 +169,17 @@ with app.app_context():
     )
     db.session.add(character)
     db.session.flush()
+
+    # Feature 310: publicar exige o pagamento da loja ligado (tag, segredo e interruptor). O
+    # estado do banco local volta ao que era no `finally`.
+    from app.models import SiteSetting
+
+    _cfg = SiteSetting.query.get(1)
+    for _campo in ("infinitepay_handle", "infinitepay_webhook_token", "virtuais_pagamento_ativo"):
+        SETTINGS_ORIGINAIS[_campo] = getattr(_cfg, _campo)
+    _cfg.infinitepay_handle = "verify205"
+    _cfg.infinitepay_webhook_token = "verify205-token"
+    _cfg.virtuais_pagamento_ativo = True
 
     superadmin_email = superadmin.email
     outsider_email = outsider.email if outsider else None
@@ -556,7 +574,7 @@ try:
     eventos_criados = {"n": 0}
 
     def fake_insert_event(calendar_id, title, start_dt, end_dt, description="", location="",
-                          conference_request_id=None):
+                          conference_request_id=None, private_props=None, **_kw):
         eventos_criados["n"] += 1
         return {
             "id": f"gcal-{eventos_criados['n']}-{conference_request_id}",
@@ -685,11 +703,18 @@ try:
     with app.app_context():
         from app.models import VirtualPaymentNotification as _PN
 
-        recusada = _PN.query.filter_by(transaction_nsu=f"{RUN_ID}-txn-segredo").first()
+        # Feature 310 (R2): o aviso com segredo errado NÃO grava o `transaction_nsu` — gravar
+        # deixava um aviso legítimo posterior com o mesmo NSU cair como "duplicado".
+        recusada = (
+            _PN.query.filter_by(order_nsu=p2["order_nsu"], secret_ok=False)
+            .order_by(_PN.id.desc())
+            .first()
+        )
         eventos_depois = CalendarEvent.query.filter_by(event_type="VIRTUAL").count()
     check("V3.10 segredo inválido dá 404", r.status_code == 404, str(r.status_code))
     check("V3.11 tentativa recusada fica registrada",
-          recusada is not None and recusada.secret_ok is False and recusada.outcome == "recusado",
+          recusada is not None and recusada.outcome == "token_invalido"
+          and recusada.transaction_nsu is None,
           str(recusada.outcome if recusada else None))
     check("V3.12 segredo inválido não cria evento", eventos_antes == eventos_depois,
           f"{eventos_antes} -> {eventos_depois}")
@@ -702,7 +727,9 @@ try:
         o2 = VirtualOrder.query.filter_by(order_nsu=p2["order_nsu"]).first()
         estado = (n.recheck_result, n.outcome, o2.status)
     check("V3.13 'não pago' recusa a efetivação",
-          estado == ("unpaid", "recusado", "aguardando"), str(estado))
+          # Feature 310: "não pago" não é prova de que não vai pagar — o aviso fica aguardando
+          # prova (retorno do checkout ou reconsulta), em vez de ser descartado.
+          estado == ("unpaid", "pendente_prova", "aguardando"), str(estado))
 
     # V3.14 — valor divergente.
     resposta_operadora["paid"] = True
@@ -713,7 +740,8 @@ try:
         o2 = VirtualOrder.query.filter_by(order_nsu=p2["order_nsu"]).first()
         estado = (n.recheck_result, n.outcome, o2.status)
     check("V3.14 valor divergente recusa a efetivação",
-          estado == ("divergent", "recusado", "aguardando"), str(estado))
+          # Feature 310: valor divergente vira "a conferir" com nome próprio.
+          estado == ("divergent", "divergente", "aguardando"), str(estado))
 
     # V3.15 — operadora indisponível: retém, nunca decide.
     resposta_operadora["paid_amount"] = None  # volta a espelhar o total do pedido
@@ -1467,9 +1495,17 @@ try:
         resultado = _ops.retentar_salas()
         o10 = VirtualOrder.query.get(order_id_v10)
         attempts_4 = o10.meet_attempts or 0
-    check("V10.10 esgotadas as 3 tentativas, a varredura para de tentar",
-          attempts_3 == 3 and attempts_4 == 3 and resultado["esgotadas"] == 1,
+    # Feature 310 (R11): esgotadas as 3 da política curta, a varredura NÃO desiste — passa a tentar
+    # a cada 10 min até o horário. Dois minutos depois da 3ª, portanto, ela ainda espera.
+    check("V10.10 esgotadas as 3 tentativas, a varredura passa ao intervalo longo",
+          attempts_3 == 3 and attempts_4 == 3 and resultado["retidas"] == 1,
           f"3ª={attempts_3}, 4ª={attempts_4}, {resultado}")
+    envelhecer_sala(order_id_v10, minutos=11)
+    with app.app_context():
+        _ops.retentar_salas()
+        attempts_5 = VirtualOrder.query.get(order_id_v10).meet_attempts or 0
+    check("V10.10b passados 10 min, a varredura tenta de novo (até o horário da chamada)",
+          attempts_5 == 4, f"{attempts_5} tentativas")
 
     fila = client.get("/api/virtuais/producao").get_json() or {}
     linha = next(
@@ -1629,6 +1665,13 @@ finally:
     with app.app_context():
         if campaign_id:
             limpar_campanha(campaign_id)
+        if SETTINGS_ORIGINAIS:
+            from app.models import SiteSetting
+
+            _cfg = SiteSetting.query.get(1)
+            for _campo, _valor in SETTINGS_ORIGINAIS.items():
+                setattr(_cfg, _campo, _valor)
+            db.session.commit()
         # Evento presencial de controle do V9 — fixture do teste, não pode ficar no financeiro.
         controle_restante = CalendarEvent.query.filter_by(
             title="Verify205 Controle Presencial"

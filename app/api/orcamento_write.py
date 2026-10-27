@@ -50,7 +50,7 @@ def api_orcamento_calcular() -> Any:
     try:
         result = quote_ops.calculate_quote(payload)
     except quote_ops.QuoteValidationError as exc:
-        return json_error(exc.message, 400, fields={exc.field: exc.message})
+        return json_error(exc.message, 400, fields={exc.field: exc.message}, **exc.extra)
     return jsonify(result)
 
 
@@ -314,10 +314,10 @@ def api_orcamento_add_especial() -> Any:
     nome = (body.get("nome") or "").strip()
     prices = body.get("prices")
     if not nome or prices is None:
-        return json_error("Dados inválidos", 400)
+        return json_error("Informe o nome e os preços do item especial.", 400)
     s = _cfg.load()
     if nome in s["especiais"]:
-        return json_error(f"'{nome}' já existe", 400, fields={"nome": "já existe"})
+        return json_error(f"Já existe um item especial chamado '{nome}'.", 400, fields={"nome": "Já existe"})
     s["especiais"][nome] = prices
     excluidos = s.setdefault("especiais_excluidos", [])
     if nome in excluidos:

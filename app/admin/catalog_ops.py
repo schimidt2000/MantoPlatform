@@ -257,7 +257,7 @@ def create_product(
     if not clean_name:
         raise CatalogValidationError("name", "Nome do produto é obrigatório.")
     if not new_photos:
-        raise CatalogValidationError("photos", "Envie ao menos uma foto.")
+        raise CatalogValidationError("photos", "Insira ao menos uma foto.")
     validate_photo_extensions(files)
     validate_video_url(video_url)
 

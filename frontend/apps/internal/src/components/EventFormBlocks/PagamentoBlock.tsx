@@ -181,7 +181,7 @@ export function PagamentoBlock({
           onChange={(e) => addProofFile(e.target.files?.[0] ?? null)}
         />
         <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-          + Adicionar comprovante
+          + Inserir comprovante
         </Button>
         <p className={HELP}>PDF, JPG ou PNG — máx. 20 MB por arquivo.</p>
       </div>

@@ -9,7 +9,12 @@
 > aqui há só a referência.
 >
 > Origem: auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript.
-> Última revisão: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
+> Última revisão: **2026-10-23** (feature 310, lote de 23/10: o pagamento da Loja
+> Virtual — a máquina de estados do pedido e do aviso, a regra única `decidir_pagamento` e as
+> invariantes do §4).
+> Antes: **2026-10-22** (feature 315, em branch: o pedido de cancelamento antes do ato, §1 "Antes do ato").
+> Antes: **2026-10-21** (feature 313, em produção desde 22/10 ~04:58: a ordem da conta do orçamento, o desconto e o PIX na linha
+> "Orçamento" de §6, e o BV do evento pelo cheio nas invariantes do BV, §1). Antes: **2026-10-20** (feature 306: o fluxo de cancelar, as invariantes 18 a 26 da Agenda e
 > 6 a 10 do Financeiro, e as correções no lugar da exclusão, do grupo, da cobrança, da regra de
 > comissão, do estorno, da cascata da DRE e da comissão exibida). Antes: **2026-10-20** (feature 309: produtos de tabela — preço fixo fora do markup,
 > vagas congeladas e teto pela tabela — na linha Orçamento do §5). Antes: **2026-10-15** (feature 307: data especial pela data do evento na linha Orçamento
@@ -208,6 +213,36 @@ da devolução e da multa em São Paulo sem fuso (`now_sp()`); o `EventLog` da 3
 correções) sai sem `created_at`, pelo default UTC do modelo — o do cancelamento da 224 saía 3 h antes.
 Modelo e transições: `specs/306-dinheiro-do-cancelamento/data-model.md` §5 a §8.
 
+### Antes do ato: o pedido de cancelamento (feature 315)
+
+**Fluxo.** O Comercial não cancela: pede ("Solicitar cancelamento", `POST /api/events/<id>/pedido-cancelamento`), com o
+motivo, o alcance numa venda de vários dias (no 1º dia com outro dia vivo: todos ou só este) e a devolução combinada com
+a cliente (tudo, parte com o valor, ou nada; quem recebe e PIX em tudo e parte; no pedido de um dia só, o novo valor da
+venda). Cada Superadmin é avisado no sino na mesma transação. **Só o Superadmin fecha o pedido**, de três jeitos:
+recusando (`DELETE …/pedido-cancelamento`), cancelando (o ato da 306 fecha o pedido de cada dia que encerra, em
+`cancel_ops.ao_cancelar`) ou excluindo o evento vazio; cada saída responde a quem pediu, uma vez, no sino. Devolver ao
+Google não mexe no pedido; editar o evento com pedido continua valendo (o pedido não tranca nada).
+
+**Invariantes.**
+1. O pedido mora no evento, nas cinco colunas (`deletion_requested_at/_by_id`, `deletion_request_reason`,
+   `deletion_request_scope`, `deletion_request_refund`), e **só `app/calendar/solicitacao_ops.py` as escreve**. Pedir e
+   recusar são `UPDATE` condicional (o claim): dois pedidos ao mesmo tempo dão um pedido e um 409 `pedido_pendente`;
+   duas decisões dão uma decisão e um 409 `sem_pedido` — nunca duas respostas.
+2. O pedido não confere dinheiro: o máximo, o mínimo e o "nada pago" são do cancelar, com o pago daquele momento. O
+   que o pedido recusa é estado: cancelado (trava da 312), ensaio e cachê pago ao elenco (no próprio dia; nos outros
+   dias só quando "todos" os alcança).
+3. Corte por papel na leitura (Q6): todos veem que há pedido (data e alcance); motivo, autor, modo e valor da devolução
+   só quem trata do cancelamento (`show_comercial`); quem recebe e PIX também exigem Financeiro ou ser o autor sem "Ver
+   como". O sino, o histórico e a auditoria nunca levam nome nem PIX; a faixa e o portal não levam motivo.
+4. Num pedido de "todos os dias", os outros dias da venda mostram o pedido (selo, detalhe, portal) — calculado em lote
+   por quem serializa (`solicitacoes_da_venda`), nunca na propriedade do modelo.
+5. Pedido de antes da 315 (alcance e devolução nulos) vale como "todos" e "sem devolução informada"; o caminho velho
+   `/solicitar-exclusao` continua nas mesmas views até o bundle novo ser o único (dívida em `docs/05`).
+
+**Armadilha.** O fecho no cancelamento roda dentro do ato, com o dia já travado: não há claim ali — a recusa que chegar
+depois não acha mais o carimbo. A resposta da exclusão sai **depois** do commit (o objeto morre nele): uma recusa que
+commita entre a leitura e a trava do núcleo dá ao autor "recusado" e depois "excluído" (corrida aceita, research R10).
+
 ### Depois do ato: o cancelado fora das listas (feature 312)
 
 **Invariante.** O cancelado não aparece em lista nenhuma do sistema — agenda (Mês, Lista, Dia), busca, Home (fora a
@@ -294,6 +329,17 @@ ato (306), não da vaga de hoje.
       da 299, e a linha que sai da EducaManto não leva a data da realização para o ramo comum.
     - **Cortesia ou permuta nunca comissiona** (dono, 15/09): a sincronização não cria linha e
       cancela a `a_pagar`, mesmo na cortesia antiga que tem valor gravado.
+12b. **PIX recebido → venda** (feature 318, `app/financeiro/pix_ops.py`). O pagamento lido do aviso do banco é
+    um `event_payments` como qualquer outro (`origem='pix_email'`, sem arquivo), gravado **sempre** pelo núcleo de
+    comprovante (`gravar_comprovante_no_grupo`, trava do grupo e recálculo da 306) — a soma do recebido não muda de
+    fórmula. Liga sozinho só com **uma** venda aberta de valor forte (saldo, sinal, parcela descoberta, total; ao
+    centavo) **e** nome do pagador batendo (≥ 2 termos ou semelhança ≥ 0,85) **ou** "já pagou antes" (PIX do mesmo
+    pagador ligado à venda/cliente), **e** DKIM do Inter aprovado pelo `mx.google.com` com remetente exato.
+    Conciliação com comprovante manual **nunca** é automática (sinal e saldo de 50% têm valor igual) e não cruza
+    contas. "Prime Dreams" no MEI: repasse do Inter Prime (par de 1–3 PIX da Prime em 3 dias, cada par usado uma vez)
+    é `conta_propria`; o resto é repasse da InfinitePay ("É esta?" só do Financeiro, pago pelo valor cobrado e com
+    a conta InfinitePay). Comprovante manual igual a PIX sem arquivo → 409 `possivel_duplicata` (sob a trava);
+    pagamento ligado a PIX não se exclui, se desfaz. O padrão "liga sozinho / É esta?" é o mesmo da 298 e da 317.
 13. **O sync nunca apaga evento com dinheiro** (feature 303, `sumico_ops.preso_ao_evento`): segura o
     evento ter venda, qualquer comprovante (mesmo sem valor), contrato, escala com talento — menos,
     em SHOW, a vaga automática do técnico de som com o técnico padrão — ou pertencer a grupo
@@ -422,6 +468,11 @@ ato (306), não da vaga de hoje.
   de mesmo `id` (o mesmo `id` duas vezes é recusado). A lista `acrescimos` do corpo da criação é
   sempre ignorada. A proporção (criação, alerta, B10) é sempre entre valores **líquidos** (× 0,84 de
   quem tem nota): o mesmo preço com e sem nota dá o mesmo BV. Nenhum BV sem valor, zero ou negativo.
+  **Desconto negociado (feature 313)**: no orçamento novo (`versao_conta: 2`) o `total_Nh` já vem com o desconto, e
+  a proporção do BV passa a ser venda ÷ **cheio** da duração (`brutos` do snapshot) — com o total no denominador a
+  razão daria 1 e o BV não encolheria; `deduzir_duracao` procura a duração pelo cheio primeiro e depois pelo final.
+  O `sale_value_gross` do evento nasce com o cheio e o `sale_value` com o final. Orçamento sem a marca: o
+  denominador e a régua acima de 4h de antes (a 305 inteira lê o salvo; nada muda no que já foi cotado).
   Quem lê a venda para gravar BV trava o evento antes (`orcamento_evento_ops.travar_evento`, chamado
   por `estado_da_venda`, `substituir_acrescimos` e `set_event_clients`; `delete_client` anula o
   evento antes de apagar os vínculos); a ordem é sempre evento → dependentes. O editor que abriu antes de uma mudança de venda não desfaz a B10 (`valor_visto`). O "Vincular
@@ -672,9 +723,9 @@ pendente (o re-export de `ensure_recurring_entries`).
 
 ---
 
-## 4. Loja de Interações Virtuais (feature 205)
+## 4. Loja de Interações Virtuais (features 205 e 310)
 
-`app/marketing/virtuais_ops.py` (2.325 linhas, 9 seções). **É o melhor código documentado do
+`app/marketing/virtuais_ops.py` (2.325 linhas na auditoria; ~3.290 depois da 310). **É o melhor código documentado do
 repositório** — os docstrings explicam consistentemente o *porquê*. É também um balde por camada: ~6
 responsabilidades técnicas distintas num arquivo (ver `docs/05`).
 
@@ -685,49 +736,142 @@ pedido existente) → valida ficha → confere limites anti-abuso → **trava o 
 `:747`, `SELECT … FOR UPDATE`) → grava o pedido → **commit** → **só então** fala com a InfinitePay
 (`_gerar_link_pagamento`, `:898`). Falar com a operadora antes de travar deixaria a janela aberta
 durante a chamada HTTP; travar durante a chamada seguraria uma linha do banco por segundos. Se a
-operadora falhar, a reserva é desfeita e o horário volta (`:889-893`).
+operadora falhar, a reserva é desfeita e o horário volta (`:889-893`). Desde a 310: com o pagamento
+desligado ou sem configuração, `reservar` levanta `VirtuaisPagamentoFechadoError` (503) **antes** de
+qualquer trava; o `client_token` só devolve o pedido anterior se horário, formato, presente e criança
+forem os mesmos (`_mesma_reserva`); o horário precisa começar a mais de 2 h; e o vídeo gravado trava
+a campanha e conta as reservas ativas como vagas ocupadas.
 
 **Anti-abuso (`_checar_limites`, `:705`):** (a) um telefone não pode ter duas reservas ativas — mas o
 erro carrega `existing_order_token` para a família **retomar** o próprio pedido, não bater numa
 parede; (b) teto por `origin_hash` (hash de IP+UA, nunca persistido cru, `hash_origem`, `:610`).
+Desde a 310 o IP é o de `ip_do_cliente()` (o que a borda do Render viu, informado pelo Node), não o
+`X-Forwarded-For` cru, e pedido que morreu por recusa da operadora (`payment_link_error`) não conta
+no teto — a família não é barrada por culpa nossa.
 
 **Soft lock de 15 min** (`VIRTUAL_SOFT_LOCK_MINUTES`), contado da criação, dentro da transação que
 trava o slot.
 
-**Webhook (`processar_notificacao_pagamento`, `:1513`) — a invariante mais importante da feature: o
-corpo do aviso não decide nada.** A InfinitePay **não assina webhooks**, então o payload só identifica
-o pedido; quem autoriza é a reconsulta em `ipc.consultar_pagamento`. Sequência: grava
-`VirtualPaymentNotification` (a UNIQUE em `transaction_nsu` barra reentrega) → reconsulta → confere
-valor (pago < total → recusado) → trava o slot e confere se ainda é desta família → efetiva ou abre
-devolução. **Responde 200 sempre**: 400 faria a operadora reenviar em loop, e reenviar não conserta
-duplicata nem conflito.
+**Aviso de pagamento — a invariante mais importante da feature: o corpo do aviso não decide nada.**
+A InfinitePay **não assina webhooks**, então o payload só identifica o pedido; quem autoriza é a
+reconsulta em `ipc.consultar_pagamento` **com os identificadores deste aviso**. Desde a 310 a rota
+só grava e responde: `registrar_aviso` grava a linha `pendente` (a reentrega de aviso **sem**
+desfecho final volta para a fila; com desfecho final é ignorada) e uma thread curta chama
+`processar_aviso`, que reivindica a linha (`_reivindicar_aviso`, UPDATE condicional no molde do
+`claim_sweep`), reconsulta e entrega a `decidir_pagamento`. Segredo errado responde 404 e grava o
+resumo **sem** `transaction_nsu`. Todo o resto responde 200: 400 faria a operadora reenviar em loop.
 
-**`efetivar_pedido()` (`:1218`)** — idempotente na entrada (`:1231`). Cria `CalendarEvent`, pré-escala
-talento+figurino (`_pre_escalar`, `:1194`), marca o slot como vendido, baixa estoque de gravado, cria
-`VirtualMediaDelivery` com prazo, injeta o presente 3D **na mesma fila que a equipe já opera**
-(`_injetar_presente_3d`, `:1316` → `impressoes3d_ops.add_event_gift`) e dispara o aviso. Se o Google
-falhar, o evento nasce com `google_event_id = 'virtual-local-<nsu>'` (`GOOGLE_ID_LOCAL_PREFIX`,
-`:535`) para a venda existir na agenda mesmo assim.
+**`decidir_pagamento()` — a única regra que transforma pagamento provado em venda ou devolução**
+(feature 310, spec R-01). Aviso, retorno do checkout e varredura chamam a mesma função; a reconsulta
+acontece antes, fora de qualquer trava (HTTP nunca segura linha do banco). Dentro dela, em ordem:
+(1) trava e relê o pedido (`_travar_pedido`, `populate_existing` — sem ele a decisão saía sobre
+leitura velha e um pedido pago voltava a expirado); (2) estado: pago com a mesma cobrança =
+`duplicado`, pago com outra = devolução `pagamento_em_dobro`, cancelado = devolução
+`pagamento_sem_pedido_ativo` (as duas sem mexer no pedido); (3) valor por `paid_amount` — ausente ou
+menor que o total = `divergente`, sem venda e sem devolução automática; sobrepagamento vale; (4) só
+então grava `transaction_nsu`/`invoice_slug`/`receipt_url` no pedido; (5) trava o horário: de outro
+pedido, travado ou vendido = devolução de conflito; começa em menos de 30 min = `horario_passou`;
+(6) vídeo: trava a campanha, `recorded_sold >= capacidade` = `sem_vaga_de_video`; (7)
+`_efetivar_no_banco` e commit; (8) `_pos_venda`: Google e e-mail, fora das travas.
 
-**`expirar_reservas()` (`:1031`) — antes de liberar um horário vencido, reconsulta a cobrança.** "Não
-sei" (operadora indisponível) nunca vira "não pago": o horário fica retido por 3 tentativas (minutos
-0, 1, 2). Esgotadas, libera e marca `expired_unverified=True` — e esse flag muda o motivo da devolução
-depois (`_abrir_devolucao`, `:1341`), porque quem liga reclamando precisa ouvir "a operadora não
-confirmou a tempo", não "sua reserva venceu".
+**Efetivação (`_efetivar_no_banco` + `_pos_venda`)** — a venda nasce inteira no banco num commit:
+`CalendarEvent` com `google_event_id = 'virtual-local-<nsu>'` (`GOOGLE_ID_LOCAL_PREFIX`), pré-escala
+talento+figurino (`_pre_escalar`), slot `vendido` **com `order_id` do dono**, baixa de estoque de
+gravado, `VirtualMediaDelivery` com prazo, presente 3D **na mesma fila que a equipe já opera**
+(`_injetar_presente_3d` → `impressoes3d_ops.add_event_gift`). Depois do commit, `regerar_sala` cria o
+evento no Google (marcado com `manto_virtual_nsu`) e o e-mail sai. Falha do Google não desfaz nada:
+`meet_pending` e a varredura retenta a cada 10 min até o horário (alerta com menos de 6 h).
+O antigo `efetivar_pedido()` saiu na 310: a única entrada da venda é `decidir_pagamento` → `_efetivar_no_banco` + `_pos_venda`.
+
+**`expirar_reservas()` — antes de liberar um horário vencido, reconsulta a cobrança** (desde a 310
+com os identificadores do pedido ou, na falta, os do aviso mais recente com o segredo certo para o
+mesmo `order_nsu`). Pedido sem link libera direto. Pago → `decidir_pagamento` (`origem=varredura`);
+pago com valor errado → libera com `unverified_reason='divergente'`. "Não sei" (operadora fora,
+travada) **retém o horário de fato** (`_reter_horario` estica o `locked_until` do slot) por 3
+tentativas (minutos 0, 1, 2); esgotadas, libera com `expired_unverified=True` e
+`unverified_reason='nao_sei'` — o pedido entra em "a conferir", e o flag muda o motivo de uma
+devolução posterior (`conflito_sem_confirmacao`), porque quem liga reclamando precisa ouvir "a
+operadora não confirmou a tempo". `nao_pago` ou `nao_encontrado` liberam na hora. Cada pedido é
+isolado: erro num não aborta o lote.
 
 **`claim_sweep()` (`:971`)** — UPDATE condicional atômico em `site_settings.virtual_sweep_at`: só um
-worker do gunicorn ganha o ciclo. `ciclo_de_varredura()` (`:1000`) roda as 3 rotinas com try/except
-**por rotina**, para uma caída não esconder as outras duas.
+worker do gunicorn ganha o ciclo. `ciclo_de_varredura()` roda as rotinas — desde a 310 quatro:
+reservas, avisos (`reprocessar_avisos`), salas e prazos de vídeo — com try/except **por rotina**,
+para uma caída não esconder as outras.
 
-**Avisos (`_enviar_aviso`, `:1381`):** a trava de "no máximo um por pedido e tipo" é o **banco** —
+**Avisos à família (`_enviar_aviso`):** a trava de "no máximo um por pedido e tipo" é o **banco** —
 grava `VirtualOrderNotification` antes de disparar e deixa a `UNIQUE(order_id, kind)` decidir.
+
+### Máquina de estados do pedido (feature 310)
+
+```text
+reservado ──link ok──▶ aguardando ──decidir_pagamento: paga + confere + horário ok──▶ pago
+   │                       │                  └─ horário tomado / passou / sem vaga ─▶ cancelado (+ devolução)
+   │ link recusado         │ trava venceu; reconsulta nao_pago ou nao_encontrado ─▶ expirado
+   ▼                       │ trava venceu; "não sei" esgotado ─▶ expirado (unverified_reason=nao_sei → a conferir)
+expirado ◀─────────────────┘
+expirado  ──pagamento atrasado provado──▶ decidir_pagamento (mesma regra: pago OU cancelado + devolução)
+pago      ──"Cancelar e abrir devolução" (equipe)──▶ cancelado (+ devolução desistencia)
+pago      ──segunda cobrança provada──▶ pago (+ devolução pagamento_em_dobro)
+cancelado ──pagamento provado──▶ cancelado (+ devolução pagamento_sem_pedido_ativo)
+```
+
+Com o interruptor desligado nenhum pedido nasce (`reservar` → 503 antes de travar); os que já
+existem seguem a máquina normalmente.
+
+### Máquina de estados do aviso de pagamento (feature 310)
+
+`state`: `pendente` → `processando` (claim de `_reivindicar_aviso`, `attempts + 1`) → `decidido`.
+Desfecho final (`efetivado`, `devolucao_aberta`, `conflito`, `duplicado`, `divergente`, `orfao`,
+`token_invalido`) fecha a linha; não final (`retido` = operadora fora ou erro na decisão;
+`pendente_prova` = reconsulta não disse "pago", pode ser atraso de propagação) devolve a linha a
+`pendente`. `reprocessar_avisos` retenta nos minutos 0/1/2 e depois a cada 10 min; com 48 h de idade
+a linha vira `decidido` com o desfecho não final e aparece em "Pagamentos a conferir". `divergente`
+e `orfao` também aparecem lá e tocam o sino.
+
+### Invariantes do pagamento (feature 310 — o `verify_310` confere)
+
+1. **Uma só função decide** se pagamento vira venda: `decidir_pagamento`. Aviso, retorno e varredura
+   chamam a mesma; nenhum caminho efetiva por conta própria (era na varredura que nascia a venda
+   dupla).
+2. **Ordem de travas: pedido → horário → campanha**, em reserva, liberação, varredura, aviso,
+   retorno e cancelamento pela equipe. Nenhuma chamada externa (InfinitePay, Google, e-mail) dentro
+   de trava de linha.
+3. **No máximo um pedido `pago` por horário**, e horário `vendido` aponta (`order_id`) para o pedido
+   pago dele. Liberar outro pedido nunca solta horário vendido.
+4. **A venda grava no banco antes do Google e do e-mail.** A disputa se decide no commit; quem perde
+   não deixa evento órfão no Google, e a falha do Google não desfaz a venda.
+5. **`nao_encontrado` ≠ "não pago".** É o `200 {"success": false}` da operadora (ou 404): ela não
+   achou cobrança paga com aqueles dados. No aviso volta para a fila como `pendente_prova`; na
+   varredura, sem identificadores, é abandono de checkout e libera. Só `paid: false` com a cobrança
+   identificada é "não pago".
+6. **Indisponível retém.** "Não sei" (timeout, 5xx, resposta ilegível, trava local) nunca libera nem
+   cancela na hora: o horário fica travado e o aviso fica `retido`; só depois das tentativas o pedido
+   sai como `nao_sei` — para "a conferir", nunca em silêncio.
+7. **"A conferir" nunca é abandono de checkout.** Entram só aviso divergente, órfão ou esgotado,
+   pedido liberado por operadora fora ou por valor divergente e recusa de link. Pedido que expirou
+   sem aviso nem retorno expira como na 205 e não entra.
+8. **Pago nunca regride.** `_liberar_reserva` relê com trava e só mexe em `reservado`/`aguardando`;
+   pagamento novo de pedido pago vira devolução sem tocar no pedido; sair de `pago` só pelo
+   "Cancelar e abrir devolução" da equipe.
+9. **Todo pagamento provado termina em `pago` ou numa `VirtualRefundRequest`** — exceto o valor
+   divergente, que fica em "a conferir" para uma pessoa decidir.
+10. **Identificador só depois da prova.** `transaction_nsu`, `invoice_slug` e `receipt_url` vindos do
+    aviso ou do retorno só vão para o pedido depois de a reconsulta com eles provar o pagamento: um
+    aviso forjado não contamina a reconsulta do verdadeiro.
+11. **`recorded_sold <= recorded_capacity`**: reserva ativa de vídeo ocupa vaga enquanto a trava vale,
+    e a efetivação confere o teto com a campanha travada.
 
 ### Regras de ouro do módulo
 
 - Tudo em `Decimal` de reais aqui dentro; **centavos só existem em
   `app/integracoes/infinitepay_client.py`**, que distingue `InfinitePayIndisponivel` ("não sei") de
   `InfinitePayError` ("falhou") — é essa distinção que permite tratar "não sei" como "segura o
-  horário".
+  horário". Desde a 310 a reconsulta devolve `resultado` (`pago`, `nao_pago`, `nao_encontrado`), e
+  `InfinitePayTravada` é subclasse de "não sei": travado, nada é efetivado nem cancelado.
+- O cliente da operadora não importa Flask: a trava (`INFINITEPAY_SUPPRESS_CALLS`) e a
+  `INFINITEPAY_API_KEY` são lidas em `_ipc_cfg()` a cada chamada e passadas por parâmetro; o default
+  do cliente é travado.
 - A feature usa **exclusivamente `now_sp()`** (importado como `agora`). Misturar com `utcnow()` faria
   sumir os horários das próximas 3h da lista.
 
@@ -784,8 +928,9 @@ base sai sempre da config.
 | **Formulários** | **Destino (feature 298)**: todo formulário que chega desde o corte (meia-noite de SP da `release_date`, ou 01/06/2026, comparada com `created_at` — que é **UTC ingênuo**, ao contrário do resto do sistema) tem destino: ligado a evento, encerrado com motivo, ou na lista da Home. As partições `sem_destino`/`com_evento`/`encerrados`/`historico` somam o total e servem Home e `/formularios` pela mesma regra (`formularios_ops.condicao_particao`/`destino_de`). Invariante: `closed_at IS NOT NULL ⇒ event_id IS NULL`; ligar desfaz o encerramento; evento **cancelado** mantém o vínculo, evento **excluído** (ou desvincular) devolve à lista. **Núcleo único de vínculo**: todo caminho passa por `apply_event_link` (cliente nos dois sentidos sem trocar ninguém quando divergem; `event_link_locked` só em decisão humana; aviso do sino lido para todos) — até a 298 três caminhos gravavam `event_id` à mão, e o segundo vínculo é 409 em todos (no `POST /api/events`, antes do Google, com o formulário bloqueado). Auto-vínculo resposta → evento (`formularios_ops._attempt_auto_link`, desde a 298 pelo núcleo com `decisao_humana=False`; ignora formulário encerrado) é a regra mais sutil do domínio: (1) exatamente um evento real na data, sem contradição de telefone; (2) telefone que resolve empate, ou aponta para um único evento futuro. **Nunca força vínculo ambíguo** — marca para revisão manual. Roda também no ciclo de sync da agenda (`calendar/sync.py:91`), para cobrir o caso do evento só existir depois da resposta. Desde a **266** há um irmão para cliente (`attempt_auto_link_client`): telefone que bate com exatamente uma ficha (`Client.phone` é UNIQUE) grava `client_id` + `client_link_source='auto_phone'`; desde a 298 roda **antes** do vínculo de evento (senão o núcleo levaria a cliente do evento e o preenchimento da ficha nunca rodaria). ⚠️ Ele roda **só no envio**, nunca no `retry_auto_link_pending` — o filtro de lá é `event_link_locked`, que não sabe nada sobre cliente, e religaria a cada ciclo o vínculo que a comercial desfez |
 | **Impressões 3D** | `impressoes3d_ops.py` (573) — estágio 3, 100% de type hints, 1 função sem docstring em 24. Consumido por outros domínios (a loja virtual injeta presentes aqui). O pacote não se chama `3d_impressions` porque identificador Python não começa com dígito (documentado no `__init__.py`) |
 | **Marketing** | `marketing_ops.py` (566): calendário editorial, metas de frequência (`goal_health`, `:440`, compara o intervalo alvo com o último post publicado) e ponte para o módulo de Revisão (`attach_review_space`, `:317`). Desde a 204b a relação post↔tema é **N:N** via `marketing_post_temas` |
-| **Orçamento** | `calculate_quote` (`quote_ops.py:105`) tem **~540 linhas** — a maior função do repositório. Produz as 4 faixas de duração. Regras não óbvias: adicional noturno de R$50 por artista/coordenador a partir das 19h somado **DEPOIS do markup** (linha `pos` da memória — o comentário antigo dizia "pré" e estava errado); markup diferente para show e receptivo; maquiador com tabela progressiva; transporte com adicional fora de SP proporcional a colaboradores × km. **Data especial (feature 307)**: a tabela de preços tem faixas por data (`datas_especiais`, padrão `natal` = 24 e 25/12); `settings.faixa_especial(event_date)` decide pelo recorte `MM-DD` da data do evento (nunca por `datetime` com fuso), e com faixa o markup é o dela para qualquer produto, Noel/Ajudante/Coordenador levam o cachê da faixa e os demais sobem ao `piso` — regra numa fonte só — `pricing.cache_na_faixa` e os getters com `faixa=`, usados pela venda e pelo **teto das vagas** (`_compute_performer_caches`; `markup_vigente` só na venda) —, teto que segue a data do **evento** na criação e no vínculo 273 (`orcamento_evento_ops.data_do_evento`). Invariantes: sem faixa a conta é byte a byte a de antes; a faixa age antes de acréscimos/NF (a conta inversa da 305 continua válida); o EducaManto remove `event_date` antes de chamar `calculate_quote`; `_migrate` roda dentro do `try` de `load()` — exceção ali devolve os DEFAULTS do código para a tabela inteira, por isso o bloco é lido na defensiva. **Produtos de tabela (feature 309)**: a Visita Mágica é vendida pelo preço da tabela de venda (`pricing_config.produtos`, preço FIXO por visita, `por_faixa` nas datas especiais), não derivada dos cachês — a 307 tinha posto "Papai Noel" em 712 para `(712 + 250) × 2,6` dar 2.500 e esse número virava o TETO da vaga; a 309 devolve 600/270 à tabela ("cachê é cachê") e põe o preço no produto. Fonte única `app/orcamento/produtos.py` para a venda e para o teto: `aplicar`/`preco_do_produto` (preço da faixa; sem preço na faixa → estimativa `Σ cachês × fator × markup`, marcada em `quote.avisos`), `split_coordenadores(coordenador_qty, produtos) → (total, da_formula, inclusos)` (o coordenador do produto não é cobrado em dobro — `total = max(qty, inclusos)`), `incremento_make` (a make do Noel já está no preço; o avulso maquiado paga só o degrau seguinte da tabela; UM Maquiador por orçamento), `labels_de_personagem` (team_lines/personagens), `noturno_do_produto` (só com `inclui_noturno: false`). Na conta: o produto entra DEPOIS de "= Após markup" e ANTES de brinde/noturno/técnico/maquiador/transporte/acréscimos/NF — assim BV % e NF incidem sobre ele, o markup nunca o multiplica, e a conta inversa da 305 continua válida; é igual nas 4 colunas (não escala com a duração) e na régua >4h fica fixo (`total_na_duracao(total_4h, produtos_total, h, acrescimos, nf)`: a parte do produto, inclusive o seu % e a sua NF, é subtraída, o resto é regrado por hora e ela volta — usada pela venda, pelo prefill e por `_total_da_duracao`/`fator_regua` no evento); personalizado "valor final" vence tudo e "multiplicador" não multiplica o produto (`cache_base × mult + produtos_total`, validação olha a base). Só produto no orçamento (sem avulso e sem coordenador da fórmula) = UM valor (`show_1h` só, `total_custom` None, bloco único na mensagem e PIX único). **Teto das vagas**: `_compute_performer_caches` emite primeiro as vagas `character` dos produtos a partir das vagas **congeladas no snapshot** (`snapshot.produtos[].vagas` — editar o produto depois da venda não muda a composição; produto apagado = `cache_Nh = None` com nota, nunca 0), flat nas 4 colunas, cachê pela tabela vigente na data do EVENTO (600/270/250/250; 1.000/650/500/250 na faixa da 307), nota com `MARCA_PRODUTO`; depois os avulsos e os extras (coordenadores do produto → da fórmula → técnico → UM maquiador com `calcular_maquiador(Σ makes dos produtos + comuns avulsos, especiais avulsos)`); prefill = criação (pareamento posicional) e o vínculo 273 casa por nome. EducaManto faz `payload.pop("produtos")`. Invariantes: sem produto a conta é byte a byte a de antes (gabarito `verify_309_golden.json` no HEAD `6356b80`); `quote` sempre traz `produtos`, `produtos_total`, `coordenadores_inclusos`, `avisos` (é a presença da chave que diz ao React que o backend conhece produtos). **Ponto positivo:** `compute_show_pricing` (`pricing.py:9`) é explicitamente uma fonte única extraída de duplicação anterior — o padrão certo |
+| **Orçamento** | `calculate_quote` (`quote_ops.py:105`) tem **~540 linhas** — a maior função do repositório. Produz as 4 faixas de duração. Regras não óbvias: adicional noturno de R$50 por artista/coordenador a partir das 19h somado **DEPOIS do markup** (linha `pos` da memória — o comentário antigo dizia "pré" e estava errado); markup diferente para show e receptivo; maquiador com tabela progressiva; transporte com adicional fora de SP proporcional a colaboradores × km. **Data especial (feature 307)**: a tabela de preços tem faixas por data (`datas_especiais`, padrão `natal` = 24 e 25/12); `settings.faixa_especial(event_date)` decide pelo recorte `MM-DD` da data do evento (nunca por `datetime` com fuso), e com faixa o markup é o dela para qualquer produto, Noel/Ajudante/Coordenador levam o cachê da faixa e os demais sobem ao `piso` — regra numa fonte só — `pricing.cache_na_faixa` e os getters com `faixa=`, usados pela venda e pelo **teto das vagas** (`_compute_performer_caches`; `markup_vigente` só na venda) —, teto que segue a data do **evento** na criação e no vínculo 273 (`orcamento_evento_ops.data_do_evento`). Invariantes: sem faixa a conta é byte a byte a de antes; a faixa age antes de acréscimos/NF (a conta inversa da 305 continua válida); o EducaManto remove `event_date` antes de chamar `calculate_quote`; `_migrate` roda dentro do `try` de `load()` — exceção ali devolve os DEFAULTS do código para a tabela inteira, por isso o bloco é lido na defensiva. **Produtos de tabela (feature 309)**: a Visita Mágica é vendida pelo preço da tabela de venda (`pricing_config.produtos`, preço FIXO por visita, `por_faixa` nas datas especiais), não derivada dos cachês — a 307 tinha posto "Papai Noel" em 712 para `(712 + 250) × 2,6` dar 2.500 e esse número virava o TETO da vaga; a 309 devolve 600/270 à tabela ("cachê é cachê") e põe o preço no produto. Fonte única `app/orcamento/produtos.py` para a venda e para o teto: `aplicar`/`preco_do_produto` (preço da faixa; sem preço na faixa → estimativa `Σ cachês × fator × markup`, marcada em `quote.avisos`), `split_coordenadores(coordenador_qty, produtos) → (total, da_formula, inclusos)` (o coordenador do produto não é cobrado em dobro — `total = max(qty, inclusos)`), `incremento_make` (a make do Noel já está no preço; o avulso maquiado paga só o degrau seguinte da tabela; UM Maquiador por orçamento), `labels_de_personagem` (team_lines/personagens), `noturno_do_produto` (só com `inclui_noturno: false`). Na conta: o produto entra DEPOIS de "= Após markup" e ANTES de brinde/noturno/técnico/maquiador/transporte/acréscimos/NF — assim BV % e NF incidem sobre ele, o markup nunca o multiplica, e a conta inversa da 305 continua válida; é igual nas 4 colunas (não escala com a duração) e na régua >4h fica fixo (`total_na_duracao(total_4h, produtos_total, h, acrescimos, nf)`: a parte do produto, inclusive o seu % e a sua NF, é subtraída, o resto é regrado por hora e ela volta — usada pela venda, pelo prefill e por `_total_da_duracao`/`fator_regua` no evento); personalizado "valor final" vence tudo e "multiplicador" não multiplica o produto (`cache_base × mult + produtos_total`, validação olha a base). **A ordem da conta e o desconto (feature 313)**: uma função só, `quote_ops.aplicar_acrescimos(base, acrescimos, nota)`, para 1–4 h e a extra (`_preco_extra`) — base (apresentação + transporte + produto) → acréscimos em R$ **uma vez** (não escalam com as horas) → % que não são BV sobre a base → BV em % sobre o valor com os acréscimos (o BV em R$ entra uma vez, nesse passo) → nota → **desconto**, o último passo, sobre o total (`desconto_pct`, ou o % exato achado pelo `desconto_valor` de uma duração, igual nas outras). O PIX à vista vale o maior entre 5% (`PIX_PCT_PADRAO`, de `AVISTA_FATOR`) e o desconto, sempre sobre o cheio; o BV a repassar acompanha o desconto e o PIX por `bv_que_acompanha`. A regra vale só para orçamento com `versao_conta: 2` no snapshot — **todo leitor do salvo pergunta pela marca** (`orcamento_evento_ops.snapshot_v2`, que também cruza `bases` × `brutos`), e sem ela segue a conta de antes: 17 dos 2.484 orçamentos do espelho mudariam pela regra nova (9 BV + "Outro", 8 duração extra + R$ — as exceções da Q7, `gabarito_paridade.py`), os outros saem byte a byte. O texto do % é `texto_do_percentual` (uma casa, **para baixo**) no servidor e `textoDoPercentual` no navegador, a mesma regra no selo do valor de venda. O núcleo continua em float (`round(x, 2)`): a paridade com os orçamentos salvos exige a mesma aritmética — dívida própria no `docs/05`. Só produto no orçamento (sem avulso e sem coordenador da fórmula) = UM valor (`show_1h` só, `total_custom` None, bloco único na mensagem e PIX único). **Teto das vagas**: `_compute_performer_caches` emite primeiro as vagas `character` dos produtos a partir das vagas **congeladas no snapshot** (`snapshot.produtos[].vagas` — editar o produto depois da venda não muda a composição; produto apagado = `cache_Nh = None` com nota, nunca 0), flat nas 4 colunas, cachê pela tabela vigente na data do EVENTO (600/270/250/250; 1.000/650/500/250 na faixa da 307), nota com `MARCA_PRODUTO`; depois os avulsos e os extras (coordenadores do produto → da fórmula → técnico → UM maquiador com `calcular_maquiador(Σ makes dos produtos + comuns avulsos, especiais avulsos)`); prefill = criação (pareamento posicional) e o vínculo 273 casa por nome. EducaManto faz `payload.pop("produtos")`. Invariantes: sem produto a conta é byte a byte a de antes (gabarito `verify_309_golden.json` no HEAD `6356b80`); `quote` sempre traz `produtos`, `produtos_total`, `coordenadores_inclusos`, `avisos` (é a presença da chave que diz ao React que o backend conhece produtos). **Ponto positivo:** `compute_show_pricing` (`pricing.py:9`) é explicitamente uma fonte única extraída de duplicação anterior — o padrão certo |
 | **EducaManto** | Calculadora de pacotes educacionais: pessoas no transporte derivadas do pacote+elenco (`pricing_ops.py:70`), transporte por km/pessoas/dias (`:96`), arredondamento para cima na centena (`_ceil100`, `:141`). Conecta-se ao Financeiro pela regra de comissão EducaManto (§2, ramo 5) |
+| **Contratos da ClickSign** (feature 317) | `app/contratos/` (`contratos_ops` puro, `sincronizar_ops`, `situacao_ops`) + cliente `app/integracoes/clicksign_client.py`. **Invariantes:** (1) **o contrato é da venda** — o principal do grupo ou o avulso; o documento e a marca manual são procurados em **todos os dias do grupo** (agrupar não move linhas) e a cobrança só sai do principal; (2) **a ClickSign é a fonte e o aviso não decide** — o webhook só dispara uma passada incremental (`filter[modified]` desde o marco) que reconsulta a API; segredo vazado não marca contrato como assinado; (3) **vínculo automático só com candidato único** (data do nome + telefone, chave DDD + 8 últimos, na ficha, nas contratantes ou no formulário ligado; tema desempata) — o resto vai para "A conferir" e **nunca** liga sozinho a venda cancelada nem religa par que a comercial desligou (`clicksign_desvinculos`); (4) **vigente** = o em processo mais recente; senão, um assinado vence qualquer cancelado (o reenvio duplicado que venceu não faz cobrar quem já assinou); (5) o PDF assinado entra uma vez (`anexo_pendente`) e o PDF automático não conta como "assinado à mão". **Dependência externa frágil**: o vínculo lê o **nome** que os fluxos com formulário da conta montam (`DDMMAAAA + (DD) NNNNN-NNNN + Tema`); se alguém mudar a personalização do nome no painel da ClickSign, tudo passa a cair em "A conferir" — visível, nunca em vínculo errado. A data no fluxo é texto livre (`DD-MM-AAAA`, `DDMMAAAA`, `DMMAAAA`) e a ClickSign devolve acento decomposto (normalizar NFC antes de ler) |
 | **Feedback** | Avaliação da **cliente** sobre a equipe, via link público com `CalendarEvent.feedback_token`. **Não confundir** com `EventRating`, que é a avaliação do **artista** sobre o evento, feita com login pelo portal |
 | **RH** | `app/rh/routes.py` são 33 linhas de casca Jinja; a lógica está em `app/api/rh_read.py`. É o único consumidor do RBAC por `has_permission` — e `rh.view` nunca é semeado (ver `docs/00` §4) |
 | **Catálogo** | **INVARIANTE (feature 300): toda listagem carrega o acompanhamento de uma vez, nunca item a item.** As serializadoras (`_item_summary` do gerenciador e da vitrine, `_category_summary`, o laço dos avulsos em `list_catalog_characters`) tocam `images`, `categories`, `characters`, `figurino_sheet` e `as_character` por item, e **todos os relationships do catálogo são `lazy=True`** — sem `.options(selectinload(...))` na consulta, cada produto vira 4 a 6 idas ao banco (eram 1.846 no gerenciador e 917 na vitrine, com 458 produtos). ⚠️ A armadilha é `CatalogItem.cover_image` (`models.py:2156`): **não é coluna, é property sobre `images[0]`** — pedir "só a capa" carrega a coleção inteira de fotos daquele produto. Duas ordenações são explícitas de propósito, porque dependiam do plano de consulta e mudariam com o carregamento antecipado: nomes de categoria e personagens empatados em `position` ordenam por **`id`** — o que reproduz exatamente a ordem que a produção sempre serviu (0 de 458 mudam). ⚠️ **Não ordenar alfabeticamente**: o card da vitrine mostra só as 3 primeiras etiquetas, e a ordem alfabética trocaria as etiquetas visíveis em 123 produtos (pego na revisão pré-deploy da 300). A escolha da miniatura é do **cliente** (`assetUrl(url, { largura })`), nunca do banco: a resposta sempre devolve o caminho do arquivo original |

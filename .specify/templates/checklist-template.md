@@ -19,7 +19,8 @@
 - [ ] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
 - [ ] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável
 - [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
+- [ ] CHK010 Texto novo ou alterado (tela, e-mail, PDF, erro da API) revisado pelo Princípio XV: tom da superfície e glossário, lido na tela aberta
+- [ ] CHK011 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
 
 <!--
   ============================================================================
@@ -31,12 +32,12 @@
 
 ## [Categoria 1]
 
-- [ ] CHK011 Primeiro item, com ação clara
-- [ ] CHK012 Segundo item
+- [ ] CHK012 Primeiro item, com ação clara
+- [ ] CHK013 Segundo item
 
 ## [Categoria 2]
 
-- [ ] CHK013 Item com critério específico
+- [ ] CHK014 Item com critério específico
 
 ## Notas
 

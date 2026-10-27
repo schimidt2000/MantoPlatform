@@ -4,7 +4,23 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-21** · Estado do repositório: pós-feature
+> Última atualização: **2026-10-23** · Estado do repositório: pós-**deploy em lote de 23/10/2026 (~19h)**, a pedido
+> do dono, num push só, na ordem dos merges: **316b-guia-de-texto** (constituição v3.1.0, Princípio XV; só
+> documentação), **319-aviso-gasto-extra** (o e-mail de gasto extra diz o que é na notificação), **315-pedido-de-cancelamento**
+> (migration `d8b4e15f2c31`), **317-contratos-clicksign** (migration `d3c7a1e5b317`; desligada até o
+> `CLICKSIGN_ACCESS_TOKEN` entrar no Render), **318-pix-recebido-por-email** (migration `d318a4c9e2b7`; liga em
+> `/pix` depois de cadastrar as contas) e **310-pagamento-loja-virtual** (migration `e8b4a1c7d310`; interruptor nasce
+> desligado; `MANTO_PROXY_SECRET` nos dois serviços antes de ligar). As quatro migrations desciam de `c5d2f7a9e306` e
+> foram reencadeadas `c5d2f7a9e306 → d8b4e15f2c31 → d3c7a1e5b317 → d318a4c9e2b7 → e8b4a1c7d310` (uma cabeça só),
+> ensaiadas no dump de produção de 23/10 02:00 (`flask db upgrade` + `seed.py`). Dívidas renumeradas no `docs/05`:
+> 317 → 151–156, 318 → 157–161, 310 → 162–164 — antes do lote pós-correção
+> **316-tom-dos-textos** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~10:36** pelo merge `9e8ee232`, a pedido
+> do dono, em horário comercial — revisão de português e tom em todas as superfícies: 505 trocas de texto visível em
+> 168 arquivos, só texto; sem verify, typecheck verde e telas abertas; bundle novo `index-DKBwlFhg.js` conferido) — antes
+> dela pós-feature
+> **313-desconto-e-pix-na-calculadora** (sem migration; **EM PRODUÇÃO desde 22/10/2026 ~04:58**, a pedido do dono,
+> fora do horário — o desconto negociado e o PIX que vale o maior na calculadora, a ordem da conta da Q7 no orçamento
+> novo, o evento com o cheio e a venda; `verify_313.py` 18/18) — antes dela pós-feature
 > **312-cancelado-fora-das-listas** (sem migration; **EM PRODUÇÃO desde 21/10/2026 ~18:20**, a pedido do dono, logo
 > depois do deploy da 185b e da 299b — o cancelado sai de toda lista e
 > só se vê na página de Cancelamentos, no card do período e na tela dele, que fica só para consulta; `verify_312.py`
@@ -155,6 +171,14 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
+| **318-pix-recebido-por-email** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O PIX que cai no Inter (MEI e Prime) é lido do aviso por e-mail e **liga sozinho à venda** quando é óbvio (uma venda com o valor + nome ou "já pagou antes" + DKIM do Inter); quando há dúvida, "É esta?" de um clique para Comercial/Financeiro/Superadmin em `/pix`. Conta que recebeu em cada pagamento, recebido por conta × mês, duplicata com o comprovante manual, repasse "Prime Dreams". Ensaio em 334 PIX reais: 0 ligação automática errada | 2026-10-22 | `d318a4c9e2b7` | (aqui) | ver Registro |
+| **317-contratos-clicksign** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O **contrato da ClickSign** se liga sozinho à venda (data + WhatsApp do nome do envelope, tema no empate), a situação fica clara no evento, num painel **"✍️ Contratos"** da Home e em `/vendas`, o PDF assinado entra sozinho nos anexos e o **"📝 Cobrar contrato"** copia a mensagem que explica a conversa da ClickSign no WhatsApp e registra quem cobrou. Sincronização incremental pela API v3 (aviso HMAC que só dispara + conferência a cada 30 min + `flask clicksign-sincronizar`); "A conferir" para o que não tem candidato único | 2026-10-22 | `d3c7a1e5b317` | (aqui) | ver Registro |
+| **315-pedido-de-cancelamento** | *(EM PRODUÇÃO 23/10 ~19h, lote)* Item 2a do backlog: o Comercial **pede o cancelamento pelo sistema** (motivo, alcance numa venda de vários dias, devolução combinada com a cliente), cada Superadmin é avisado no sino, só o Superadmin fecha o pedido (recusa, cancela ou exclui o vazio) e quem pediu recebe a resposta; o pedido com corte por papel na tela, na fila e no portal, na faixa do topo e no selo da agenda | 2026-10-22 | `d8b4e15f2c31` | (aqui) | Registro |
+| **319-aviso-gasto-extra** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O e-mail de gasto extra pendente diz o que é **na notificação do celular**: assunto "Gasto extra R$ valor · descrição", prévia com categoria, quem lançou, pagamento, comprovante e evento; botão "Revisar gasto" para `/gastos` | 2026-10-22 | — | (aqui) | ver Registro |
+| **316b-guia-de-texto** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O guia de tom e o glossário da 316 saem da spec, que ninguém abre sozinho, e entram na **constituição como Princípio XV** (v3.1.0). O XV traz o tom por superfície, o glossário único e o que um ajuste de texto não toca, e cria o portão "texto revisado pelo XV". Ponteiros no `CLAUDE.md` §5, no `docs/00` §5 e nos templates de plano, checklist e tarefas | 2026-10-23 | — | (aqui) | ver Registro |
+| **316-tom-dos-textos** | *(EM PRODUÇÃO 22/10 ~10:36)* Revisão de **português e tom** em todas as superfícies: app interno operacional (Inserir comprovante, Situação, Excluir × Remover, estados vazios "Nenhum …", sem "dá para"/"aqui"/"Pronto."), site público lúdico e claro, portal cordial; e-mails e mensagens de erro da API no mesmo guia. 505 trocas de texto visível em 168 arquivos, nenhum identificador, enum, código de erro ou texto jurídico | 2026-10-22 | — | (aqui) | ver Registro |
+| **313-desconto-e-pix-na-calculadora** | *(EM PRODUÇÃO 22/10 ~04:58)* Item 3b do backlog, parte 1: o **desconto negociado** na calculadora (em % ou "fechar [duração] por R$", sobre o total), a proposta com "de/por", o **PIX que vale o maior** entre 5% e o desconto, o BV a repassar que acompanha; a **ordem da conta** da Q7 (o acréscimo em R$ uma vez, o BV sobre tudo) só no orçamento novo (`versao_conta: 2`); o evento nasce com o cheio e a venda, e o BV encolhe pelo cheio | 2026-10-21 | `—` | (aqui) | — |
 | **312-cancelado-fora-das-listas** | *(EM PRODUÇÃO 21/10 ~18:20)* Item 1c do backlog (3ª entrega da 303): o **cancelado sai de toda lista** (Dia, busca, fichas, seletores, filas 3D, painel do grupo, conflito de agenda) e se vê só na **página de Cancelamentos** (agora também do Financeiro, com filtros), no **card "Cancelamentos do período"** (DRE e Comercial) e na tela dele, que fica **só para consulta** fora os dados de venda, o motivo e os desfazer; motivo e autor só para Comercial, Financeiro e Superadmin; o Casting ganha a pendência "excluir e avisar" | 2026-10-20 | `—` | (aqui) | — |
 | **185b-tags-por-virgula** | *(EM PRODUÇÃO 21/10 ~18:17)* O campo Tags do produto do catálogo separa pela vírgula no **texto**, não só pela tecla: no celular (`key: "Unidentified"`) e ao colar "a, b, c" tudo virava um chip só. Colar lista em linhas também separa, e o texto digitado sem Enter entra no Salvar em vez de sumir | 2026-10-21 | — | (aqui) | ver Registro |
 | **299b-cobranca-a-qualquer-momento** | *(EM PRODUÇÃO 21/10 ~18:17)* O "💰 Cobrança" do menu do evento deixa de esperar o vencimento (2 dias antes do evento, na falta de data combinada ou parcela): a mensagem se copia a qualquer momento. Continuam travados o outro evento do grupo, a venda fora das listas, a cortesia, o sem valor, o simbólico e a quitada | 2026-10-21 | — | (aqui) | ver Registro |
@@ -305,6 +329,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
+| Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
+| Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
@@ -336,6 +362,474 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 310 — Pagamento da loja de conversas ligado com segurança (InfinitePay, Natal 2026)   (310-pagamento-loja-virtual · 2026-10-20 · migration `e8b4a1c7d310`)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (branch `310-pagamento-loja-virtual`, worktree `C:\tmp\mp310`). Nível 1.
+> Spec, plano, contratos e roteiro em `specs/310-pagamento-loja-virtual/`. Migration aditiva
+> `e8b4a1c7d310` sobre a `c5d2f7a9e306` (306); quem mergear por último reencadeia o `down_revision`.
+
+**O pedido.** O dono, em 19/10: "Precisamos andar com a parte do pagamento. Como devemos fazer? Um
+abacatepay da vida? Ou usamos o infinitepay que já uso e tenho conta?". Decisão: a InfinitePay, que
+já existe (Pix grátis, conta da maquininha com o Checkout Integrado ligado no app). Até ali nenhuma
+chamada real à operadora tinha sido feita: a tag e o segredo estavam vazios, e o `verify_205` usava
+dublês.
+
+**Teste 0 e teste A em produção (20/10, com o dono).** Configuração `prime-dreams`. O `POST /links`
+aceitou o pacote atual. A reconsulta de pedido não pago só com `handle` + `order_nsu` responde
+`200 {"success": false}`, sem `paid`: sem os identificadores do aviso ou do retorno, a operadora não
+distingue "não pago" de "não achei". Teste A (Pix de R$ 1): pedido pago em ~1,5 min, aviso em centavos
+sem `paid`, reconsulta `paid: true`, evento com Meet e e-mail `compra_confirmada`.
+
+**A causa** (auditoria do código em `98192e8`, cada achado refutado por um verificador cético):
+- o mesmo horário podia ser vendido duas vezes: a varredura confirmava sem travar o horário nem
+  conferir valor, a venda não gravava o dono do horário, e um pedido pago podia voltar a "expirado";
+- pagamento sem aviso virava dinheiro sem dono: esgotadas as 3 tentativas, o horário era liberado
+  sem devolução, e a página de retorno descartava os identificadores da URL;
+- fora da produção nada impedia cobrar de verdade (o espelho traz a tag e o segredo reais);
+- o limitador via o IP do balanceador: o limite valia para a loja inteira;
+- salvar a tag ligava a venda de toda campanha publicada, a caixa "gerar segredo novo" trocava o
+  segredo a cada Salvar, e subir o logo desligava todos os e-mails;
+- o segredo do aviso aparecia nos logs, e o nome da criança ia à operadora como comprador.
+
+**O que mudou.**
+- **Uma regra decide** (`virtuais_ops.decidir_pagamento`), chamada pelo aviso, pelo retorno e pela
+  varredura: relê o pedido com trava; pago com a mesma cobrança = duplicado, com outra = devolução
+  `pagamento_em_dobro`; cancelado = devolução `pagamento_sem_pedido_ativo`; valor por `paid_amount`
+  (ausente ou menor = `divergente`, sem venda e sem devolução automática); dono do horário; folga de
+  30 min (`horario_passou`); vaga de vídeo (`sem_vaga_de_video`). Ordem de travas pedido → horário →
+  campanha. A venda grava no banco primeiro (horário vendido **com dono**, evento com id local) e o
+  Google e o e-mail vêm depois, fora das travas.
+- **A varredura não efetiva mais sozinha**: reconsulta e decide pela mesma regra; "não sei" retém o
+  horário de fato; esgotado vira `unverified_reason='nao_sei'` ("a conferir"); abandono expira na
+  primeira consulta sem ir para "a conferir".
+- **Aviso**: a rota grava `pendente` e responde em seguida; o processamento roda numa thread e a
+  varredura reprocessa (0/1/2 min, depois a cada 10 min, até 48 h); token atual ou anterior por
+  24 h em tempo constante; segredo errado não grava o NSU; 60/min e 64 KB.
+- **Retorno do checkout** (`POST /api/virtuais/pedidos/<token>/retorno`, 20/min) como segunda prova.
+- **Ligar e desligar**: interruptor `virtuais_pagamento_ativo` (nasce desligado; desligado = reserva
+  503 e publicar recusado); tag validada e auditada; segredo anterior por 24 h com diálogo que mostra
+  os pedidos aguardando; configurações só mudam o que veio no envio; recusa da operadora gravada em
+  `payment_link_error`, fora do teto por origem e no sino.
+- **Trava** `INFINITEPAY_SUPPRESS_CALLS` (banco local = travado; escape
+  `INFINITEPAY_ALLOW_LOCAL_CALLS`) e `CALENDAR_SUPPRESS_EVENT_WRITES` no evento de venda;
+  `INFINITEPAY_API_KEY` opcional (link com validade e pagamento único).
+- **Limite por família**: `X-Manto-Client-Ip` no `server.js` e `ip_do_cliente()` como chave do
+  `Limiter` e da origem da reserva — todo `@limiter.limit` do sistema (login, portal, cadastro,
+  NFC) passa a contar por cliente, não pela infraestrutura.
+- **Privacidade e logs**: pacote só com e-mail e telefone; descrição "<título> — pedido <nsu>";
+  máscara do segredo no `gunicorn.access`, no `werkzeug` e no proxy Node.
+- **Equipe**: aba "Pagamentos a conferir" nas Devoluções (aviso divergente/órfão/esgotado, pedido
+  liberado sem prova, recusa de link agrupada), sino `virtual.atencao` para Comercial e Superadmin,
+  "Cancelar e abrir devolução" (motivo `desistencia`) na Fila de Produção.
+- **Família**: horários só a mais de 2 h; contagem por `seconds_left`; token novo depois de cada
+  reserva; três textos de espera; e-mail de cancelamento com o motivo real.
+- **Sala**: retentada a cada 10 min até o horário, alerta com menos de 6 h; evento da loja marcado
+  no Google (`manto_virtual_nsu`) e pulado pela sincronização.
+- **Teste**: campanha "fora da vitrine" (`listada`) e `limpar_venda_teste.py --pedido N [--execute]`.
+
+**Banco.** `site_settings`: `virtuais_pagamento_ativo`, `infinitepay_webhook_token_anterior`,
+`…_anterior_ate`. `virtual_orders`: `unverified_reason`, `payment_link_error`, `receipt_url`,
+`conferido_em`, `conferido_por`. `virtual_payment_notifications`: `state`, `attempts`,
+`last_attempt_at`, `resolvido_em`, `resolvido_por` (backfill `state='decidido'` onde há `outcome`).
+`virtual_campaigns`: `listada`. Detalhe em `docs/01` §2.10 e §2.10.1.
+
+**RBAC.** Nenhum papel novo. `GET`/`PATCH /api/virtuais/pagamentos-a-conferir*` e
+`POST /api/virtuais/pedidos/<id>/cancelar`: `COMERCIAL`, `SUPERADMIN` (`require_virtuais_access`).
+Retorno público por token. `PATCH /api/admin/settings` segue só do Superadmin.
+
+**Revisão adversarial (T059).** Cinco dimensões e um cético por achado; 18 sobreviveram (13
+distintos), todos corrigidos: o IP do cliente agora só vale com a prova `X-Manto-Proxy-Secret`
+(`MANTO_PROXY_SECRET`, o backend tem URL pública) e é lido antes do `xfwd` do http-proxy, que
+acrescentava o próprio socket; aviso parado em "processando" volta à varredura e o esgotado em 48 h
+vira "retido" com sino; "a conferir" só lista pedido sem prova enquanto ele segue expirado; vídeo
+gravado conta as reservas vivas dos outros na decisão, a retenção estende a trava do pedido e a
+landing usa a mesma conta; o pós-venda marca a primeira tentativa de sala (a varredura criava um
+segundo evento no Google); a sincronização sinaliza a divergência antes de pular a marca da loja;
+cancelar trava a campanha antes do `-1` do vídeo e avisa se o evento não sair do Google; segredo
+mascarado também no `app.logger` e no `[slow]`; corpo chunked acima de 64 KB → 413; segredo
+anterior pelo relógio de São Paulo (valia 27 h); "Salvar" só manda o interruptor quando mudou;
+botão de cancelar só para Comercial/Superadmin; `efetivar_pedido()` (sem chamador) saiu.
+
+**Convergência (T061, duas passadas).** Fase 14 (T063–T071): varredura retém o horário quando há
+aviso válido sem decisão; identificadores do retorno sem prova guardados num registro próprio que a
+varredura reconsulta; cancelar limpa as tabelas laterais do evento e toca o sino; SMTP com prazo de
+20 s; verify mais completo (travas de ponta a ponta, limite de 60/min, R-22 com os sete da H1);
+`MANTO_PROXY_SECRET` na spec e no roteiro. Fase 15 (T072–T077): retorno forjado não sequestra o
+aviso de outra família (o aviso autenticado sobrescreve; um registro por pedido); "Abandonar e
+reservar este" (`POST …/abandonar`) cumpre a FR-020a; assunto e preheader do cancelamento seguem o
+motivo; prazo de 20 s no `insert_event` da venda; c1b/c2b/c5b em paralelo.
+
+**Verificação.** `verify_310.py` 648/648 com a rodada R-22 20× (B1–B11; antes da convergência, 195/195; prova por mutação do dono do horário, da releitura
+com trava, do identificador antes da prova, do IP do cliente, de quatro correções da revisão e de
+três da convergência — cenários 52, 53 e 54);
+regressão `verify_205.py` 138/138 e `verify_304.py` 27/27, com as mudanças intencionais; `ruff`
+limpo; tela aberta contra o `manto_local` (cartão de pagamento, a conferir, cancelar na fila,
+"Aparece na vitrine", loja pública em 375 px), que achou e corrigiu dois defeitos (a volta do
+checkout presa em "Confirmando…" e o diálogo do segredo abrindo com o erro anterior).
+
+**Pegadinhas.**
+- **Depois do deploy a loja fica fechada** até o dono ligar o interruptor em Configurações, mesmo com
+  a `prime-dreams` já gravada: a coluna nasce falsa.
+- `listada` nasce verdadeira: a campanha de teste aparece na vitrine até alguém desmarcar "Aparece
+  na vitrine".
+- A História 9 (link que vence com a reserva) só liga quando o dono colar `INFINITEPAY_API_KEY` no
+  Render (`docs/05`).
+- Durante a campanha, nada de deploy entre 9h e 23h de 1º/11 a 25/12 (R-20, `DEVELOPMENT.md`).
+
+**Fora de escopo.** Trocar de operadora, devolução por API (a InfinitePay não tem), o botão "Nova
+campanha" (`docs/05` 88), o limitador em memória por processo (`docs/05`).
+### 318 — O PIX que cai no Inter se liga sozinho à venda   (318-pix-recebido-por-email · 2026-10-22 · migration `d318a4c9e2b7`)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (worktree `C:\tmp\mp318`). Nível 1. Plano aprovado pelo dono em 22/10; decisões dele em
+> `specs/318-pix-recebido-por-email/spec.md` (Clarifications). Merge e push só quando o dono pedir; antes do merge,
+> re-encadear o `down_revision` no head da `main` (a 310 e a 315 partem do mesmo `c5d2f7a9e306`).
+
+**O pedido.** "Recebo um e-mail para cada PIX que entra nas contas. Quero uma automação que leia esses e-mails e
+ligue o pagamento ao evento/cliente sozinha" — "a ideia é que o comercial não tenha esse trabalho". Motivação: o
+cruzamento extratos × ERP de 21/10 achou R$ 209 mil de dinheiro de cliente sem registro e nenhuma informação de
+qual conta recebeu (o MEI recebeu R$ 887 mil no período).
+
+**Viabilidade (22/10, só leitura).** Só o Inter manda aviso por PIX (`no-reply@inter.co`, "Pagamento Pix
+recebido": valor, nome do pagador, número da conta — sem CPF, E2E nem hora). InfinitePay e Cora não mandam. A caixa
+joao@mantoproducoes guarda tudo (337 avisos desde 01/06) e o ERP já a lê por IMAP (bounce da 219); a Prime chega
+lá por um **filtro do Gmail de joao@primedreams criado e confirmado em 22/10**. 357/357 avisos reais entendidos pelo
+leitor, todos com DKIM do Inter.
+
+**O que mudou.**
+- *Banco*: `contas_recebimento` (4 contas, sem número — o Superadmin preenche), `pix_recebidos` (um aviso por linha,
+  `message_id` único), `event_payments.origem/conta_id` e `file_path` NULL só na origem PIX (CHECK), 5 colunas em
+  `site_settings` (interruptor nasce desligado).
+- *Backend*: `pix_aviso` (leitor puro), `pix_ops` (regra e respostas), `pix_email_ops` (rodada, claim, reavaliação
+  por 7 dias, saúde), thread `pix-email` (15 min), `/api/pix*`, duplicata e `conta_id` no POST de comprovante (no
+  núcleo, sob a trava), núcleo de comprovante aceitando "Sistema" e pagamento sem arquivo; kinds `pix.*` no sino.
+- *Frontend*: `/pix` (fila, ligados com Desfazer, recebido por conta, saúde, configuração), item no menu Comercial,
+  linha na Home, pagamento de PIX + "Anexar comprovante" + "Conta que recebeu" + pergunta de duplicata no evento.
+
+**A regra** (invariante 12b do `docs/04`): liga sozinho só com uma venda aberta de valor forte **e** nome (≥ 2
+termos) ou "já pagou antes" **e** DKIM do Inter pelo `mx.google.com` com remetente exato; conciliação com
+comprovante manual sempre pergunta; "Prime Dreams" no MEI é repasse (da Prime: ignorado; da InfinitePay: "É esta?"
+do Financeiro, pago pelo valor cobrado na conta InfinitePay); sem candidata, ignorado (decisão do dono).
+
+**Verificação.** `verify_318.py` **36/36** (29 da spec + 27b + 6 da revisão adversarial; 4 "deve falhar"), primeira
+rodada em `verify_318_primeira_falha.txt` (1/30). Mutações acusadas (DKIM, outra conta, nome de um termo, duplicata
+no núcleo, repasse pela Comercial). `npm run typecheck` verde nas três SPAs. Tela aberta em `/pix`, Home e página
+do evento (confirmar, pergunta de duplicata → anexar). Migration: upgrade/downgrade/upgrade num clone do espelho
+(`manto_local_318` — o `manto_local` compartilhado está no head da 310).
+
+**Ensaio** (`ensaio_318.py`, caixa real só leitura, 334 PIX de 01/06 a 21/10, banco com rollback, gabarito de 21/10;
+só contagens): **0 ligação automática errada**. Sem ninguém responder o "É esta?": 41/248 PIX de venda ligam
+sozinhos (17%); respondendo o "É esta?" (cada confirmação ensina o "já pagou antes"): 69/248 (28%). Somando a fila
+com a venda certa entre as sugestões, ~81% dos PIX de venda ficam a zero ou um clique. **SC-002 (≥ 1/3 sozinho) não
+foi atingido**: o freio é o nome (só ~metade dos pagadores tem o nome da cliente) e valores repetidos entre vendas.
+O ensaio não teve o nome do sócio nos pagadores próprios nem os avisos históricos da Prime (o filtro é de 22/10).
+
+**Revisão adversarial.** 13 achados, todos corrigidos (e-mail forjado com domínio parecido passava como autenticado;
+conciliação podia engolir um pagamento de mesmo valor; nome de um termo; corrida comprovante × thread; exclusão de
+pagamento de PIX deixava o PIX órfão; repasse sem validação; par da Prime reusado; "LTDA"; anexar no cancelado;
+aviso que quebrava sumia; mês do resumo em UTC; auditor; edição do evento).
+
+**Decisão de 23/10 — o comprovante é tarefa, não PDF do e-mail.** O aviso do banco não traz as informações de fato
+nem prova que o PIX não foi estornado: o PIX entra como recebido e vira a tarefa "incluir o comprovante" — sino do
+Financeiro, aba "Sem comprovante" em `/pix`, linha na Home; Comercial, Financeiro e Superadmin incluem o PDF (o
+recebido não muda; a tarefa some do sino). `verify_318.py` **37/37** (cenário 36).
+
+**Depois do deploy (dono).** Em `/pix` → Configuração: número das contas Inter MEI e Inter Prime ("na conta …" do
+aviso), acrescentar o nome do sócio aos pagadores próprios, **ligar**; no dia seguinte, conferir a faixa de saúde e as
+primeiras ligações. Follow-up recomendado: link InfinitePay por venda (`docs/05` 148).
+### 317 — O contrato da ClickSign se liga sozinho à venda e a comercial cobra em um clique   (317-contratos-clicksign · 2026-10-22 · migration `d3c7a1e5b317`)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote); desligada até o token entrar no Render.** Nível 1, worktree `C:\tmp\mp317`. Esteira completa (specify → clarify → plan
+> com Portão 0 → checklist 35/35 → tasks → analyze com refutação contra o código, 20 achados aplicados →
+> implement → converge). `verify_317.py` 26/26, zero conexão de saída.
+
+**O pedido.** "Vincular os contratos do ClickSign com os clientes, deixar isso de forma mais clara e automatizar
+sem ação humana — no máximo para verificar se de fato é esse. Ficar claro: precisa cobrar esse contrato, esse aqui
+foi assinado, não precisa cobrar mais. Igual à cobrança de valor, um botãozinho para cobrar contrato, com uma
+mensagem explicando: o ClickSign te manda uma mensagem pelo WhatsApp, numa conversa com o ClickSign, é só clicar
+lá e assinar."
+
+**O que se descobriu.** A comercial transcreve o formulário da Manto para um "Fluxo com formulário" da ClickSign
+(conta PRIME DREAMS LTDA, plano Plus Automação), que gera o contrato com o nome `DDMMAAAA + (DD) NNNNN-NNNN +
+Tema` e o manda à cliente pelo WhatsApp, com 5–6 dias de prazo (vencido, cancela sozinho). O sistema não sabia
+de nada: só 7 de 60 anexos marcados "assinado" (só o Superadmin marca) e o histórico gravava "Adicionou contrato
+assinado" sempre. O webhook do CRM antigo (021) nunca funcionou (lia uma coluna inexistente → 401 sempre). A API
+v3 só responde com "E-mail do usuário da API" preenchido no painel (configurado em 22/10 com o administrador).
+Ensaio só leitura na conta real: 237 envelopes desde 01/06 → 144 ligariam sozinhos contra o espelho de ~20/10.
+
+**Decisões do dono (22/10).** O botão só copia a mensagem (o lembrete da ClickSign por WhatsApp é cobrado à parte)
+e registra quem cobrou; fica no menu ⋯ do evento e em cada linha da Home; COMERCIAL e SUPERADMIN cobram e
+confirmam, o FINANCEIRO só vê; gerar o contrato pela API fica para outra feature. No clarify: cortesia entra;
+"Venda sem contrato" só nos próximos 30 dias; vermelho com prazo hoje/amanhã ou evento em até 7 dias.
+
+**Como ficou.**
+- **A ClickSign é a fonte; o aviso não decide.** Toda passada pede `filter[modified]` desde o marco e grava em
+  `clicksign_documentos` (idempotente pelo envelope). O aviso (`POST /api/webhooks/clicksign`, HMAC do corpo
+  bruto, o primeiro do repositório) só dispara a passada; a conferência de 30 min (thread com lock) cobre aviso
+  perdido; `flask clicksign-sincronizar --desde 2026-06-01 [--aplicar]` traz o passivo.
+- **Vínculo**: nome normalizado (NFC — a ClickSign devolve "Ç" decomposto), data em `DD-MM-AAAA`/`DDMMAAAA`/
+  `DMMAAAA`, telefone do nome conferido com o do signatário; candidata = venda viva com qualquer dia do grupo na
+  data e telefone igual (chave DDD + 8 últimos) na ficha, nas contratantes ou no formulário ligado; empate → tema;
+  sem candidato, cancelada, telefone divergente ou data ilegível → "A conferir". Desligado não religa sozinho.
+- **Situação da venda** (julgada pelo grupo inteiro — agrupar não move linhas): vigente = em processo mais
+  recente, senão um assinado vence qualquer cancelado; assinado manual (fora os PDFs automáticos) continua valendo.
+- **PDF assinado** entra sozinho em `event_contracts` (`_add_contract_record`, autor "ClickSign (automático)"), uma
+  vez só; o Superadmin que exclui não o vê voltar.
+- **Telas**: bloco "Situação do contrato" no evento, painel "✍️ Contratos" na Home (só festa futura em "A
+  conferir"), chip do Resumo e coluna de `/vendas` pela mesma situação; "📝 Cobrar contrato" no menu ⋯.
+- **Segurança**: token só na env (`CLICKSIGN_ACCESS_TOKEN`, `sync: false`), trava `_suppress_clicksign()` no mesmo
+  commit do cliente, segredo do aviso no `SiteSetting` (revogável; inofensivo porque o aviso não decide).
+
+**Pegadinhas.** O token foi **regerado** em 22/10 (o anterior apareceu num print do chat). `requests` passa por
+`socket.socket.connect`, não por `create_connection`: o disjuntor da 310 não pegaria escape (o do `verify_317`
+pega os dois). O `manto_local` está na revisão da 310 (`e8b4a1c7d310`): a migration da 317 foi aplicada direto
+(DDL) sem mexer no `alembic_version`. A 310 também parte de `c5d2f7a9e306`: quem mergear por último reencadeia.
+
+**Verificação.** `specs/317-contratos-clicksign/verify_317.py` 36/36 depois do converge (26/26 antes; primeira rodada 3/26 em
+`verify_317_primeira_falha.txt`); `npm run typecheck` (três apps) e `ruff` limpos nos tocados; tela aberta como
+COMERCIAL e FINANCEIRO (evento, menu ⋯ com o texto copiado conferido, Home a 375 px sem rolagem horizontal);
+`verify_299`, `verify_312` e `verify_306` de novo.
+
+**Converge (23/10).** Avaliação independente achou 22 lacunas (4 altas: anexo que não era tentado de novo, "outro"
+ligado à mão que sumia, uma falha travando a passada inteira, N+1 nas sugestões), todas resolvidas (T038–T059,
+`pesquisa/converge-2026-10-23.md`); verify foi a 36/36. Decisões que ficaram: o documento vigente é o **mais
+recente** (remarcação vencida não volta a "Assinado"); a marca manual vence documento em processo/vencido;
+desligar tira o PDF automático da venda errada; a simulação não escreve nada.
+
+**Antes de ligar** (quickstart §3, à noite): colar `CLICKSIGN_ACCESS_TOKEN` no `manto-backend`; `flask
+clicksign-webhook --registrar --aplicar` (URL do endereço público); `flask clicksign-sincronizar` (simulação, desde
+01/06) → `--aplicar`; contrato de teste de ponta a ponta; avisar a comercial.
+### 315 — O Comercial pede o cancelamento e o Superadmin decide   (315-pedido-de-cancelamento · 2026-10-22 · migration `d8b4e15f2c31`)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote)** (worktree `C:\tmp\mp315`). Nível 1. Item 2a do backlog de setembro
+> (`docs/backlog/`), sobre a 306 (o cancelar com dinheiro) e a 312 (o cancelado fora das listas).
+
+**O porquê.** O "Solicitar exclusão" da 224 existia e ninguém usava: o pedido não avisava ninguém, não dizia o que a
+cliente combinou e não fechava sozinho quando o Superadmin cancelava. A reconferência de 22/10
+(`specs/315-pedido-de-cancelamento/pesquisa/reconferencia-2026-10-22.md`) achou **um pedido real parado desde 07/10**
+(evento de 12/12, com venda), feito por uma Comercial e marcado "sumiu do Google" seis minutos depois — com seis
+avisos de sumiço no sino e nenhum lido. O pedido em si não tinha aviso nenhum.
+
+**O que mudou.**
+- **Pedir** (`POST /api/events/<id>/pedido-cancelamento`, Comercial ou Superadmin real): motivo; no 1º dia de uma
+  venda com outro dia vivo, todos os dias ou só este; a devolução combinada na forma do cancelar da 306 (Tudo/Parte/
+  Nada, valor, quem recebe e PIX; num dia só, Parte/Nada e o novo valor da venda; na venda virtual, só o motivo).
+  Recusas na ordem da 306 (cancelado → ensaio → cachê pago → campos → cachê pago dos outros dias → `pedido_pendente`).
+  Cada Superadmin ativo recebe `evento.pedido_cancelamento` na mesma transação (`urgent` em até 7 dias ou já passado).
+- **Decidir**: só o Superadmin real — recusar (`DELETE …`, motivo opcional), cancelar (o ato da 306 fecha o pedido de
+  cada dia em `ao_cancelar`) ou excluir o vazio. Quem pediu recebe uma resposta por pedido (`evento.pedido_decidido`):
+  recusado com o motivo, "Evento cancelado", "Dia dd/mm cancelado — a venda segue / passou para o dia dd/mm", "Evento
+  excluído" (sem link). Pedir e recusar por `UPDATE` condicional: duas ações ao mesmo tempo dão um vencedor e um 409.
+- **Ver**: o quadro "Cancelamento pedido — aguardando o Superadmin" com o corte da Q6 (todos veem que há pedido;
+  motivo e devolução, quem trata do cancelamento; nome e PIX, Financeiro, Superadmin e o autor); a frase dos pedidos
+  na faixa do topo; o selo neutro "Cancelamento pedido" no Mês, Dia, Lista e busca (também nos outros dias de uma
+  venda com pedido de "todos"); "Evento em confirmação" no portal; a página vira "Cancelamentos", com alcance e
+  devolução na fila.
+- **Contrato velho**: `/solicitar-exclusao` segue nas mesmas views (bundle de antes do deploy) — dívida 148. O pedido
+  de antes (o do 1350) fica "sem devolução informada", lido como "todos". Sai o `EventLog` em horário de SP da 224
+  (parte da dívida 76).
+
+**Premissas da Session 2026-10-22** (contestáveis, na spec): pedido aceito no evento marcado "sumiu do Google" e não
+decidido pelo "Devolver ao Google"; ensaio e dia com cachê pago não recebem pedido; a devolução segue a forma da 306 e
+o pedido não confere dinheiro; nome e PIX só para Superadmin, Financeiro e o autor.
+
+**Verificação.** `verify_315.py` 28/28 (primeira rodada vermelha guardada em `verify_315_primeira_falha.txt`: 2/28);
+regressão 306 67/69 (base), 312 27/27, 303 44/44, 311 8/8, 302 22/22. **Pré-merge**: a 310 (pronta, não publicada)
+também desce de `c5d2f7a9e306` — quem entrar por último na `main` repõe o `down_revision`.
+### 319 — O aviso de gasto extra diz o que é   (319-aviso-gasto-extra · 2026-10-22 · sem migration)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote).** Nível 2 (um e-mail, sem migration). Detalhe: `specs/319-aviso-gasto-extra/spec.md`.
+
+**O pedido.** O dono mandou o print da tela bloqueada: dois avisos idênticos "Novo gasto extra cadastrado —
+aprovação pendente", com a prévia repetindo o assunto e emendando "Manto Produções Olá, João!". Não dava para
+saber o que era nem distinguir um gasto do outro. Decidiu: valor primeiro no assunto e botão para a tela.
+
+**O que mudou.** `send_new_expense_alert_email`: assunto `Gasto extra R$ X · descrição`; preheader com
+categoria · quem lançou · pagamento · comprovante · evento — dd/mm, mais enchimento invisível; corpo com
+todos os campos e botão "Revisar gasto →" (`/gastos`, mesma base do aviso de ensaio).
+
+**Pegadinha.** O celular mostra o assunto e o **preheader** — não o corpo. Se o preheader for curto, ele emenda o
+texto do corpo (cabeçalho "Manto Produções" + saudação). O enchimento `&#847;&zwnj;&nbsp;` corta isso. Este
+e-mail também passou a escapar o texto do usuário; os outros de `email_service.py` ainda não escapam (dívida).
+### 316b — O guia de texto da 316 entra na constituição (Princípio XV)   (316b-guia-de-texto · 2026-10-23 · sem migration)
+
+> **EM PRODUÇÃO desde 23/10/2026 ~19h (deploy em lote).** Nível 2 (só documentação e harness).
+
+**O pedido.** "O Claude sempre, quando vai fazer algo, deve olhar a constitution ou algum arquivo do tipo
+para escrever os textos, correto? Preciso que altere nesse arquivo as diretrizes para bons textos escritos,
+seguindo o padrão do que fizemos."
+
+**Por quê.** A entrada da 316 diz que o guia e o glossário ficaram na spec da 316 e que ela é a fonte para
+texto novo. Mas nenhuma sessão abre aquela spec por conta própria. O que entra em toda sessão é o
+`CLAUDE.md`, que aponta para a constituição por número de princípio, e a constituição é o que o plano e o
+checklist cobram. **Esta entrada corrige a da 316: a fonte agora é a constituição, Princípio XV.**
+
+**O que mudou.**
+- **Constituição 3.1.0, Princípio XV, "Texto que o usuário lê"**. Traz:
+  - o alcance: tela, e-mail, PDF, mensagem copiada, erro da API;
+  - a regra de ler a tela inteira antes de escrever;
+  - o tom por superfície: interno operacional, público lúdico e claro, portal cordial, WhatsApp copiado
+    em tom de conversa;
+  - o glossário: Inserir/Ver/Excluir comprovante, Situação, Excluir × Remover, verbos fixos, estado vazio,
+    grafia, caixa, contagem e vocabulário de domínio;
+  - o que não se toca: identificador, enum, string comparada em lógica, CSV, texto jurídico e texto
+    assinado pelo dono.
+- **Portão novo** "texto revisado pelo XV". **Redação do V**: "Salvando…", "excluir, remover".
+- **Ponteiros**:
+  - `CLAUDE.md` §5: "antes de escrever qualquer texto que o usuário lê, leia a constituição §XV";
+  - `docs/00` §5;
+  - linha XV no Constitution Check do `plan-template`;
+  - CHK010 no `checklist-template`;
+  - tarefa de polimento no `tasks-template`;
+  - nota de "guia vigente" na spec da 316.
+
+**Verificação.** Só documentação. O XV foi conferido contra o que a 316 decidiu: os 505 textos, as 3
+recusas e as dívidas 145–147 do `docs/05`.
+
+### 316 — Revisão de português e tom em todas as superfícies   (316-tom-dos-textos · 2026-10-22 · sem migration)
+
+> **EM PRODUÇÃO desde 22/10/2026 ~10:36** (merge `9e8ee232`, a pedido do dono, em horário comercial: ~2 min de 502
+> até o backend voltar com JSON; o bundle `index-DKBwlFhg.js` traz o texto novo). Nível 2 (só texto, sem migration,
+> sem regra de negócio).
+
+**O pedido.** "Faça uma varredura inteira no sistema interno e todas as páginas externas também por
+checagens de português. Ajuste o tom, algumas coisas parecem largadas. Exemplo: Colocar comprovante >
+inserir comprovante. No interno ajuste para operacional, eficaz e claro. Deixando em páginas externas em
+tom mais lúdico, mas ainda assim com muita clareza." O dono aprovou a amostra e pediu "revise, altere e
+faça push, com atenção para fazer sentido com o restante da página".
+
+**O guia e o glossário** ficaram em `specs/316-tom-dos-textos/spec.md` — é a fonte para texto novo:
+interno operacional (imperativo curto, confirmação é fato), público lúdico e claro, portal cordial;
+"Inserir/Ver/Excluir comprovante", "Situação" (não "Status") em cabeçalho/rótulo/filtro, "Excluir" (apaga)
+× "Remover" (sai do vínculo), "Nenhum X registrado ainda.", "e-mail", "Superadmin", "a cliente", "Ex.:", "…".
+
+**O que mudou** (505 trocas em 168 arquivos; só texto visível). Dois exemplos por família:
+- Verbo de conversa → ação: "até alguém pôr o valor" → "inserir o valor" (`ValoresBlock`); "Não dá para
+  desfazer." → "Esta ação não pode ser desfeita." (`PagamentosPage`).
+- Comprovante/anexo: "+ Adicionar comprovante" → "+ Inserir comprovante" (`PagamentoBlock`); "Adicionar
+  pagamento" → "Inserir comprovante" e "Abrir" → "Ver nota" (`FinanceiroSection`).
+- Situação: cabeçalhos de Comissões, Gastos Extras, Fila 3D, Painel de Marketing, DRE; "Todos os status"
+  → "Todas as situações"; API "Status inválido para este item" → "Situação inválida…".
+- Excluir × Remover: "Tirar da escala" → "Remover da escala" (`CastingSection`); "Remover esta
+  observação?" → "Excluir esta observação?"; vídeo/moldura da tag NFC: "Remover" → "Excluir" (apaga do
+  servidor); "Tirar do funil" → "Remover do funil".
+- Confirmações e vazios: "Pronto. A ficha já está na base de clientes." → "Ficha salva na base de
+  clientes."; "Nada aqui ainda" → "Nenhuma postagem ainda."; "Tudo em dia por aqui. 🎉" sai.
+- "aqui" apontando para a tela: "as respostas aparecem aqui" → "nesta lista" (Formulários,
+  Notificações, Tags NFC, Marketing).
+- Title Case em cartão/botão: "Dados do Evento", "Ajustes Finos", "Gerar Orçamento", "Ver Detalhes para
+  Impressão", "Salvar e Aprovar", "Resetar senha" → "Redefinir senha", "Sync" → "Sincronização".
+- Público (pontual): "uns minutinhos" → "alguns minutos" (`lojaTema`, e-mail da reserva); "Esse horário"
+  → "Este horário"; "Anexe a foto do rosto." → "Escolha a foto do rosto." (botão "Escolher arquivo");
+  "email" → "e-mail"; "..." → "…".
+- Portal: "Deu um erro do nosso lado… Já estamos avisados." → "Houve um erro do nosso lado… Nossa equipe
+  já foi avisada."; "Conte o que aconteceu" → "Descreva o que aconteceu"; "Tudo certo! Sua nova senha
+  já está valendo." → "Sua nova senha já está ativa."
+- E-mails: "Confirmar leva um toque" → "Confirmar é rápido"; "Você será solicitado(a) a criar…" → "No
+  primeiro acesso, você vai criar…"; gasto extra "Acesse o sistema" → "Acesse a plataforma".
+- API: "Explique o motivo do cancelamento." → "Informe o motivo…" (`cancel_ops`, ×4); "Esse email já
+  existe." → "Este e-mail já está cadastrado." (`user_ops`); "Outra pessoa mexeu neste evento" →
+  "alterou"; "YYYY-MM-DD" → "AAAA-MM-DD"; "Dados inválidos" → "Informe o nome e os preços do item
+  especial."
+- De passagem: o convite por WhatsApp sem acento ("Ola… Voce… Cache… Horario", `lib/eventDetail.ts`);
+  "1 avaliações" (`FeedbackSection`); e-mail interno "Olá, Olá!" para usuário sem nome (`email_service`,
+  agora "Olá, equipe!").
+
+**Como foi feito.** Dez revisores em paralelo, cada um lendo os arquivos inteiros da sua área (pages em
+três fatias, EventDetail, components, subpastas + lib, público, portal, e-mails/PDF/`@manto/ui`, API)
+e propondo `antes → depois` com unicidade conferida; revisão uma a uma (3 rejeitadas: "Oi" nas
+mensagens de WhatsApp, ponto antes do ✓, cabeçalho do CSV de comissões; 8 ajustadas); aplicação por
+substituição exata preservando CRLF e UTF-8 (+509/−510 linhas, sem mojibake, sem BOM).
+
+**Verificação.** Sem `verify_316.py` (não há regra). `npm run typecheck` (três apps) verde; `py_compile`
+nos 30 `.py`; `ruff check` só com os 3 avisos que a `main` já tinha (`producao_ops.py`). Telas abertas no
+Browser pane contra o `manto_local`: Home, evento, Pagamentos, Clientes; loja e cadastro a 375px;
+login e avaliação do portal.
+
+**Fora de escopo** (dívidas 145–147 no `docs/05`): "super admin" comparado por texto em
+`figurino_producao_write.py:223`; rótulos do menu e títulos de módulo em Title Case; cabeçalho do CSV;
+mensagens técnicas e com enum; "Google Calendar" × "Google Agenda"; o e-mail do prazo (311), o termo e
+a frase do PDF do orçamento, que são texto do dono.
+
+### 313 — Desconto negociado e PIX que vale o maior na calculadora; o acréscimo entra uma vez e o BV é calculado sobre tudo   (313-desconto-e-pix-na-calculadora · 2026-10-21 · sem migration)
+
+> **EM PRODUÇÃO desde 22/10/2026 ~04:58** (merge `merge: 313 — …` sobre a `main` `c074657b`, a da 312; a pedido do
+> dono, fora do horário). A `main` não andou desde a base da branch; a rodada final repetiu `verify_313` 18/18 e o
+> retrato `main` × branch da 306 (DRE, Comercial, Home, Comissões, Planilha idênticos ao centavo).
+
+**O pedido.** Item 3b do backlog de setembro, a parte 1 (a noite do desconto; os dias adicionais são outra entrega):
+a comercial dá desconto quando a cliente "chora por desconto" e hoje não tem onde — fazia à mão ou com acréscimo
+negativo. Plano `docs/backlog/3b-calculadora-desconto-e-dias.md`; spec em
+`specs/313-desconto-e-pix-na-calculadora/spec.md`. As decisões do dono: o desconto é sobre o **total** (Q1 = A); a
+comercial digita o % **ou** o valor final de uma duração (Q8 = B); a proposta diz "de/por" e o % arredondado, e o 5% do
+PIX vale o maior (Q3 = A, D4); no evento o PIX de quem recebe o BV continua digitado (Q2 = C), o "valor antes do
+desconto" nasce com o cheio e a venda com o final (D3); o acréscimo manual entra **uma vez** em qualquer duração e o BV
+em % é calculado sobre o valor com os acréscimos, antes da nota (Q7); o BV em reais continua, entra uma vez e encolhe
+com o desconto, e a linha nova de BV nasce com "%" (Q9 = B); o BV acompanha a venda (3a-Q1 = B).
+
+**O que mudou** (contrato em `docs/01` §3.13, "Feature 313"; telas em `docs/02` A.7 e `/events/new`; a ordem da conta
+em `docs/04` §6, linha "Orçamento", e o BV pelo cheio em §1, invariantes do BV):
+- **A ordem da conta numa função** (`quote_ops.aplicar_acrescimos`), para 1–4 h e a extra (`_preco_extra`): base → R$
+  uma vez → % sobre a base → BV sobre tudo → nota → desconto. Vale só no orçamento marcado `versao_conta: 2`; todo
+  leitor do salvo pergunta pela marca (`snapshot_v2`) e, sem ela, faz a conta de antes.
+- **O desconto** em % ou pelo valor fechado de uma duração (o % exato vale para as outras); o `quote` traz o cheio, o
+  final, o PIX (`max(5, d)` sobre o cheio) e o BV a repassar com o desconto e no PIX; mensagem e PDF com "de/por";
+  memória com "Desconto (N%)" e "BV a repassar". O % da proposta e o selo do evento: uma casa, **para baixo**.
+- **O evento**: o Novo evento e o vínculo 273 gravam o cheio em `sale_value_gross` e o final em `sale_value`; o BV
+  (305) e a dedução da duração usam o **cheio** como denominador; o prefill ganha `bruto_*`, `extra_por_horas` (5 a 24
+  h) e `valores_final` por linha de acréscimo.
+- **Telas**: o bloco "Desconto negociado", o card Resultado (cheio riscado, PIX, BV a repassar), o orçamento gerado,
+  o selo "−N%" do histórico, o Novo evento e o editor de acréscimos (a linha de BV nasce em %).
+
+**Decisões fixadas pela spec, não palavras do dono** (Session 2026-10-21, contestáveis): o desconto incide também sobre
+o produto de tabela (309) e sobre o personalizado; o acréscimo negativo segue como acréscimo (entra uma vez e baixa a
+base do BV); o que já foi cotado não muda, nem quando vira evento depois (020); o BV do evento encolhe pelo cheio; o %
+da proposta e o selo do evento usam a mesma regra; os dias adicionais ficam para a outra noite.
+
+**Quantos orçamentos a regra nova mudaria.** O gabarito de paridade (`gabarito_paridade.py`, na `c074657b`) recalculou
+os 2.484 orçamentos do espelho pela conta nova sem desconto: **17** mudam, todos pelas exceções da Q7, conferidas
+pela fórmula — 9 com BV e "Outro" (o BV passa a incidir sobre o "Outro") e 8 com duração extra e acréscimo em R$ (o R$
+deixa de escalar com as horas); os outros 2.467 saem byte a byte. Nenhum deles muda de verdade: o salvo não tem a
+marca e continua com a conta de antes. O converge achou uma exceção que o gabarito não alcança (o espelho não tem
+orçamento com produto): **produto de tabela acima de 4 h com nota** pode sair R$ 0,01 diferente da conta de antes
+(5 de 32 casos sondados na base × branch — a 309 fazia a régua em Decimal sobre o total com nota; a 313 refaz pela
+base, na função única). Premissa contestável: fica a função única; nenhum orçamento de produção tem produto. Recontagem da produção em 21/10 (só leitura): 2.710 orçamentos; 267 vendas
+desde junho, 92 com desconto dado à mão; 121 orçamentos acima de 4h, 11 deles com acréscimo em R$; 2 BV em reais;
+nenhum acréscimo negativo; nenhum produto de tabela.
+
+**Achados no caminho.** A reconferência do plano (`pesquisa/reconferencia-2026-10-21.md`), escrito em 01–02/10 contra a
+`f6ad283`, mostrou que a 305 já tinha a função única do BV (`bv_que_acompanha`) e fixado o denominador e as réguas
+acima de 4h que o desconto quebraria — daí a marca de regra no snapshot e o cheio no evento. O analyze (33 achados de
+dois leitores, aplicados antes do implement) pegou, entre outros: a extra sem parte fixa precisava manter o
+`round(bruto_4h ÷ 4 × h, 2)` de hoje para a paridade; o limiar de 5% do PIX em float; o `verify_309` a atualizar pela
+Q7 (6h com BV e fixo de 200 → 4.158,00); a tela do vínculo 273 mostrando o BV cheio; a ordem de soma em float; a extra
+do personalizado; a validação cruzada `bases` × `brutos`; valores Decimal vazando no `quote`. A **tela aberta** (T045)
+achou dois defeitos da própria 313, corrigidos com cenário vermelho antes: o "fechar 2h por R$ 600" ficava preso
+quando a comercial deixava só um produto (o seletor esperava um resultado que o servidor recusava) — agora o 400 traz
+`duracoes_do_desconto` e a tela troca o seletor, **zerando o valor com aviso**, porque levá-lo para o preço de tabela
+viraria 76% de desconto que ninguém negociou; e o BV no PIX numa linha própria. E três de antes, registrados no
+`docs/05` (138–140): a memória que não fecha por R$ 0,01 no BV em meio centavo, a primeira linha do PDF no traço, o
+"BV" duplicado no seletor. No celular, a tabela da Equipe esticava a calculadora a 737px em 375 (grade sem
+`min-w-0`) — corrigido, porque escondia as colunas novas.
+
+**Converge (T048).** Três revisores só de leitura (núcleo; evento e leitores do salvo; telas e deploy cruzado), nada
+CRITICAL. Viraram o cenário 17 do verify, vermelho antes, e as tarefas T050–T062: o desconto que zera uma duração
+(R$ 0,005 nas 4h, 99,9999%) dava 500 com BV — agora 400 no campo; o `desconto_valor` booleano caía na mensagem da
+duração; abaixo de 0,1% a proposta dizia "desconto de 0%" — agora fica só o "de/por" (premissa contestável); o PDF
+decidia o "PIX = o mesmo valor" por outra regra que a mensagem (`pix_vale_o_desconto`, regra única); snapshot forjado
+no `/salvar` (valor não numérico, NaN, extra acima do cheio, `desconto_aplicado` que não bate com as colunas) dava 500
+ou NaN no prefill — agora cai no caminho de antes. Na tela: o selo do valor de venda dizia "4,9%" onde a proposta diz
+"5%" (3.571,43 com 5%: o % recalculado dos centavos arredondados) — agora o maior % compatível com o centavo; o
+"Recalcular" de um "fechar [extra] por R$" zerava o valor; com o backend de antes a calculadora dizia "Fecha 2h por"
+o cheio — agora avisa e não deixa gerar; trocar as horas da extra levava o R$ negociado para outras horas; o campo %
+apagava o "0" do começo; acima de 24 h o Novo evento mantinha o preço da duração anterior.
+
+**Verificação.** `verify_313.py` 18/18 duas vezes seguidas com o gabarito (o 17 é o do converge) (a primeira rodada, contra a `main`, em
+`verify_313_primeira_falha.txt`: 5/17). Regressão: `verify_305 --regressao` 68/68, `verify_307` 17/17, `verify_309`
+19/19 (atualizado pela Q7), `verify_235` verde. `verify_273` dá 8/15 na base e na branch (não é da 313); `verify_190`
+está morto desde a 235 (importa `EducaMantoPackage`). Typecheck das três SPAs e `ruff check` limpos (o I001 de
+`app/calendar/routes.py` já estava na base). Tela aberta no backend do worktree (Google dublado) com Comercial e
+Superadmin descartáveis, em desktop, 375 px e tema claro; o PDF aberto de verdade.
 
 ### 312 — O cancelado sai de toda lista e só se vê onde se trata do cancelamento   (312-cancelado-fora-das-listas · 2026-10-20 · sem migration)
 

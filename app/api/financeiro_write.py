@@ -68,7 +68,7 @@ def api_set_payment_status() -> Any:
     status = body.get("status")
 
     if item_id is None or status not in _VALID_PAYMENT_STATUS:
-        return json_error("Status inválido para este item", 400)
+        return json_error("Situação inválida para este item", 400)
 
     from app.utils import audit
 
@@ -103,7 +103,7 @@ def api_set_payment_status() -> Any:
     if item_type == "recurring":
         entry = RecurringExpenseEntry.query.get(_to_int(item_id))
         if not entry or entry.status not in ("a_pagar", "no_banco", "pago"):
-            return json_error("Status inválido para este item", 400)
+            return json_error("Situação inválida para este item", 400)
         old = entry.status
         if status == "pago":
             entry.status = "pago"
@@ -419,7 +419,7 @@ def api_salary_advance(sp_id: int) -> Any:
     proof = request.files.get("advance_proof")
     if not (proof and proof.filename):
         return json_error(
-            "Anexe o comprovante do adiantamento.", 400, {"advance_proof": "Obrigatório"}
+            "Insira o comprovante do adiantamento.", 400, {"advance_proof": "Obrigatório"}
         )
 
     # Allowlist antes de gravar: o comprovante sai por `/uploads`, no mesmo origin das SPAs.
@@ -450,7 +450,7 @@ def api_salary_advance(sp_id: int) -> Any:
     except ImagemNaoConvertida:
         db.session.rollback()
         return json_error(
-            "Não conseguimos ler este comprovante. Envie em PDF, JPG ou PNG.",
+            "Não foi possível ler este comprovante. Envie em PDF, JPG ou PNG.",
             400,
             {"advance_proof": "Arquivo ilegível"},
         )

@@ -290,7 +290,7 @@ export function AdminUserEditPage() {
 
       <PageHeader
         title={user.name}
-        subtitle={`${user.email || "sem email"} · ${user.has_access ? "com acesso" : "só pagamento"}${
+        subtitle={`${user.email || "sem e-mail"} · ${user.has_access ? "com acesso" : "só pagamento"}${
           user.is_active ? "" : " · inativo"
         }`}
         className="mb-0"
@@ -340,7 +340,7 @@ export function AdminUserEditPage() {
                     )}
                   </div>
                   <div>
-                    <label className={LABEL}>Email</label>
+                    <label className={LABEL}>E-mail</label>
                     <input
                       type="email"
                       className={INPUT}
@@ -457,7 +457,7 @@ export function AdminUserEditPage() {
               <CardContent className="space-y-3">
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <label className={LABEL}>Email</label>
+                    <label className={LABEL}>E-mail</label>
                     <input
                       type="email"
                       className={INPUT}
@@ -495,7 +495,7 @@ export function AdminUserEditPage() {
           {isSuperadmin && user.has_access && (
             <Card>
               <CardHeader>
-                <CardTitle>Resetar senha</CardTitle>
+                <CardTitle>Redefinir senha</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <input
@@ -505,17 +505,17 @@ export function AdminUserEditPage() {
                   onChange={(e) => setResetPasswordValue(e.target.value)}
                 />
                 {resetPassword.isError && (
-                  <p className="text-xs text-red">Não foi possível resetar a senha.</p>
+                  <p className="text-xs text-red">Não foi possível redefinir a senha.</p>
                 )}
                 {resetPassword.isSuccess && (
-                  <p className="text-xs text-green">Senha resetada com sucesso.</p>
+                  <p className="text-xs text-green">Senha redefinida.</p>
                 )}
                 <Button
                   size="sm"
                   loading={resetPassword.isPending}
                   onClick={() => resetPassword.mutate(resetPasswordValue)}
                 >
-                  Resetar senha
+                  Redefinir senha
                 </Button>
               </CardContent>
             </Card>
@@ -611,7 +611,7 @@ export function AdminUserEditPage() {
                   </h3>
                   {isSuperadmin && (
                     <span className="text-[11px] text-muted">
-                      Errou o valor? Corrija ou exclua a faixa aqui.
+                      Valor errado? Corrija ou exclua a faixa.
                     </span>
                   )}
                 </div>

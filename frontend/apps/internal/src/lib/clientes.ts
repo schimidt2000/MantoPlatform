@@ -39,6 +39,8 @@ export interface ClientFormHistoryItem {
   event_title: string | null;
   /** Feature 312: a situação do evento ligado (o selo do cancelado). Ausente em backend velho. */
   event_situacao?: SituacaoEvento | null;
+  /** Feature 315: desde quando vale a situação (o tooltip do selo). */
+  event_situacao_desde?: string | null;
 }
 
 export interface ClientDetail extends ClientSummary {

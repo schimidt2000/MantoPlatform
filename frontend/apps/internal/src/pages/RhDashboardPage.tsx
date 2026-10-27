@@ -24,7 +24,7 @@ export function RhDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted">
-              Módulo de RH em construção — mais funcionalidades chegam em fatias futuras.
+              Módulo de RH em construção — mais funcionalidades chegam nas próximas versões.
             </p>
             {query.data.can_manage_users && (
               <Button asChild variant="outline" size="sm">

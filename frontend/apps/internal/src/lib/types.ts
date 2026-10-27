@@ -1,6 +1,7 @@
 /** Tipos dos recursos da API consumidos pela Fundação (data-model.md). */
 
 import type { StatusCounts } from "./formulariosAdmin";
+import type { ContratosResumo } from "./contratos";
 import type { Severidade } from "./homeListas";
 
 /** Usuário autenticado — resposta de /api/auth/me e /api/auth/login. */
@@ -172,6 +173,15 @@ export interface ComercialSummary {
   corte?: string | null;
   /** Papel efetivo edita a venda (senão a ação da linha "sem valor" é "Abrir"). */
   pode_editar_venda?: boolean;
+  /**
+   * Feature 317: painel "Contratos". `undefined` = servidor antigo (não desenha); `null` = o
+   * bloco falhou (mostra o aviso, nunca "✓").
+   */
+  contratos?: ContratosResumo | null;
+  /** Feature 318: PIX lidos do aviso do banco esperando "É esta?" (`null` = a contagem falhou). */
+  pix_para_conferir?: { total: number } | null;
+  /** Feature 318 (23/10): pagamentos de PIX esperando o comprovante do banco — a tarefa. */
+  pix_sem_comprovante?: { total: number } | null;
 }
 
 /** Painel Performance (SUPERADMIN real, nunca durante impersonação) — feature 174. */

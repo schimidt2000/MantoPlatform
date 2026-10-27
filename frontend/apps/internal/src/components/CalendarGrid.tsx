@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { formatShortDate } from "@manto/ui";
 import type { EventoResumo } from "../lib/agenda";
 import { eventCategory } from "../lib/eventCategory";
-import { SeloSituacao } from "./SeloSituacao";
+import { SeloSituacao, textoDoPedido } from "./SeloSituacao";
 
 export interface CalendarGridProps {
   ym: string;
@@ -76,6 +76,7 @@ function eventTime(ev: EventoResumo): string {
 
 /** Tooltip do chip: o selo inteiro não cabe nos ~80 px, então o texto da marca vai aqui (303). */
 function chipTitle(ev: EventoResumo): string {
+  if (ev.situacao === "exclusao_solicitada") return `${ev.title} — ${textoDoPedido(ev.situacao_desde)}`;
   if (ev.situacao !== "sumiu_do_google") return ev.title;
   const quando = ev.situacao_desde ? `, percebido em ${formatShortDate(ev.situacao_desde)}` : "";
   return `${ev.title} — Sumiu do Google Agenda${quando}`;

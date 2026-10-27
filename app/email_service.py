@@ -7,9 +7,12 @@ from __future__ import annotations
 
 import logging
 import re
+import smtplib
 import threading
+from html import escape
 from zoneinfo import ZoneInfo
 
+import flask_mail
 from flask import current_app
 from flask_mail import Mail, Message
 
@@ -18,6 +21,31 @@ from app.constants import DEPARTURE_DEFAULT_LOCATION
 
 log = logging.getLogger(__name__)
 mail = Mail()
+
+#: Prazo da conversa com o SMTP (feature 310, FR-016). O flask-mail 0.10 abre `smtplib.SMTP` sem
+#: timeout: um servidor de e-mail parado prendia para sempre quem esperava o envio — na loja, a
+#: thread do aviso de pagamento e o retorno do checkout, com a família olhando a tela.
+SMTP_TIMEOUT_S = 20
+
+
+class _ConexaoComPrazo(flask_mail.Connection):
+    def configure_host(self):  # noqa: ANN201 — mesma assinatura do flask-mail
+        state = self.mail
+        if state.use_ssl:
+            host = smtplib.SMTP_SSL(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        else:
+            host = smtplib.SMTP(state.server, state.port, timeout=SMTP_TIMEOUT_S)
+        host.set_debuglevel(int(state.debug))
+        if state.use_tls:
+            host.starttls()
+        if state.username and state.password:
+            host.login(state.username, state.password)
+        return host
+
+
+# `Mail.connect()` instancia `Connection` pelo nome do módulo do flask-mail: trocar o nome lá é o
+# que faz TODO envio (não só o da loja) ter prazo.
+flask_mail.Connection = _ConexaoComPrazo
 
 _TZ = ZoneInfo("America/Sao_Paulo")
 
@@ -186,7 +214,7 @@ def _html_wrap(content_html: str, preheader: str = "", tema: dict | None = None)
           <td style="background:#ffffff;padding:32px;border-radius:0 0 12px 12px;">
             {content_html}
             <div style="margin-top:28px;padding-top:20px;border-top:1px solid #eeecf8;font-size:12px;color:#aaa;text-align:center;line-height:1.6;">
-              Este email foi enviado automaticamente pela plataforma Manto Produções.<br>
+              Este e-mail foi enviado automaticamente pela plataforma Manto Produções.<br>
               Em caso de dúvidas, fale com nossa equipe.
             </div>
           </td>
@@ -349,7 +377,7 @@ def send_invite_reminder_email(talent, roles) -> bool:
         + _paragraph(chamada)
         + _info_box(linhas)
         + _paragraph(
-            "Confirmar leva um toque: entre no portal, abra <strong>Convites</strong> e responda "
+            "Confirmar é rápido: entre no portal, abra <strong>Convites</strong> e responda "
             "<strong>Aceitar</strong> ou <strong>Recusar</strong>. Se não puder ir, recusar também "
             "ajuda — é assim que a produção consegue chamar outra pessoa a tempo."
         )
@@ -477,7 +505,7 @@ def send_portal_announcement_email(talent) -> bool:
         )
         + f'<div style="margin:20px 0;">{bullets}</div>'
         + _paragraph(
-            'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você mesmo cria no '
+            'O acesso é feito com o seu <strong>CPF</strong> e uma senha que você cria no '
             'primeiro acesso. É rápido e seguro.'
         )
         + _btn("Acessar o portal agora →", login_url)
@@ -487,7 +515,7 @@ def send_portal_announcement_email(talent) -> bool:
             f'Ou copie o endereço: <a href="{login_url}" style="color:#2d1f6e;">{login_url}</a>'
         )
         + _alert_box(
-            "Em caso de dúvidas para acessar, responda este email ou fale com nossa equipe — vamos te ajudar.",
+            "Em caso de dúvidas para acessar, responda este e-mail ou fale com nossa equipe — vamos te ajudar.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
     )
@@ -559,7 +587,7 @@ def send_password_reset_email(talent, reset_url: str) -> bool:
         + _btn("Criar nova senha →", reset_url)
         + _paragraph(f'Se o botão não funcionar, copie e cole: <a href="{reset_url}" style="color:#2d1f6e;">{reset_url}</a>')
         + _alert_box(
-            "Este link é válido por <strong>1 hora</strong>. Se você não solicitou a redefinição, ignore este email — sua senha não será alterada.",
+            "Este link é válido por <strong>1 hora</strong>. Se você não solicitou a redefinição, ignore este e-mail — sua senha não será alterada.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
     )
@@ -615,7 +643,7 @@ def send_foto_pendente_email(talent, *, faltas: list[str], acao_url: str, valida
             f'padding-left:18px;color:#555;">{itens}</ul></td></tr>'
         )
         + _paragraph(
-            "É rápido: o botão abaixo abre o portal, você cria sua senha e cai direto na tela "
+            "É rápido: o botão abaixo abre o portal, você cria sua senha e vai direto para a tela "
             "de envio das fotos."
         )
         + _btn("Enviar minhas fotos →", acao_url)
@@ -777,10 +805,10 @@ def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:
             "está tudo salvo, você não precisa preencher nada de novo."
         )
         + _paragraph(
-            "Falta só confirmar que este é mesmo o seu email. É por ele que enviamos os convites "
+            "Falta só confirmar que este é mesmo o seu e-mail. É por ele que enviamos os convites "
             "de trabalho, então um endereço errado significa perder oportunidade."
         )
-        + _btn("Confirmar meu email →", confirm_url)
+        + _btn("Confirmar meu e-mail →", confirm_url)
         + _paragraph(
             f'Se o botão não funcionar, copie e cole: '
             f'<a href="{confirm_url}" style="color:#2d1f6e;">{confirm_url}</a>'
@@ -794,9 +822,9 @@ def send_cadastro_confirmation_email(talent, confirm_url: str) -> bool:
 
     return _send(
         to=talent.email_contact,
-        subject="✅ Confirme seu email — Cadastro Manto Produções",
+        subject="✅ Confirme seu e-mail — Cadastro Manto Produções",
         html=_html_wrap(
-            content, preheader="Um clique para confirmar seu email e receber nossos convites."
+            content, preheader="Um clique para confirmar seu e-mail e receber nossos convites."
         ),
     )
 
@@ -819,7 +847,7 @@ def send_welcome_email(talent, temp_password: str) -> bool:
         + _paragraph("Seja bem-vindo(a) ao <strong>Portal Manto Produções</strong>! Seus dados de acesso estão prontos.")
         + _info_box(rows)
         + _alert_box(
-            "Você será solicitado(a) a <strong>criar uma nova senha</strong> no primeiro acesso.",
+            "No primeiro acesso, você vai <strong>criar uma nova senha</strong>.",
             color="#f0f9ff", border="#bae6fd", text="#0c4a6e",
         )
         + _btn("Acessar o portal →", login_url)
@@ -856,7 +884,7 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
         )
         + _paragraph(
             "Caso tenha alguma dúvida ou queira ajustar algum detalhe, fique à vontade para responder "
-            "este email ou entrar em contato pelo WhatsApp — estamos aqui para tornar o seu evento especial."
+            "este e-mail ou entrar em contato pelo WhatsApp — estamos aqui para tornar o seu evento especial."
         )
         + _alert_box(
             "Proposta válida por <strong>7 dias</strong> a contar desta data.",
@@ -903,40 +931,98 @@ def send_quote_email(to: str, client_name: str, pdf_bytes: bytes) -> bool:
 
 # ── Email de alerta de gasto extra para Financeiro/Superadmin ────────────────
 
+#: Tamanho máximo da descrição no assunto: o aviso do celular corta o assunto perto daqui (319).
+_ASSUNTO_DESCRICAO_MAX = 50
+
+
+def _primeiro_nome(user) -> str:
+    return (user.name or "").split()[0] if user and user.name else ""
+
+
+def _pagamento_do_gasto(expense) -> str | None:
+    """Quem recebe o dinheiro do gasto, em uma frase curta; ``None`` se não foi informado."""
+    if expense.paid_at_creation:
+        return "já pago"
+    if expense.disbursement_type == "reembolso":
+        nome = _primeiro_nome(expense.reimburse_user)
+        return f"reembolsar {nome}" if nome else "reembolso"
+    if expense.disbursement_type == "fornecedor":
+        return f"pagar {expense.supplier_name}" if expense.supplier_name else "pagar fornecedor"
+    if expense.disbursement_type == "cliente":
+        return "devolver ao cliente"
+    return None
+
+
 def send_new_expense_alert_email(expense, users: list) -> int:
-    """Notifica FINANCEIRO/SUPERADMIN sobre um novo gasto extra pendente de aprovação."""
+    """Notifica FINANCEIRO/SUPERADMIN sobre um novo gasto extra pendente de aprovação.
+
+    O aviso do celular mostra só o assunto e a prévia (o preheader); até a 319 os dois eram
+    genéricos e dois gastos do mesmo evento chegavam como avisos idênticos. Agora o assunto leva
+    valor e descrição, e a prévia leva o resto do que decide a aprovação.
+    """
     if not users:
         return 0
 
-    event_title = expense.event.title if expense.event else None
+    event = expense.event
     amount_str = f"R$ {expense.amount:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
+    descricao = expense.description or ""
+    autor = _primeiro_nome(expense.created_by)
+    pagamento = _pagamento_do_gasto(expense)
+    comprovante = "com comprovante" if expense.receipt_path else "sem comprovante"
+    evento_str = None
+    if event:
+        evento_str = event.title
+        if event.start_at:
+            evento_str += f" — {event.start_at.strftime('%d/%m')}"
 
-    rows = _info_row("Descrição", expense.description)
-    rows += _info_row("Categoria", expense.category)
-    rows += _info_row("Valor", amount_str)
-    if event_title:
-        rows += _info_row("Evento", event_title)
+    descricao_assunto = descricao
+    if len(descricao_assunto) > _ASSUNTO_DESCRICAO_MAX:
+        descricao_assunto = descricao_assunto[: _ASSUNTO_DESCRICAO_MAX - 1].rstrip() + "…"
+    subject = f"Gasto extra {amount_str} · {descricao_assunto}"
 
-    subject_target = f"no evento {event_title}" if event_title else "sem evento vinculado"
-    content_paragraph = (
-        f"Um novo gasto extra foi cadastrado {subject_target} e está aguardando aprovação."
-    )
+    # Ordem da prévia: o que cabe na tela bloqueada primeiro; o título do evento, que costuma ser
+    # longo, vai por último para não empurrar o resto para fora.
+    partes = [expense.category]
+    if autor:
+        partes.append(f"lançado por {autor}")
+    if pagamento:
+        partes.append(pagamento)
+    partes.append(comprovante)
+    partes.append(evento_str or "sem evento")
+    # O enchimento invisível no fim impede o celular de completar a prévia com o cabeçalho e a
+    # saudação do corpo ("Manto Produções Olá, João!"), que não dizem nada.
+    preheader = escape(" · ".join(p for p in partes if p)) + "&#847;&zwnj;&nbsp;" * 90
+
+    rows = _info_row("Valor", amount_str)
+    rows += _info_row("Descrição", escape(descricao))
+    rows += _info_row("Categoria", escape(expense.category or ""))
+    if expense.expense_date:
+        rows += _info_row("Data do gasto", expense.expense_date.strftime("%d/%m/%Y"))
+    if autor:
+        rows += _info_row("Lançado por", escape(expense.created_by.name))
+    if pagamento:
+        rows += _info_row("Pagamento", escape(pagamento[0].upper() + pagamento[1:]))
+    rows += _info_row("Comprovante", "Anexado" if expense.receipt_path else "Não anexado")
+    rows += _info_row("Evento", escape(evento_str) if evento_str else "Sem evento vinculado")
+    if expense.notes:
+        rows += _info_row("Observações", escape(expense.notes))
+
+    # Interno, como o aviso de ensaio: o botão abre a plataforma, não o Portal do Artista.
+    base_plataforma = (current_app.config.get("PUBLIC_BASE_URL") or PLATFORM_BASE_URL).rstrip("/")
+    gastos_url = f"{base_plataforma}/gastos"
 
     sent = 0
     for user in users:
         if not user.email:
             continue
         content = (
-            _greeting(user.name.split()[0])
-            + _paragraph(content_paragraph)
+            _greeting(_primeiro_nome(user))
+            + _paragraph("Um gasto extra novo está aguardando a sua aprovação.")
             + _info_box(rows)
-            + _alert_box(
-                "Acesse o sistema para revisar e aprovar o gasto.",
-                color="#fffbea", border="#f0d060", text="#7a5800",
-            )
+            + _btn("Revisar gasto →", gastos_url)
         )
-        html = _html_wrap(content, preheader="Novo gasto extra cadastrado — verifique no sistema para aprovação.")
-        if _send(to=user.email, subject="Novo gasto extra cadastrado — aprovação pendente", html=html):
+        html = _html_wrap(content, preheader=preheader)
+        if _send(to=user.email, subject=subject, html=html):
             sent += 1
     return sent
 
@@ -1000,7 +1086,7 @@ def send_figurino_producao_email(producao, user) -> bool:
     )
 
     content = (
-        _greeting(user.name.split()[0] if user.name else "Olá")
+        _greeting(user.name.split()[0] if user.name else "equipe")
         + corpo
         + _info_box(rows)
         + _alert_box(aviso, color="#fffbea", border="#f0d060", text="#7a5800")
@@ -1059,7 +1145,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
 
     corpo = _paragraph(
         f"Entrou um pedido de <strong>{rotulo.lower()}</strong>{contexto} e "
-        "ainda não tem ninguém responsável."
+        "ainda está sem responsável."
     )
     if producao.description:
         corpo += _paragraph(producao.description)
@@ -1071,7 +1157,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
         )
         cores = {"color": "#fdecec", "border": "#e45858", "text": "#8a1f1f"}
     elif e_compra:
-        aviso = "Abra os pedidos de compra para aprovar e dizer quem vai comprar."
+        aviso = "Abra os pedidos de compra para aprovar e definir quem vai comprar."
         cores = {"color": "#fffbea", "border": "#f0d060", "text": "#7a5800"}
     else:
         aviso = "Abra a fila da oficina para assumir o pedido e definir o prazo."
@@ -1083,7 +1169,7 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
         if not user.email:
             continue
         content = (
-            _greeting(user.name.split()[0] if user.name else "Olá")
+            _greeting(user.name.split()[0] if user.name else "equipe")
             + corpo
             + _info_box(rows)
             + _alert_box(aviso, **cores)
@@ -1223,7 +1309,7 @@ def send_virtual_order_confirmed_email(order) -> bool:
 
     url = _virtuais_order_url(order)
     proximo_passo = (
-        "No dia, abra a página do pedido uns minutinhos antes: o link da chamada fica lá. "
+        "No dia, abra a página do pedido alguns minutos antes: o link da chamada fica lá. "
         "Deixe a cartinha por perto — a criança pode mostrar na câmera."
         if ao_vivo
         else "Assim que o vídeo ficar pronto, mandamos outro e-mail. Ele fica na página do pedido."
@@ -1249,6 +1335,53 @@ def send_virtual_order_confirmed_email(order) -> bool:
     )
 
 
+def _motivo_da_devolucao_virtual(order) -> str | None:
+    """Motivo da devolução mais recente do pedido, ou ``None`` (fonte do corpo e do assunto)."""
+    from app.models import VirtualRefundRequest
+
+    # Pedido sem id (pré-visualização do e-mail com objeto montado na mão) cai na frase padrão.
+    order_id = getattr(order, "id", None)
+    devolucao = (
+        VirtualRefundRequest.query.filter_by(order_id=order_id)
+        .order_by(VirtualRefundRequest.id.desc())
+        .first()
+        if order_id
+        else None
+    )
+    return devolucao.reason if devolucao else None
+
+
+def _motivo_do_cancelamento_virtual(order) -> str:
+    """A frase do porquê, pelo motivo da devolução mais recente (feature 310).
+
+    Antes havia uma frase só ("o horário foi confirmado para outra família"), e a 310 criou
+    cancelamentos por outros motivos — dizer à família um motivo falso é pior que não dizer.
+    """
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado, como combinado com a nossa equipe."
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return (
+            "Precisamos te dar uma notícia chata: o seu pagamento chegou quando o horário da "
+            "chamada já estava começando, e não dava mais tempo de preparar tudo."
+        )
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return (
+            "Precisamos te dar uma notícia chata: os vídeos esgotaram antes de o seu pagamento "
+            "chegar até nós."
+        )
+    return (
+        "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
+        "confirmado para outra família antes do seu pagamento chegar até nós."
+    )
+
+
 def send_virtual_order_cancelled_email(order) -> bool:
     """Avisa o cancelamento por horário indisponível e a devolução em andamento (FR-043a).
 
@@ -1261,10 +1394,7 @@ def send_virtual_order_cancelled_email(order) -> bool:
     campanha = order.campaign
     content = (
         _virtuais_saudacao()
-        + _paragraph(
-            "Precisamos te dar uma notícia chata: o horário que você escolheu acabou sendo "
-            "confirmado para outra família antes do seu pagamento chegar até nós."
-        )
+        + _paragraph(_motivo_do_cancelamento_virtual(order))
         + _paragraph(
             f"Seu pedido foi cancelado e a devolução de {_virtuais_valor(order)} já está em "
             "andamento. Assim que ela for concluída, o valor volta pelo mesmo meio de pagamento."
@@ -1280,15 +1410,36 @@ def send_virtual_order_cancelled_email(order) -> bool:
         )
     )
 
+    # Assunto e preheader seguem o mesmo motivo do corpo (feature 310): a família que desistiu
+    # não pode ler na caixa de entrada que "o horário foi confirmado para outra família".
+    assunto, preheader = _cabecalho_do_cancelamento_virtual(order)
     return _send(
         to=order.contact_email,
-        subject="Sobre a sua reserva — precisamos remarcar",
-        html=_html_wrap(
-            content,
-            preheader="O horário foi confirmado para outra família; a devolução está em andamento.",
-            tema=TEMA_LOJA_VIRTUAL,
-        ),
+        subject=assunto,
+        html=_html_wrap(content, preheader=preheader, tema=TEMA_LOJA_VIRTUAL),
     )
+
+
+def _cabecalho_do_cancelamento_virtual(order) -> tuple[str, str]:
+    """(assunto, preheader) do e-mail de cancelamento, pelo motivo da devolução (feature 310)."""
+    from app.constants import (
+        VIRTUAL_REFUND_REASON_DESISTENCIA,
+        VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
+        VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
+    )
+
+    motivo = _motivo_da_devolucao_virtual(order)
+    andamento = "a devolução está em andamento."
+    if motivo == VIRTUAL_REFUND_REASON_DESISTENCIA:
+        return "Seu pedido foi cancelado", f"Cancelamos como combinado; {andamento}"
+    if motivo == VIRTUAL_REFUND_REASON_HORARIO_PASSOU:
+        return ("Sobre a sua reserva — precisamos remarcar",
+                f"O pagamento chegou em cima da hora da chamada; {andamento}")
+    if motivo == VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO:
+        return ("Sobre o seu vídeo — a devolução está em andamento",
+                f"Os vídeos esgotaram antes de o seu pagamento chegar; {andamento}")
+    return ("Sobre a sua reserva — precisamos remarcar",
+            f"O horário foi confirmado para outra família; {andamento}")
 
 
 def send_virtual_video_ready_email(order) -> bool:

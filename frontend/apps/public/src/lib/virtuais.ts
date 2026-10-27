@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch, ApiRequestError } from "@manto/api-client";
 
@@ -74,6 +75,10 @@ export interface VirtualOrderSummary {
   start_at: string | null;
   total_value: string | null;
   locked_until: string | null;
+  /** Segundos até a trava vencer, calculados no servidor (feature 310): independe do fuso. */
+  seconds_left: number | null;
+  /** Um aviso de pagamento deste pedido está sendo decidido (feature 310). */
+  confirming: boolean;
   payment_url: string | null;
   requires_verification: boolean;
   phone_hint: string | null;
@@ -107,6 +112,7 @@ export interface ReservaResponse {
   public_token: string;
   order_nsu: string;
   locked_until: string | null;
+  seconds_left: number | null;
   total_value: string | null;
   payment_url: string | null;
 }
@@ -155,7 +161,12 @@ export function usePedidoVirtual(token: string | undefined) {
     staleTime: 0,
     // Enquanto o pagamento não confirma, a página se atualiza sozinha (FR-035a): a família não
     // precisa saber o que é "pagamento assíncrono" nem recarregar na mão.
-    refetchInterval: (query) => (query.state.data?.status === "aguardando" ? 5000 : false),
+    // Feature 310: também em "reservado" — o link pode ainda estar sendo gerado, e a página
+    // ficava parada sem botão de pagar até a família recarregar.
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "aguardando" || status === "reservado" ? 5000 : false;
+    },
     // **Continua consultando com a aba em segundo plano.** É o caso normal, não a exceção: a
     // família clica em "Ir para o pagamento", vai para a aba da operadora e deixa esta aqui
     // atrás. Sem isso, ela voltaria para uma página congelada em "aguardando".
@@ -164,6 +175,82 @@ export function usePedidoVirtual(token: string | undefined) {
     // deixaria a família olhando para um estado velho.
     refetchOnWindowFocus: true,
   });
+}
+
+/** Identificadores que a InfinitePay põe na URL de retorno do checkout (feature 310, R3). */
+export interface RetornoCheckout {
+  order_nsu: string;
+  slug?: string | null;
+  transaction_nsu?: string | null;
+  capture_method?: string | null;
+  receipt_url?: string | null;
+}
+
+/**
+ * Manda ao servidor os identificadores do retorno do checkout (feature 310, R3).
+ *
+ * É a segunda prova de pagamento além do aviso: sem eles a operadora não distingue "não pago" de
+ * "não achei". Quem decide continua sendo a reconsulta no servidor.
+ */
+export function useRetornoCheckout(token: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<VirtualOrderSummary, ApiRequestError, RetornoCheckout>({
+    mutationFn: (dados) =>
+      apiFetch<VirtualOrderSummary>(`/api/virtuais/pedidos/${token}/retorno`, {
+        method: "POST",
+        body: JSON.stringify(dados),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["virtuais", "pedido", token], data);
+    },
+  });
+}
+
+/**
+ * Desiste de uma reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+ *
+ * A regra "uma reserva ativa por telefone" mandava abandonar a reserva antiga para escolher outro
+ * horário ou reservar para o irmão — sem este botão, a família ficava presa até a trava vencer.
+ * Com sinal de pagamento o servidor recusa (409): quem decide é a operadora.
+ */
+export function useAbandonarReserva() {
+  return useMutation<
+    VirtualOrderSummary,
+    ApiRequestError,
+    { token: string; clientToken: string }
+  >({
+    mutationFn: ({ token, clientToken }) =>
+      apiFetch<VirtualOrderSummary>(`/api/virtuais/pedidos/${token}/abandonar`, {
+        method: "POST",
+        body: JSON.stringify({ client_token: clientToken }),
+      }),
+  });
+}
+
+const CHAVE_RESERVAS_DA_ABA = "manto_virtuais_reservas_da_aba";
+
+/**
+ * Guarda qual `client_token` criou cada reserva desta aba. É a prova que o servidor pede para
+ * abandonar (o link do pedido sozinho não basta) — e o token da aba é renovado a cada reserva.
+ */
+export function lembrarReservaDaAba(publicToken: string, clientToken: string): void {
+  try {
+    const mapa = JSON.parse(window.sessionStorage.getItem(CHAVE_RESERVAS_DA_ABA) || "{}");
+    mapa[publicToken] = clientToken;
+    window.sessionStorage.setItem(CHAVE_RESERVAS_DA_ABA, JSON.stringify(mapa));
+  } catch {
+    /* sem sessionStorage: a família só não terá o botão de abandonar nesta aba */
+  }
+}
+
+/** O `client_token` que criou a reserva nesta aba, ou `null` (outra aba, outro aparelho). */
+export function tokenDaAbaPara(publicToken: string): string | null {
+  try {
+    const mapa = JSON.parse(window.sessionStorage.getItem(CHAVE_RESERVAS_DA_ABA) || "{}");
+    return typeof mapa[publicToken] === "string" ? mapa[publicToken] : null;
+  } catch {
+    return null;
+  }
 }
 
 /** Pedido completo — só chega depois da validação dupla (FR-044a). */
@@ -216,6 +303,18 @@ export function usePedidoCompleto(token: string | undefined, enabled: boolean) {
  * Guardado em `sessionStorage` de propósito: some quando a aba fecha, então uma compra futura da
  * mesma família nasce limpa, sem herdar a reserva antiga.
  */
+/**
+ * Descarta o token da aba depois de uma reserva criada (feature 310, FR-036): a próxima reserva
+ * na mesma aba (outro horário, o irmão) nasce como pedido novo.
+ */
+export function renovarClientToken(): void {
+  try {
+    window.sessionStorage.removeItem("manto_virtuais_client_token");
+  } catch {
+    /* sessionStorage indisponível: o servidor já confere horário, formato, presente e criança */
+  }
+}
+
 export function getClientToken(): string {
   const CHAVE = "manto_virtuais_client_token";
   const existente = window.sessionStorage.getItem(CHAVE);
@@ -241,4 +340,30 @@ export function fieldErrorsFrom(error: unknown): Record<string, string> {
     return error.fields as Record<string, string>;
   }
   return {};
+}
+
+/**
+ * Contagem regressiva a partir dos segundos que o SERVIDOR calculou (feature 310, FR-035).
+ *
+ * `locked_until` é hora de parede de São Paulo sem fuso: `new Date()` o lia no fuso do aparelho,
+ * e uma família em Manaus via 75:00 no lugar de 15:00. O servidor manda quanto falta; aqui só se
+ * desconta o tempo passado desde que a resposta chegou.
+ */
+export function useContagemDeSegundos(segundos: number | null | undefined): string | null {
+  const [restante, setRestante] = useState<string | null>(null);
+  useEffect(() => {
+    if (segundos === null || segundos === undefined) {
+      setRestante(null);
+      return;
+    }
+    const alvo = Date.now() + segundos * 1000;
+    const tick = () => {
+      const s = Math.max(0, Math.floor((alvo - Date.now()) / 1000));
+      setRestante(`${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`);
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [segundos]);
+  return restante;
 }

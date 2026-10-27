@@ -33,6 +33,7 @@ import json
 import logging
 from collections.abc import Iterable
 from datetime import datetime, timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from sqlalchemy import and_, delete, or_, select, update
@@ -58,6 +59,15 @@ KIND_RECADO_NFC = "recado_nfc.novo"
 KIND_EVENTO_SUMIU_GOOGLE = "evento.sumiu_google"
 KIND_EVENTO_CANCELADO = "evento.cancelado"
 KIND_EVENTO_CANCELADO_ESCALA = "evento.cancelado_escala"
+KIND_EVENTO_PEDIDO_CANCELAMENTO = "evento.pedido_cancelamento"
+KIND_EVENTO_PEDIDO_DECIDIDO = "evento.pedido_decidido"
+# Feature 318: o PIX lido do aviso do banco. Os destinatários reais vão explícitos pelo produtor
+# (o vendedor da venda); o catálogo é o padrão de quem decide.
+KIND_PIX_LIGADO = "pix.ligado"
+KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
+KIND_PIX_REPASSE = "pix.repasse_infinitepay"
+KIND_PIX_SEM_COMPROVANTE = "pix.sem_comprovante"
+KIND_VIRTUAL_ATENCAO = "virtual.atencao"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -74,6 +84,21 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # Superadmin, que é quem cancela.
     KIND_EVENTO_CANCELADO: (RoleName.ENSAIO,),
     KIND_EVENTO_CANCELADO_ESCALA: (RoleName.CASTING,),
+    # Feature 315: o pedido de cancelamento vai a quem decide; a resposta, só a quem pediu — sempre
+    # pela lista explícita (`destinatarios=[autor]`), nunca por papel.
+    KIND_EVENTO_PEDIDO_CANCELAMENTO: (RoleName.SUPERADMIN,),
+    KIND_EVENTO_PEDIDO_DECIDIDO: (),
+    # Feature 318: "É esta?" é do vendedor (vai explícito) e do Financeiro; o repasse da
+    # InfinitePay, só de quem cuida do dinheiro — a comercial não é acionada (decisão do dono).
+    KIND_PIX_LIGADO: (RoleName.COMERCIAL,),
+    KIND_PIX_PARA_CONFERIR: (RoleName.FINANCEIRO,),
+    KIND_PIX_REPASSE: (RoleName.FINANCEIRO, RoleName.SUPERADMIN),
+    # A tarefa "incluir o comprovante do PIX" é do Financeiro (decisão do dono, 23/10).
+    KIND_PIX_SEM_COMPROVANTE: (RoleName.FINANCEIRO,),
+    # Feature 310: dinheiro da loja virtual que precisa de mão humana (devolução a fazer, pagamento
+    # a conferir, link recusado, sala faltando perto da chamada) — os mesmos papéis que operam a
+    # tela de Devoluções.
+    KIND_VIRTUAL_ATENCAO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -386,6 +411,74 @@ def notificar_evento_sumiu_google(
     )
 
 
+def notificar_pedido_cancelamento(
+    event: CalendarEvent,
+    *,
+    carimbo: datetime,
+    venda: Decimal,
+    recebido: Decimal,
+    n_escalados: int,
+    alcance: str,
+    autor: str,
+    motivo: str,
+) -> int:
+    """O Comercial pediu o cancelamento → SUPERADMIN (feature 315). Regime A, sem commit.
+
+    Roda na transação que grava o pedido: pedido sem aviso não existe. A chave leva o carimbo — um
+    aviso por pedido, e aviso novo se o pedido for recusado e feito de novo. `urgent` quando o evento
+    é em ≤ 7 dias ou já passou. O corpo diz o que está em jogo para o Superadmin decidir sem abrir o
+    evento — venda e recebido são os da venda inteira (num grupo, os do 1º dia e de todos os dias); nome e PIX de quem recebe a devolução nunca entram (o sino não tem corte por papel).
+    """
+    agora = now_sp()
+    urgente = bool(event.start_at and event.start_at - agora <= timedelta(days=ANTECEDENCIA_URGENTE_DIAS))
+    partes = [f"{event.start_at:%d/%m/%Y}" if event.start_at else "sem data"]
+    partes.append(f"venda {format_brl(venda, prefix=True)}" if venda > 0 else "sem venda")
+    partes.append(f"recebido {format_brl(recebido, prefix=True)}")
+    partes.append(_escalados_no_aviso(n_escalados))
+    partes.append(alcance)
+    partes.append(f"pedido por {autor}: {motivo}")
+    return emitir(
+        KIND_EVENTO_PEDIDO_CANCELAMENTO,
+        title=f"Cancelamento pedido — {event.title}",
+        body=" · ".join(partes),
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=f"{KIND_EVENTO_PEDIDO_CANCELAMENTO}:{event.id}:{carimbo:%Y%m%d%H%M%S%f}",
+        severity="urgent" if urgente else "info",
+    )
+
+
+def notificar_pedido_decidido(
+    autor: User | None,
+    *,
+    quem_decidiu_id: int | None,
+    decisao: str,
+    carimbo: datetime,
+    event_id: int,
+    title: str,
+    body: str | None = None,
+    com_link: bool = True,
+) -> int:
+    """O Superadmin fechou o pedido → só quem pediu (feature 315). Sem commit.
+
+    Uma resposta por pedido: a chave leva a decisão e o carimbo do pedido, e só a transação que
+    ganhou o claim (ou o fecho do cancelamento) chega aqui. Não responde a quem perdeu o acesso nem
+    a quem decidiu o próprio pedido — `emitir` não filtra a lista explícita, então o filtro é daqui.
+    Na exclusão o evento não existe mais: sem entidade e sem link (`com_link=False`).
+    """
+    if autor is None or not (autor.is_active and autor.has_access) or autor.id == quem_decidiu_id:
+        return 0
+    return emitir(
+        KIND_EVENTO_PEDIDO_DECIDIDO,
+        title=title,
+        body=body,
+        link_path=f"/events/{event_id}" if com_link else None,
+        entidade=("calendar_event", event_id) if com_link else None,
+        dedupe_key=f"{KIND_EVENTO_PEDIDO_DECIDIDO}:{event_id}:{decisao}:{carimbo:%Y%m%d%H%M%S%f}",
+        destinatarios=[autor],
+    )
+
+
 # ── A caixa do usuário ─────────────────────────────────────────────────────────────────────────
 
 def contar_nao_lidas(user_id: int) -> int:
@@ -558,3 +651,22 @@ def serializar(n: Notification) -> dict:
         "created_at": n.created_at.isoformat(timespec="seconds") if n.created_at else None,
         "read_at": n.read_at.isoformat(timespec="seconds") if n.read_at else None,
     }
+
+
+def notificar_virtual_atencao(*, titulo: str, corpo: str, dedupe_key: str,
+                              urgente: bool = False) -> int:
+    """Feature 310: algo da loja virtual pede ação de Comercial/Superadmin. Comita.
+
+    A chave de deduplicação é de quem chama (por item, ou por código e hora na falha de link): o
+    mesmo fato não vira uma pilha de avisos iguais.
+    """
+    gravadas = emitir(
+        KIND_VIRTUAL_ATENCAO,
+        title=titulo,
+        body=corpo,
+        link_path="/virtuais/devolucoes",
+        dedupe_key=dedupe_key[:120],
+        severity="urgent" if urgente else "info",
+    )
+    db.session.commit()
+    return gravadas

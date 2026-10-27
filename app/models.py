@@ -304,6 +304,13 @@ class CalendarEvent(db.Model):
     deletion_requested_at = db.Column(db.DateTime, nullable=True)
     deletion_requested_by_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     deletion_request_reason = db.Column(db.Text, nullable=True)
+    # Feature 315: o pedido de cancelamento grava também o alcance numa venda de vários dias
+    # (`ALCANCE_TODOS` | `ALCANCE_SO_ESTE_DIA`, o vocabulário do cancelar da 306; nulo = pedido de
+    # antes do deploy ou pelo caminho velho, lido como "todos") e a devolução combinada com a
+    # cliente (JSON em texto, `solicitacao_ops`). Só `solicitacao_ops` escreve as cinco colunas, e
+    # sempre por `UPDATE` condicional — dois pedidos ao mesmo tempo não se sobrescrevem.
+    deletion_request_scope = db.Column(db.String(16), nullable=True)
+    deletion_request_refund = db.Column(db.Text, nullable=True)
 
     # Marca "Sumiu do Google Agenda" (feature 303): quando o sync percebeu que o evento não está
     # mais no Google e o manteve porque tem dinheiro preso. Horário de parede de São Paulo, sem
@@ -720,15 +727,31 @@ class EventPayment(db.Model):
     __tablename__ = "event_payments"
     __table_args__ = (
         db.Index("ix_event_payments_event_id", "event_id"),
+        db.CheckConstraint(
+            "file_path IS NOT NULL OR origem = 'pix_email'",
+            name="ck_event_payments_arquivo_ou_pix",
+        ),
     )
 
     id = db.Column(db.Integer, primary_key=True)
     event_id = db.Column(db.Integer, db.ForeignKey("calendar_events.id"), nullable=False)
-    file_path = db.Column(db.String(300), nullable=False)
+    # Feature 318: NULL só no pagamento de origem PIX ainda sem arquivo — a prova é o aviso
+    # autenticado do banco (`PixRecebido`). O CHECK do banco impede NULL em qualquer outra origem.
+    file_path = db.Column(db.String(300), nullable=True)
     amount = db.Column(db.Numeric(12, 2), nullable=True)  # aceita centavos
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Feature 318: conta da empresa que recebeu o dinheiro (pergunta do contador sobre o MEI).
+    # Preenchida pelo PIX lido do e-mail; opcional no comprovante manual.
+    conta_id = db.Column(
+        db.Integer, db.ForeignKey("contas_recebimento.id", ondelete="SET NULL"), nullable=True
+    )
+    # "comprovante" (anexado à mão) ou "pix_email" (criado/conciliado pelo PIX lido do e-mail).
+    origem = db.Column(
+        db.String(20), nullable=False, default="comprovante", server_default="comprovante"
+    )
 
     event = db.relationship("CalendarEvent", lazy=True)
+    conta = db.relationship("ContaRecebimento", lazy=True)
 
 
 class EventReimbursement(db.Model):
@@ -912,6 +935,16 @@ class SiteSetting(db.Model):
     # token é a única barreira de entrada — e fica no banco justamente para ser revogável sem
     # deploy: trocar a linha invalida o endereço antigo na hora.
     infinitepay_webhook_token = db.Column(db.String(64), nullable=True)
+    # Feature 310 (R-12): regerar o segredo derrubava o aviso de todo link já aberto. O anterior
+    # continua aceito por `VIRTUAL_TOKEN_ANTERIOR_HORAS`, e então deixa de valer sozinho.
+    infinitepay_webhook_token_anterior = db.Column(db.String(64), nullable=True)
+    infinitepay_webhook_token_anterior_ate = db.Column(db.DateTime, nullable=True)
+    # Feature 310 (R-18): salvar a InfiniteTag ligava a venda de toda campanha publicada. O
+    # interruptor nasce DESLIGADO; desligado, não nasce link novo, mas aviso, retorno e reconsulta
+    # de pedidos já abertos seguem — pedido aberto precisa fechar.
+    virtuais_pagamento_ativo = db.Column(
+        db.Boolean, nullable=False, default=False, server_default="0"
+    )
     # Marcador do último ciclo da varredura de reservas virtuais. Serve de "lock" de execução única
     # entre os workers do gunicorn — mesmo papel de `calendar_auto_sync_at` (FR-057a): dois
     # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
@@ -921,6 +954,24 @@ class SiteSetting(db.Model):
     # de lock dos dois acima — aqui ele é o que impede os 3 workers de mandarem o mesmo e-mail
     # três vezes, que é exatamente o spam que a feature existe para evitar.
     invite_reminder_run_at = db.Column(db.DateTime, nullable=True)
+    # ── Contratos da ClickSign (feature 317) ─────────────────────────────────
+    # O TOKEN da API não mora aqui (só na env `CLICKSIGN_ACCESS_TOKEN`): esta tabela vai inteira
+    # para o backup e para o `manto_local`. O segredo do aviso pode morar porque o aviso nunca
+    # decide nada — ele só dispara uma sincronização que reconsulta a ClickSign (research R-05).
+    clicksign_webhook_id = db.Column(db.String(36), nullable=True)
+    clicksign_webhook_secret = db.Column(db.String(64), nullable=True)
+    # O segredo anterior vale 24 h depois de recadastrar o aviso (molde da 310).
+    clicksign_webhook_secret_anterior = db.Column(db.String(64), nullable=True)
+    clicksign_webhook_secret_anterior_ate = db.Column(db.DateTime, nullable=True)
+    # Lock de execução única da sincronização entre os 3 workers (molde `invite_reminder_run_at`).
+    clicksign_sync_at = db.Column(db.DateTime, nullable=True)
+    # Maior `modified` já processado: a próxima passada pede "o que mudou desde aqui" (com folga).
+    clicksign_sync_cursor = db.Column(db.DateTime, nullable=True)
+    # Aviso que chegou com uma passada em curso: a passada repete antes de soltar o lock, para a
+    # assinatura não esperar a conferência de 30 min.
+    clicksign_sync_pendente = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    # Fim da última passada: a periódica dos 3 workers pula se outra acabou de rodar.
+    clicksign_sync_fim = db.Column(db.DateTime, nullable=True)
     # ── Tags NFC: moldura e vídeo de abertura (feature 297) ──────────────────
     # Dois arquivos ÚNICOS do sistema, guardados em `nfc_media/sistema/` com nome fixo, no mesmo
     # molde de `logo_path` acima: o banco guarda o caminho, o disco guarda o arquivo.
@@ -928,6 +979,17 @@ class SiteSetting(db.Model):
     # `nfc_intro_video_path` NULL = a página da tag pula a capa e abre direto no menu.
     nfc_frame_path = db.Column(db.String(300), nullable=True)
     nfc_intro_video_path = db.Column(db.String(300), nullable=True)
+    # ── PIX recebido por e-mail (feature 318) ────────────────────────────────
+    # Interruptor da leitura: nasce DESLIGADO; o Superadmin liga depois do ensaio. Só entram na
+    # fila avisos recebidos depois de `pix_email_ativo_desde` — o passado é do ensaio, não da fila.
+    pix_email_ativo = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    pix_email_ativo_desde = db.Column(db.DateTime, nullable=True)
+    # Um nome por linha: transferência entre contas da empresa (nunca é venda).
+    pix_pagadores_proprios = db.Column(db.Text, nullable=True)
+    # Último erro da rodada (login IMAP recusado, caixa fora do ar) — a tela mostra como alerta,
+    # para a equipe não achar que está coberta quando não está.
+    pix_email_ultimo_erro = db.Column(db.Text, nullable=True)
+    pix_email_ultimo_erro_em = db.Column(db.DateTime, nullable=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 
@@ -2107,6 +2169,119 @@ class FormResponseDismissedEvent(db.Model):
     dismissed_at = db.Column(db.DateTime, default=now_sp, nullable=False)
 
 
+class ClicksignDocumento(db.Model):
+    """Um envelope da conta ClickSign, espelhado pela sincronização (feature 317).
+
+    É a fonte da situação do contrato da venda: a ClickSign é a verdade, e esta linha é a cópia
+    que a Home e o evento leem sem chamar a API. Cada envelope dos fluxos com formulário da Manto
+    tem um documento e um signatário; por isso documento e envelope moram na mesma linha.
+
+    ``event_id`` aponta sempre o **principal** da venda (ou o avulso) na hora do vínculo; a busca
+    do documento vigente olha o grupo inteiro, porque agrupar não move linhas (analyze R1).
+
+    **Sem backref, de propósito** (molde `FormResponseDismissedEvent`): a exclusão de evento passa
+    por `_clear_event_side_tables`, que devolve o documento a "a conferir" antes do DELETE; um
+    backref faria o ORM mexer na FK por conta própria.
+    """
+
+    __tablename__ = "clicksign_documentos"
+    __table_args__ = (
+        db.UniqueConstraint("envelope_id", name="uq_clicksign_documentos_envelope"),
+        db.Index("ix_clicksign_documentos_event_id", "event_id"),
+        db.Index("ix_clicksign_documentos_data_lida", "data_lida"),
+        db.Index(
+            "ix_clicksign_documentos_a_conferir",
+            "vinculo",
+            postgresql_where=db.text("vinculo = 'a_conferir'"),
+            sqlite_where=db.text("vinculo = 'a_conferir'"),
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    envelope_id = db.Column(db.String(36), nullable=False)
+    document_id = db.Column(db.String(36), nullable=True)
+    nome = db.Column(db.Text, nullable=True)
+    tipo = db.Column(db.String(12), nullable=False)
+    status = db.Column(db.String(12), nullable=False)
+    recusado = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    prazo = db.Column(db.DateTime, nullable=True)
+    criado_em = db.Column(db.DateTime, nullable=True)
+    modificado_em = db.Column(db.DateTime, nullable=True)
+    assinado_em = db.Column(db.DateTime, nullable=True)
+    cancelado_em = db.Column(db.DateTime, nullable=True)
+    # Do signatário só o necessário para ligar e cobrar (spec, Premissas — LGPD).
+    signatario_nome = db.Column(db.String(200), nullable=True)
+    signatario_telefone = db.Column(db.String(20), nullable=True)
+    signatario_email = db.Column(db.String(200), nullable=True)
+    canal = db.Column(db.String(10), nullable=True)
+    # O que o leitor tirou do nome do envelope (data do evento, WhatsApp de quem assina, tema).
+    data_lida = db.Column(db.Date, nullable=True)
+    telefone_lido = db.Column(db.String(20), nullable=True)
+    tema_lido = db.Column(db.String(200), nullable=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="SET NULL"), nullable=True
+    )
+    vinculo = db.Column(db.String(12), nullable=False)
+    vinculo_origem = db.Column(db.String(10), nullable=True)
+    vinculo_motivo = db.Column(db.String(40), nullable=True)
+    vinculado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    vinculado_em = db.Column(db.DateTime, nullable=True)
+    contrato_anexo_id = db.Column(
+        db.Integer, db.ForeignKey("event_contracts.id", ondelete="SET NULL"), nullable=True
+    )
+    # Liga quando o documento fecha ligado; o anexo feito (ou recusado) desliga. Excluir o anexo
+    # não religa: o Superadmin que apagou o PDF não o vê voltar sozinho (analyze R11).
+    anexo_pendente = db.Column(db.Boolean, default=False, nullable=False, server_default="0")
+    sincronizado_em = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
+class ClicksignDesvinculo(db.Model):
+    """Par documento × venda que a comercial desligou: a sincronização não religa sozinha.
+
+    Molde de `FormResponseDismissedEvent` (298): CASCADE nas duas pontas, sem backref.
+    """
+
+    __tablename__ = "clicksign_desvinculos"
+    __table_args__ = (
+        db.UniqueConstraint("documento_id", "event_id", name="uq_clicksign_desvinculo"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    documento_id = db.Column(
+        db.Integer, db.ForeignKey("clicksign_documentos.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    em = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
+class ClicksignCobranca(db.Model):
+    """Cada "Cobrar contrato": quem copiou a mensagem e quando (FR-011).
+
+    ``usuario_nome`` é copiado na hora para o histórico sobreviver à exclusão do usuário.
+    """
+
+    __tablename__ = "clicksign_cobrancas"
+    __table_args__ = (
+        db.Index("ix_clicksign_cobrancas_documento_em", "documento_id", "em"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    documento_id = db.Column(
+        db.Integer, db.ForeignKey("clicksign_documentos.id", ondelete="CASCADE"), nullable=False
+    )
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"), nullable=False
+    )
+    usuario_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    usuario_nome = db.Column(db.String(120), nullable=False)
+    em = db.Column(db.DateTime, default=now_sp, nullable=False)
+
+
 class FormFieldDefinition(db.Model):
     """Definição editável de um campo de formulário público (feature 123).
 
@@ -3154,6 +3329,9 @@ class VirtualCampaign(db.Model):
 
     max_reservations_per_origin = db.Column(db.Integer, nullable=False, server_default="5")
     reservation_window_minutes  = db.Column(db.Integer, nullable=False, server_default="60")
+    # Feature 310 (R14): campanha publicada fora da vitrine, acessível só pelo link — para o teste
+    # real de baixo valor não aparecer para o público, e para ofertas fechadas.
+    listada = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
 
     created_at = db.Column(db.DateTime, default=now_sp, nullable=False)
     updated_at = db.Column(
@@ -3313,6 +3491,17 @@ class VirtualOrder(db.Model):
     expired_unverified = db.Column(
         db.Boolean, nullable=False, default=False, server_default="0"
     )
+    # Feature 310. Por que o liberado sem prova foi liberado: `nao_sei` = operadora fora (entra em
+    # "a conferir"); nulo com `expired_unverified` = legado da 205. Abandono não marca nada (R-07).
+    unverified_reason = db.Column(db.String(24), nullable=True)
+    # Código da recusa da operadora ao criar o link (`external_checkout_not_enabled`…): é o que a
+    # equipe precisa ver, e o que tira o pedido do teto por origem (FR-026).
+    payment_link_error = db.Column(db.String(200), nullable=True)
+    # Comprovante da operadora, quando chega por aviso ou retorno (FR-033).
+    receipt_url = db.Column(db.String(500), nullable=True)
+    # "A conferir" resolvido pela equipe (R-07): irreversível e auditado.
+    conferido_em  = db.Column(db.DateTime, nullable=True)
+    conferido_por = db.Column(db.String(120), nullable=True)
     # Tentativas de telefone na página do pedido (FR-044b).
     access_attempts      = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     access_blocked_until = db.Column(db.DateTime, nullable=True)
@@ -3355,9 +3544,18 @@ class VirtualPaymentNotification(db.Model):
     # 'paid' | 'unpaid' | 'divergent' | 'unavailable' | 'error'
     recheck_result  = db.Column(db.String(20), nullable=True)
     recheck_payload = db.Column(db.Text, nullable=True)
-    # 'efetivado' | 'duplicado' | 'recusado' | 'conflito' | 'retido' | 'orfao'
+    # Desfechos em `constants.VIRTUAL_AVISO_*` (feature 310; os da 205 continuam nas linhas antigas).
     outcome         = db.Column(db.String(24), nullable=True)
     message         = db.Column(db.Text, nullable=True)
+    # Feature 310 (R2): a rota só grava e responde; o processamento roda fora da requisição. `state`
+    # é o claim por linha (pendente → processando → decidido) e o par attempts/last_attempt_at é a
+    # política de reprocessamento (R-06).
+    state           = db.Column(db.String(12), nullable=False, default="pendente",
+                                server_default="pendente")
+    attempts        = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    last_attempt_at = db.Column(db.DateTime, nullable=True)
+    resolvido_em    = db.Column(db.DateTime, nullable=True)
+    resolvido_por   = db.Column(db.String(120), nullable=True)
     created_at      = db.Column(db.DateTime, default=now_sp, nullable=False)
 
     order = db.relationship(
@@ -3763,3 +3961,86 @@ class FigurinoProducaoLog(db.Model):
     created_at  = db.Column(db.DateTime, default=now_sp, nullable=False)
 
     producao = db.relationship("FigurinoProducao", back_populates="logs")
+
+
+class ContaRecebimento(db.Model):
+    """Conta bancária da empresa que recebe dinheiro de cliente (feature 318).
+
+    O aviso de PIX do Inter diz "na conta <número>"; é por esse número que o PIX sabe em qual conta
+    entrou (Inter MEI × Inter Prime). As linhas nascem na migration **sem número** — número de conta
+    não vai para o repositório — e o Superadmin preenche na tela. Responde a pergunta do contador:
+    quanto entrou no MEI.
+    """
+
+    __tablename__ = "contas_recebimento"
+
+    id = db.Column(db.Integer, primary_key=True)
+    apelido = db.Column(db.String(60), nullable=False, unique=True)
+    titular_tipo = db.Column(db.String(10), nullable=False)  # "mei" | "pj"
+    banco = db.Column(db.String(30), nullable=False)  # "inter" | "infinitepay" | "cora"
+    numero_conta = db.Column(db.String(30), nullable=True, unique=True)
+    ativa = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
+class PixRecebido(db.Model):
+    """Um aviso de PIX recebido lido da caixa de e-mail (feature 318).
+
+    Uma linha por e-mail (`message_id` único = idempotência: reler a caixa não duplica). O corpo do
+    e-mail NÃO é guardado — só o que a regra de vínculo precisa. O estado diz o que o sistema fez:
+    ligou sozinho, pôs para conferir ("É esta?"), ignorou (sem venda, conta própria, devolução) ou
+    não entendeu o aviso (contado na saúde da leitura). Detalhes: `specs/318-…/data-model.md`.
+    """
+
+    __tablename__ = "pix_recebidos"
+    __table_args__ = (
+        db.Index("ix_pix_recebidos_estado", "estado"),
+        db.Index("ix_pix_recebidos_recebido_em", "recebido_em"),
+        db.Index("ix_pix_recebidos_pagador_norm", "pagador_norm"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    origem = db.Column(db.String(20), nullable=False)
+    message_id = db.Column(db.String(300), nullable=False, unique=True)
+    # Reservado a fontes que tragam o id E2E do PIX (o aviso do Inter não traz).
+    e2e_id = db.Column(db.String(64), nullable=True, unique=True)
+    tipo = db.Column(db.String(12), nullable=False)  # pix | devolucao | desconhecido
+    conta_id = db.Column(
+        db.Integer, db.ForeignKey("contas_recebimento.id", ondelete="SET NULL"), nullable=True
+    )
+    numero_conta_lido = db.Column(db.String(30), nullable=True)
+    # Saudação do aviso ("JOAO", "PRIME"): reconhece a Prime antes de o número ser cadastrado.
+    titular_lido = db.Column(db.String(30), nullable=True)
+    valor = db.Column(db.Numeric(12, 2), nullable=True)
+    pagador_nome = db.Column(db.String(200), nullable=True)
+    pagador_norm = db.Column(db.String(200), nullable=True)
+    # Horário de parede de São Paulo (naive), como `CalendarEvent.start_at`.
+    recebido_em = db.Column(db.DateTime, nullable=False)
+    # DKIM do Inter aprovado pelo servidor que recebeu. Sem isso, nunca liga sozinho.
+    autenticado = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    estado = db.Column(db.String(20), nullable=False, default="novo", server_default="novo")
+    tipo_sugestao = db.Column(db.String(25), nullable=True)
+    # [{"event_ids": [...], "motivos": [...], "valor_alvo": "…", "pontos": n}] — até 3 sugestões.
+    candidatos = db.Column(db.JSON, nullable=True)
+    descartados = db.Column(db.JSON, nullable=False, default=list)
+    motivo = db.Column(db.Text, nullable=True)
+    event_payment_id = db.Column(
+        db.Integer,
+        db.ForeignKey("event_payments.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    # Repasse da InfinitePay que cobriu mais de uma venda: os demais pagamentos criados.
+    pagamentos_extra = db.Column(db.JSON, nullable=False, default=list)
+    decidido_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decidido_em = db.Column(db.DateTime, nullable=True)
+    # Só para aviso não entendido: o bastante para diagnosticar sem guardar o corpo.
+    assunto = db.Column(db.String(200), nullable=True)
+    remetente = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    conta = db.relationship("ContaRecebimento", lazy=True)
+    pagamento = db.relationship("EventPayment", lazy=True, foreign_keys=[event_payment_id])
+    decidido_por = db.relationship("User", lazy=True, foreign_keys=[decidido_por_id])

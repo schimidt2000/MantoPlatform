@@ -209,7 +209,7 @@ function AgendaNoDiaAlert({ date }: { date: string }) {
   return (
     <div className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
       <p className="mb-1 font-semibold text-gold-ink">
-        ⚠️ Já na agenda neste dia — não vender em dobro
+        ⚠️ Já na agenda neste dia — não venda em dobro
       </p>
       <ul className="list-disc space-y-0.5 pl-4 text-ink">
         {personagens.map((p) => (
@@ -370,7 +370,7 @@ export function EducaMantoCalculadoraPage() {
     setRecalcularAviso(
       musical
         ? `Orçamento antigo (por pacote) mapeado para o musical "${musical.name}". As responsabilidades foram pré-marcadas pelo nível do pacote — confira antes de gerar.`
-        : "Orçamento antigo: o pacote original não existe mais; usei o primeiro musical. Confira tudo antes de gerar.",
+        : "Orçamento antigo: o pacote original não existe mais; o primeiro musical foi selecionado. Confira tudo antes de gerar.",
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [quoteDetalhe.data, musicals]);
@@ -640,7 +640,7 @@ export function EducaMantoCalculadoraPage() {
                   {textosQuery.isError && (
                     <p className="text-xs text-red" role="alert">
                       Não foi possível carregar as dicas de cada responsabilidade. O cálculo
-                      continua normal — recarregue a página para tentar de novo.
+                      continua normal — recarregue a página para tentar novamente.
                     </p>
                   )}
                   {(textos?.ordem ?? RESPONSABILIDADES_ORDEM).map(
@@ -777,8 +777,8 @@ export function EducaMantoCalculadoraPage() {
                     {!config.contratacao.ativa && (
                       <>
                         <p className="text-xs text-muted">
-                          Vai ter uma apresentação da Manto tradicional junto do EducaManto?
-                          Monte a equipe aqui — o valor soma ao desta página e a nota fiscal é
+                          Haverá apresentação tradicional da Manto junto do EducaManto?
+                          Monte a equipe nesta seção — o valor soma ao desta página e a nota fiscal é
                           aplicada sobre o total.
                         </p>
                         <Button
@@ -855,7 +855,7 @@ export function EducaMantoCalculadoraPage() {
                                 </div>
                                 {duracoesDaContratacao(config.contratacao).length === 0 ? (
                                   <p className="mt-1 text-xs text-red" role="alert">
-                                    Marque ao menos uma duração — sem isso o orçamento não sai
+                                    Marque ao menos uma duração — sem isso o orçamento não é gerado
                                     com a contratação Manto.
                                   </p>
                                 ) : (
@@ -889,6 +889,8 @@ export function EducaMantoCalculadoraPage() {
                                 alterarConfig({ contratacao: { ...config.contratacao, acrescimos } })
                               }
                               tipos={[...opcoes.data.acrescimo_tipos, opcoes.data.acrescimo_tipo_bv]}
+                              tipoBv={opcoes.data.acrescimo_tipo_bv}
+                              ajuda="O acréscimo em R$ entra uma vez, em qualquer duração; o BV é calculado sobre o valor com os acréscimos. O BV é um repasse (não aparece para o cliente)."
                             />
 
                             <Button
@@ -1024,12 +1026,12 @@ export function EducaMantoCalculadoraPage() {
                   {resultado?.acrescimo_capado && (
                     <div className="rounded-md border border-gold/40 bg-gold-soft p-3 text-sm" role="alert">
                       <p className="font-semibold text-gold-ink">
-                        ⚠️ Acima do máximo — só entrou {brl(resultado.acrescimo_efetivo)}
+                        ⚠️ Acima do máximo — aplicado apenas {brl(resultado.acrescimo_efetivo)}
                       </p>
                       <p className="mt-0.5 text-ink">
                         A comissão não pode passar do valor desta página, que é{" "}
                         {brl(resultado.acrescimo_maximo)}. Os {brl(config.acrescimo)} digitados
-                        foram cortados até esse teto.
+                        foram reduzidos a esse teto.
                       </p>
                     </div>
                   )}
@@ -1052,7 +1054,7 @@ export function EducaMantoCalculadoraPage() {
                       id="observacao"
                       className={`${FIELD} h-24 resize-y py-2`}
                       maxLength={MAX_OBSERVACAO}
-                      placeholder="Texto livre que sai formatado no PDF…"
+                      placeholder="Texto livre que aparece formatado no PDF…"
                       value={observacao}
                       onChange={(e) => setObservacao(e.target.value)}
                     />

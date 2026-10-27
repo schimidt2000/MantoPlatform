@@ -40,7 +40,7 @@ def api_agenda() -> Any:
             if not 1 <= month <= 12:
                 raise ValueError
         except (ValueError, AttributeError):
-            return json_error("Mês inválido (use YYYY-MM)", 400)
+            return json_error("Mês inválido (use AAAA-MM)", 400)
     else:
         now = datetime.now()
         year, month = now.year, now.month
@@ -59,16 +59,18 @@ def api_agenda_search() -> Any:
     digitando o telefone, mas recebem os campos como `null`.
     """
     from app.calendar.event_ops import SEARCH_LIMIT, search_events
+    from app.calendar.solicitacao_ops import solicitacoes_da_venda
 
     q = (request.args.get("q") or "").strip()
     events = search_events(q)
+    da_venda = solicitacoes_da_venda(events)
 
     vendas_roles = {RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
     can_see_client = any(r.name.upper() in vendas_roles for r in current_user.roles)
 
     items = []
     for event in events:
-        summary = serialize_event_summary(event)
+        summary = serialize_event_summary(event, da_venda.get(event.id))
         client_name, client_phone = client_of_event(event) if can_see_client else (None, None)
         summary["client_name"] = client_name
         summary["client_phone_display"] = client_phone
@@ -84,7 +86,7 @@ def api_agenda_day(date_str: str) -> Any:
     try:
         day = datetime.strptime(date_str, "%Y-%m-%d").date()
     except ValueError:
-        return json_error("Data inválida (use YYYY-MM-DD)", 400)
+        return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
     day_start = datetime(day.year, day.month, day.day)
     day_end = datetime.fromordinal(day_start.toordinal() + 1)
@@ -100,8 +102,14 @@ def api_agenda_day(date_str: str) -> Any:
         .order_by(CalendarEvent.start_at)
         .all()
     )
+    from app.calendar.solicitacao_ops import solicitacoes_da_venda
+
+    da_venda = solicitacoes_da_venda(events)
     return jsonify(
-        {"day": day.isoformat(), "events": [serialize_event_summary(e) for e in events]}
+        {
+            "day": day.isoformat(),
+            "events": [serialize_event_summary(e, da_venda.get(e.id)) for e in events],
+        }
     )
 
 
@@ -164,12 +172,16 @@ def api_events_sumidos_google() -> Any:
 
     Quem não vê recebe 200 com a faixa vazia, sem tocar no banco — o componente é montado para
     todo usuário, e um 403 viraria erro de tela em cada página.
+
+    Feature 315: a chave opcional `pedidos` (`{total, items}`) traz os pedidos de cancelamento
+    pendentes, pela mesma régua; `total` e `items` continuam só do sumiço.
     """
+    from app.calendar.solicitacao_ops import faixa_das_solicitacoes
     from app.calendar.sumico_ops import FAIXA_LIMITE, faixa_sumidos
 
     if not _ve_faixa_sumidos():
         return jsonify({"pode_ver": False, "total": 0, "limit": FAIXA_LIMITE, "items": []})
-    return jsonify({"pode_ver": True, **faixa_sumidos()})
+    return jsonify({"pode_ver": True, **faixa_sumidos(), "pedidos": faixa_das_solicitacoes()})
 
 
 @api_bp.route("/events/new/options")

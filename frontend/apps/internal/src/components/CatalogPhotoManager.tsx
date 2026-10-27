@@ -175,7 +175,7 @@ export function CatalogPhotoManager({
     const photosNext = photos.filter((_, i) => i !== index);
     if (slot.kind === "existing") {
       commit(photosNext, [...removed, { id: slot.id, url: slot.url }]);
-      setAnnouncement("Foto marcada para remoção. Dá para desfazer antes de salvar.");
+      setAnnouncement("Foto marcada para remoção. É possível desfazer antes de salvar.");
       return;
     }
     URL.revokeObjectURL(slot.previewUrl);
@@ -428,7 +428,7 @@ export function CatalogPhotoManager({
               >
                 <ImagePlus className="h-6 w-6" aria-hidden="true" />
                 <span className="px-2 text-center text-xs font-medium">
-                  {photos.length === 0 ? "Escolher fotos" : "Adicionar fotos"}
+                  {photos.length === 0 ? "Inserir fotos" : "Inserir mais fotos"}
                 </span>
                 <span className="px-2 text-center text-[10px]">ou arraste arquivos aqui</span>
               </label>

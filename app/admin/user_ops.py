@@ -130,7 +130,7 @@ def create_user(
 
     if user_type == "payment_only":
         if clean_email and User.query.filter_by(email=clean_email).first():
-            raise UserValidationError("email", "Esse email já existe.")
+            raise UserValidationError("email", "Este e-mail já está cadastrado.")
         user = User(
             email=clean_email or None,
             name=clean_name,
@@ -140,9 +140,9 @@ def create_user(
         )
     else:
         if not clean_email or not temp_password:
-            raise UserValidationError("email", "Para usuário com acesso, preencha email e senha.")
+            raise UserValidationError("email", "Para usuário com acesso, informe e-mail e senha.")
         if User.query.filter_by(email=clean_email).first():
-            raise UserValidationError("email", "Esse email já existe.")
+            raise UserValidationError("email", "Este e-mail já está cadastrado.")
         user = User(email=clean_email, name=clean_name, is_active=True, must_change_password=True)
         user.set_password(temp_password)
         if role_ids:
@@ -181,11 +181,11 @@ def update_user_identity(
     if not clean_name:
         raise UserValidationError("name", "Informe o nome.")
     if user.has_access and not clean_email:
-        raise UserValidationError("email", "Email é obrigatório para usuário com acesso.")
+        raise UserValidationError("email", "E-mail é obrigatório para usuário com acesso.")
     if clean_email:
         existing = User.query.filter(User.email == clean_email, User.id != user.id).first()
         if existing:
-            raise UserValidationError("email", "Esse email já existe.")
+            raise UserValidationError("email", "Este e-mail já está cadastrado.")
 
     user.name = clean_name
     user.email = clean_email or None
@@ -330,7 +330,7 @@ def update_salary(user: User, entry: SalaryHistory, salary: SalaryInput) -> tupl
         Tupla ``(faixa_atualizada, lançamentos_realinhados)``.
     """
     if entry.user_id != user.id:
-        raise UserValidationError("salary", "Esse salário não pertence a este usuário.")
+        raise UserValidationError("salary", "Este salário não pertence a este usuário.")
     salary_value, payment_type, start_date = _parse_salary_fields(salary)
 
     before = f"R${entry.salary} ({entry.payment_type}) desde {entry.start_date}"
@@ -360,7 +360,7 @@ def delete_salary(user: User, entry: SalaryHistory) -> int:
         Quantidade de lançamentos da planilha realinhados pela exclusão.
     """
     if entry.user_id != user.id:
-        raise UserValidationError("salary", "Esse salário não pertence a este usuário.")
+        raise UserValidationError("salary", "Este salário não pertence a este usuário.")
 
     removed = f"R${entry.salary} ({entry.payment_type}) desde {entry.start_date}"
     # Solta as referências antes do DELETE: os lançamentos já pagos apontam para esta faixa e a
@@ -384,15 +384,15 @@ def delete_salary(user: User, entry: SalaryHistory) -> int:
 def grant_access(user: User, *, email: str, temp_password: str) -> User:
     """Concede acesso a uma pessoa cadastrada só para pagamento."""
     if user.has_access:
-        raise UserValidationError("email", "Esse usuário já tem acesso ao sistema.")
+        raise UserValidationError("email", "Este usuário já tem acesso ao sistema.")
     clean_email = (email or "").strip().lower()
     if not clean_email or not temp_password:
         raise UserValidationError(
-            "email", "Para conceder acesso, informe email e senha temporária."
+            "email", "Para conceder acesso, informe e-mail e senha temporária."
         )
     existing = User.query.filter(User.email == clean_email, User.id != user.id).first()
     if existing:
-        raise UserValidationError("email", "Esse email já existe.")
+        raise UserValidationError("email", "Este e-mail já está cadastrado.")
 
     user.email = clean_email
     user.set_password(temp_password)
@@ -406,7 +406,7 @@ def grant_access(user: User, *, email: str, temp_password: str) -> User:
 def reset_password(user: User, *, temp_password: str) -> User:
     """Reseta a senha de um usuário (exclusivo Superadmin)."""
     if not temp_password:
-        raise UserValidationError("temp_password", "Senha temporária obrigatória.")
+        raise UserValidationError("temp_password", "Informe a senha temporária.")
     user.set_password(temp_password)
     user.must_change_password = True
     audit("reset_password", "user", user.id, user.name, "Senha resetada pelo admin")
@@ -445,6 +445,10 @@ def delete_user(user: User, *, actor_id: int) -> None:
     SpecialExpense.query.filter_by(approved_by_id=user.id).update({"approved_by_id": None})
     SpecialExpense.query.filter_by(reimburse_user_id=user.id).update({"reimburse_user_id": None})
     EventCancellation.query.filter_by(updated_by_id=user.id).update({"updated_by_id": None})
+    # Feature 315: o pedido de cancelamento pendente fica, sem autor (só `solicitacao_ops` mexe nele).
+    from app.calendar.solicitacao_ops import soltar_autor
+
+    soltar_autor(user.id)
 
     audit("delete", "user", user.id, user.name, f"Usuário excluído: {user.email or user.name}")
     db.session.delete(user)

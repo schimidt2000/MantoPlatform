@@ -13,7 +13,7 @@ const DOC_MAX = 10 * 1024 * 1024;
 function SemFoto({ texto }: { texto: string }) {
   return (
     <p className="rounded-md bg-surface-2 px-3 py-2 text-sm text-muted">
-      {texto} Envie uma abaixo — ela aparece aqui assim que subir.
+      {texto} Envie uma abaixo — ela aparece aqui assim que o envio terminar.
     </p>
   );
 }
@@ -39,7 +39,7 @@ export function PortalFotosDocumentosPage() {
       { kind, file },
       {
         onError: (err) => {
-          const message = err instanceof ApiRequestError ? err.message : "Falha no envio.";
+          const message = err instanceof ApiRequestError ? err.message : "Não foi possível enviar a foto. Tente novamente.";
           if (kind === "face") setFaceError(message);
           else setFullError(message);
         },
@@ -59,7 +59,7 @@ export function PortalFotosDocumentosPage() {
       {
         onSuccess: () => setSent(true),
         onError: (err) => {
-          setError(err instanceof ApiRequestError ? err.message : "Falha no envio.");
+          setError(err instanceof ApiRequestError ? err.message : "Não foi possível enviar o arquivo. Tente novamente.");
         },
       },
     );
@@ -67,7 +67,7 @@ export function PortalFotosDocumentosPage() {
 
   return (
     <div className="space-y-4 p-4">
-      <h1 className="text-lg font-semibold text-ink">Fotos e Documentos</h1>
+      <h1 className="text-lg font-semibold text-ink">Fotos e documentos</h1>
 
       <Card>
         <CardHeader>
@@ -157,7 +157,7 @@ export function PortalFotosDocumentosPage() {
 
       {(photoUpload.isPending || documentUpload.isPending) && (
         <Button disabled loading className="w-full">
-          Enviando...
+          Enviando…
         </Button>
       )}
     </div>

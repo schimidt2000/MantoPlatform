@@ -203,7 +203,7 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       <p className="mt-1 max-w-sm text-sm text-muted">
         {filtered
           ? "Nenhuma avaliação corresponde aos filtros aplicados. Tente ampliar o período ou limpar a busca."
-          : "Assim que as clientes responderem o link de avaliação enviado após o evento, os feedbacks aparecem aqui."}
+          : "Assim que as clientes responderem ao link de avaliação enviado após o evento, as avaliações aparecem nesta lista."}
       </p>
     </div>
   );

@@ -34,7 +34,8 @@ export function bvVaiNascerNaTela(props: Pick<BvDoOrcamentoBlockProps, "acrescim
 /**
  * Quadro do BV do orçamento no Novo evento (feature 305, F1).
  *
- * Mostra o BV CHEIO que o orçamento somou ao preço na duração escolhida (valor do servidor) e, quando
+ * Mostra o BV que o orçamento somou ao preço na duração escolhida (valor do servidor; com desconto, o que a
+ * linha vale com ele — feature 313, `valores_final`) e, quando
  * ele vai nascer, os dois campos obrigatórios — o dono: "é de extrema importância que, ao colocar na
  * agenda um evento com BV, seja obrigatório colocar o PIX de quem receberá o BV". Venda diferente do
  * total: o BV acompanha na mesma proporção, "calculado ao salvar" — nenhuma conta de dinheiro aqui.
@@ -59,10 +60,13 @@ export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
   if (!bv) return null;
 
   const chave = ["1", "2", "3", "4"].includes(duracao) ? (duracao as "1" | "2" | "3" | "4") : null;
-  const cheio = chave
-    ? bv.valores_brl[chave]
+  // Feature 313: com a venda = o total do orçamento, o BV que vai ser gravado é o `valores_final` (já com o
+  // desconto); backend de antes não manda — fica o cheio, como era.
+  const valores = bv.valores_final ?? bv.valores_brl;
+  const doOrcamento = chave
+    ? valores[chave]
     : duracaoCustom != null && String(duracaoCustom) === duracao
-      ? bv.valores_brl.custom
+      ? valores.custom
       : null;
   const semVenda = props.cortesia || props.aDefinir || (props.venda ?? 0) < 1;
   // A mesma comparação do servidor (`plano_dos_acrescimos`): líquido da venda (× 0,84 se o evento
@@ -83,7 +87,7 @@ export function BvDoOrcamentoBlock(props: BvDoOrcamentoBlockProps) {
     <div className="space-y-3 rounded-md border border-line p-3">
       <p className="text-sm text-ink">
         <strong>BV · {rotulo}</strong>
-        {cheio != null ? <> → R$ {formatBRL(cheio)}</> : <> → calculado ao salvar</>}
+        {doOrcamento != null && !proporcional ? <> → R$ {formatBRL(doOrcamento)}</> : <> → calculado ao salvar</>}
         {props.totalDaDuracao != null && <> no total de R$ {formatBRL(props.totalDaDuracao)} ({duracao}h)</>}
         {" "}— repasse a quem indicou; não entra na comissão.
       </p>

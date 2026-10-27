@@ -70,7 +70,7 @@ def api_clientes_detail(client_id: int) -> Any:
         return denied
     client, events, rel_by_event, total_sales, cancelamentos = client_ops.get_client_detail(client_id)
     if client is None:
-        return json_error("Cliente não encontrado", 404)
+        return json_error("Cliente não encontrada", 404)
     history = client_ops.list_client_form_history(client_id)
     return jsonify(
         {
@@ -107,6 +107,10 @@ def api_clientes_detail(client_id: int) -> Any:
                     "event_title": r.event.title if r.event else None,
                     # Feature 312: o formulário ligado a um cancelado leva a situação (o selo).
                     "event_situacao": r.event.situacao if r.event else None,
+                    # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+                    "event_situacao_desde": (
+                        r.event.situacao_desde.isoformat() if r.event and r.event.situacao_desde else None
+                    ),
                 }
                 for r in history
             ],

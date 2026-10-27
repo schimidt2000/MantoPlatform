@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from flask import (
@@ -17,7 +18,6 @@ from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_login import login_required, current_user
 from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
 from datetime import datetime
 from .config import AVISOS_DE_URL, Config, PLATFORM_BASE_URL  # se seu config.py está na raiz
 from .constants import RoleName
@@ -29,7 +29,37 @@ migrate = Migrate()
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
 login_manager.login_message = None  # suprime mensagem automática de "faça login"
-limiter = Limiter(key_func=get_remote_address, default_limits=[])
+# Feature 310 (R8): a chave do limite é o IP do cliente informado pelo Node, não o
+# `remote_addr` (que atrás do proxy é o IP da infraestrutura — limite da loja inteira).
+from .api_utils import ip_do_cliente as _ip_do_cliente  # noqa: E402
+from .api_utils import mascarar_url_webhook  # noqa: E402
+
+limiter = Limiter(key_func=_ip_do_cliente, default_limits=[])
+
+
+class _MascaraSegredoDoAviso(logging.Filter):
+    """Segredo do aviso de pagamento fora do log de acesso do gunicorn (feature 310, R-13).
+
+    O formato de acesso do `render.yaml` grava o caminho (`%(U)s`), e o caminho do aviso É o
+    segredo. Mexer no `startCommand` para tirar o caminho já derrubou a produção; o filtro age
+    dentro do processo, sem tocar no start.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        from .api_utils import mascarar_url_webhook
+
+        if isinstance(record.args, dict):
+            record.args = {
+                k: mascarar_url_webhook(v) if isinstance(v, str) else v
+                for k, v in record.args.items()
+            }
+        elif isinstance(record.args, tuple):
+            record.args = tuple(
+                mascarar_url_webhook(v) if isinstance(v, str) else v for v in record.args
+            )
+        if isinstance(record.msg, str):
+            record.msg = mascarar_url_webhook(record.msg)
+        return True
 
 
 def _is_revendedor_only(user) -> bool:
@@ -491,6 +521,49 @@ def _start_email_bounce_sweep(app):
     app.logger.info(f"[email-bounce] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_pix_email_sweep(app):
+    """Thread que lê os avisos de PIX recebido do Inter e liga cada PIX à venda (feature 318).
+
+    Mesma caixa e mesma credencial do bounce (219), **só leitura**. Uma rodada por ciclo entre os
+    workers (`pix_email_ops.claim_sweep`). Dois interruptores: `PIX_EMAIL_SWEEP_ENABLED` (desligado
+    onde o e-mail é suprimido — o banco local, espelho com credencial real) e o da tela
+    (`SiteSetting.pix_email_ativo`, nasce desligado; lido a cada rodada dentro de `rodada()`).
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+    if not app.config.get("PIX_EMAIL_SWEEP_ENABLED", True):
+        app.logger.info("[pix-email] leitura desativada por configuração")
+        return
+    if not app.config.get("MAIL_USERNAME") or not app.config.get("MAIL_PASSWORD"):
+        app.logger.warning("[pix-email] MAIL_USERNAME/MAIL_PASSWORD ausentes — leitura desativada")
+        return
+
+    INTERVAL = app.config.get("PIX_EMAIL_SWEEP_INTERVAL", 900)
+
+    def _loop():
+        import time
+        time.sleep(75)  # depois do bounce: não abrir duas conexões IMAP no mesmo instante
+        from app.financeiro import pix_email_ops
+        while True:
+            try:
+                with app.app_context():
+                    if pix_email_ops.claim_sweep(INTERVAL):
+                        resumo = pix_email_ops.rodada()
+                        if resumo.get("novos") or resumo.get("religados"):
+                            app.logger.info("[pix-email] rodada: %s", resumo)
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[pix-email] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="pix-email")
+    t.start()
+    app.logger.info(f"[pix-email] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def _start_invite_reminders(app):
     """Thread que cobra confirmação de convite por e-mail (feature 231).
 
@@ -542,10 +615,59 @@ def _start_invite_reminders(app):
     app.logger.info(f"[invite-reminders] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_clicksign_sync(app):
+    """Conferência periódica com a ClickSign (feature 317): cobre o aviso perdido em deploy.
+
+    Uma passada incremental a cada 30 min (1–2 requisições), com o lock atômico de
+    `sincronizar_ops` (os 3 workers acordam juntos). Sem token, não sobe e avisa no log — lido
+    da config, nunca do `SiteSetting`: o `startCommand` roda `flask db upgrade && python seed.py`
+    sem `MANTO_SEM_THREADS`, e nesse processo as colunas novas ainda não existem (analyze R14).
+    Pelo mesmo motivo, dorme antes de tocar o banco.
+    """
+    import os as _os
+    import threading
+
+    if not app.config.get("CLICKSIGN_ACCESS_TOKEN"):
+        app.logger.warning("[clicksign] integração desligada: CLICKSIGN_ACCESS_TOKEN vazio")
+        return
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+    if not app.config.get("CLICKSIGN_SYNC_ENABLED", True):
+        app.logger.info("[clicksign] conferência periódica desativada por configuração")
+        return
+
+    INTERVAL = app.config.get("CLICKSIGN_SYNC_INTERVAL", 1800)
+
+    def _loop():
+        import time
+        time.sleep(90)
+        from app.contratos import sincronizar_ops
+        while True:
+            try:
+                with app.app_context():
+                    resultado = sincronizar_ops.sincronizar(motivo="periodica")
+                    if resultado.get("erro"):
+                        app.logger.warning(f"[clicksign] passada periódica: {resultado['erro']}")
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[clicksign] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    threading.Thread(target=_loop, daemon=True, name="clicksign-sync").start()
+    app.logger.info(f"[clicksign] conferência periódica iniciada (intervalo: {INTERVAL}s)")
+
+
 def create_app():
     from urllib.parse import quote as _url_quote
     app = Flask(__name__)
     app.config.from_object(Config)
+    # Feature 310: máscara do segredo do aviso nos logs de acesso (gunicorn) e da aplicação. O
+    # `app.logger` entra porque o "Exception on <caminho>" do Flask num 500 grava o caminho — e o
+    # caminho do aviso É o segredo.
+    for _log in (logging.getLogger("gunicorn.access"), logging.getLogger("gunicorn.error"),
+                 logging.getLogger("werkzeug"), app.logger):
+        if not any(isinstance(f, _MascaraSegredoDoAviso) for f in _log.filters):
+            _log.addFilter(_MascaraSegredoDoAviso())
     app.jinja_env.filters['urlencode'] = _url_quote
 
     # Hotfix 269b: os endereços que saem para gente de fora ficam registrados no log do deploy —
@@ -557,6 +679,19 @@ def create_app():
         "[links externos] portal=%s plataforma=%s",
         app.config.get("PORTAL_URL"), app.config.get("PUBLIC_BASE_URL"),
     )
+    # Feature 310 (constituição XIV): estado da InfinitePay no log do deploy. A API Key ausente é
+    # estado válido (fluxo legado), mas precisa ser visível — foi o silêncio que fez tokens sumirem
+    # na migração para o Render.
+    app.logger.info(
+        "[infinitepay] travada=%s api_key=%s",
+        app.config.get("INFINITEPAY_SUPPRESS_CALLS"),
+        "configurada" if app.config.get("INFINITEPAY_API_KEY") else "ausente (link sem validade)",
+    )
+    if not app.config.get("MANTO_PROXY_SECRET") and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar "
+            "o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend."
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl
@@ -648,7 +783,8 @@ def create_app():
             elapsed = time.monotonic() - started
             if elapsed >= _SLOW_REQUEST_S:
                 app.logger.warning(
-                    f"[slow] {elapsed:.1f}s {request.method} {request.path} -> {resp.status_code}"
+                    f"[slow] {elapsed:.1f}s {request.method} "
+                    f"{mascarar_url_webhook(request.path)} -> {resp.status_code}"
                 )
         return resp
 
@@ -946,11 +1082,17 @@ def create_app():
         # ── Devoluções de email viram fila de contato do casting ───
         _start_email_bounce_sweep(app)
 
+        # ── PIX recebido (aviso do Inter) ligado à venda (feature 318) ──
+        _start_pix_email_sweep(app)
+
         # ── Cobrança de confirmação de convite ─────────────────────
         _start_invite_reminders(app)
 
         # ── Conversão dos vídeos das tags NFC (feature 297) ────────
         _start_nfc_video_worker(app)
+
+        # ── Conferência periódica com a ClickSign (feature 317) ────
+        _start_clicksign_sync(app)
 
         # ── Backup automático para o Google Drive (feature 264) ────
         from app.backup_drive import start_backup_thread

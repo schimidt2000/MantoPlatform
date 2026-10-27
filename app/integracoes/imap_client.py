@@ -114,3 +114,85 @@ def fetch_bounce_messages(
             box.logout()
         except (imaplib.IMAP4.error, OSError):
             pass
+
+
+_MESES_IMAP = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+
+
+def _data_imap(dia: date) -> str:
+    """`DD-Mon-YYYY` do IMAP com o mês em inglês, independente do locale do processo."""
+    return f"{dia.day:02d}-{_MESES_IMAP[dia.month - 1]}-{dia.year}"
+
+
+def fetch_messages(
+    username: str,
+    password: str,
+    *,
+    sender: str,
+    subject: str,
+    since_days: int,
+    limit: int = 500,
+) -> list[bytes]:
+    """Baixa, só leitura, as mensagens de um remetente com um trecho no assunto (feature 318).
+
+    Mesmo contrato de segurança de `fetch_bounce_messages`: ``EXAMINE`` + ``BODY.PEEK[]`` — nada é
+    marcado como lido, movido ou apagado. Usada pela leitura dos avisos de PIX do Inter.
+
+    Args:
+        username: `MAIL_USERNAME`.
+        password: `MAIL_PASSWORD` (App Password); espaços são ignorados.
+        sender: Remetente exato (``no-reply@inter.co``).
+        subject: Trecho do assunto (``Pix recebido``).
+        since_days: Janela em dias (IMAP `SINCE`, por data). Reler é inofensivo para quem guarda
+            pelo `Message-ID`.
+        limit: Teto por chamada (as mais recentes primeiro).
+
+    Returns:
+        Os bytes brutos de cada mensagem (as mais recentes primeiro).
+
+    Raises:
+        ImapUnavailableError: Login recusado ou IMAP indisponível.
+    """
+    clean_password = (password or "").replace(" ", "")
+    if not username or not clean_password:
+        raise ImapUnavailableError("MAIL_USERNAME/MAIL_PASSWORD não configurados.")
+
+    try:
+        box = imaplib.IMAP4_SSL(IMAP_HOST, IMAP_PORT, timeout=IMAP_TIMEOUT)
+    except OSError as exc:
+        raise ImapUnavailableError(f"conexão IMAP falhou: {exc}") from exc
+
+    try:
+        try:
+            box.login(username, clean_password)
+        except imaplib.IMAP4.error as exc:
+            raise ImapUnavailableError(f"login IMAP recusado: {exc}") from exc
+
+        status, _ = box.select(_all_mail_folder(box), readonly=True)  # readonly → EXAMINE
+        if status != "OK":
+            status, _ = box.select("INBOX", readonly=True)
+            if status != "OK":
+                raise ImapUnavailableError("nenhuma pasta legível na conta.")
+
+        since = _data_imap(date.today() - timedelta(days=max(1, since_days)))
+        status, data = box.search(
+            None, "FROM", f'"{sender}"', "SUBJECT", f'"{subject}"', "SINCE", since
+        )
+        if status != "OK":
+            raise ImapUnavailableError(f"busca IMAP falhou: {status}")
+        ids = data[0].split() if data and data[0] else []
+        escolhidos = list(reversed(ids))[:limit]
+
+        messages: list[bytes] = []
+        for message_id in escolhidos:
+            status, raw = box.fetch(message_id, "(BODY.PEEK[])")  # PEEK → não marca como lida
+            if status == "OK" and raw and isinstance(raw[0], tuple):
+                messages.append(raw[0][1])
+        return messages
+    except imaplib.IMAP4.error as exc:
+        raise ImapUnavailableError(f"IMAP falhou: {exc}") from exc
+    finally:
+        try:
+            box.logout()
+        except (imaplib.IMAP4.error, OSError):
+            pass

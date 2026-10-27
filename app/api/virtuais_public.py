@@ -20,7 +20,7 @@ from flask import jsonify, request, send_file, session
 
 from app import limiter
 from app.api import api_bp
-from app.api_utils import json_error
+from app.api_utils import ip_do_cliente, json_error
 from app.constants import (
     VIRTUAL_ACCESS_SESSION_MINUTES,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
@@ -107,7 +107,9 @@ def api_virtuais_reservar(slug: str) -> Any:
             slot_id=data.get("slot_id"),
             gift_item_id=data.get("gift_item_id"),
             client_token=data.get("client_token"),
-            origin_ip=request.headers.get("X-Forwarded-For", request.remote_addr),
+            # Feature 310 (R8): o IP resolvido, nunca o X-Forwarded-For cru (que o cliente forja à
+            # esquerda e a infraestrutura alonga à direita).
+            origin_ip=ip_do_cliente(),
             origin_user_agent=request.headers.get("User-Agent"),
             child_name=data.get("child_name"),
             child_age=data.get("child_age"),
@@ -128,6 +130,8 @@ def api_virtuais_reservar(slug: str) -> Any:
         if exc.existing_order_token:
             body["error"]["existing_order_token"] = exc.existing_order_token
         return jsonify(body), 429
+    except ops.VirtuaisPagamentoFechadoError as exc:
+        return json_error(str(exc), 503)
     except ops.VirtuaisOperadoraError as exc:
         return json_error(str(exc), 502)
 
@@ -137,6 +141,7 @@ def api_virtuais_reservar(slug: str) -> Any:
                 "public_token": order.public_token,
                 "order_nsu": order.order_nsu,
                 "locked_until": order.locked_until.isoformat() if order.locked_until else None,
+                "seconds_left": ops.segundos_restantes(order),
                 "total_value": ops._money(order.total_value),
                 "payment_url": order.payment_url,
             }
@@ -155,6 +160,47 @@ def api_virtuais_pedido_publico(public_token: str) -> Any:
     order = VirtualOrder.query.filter_by(public_token=public_token).first()
     if order is None:
         return json_error("Pedido não encontrado", 404)
+    return jsonify(ops.serialize_order_summary(order))
+
+
+@api_bp.route("/virtuais/pedidos/<public_token>/retorno", methods=["POST"])
+@limiter.limit("20 per minute")
+def api_virtuais_pedido_retorno(public_token: str) -> Any:
+    """Volta do checkout com os identificadores da cobrança (feature 310, R3).
+
+    A InfinitePay põe ``order_nsu``, ``slug`` e ``transaction_nsu`` na URL de retorno. É a segunda
+    prova de pagamento além do aviso: sem esses identificadores a reconsulta não distingue "não
+    pago" de "não achei" (teste 0 em produção). Quem decide continua sendo a reconsulta na
+    operadora — os identificadores só apontam para a cobrança.
+    """
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    data = request.get_json(silent=True) or {}
+    if order is None or (data.get("order_nsu") or "") != order.order_nsu:
+        return json_error("Pedido não encontrado.", 404)
+    ops.registrar_retorno(order, data)
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    return jsonify(ops.serialize_order_summary(order))
+
+
+@api_bp.route("/virtuais/pedidos/<public_token>/abandonar", methods=["POST"])
+@limiter.limit("20 per minute")
+def api_virtuais_pedido_abandonar(public_token: str) -> Any:
+    """A família desiste da reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+
+    Exige o ``client_token`` da aba que criou a reserva: o link do pedido chega a outras pessoas
+    (é o que se compartilha), e sem a prova qualquer um desfazia a reserva de outra família. Com
+    sinal de pagamento → 409 (quem decide é a operadora); pedido que já não está ativo → 200 com o
+    resumo, sem efeito.
+    """
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
+    data = request.get_json(silent=True) or {}
+    if order is None or not ops.prova_da_aba(order, data.get("client_token")):
+        return json_error("Pedido não encontrado.", 404)
+    try:
+        ops.abandonar_reserva(order)
+    except ops.VirtuaisConflitoError as exc:
+        return json_error(str(exc), 409)
+    order = VirtualOrder.query.filter_by(public_token=public_token).first()
     return jsonify(ops.serialize_order_summary(order))
 
 

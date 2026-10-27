@@ -29,6 +29,7 @@ from .service import (
 )
 from .. import db
 from app.constants import (
+    EVENT_PAYMENT_ORIGEM_PIX,
     RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS, GCAL_KIND_KEY,
     EVENT_TYPE_SHOW,
 )
@@ -304,6 +305,25 @@ def _clear_event_side_tables(event_id: int) -> None:
     # devolve com id novo).
     FormResponse.query.filter_by(event_id=event_id).update(
         {"event_id": None, "event_link_source": None, "event_link_ambiguous": False}
+    )
+    # Feature 317: o contrato da ClickSign ligado à venda excluída volta para "a conferir" (o
+    # documento existe na ClickSign e pode ser da venda recriada). `vinculo_origem` limpo: a
+    # sincronização pode religar sozinha quando o evento voltar (analyze R6). Cobranças e
+    # desvínculos vão pelo CASCADE.
+    from app.constants import CONFERIR_VENDA_EXCLUIDA, VINCULO_A_CONFERIR, VINCULO_LIGADO
+    from app.models import ClicksignDocumento
+
+    ClicksignDocumento.query.filter(
+        ClicksignDocumento.event_id == event_id, ClicksignDocumento.vinculo == VINCULO_LIGADO
+    ).update(
+        {
+            "event_id": None,
+            "vinculo": VINCULO_A_CONFERIR,
+            "vinculo_origem": None,
+            "vinculo_motivo": CONFERIR_VENDA_EXCLUIDA,
+            "contrato_anexo_id": None,
+        },
+        synchronize_session=False,
     )
 
 
@@ -1122,6 +1142,12 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
     ).first()
     if not payment:
         return
+    from app.financeiro import pix_ops
+
+    if pix_ops.pix_do_pagamento(payment.id) is not None:
+        # Feature 318: o pagamento de um PIX lido do banco sai pelo "Desfazer" (ver a API).
+        flash('Este pagamento veio de um PIX lido do banco: use "Desfazer" em PIX recebidos.', "error")
+        return
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=current_user.name,
@@ -1135,30 +1161,59 @@ def _handle_delete_payment(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
 
 
 def _add_payment_record(
-    event: CalendarEvent, *, amount: Decimal | None, file_storage
+    event: CalendarEvent,
+    *,
+    amount: Decimal | None,
+    file_storage,
+    sem_arquivo: bool = False,
+    conta_id: int | None = None,
 ) -> EventPayment | None:
     """Adiciona um comprovante de pagamento ao evento (feature 153).
 
-    Paridade com `_handle_add_payment`: exige valor E arquivo.
+    Paridade com `_handle_add_payment`: exige valor E arquivo — exceto o pagamento de PIX lido do
+    aviso do banco (feature 318, `sem_arquivo=True`), cuja prova é o próprio aviso.
 
     Args:
         event: evento ao qual o pagamento pertence.
         amount: valor recebido.
         file_storage: arquivo do comprovante (``FileStorage``).
+        sem_arquivo: pagamento de origem PIX, gravado sem arquivo.
+        conta_id: conta da empresa que recebeu (feature 318), opcional.
 
     Returns:
         O ``EventPayment`` criado, ou None se faltar valor válido ou arquivo (ausente/> 10 MB).
     """
     if not amount or amount <= 0:
         return None
+    if sem_arquivo:
+        payment = EventPayment(
+            event_id=event.id,
+            file_path=None,
+            amount=amount,
+            origem=EVENT_PAYMENT_ORIGEM_PIX,
+            conta_id=conta_id,
+        )
+        db.session.add(payment)
+        return payment
     file_path = _save_bounded_upload(
         file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
     )
     if not file_path:
         return None
-    payment = EventPayment(event_id=event.id, file_path=file_path, amount=amount)
+    payment = EventPayment(event_id=event.id, file_path=file_path, amount=amount, conta_id=conta_id)
     db.session.add(payment)
     return payment
+
+
+def _attach_payment_file(payment: EventPayment, *, file_storage) -> bool:
+    """Põe o arquivo num pagamento de PIX que nasceu sem arquivo (feature 318). O valor não muda."""
+    file_path = _save_bounded_upload(
+        file_storage, current_app.config["UPLOAD_PAYMENTS"], "payments", max_mb=10
+    )
+    if not file_path:
+        return False
+    payment.file_path = file_path
+    return True
 
 
 def _edit_payment_amount(payment: EventPayment, *, amount: Decimal | None) -> bool:
@@ -2290,6 +2345,17 @@ def _is_manto_task_item(item: dict) -> bool:
     return bool(private.get(GCAL_KIND_KEY))
 
 
+def _eh_evento_da_loja(item: dict) -> bool:
+    """True se o item do Google foi criado pela loja virtual (feature 310, R11).
+
+    A venda virtual cria o evento no Google com ``extendedProperties.private.manto_virtual_nsu``.
+    Se a gravação local falhar (disputa, deploy no meio), o evento existe só no Google — e sem
+    esta marca a sincronização o importaria como evento comum, com venda, funil e DRE.
+    """
+    private = (item.get("extendedProperties") or {}).get("private") or {}
+    return bool(private.get("manto_virtual_nsu"))
+
+
 def sync_events(items: list[dict]) -> None:
     for item in items:
         google_id = item.get("id")
@@ -2327,6 +2393,11 @@ def sync_events(items: list[dict]) -> None:
         existente = CalendarEvent.query.filter_by(google_event_id=google_id).first()
         if _is_virtual_event(existente):
             _sinalizar_divergencia_virtual(existente, item)
+            continue
+        # Marca da loja SEM evento local (a gravação local falhou): nunca importar — viraria
+        # evento comum, com venda, funil e DRE (feature 310). Vem depois do sinal acima para não
+        # calar a divergência dos eventos da loja que existem aqui.
+        if _eh_evento_da_loja(item):
             continue
 
         # Evento cancelado é intocável pelo sync (feature 224): se alguém recriar a linha no
@@ -3375,7 +3446,29 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
     )
     total_4h_val = float(entry.total_4h or 0)
     total_custom = None
-    if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
+    # Feature 313: orçamento cotado pela regra nova (versão 2) — o cheio e o final de qualquer duração saem da mesma
+    # conta da calculadora (`preco_na_duracao`); o de antes segue a régua de sempre, logo abaixo.
+    from app.calendar.orcamento_evento_ops import snapshot_v2
+    from app.orcamento.quote_ops import preco_na_duracao
+
+    v2 = snapshot_v2(entry)
+    novas: dict = {}
+    if v2 is not None:
+        brutos = v2.get("brutos") or {}
+        novas = {f"bruto_{d}h": float(brutos[f"{d}h"]) for d in (1, 2, 3, 4)}
+        novas["desconto_pct"] = float(v2.get("desconto_aplicado") or 0) or None
+        # O "Outra (h)" de 5 a 24 h pelo servidor: o acréscimo em R$ uma vez, o BV sobre tudo (Q7).
+        novas["extra_por_horas"] = {
+            str(h): {"bruto": conta["bruto"], "total": conta["total"]}
+            for h in range(5, 25)
+            if (conta := preco_na_duracao(v2, h)) is not None
+        }
+    if v2 is not None and duracao_custom > 4:
+        conta = preco_na_duracao(v2, duracao_custom)
+        if conta is not None:
+            total_custom = conta["total"]
+            novas["bruto_custom"] = conta["bruto"]
+    elif duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
         # Feature 309: com produto de tabela o produto fica fixo na régua — a MESMA função da
         # calculadora e de `_total_da_duracao`; sem produto, a conta de sempre.
         produtos_total = float(snap.get("produtos_total") or 0)
@@ -3413,6 +3506,8 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         "acrescimos_do_orcamento": _acrescimos_do_prefill(entry, duracao_custom if total_custom else None),
         "with_invoice": bool(snap.get("nota_fiscal", False)),
         "caches": caches,
+        # Feature 313 (só orçamento da versão 2; ausentes no de antes): bruto_*, desconto_pct, extra_por_horas.
+        **novas,
     }
 
 
@@ -3424,10 +3519,13 @@ def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) 
     sem isso ela comparava brutos e mostrava um BV quando o servidor gravava outro.
     """
     from app.calendar.orcamento_evento_ops import (
+        _bruto_da_duracao,
+        _total_da_duracao,
         acrescimos_do_orcamento,
         divisor_da_nota,
         snapshot_do_orcamento,
     )
+    from app.orcamento.quote_ops import bv_que_acompanha
 
     snap = snapshot_do_orcamento(entry)
     nota = {"nota_do_orcamento": bool(snap.get("nota_fiscal")), "divisor_da_nota": float(divisor_da_nota())}
@@ -3442,12 +3540,28 @@ def _acrescimos_do_prefill(entry: OrcamentoHistory, duracao_custom: int | None) 
             for d in (1, 2, 3, 4)
         }
         valores["custom"] = float(custom[i]["amount_brl"]) if custom and i < len(custom) else None
+        # Feature 313: o que a linha vale com o desconto (a venda = o total do orçamento) — a conta é do servidor,
+        # pela função única da 305; o quadro do Novo evento e o vínculo só mostram.
+        finais = {}
+        for d in (1, 2, 3, 4):
+            cheio, final = _bruto_da_duracao(entry, d), _total_da_duracao(entry, d)
+            finais[str(d)] = (
+                float(bv_que_acompanha(valores[str(d)], final, cheio))
+                if valores[str(d)] is not None and cheio and final
+                else None
+            )
+        if duracao_custom and valores["custom"] is not None:
+            cheio, final = _bruto_da_duracao(entry, duracao_custom), _total_da_duracao(entry, duracao_custom)
+            finais["custom"] = float(bv_que_acompanha(valores["custom"], final, cheio)) if cheio and final else None
+        else:
+            finais["custom"] = None
         linhas.append({
             "tipo": base["tipo"],
             "descricao": base["descricao"],
             "is_bv": base["is_bv"],
             "percentual": float(base["percentual"]) if base["percentual"] is not None else None,
             "valores_brl": valores,
+            "valores_final": finais,
         })
     return {"personalizado": False, "linhas": linhas, **nota}
 

@@ -1,5 +1,9 @@
 # 05 — Dívida Técnica
 
+> **2026-10-20 (feature 310, pronta e aguardando deploy)**: itens 133 (limitador em memória por
+> processo), 134 (História 9 desligada até a `INFINITEPAY_API_KEY`) e 135 (prova do proxy desligada até o
+> `MANTO_PROXY_SECRET`), na baixa da 310 ao fim.
+>
 > **2026-09-08 (feature 296)**: §10 resolvida; pendências operacionais 21-33 registradas ao fim do §10.
 >
 > Achados de uma auditoria de leitura de 2026-08-06 sobre ~44k linhas de Python e ~46k de TypeScript,
@@ -495,7 +499,7 @@ fora.
 | 73 | **P3** | `event_ops.update_ensaio` e `routes.edit_ensaio` | só capturam `RuntimeError` da escrita no Google: outra exceção derruba a edição | tratar como `_sincronizar_e_trocar_tipo` |
 | ~~74~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 312** — agendar e vincular ensaio e vincular presente 3D recusam o cancelado no núcleo; a Fila 3D e as pendências não o trazem | — | — |
 | 75 | **P3** | lembrete diário de convite (`invite_reminders`, 303) | continua lembrando convite pendente de evento marcado "Sumiu do Google Agenda" | decidir com o dono se o lembrete pausa enquanto marcado |
-| 76 | **P3** | `EventLog` gravado em horário de São Paulo: `cancel_ops.solicitar_exclusao` e `recusar_solicitacao` (224) e o desfazer do pagamento de comissão da 267c (`comissoes_ops.liquidar_item_de_comissao`, `created_at=now_sp()`) | o histórico trata sem-fuso como UTC e essas linhas saem 3 h antes da hora real. O cancelar saiu da lista na 306: o histórico do ato passou a usar o default UTC | deixar o default UTC, como a 303 e a 306 fazem |
+| 76 | **P3** | `EventLog` gravado em horário de São Paulo: o desfazer do pagamento de comissão da 267c (`comissoes_ops.liquidar_item_de_comissao`, `created_at=now_sp()`) | o histórico trata sem-fuso como UTC e essas linhas saem 3 h antes da hora real. O cancelar saiu da lista na 306; o pedido e a recusa da 224 saíram na 315 (`solicitacao_ops` grava sem `created_at`) | deixar o default UTC, como a 303, a 306 e a 315 fazem |
 | 77 | **P4** | `specs/205-loja-interacoes-virtuais/verify_205.py` antes da 303 | o V7.2 antigo chamava a limpeza com a lista vazia e apagava do espelho os eventos não virtuais do mês — o espelho de quem rodou o 205 antes da 303 pode estar sem eles | refresh do espelho |
 | 78 | **P4** | `FaixaSumidosGoogle.tsx` (303) | sexta cópia do fechar-em-Esc-e-clique-fora (sino, `KebabMenu`, `FilterDropdown`…) | promover um hook `useFecharAoSair` para `@manto/ui` |
 | 79 | **P3** | `sumico_ops.limpar_mes` (303) | sem teto de consultas por execução: lista de mês vazia ou cortada com o Google no ar faz uma consulta por evento, em série; no "Limpar eventos fantasma" pode passar dos 180 s do proxy (o Flask termina, a tela diz que não concluiu) | teto por execução, ou rodar a limpeza em segundo plano |
@@ -655,4 +659,90 @@ E mais quatro que nunca chegaram a ser numeradas (vinham da pesquisa da 303):
 | 133 | **P4** | Planilha de Pagamentos (`financeiro_write.py` `set-status` e `bulk-action`) | o status do cachê de uma vaga de evento cancelado ainda muda pela Planilha (fora da tela do evento, que a trava fecha) | decidir se o cachê do cancelado é editável pela Planilha (o cachê de cancelado já sai dela pela 306) |
 | ~~134~~ | ~~P4~~ | ✅ **RESOLVIDO no converge da feature 312** — `figurino_ops.associate_missing_character` não grava em vaga de cancelado e `list_sheets` não a conta entre os faltantes | — | — |
 | 135 | **P4** | listas internas sem o selo do cancelado | avaliações internas, as avaliações da ficha do talento e os comprovantes dos outros dias do grupo mostram o título do evento sem a situação (premissa 24 do plano 1c) | `event_situacao` onde a lista aparecer |
-| 136 | **P4** | `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |
+| ~~136~~ | ~~P4~~ | ✅ **RESOLVIDO com a 312 na `main`** — o retrato `main` (`c074657b`) × 313, rodado no pré-merge da 313 em 22/10, saiu idêntico (saída 0). Texto original: `verify_306.py` cenário 23 (retrato main × branch) | com a 312 em branch, o retrato acusa a mudança de contrato da ficha da cliente (`events[].cancelado` sai; `cancelamentos` e `event_situacao` entram — 239 diferenças, todas dessa chave). Volta a ficar verde quando a 312 estiver na `main` (a base do retrato) | nada a fazer depois do merge; registrar a base nova no `docs/03` |
+
+## Baixa da feature 313-desconto-e-pix-na-calculadora (2026-10-21; em produção desde 22/10 ~04:58)
+
+**Quitadas.** Nenhuma. A 100 (acréscimo negativo, que a equipe usava como desconto) continua — o desconto negociado
+agora tem campo próprio, mas o acréscimo negativo segue aceito no servidor e no Jinja.
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 137 | **P4** | `app/orcamento/quote_ops.py` (núcleo do orçamento) | a conta do orçamento é float com `round(x, 2)` (o Princípio IX pede Decimal no backend); a 313 manteve assim de propósito — a paridade byte a byte com os 2.484 orçamentos do espelho e com a mensagem de hoje exige a mesma aritmética (plano §Complexidade). O BV, que vira dinheiro gravado, já é Decimal (305) | converter numa feature própria, com gabarito de paridade (`specs/313-…/gabarito_paridade.py`) e a lista dos centavos que mudam aprovada pelo dono |
+| 138 | **P4** | memória de cálculo com BV em % (`quote_ops`, a linha do BV) | o BV que cai em meio centavo arredonda na linha (796,25 × 10% → 79,62) e no total por outro caminho (875,875 → 875,88): a memória não fecha por R$ 0,01 nessas colunas. Já era assim antes da 313 (a conta é a mesma; visto na tela aberta, T045) | a linha do BV = total arredondado − base arredondada, ou uma regra de arredondamento só, junto da 137 |
+| 139 | **P5** | PDF do orçamento (`app/orcamento/pdf.py`, tabela INVESTIMENTO) | a primeira linha ("1 hora") encosta no traço do título da seção — no PDF de antes da 313 também (conferido num orçamento de 2026) | descer a tabela um respiro abaixo do traço |
+| 140 | **P5** | seletor de tipo do acréscimo (`OrcamentoCalculadoraPage` → `AcrescimosEditor`) | "BV" aparece duas vezes: a tabela de preços do espelho já traz "BV" em `acrescimo_tipos` e a tela soma `acrescimo_tipo_bv` (vem de antes da 313) | deduplicar ao montar a lista (`new Set`) ou tirar "BV" de `acrescimo_tipos` nas Configurações |
+| 141 | **P5** | BV em duas ou mais linhas (`quote_ops` × `orcamento_evento_ops.plano_dos_acrescimos`) | a calculadora mostra `bv_que_acompanha(Σ linhas)` e o evento grava a soma das linhas arredondadas uma a uma: pode diferir R$ 0,01 (converge da 313) | calcular o BV a repassar do quote linha a linha, como o evento |
+| 142 | **P5** | `orcamento_evento_ops._linhas_v2` acima de 4h | casa as linhas do `valores_brl` com as da conta da extra pela posição; os dois filtros (`_linhas_do_snapshot` × `_linhas_do_snapshot_313`) só coincidem no snapshot que a calculadora gera — num forjado, o valor de uma linha vai para outra | um filtro só, ou casar por índice do acréscimo |
+| 143 | **P5** | `deduzir_duracao` com o bruto = o final (gêmeo Jinja, bundle velho) | procura o cheio em todas as durações antes do final: se o final de uma duração for igual ao cheio de outra ("3 h pelo preço de 2 h"), deduz a duração errada — só muda o BV com acréscimo em R$ | dar preferência à duração gravada no evento quando houver |
+| 144 | **P5** | a marca `versao_conta: 2` × `snapshot_v2` | o leitor refaz a conta com o `aplicar_acrescimos` de hoje e exige ± R$ 0,01: uma mudança futura de centavo nessa função, sem subir a versão, manda todo orçamento v2 para o caminho de antes sem aviso (cheio = final, o BV deixa de encolher) | qualquer mudança no núcleo sobe `VERSAO_CONTA` e trata a versão anterior; um cenário do verify segura a paridade |
+
+## Baixa da feature 317-contratos-clicksign (2026-10-22, branch)
+
+**Quitadas.** Nenhuma da lista; a 317 corrige de passagem as menções antigas à ClickSign "viva" em `docs/01`
+e `docs/02` (a integração do CRM tinha saído na 021).
+
+**Criadas.** (151–156; nasceram 148–153 na branch e foram renumeradas no merge em lote de 23/10.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 151 | **P3** | `render.yaml` / painel do Render | **`CLICKSIGN_ACCESS_TOKEN` nasce vazio em produção** (Princípio XIV): sem ele a integração fica desligada e a Home não mostra o painel (só ao Superadmin, com o aviso) | o dono cola o token "Plataforma Manto" no `manto-backend` no deploy (quickstart §3) |
+| 152 | **P4** | `site_settings.clicksign_token` / `clicksign_sandbox` | colunas inertes desde a 021 (a 317 lê o token só da env); confundem quem lê o schema | migração destrutiva com ensaio, quando houver outra mexida em `site_settings` |
+| 153 | **P4** | `app/contratos/sincronizar_ops.candidatos` | o vínculo depende do nome que os fluxos da ClickSign montam; mudar a personalização do nome no painel faz tudo cair em "A conferir" sem aviso | quando a Manto gerar o contrato pela API (feature própria, decisão 4 do dono), gravar o id da venda no `metadata` do envelope e casar por ele |
+| 154 | **P5** | `ClicksignDocumento` × contratos de artista | o contrato de prestação de serviços artísticos é classificado e ignorado | ligar ao talento pelo telefone do signatário, se o dono quiser |
+| 155 | **P5** | migration `d3c7a1e5b317` × `e8b4a1c7d310` (310) | as duas partem de `c5d2f7a9e306`; a que for mergeada por último precisa reencadear o `down_revision` | conferir `flask db heads` no merge |
+| 156 | **P5** | `app/contratos/situacao_ops.contratos_da_home` | `sugestoes()` consulta por documento a conferir (poucos, mas é N consultas) | lote único por intervalo de datas se a lista crescer |
+
+## Baixa da feature 318-pix-recebido-por-email (2026-10-22, branch — não mergeada)
+
+**Criadas.** (157–161; nasceram 148–152 na branch e foram renumeradas no merge em lote de 23/10.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 157 | **P3** | InfinitePay fora da loja (cartão/link) | não manda aviso por e-mail; a 318 só vê o repasse manual ao MEI ("Prime Dreams"), que é paliativo ("É esta?" do Financeiro, sem nome, com taxa) | link de pagamento InfinitePay gerado pelo ERP para cada venda (`order_nsu` = venda), no webhook da 205/310 — depois da 310 |
+| 158 | **P4** | `EventInstallment.received` | nenhum código marca a parcela como recebida; a 318 trata como "não coberta" a parcela que o recebido acumulado não cobre (mesma régua do vencimento) | marcar `received` pelo recebido do grupo, ou tirar a coluna |
+| 159 | **P4** | `pix_recebidos` sem venda | o dono escolheu ignorar (sem fila); os R$ 209 mil "sem registro" de 21/10 continuariam sem tela | tela "PIX sem venda" para o Financeiro classificar (venda esquecida, aporte, empréstimo) |
+| 160 | **P4** | resumo por conta (`pix_ops.resumo_por_conta`) | agrupa pelo mês do registro do pagamento (`created_at`), não do dinheiro; comprovante manual sem conta cai em "Sem conta informada" | data do pagamento no `EventPayment` e conta obrigatória no manual, quando o dono decidir |
+| 161 | **P5** | `fetch_messages` (`imap_client.py`) | busca uma mensagem por vez (`FETCH` por id): 3 dias de avisos são segundos, mas o ensaio de 145 dias leva ~7 min | `FETCH` em lote (`1:n`) |
+
+## Baixa da correção 316-tom-dos-textos (2026-10-22, branch)
+
+**Quitadas.** Nenhuma (só texto).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 145 | **P4** | `app/api/figurino_producao_write.py:223` × `app/figurino/producao_ops.py:875` | o endpoint decide o 403 por `"super admin" in exc.message.lower()`: a mensagem "Só um super admin aprova um pedido…" ficou fora da padronização para "Superadmin" porque trocar o texto viraria 400 | a exceção carrega um código (`ProducaoValidationError.code`), e o endpoint decide por ele, não pelo texto |
+| 146 | **P5** | `lib/navigation.tsx` e títulos de módulo ("Banco de Talentos", "Calculadora de Orçamento", "Planilha de Pagamentos", "Calc. Orçamento", "Config. Preços") | nome de seção em Title Case convivendo com "Gerenciar catálogo" e "Exclusões e cancelamentos"; a 316 padronizou cartão e botão, não o menu | decisão de produto: um padrão para o menu inteiro, sidebar e título de página juntos |
+| 147 | **P5** | mensagens da API com enum ou campo em texto (`"Status inválido (use: …)"`, `form_response_id inválido`, `Envie a lista completa em \`items\``), "Google Calendar" × "Google Agenda" (`agenda_write`, `event_ops`), cabeçalho do CSV de comissões (`lib/financeiro.ts`: "Status", "Qtd de Vendas") | ficaram fora da 316: as duas primeiras só aparecem com o frontend quebrado; o CSV pode ser lido por planilha externa pelo nome da coluna | tratar ao mexer em cada endpoint; o CSV só com o dono confirmando que nenhuma planilha depende do cabeçalho |
+| 150 | **P5** | `app/email_service.py` (todos os e-mails menos o de gasto extra) | texto digitado por usuário (título de evento, nome, descrição) entra no HTML sem `escape`; um "&" ou "<" no título quebra a linha e um `<a>` colado vira link no e-mail. A 319 escapou só o aviso de gasto extra | escapar em `_info_row`/`_paragraph` exige rever quem já passa HTML pronto (negrito, links) |
+
+## Baixa da feature 315-pedido-de-cancelamento (2026-10-22, branch)
+
+**Quitadas.** A parte da 224 da **76** (o pedido e a recusa gravavam o `EventLog` em horário de São Paulo; saíram com
+`cancel_ops.solicitar_exclusao` e `recusar_solicitacao`).
+
+**Criadas.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 148 | **P5** | `app/api/agenda_write.py` (`api_solicitar_exclusao`, `api_recusar_solicitacao`) | as rotas velhas `/api/events/<id>/solicitar-exclusao` (POST e DELETE) seguem como segunda regra das views novas, para o bundle de antes do deploy; pelo caminho velho o corpo só com o motivo vale, e o pedido nasce sem devolução e com alcance nulo | tirar as duas regras velhas quando o bundle novo for o único (alguns dias depois do deploy); o `verify_312` 9b e o `verify_315` 17 e 26 usam o caminho velho e mudam junto |
+| 149 | **P5** | `solicitacao_ops.responder_na_exclusao` × `api_delete_event` | a resposta "Evento excluído" sai depois do commit da exclusão, lida antes dela: uma recusa que commita entre a leitura e a trava do núcleo dá ao autor "recusado" e depois "excluído" (research R10) | só se aparecer na prática: ler o pedido depois da trava do núcleo, dentro de `_delete_event_flow` |
+
+## Baixa da feature 310-pagamento-loja-virtual (2026-10-20, branch)
+
+**Quitada.** O limite anti-abuso deixou de valer para a loja inteira: o limitador lia o IP da
+infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do_cliente()`, `docs/01`
+§3.13.4). A 88 ("Nova campanha") continua aberta, fora do escopo da 310.
+
+**Criadas.** (162–164; nasceram 133–135 na branch e foram renumeradas no merge em lote de 23/10.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 162 | **P4** | `app/__init__.py` (`Limiter(key_func=ip_do_cliente, default_limits=[])`, sem `storage_uri`) | o Flask-Limiter guarda as contagens **em memória, por processo**: cada um dos 3 workers do gunicorn conta separado, e o limite efetivo de cada família fica até ~3× o nominal (reservar 20/min vira até ~60/min; o aviso, 60 → ~180). O próprio Flask-Limiter avisa no start ("in-memory storage… not recommended for production"). Aceito pela 310: a 310 corrigiu de quem é o balde (o cliente, não a loja inteira), não o tamanho | backend compartilhado (`storage_uri` num Redis, ou no Postgres) — serviço novo no Render, decisão do dono |
+| 163 | **P3** | `INFINITEPAY_API_KEY` no painel do `manto-backend` (Render) | a **História 9 da 310** (link que vence junto com a reserva e aceita um pagamento só) está **desligada** até o dono colar a chave: sem ela o link nasce sem validade e a família ainda pode pagar um horário que já voltou para a vitrine — o pagamento atrasado vira venda ou devolução pela regra única, mas a devolução é trabalho manual no app. O código já suporta (`render.yaml` declara a chave com `sync: false`); o log do deploy diz `[infinitepay] … api_key=ausente (link sem validade)` | o dono cria a chave na InfinitePay e cola no painel do Render (nunca pelo chat); mudar env redeploya, então fora do horário |
+| 164 | **P2** | `MANTO_PROXY_SECRET` nos painéis do `manto-frontend` e do `manto-backend` (Render) | a prova de que o IP do cliente veio do Node (revisão T059 da 310) fica **desligada** até o dono criar a variável com o MESMO valor nos dois serviços: sem ela o backend aceita `X-Manto-Client-Ip` sem prova, e quem chama `manto-backend.onrender.com` direto trocando o cabeçalho escapa de todo limite de taxa — o de login inclusive. O boot avisa `[proxy] MANTO_PROXY_SECRET ausente` | o dono cria um valor aleatório e cola nos dois painéis — frontend primeiro, backend depois (ao contrário, por alguns minutos todo mundo cai no mesmo balde); fora do horário |
+

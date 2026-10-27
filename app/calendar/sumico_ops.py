@@ -35,8 +35,16 @@ from sqlalchemy import ColumnElement, and_, update
 from app import db
 from app.calendar import service as gcal
 from app.calendar.cancel_ops import total_recebido
-from app.constants import EVENT_TYPE_SHOW, now_sp
-from app.models import AuditLog, CalendarEvent, EventContract, EventLog, EventPayment, EventRole
+from app.constants import EVENT_TYPE_SHOW, VINCULO_LIGADO, now_sp
+from app.models import (
+    AuditLog,
+    CalendarEvent,
+    ClicksignDocumento,
+    EventContract,
+    EventLog,
+    EventPayment,
+    EventRole,
+)
 from app.money import format_brl
 from app.notificacoes import notificacoes_ops
 
@@ -200,7 +208,13 @@ def preso_ao_evento(event: CalendarEvent) -> PresoAoEvento:
         venda=Decimal(str(event.sale_value or 0)),
         recebido=total_recebido(event),
         n_comprovantes=EventPayment.query.filter_by(event_id=event.id).count(),
-        tem_contrato=EventContract.query.filter_by(event_id=event.id).first() is not None,
+        # Feature 317: o contrato da ClickSign ligado prende o evento como o anexo — sem isso, o
+        # sumiço apagaria a venda "vazia" com contrato aguardando assinatura (analyze R6).
+        tem_contrato=(
+            EventContract.query.filter_by(event_id=event.id).first() is not None
+            or ClicksignDocumento.query.filter_by(event_id=event.id, vinculo=VINCULO_LIGADO).first()
+            is not None
+        ),
         n_escalados=escalados.count() - n_tecnico,
         grupo=_grupo_do_evento(event),
         tecnico_automatico=n_tecnico > 0,

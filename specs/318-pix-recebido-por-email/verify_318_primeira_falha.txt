@@ -1,0 +1,52 @@
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+[2026-10-22 15:49:17,511] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+[2026-10-22 15:49:18,377] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+[2026-10-22 15:49:20,138] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 15:49:20,304] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 15:49:20,477] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+[2026-10-22 15:49:20,909] WARNING in __init__: [sessao] 0 cookies 'session' na mesma requisição /api/auth/login — órfão recolhido de .mantoproducoes.com.br
+
+── verify 318 ──
+  FALHA      1 · valor + nome, venda única → liga sozinho: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      2 · o mesmo e-mail duas vezes: 'h1_raw'
+  FALHA      3 · sinal de 50%: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      4 · já pagou antes → liga sem o nome: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      5 · sem DKIM do Inter → para conferir: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      6 · cancelada e quitada não são candidatas: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      7 · duas vendas com o mesmo saldo: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      8 · só o valor bate: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      9 · Comercial confirma: GET /api/pix?aba=conferir como com → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      10 · descartar a única sugestão: 'h2c_pix'
+  FALHA      11 · Outra venda…: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      12 · Casting lê/responde (DEVE FALHAR): Casting leu a fila: 404
+  FALHA      13 · comprovante igual ao PIX → possível duplicata → anexar: 'h1_evento'
+  FALHA      14 · é outro pagamento: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      15 · PIX concilia com comprovante manual: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      16 · comprovante de valor diferente: 'h1_evento'
+  FALHA      17 · resumo por conta × mês: GET /api/pix/resumo-por-conta?meses=1 como fin → 404 {
+  "error": {
+    "message": "Recurso n\u00e3o encontrado."
+  }
+}
+
+  FALHA      18 · conta não cadastrada: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      19 · repasse da Prime → ignorado: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      20 · repasse da InfinitePay → só Financeiro: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      21 · Comercial confirma repasse (DEVE FALHAR): 'h5_pix'
+  FALHA      22 · repasse: valor cobrado, taxa e duas vendas: 'h5_pix'
+  FALHA      23 · leitura desligada / antes do início: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      24 · formato desconhecido → saúde: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      25 · duas rodadas ao mesmo tempo: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      26 · Comercial desfaz (DEVE FALHAR): 'h2_pix'
+  FALHA      27 · desfazer: sem arquivo, com arquivo, repasse: 'h2_pix'
+  FALHA      27b · PIX adiantado religa em 7 dias, não em 8: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  FALHA      28 · pagamento sem arquivo no React e no Jinja: cannot import name 'pix_email_ops' from 'app.financeiro' (C:\tmp\mp318\app\financeiro\__init__.py)
+  OK         29 · limpeza e nenhuma rede
+
+1/30 OK

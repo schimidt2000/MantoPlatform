@@ -196,7 +196,7 @@ export function useVincularEnsaio(ensaioId: number) {
 // trechos que dependem do evento, em `EventoDetalhe.mensagens`).
 
 /** Saudação por faixa de horário, como no fluxo Jinja de hoje. */
-function saudacao(): string {
+export function saudacao(): string {
   const hora = new Date().getHours();
   if (hora >= 5 && hora < 12) return "Bom dia";
   if (hora >= 12 && hora < 18) return "Boa tarde";
@@ -232,6 +232,47 @@ export function buildCobrancaMsg(m: EventMensagens): string {
     "",
     valor,
     "Poderia, por gentileza, confirmar o pagamento? Qualquer dúvida estou à disposição!",
+  ].join("\n");
+}
+
+/** O que a mensagem do contrato precisa do evento (o detalhe e a linha da Home mandam o mesmo). */
+export interface FragmentosDoContrato {
+  characters: string;
+  date_line: string;
+  location?: string;
+}
+
+/** Como a ClickSign pediu a assinatura, na voz da mensagem (feature 317). */
+const ONDE_A_CLICKSIGN_MANDOU: Record<string, string> = {
+  whatsapp:
+    "te mandou uma mensagem aqui no WhatsApp, numa conversa com a ClickSign. É só abrir essa conversa, tocar no link e assinar",
+  email:
+    "te mandou um e-mail (vale olhar também a caixa de spam). É só abrir o e-mail, tocar no link e assinar",
+  sms: "te mandou um SMS. É só abrir a mensagem, tocar no link e assinar",
+};
+
+/**
+ * Mensagem do "Cobrar contrato" (feature 317): explica que a ClickSign já mandou o pedido de
+ * assinatura e por onde. O canal vem do signatário na ClickSign; sem canal conhecido, o texto do
+ * WhatsApp (o dos fluxos "Contratos Monta").
+ */
+export function buildCobrancaContratoMsg(
+  m: FragmentosDoContrato,
+  canal?: string | null,
+  prazo?: string | null,
+): string {
+  const onde = ONDE_A_CLICKSIGN_MANDOU[canal ?? ""] ?? ONDE_A_CLICKSIGN_MANDOU.whatsapp;
+  return [
+    `${saudacao()}! Tudo bem?`,
+    "Passando sobre o contrato do seu evento:",
+    "",
+    m.characters,
+    m.date_line,
+    ...(m.location ? [m.location] : []),
+    "",
+    `Para garantir a sua data, falta só assinar o contrato. A ClickSign, plataforma de assinatura digital que usamos, ${onde} — leva menos de um minuto.`,
+    ...(prazo ? [`O prazo para assinar vai até ${prazo}.`] : []),
+    "Se não encontrar a mensagem ou o link não abrir, me avise que eu reenvio!",
   ].join("\n");
 }
 
@@ -290,7 +331,7 @@ export const PORTAL_PUBLICO = "portal.mantoproducoes.com.br";
 /** Mensagem de convite individual de um talento (botão "Copiar convite" do card). */
 export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: string): string {
   const linhas = [
-    `Ola, ${role.talent?.first_name ?? ""}! Voce tem um convite da Manto Producoes. 🎉`,
+    `Olá, ${role.talent?.first_name ?? ""}! Você tem um convite da Manto Produções. 🎉`,
     "",
     `🎪 *${ctx.title}*`,
     // 40% das escalações são cargo (Coordenador, Técnico de Som, Maquiador, Foto/Vídeo,
@@ -301,9 +342,9 @@ export function buildConviteMsg(role: RoleItem, ctx: ConviteContext, cache: stri
   if (ctx.dateLabel) linhas.push(`📅 ${ctx.dateLabel}`);
   if (ctx.timeLabel) linhas.push(`🕐 ${ctx.timeLabel}`);
   if (ctx.location) linhas.push(`📍 ${ctx.location}`);
-  if (cache) linhas.push(`💰 Cache: ${cache}`);
+  if (cache) linhas.push(`💰 Cachê: ${cache}`);
   if (ctx.makeupTime) {
-    linhas.push("", "💄 *Maquiagem*", `🕐 Horario: ${ctx.makeupTime}`);
+    linhas.push("", "💄 *Maquiagem*", `🕐 Horário: ${ctx.makeupTime}`);
     if (ctx.makeupLocation) linhas.push(`📍 Local: ${ctx.makeupLocation}`);
   }
   linhas.push(

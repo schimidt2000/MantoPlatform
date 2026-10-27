@@ -74,7 +74,7 @@ export function PortalResetPasswordPage() {
       <AuthCard title="Senha redefinida">
         <div className="space-y-4 text-sm text-ink">
           <CheckCircle2 className="h-10 w-10 text-green" aria-hidden="true" />
-          <p>Tudo certo! Sua nova senha já está valendo.</p>
+          <p>Sua nova senha já está ativa.</p>
           <Button
             className="w-full"
             onClick={() => navigate(comDestino("/login", destino), { replace: true })}

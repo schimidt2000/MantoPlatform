@@ -700,7 +700,7 @@ export function PagamentosPage() {
                 excluído{hiddenSelectedCount === 1 ? "" : "s"} também.
               </p>
             )}
-            <p className="mt-2">Não dá para desfazer.</p>
+            <p className="mt-2">Esta ação não pode ser desfeita.</p>
           </>
         }
         confirmLabel="Excluir"

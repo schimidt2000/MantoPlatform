@@ -37,6 +37,7 @@ import { SEVERIDADE_TOM, diaMes, distanciaDaData } from "../lib/homeListas";
 import { BotaoMostrarTodas, GrupoDeLinhas, LIMITE_LINHAS_PAINEL, PanelGroup } from "../components/home/GrupoDeLinhas";
 import { LinhaDaHome } from "../components/home/LinhaDaHome";
 import { PainelCobrancas } from "../components/home/PainelCobrancas";
+import { PainelContratos } from "../components/home/PainelContratos";
 import { PainelSemValor } from "../components/home/PainelSemValor";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
@@ -138,7 +139,7 @@ function BotaoCargo({ task, acao }: { task: DashboardTaskRef; acao: "dismiss" | 
       className={mutacao.isError ? "text-red" : undefined}
       onClick={() => mutacao.mutate({ roleId, eventId: task.event_id })}
     >
-      {mutacao.isError ? "Tentar de novo" : acao === "dismiss" ? "Dispensar" : "Restaurar"}
+      {mutacao.isError ? "Tentar novamente" : acao === "dismiss" ? "Dispensar" : "Restaurar"}
     </Button>
   );
 }
@@ -402,7 +403,7 @@ function EnsaioPanel({
           <PanelGroup title={`Ensaios órfãos (${summary.orphans.length})`}>
             <ListaTruncada>
               {summary.orphans.map((item) => (
-                <EnsaioEventRow key={item.event_id} item={item} extra="show original removido" />
+                <EnsaioEventRow key={item.event_id} item={item} extra="show original excluído" />
               ))}
             </ListaTruncada>
           </PanelGroup>
@@ -823,6 +824,7 @@ type SectionKey =
   | "figurino"
   | "ensaio"
   | "comercial"
+  | "contratos"
   | "sem_valor"
   | "formularios"
   | "recorrentes";
@@ -877,6 +879,29 @@ function statsComerciais(c: ComercialSummary): SectionStat[] {
       urgent: pagamentos.filter(cobrancaVermelha).length,
       emDia: resumo ? pagamentos.length === 0 : undefined,
       detail: pagamentos.length > 0 ? `R$ ${formatBRL(emAberto)} em aberto` : null,
+    });
+  }
+  // Feature 317: `undefined` = servidor antigo (sem card); `null` = falhou; desligada = sem card.
+  if (c.contratos === null) {
+    stats.push(cardEmFalha("contratos", "✍️", "Contratos"));
+  } else if (c.contratos?.integracao_ligada) {
+    const k = c.contratos;
+    const linhas = [...k.para_cobrar, ...k.vencidos, ...k.sem_contrato];
+    const paraAgir = k.resumo.para_agir + k.a_conferir.length;
+    stats.push({
+      key: "contratos",
+      emoji: "✍️",
+      label: "Contratos",
+      count: paraAgir,
+      noTotal: paraAgir,
+      urgent: linhas.filter((l) => l.severidade === "vermelho").length,
+      emDia: paraAgir === 0,
+      detail:
+        k.para_cobrar.length > 0
+          ? `${k.para_cobrar.length} aguardando assinatura`
+          : k.a_conferir.length > 0
+            ? `${k.a_conferir.length} a conferir`
+            : null,
     });
   }
   if (c.sem_valor === null) {
@@ -1315,7 +1340,7 @@ export function DashboardPage() {
                   onOpenChange={aoAlternar("confirmacoes")}
                 >
                   {data.casting.unconfirmed.length === 0 ? (
-                    <p className="py-2 text-sm text-muted">Todo mundo confirmado. ✓</p>
+                    <p className="py-2 text-sm text-muted">Todos confirmados. ✓</p>
                   ) : (
                     <>
                       {/* O robô só cobra quem JÁ recebeu convite, e só na semana do evento — quem
@@ -1373,6 +1398,47 @@ export function DashboardPage() {
               </div>
             )}
 
+            {/* Feature 318: PIX lidos do aviso do banco esperando "É esta?" — uma linha só, com
+                atalho para a fila; some quando não há nenhum (ou o servidor é antigo). */}
+            {data.comercial?.pix_para_conferir && data.comercial.pix_para_conferir.total > 0 && (
+              <div className="overflow-hidden rounded-lg border border-line">
+                <LinhaDaHome
+                  severidade="amarelo"
+                  cabecalho={
+                    <span>
+                      💸 {data.comercial.pix_para_conferir.total} PIX para conferir — é de qual venda?
+                    </span>
+                  }
+                  detalhe="O sistema leu o aviso do banco, mas não teve certeza da venda."
+                  acoes={
+                    <Button asChild size="sm">
+                      <Link to="/pix">Conferir</Link>
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+
+            {/* Feature 318 (23/10): a tarefa de incluir o comprovante do banco dos PIX que já entraram. */}
+            {data.comercial?.pix_sem_comprovante && data.comercial.pix_sem_comprovante.total > 0 && (
+              <div className="overflow-hidden rounded-lg border border-line">
+                <LinhaDaHome
+                  severidade="cinza"
+                  cabecalho={
+                    <span>
+                      📎 {data.comercial.pix_sem_comprovante.total} PIX sem comprovante — incluir o PDF do banco
+                    </span>
+                  }
+                  detalhe="O valor já conta como recebido; falta anexar o comprovante."
+                  acoes={
+                    <Button asChild size="sm" variant="outline">
+                      <Link to="/pix?aba=sem_comprovante">Incluir</Link>
+                    </Button>
+                  }
+                />
+              </div>
+            )}
+
             {/* Feature 299: o painel "Comercial" virou dois, "Cobranças" e "Sem valor", cada um
                 com o nome do seu card. O contador do painel aberto mostra todas as linhas. */}
             {data.comercial && (
@@ -1394,6 +1460,31 @@ export function DashboardPage() {
                 </SectorPanel>
               </div>
             )}
+
+            {/* Feature 317: `undefined` = servidor antigo (sem painel); `null` = falhou (aviso).
+                Desligada (sem token), só o Superadmin vê o painel, com o aviso. */}
+            {data.comercial &&
+              data.comercial.contratos !== undefined &&
+              (data.comercial.contratos === null ||
+                data.comercial.contratos.integracao_ligada ||
+                user?.is_superadmin) && (
+                <div {...propsSecao("contratos")}>
+                  <SectorPanel
+                    title="✍️ Contratos"
+                    count={statPorSecao.get("contratos")?.count ?? 0}
+                    falhou={statPorSecao.get("contratos")?.falhou}
+                    urgentCount={statPorSecao.get("contratos")?.urgent ?? 0}
+                    open={painelAberto("contratos")}
+                    onOpenChange={aoAlternar("contratos")}
+                  >
+                    <PainelContratos
+                      contratos={data.comercial.contratos}
+                      onTentarDeNovo={tentarDeNovo}
+                      tentando={dashboard.isFetching}
+                    />
+                  </SectorPanel>
+                </div>
+              )}
 
             {/* `undefined` = servidor antigo (sem painel); `null` = a lista falhou (aviso). */}
             {data.comercial && data.comercial.sem_valor !== undefined && (
@@ -1478,7 +1569,7 @@ export function DashboardPage() {
             !data.financeiro && (
               <Card>
                 <CardContent className="p-5">
-                  <p className="text-sm text-muted">Tudo em dia! ✓</p>
+                  <p className="text-sm text-muted">Tudo em dia ✓</p>
                 </CardContent>
               </Card>
             )}

@@ -137,7 +137,7 @@ export function AvaliacaoCastingPage() {
   return (
     <div className="w-full space-y-4 px-6 py-6 sm:px-8">
       <PageHeader
-        title="Resumo das Avaliações"
+        title="Resumo das avaliações"
         subtitle="Panorama das avaliações dos eventos — filtre por período, categoria ou evento"
         className="mb-0"
       />
@@ -159,7 +159,7 @@ export function AvaliacaoCastingPage() {
               <p className="mt-1 text-xs text-muted">
                 {data.fully_anonymous
                   ? "A autoria está oculta para todos, inclusive para você. Desative para voltar a ver quem avaliou."
-                  : "Os comentários são anônimos para os demais usuários; só você (super admin) vê a autoria. Ative o modo anônimo total para ocultar a autoria até para você."}
+                  : "Os comentários são anônimos para os demais usuários; só você (Superadmin) vê a autoria. Ative o modo anônimo total para ocultar a autoria até para você."}
               </p>
             </div>
             <Button
@@ -169,8 +169,8 @@ export function AvaliacaoCastingPage() {
               onClick={() => {
                 const next = !data.fully_anonymous;
                 const msg = next
-                  ? "Ativar o modo anônimo total? Nem o super admin verá quem fez cada avaliação."
-                  : "Desativar o modo anônimo total? A autoria volta a aparecer para o super admin.";
+                  ? "Ativar o modo anônimo total? Nem o Superadmin verá quem fez cada avaliação."
+                  : "Desativar o modo anônimo total? A autoria volta a aparecer para o Superadmin.";
                 if (window.confirm(msg)) toggleAnon.mutate(next);
               }}
             >

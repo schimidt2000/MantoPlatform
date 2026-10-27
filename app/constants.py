@@ -361,12 +361,44 @@ VIRTUAL_REFUND_STATUS_CONCLUIDA = "concluida"
 # operadora não respondeu — a família pode ter pago em dia e perdido o horário mesmo assim.
 VIRTUAL_REFUND_REASON_CONFLITO = "conflito_horario"
 VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO = "conflito_sem_confirmacao"
+# Feature 310: todo pagamento provado termina em venda ou numa devolução com motivo — nunca em
+# dinheiro sem dono no sistema (spec R-01).
+VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO = "pagamento_em_dobro"
+VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO = "pagamento_sem_pedido_ativo"
+VIRTUAL_REFUND_REASON_HORARIO_PASSOU = "horario_passou"
+VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO = "sem_vaga_de_video"
+VIRTUAL_REFUND_REASON_DESISTENCIA = "desistencia"
 VIRTUAL_REFUND_REASON_LABELS = {
     VIRTUAL_REFUND_REASON_CONFLITO: "Horário já vendido a outra família",
     VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO: (
         "Horário liberado sem confirmação da operadora — a família pode ter pago no prazo"
     ),
+    VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO: "Segundo pagamento de um pedido já pago",
+    VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO: "Pagamento de um pedido já cancelado",
+    VIRTUAL_REFUND_REASON_HORARIO_PASSOU: "Pagamento chegou quando o horário já tinha começado",
+    VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO: "Vídeos gravados esgotaram antes do pagamento",
+    VIRTUAL_REFUND_REASON_DESISTENCIA: "Cancelado pela equipe (desistência da família)",
 }
+
+# Desfechos do aviso de pagamento (feature 310, R-06). Os finais encerram o aviso; os outros são
+# reprocessados pela varredura até virarem final ou "a conferir".
+VIRTUAL_AVISO_EFETIVADO = "efetivado"
+VIRTUAL_AVISO_DEVOLUCAO = "devolucao_aberta"
+VIRTUAL_AVISO_CONFLITO = "conflito"
+VIRTUAL_AVISO_DUPLICADO = "duplicado"
+VIRTUAL_AVISO_DIVERGENTE = "divergente"
+VIRTUAL_AVISO_ORFAO = "orfao"
+VIRTUAL_AVISO_RETIDO = "retido"
+VIRTUAL_AVISO_PENDENTE_PROVA = "pendente_prova"
+VIRTUAL_AVISO_RECUSADO_TOKEN = "token_invalido"
+VIRTUAL_AVISO_FINAIS = frozenset({
+    VIRTUAL_AVISO_EFETIVADO, VIRTUAL_AVISO_DEVOLUCAO, VIRTUAL_AVISO_CONFLITO,
+    VIRTUAL_AVISO_DUPLICADO, VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO,
+    VIRTUAL_AVISO_RECUSADO_TOKEN,
+})
+VIRTUAL_AVISO_STATE_PENDENTE = "pendente"
+VIRTUAL_AVISO_STATE_PROCESSANDO = "processando"
+VIRTUAL_AVISO_STATE_DECIDIDO = "decidido"
 
 # ── Destino do formulário (feature 298) ───────────────────────────────────────────────────────
 # Corte padrão de "o que é tarefa": a data de início do sistema (`SiteSetting.release_date`) manda;
@@ -508,6 +540,99 @@ MOTIVOS_AJUSTE_COMISSAO = {
 # `NOTA_CICLO_VALOR_TARDIO`. `_comissao_existente` e a reconciliação ignoram a linha marcada.
 NOTA_COMISSAO_PROPRIA_DO_DIA = "Comissão própria do dia"
 
+# ── Contratos da ClickSign (feature 317) ──────────────────────────────────────────────────────
+# O que é cada envelope da conta: só o de cliente liga a uma venda; o de artista (contrato de
+# prestação de serviços) e os avulsos ficam fora das listas.
+CLICKSIGN_TIPO_CLIENTE = "cliente"
+CLICKSIGN_TIPO_ARTISTA = "artista"
+CLICKSIGN_TIPO_OUTRO = "outro"
+# Marca do contrato de artista no nome do envelope (depois de normalizar para NFC: a ClickSign
+# devolve "Ç" decomposto, e sem normalizar a busca falha).
+CLICKSIGN_MARCA_ARTISTA = "PRESTAÇÃO DE SERVIÇOS ARTÍSTICOS"
+
+# Estado do vínculo documento → venda (data-model §clicksign_documentos).
+VINCULO_LIGADO = "ligado"
+VINCULO_A_CONFERIR = "a_conferir"
+VINCULO_DESCARTADO = "descartado"
+VINCULO_FORA = "fora"
+VINCULO_ORIGEM_AUTO = "auto"
+VINCULO_ORIGEM_MANUAL = "manual"
+# Por que o documento ficou para conferir; a tela traduz pelo dicionário abaixo.
+CONFERIR_SEM_CANDIDATO = "sem_candidato"
+CONFERIR_EMPATE = "empate"
+CONFERIR_CANCELADA = "cancelada"
+CONFERIR_TELEFONE_DIVERGE = "telefone_diverge"
+CONFERIR_DATA_ILEGIVEL = "data_ilegivel"
+CONFERIR_SEM_TELEFONE = "sem_telefone"
+CONFERIR_DESLIGADO = "desligado"
+CONFERIR_VENDA_EXCLUIDA = "venda_excluida"
+CONFERIR_MOTIVOS = {
+    CONFERIR_SEM_CANDIDATO: "Nenhuma venda com esta data e este telefone",
+    CONFERIR_EMPATE: "Mais de uma venda com esta data e este telefone",
+    CONFERIR_CANCELADA: "A venda desta data está cancelada",
+    CONFERIR_TELEFONE_DIVERGE: "O telefone de quem assina não é o do nome do contrato",
+    CONFERIR_DATA_ILEGIVEL: "Não foi possível ler a data no nome do contrato",
+    CONFERIR_SEM_TELEFONE: "O nome do contrato não tem telefone",
+    CONFERIR_DESLIGADO: "Desligado da venda por alguém da equipe",
+    CONFERIR_VENDA_EXCLUIDA: "A venda ligada foi excluída",
+}
+
+# Situação do contrato da venda (FR-007), com o rótulo que a tela mostra.
+CONTRATO_ASSINADO = "assinado"
+CONTRATO_ASSINADO_MANUAL = "assinado_manual"
+CONTRATO_AGUARDANDO = "aguardando"
+CONTRATO_VENCIDO = "vencido"
+CONTRATO_RECUSADO = "recusado"
+CONTRATO_SEM_CONTRATO = "sem_contrato"
+CONTRATO_ROTULOS = {
+    CONTRATO_ASSINADO: "Assinado",
+    CONTRATO_ASSINADO_MANUAL: "Assinado (marcado à mão)",
+    CONTRATO_AGUARDANDO: "Aguardando assinatura",
+    CONTRATO_VENCIDO: "Venceu sem assinatura",
+    CONTRATO_RECUSADO: "Recusado pela cliente",
+    CONTRATO_SEM_CONTRATO: "Sem contrato na ClickSign",
+}
+# Por que "Cobrar contrato" fica desativado (spec, História 2, cenário 3).
+COBRAR_CONTRATO_BLOQUEIOS = {
+    CONTRATO_ASSINADO: "Contrato já assinado",
+    CONTRATO_ASSINADO_MANUAL: "Contrato já assinado",
+    CONTRATO_VENCIDO: "O contrato venceu sem assinatura. Gere um novo na ClickSign.",
+    CONTRATO_RECUSADO: "A cliente recusou o contrato. Gere um novo na ClickSign.",
+    CONTRATO_SEM_CONTRATO: "Nenhum contrato na ClickSign para esta venda",
+}
+COBRAR_CONTRATO_BLOQUEIO_SATELITE = "A cobrança deste grupo está no evento principal"
+COBRAR_CONTRATO_BLOQUEIO_CANCELADA = "O evento está cancelado"
+
+# Régua do contrato (premissa 5 da spec, confirmada no clarify): vermelho quando o prazo da
+# ClickSign vence hoje ou amanhã, amarelo em 2–3 dias; a distância do evento usa a régua da 298
+# (`FORM_COR_*`), e vale a pior das duas.
+CONTRATO_PRAZO_VERMELHO_ATE_DIAS = 1
+CONTRATO_PRAZO_AMARELO_ATE_DIAS = 3
+# "Venda sem contrato" só lista evento nos próximos 30 dias (clarify).
+CONTRATO_SEM_CONTRATO_JANELA_DIAS = 30
+
+# Autor do que a sincronização grava sozinha (histórico do evento e anexo do PDF assinado).
+CLICKSIGN_AUTOR = "ClickSign (automático)"
+CLICKSIGN_AUTOR_PAPEL = "Sistema"
+# Folga do marco da sincronização incremental: relógios e atraso de gravação na ClickSign.
+CLICKSIGN_CURSOR_FOLGA_MINUTOS = 10
+# Quanto tempo o segredo anterior do aviso continua aceito depois de recadastrar (molde 310).
+CLICKSIGN_SEGREDO_ANTERIOR_HORAS = 24
+# Tamanho máximo do corpo do aviso da ClickSign (molde do aviso da InfinitePay da 310).
+CLICKSIGN_AVISO_CORPO_MAXIMO = 64 * 1024
+# Eventos que a Manto pede no cadastro do aviso: só servem de "algo mudou" (R-01).
+CLICKSIGN_EVENTOS_DO_AVISO = (
+    "add_signer",
+    "upload",
+    "sign",
+    "close",
+    "auto_close",
+    "document_closed",
+    "deadline",
+    "cancel",
+    "refusal",
+)
+
 VIRTUAL_NOTIFICATION_KIND_COMPRA = "compra_confirmada"
 VIRTUAL_NOTIFICATION_KIND_VIDEO = "video_pronto"
 VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO = "cancelamento"
@@ -526,6 +651,23 @@ VIRTUAL_NOTIFICATION_LABELS = {
 # Duração fixa de uma chamada ao vivo e janela do "soft lock" do horário (FR-017).
 VIRTUAL_SLOT_MINUTES = 10
 VIRTUAL_SOFT_LOCK_MINUTES = 15
+# Feature 310. Reservar só até 2 h antes (decisão do dono, 19/10/2026: a equipe lê as dicas e o
+# artista se prepara). No PAGAMENTO a folga é outra, 30 min: quem reservou 2h01 antes e pagou 15 min
+# depois cumpriu a regra e não pode virar devolução (research R1.6).
+VIRTUAL_ANTECEDENCIA_RESERVA_HORAS = 2
+VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO = 30
+# Sala do Meet: depois das 3 tentativas da política, retenta a cada 10 min até o horário; faltando
+# menos de 6 h sem sala, a equipe é avisada (R11).
+VIRTUAL_SALA_RETRY_LONGO_MIN = 10
+VIRTUAL_SALA_ALERTA_HORAS = 6
+# Prazo (s) da criação do evento da venda no Google (feature 310, FR-016): o caminho do aviso e do
+# retorno não pode ficar 60 s × 3 tentativas pendurado com a família esperando.
+VIRTUAL_GOOGLE_TIMEOUT_S = 20
+# Aviso de pagamento sem desfecho: reprocessado por até 48 h, depois vira "a conferir" (R-06).
+VIRTUAL_AVISO_REPROCESSA_HORAS = 48
+VIRTUAL_AVISO_RETRY_LONGO_MIN = 10
+# Segredo anterior do aviso continua aceito por 24 h depois de regerar (R-12).
+VIRTUAL_TOKEN_ANTERIOR_HORAS = 24
 
 # Política única de retry para chamadas externas (FR-056): 3 tentativas nos minutos 0, 1 e 2.
 # O intervalo curto é deliberado — protege contra vender horário já pago sem prender estoque no
@@ -647,3 +789,81 @@ CODIGOS_RECUSA_DO_CANCELAMENTO = frozenset({
     CODIGO_PAGO_ABAIXO_DO_DEVOLVIDO, CODIGO_BV_NAO_ESTA_A_PAGAR, CODIGO_VALOR_MUDOU,
     CODIGO_DEVOLUCAO_TRAVADA, CODIGO_ESTADO_MUDOU,
 })
+
+# Feature 315: as recusas do pedido de cancelamento (`app/calendar/solicitacao_ops.py`), lidas pela
+# união `CodigoRecusaPedido` (`lib/eventOps.ts`). Reusa as do cancelar que valem para o pedido.
+CODIGO_PEDIDO_PENDENTE = "pedido_pendente"
+CODIGO_SEM_PEDIDO = "sem_pedido"
+CODIGOS_RECUSA_DO_PEDIDO = frozenset({
+    CODIGO_EVENTO_CANCELADO, CODIGO_ENSAIO, CODIGO_CACHE_PAGO, CODIGO_PEDIDO_PENDENTE, CODIGO_SEM_PEDIDO,
+})
+# Feature 318: PIX recebido lido do aviso por e-mail do Inter e ligado à venda.
+# Origem do aviso e do comprovante. O comprovante de origem PIX pode existir sem arquivo: o aviso
+# autenticado do banco é a prova (`EventPayment.file_path` NULL só nessa origem — CHECK no banco).
+PIX_ORIGEM_EMAIL_INTER = "email_inter"
+EVENT_PAYMENT_ORIGEM_COMPROVANTE = "comprovante"
+EVENT_PAYMENT_ORIGEM_PIX = "pix_email"
+
+# Tipos de aviso que o parser reconhece. Só `pix` é comparado com vendas.
+PIX_TIPO_PIX = "pix"
+PIX_TIPO_DEVOLUCAO = "devolucao"
+PIX_TIPO_DESCONHECIDO = "desconhecido"
+
+# Estados do PIX recebido (data-model.md). `ligado_*` ⇔ há pagamento ligado.
+PIX_ESTADO_NOVO = "novo"
+PIX_ESTADO_LIGADO_AUTO = "ligado_auto"
+PIX_ESTADO_LIGADO_CONFIRMADO = "ligado_confirmado"
+PIX_ESTADO_PARA_CONFERIR = "para_conferir"
+PIX_ESTADO_SEM_VENDA = "sem_venda"
+PIX_ESTADO_CONTA_PROPRIA = "conta_propria"
+PIX_ESTADO_IGNORADO = "ignorado"
+PIX_ESTADO_NAO_ENTENDIDO = "nao_entendido"
+PIX_ESTADOS = frozenset({
+    PIX_ESTADO_NOVO, PIX_ESTADO_LIGADO_AUTO, PIX_ESTADO_LIGADO_CONFIRMADO, PIX_ESTADO_PARA_CONFERIR,
+    PIX_ESTADO_SEM_VENDA, PIX_ESTADO_CONTA_PROPRIA, PIX_ESTADO_IGNORADO, PIX_ESTADO_NAO_ENTENDIDO,
+})
+PIX_ESTADOS_LIGADOS = frozenset({PIX_ESTADO_LIGADO_AUTO, PIX_ESTADO_LIGADO_CONFIRMADO})
+
+# Tipo da sugestão: venda comum, ou repasse da InfinitePay ("Prime Dreams" no MEI sem par na Prime)
+# — este só Financeiro/Superadmin veem e nunca liga sozinho (decisão do dono, 22/10).
+PIX_SUGESTAO_VENDA = "venda"
+PIX_SUGESTAO_REPASSE = "repasse_infinitepay"
+
+# Valor "forte" é igual ao centavo; o repasse da InfinitePay fica entre 88% e 100% do valor cobrado
+# (a taxa) e pode juntar até 3 vendas; o par do repasse da Prime é procurado nos 3 dias anteriores.
+PIX_TOLERANCIA_VALOR = Decimal("0.01")
+PIX_REPASSE_FAIXA = (Decimal("0.88"), Decimal("1.00"))
+PIX_REPASSE_MAX_VENDAS = 3
+PIX_REPASSE_PRIME_DIAS = 3
+PIX_REPASSE_PRIME_MAX_SOMA = 3
+# PIX sem venda é comparado de novo por 7 dias: a cliente costuma pagar o sinal antes de a venda
+# ser cadastrada (clarify de 22/10).
+PIX_REAVALIAR_DIAS = 7
+PIX_MAX_SUGESTOES = 3
+
+# "Nome bate": termos normalizados de ≥ 3 letras, sem estas palavras de ligação/razão social;
+# dois termos em comum (ou o único termo do nome curto), ou semelhança do nome inteiro ≥ 0,85.
+PIX_NOME_STOPWORDS = frozenset({
+    "ltda", "me", "mei", "eireli", "sa", "epp", "de", "da", "do", "das", "dos", "e", "cia",
+})
+PIX_NOME_SEMELHANCA = 0.85
+
+# Saúde da leitura: sem rodada há mais disso, a tela mostra "leitura parada".
+PIX_SAUDE_PARADA_MIN = 60
+PIX_SAUDE_JANELA_DIAS = 7
+
+# Pagadores próprios (transferência entre contas da empresa). O Superadmin edita a lista na tela;
+# este é só o valor inicial da migration.
+PIX_PAGADORES_PROPRIOS_PADRAO = "Prime Dreams\nMonta Producoes"
+# O nome com que o Inter Prime e a InfinitePay repassam ao MEI (normalizado).
+PIX_PAGADOR_PRIME = "prime dreams"
+# Saudação do aviso do Inter ("Olá, PRIME") que identifica a conta Prime antes do cadastro do número.
+PIX_TITULAR_PRIME = "PRIME"
+
+PIX_KIND_LIGADO = "pix.ligado"
+PIX_KIND_PARA_CONFERIR = "pix.para_conferir"
+PIX_KIND_REPASSE = "pix.repasse_infinitepay"
+# Decisão do dono (23/10): o PIX entra como recebido, mas o comprovante oficial (PDF do banco) é
+# tarefa de gente — o Financeiro é avisado, e Comercial/Financeiro/Superadmin anexam.
+PIX_KIND_SEM_COMPROVANTE = "pix.sem_comprovante"
+PIX_ENTIDADE_PAGAMENTO = "event_payment"

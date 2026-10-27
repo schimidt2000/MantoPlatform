@@ -24,10 +24,22 @@ from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from zoneinfo import ZoneInfo
 
-from app.constants import EVENT_TYPE_SHOW, EVENT_TYPE_VIRTUAL, RoleName, now_sp
+from sqlalchemy import or_
+
+from app.constants import (
+    EVENT_TYPE_SHOW,
+    EVENT_TYPE_VIRTUAL,
+    PIX_ESTADO_LIGADO_AUTO,
+    PIX_ESTADOS_LIGADOS,
+    PIX_SUGESTAO_REPASSE,
+    SITUACAO_EXCLUSAO_SOLICITADA,
+    RoleName,
+    now_sp,
+)
 from app.models import (
     CalendarEvent,
     ClientFeedback,
+    ContaRecebimento,
     EventContract,
     EventInvoice,
     EventLog,
@@ -35,6 +47,7 @@ from app.models import (
     EventRating,
     EventReimbursement,
     OrcamentoHistory,
+    PixRecebido,
     SiteSetting,
     SpecialExpense,
     User,
@@ -42,6 +55,30 @@ from app.models import (
 
 if TYPE_CHECKING:
     from app.financeiro.cobranca_ops import VendaResumo
+
+
+def _pix_dos_pagamentos(ids: list[int]) -> dict[int, dict]:
+    """O PIX que criou ou conciliou cada pagamento (feature 318), para a tela dizer de onde veio."""
+    if not ids:
+        return {}
+    alvo = set(ids)
+    achados: dict[int, dict] = {}
+    candidatos = PixRecebido.query.filter(
+        PixRecebido.estado.in_(PIX_ESTADOS_LIGADOS),
+        or_(PixRecebido.event_payment_id.in_(ids), PixRecebido.tipo_sugestao == PIX_SUGESTAO_REPASSE),
+    ).all()
+    for pix in candidatos:
+        for pid in [pix.event_payment_id, *(pix.pagamentos_extra or [])]:
+            if pid in alvo:
+                achados[pid] = {
+                    "id": pix.id,
+                    "pagador": pix.pagador_nome,
+                    "recebido_em": pix.recebido_em.isoformat(timespec="seconds"),
+                    "automatico": pix.estado == PIX_ESTADO_LIGADO_AUTO,
+                    "decidido_por": pix.decidido_por.name if pix.decidido_por else None,
+                    "conta": pix.conta.apelido if pix.conta else None,
+                }
+    return achados
 
 
 def _money(value: Any) -> float | None:
@@ -67,18 +104,24 @@ def _event_type_serializado(event) -> str:
     return parse_event_type(event.title)
 
 
-def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
+def serialize_event_summary(event: CalendarEvent, pedido_da_venda: datetime | None = None) -> dict[str, Any]:
     """Resumo de um evento para a lista/calendário da agenda (data-model.md: EventoResumo).
 
     Sem nenhum dado financeiro — a agenda não expõe valores. É o serializador único do mês, do
     dia e da busca, e vai a todo papel que vê a agenda (inclusive o revendedor EducaManto): a
     `situacao` (feature 303) leva só o código e a data — sem dinheiro, motivo nem autor. A
     precedência entre cancelado, sumiço e pedido de exclusão vem pronta do modelo.
+
+    `pedido_da_venda` (feature 315): o carimbo do pedido de "todos os dias" feito no principal,
+    calculado em lote por quem chama (`solicitacao_ops.solicitacoes_da_venda`) — o dia sem
+    situação própria aparece como "exclusao_solicitada" desde ele.
     """
     # Import tardio: parsers vivem no blueprint calendar (evita import circular no boot).
     from app.calendar.routes import parse_characters
 
-    desde = event.situacao_desde
+    situacao, desde = event.situacao, event.situacao_desde
+    if situacao is None and pedido_da_venda is not None:
+        situacao, desde = SITUACAO_EXCLUSAO_SOLICITADA, pedido_da_venda
     return {
         "id": event.id,
         "title": event.title,
@@ -90,7 +133,7 @@ def serialize_event_summary(event: CalendarEvent) -> dict[str, Any]:
         "is_satellite": event.is_satellite,
         "group_name": event.group_name or None,
         "confirmed": event.confirmed_at is not None,
-        "situacao": event.situacao,
+        "situacao": situacao,
         "situacao_desde": desde.isoformat() if desde else None,
     }
 
@@ -133,9 +176,11 @@ def build_agenda_month(year: int, month: int) -> dict[str, Any]:
     que eles cobrem dentro do mês (como o calendário Jinja).
     """
     from app.calendar.routes import _query_month_events
+    from app.calendar.solicitacao_ops import solicitacoes_da_venda
 
     events = _query_month_events(year, month)
-    summaries = [serialize_event_summary(e) for e in events]
+    da_venda = solicitacoes_da_venda(events)
+    summaries = [serialize_event_summary(e, da_venda.get(e.id)) for e in events]
 
     by_day: dict[str, list[int]] = {}
     for event in events:
@@ -782,6 +827,26 @@ def _serialize_travel(event: CalendarEvent, settings: Any) -> dict[str, Any]:
     }
 
 
+def _bloco_do_contrato(event: CalendarEvent, flags: dict[str, Any]) -> dict[str, Any] | None:
+    """O bloco `contrato` (feature 317), num savepoint: falha vira `None` e fica no log."""
+    from flask import current_app
+
+    from app import db
+    from app.contratos import situacao_ops
+
+    try:
+        with db.session.begin_nested():
+            return situacao_ops.bloco_do_evento(
+                event,
+                pode_cobrar_papel=bool(flags.get("can_confirm")),
+                pode_conferir_papel=bool(flags.get("can_confirm")),
+                hoje=now_sp().date(),
+            )
+    except Exception:  # noqa: BLE001 — o contrato não pode derrubar o detalhe do evento
+        current_app.logger.exception("bloco do contrato falhou no evento %s", event.id)
+        return None
+
+
 def _serialize_mensagens(
     event: CalendarEvent, cobranca: dict[str, Any], reembolsos: list[Any]
 ) -> dict[str, Any]:
@@ -817,12 +882,15 @@ def serialize_event_detail(
     """Detalhe do evento para leitura, com RBAC (data-model.md). Blocos financeiros só
     entram no JSON conforme o papel — nunca serializados para quem não os veria (FR-003).
     """
+    from app.calendar import solicitacao_ops
     from app.calendar.routes import parse_characters
 
     flags = flags_do_detalhe(event, user, impersonate)
     cancelado = event.is_cancelled
     is_ensaio = event.event_type == "ENSAIO"
     settings = SiteSetting.query.get(1)
+    # Feature 315: o dia que herda o pedido de "todos os dias" feito no principal (só leitura).
+    pedido_da_venda = solicitacao_ops.pedido_da_venda(event)
 
     data: dict[str, Any] = {
         "event": {
@@ -851,18 +919,20 @@ def serialize_event_detail(
             # e por quê só com `show_comercial` (segue o "Ver como"); os outros veem só a data.
             "cancelled_by": _nome_usuario(event.cancelled_by_id) if flags["show_comercial"] else None,
             "cancellation_reason": (event.cancellation_reason or None) if flags["show_comercial"] else None,
-            "deletion_request": (
-                {
-                    "requested_at": event.deletion_requested_at.isoformat(),
-                    "requested_by": _nome_usuario(event.deletion_requested_by_id),
-                    "reason": event.deletion_request_reason or None,
-                }
-                if event.has_pending_deletion_request
-                else None
+            # O pedido de cancelamento (features 224 e 315) com o corte por papel: todos veem que
+            # há pedido; motivo, autor e devolução, quem trata do cancelamento (`serializar_para`).
+            # Chamado pelo módulo: o verify o troca para provar o corte.
+            "deletion_request": solicitacao_ops.serializar_para(
+                event, flags=flags, usuario=user, impersonando=bool(impersonate)
             ),
+            "pedido_da_venda": pedido_da_venda,
             # Situação única (feature 303). `sumiu_do_google` só vem quando marcado E não
             # cancelado — a marca nunca aparece em evento cancelado.
-            "situacao": event.situacao,
+            "situacao": (
+                SITUACAO_EXCLUSAO_SOLICITADA
+                if event.situacao is None and pedido_da_venda
+                else event.situacao
+            ),
             "sumiu_do_google": (
                 {"desde": event.google_missing_since.isoformat()}
                 if event.is_google_missing
@@ -892,6 +962,16 @@ def serialize_event_detail(
         },
         "flags": flags,
     }
+
+    # Feature 315: por que o menu "Solicitar cancelamento" vem desabilitado (a frase do servidor)
+    # e, no principal com outro dia vivo, a escolha do alcance pronta — antes do retorno do ENSAIO.
+    if flags.get("can_request_delete") and not event.has_pending_deletion_request:
+        bloqueio = solicitacao_ops.bloqueio_do_proprio_dia(event)
+        if bloqueio:
+            data["event"]["pedido_bloqueado"] = bloqueio
+        escolha = solicitacao_ops.escolha_do_alcance(event)
+        if escolha:
+            data["event"]["escolha_do_alcance"] = escolha
 
     # Histórico do evento — só SUPERADMIN (real e sem impersonação, mesma semântica de
     # flags["is_superadmin"]) recebe; chave ausente = o React não renderiza a seção (mesmo
@@ -1179,21 +1259,43 @@ def serialize_event_detail(
             sum((r.amount or 0 for r in reembolsos if not r.is_collected), Decimal("0"))
         )
         data["mensagens"] = _serialize_mensagens(event, data["cobranca"], reembolsos)
+        # Feature 317: situação do contrato da ClickSign, julgada pela venda. Isolado num
+        # savepoint: uma falha aqui deixa `contrato: null` (a tela mostra o aviso) e não derruba o
+        # detalhe inteiro. Cobrar e conferir seguem o `can_confirm` (COMERCIAL/SA, zerado no
+        # cancelado), como os outros itens comerciais do menu.
+        data["contrato"] = _bloco_do_contrato(event, flags)
+        if data["contrato"] and data["contrato"]["documento"]:
+            documento = data["contrato"]["documento"]
+            data["mensagens"]["contrato_canal"] = documento["canal"]
+            data["mensagens"]["contrato_prazo"] = (
+                datetime.fromisoformat(documento["prazo"]).strftime("%d/%m") if documento["prazo"] else ""
+            )
         # Comprovantes de pagamento e reembolsos são do bloco COMERCIAL, não do financeiro: no
         # Jinja os dois painéis ficavam dentro de `{% if show_comercial %}` (event_detail.html,
         # linhas 1982-2196). Quem vende precisa saber se a cliente já pagou — e é quem sobe o
         # comprovante (`POST /events/<id>/payments` sempre foi `_CAN_EDIT_EVENT`, que inclui
         # Comercial). As ações destrutivas continuam restritas: editar valor e excluir são
         # superadmin, checado no endpoint e escondido pelo React via `flags.is_superadmin`.
+        pix_por_pagamento = _pix_dos_pagamentos([p.id for p in payments])
         data["pagamentos"] = {
             "items": [
                 {
                     "id": p.id,
                     "amount": _money(p.amount),
+                    # Feature 318: NULL no pagamento de PIX ainda sem arquivo (a prova é o aviso).
                     "file_path": p.file_path,
                     "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "origem": p.origem,
+                    "conta_id": p.conta_id,
+                    "conta": p.conta.apelido if p.conta is not None else None,
+                    "pix": pix_por_pagamento.get(p.id),
                 }
                 for p in payments
+            ],
+            # Feature 318: as contas para o campo opcional "Conta que recebeu" do comprovante.
+            "contas": [
+                {"id": c.id, "apelido": c.apelido}
+                for c in ContaRecebimento.query.filter_by(ativa=True).order_by(ContaRecebimento.id)
             ],
             "received_total": _money(sum((p.amount or 0 for p in payments), Decimal("0"))),
             # Feature 299: os comprovantes dos OUTROS eventos do grupo, um resumo por evento — o

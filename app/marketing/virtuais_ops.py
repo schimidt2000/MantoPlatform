@@ -15,6 +15,7 @@ entram nas fases seguintes.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import logging
 import re
@@ -27,13 +28,33 @@ from typing import Any
 
 from flask import current_app
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import lazyload
 
 from app import db
-from app.constants import (
+from app.constants import (  # feature 310
     EVENT_TYPE_VIRTUAL,
+    GIFT_3D_STATUS_PENDENTE,
+    VIRTUAL_ANTECEDENCIA_RESERVA_HORAS,
+    VIRTUAL_AVISO_CONFLITO,
+    VIRTUAL_AVISO_DEVOLUCAO,
+    VIRTUAL_AVISO_DIVERGENTE,
+    VIRTUAL_AVISO_DUPLICADO,
+    VIRTUAL_AVISO_EFETIVADO,
+    VIRTUAL_AVISO_FINAIS,
+    VIRTUAL_AVISO_ORFAO,
+    VIRTUAL_AVISO_PENDENTE_PROVA,
+    VIRTUAL_AVISO_RECUSADO_TOKEN,
+    VIRTUAL_AVISO_REPROCESSA_HORAS,
+    VIRTUAL_AVISO_RETIDO,
+    VIRTUAL_AVISO_RETRY_LONGO_MIN,
+    VIRTUAL_AVISO_STATE_DECIDIDO,
+    VIRTUAL_AVISO_STATE_PENDENTE,
+    VIRTUAL_AVISO_STATE_PROCESSANDO,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_CAMPAIGN_STATUSES,
+    VIRTUAL_GOOGLE_TIMEOUT_S,
+    VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO,
     VIRTUAL_MODALITIES,
     VIRTUAL_MODALITY_AO_VIVO,
     VIRTUAL_MODALITY_GRAVADO,
@@ -50,11 +71,18 @@ from app.constants import (
     VIRTUAL_PRODUCTION_STATUS_PENDENTE,
     VIRTUAL_PRODUCTION_STATUSES,
     VIRTUAL_REFUND_REASON_CONFLITO,
+    VIRTUAL_REFUND_REASON_DESISTENCIA,
+    VIRTUAL_REFUND_REASON_HORARIO_PASSOU,
     VIRTUAL_REFUND_REASON_LABELS,
+    VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO,
     VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO,
+    VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO,
+    VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO,
     VIRTUAL_REFUND_STATUS_PENDENTE,
     VIRTUAL_RETRY_INTERVAL_MIN,
     VIRTUAL_RETRY_MAX_ATTEMPTS,
+    VIRTUAL_SALA_ALERTA_HORAS,
+    VIRTUAL_SALA_RETRY_LONGO_MIN,
     VIRTUAL_SLOT_MINUTES,
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
@@ -115,6 +143,10 @@ class VirtuaisLimiteError(Exception):
 
 class VirtuaisOperadoraError(Exception):
     """A operadora falhou ao gerar o link de pagamento. Vira **502** na API."""
+
+
+class VirtuaisPagamentoFechadoError(Exception):
+    """Pagamento desligado ou não configurado (feature 310, R-18). Vira **503** na API."""
 
 
 class VirtuaisValidationError(Exception):
@@ -354,6 +386,11 @@ def atualizar_campanha(campaign: VirtualCampaign, **campos: Any) -> VirtualCampa
         campaign.talent_id = campos["talent_id"] or None
     if "figurino_sheet_id" in campos:
         campaign.figurino_sheet_id = campos["figurino_sheet_id"] or None
+    if "listada" in campos:
+        valor = campos["listada"]
+        campaign.listada = (
+            str(valor).lower() in ("1", "true", "on") if isinstance(valor, str) else bool(valor)
+        )
 
     audit("edit", "VirtualCampaign", campaign.id, campaign.title, "Campanha virtual editada")
     db.session.commit()
@@ -414,6 +451,14 @@ def _campos_faltantes_para_publicar(campaign: VirtualCampaign) -> tuple[str, str
         )
     if not campaign.tolerance_terms:
         return ("tolerance_terms", "Escreva os termos de tolerância antes de publicar.")
+    # Feature 310 (FR-022): publicar com o pagamento desligado ou sem configuração punha no ar uma
+    # campanha em que toda família preenchia a ficha para receber um erro no fim.
+    if not _pagamento_ligado():
+        return (
+            "pagamento",
+            "Ligue o pagamento da loja em Configurações (InfiniteTag, segredo e interruptor) "
+            "antes de publicar.",
+        )
     return None
 
 
@@ -649,6 +694,48 @@ def _gerar_order_nsu(campaign_id: int) -> str:
     return f"205-{campaign_id}-{secrets.token_hex(6)}"
 
 
+def _vagas_de_video_livres(campaign: VirtualCampaign, momento: datetime | None = None) -> int:
+    """Vagas de vídeo que ainda podem ser reservadas: capacidade − vendidos − reservas ativas."""
+    momento = momento or agora()
+    ativas = VirtualOrder.query.filter(
+        VirtualOrder.campaign_id == campaign.id,
+        VirtualOrder.modality == VIRTUAL_MODALITY_GRAVADO,
+        VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
+        VirtualOrder.locked_until > momento,
+    ).count()
+    return (campaign.recorded_capacity or 0) - (campaign.recorded_sold or 0) - ativas
+
+
+def _pedido_com_trava_viva(order: VirtualOrder) -> bool:
+    """O pedido ainda está dentro da própria reserva (a vaga dele já foi contada ao reservar)."""
+    return (
+        order.status in VIRTUAL_ORDER_STATUS_ATIVOS
+        and order.locked_until is not None
+        and order.locked_until > agora()
+    )
+
+
+def _mesma_reserva(anterior: VirtualOrder, modality: str, slot_id: Any, gift_item_id: Any,
+                   child_name: Any) -> bool:
+    def _id(valor: Any) -> int | None:
+        try:
+            return int(valor) if valor not in (None, "") else None
+        except (TypeError, ValueError):
+            return None
+
+    return (
+        anterior.modality == (modality or "").strip().lower()
+        and anterior.slot_id == _id(slot_id)
+        and anterior.gift_item_id == _id(gift_item_id)
+        and (anterior.child_name or "").strip().lower() == str(child_name or "").strip().lower()
+    )
+
+
+def _limite_de_reserva(momento: datetime | None = None) -> datetime:
+    """Primeiro instante em que um horário ainda pode ser reservado (feature 310, FR-006)."""
+    return (momento or agora()) + timedelta(hours=VIRTUAL_ANTECEDENCIA_RESERVA_HORAS)
+
+
 def listar_slots_disponiveis(campaign: VirtualCampaign, *, day: str | None = None) -> list:
     """Horários que a família pode reservar agora.
 
@@ -656,12 +743,14 @@ def listar_slots_disponiveis(campaign: VirtualCampaign, *, day: str | None = Non
     que faz a expiração valer mesmo antes de a varredura rodar — quem abre a landing já vê o
     horário de volta.
 
-    Horário no passado nunca entra, ainda que nunca tenha sido vendido.
+    Horário no passado nunca entra, ainda que nunca tenha sido vendido. Desde a 310, também não
+    entra o que começa em menos de ``VIRTUAL_ANTECEDENCIA_RESERVA_HORAS`` (2 h, decisão do dono):
+    a equipe precisa ler as dicas e o artista se preparar.
     """
     momento = agora()
     query = VirtualCampaignSlot.query.filter(
         VirtualCampaignSlot.campaign_id == campaign.id,
-        VirtualCampaignSlot.start_at > momento,
+        VirtualCampaignSlot.start_at > _limite_de_reserva(momento),
     ).order_by(VirtualCampaignSlot.start_at.asc())
 
     slots = [s for s in query.all() if s.is_available(momento)]
@@ -731,16 +820,23 @@ def _checar_limites(campaign: VirtualCampaign, telefone: str, origem: str) -> No
         .first()
     )
     if existente is not None:
+        # O token da reserva existente só volta para a mesma origem (aparelho e rede): qualquer um
+        # que digitasse o telefone de outra família recebia o link do pedido dela (feature 310).
         raise VirtuaisLimiteError(
             "Você já tem uma reserva em andamento. Conclua o pagamento ou abandone-a para "
             "escolher outro horário.",
-            existing_order_token=existente.public_token,
+            existing_order_token=(
+                existente.public_token if existente.origin_hash == origem else None
+            ),
         )
 
     janela = momento - timedelta(minutes=campaign.reservation_window_minutes or 60)
+    # Pedido que morreu porque a OPERADORA recusou o link não conta (feature 310, FR-026): a
+    # família que tentou de novo não pode ser barrada por "muitas reservas" por culpa nossa.
     recentes = VirtualOrder.query.filter(
         VirtualOrder.origin_hash == origem,
         VirtualOrder.created_at >= janela,
+        VirtualOrder.payment_link_error.is_(None),
     ).count()
     if recentes >= (campaign.max_reservations_per_origin or 5):
         audit(
@@ -777,6 +873,8 @@ def _travar_slot(slot_id: int, campaign_id: int) -> VirtualCampaignSlot:
         raise VirtuaisValidationError("slot_id", "Horário não encontrado nesta campanha.")
     if slot.start_at <= agora():
         raise VirtuaisConflitoError("Este horário já passou.")
+    if slot.start_at <= _limite_de_reserva():
+        raise VirtuaisConflitoError("Este horário fecha 2 horas antes. Escolha outro.")
     if not slot.is_available():
         raise VirtuaisConflitoError("Este horário acabou de ser reservado por outra pessoa.")
     return slot
@@ -821,6 +919,10 @@ def reservar(
     """
     if not campaign.is_public:
         raise VirtuaisConflitoError("Esta campanha não está aceitando reservas no momento.")
+    # Feature 310 (R-18): com o pagamento desligado, nada é travado — a família não preenche a ficha
+    # para descobrir no fim que não dá para pagar.
+    if not _pagamento_ligado():
+        raise VirtuaisPagamentoFechadoError("As reservas estão fechadas por enquanto.")
 
     modalidade = (modality or "").strip().lower()
     if modalidade not in VIRTUAL_MODALITIES:
@@ -835,7 +937,11 @@ def reservar(
             VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
             VirtualOrder.locked_until > agora(),
         ).first()
-        if anterior is not None:
+        # Feature 310 (FR-036): só é o MESMO pedido se for o mesmo horário, formato, presente e
+        # criança. Antes, a família que voltava do checkout e escolhia outro horário (ou reservava
+        # para o irmão) era mandada para o link do primeiro pedido.
+        if anterior is not None and _mesma_reserva(anterior, modality, slot_id, gift_item_id,
+                                                   ficha.get("child_name")):
             return anterior
 
     peca = None
@@ -849,6 +955,14 @@ def reservar(
 
     dados = _validar_ficha(ficha, exige_endereco=peca is not None)
     origem = hash_origem(origin_ip, origin_user_agent)
+    # Uma linha, sem o IP: é como o teste de produção confere que duas redes dão duas origens
+    # (quickstart §2.3). `publico=nao` aqui em produção = o IP ainda é o da infraestrutura.
+    try:
+        publico = ipaddress.ip_address((origin_ip or "").strip()).is_global
+    except ValueError:
+        publico = False
+    logger.info("[virtuais] origem: hash=%s publico=%s", (origem or "")[:8],
+                "sim" if publico else "nao")
     _checar_limites(campaign, dados["contact_phone"], origem)
 
     momento = agora()
@@ -861,8 +975,14 @@ def reservar(
         slot = _travar_slot(int(slot_id), campaign.id)
         preco = campaign.price_live
     else:
-        if campaign.recorded_available <= 0:
-            raise VirtuaisConflitoError("Os vídeos gravados desta campanha esgotaram.")
+        # Feature 310 (R-03): a reserva ativa de vídeo ocupa vaga enquanto a trava dela vale. Sem
+        # isso, com 1 vaga sobrando, N famílias recebiam link ao mesmo tempo e todas que pagassem
+        # viravam venda. A trava da campanha enfileira duas reservas simultâneas no banco.
+        db.session.query(VirtualCampaign).filter(
+            VirtualCampaign.id == campaign.id
+        ).options(lazyload("*")).with_for_update().first()
+        if _vagas_de_video_livres(campaign, momento) <= 0:
+            raise VirtuaisConflitoError("Os vídeos gravados desta campanha se esgotaram.")
         preco = campaign.price_recorded
 
     preco_presente = campaign.price_gift if peca is not None else Decimal("0.00")
@@ -898,11 +1018,34 @@ def reservar(
     # no banco. Se ela falhar, desfazemos a reserva e devolvemos o horário ao estoque.
     try:
         _gerar_link_pagamento(order, redirect_url_builder)
-    except VirtuaisOperadoraError:
+    except (VirtuaisOperadoraError, VirtuaisPagamentoFechadoError):
         _liberar_reserva(order, motivo="falha ao gerar o link de pagamento")
         raise
 
     return order
+
+
+def _pagamento_ligado() -> bool:
+    """Tag, segredo e interruptor presentes (feature 310, R-18)."""
+    settings = SiteSetting.query.get(1)
+    return bool(
+        settings
+        and settings.infinitepay_handle
+        and settings.infinitepay_webhook_token
+        and getattr(settings, "virtuais_pagamento_ativo", False)
+    )
+
+
+def _ipc_cfg() -> dict[str, Any]:
+    """Trava e chave da InfinitePay deste processo, lidas a cada chamada (feature 310, R5).
+
+    Lidas aqui, na camada ``_ops``, e passadas ao cliente por parâmetro — o cliente não importa
+    Flask. Chave de trava ausente = travado: quem esquecer não cobra ninguém por engano.
+    """
+    return {
+        "travada": bool(current_app.config.get("INFINITEPAY_SUPPRESS_CALLS", True)),
+        "api_key": current_app.config.get("INFINITEPAY_API_KEY") or None,
+    }
 
 
 def _gerar_link_pagamento(
@@ -911,16 +1054,23 @@ def _gerar_link_pagamento(
     """Pede o link à InfinitePay e grava no pedido (FR-021).
 
     Passa o total em ``Decimal``: quem converte para centavos é o cliente da operadora, e só ele.
+
+    Feature 310:
+    - **interruptor** (R-18): desligado, não nasce link novo — avisos e reconsultas de pedidos já
+      abertos seguem por outros caminhos;
+    - **pacote** (R-15): nada da criança vai à operadora — descrição neutra com o código do
+      pedido, comprador só com e-mail e telefone (o formato provado em produção, só dígitos);
+    - **recusa** (FR-026): 4xx não é repetido (não muda na segunda vez), o código da operadora
+      fica gravado no pedido e a equipe é avisada; só indisponibilidade é repetida.
     """
     from app.integracoes import infinitepay_client as ipc
 
     settings = SiteSetting.query.get(1)
     handle = (settings.infinitepay_handle or "") if settings else ""
     token = (settings.infinitepay_webhook_token or "") if settings else ""
-    if not handle or not token:
-        raise VirtuaisOperadoraError(
-            "O meio de pagamento ainda não está configurado. Fale com a gente pelo WhatsApp."
-        )
+    ativo = bool(getattr(settings, "virtuais_pagamento_ativo", False)) if settings else False
+    if not handle or not token or not ativo:
+        raise VirtuaisPagamentoFechadoError("As reservas estão fechadas por enquanto.")
 
     base_url = (current_app.config.get("PUBLIC_BASE_URL") or "").rstrip("/")
     redirect_url = (
@@ -929,6 +1079,11 @@ def _gerar_link_pagamento(
         else f"{base_url}/catalogo/v/pedido/{order.public_token}"
     )
     webhook_url = f"{base_url}/api/webhooks/infinitepay/{token}"
+    cfg = _ipc_cfg()
+    valid_until = None
+    if order.locked_until is not None:
+        # Hora de parede de São Paulo → ISO com o fuso explícito, que é o que a API nova pede.
+        valid_until = order.locked_until.replace(microsecond=0).isoformat() + "-03:00"
 
     try:
         resultado = executar_com_retry(
@@ -936,19 +1091,33 @@ def _gerar_link_pagamento(
                 handle=handle,
                 order_nsu=order.order_nsu,
                 total=Decimal(order.total_value),
-                description=f"{order.campaign.title} — {order.child_name}",
+                description=f"{order.campaign.title} — pedido {order.order_nsu}",
                 redirect_url=redirect_url,
                 webhook_url=webhook_url,
-                customer={
-                    "name": order.child_name,
-                    "email": order.contact_email,
-                    "phone_number": order.contact_phone,
-                },
+                customer={"email": order.contact_email, "phone_number": order.contact_phone},
+                travada=cfg["travada"],
+                api_key=cfg["api_key"],
+                valid_until=valid_until,
             ),
             descricao="criar link de pagamento",
-            exception_types=(ipc.InfinitePayError,),
+            exception_types=(ipc.InfinitePayIndisponivel,),
         )
+    except ipc.InfinitePayRecusou as exc:
+        codigo = (getattr(exc, "code", None) or str(exc) or "recusado")[:200]
+        order.payment_link_error = codigo
+        db.session.commit()
+        _avisar_falha_de_link(order, codigo)
+        raise VirtuaisOperadoraError(
+            "Não conseguimos abrir o pagamento. A equipe já foi avisada; tente de novo mais tarde "
+            "ou fale com a gente no WhatsApp."
+        ) from exc
     except RetryEsgotado as exc:
+        if isinstance(exc.ultima_falha, ipc.InfinitePayTravada):
+            order.payment_link_error = "travado_neste_ambiente"
+            db.session.commit()
+            raise VirtuaisOperadoraError(
+                "Pagamento travado neste ambiente (cópia de teste)."
+            ) from exc
         raise VirtuaisOperadoraError(
             "Não conseguimos abrir o pagamento agora. Tente de novo em instantes."
         ) from exc
@@ -958,24 +1127,97 @@ def _gerar_link_pagamento(
     db.session.commit()
 
 
-def _liberar_reserva(order: VirtualOrder, *, motivo: str) -> None:
-    """Desfaz uma reserva e devolve o horário ao estoque."""
-    slot = (
-        db.session.query(VirtualCampaignSlot)
-        .filter(VirtualCampaignSlot.id == order.slot_id)
+def _avisar_falha_de_link(order: VirtualOrder, codigo: str) -> None:
+    """Sino para Comercial e Superadmin quando a operadora recusa o link (FR-026, R-19).
+
+    Agrupa por código e hora: a mesma recusa (ex.: Checkout Integrado desligado) derruba toda
+    reserva, e 50 avisos iguais ensinam a ignorar o sino.
+    """
+    try:
+        from app.notificacoes import notificacoes_ops as nops
+
+        emitir = getattr(nops, "notificar_virtual_atencao", None)
+        if emitir is None:
+            return
+        emitir(
+            titulo="Pagamento: a InfinitePay recusou abrir o link",
+            corpo=f"Código: {codigo}. Pedido {order.order_nsu}.",
+            dedupe_key=f"virtual.link:{codigo}:{agora():%Y%m%d%H}",
+        )
+    except Exception as exc:  # noqa: BLE001 — o aviso à equipe nunca derruba a resposta
+        logger.warning("[virtuais] aviso de falha de link não saiu: %s", exc)
+
+
+def _travar_pedido(order_id: int) -> VirtualOrder | None:
+    """Trava a linha do pedido e devolve o estado ATUAL do banco (feature 310, R1).
+
+    ``populate_existing`` é o ponto: sem ele, a sessão devolveria o objeto já carregado, com o
+    status lido antes de outro worker mudá-lo — e a decisão sairia sobre leitura velha (foi assim
+    que um pedido PAGO voltava a EXPIRADO). Ordem de travas da feature: pedido → horário → campanha.
+
+    ``lazyload("*")``: o modelo carrega campanha e presente por JOIN externo, e o Postgres recusa
+    ``FOR UPDATE`` sobre o lado opcional de um join.
+    """
+    return (
+        db.session.query(VirtualOrder)
+        .filter(VirtualOrder.id == order_id)
+        .options(lazyload("*"))
+        .populate_existing()
         .with_for_update()
         .first()
-        if order.slot_id
-        else None
     )
-    if slot is not None and slot.order_id == order.id:
+
+
+def _travar_horario(slot_id: int) -> VirtualCampaignSlot | None:
+    return (
+        db.session.query(VirtualCampaignSlot)
+        .filter(VirtualCampaignSlot.id == slot_id)
+        .options(lazyload("*"))
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
+
+
+def _liberar_reserva(
+    order: VirtualOrder, *, motivo: str, unverified_reason: str | None = None
+) -> bool:
+    """Desfaz uma reserva ATIVA e devolve o horário ao estoque.
+
+    Feature 310: trava o pedido antes do horário e relê o status. Só libera pedido ainda
+    reservado/aguardando — um pedido que outra rotina acabou de efetivar ou cancelar fica como
+    está. E nunca solta horário vendido, mesmo que o dono gravado coincida (defesa em
+    profundidade contra venda de legado sem dono).
+
+    Returns:
+        True se liberou; False se o pedido já não estava ativo.
+    """
+    atual = _travar_pedido(order.id)
+    if atual is None or atual.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        db.session.commit()
+        return False
+    slot = _travar_horario(atual.slot_id) if atual.slot_id else None
+    if (
+        slot is not None
+        and slot.order_id == atual.id
+        and slot.status != VIRTUAL_SLOT_STATUS_VENDIDO
+    ):
         slot.status = VIRTUAL_SLOT_STATUS_LIVRE
         slot.locked_until = None
         slot.order_id = None
-    order.status = VIRTUAL_ORDER_STATUS_EXPIRADO
-    order.locked_until = None
-    logger.info("[virtuais] reserva %s liberada: %s", order.order_nsu, motivo)
+    atual.status = VIRTUAL_ORDER_STATUS_EXPIRADO
+    atual.locked_until = None
+    if unverified_reason:
+        atual.expired_unverified = True
+        atual.unverified_reason = unverified_reason
+        _avisar_a_conferir(
+            f"virtual.conferir:pedido:{atual.id}",
+            "Loja virtual: pagamento a conferir",
+            f"Pedido {atual.order_nsu} liberado sem prova ({unverified_reason}).",
+        )
+    logger.info("[virtuais] reserva %s liberada: %s", atual.order_nsu, motivo)
     db.session.commit()
+    return True
 
 
 def claim_sweep(interval_seconds: int) -> bool:
@@ -1025,6 +1267,7 @@ def ciclo_de_varredura() -> dict[str, Any]:
     resumo: dict[str, Any] = {}
     rotinas: list[tuple[str, Callable[[], Any]]] = [
         ("reservas", expirar_reservas),
+        ("avisos", reprocessar_avisos),
         ("salas", retentar_salas),
         ("prazos", alertar_prazos_video),
     ]
@@ -1038,86 +1281,237 @@ def ciclo_de_varredura() -> dict[str, Any]:
     return resumo
 
 
+def _identificadores_conhecidos(order: VirtualOrder) -> dict[str, str | None]:
+    """Identificadores da cobrança para reconsultar (feature 310, R-09).
+
+    Os do pedido (gravados só depois de provados) ou, na falta, os do aviso mais recente com o
+    token certo para o mesmo ``order_nsu`` — um aviso que chegou mas ainda não decidiu.
+    """
+    if order.transaction_nsu and order.invoice_slug:
+        return {"transaction_nsu": order.transaction_nsu, "invoice_slug": order.invoice_slug}
+    aviso = (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.transaction_nsu.isnot(None),
+        )
+        .order_by(VirtualPaymentNotification.id.desc())
+        .first()
+    )
+    if aviso is None:
+        return {"transaction_nsu": None, "invoice_slug": None}
+    try:
+        corpo = json.loads(aviso.raw_payload or "{}")
+    except ValueError:
+        corpo = {}
+    return {"transaction_nsu": aviso.transaction_nsu, "invoice_slug": corpo.get("invoice_slug")}
+
+
+def _reconsultar(order_nsu: str, ids: dict[str, str | None]) -> dict:
+    """Reconsulta na operadora com a config do processo. "Não sei" sobe como exceção."""
+    from app.integracoes import infinitepay_client as ipc
+
+    settings = SiteSetting.query.get(1)
+    handle = (settings.infinitepay_handle or "") if settings else ""
+    if not handle:
+        raise ipc.InfinitePayIndisponivel("Operadora não configurada.")
+    cfg = _ipc_cfg()
+    consulta = ipc.consultar_pagamento(
+        handle=handle,
+        order_nsu=order_nsu,
+        transaction_nsu=ids.get("transaction_nsu"),
+        slug=ids.get("invoice_slug"),
+        travada=cfg["travada"],
+        api_key=cfg["api_key"],
+    )
+    # Dublês antigos (verify_205) não trazem `resultado`; deriva do `paid`.
+    consulta.setdefault("resultado", "pago" if consulta.get("paid") else "nao_pago")
+    return consulta
+
+
 def expirar_reservas(*, limite: int = 100) -> dict[str, int]:
-    """Devolve ao estoque os horários de reservas vencidas (FR-018, FR-018a, FR-018b, FR-041a).
+    """Devolve ao estoque os horários de reservas vencidas (FR-018, FR-041a; 310 R4, R-09).
 
-    **Antes de liberar, reconsulta a cobrança na operadora.** É a defesa principal contra o
-    conflito: se a família pagou no último segundo, a venda é efetivada em vez de o horário voltar
-    para a prateleira e ser vendido de novo.
+    **Antes de liberar, reconsulta a cobrança na operadora** — se a família pagou no último
+    segundo, a decisão vai para ``decidir_pagamento``, a mesma regra do aviso (feature 310). A
+    varredura não efetiva mais nada sozinha: era aí que nascia a venda dupla.
 
-    Se a operadora não responder, o horário fica retido enquanto as 3 tentativas acontecem (minutos
-    0, 1 e 2). Esgotadas, o horário é liberado e o pedido marcado com ``expired_unverified`` — para
-    que, se o pagamento aparecer depois, a equipe saiba de onde veio o conflito.
+    Semântica da reconsulta (teste 0 em produção, 20/10/2026):
+    - sem identificadores e ``nao_encontrado`` = família abandonou o checkout → libera na primeira
+      consulta, sem gastar as 3 tentativas e sem ir para "a conferir";
+    - ``nao_pago`` → libera;
+    - "não sei" (operadora fora, travada) → retém de fato (o horário continua travado) por 3
+      tentativas; esgotou → libera com ``unverified_reason='nao_sei'`` ("a conferir");
+    - pago → ``decidir_pagamento``; pago com valor errado → libera com ``divergente``.
+
+    Cada pedido é isolado: um erro num pedido não aborta o lote nem gasta a tentativa dos outros.
 
     Returns:
         ``{"liberadas": int, "retidas": int, "pagas": int}``.
     """
-    from app.integracoes import infinitepay_client as ipc
-
     momento = agora()
-    vencidas = (
-        VirtualOrder.query.filter(
+    ids_vencidas = [
+        o.id
+        for o in VirtualOrder.query.filter(
             VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
             VirtualOrder.locked_until.isnot(None),
             VirtualOrder.locked_until <= momento,
         )
+        .order_by(VirtualOrder.locked_until.asc())
         .limit(limite)
         .all()
-    )
+    ]
 
     resultado = {"liberadas": 0, "retidas": 0, "pagas": 0}
-    settings = SiteSetting.query.get(1)
-    handle = (settings.infinitepay_handle or "") if settings else ""
-
-    for order in vencidas:
-        # Sem operadora configurada não há o que reconsultar — libera direto, marcando que a
-        # decisão foi tomada sem confirmação.
-        if not handle or not order.payment_url:
-            order.expired_unverified = True
-            _liberar_reserva(order, motivo="lock vencido, sem cobrança para reconsultar")
-            resultado["liberadas"] += 1
-            continue
-
-        if not deve_tentar_novamente(order.recheck_attempts, order.grace_until):
-            if retry_esgotou(order.recheck_attempts):
-                order.expired_unverified = True
-                _liberar_reserva(order, motivo="tolerância esgotada sem resposta da operadora")
-                resultado["liberadas"] += 1
-            else:
-                resultado["retidas"] += 1
-            continue
-
-        order.recheck_attempts += 1
-        order.grace_until = agora()
-        db.session.commit()
-
+    for order_id in ids_vencidas:
         try:
-            consulta = ipc.consultar_pagamento(
-                handle=handle,
-                order_nsu=order.order_nsu,
-                transaction_nsu=order.transaction_nsu,
-                slug=order.invoice_slug,
-            )
-        except ipc.InfinitePayIndisponivel:
-            # "Não sei" nunca é "não pago": segura o horário e tenta de novo no próximo ciclo.
-            resultado["retidas"] += 1
-            continue
-        except ipc.InfinitePayError as exc:
-            logger.warning("[virtuais] reconsulta de %s falhou: %s", order.order_nsu, exc)
-            resultado["retidas"] += 1
-            continue
-
-        if consulta.get("paid"):
-            # Pagou no último segundo: efetiva em vez de devolver o horário ao estoque.
-            # Vender de novo algo já pago é o pior desfecho possível (FR-041a).
-            efetivar_pedido(order, consulta=consulta)
-            resultado["pagas"] += 1
-            continue
-
-        _liberar_reserva(order, motivo="lock vencido e cobrança não paga")
-        resultado["liberadas"] += 1
-
+            desfecho = _expirar_um(order_id)
+        except Exception as exc:  # noqa: BLE001 — um pedido problemático não trava o lote
+            db.session.rollback()
+            logger.warning("[virtuais] varredura do pedido %s falhou: %s", order_id, exc)
+            desfecho = "retidas"
+        if desfecho:
+            resultado[desfecho] += 1
     return resultado
+
+
+def _expirar_um(order_id: int) -> str | None:
+    from app.integracoes import infinitepay_client as ipc
+
+    order = db.session.get(VirtualOrder, order_id)
+    if order is None or order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return None
+    if order.locked_until and order.locked_until > agora():
+        return None
+
+    if not order.payment_url:
+        # Sem link não há o que reconsultar (a criação falhou ou nunca aconteceu).
+        _liberar_reserva(order, motivo="lock vencido, sem cobrança para reconsultar")
+        return "liberadas"
+
+    if not deve_tentar_novamente(order.recheck_attempts, order.grace_until):
+        if retry_esgotou(order.recheck_attempts):
+            _liberar_reserva(
+                order, motivo="tolerância esgotada sem resposta da operadora",
+                unverified_reason="nao_sei",
+            )
+            return "liberadas"
+        _reter_horario(order)
+        return "retidas"
+
+    order.recheck_attempts += 1
+    order.grace_until = agora()
+    db.session.commit()
+
+    ids = _identificadores_conhecidos(order)
+    try:
+        consulta = _reconsultar(order.order_nsu, ids)
+    except (ipc.InfinitePayIndisponivel, ipc.InfinitePayRecusou) as exc:
+        logger.warning("[virtuais] reconsulta de %s sem resposta: %s", order.order_nsu, exc)
+        _reter_horario(order)
+        return "retidas"
+
+    if consulta["resultado"] == "pago":
+        desfecho = decidir_pagamento(
+            order.id, consulta, identificadores=ids, origem="varredura"
+        )
+        if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+            _liberar_reserva(order, motivo="pago com valor divergente",
+                             unverified_reason="divergente")
+            return "liberadas"
+        return "pagas"
+
+    if _aviso_sem_decisao(order):
+        # Há aviso com o segredo certo ainda sem desfecho: "não achei"/"não pago" agora pode ser
+        # só atraso da operadora (R-09). Liberar aqui vendia o horário de quem pagou; vale como
+        # "não sei" — retém, e esgotadas as tentativas libera marcado `nao_sei` (a conferir).
+        _reter_horario(order)
+        return "retidas"
+    _liberar_reserva(order, motivo=f"lock vencido; reconsulta: {consulta['resultado']}")
+    return "liberadas"
+
+
+def prova_da_aba(order: VirtualOrder, client_token: str | None) -> bool:
+    """True se quem pede é a aba que criou a reserva (o ``client_token`` dela, comparado em tempo
+    constante). O link do pedido sozinho não basta para desfazer a reserva de ninguém."""
+    import hmac
+
+    return bool(
+        client_token and order.client_token
+        and hmac.compare_digest(str(client_token), str(order.client_token))
+    )
+
+
+def abandonar_reserva(order: VirtualOrder) -> bool:
+    """A família desiste de uma reserva ainda não paga (FR-020a da 205; feature 310, FR-036).
+
+    A regra "uma reserva ativa por telefone" mandava a família "abandonar" a reserva antiga para
+    escolher outro horário ou reservar para o irmão — mas não havia como: ela ficava presa até a
+    trava vencer. Só libera sem sinal de pagamento (nenhum identificador provado e nenhum aviso ou
+    retorno esperando decisão); com sinal, a decisão é da operadora.
+
+    Returns:
+        True se liberou; False se o pedido já não estava ativo.
+
+    Raises:
+        VirtuaisConflitoError: Há sinal de pagamento deste pedido.
+    """
+    from app.integracoes import infinitepay_client as ipc
+
+    if order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return False
+    sinal = VirtuaisConflitoError(
+        "Já recebemos um sinal de pagamento deste pedido — aguarde a confirmação aqui."
+    )
+    if order.transaction_nsu or _aviso_sem_decisao(order):
+        raise sinal
+    if order.payment_url:
+        # Pode ter pago sem o aviso ter chegado: mesma reconsulta da varredura. "Pago" ou "não
+        # sei" (operadora fora/travada) não liberam — só "não achei a cobrança".
+        try:
+            consulta = _reconsultar(order.order_nsu, _identificadores_conhecidos(order))
+        except ipc.InfinitePayError as exc:
+            raise VirtuaisConflitoError(
+                "Não conseguimos conferir o pagamento agora. Tente de novo em alguns minutos."
+            ) from exc
+        if consulta.get("resultado") == "pago":
+            raise sinal
+    return _liberar_reserva(order, motivo="abandonada pela família")
+
+
+def _aviso_sem_decisao(order: VirtualOrder) -> bool:
+    """True se chegou aviso com o segredo certo para este pedido e ele ainda não teve desfecho."""
+    return db.session.query(
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.resolvido_em.is_(None),
+            db.or_(
+                VirtualPaymentNotification.outcome.is_(None),
+                VirtualPaymentNotification.outcome.notin_(tuple(VIRTUAL_AVISO_FINAIS)),
+            ),
+        ).exists()
+    ).scalar()
+
+
+def _reter_horario(order: VirtualOrder) -> None:
+    """Retém DE FATO o horário enquanto a reconsulta não responde (feature 310, FR-004).
+
+    Antes, "reter" só mexia no contador do pedido: o horário com a trava vencida voltava à vitrine
+    e outra família o reservava no meio das tentativas.
+    """
+    if not order.slot_id:
+        # Vídeo gravado não tem horário: a vaga é contada pelas reservas com trava viva
+        # (`_vagas_de_video_livres`). Sem estender a trava do pedido, a vaga voltava à venda no
+        # meio das tentativas e quem pagou em dia podia ser devolvido por "vídeos esgotados".
+        if order.modality == VIRTUAL_MODALITY_GRAVADO:
+            order.locked_until = agora() + timedelta(minutes=VIRTUAL_RETRY_INTERVAL_MIN + 1)
+            db.session.commit()
+        return
+    slot = _travar_horario(order.slot_id)
+    if slot is not None and slot.order_id == order.id and slot.status == VIRTUAL_SLOT_STATUS_TRAVADO:
+        slot.locked_until = agora() + timedelta(minutes=VIRTUAL_RETRY_INTERVAL_MIN + 1)
+    db.session.commit()
 
 
 # ── Efetivação: a venda vira operação (US3) ──────────────────────────────────
@@ -1161,6 +1555,11 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
     from app.calendar.routes import CALENDAR_ID
     from app.calendar.service import insert_event
 
+    # Feature 310 (constituição XIV): a cópia local traz o token real do Google — sem esta trava,
+    # uma venda de teste criava evento e sala na agenda da empresa. Chave ausente = travado.
+    if current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True):
+        raise RuntimeError("Escrita na agenda travada neste ambiente (cópia de teste).")
+
     campanha = order.campaign
     inicio = order.slot.start_at if order.slot else agora()
     fim = inicio + timedelta(minutes=VIRTUAL_SLOT_MINUTES)
@@ -1193,6 +1592,11 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
             fim,
             description=descricao,
             conference_request_id=f"virtual-{order.order_nsu}" if ao_vivo else None,
+            # Feature 310 (R11): marca do evento da loja, para a sincronização da agenda nunca o
+            # importar como evento comum (com venda, funil e DRE) se a gravação local falhar.
+            private_props={"manto_virtual_nsu": order.order_nsu},
+            # FR-016: prazo curto — este caminho roda no aviso e no retorno da família.
+            timeout=VIRTUAL_GOOGLE_TIMEOUT_S,
         ),
         descricao=f"criar evento no Google do pedido {order.order_nsu}",
         exception_types=(Exception,),
@@ -1225,48 +1629,21 @@ def _pre_escalar(event: CalendarEvent, campanha: VirtualCampaign) -> None:
     )
 
 
-def efetivar_pedido(order: VirtualOrder, *, consulta: dict | None = None) -> VirtualOrder:
-    """Converte uma reserva paga em operação (FR-029 a FR-033).
+def _efetivar_no_banco(order: VirtualOrder) -> None:
+    """Converte uma reserva paga em operação (FR-029 a FR-033) — só pela ``decidir_pagamento``.
 
-    **Tudo numa transação só.** Evento, ficha, escala, presente 3D, baixa de estoque e o registro
-    do aviso nascem juntos ou não nascem — meia efetivação é pior que nenhuma, porque ninguém
-    saberia o que faltou.
-
-    A chamada ao Google fica **fora** do commit final por necessidade (é HTTP), mas o evento só é
-    gravado depois que ela volta; se ela falhar, nada é persistido e a notificação fica ``retido``
-    para nova tentativa.
-
-    Idempotente: pedido já ``pago`` com evento vinculado é devolvido como está.
+    Feature 310: a venda nasce **no banco primeiro** — pedido pago, horário vendido com dono,
+    evento com id local e sala pendente, entrega, presente — num commit só; o Google e o e-mail vêm
+    depois, fora das travas (``_pos_venda``). Assim uma disputa é decidida no banco antes de
+    qualquer chamada externa, e o perdedor não deixa evento órfão na agenda do Google.
     """
-    if order.status == VIRTUAL_ORDER_STATUS_PAGO and order.event_id:
-        return order
-
     campanha = order.campaign
-
-    google_id: str | None = None
-    html_link: str | None = None
-    meet_url: str | None = None
-    try:
-        google_id, html_link, meet_url = _criar_evento_google(order)
-    except Exception as exc:  # noqa: BLE001 — a falha do Google não pode derrubar a venda
-        logger.warning("[virtuais] falha ao criar evento do pedido %s: %s", order.order_nsu, exc)
-
-    # Sem id do Google não dá para criar o `CalendarEvent` (a coluna é NOT NULL e única). Usamos um
-    # id local marcado, para a venda existir na Agenda mesmo com o Google fora — a sincronização
-    # ignora eventos virtuais, então não há risco de colisão com um id de verdade.
-    if not google_id:
-        google_id = f"{GOOGLE_ID_LOCAL_PREFIX}{order.order_nsu}"
-        # Independentemente da modalidade, o evento ficou sem lado Google — a varredura precisa
-        # voltar aqui depois (`_retentar_salas`). Para a chamada ao vivo isso é urgente: sem sala,
-        # a família não tem por onde entrar. Para o vídeo gravado é só higiene de agenda.
-        order.meet_pending = order.modality == VIRTUAL_MODALITY_AO_VIVO
-        order.meet_last_attempt_at = agora()
-        order.meet_attempts = (order.meet_attempts or 0) + 1
-
     inicio = order.slot.start_at if order.slot else agora()
     evento = CalendarEvent(
-        google_event_id=google_id,
-        google_html_link=html_link,
+        # Id local marcado: a linha precisa de um id único já; o verdadeiro vem do Google em
+        # `_pos_venda` (mesmo caminho do `regerar_sala`). A sincronização ignora eventos virtuais.
+        google_event_id=f"{GOOGLE_ID_LOCAL_PREFIX}{order.order_nsu}",
+        google_html_link=None,
         title=f"🎥 VIRTUAL — {order.child_name}",
         description=(order.behavior_notes or None),
         start_at=inicio,
@@ -1284,17 +1661,21 @@ def efetivar_pedido(order: VirtualOrder, *, consulta: dict | None = None) -> Vir
     order.event_id = evento.id
     order.status = VIRTUAL_ORDER_STATUS_PAGO
     order.paid_at = agora()
-    # `meet_pending` só é uma pendência de verdade na chamada ao vivo: vídeo gravado não tem sala,
-    # então marcá-lo como pendente encheria a fila de um alerta que ninguém pode resolver.
-    if meet_url:
-        order.meet_url = meet_url
-        order.meet_pending = False
-    else:
-        order.meet_pending = order.modality == VIRTUAL_MODALITY_AO_VIVO
+    order.locked_until = None
+    # Toda venda nasce com o lado Google pendente; vídeo gravado não tem sala, então a pendência
+    # de SALA só existe na chamada ao vivo (o id local é reconciliado pela varredura em ambos).
+    order.meet_pending = order.modality == VIRTUAL_MODALITY_AO_VIVO
+    # Reserva a primeira tentativa para o `_pos_venda` desta mesma decisão: sem a marca, a
+    # varredura de salas via o pedido pendente com 0 tentativas e criava um SEGUNDO evento no
+    # Google enquanto o pós-venda ainda criava o primeiro. Assim ela espera o intervalo de 1 min.
+    order.meet_last_attempt_at = agora()
 
     if order.slot is not None:
         order.slot.status = VIRTUAL_SLOT_STATUS_VENDIDO
         order.slot.locked_until = None
+        # A 205 não gravava o dono do horário vendido: era assim que dois pagamentos atrasados
+        # viravam duas vendas do mesmo horário (feature 310, invariante 2).
+        order.slot.order_id = order.id
 
     if order.modality == VIRTUAL_MODALITY_GRAVADO:
         campanha.recorded_sold = (campanha.recorded_sold or 0) + 1
@@ -1319,8 +1700,24 @@ def efetivar_pedido(order: VirtualOrder, *, consulta: dict | None = None) -> Vir
     )
     db.session.commit()
 
+
+def _pos_venda(order: VirtualOrder) -> None:
+    """Lado de fora da venda: evento e sala no Google, depois o e-mail de compra.
+
+    Falha do Google não desfaz nada: o pedido fica com ``meet_pending`` e a varredura de salas
+    retenta até o horário (R11). O e-mail tem a trava de um por pedido e tipo.
+    """
+    try:
+        regerar_sala(order)
+    except Exception as exc:  # noqa: BLE001 — a venda já existe; a sala é retentada depois
+        db.session.rollback()
+        logger.warning("[virtuais] Google na venda %s falhou: %s", order.order_nsu, exc)
+        atual = db.session.get(VirtualOrder, order.id)
+        atual.meet_attempts = (atual.meet_attempts or 0) + 1
+        atual.meet_last_attempt_at = agora()
+        atual.meet_pending = atual.modality == VIRTUAL_MODALITY_AO_VIVO
+        db.session.commit()
     _enviar_aviso(order, VIRTUAL_NOTIFICATION_KIND_COMPRA)
-    return order
 
 
 def _injetar_presente_3d(order: VirtualOrder, evento: CalendarEvent) -> None:
@@ -1348,44 +1745,235 @@ def _injetar_presente_3d(order: VirtualOrder, evento: CalendarEvent) -> None:
         )
 
 
-def _abrir_devolucao(order: VirtualOrder, *, consulta: dict | None = None) -> None:
+def _abrir_devolucao(
+    order: VirtualOrder,
+    *,
+    consulta: dict | None = None,
+    motivo: str | None = None,
+    identificadores: dict | None = None,
+) -> None:
     """Cancela o pedido e abre a devolução para a equipe executar (FR-042, FR-043).
 
-    Nenhum evento, escala ou pendência de impressão é criado — o horário é de outra família.
-    A InfinitePay não publica API de estorno, então o sistema garante o rastro e a cobrança;
-    quem devolve o dinheiro é uma pessoa, no painel da operadora.
+    Nenhum evento, escala ou pendência de impressão é criado. A InfinitePay não publica API de
+    estorno: o sistema garante o rastro e a cobrança; quem devolve é uma pessoa, no app.
+
+    Feature 310: ``motivo`` explícito (horário passou, sem vaga de vídeo…); sem ele, vale a regra
+    da 205 (conflito, ou conflito sem confirmação se o pedido foi liberado sem prova).
     """
     valor = Decimal(order.total_value)
     if consulta and consulta.get("paid_amount") is not None:
         valor = Decimal(consulta["paid_amount"])
-
-    # A origem do conflito muda a conversa com a família (FR-018b). Se o horário foi liberado
-    # porque a operadora não respondeu, ela pode ter pago em dia e perdido o horário mesmo assim —
-    # e quem liga pedindo satisfação precisa ouvir isso, não "sua reserva venceu". Registrar num
-    # campo que nenhuma tela lê é o mesmo que não registrar.
-    motivo = (
-        VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO
-        if order.expired_unverified
-        else VIRTUAL_REFUND_REASON_CONFLITO
-    )
+    if motivo is None:
+        motivo = (
+            VIRTUAL_REFUND_REASON_SEM_CONFIRMACAO
+            if order.expired_unverified
+            else VIRTUAL_REFUND_REASON_CONFLITO
+        )
+    ids = identificadores or {}
     db.session.add(
         VirtualRefundRequest(
             order_id=order.id,
             amount=valor,
             reason=motivo,
             status=VIRTUAL_REFUND_STATUS_PENDENTE,
-            invoice_slug=order.invoice_slug,
-            transaction_nsu=order.transaction_nsu,
+            invoice_slug=ids.get("invoice_slug") or order.invoice_slug,
+            transaction_nsu=ids.get("transaction_nsu") or order.transaction_nsu,
         )
     )
     order.status = VIRTUAL_ORDER_STATUS_CANCELADO
     order.locked_until = None
     audit(
         "edit", "VirtualOrder", order.id, order.order_nsu,
-        "Pagamento chegou para horário indisponível — devolução aberta",
+        f"Pagamento não pôde virar venda ({motivo}) — devolução aberta",
     )
     db.session.commit()
+    _avisar_equipe_devolucao(order, motivo)
     _enviar_aviso(order, VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO)
+
+
+def _abrir_devolucao_de_cobranca(
+    order: VirtualOrder, *, consulta: dict, identificadores: dict, motivo: str
+) -> None:
+    """Devolve uma cobrança A MAIS, sem mexer no pedido (feature 310, FR-014).
+
+    Pagamento em dobro de um pedido pago, ou pagamento de um pedido já cancelado: o pedido fica
+    como está, e a cobrança nova vira devolução pendente com o valor que a operadora confirmou.
+    """
+    valor = Decimal(consulta.get("paid_amount") or order.total_value)
+    db.session.add(
+        VirtualRefundRequest(
+            order_id=order.id,
+            amount=valor,
+            reason=motivo,
+            status=VIRTUAL_REFUND_STATUS_PENDENTE,
+            invoice_slug=identificadores.get("invoice_slug"),
+            transaction_nsu=identificadores.get("transaction_nsu"),
+        )
+    )
+    audit(
+        "edit", "VirtualOrder", order.id, order.order_nsu,
+        f"Cobrança a mais ({motivo}) — devolução aberta",
+    )
+    db.session.commit()
+    _avisar_equipe_devolucao(order, motivo)
+
+
+def _avisar_equipe_devolucao(order: VirtualOrder, motivo: str) -> None:
+    """Sino para Comercial e Superadmin: devolução nova é dinheiro a devolver (FR-032)."""
+    try:
+        from app.notificacoes import notificacoes_ops as nops
+
+        emitir = getattr(nops, "notificar_virtual_atencao", None)
+        if emitir is None:
+            return
+        rotulo = VIRTUAL_REFUND_REASON_LABELS.get(motivo, motivo)
+        emitir(
+            titulo="Loja virtual: devolução a fazer no app da InfinitePay",
+            corpo=f"{rotulo}. Pedido {order.order_nsu}.",
+            dedupe_key=f"virtual.devolucao:{order.id}:{motivo}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[virtuais] aviso de devolução não saiu: %s", exc)
+
+
+def _pagamento_confere(order: VirtualOrder, consulta: dict) -> bool:
+    """Pago, com valor pago informado e não menor que o total (feature 310, R-02).
+
+    Nunca ``paid_amount or amount``: um ``paid_amount`` zero cairia no valor nominal do link e
+    passaria. Sobrepagamento (cartão com juros repassados) confere.
+    """
+    if not consulta.get("paid"):
+        return False
+    pago = consulta.get("paid_amount")
+    if pago is None:
+        return False
+    return Decimal(pago) >= Decimal(order.total_value)
+
+
+def decidir_pagamento(
+    order_id: int,
+    consulta: dict,
+    *,
+    identificadores: dict | None = None,
+    origem: str = "aviso",
+) -> str:
+    """A ÚNICA regra que transforma um pagamento provado em venda ou devolução (feature 310, R-01).
+
+    Chamada pelo aviso, pelo retorno do checkout e pela varredura. A ``consulta`` é a reconsulta
+    na operadora feita ANTES, fora de qualquer trava (HTTP nunca segura linha do banco); aqui só
+    se decide, com o pedido travado e relido:
+
+    1. estado do pedido — pago com a mesma cobrança = duplicado; pago com outra cobrança =
+       devolução ``pagamento_em_dobro``; cancelado = devolução ``pagamento_sem_pedido_ativo``;
+    2. valor (``_pagamento_confere``) — não confere = ``divergente`` (sem venda e sem devolução
+       automática: entra em "a conferir");
+    3. dono do horário — tomado por outro pedido, travado ou vendido = devolução de conflito;
+    4. folga — o horário começa em menos de 30 min = devolução ``horario_passou``;
+    5. vaga de vídeo — esgotada = devolução ``sem_vaga_de_video``;
+    6. senão, efetiva: banco primeiro, Google e e-mail depois.
+
+    Returns:
+        O desfecho (constante ``VIRTUAL_AVISO_*``).
+    """
+    ids = {k: v for k, v in (identificadores or {}).items() if v}
+    if not consulta.get("paid"):
+        db.session.rollback()
+        return VIRTUAL_AVISO_PENDENTE_PROVA
+
+    order = _travar_pedido(order_id)
+    if order is None:
+        db.session.rollback()
+        return VIRTUAL_AVISO_ORFAO
+    tx = ids.get("transaction_nsu")
+
+    if order.status == VIRTUAL_ORDER_STATUS_PAGO:
+        if not tx or tx == order.transaction_nsu or _cobranca_ja_devolvida(order, tx):
+            db.session.commit()
+            return VIRTUAL_AVISO_DUPLICADO
+        _abrir_devolucao_de_cobranca(
+            order, consulta=consulta, identificadores=ids,
+            motivo=VIRTUAL_REFUND_REASON_PAGAMENTO_EM_DOBRO,
+        )
+        return VIRTUAL_AVISO_DEVOLUCAO
+
+    if order.status == VIRTUAL_ORDER_STATUS_CANCELADO:
+        if not tx or tx == order.transaction_nsu or _cobranca_ja_devolvida(order, tx):
+            db.session.commit()
+            return VIRTUAL_AVISO_DUPLICADO
+        _abrir_devolucao_de_cobranca(
+            order, consulta=consulta, identificadores=ids,
+            motivo=VIRTUAL_REFUND_REASON_SEM_PEDIDO_ATIVO,
+        )
+        return VIRTUAL_AVISO_DEVOLUCAO
+
+    if not _pagamento_confere(order, consulta):
+        db.session.commit()
+        logger.warning(
+            "[virtuais] pagamento divergente no pedido %s (%s): operadora %s, pedido %s",
+            order.order_nsu, origem, consulta.get("paid_amount"), order.total_value,
+        )
+        return VIRTUAL_AVISO_DIVERGENTE
+
+    # Provado: agora os identificadores podem ir para o pedido (FR-017).
+    if tx:
+        order.transaction_nsu = tx
+    if ids.get("invoice_slug"):
+        order.invoice_slug = ids["invoice_slug"]
+    if ids.get("receipt_url"):
+        order.receipt_url = ids["receipt_url"][:500]
+
+    motivo = None
+    tomado = False
+    if order.slot_id is not None:
+        slot = _travar_horario(order.slot_id)
+        tomado = (
+            slot is None
+            or (slot.order_id is not None and slot.order_id != order.id)
+            or (slot.status == VIRTUAL_SLOT_STATUS_VENDIDO and slot.order_id != order.id)
+        )
+        if not tomado and slot.start_at <= agora() + timedelta(
+            minutes=VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO
+        ):
+            motivo = VIRTUAL_REFUND_REASON_HORARIO_PASSOU
+    elif order.modality == VIRTUAL_MODALITY_GRAVADO:
+        campanha = (
+            db.session.query(VirtualCampaign)
+            .filter(VirtualCampaign.id == order.campaign_id)
+            .options(lazyload("*"))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        # Conta também as reservas vivas dos OUTROS pedidos: um pagamento atrasado (pedido já
+        # expirado) não pode tomar a vaga de quem ainda está pagando dentro da própria reserva.
+        outras_ativas = VirtualOrder.query.filter(
+            VirtualOrder.campaign_id == campanha.id,
+            VirtualOrder.id != order.id,
+            VirtualOrder.modality == VIRTUAL_MODALITY_GRAVADO,
+            VirtualOrder.status.in_(VIRTUAL_ORDER_STATUS_ATIVOS),
+            VirtualOrder.locked_until > agora(),
+        ).count()
+        ocupadas = (campanha.recorded_sold or 0) + (0 if _pedido_com_trava_viva(order) else outras_ativas)
+        if ocupadas >= (campanha.recorded_capacity or 0):
+            motivo = VIRTUAL_REFUND_REASON_SEM_VAGA_VIDEO
+
+    if tomado or motivo:
+        _abrir_devolucao(order, consulta=consulta, motivo=motivo, identificadores=ids)
+        logger.info("[virtuais] pedido %s (%s): devolução %s", order.order_nsu, origem,
+                    motivo or "conflito")
+        return VIRTUAL_AVISO_CONFLITO if tomado else VIRTUAL_AVISO_DEVOLUCAO
+
+    _efetivar_no_banco(order)
+    logger.info("[virtuais] pedido %s efetivado (origem=%s)", order.order_nsu, origem)
+    _pos_venda(order)
+    return VIRTUAL_AVISO_EFETIVADO
+
+
+def _cobranca_ja_devolvida(order: VirtualOrder, tx: str) -> bool:
+    return (
+        VirtualRefundRequest.query.filter_by(order_id=order.id, transaction_nsu=tx).first()
+        is not None
+    )
 
 
 def _enviar_aviso(order: VirtualOrder, kind: str) -> None:
@@ -1520,139 +2108,401 @@ def reenviar_aviso(order: VirtualOrder, kind: str) -> VirtualOrderNotification:
     return registro
 
 
-def processar_notificacao_pagamento(payload: dict, *, secret_ok: bool = True) -> dict[str, Any]:
-    """Processa um aviso de pagamento da InfinitePay (FR-027 a FR-034).
+def token_do_aviso_valido(token: str) -> bool:
+    """O segredo do endereço confere com o atual ou com o anterior ainda na janela (R-12).
 
-    **O corpo do aviso não decide nada.** Ele identifica o pedido; quem autoriza é a reconsulta da
-    cobrança na operadora. A InfinitePay não assina seus webhooks, então confiar no payload seria
-    aceitar que qualquer um libere produto de graça.
-
-    Sequência: registra a notificação (a unicidade de ``transaction_nsu`` barra a reentrega) →
-    trava o slot → reconsulta → decide.
-
-    Returns:
-        ``{"outcome": str, "order_nsu": str | None}`` — o desfecho registrado, para log e teste.
-        A rota responde **200** em todos os casos: `400` faria a operadora reenviar em loop, e
-        reenviar não conserta duplicata, pedido inexistente nem conflito de horário.
+    Comparação em tempo constante. Sem segredo configurado, nada é aceito.
     """
-    from app.integracoes import infinitepay_client as ipc
+    import hmac
 
+    settings = SiteSetting.query.get(1)
+    if settings is None or not token:
+        return False
+    atual = settings.infinitepay_webhook_token or ""
+    if atual and hmac.compare_digest(token, atual):
+        return True
+    anterior = getattr(settings, "infinitepay_webhook_token_anterior", None) or ""
+    ate = getattr(settings, "infinitepay_webhook_token_anterior_ate", None)
+    return bool(anterior and ate and ate > agora() and hmac.compare_digest(token, anterior))
+
+
+def registrar_aviso_invalido(payload: dict) -> None:
+    """Chamada com o segredo errado: registra um resumo curto e NÃO ocupa o ``transaction_nsu``.
+
+    Gravar o NSU aqui deixava um aviso legítimo posterior (mesmo NSU) cair como "duplicado" — o
+    atacante nem precisava do segredo (feature 310, R2).
+    """
+    corpo = json.dumps(payload or {}, ensure_ascii=False)[:2000]
+    db.session.add(
+        VirtualPaymentNotification(
+            order_nsu=str((payload or {}).get("order_nsu") or "")[:64] or None,
+            transaction_nsu=None,
+            raw_payload=corpo,
+            secret_ok=False,
+            outcome=VIRTUAL_AVISO_RECUSADO_TOKEN,
+            message="Segredo do endereço inválido.",
+            state=VIRTUAL_AVISO_STATE_DECIDIDO,
+        )
+    )
+    db.session.commit()
+
+
+def registrar_aviso(payload: dict) -> int | None:
+    """Grava o aviso (segredo certo) e devolve o id a processar, ou ``None`` se já está decidido.
+
+    Feature 310 (R2, R-06): a rota só grava e responde; quem decide é ``processar_aviso``, fora da
+    requisição. A reentrega de um aviso cujo registro NÃO tem desfecho final volta para a fila —
+    antes ela caía como "duplicado" e o pagamento ficava sem dono.
+    """
+    tx = (payload or {}).get("transaction_nsu")
     order_nsu = (payload or {}).get("order_nsu")
-    transaction_nsu = (payload or {}).get("transaction_nsu")
+    existente = (
+        VirtualPaymentNotification.query.filter_by(transaction_nsu=tx).first() if tx else None
+    )
+    if existente is not None:
+        if existente.outcome in VIRTUAL_AVISO_FINAIS:
+            return None
+        if _veio_do_retorno(existente):
+            # O registro veio de um retorno (POST público, sem segredo): o aviso autenticado
+            # manda. Sem isto, um retorno forjado com o NSU de outra família fazia o aviso dela
+            # ser reconsultado com o pedido errado — e o pagamento ficava sem dono.
+            existente.order_nsu = order_nsu
+            existente.order_id = None
+            existente.raw_payload = json.dumps(payload or {}, ensure_ascii=False)[:20000]
+            existente.message = None
+        existente.state = VIRTUAL_AVISO_STATE_PENDENTE
+        existente.last_attempt_at = None
+        db.session.commit()
+        return existente.id
 
     registro = VirtualPaymentNotification(
         order_nsu=order_nsu,
-        transaction_nsu=transaction_nsu,
-        raw_payload=json.dumps(payload, ensure_ascii=False)[:20000],
-        secret_ok=secret_ok,
+        transaction_nsu=tx,
+        raw_payload=json.dumps(payload or {}, ensure_ascii=False)[:20000],
+        secret_ok=True,
+        state=VIRTUAL_AVISO_STATE_PENDENTE,
     )
     db.session.add(registro)
     try:
         db.session.commit()
     except IntegrityError:
-        # `transaction_nsu` já registrado: este aviso já foi processado. É a trava que impede
-        # evento, escala, presente e baixa de estoque duplicados (FR-028).
         db.session.rollback()
-        return {"outcome": "duplicado", "order_nsu": order_nsu}
+        existente = VirtualPaymentNotification.query.filter_by(transaction_nsu=tx).first()
+        return None if existente is None or existente.outcome in VIRTUAL_AVISO_FINAIS else existente.id
+    return registro.id
 
-    if not secret_ok:
-        return _fechar_notificacao(registro, "recusado", "Segredo do endereço inválido.")
 
-    order = VirtualOrder.query.filter_by(order_nsu=order_nsu).first() if order_nsu else None
+def _reivindicar_aviso(registro_id: int) -> bool:
+    """Claim por linha: só um processo processa cada aviso (padrão do ``claim_sweep``)."""
+    from sqlalchemy import text
+
+    momento = agora()
+    preso = momento - timedelta(minutes=5)  # thread que morreu no meio (deploy) libera a linha
+    resultado = db.session.execute(
+        text(
+            "UPDATE virtual_payment_notifications SET state = :proc, attempts = attempts + 1, "
+            "last_attempt_at = :now WHERE id = :id AND (state = :pend OR "
+            "(state = :proc AND last_attempt_at < :preso))"
+        ),
+        {"proc": VIRTUAL_AVISO_STATE_PROCESSANDO, "pend": VIRTUAL_AVISO_STATE_PENDENTE,
+         "now": momento, "id": registro_id, "preso": preso},
+    )
+    db.session.commit()
+    return resultado.rowcount > 0
+
+
+def processar_aviso(registro_id: int) -> str | None:
+    """Decide um aviso registrado (feature 310, R2).
+
+    A reconsulta usa os identificadores DESTE aviso (nunca os gravados no pedido por outro aviso):
+    um aviso forjado não contamina o verdadeiro. Os identificadores só vão para o pedido depois de
+    provados (``decidir_pagamento``).
+
+    Returns:
+        O desfecho, ou ``None`` se outro processo já estava com o aviso.
+    """
+    from app.integracoes import infinitepay_client as ipc
+
+    if not _reivindicar_aviso(registro_id):
+        return None
+    registro = db.session.get(VirtualPaymentNotification, registro_id)
+    db.session.refresh(registro)
+    try:
+        payload = json.loads(registro.raw_payload or "{}")
+    except ValueError:
+        payload = {}
+
+    order = (
+        VirtualOrder.query.filter_by(order_nsu=registro.order_nsu).first()
+        if registro.order_nsu else None
+    )
     if order is None:
-        # Aviso órfão: registrado e sinalizado, nunca descartado em silêncio (FR-034).
-        return _fechar_notificacao(
-            registro, "orfao", f"Nenhum pedido com order_nsu={order_nsu!r}."
-        )
-
+        return _fechar_aviso(registro, VIRTUAL_AVISO_ORFAO,
+                             f"Nenhum pedido com order_nsu={registro.order_nsu!r}.")
     registro.order_id = order.id
-    if transaction_nsu and not order.transaction_nsu:
-        order.transaction_nsu = transaction_nsu
-    if (payload or {}).get("invoice_slug") and not order.invoice_slug:
-        order.invoice_slug = payload["invoice_slug"]
     db.session.commit()
 
-    if order.status == VIRTUAL_ORDER_STATUS_PAGO:
-        return _fechar_notificacao(registro, "duplicado", "Pedido já estava pago.")
-
-    settings = SiteSetting.query.get(1)
-    handle = (settings.infinitepay_handle or "") if settings else ""
-    if not handle:
-        return _fechar_notificacao(
-            registro, "retido", "Operadora não configurada — nada foi liberado."
-        )
-
+    ids = {
+        "transaction_nsu": payload.get("transaction_nsu"),
+        "invoice_slug": payload.get("invoice_slug"),
+        "receipt_url": payload.get("receipt_url"),
+    }
     try:
-        consulta = ipc.consultar_pagamento(
-            handle=handle,
-            order_nsu=order.order_nsu,
-            transaction_nsu=order.transaction_nsu,
-            slug=order.invoice_slug,
-        )
+        consulta = _reconsultar(order.order_nsu, ids)
     except ipc.InfinitePayIndisponivel as exc:
-        # "Não sei" nunca vira venda nem cancelamento (FR-027d).
         registro.recheck_result = "unavailable"
-        return _fechar_notificacao(registro, "retido", f"Operadora indisponível: {exc}")
+        return _fechar_aviso(registro, VIRTUAL_AVISO_RETIDO, f"Operadora indisponível: {exc}",
+                             final=False)
     except ipc.InfinitePayError as exc:
         registro.recheck_result = "error"
-        return _fechar_notificacao(registro, "retido", f"Falha na reconsulta: {exc}")
+        return _fechar_aviso(registro, VIRTUAL_AVISO_RETIDO, f"Falha na reconsulta: {exc}",
+                             final=False)
 
-    registro.recheck_payload = json.dumps(consulta.get("raw", {}), ensure_ascii=False)[:20000]
-
-    if not consulta.get("paid"):
+    registro.recheck_payload = json.dumps(consulta.get("raw", {}), ensure_ascii=False,
+                                          default=str)[:20000]
+    if consulta["resultado"] != "pago":
+        # Pode ser atraso de propagação na operadora: volta para a fila (R4).
         registro.recheck_result = "unpaid"
-        return _fechar_notificacao(
-            registro, "recusado", "A operadora informou que a cobrança não está paga."
-        )
-
-    pago = consulta.get("paid_amount") or consulta.get("amount")
-    if pago is None or Decimal(pago) < Decimal(order.total_value):
-        registro.recheck_result = "divergent"
-        return _fechar_notificacao(
-            registro, "recusado",
-            f"Valor divergente: operadora {pago}, pedido {order.total_value}.",
-        )
+        return _fechar_aviso(registro, VIRTUAL_AVISO_PENDENTE_PROVA,
+                             f"Operadora: {consulta['resultado']}.", final=False)
 
     registro.recheck_result = "paid"
-
-    # O horário ainda é desta família? Trava a linha antes de decidir — entre o aviso e aqui,
-    # outra pessoa pode ter levado o slot que expirou.
-    if order.slot_id is not None:
-        slot = (
-            db.session.query(VirtualCampaignSlot)
-            .filter(VirtualCampaignSlot.id == order.slot_id)
-            .with_for_update()
-            .first()
-        )
-        tomado = slot is None or (slot.order_id is not None and slot.order_id != order.id)
-        if tomado:
-            _abrir_devolucao(order, consulta=consulta)
-            return _fechar_notificacao(
-                registro, "conflito", "Horário já vendido a outra pessoa — devolução aberta."
-            )
-
+    db.session.commit()
     try:
-        efetivar_pedido(order, consulta=consulta)
-    except Exception as exc:  # noqa: BLE001 — falha parcial não pode deixar meia venda
+        desfecho = decidir_pagamento(order.id, consulta, identificadores=ids, origem="aviso")
+    except Exception as exc:  # noqa: BLE001 — falha na decisão volta para a fila, nunca meia venda
         db.session.rollback()
-        logger.exception("[virtuais] efetivação do pedido %s falhou", order.order_nsu)
-        return _fechar_notificacao(registro, "retido", f"Falha ao efetivar: {exc}")
+        logger.exception("[virtuais] decisão do aviso %s falhou", registro_id)
+        registro = db.session.get(VirtualPaymentNotification, registro_id)
+        return _fechar_aviso(registro, VIRTUAL_AVISO_RETIDO, f"Falha ao decidir: {exc}",
+                             final=False)
+    if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+        registro.recheck_result = "divergent"
+    registro = db.session.get(VirtualPaymentNotification, registro_id)
+    return _fechar_aviso(registro, desfecho, _MENSAGEM_DESFECHO.get(desfecho, desfecho),
+                         final=desfecho in VIRTUAL_AVISO_FINAIS)
 
-    return _fechar_notificacao(registro, "efetivado", "Venda efetivada.")
+
+_MENSAGEM_DESFECHO = {
+    VIRTUAL_AVISO_EFETIVADO: "Venda efetivada.",
+    VIRTUAL_AVISO_CONFLITO: "Horário já vendido a outra pessoa — devolução aberta.",
+    VIRTUAL_AVISO_DEVOLUCAO: "Pagamento não pôde virar venda — devolução aberta.",
+    VIRTUAL_AVISO_DUPLICADO: "Pagamento já decidido.",
+    VIRTUAL_AVISO_DIVERGENTE: "Valor pago diferente do pedido — a conferir.",
+}
 
 
-def _fechar_notificacao(
-    registro: VirtualPaymentNotification, outcome: str, mensagem: str
-) -> dict[str, Any]:
-    """Grava o desfecho da notificação e devolve o resumo."""
+def _fechar_aviso(
+    registro: VirtualPaymentNotification, outcome: str, mensagem: str, *, final: bool = True
+) -> str:
+    """Grava o desfecho; não final volta para a fila do reprocessamento (R-06)."""
     registro.outcome = outcome
     registro.message = mensagem
+    registro.state = VIRTUAL_AVISO_STATE_DECIDIDO if final else VIRTUAL_AVISO_STATE_PENDENTE
     db.session.commit()
-    if outcome in ("recusado", "conflito", "retido", "orfao"):
-        logger.warning(
-            "[virtuais] notificação %s: %s (%s)", registro.transaction_nsu, outcome, mensagem
+    if outcome not in (VIRTUAL_AVISO_EFETIVADO, VIRTUAL_AVISO_DUPLICADO):
+        logger.warning("[virtuais] aviso %s: %s (%s)", registro.id, outcome, mensagem)
+    if final and outcome in (VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO):
+        _avisar_a_conferir(
+            f"virtual.conferir:aviso:{registro.id}",
+            "Loja virtual: pagamento a conferir",
+            f"Aviso {outcome} do pedido {registro.order_nsu}.",
         )
-    return {"outcome": outcome, "order_nsu": registro.order_nsu}
+    return outcome
+
+
+def processar_notificacao_pagamento(payload: dict, *, secret_ok: bool = True) -> dict[str, Any]:
+    """Compatibilidade (205): registra e processa um aviso na mesma chamada.
+
+    A rota da 310 usa ``registrar_aviso`` + ``processar_aviso`` (resposta rápida); este atalho fica
+    para scripts e verifies antigos.
+    """
+    if not secret_ok:
+        registrar_aviso_invalido(payload)
+        return {"outcome": VIRTUAL_AVISO_RECUSADO_TOKEN, "order_nsu": (payload or {}).get("order_nsu")}
+    registro_id = registrar_aviso(payload)
+    if registro_id is None:
+        return {"outcome": VIRTUAL_AVISO_DUPLICADO, "order_nsu": (payload or {}).get("order_nsu")}
+    return {"outcome": processar_aviso(registro_id), "order_nsu": (payload or {}).get("order_nsu")}
+
+
+def reprocessar_avisos(*, limite: int = 50) -> dict[str, int]:
+    """Rotina da varredura: avisos sem desfecho final voltam a ser processados (R-06).
+
+    Cadência: 3 tentativas nos minutos 0/1/2 (a política da feature 205) e depois a cada 10 min,
+    por até 48 h. Esgotou → fica decidido com o desfecho não final, e entra em "a conferir".
+    Vale para pedido de qualquer estado — o aviso de um pagamento atrasado de pedido expirado
+    também tem de terminar em venda ou devolução.
+    """
+    momento = agora()
+    limite_idade = momento - timedelta(hours=VIRTUAL_AVISO_REPROCESSA_HORAS)
+    # "processando" parado há mais de 5 min = a thread morreu no meio (deploy, reciclagem do
+    # worker, exceção). Só olhar "pendente" deixava essa linha fora de tudo para sempre: a página
+    # da família em "confirmando" e nada em "a conferir". É o mesmo critério do claim.
+    preso = momento - timedelta(minutes=5)
+    candidatos = (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.secret_ok.is_(True),
+            db.or_(
+                VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_PENDENTE,
+                db.and_(
+                    VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_PROCESSANDO,
+                    VirtualPaymentNotification.last_attempt_at < preso,
+                ),
+            ),
+        )
+        .order_by(VirtualPaymentNotification.id.asc())
+        .limit(limite)
+        .all()
+    )
+    resultado = {"processados": 0, "esperando": 0, "esgotados": 0}
+    for aviso in candidatos:
+        if aviso.created_at and aviso.created_at < limite_idade and _veio_do_retorno(aviso):
+            # Registro de retorno (POST público, sem segredo) que nunca provou nada em 48 h: fecha
+            # em silêncio — sem sino e fora de "a conferir". Um retorno inventado não pode virar
+            # alarme para a equipe; o retorno de quem pagou de verdade já decidiu antes disso.
+            aviso.state = VIRTUAL_AVISO_STATE_DECIDIDO
+            aviso.outcome = aviso.outcome or VIRTUAL_AVISO_PENDENTE_PROVA
+            aviso.resolvido_em = momento
+            aviso.resolvido_por = "sistema (retorno sem prova em 48 h)"
+            db.session.commit()
+            resultado["esgotados"] += 1
+            continue
+        if aviso.created_at and aviso.created_at < limite_idade:
+            aviso.state = VIRTUAL_AVISO_STATE_DECIDIDO
+            # Sem desfecho nenhum (nunca chegou a decidir) vira "retido": é o que o põe em
+            # "a conferir" — senão o aviso esgotado sumia sem ninguém ver.
+            aviso.outcome = aviso.outcome or VIRTUAL_AVISO_RETIDO
+            db.session.commit()
+            _avisar_a_conferir(
+                f"virtual.aviso:{aviso.id}",
+                "Loja virtual: aviso de pagamento sem desfecho",
+                f"O aviso do pedido {aviso.order_nsu or '?'} passou 48 h sem ser decidido. "
+                "Confira na InfinitePay (Devoluções → Pagamentos a conferir).",
+            )
+            resultado["esgotados"] += 1
+            continue
+        intervalo = (
+            VIRTUAL_RETRY_INTERVAL_MIN
+            if (aviso.attempts or 0) < VIRTUAL_RETRY_MAX_ATTEMPTS
+            else VIRTUAL_AVISO_RETRY_LONGO_MIN
+        )
+        if aviso.last_attempt_at and aviso.last_attempt_at > momento - timedelta(minutes=intervalo):
+            resultado["esperando"] += 1
+            continue
+        try:
+            processar_aviso(aviso.id)
+            resultado["processados"] += 1
+        except Exception as exc:  # noqa: BLE001
+            db.session.rollback()
+            logger.warning("[virtuais] reprocessamento do aviso %s falhou: %s", aviso.id, exc)
+    return resultado
+
+
+def registrar_retorno(order: VirtualOrder, dados: dict) -> str | None:
+    """Retorno do checkout como segunda prova de pagamento (feature 310, R3, R-08).
+
+    A família toca "Continuar" e volta com ``order_nsu``, ``slug``, ``transaction_nsu`` na URL. Se
+    o ``order_nsu`` não for o do pedido, nada acontece (o chamador responde 404). Sem
+    identificadores, só devolve o estado. Com eles, reconsulta e decide pela mesma regra.
+
+    Returns:
+        O desfecho, ou ``None`` quando não havia o que provar.
+    """
+    from app.integracoes import infinitepay_client as ipc
+
+    tx = (dados.get("transaction_nsu") or "").strip()[:120] or None
+    slug = (dados.get("slug") or "").strip()[:120] or None
+    if not tx or not slug or order.status == VIRTUAL_ORDER_STATUS_PAGO:
+        return None
+    ids = {"transaction_nsu": tx, "invoice_slug": slug,
+           "receipt_url": (dados.get("receipt_url") or "")[:500] or None}
+    try:
+        consulta = _reconsultar(order.order_nsu, ids)
+    except ipc.InfinitePayError:
+        _guardar_retorno_sem_prova(order, ids, dados)
+        return VIRTUAL_AVISO_RETIDO
+    if consulta["resultado"] != "pago":
+        _guardar_retorno_sem_prova(order, ids, dados)
+        return VIRTUAL_AVISO_PENDENTE_PROVA
+    desfecho = decidir_pagamento(order.id, consulta, identificadores=ids, origem="retorno")
+    if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+        _guardar_retorno_sem_prova(order, ids, dados, desfecho=VIRTUAL_AVISO_DIVERGENTE)
+    return desfecho
+
+
+#: Texto do registro de aviso que nasceu de um retorno do checkout (sem segredo). A marca que
+#: dura é ``"origem": "retorno"`` no corpo — a mensagem é trocada quando o registro decide.
+MENSAGEM_RETORNO_SEM_PROVA = "Retorno do checkout (identificadores ainda sem prova)."
+
+
+def _veio_do_retorno(registro: VirtualPaymentNotification) -> bool:
+    try:
+        return json.loads(registro.raw_payload or "{}").get("origem") == "retorno"
+    except (ValueError, AttributeError):
+        return False
+
+
+def _guardar_retorno_sem_prova(order: VirtualOrder, ids: dict, dados: dict, *,
+                               desfecho: str | None = None) -> None:
+    """Guarda os identificadores do retorno que ainda não provaram nada (feature 310, R-08).
+
+    Vão para um registro de aviso PRÓPRIO, nunca para o pedido: o pedido só recebe
+    identificadores provados (um retorno forjado não contamina nada). Sem desfecho, o registro
+    fica ``pendente`` e a varredura de avisos o reconsulta como reconsulta qualquer aviso — antes
+    os identificadores eram descartados e, se o aviso da operadora não chegasse, ninguém mais os
+    tinha. Com ``divergente``, já nasce decidido e entra em "a conferir" com sino.
+
+    Se a operadora já mandou o aviso dessa transação, o registro dela basta: nada é criado.
+    """
+    tx = ids.get("transaction_nsu")
+    if not tx or VirtualPaymentNotification.query.filter_by(transaction_nsu=tx).first():
+        return
+    # Um por pedido enquanto não decide: o retorno é público (só o token do pedido), e repetir com
+    # NSUs inventados não pode encher a fila da varredura nem "a conferir".
+    if not desfecho and any(
+        _veio_do_retorno(r)
+        for r in VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.state != VIRTUAL_AVISO_STATE_DECIDIDO,
+        ).all()
+    ):
+        return
+    corpo = {
+        "origem": "retorno",
+        "order_nsu": order.order_nsu,
+        "transaction_nsu": tx,
+        "invoice_slug": ids.get("invoice_slug"),
+        "receipt_url": ids.get("receipt_url"),
+        "capture_method": (dados.get("capture_method") or "")[:40] or None,
+    }
+    db.session.add(
+        VirtualPaymentNotification(
+            order_id=order.id,
+            order_nsu=order.order_nsu,
+            transaction_nsu=tx,
+            raw_payload=json.dumps(corpo, ensure_ascii=False),
+            # "Segredo certo" aqui = registro que a varredura pode reconsultar. A prova continua
+            # sendo SÓ a reconsulta na operadora; o retorno não decide nada sozinho.
+            secret_ok=True,
+            outcome=desfecho,
+            message=MENSAGEM_RETORNO_SEM_PROVA,
+            state=VIRTUAL_AVISO_STATE_DECIDIDO if desfecho else VIRTUAL_AVISO_STATE_PENDENTE,
+            attempts=1,
+            last_attempt_at=agora(),
+        )
+    )
+    try:
+        db.session.commit()
+    except Exception:  # noqa: BLE001 — corrida com o aviso da mesma transação: o dele basta
+        db.session.rollback()
+        return
+    if desfecho == VIRTUAL_AVISO_DIVERGENTE:
+        _avisar_a_conferir(
+            f"virtual.retorno:{tx}",
+            "Loja virtual: pagamento com valor diferente do pedido",
+            f"Pedido {order.order_nsu}: a família pagou um valor diferente. Confira na InfinitePay.",
+        )
 
 
 def regerar_sala(order: VirtualOrder) -> VirtualOrder:
@@ -1704,9 +2554,10 @@ def retentar_salas(*, limite: int = 50) -> dict[str, int]:
     **queda longa** do Google, com o intervalo de 1 minuto e o progresso em banco — porque entre um
     ciclo e o seguinte o processo pode reiniciar, ou outro worker pode assumir.
 
-    Esgotadas as 3 tentativas, o pedido para de ser retentado e passa a contar como falha
-    definitiva: ``meet_pending`` continua ``True`` e o painel mostra que o sistema desistiu
-    (FR-056a). Silêncio seria o único desfecho inaceitável.
+    Esgotadas as 3 tentativas, o painel mostra a sala como falha (FR-056a) e a varredura passa a
+    tentar a cada 10 min até o horário da chamada (feature 310, R11 — antes desistia em ~2 min);
+    só conta como ``esgotada`` depois que o horário passou. Faltando menos de 6 h sem sala, a
+    equipe recebe o alerta "a conferir". Silêncio seria o único desfecho inaceitável.
 
     Returns:
         ``{"resolvidas": int, "retidas": int, "esgotadas": int}``.
@@ -1722,12 +2573,29 @@ def retentar_salas(*, limite: int = 50) -> dict[str, int]:
     )
 
     resultado = {"resolvidas": 0, "retidas": 0, "esgotadas": 0}
+    momento = agora()
     for order in pendentes:
-        if not deve_tentar_novamente(order.meet_attempts or 0, order.meet_last_attempt_at):
-            if retry_esgotou(order.meet_attempts or 0):
-                resultado["esgotadas"] += 1
-            else:
-                resultado["retidas"] += 1
+        inicio = order.slot.start_at if order.slot else None
+        if inicio is not None and inicio - momento <= timedelta(hours=VIRTUAL_SALA_ALERTA_HORAS):
+            # Feature 310 (R11): faltando menos de 6 h sem sala, a equipe precisa saber — antes
+            # ninguém percebia até a família entrar no horário e não achar a sala.
+            _avisar_a_conferir(
+                f"virtual.sala:{order.id}",
+                "Loja virtual: chamada sem sala do Meet",
+                f"Pedido {order.order_nsu} começa {inicio:%d/%m %H:%M} e ainda não tem sala.",
+            )
+        tentativas = order.meet_attempts or 0
+        if retry_esgotou(tentativas):
+            # Depois das 3 da política, a cada 10 min até o horário (antes: desistia em ~2 min).
+            passou = inicio is not None and inicio <= momento
+            recente = order.meet_last_attempt_at and order.meet_last_attempt_at > momento - (
+                timedelta(minutes=VIRTUAL_SALA_RETRY_LONGO_MIN)
+            )
+            if passou or recente:
+                resultado["esgotadas" if passou else "retidas"] += 1
+                continue
+        elif not deve_tentar_novamente(tentativas, order.meet_last_attempt_at):
+            resultado["retidas"] += 1
             continue
 
         try:
@@ -1865,7 +2733,7 @@ def salvar_video_entrega(delivery: VirtualMediaDelivery, file_obj: Any) -> Virtu
 
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise VirtuaisValidationError("video", "Escolha o arquivo de vídeo.")
+        raise VirtuaisValidationError("video", "Selecione o arquivo de vídeo.")
 
     extensao = os.path.splitext(nome_original)[1].lower()
     if extensao not in VIRTUAL_VIDEO_EXTENSIONS:
@@ -1973,7 +2841,7 @@ def atualizar_status_entrega(
         and delivery.order.modality == VIRTUAL_MODALITY_GRAVADO
         and not delivery.video_path
     ):
-        raise VirtuaisValidationError("video", "Envie o vídeo antes de finalizar a entrega.")
+        raise VirtuaisValidationError("video", "Insira o vídeo antes de finalizar a entrega.")
 
     delivery.status = limpo
     delivery.updated_by_id = user_id
@@ -2153,7 +3021,9 @@ def serialize_campaign(campaign: VirtualCampaign) -> dict[str, Any]:
         "price_live": _money(campaign.price_live),
         "price_recorded": _money(campaign.price_recorded),
         "price_gift": _money(campaign.price_gift),
-        "recorded_available": campaign.recorded_available,
+        # Mesma conta da reserva (descontando as reservas vivas): a landing dizia "tem vídeo" e a
+        # reserva recusava com "esgotaram" (feature 310).
+        "recorded_available": max(_vagas_de_video_livres(campaign), 0),
         "recorded_delivery_days": campaign.recorded_delivery_days,
         "gift_items": [
             {"id": item.id, "name": item.name, "photo_url": item.photo_url}
@@ -2174,7 +3044,9 @@ def listar_vitrine() -> list[dict[str, Any]]:
     de repente confundiria quem recebeu o link e voltaria depois.
     """
     campanhas = (
-        VirtualCampaign.query.filter_by(status=VIRTUAL_CAMPAIGN_STATUS_PUBLICADA)
+        # Feature 310 (R14): publicada FORA da vitrine (teste real, oferta fechada) só abre pelo
+        # link — a campanha continua pública, só não é listada.
+        VirtualCampaign.query.filter_by(status=VIRTUAL_CAMPAIGN_STATUS_PUBLICADA, listada=True)
         .order_by(VirtualCampaign.created_at.desc())
         .all()
     )
@@ -2189,7 +3061,7 @@ def listar_vitrine() -> list[dict[str, Any]]:
             "price_live": _money(campanha.price_live),
             "price_recorded": _money(campanha.price_recorded),
             "tem_horario": len(listar_slots_disponiveis(campanha)) > 0,
-            "tem_gravado": campanha.recorded_available > 0,
+            "tem_gravado": _vagas_de_video_livres(campanha) > 0,
         })
     return vitrine
 
@@ -2215,6 +3087,7 @@ def serialize_campaign_admin(campaign: VirtualCampaign) -> dict[str, Any]:
         **serialize_campaign(campaign),
         "id": campaign.id,
         "status": campaign.status,
+        "listada": bool(getattr(campaign, "listada", True)),
         "catalog_character_id": campaign.catalog_character_id,
         "talent_id": campaign.talent_id,
         "figurino_sheet_id": campaign.figurino_sheet_id,
@@ -2324,6 +3197,26 @@ def serialize_refund(refund: VirtualRefundRequest) -> dict[str, Any]:
     }
 
 
+def segundos_restantes(order: VirtualOrder) -> int | None:
+    """Segundos até a trava do pedido vencer, calculados no servidor (feature 310, FR-035)."""
+    if order.locked_until is None or order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return None
+    return max(0, int((order.locked_until - agora()).total_seconds()))
+
+
+def _confirmando(order: VirtualOrder) -> bool:
+    if order.status not in VIRTUAL_ORDER_STATUS_ATIVOS:
+        return False
+    return (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.order_nsu == order.order_nsu,
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.state != VIRTUAL_AVISO_STATE_DECIDIDO,
+        ).first()
+        is not None
+    )
+
+
 def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
     """Resumo do pedido para a página pública **antes** da validação dupla (FR-044a).
 
@@ -2342,6 +3235,11 @@ def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
         "start_at": order.slot.start_at.isoformat() if order.slot else None,
         "total_value": _money(order.total_value),
         "locked_until": order.locked_until.isoformat() if order.locked_until else None,
+        # Feature 310 (FR-035): o relógio vem pronto do servidor. `locked_until` é hora de parede
+        # de São Paulo sem fuso, e o navegador em Manaus contava 75 minutos em vez de 15.
+        "seconds_left": segundos_restantes(order),
+        # Há um aviso de pagamento deste pedido esperando decisão (a página diz "confirmando").
+        "confirming": _confirmando(order),
         "payment_url": (
             order.payment_url if order.status in VIRTUAL_ORDER_STATUS_ATIVOS else None
         ),
@@ -2364,3 +3262,280 @@ def serialize_order_summary(order: VirtualOrder) -> dict[str, Any]:
             else None
         ),
     }
+
+
+# ── "A conferir" e cancelamento pela equipe (feature 310, US6) ────────────────────────────────
+
+
+def _avisar_a_conferir(dedupe: str, titulo: str, corpo: str) -> None:
+    """Sino para Comercial e Superadmin quando nasce um item "a conferir" (FR-032)."""
+    try:
+        from app.notificacoes import notificacoes_ops as nops
+
+        nops.notificar_virtual_atencao(titulo=titulo, corpo=corpo, dedupe_key=dedupe)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[virtuais] aviso 'a conferir' não saiu: %s", exc)
+
+
+def listar_a_conferir(*, dias: int = 30) -> list[dict[str, Any]]:
+    """Pagamentos que precisam de olho humano (feature 310, R-07).
+
+    Três origens, nunca abandono de checkout:
+    1. aviso divergente, órfão, ou esgotado sem desfecho (48 h);
+    2. pedido liberado sem prova porque a operadora não respondeu (``nao_sei``) ou porque pagou
+       valor errado (``divergente``);
+    3. recusa da operadora ao criar o link, agrupada por código.
+    """
+    desde = agora() - timedelta(days=dias)
+    itens: list[dict[str, Any]] = []
+
+    avisos = (
+        VirtualPaymentNotification.query.filter(
+            VirtualPaymentNotification.secret_ok.is_(True),
+            VirtualPaymentNotification.resolvido_em.is_(None),
+            VirtualPaymentNotification.created_at >= desde,
+            db.or_(
+                VirtualPaymentNotification.outcome.in_(
+                    (VIRTUAL_AVISO_DIVERGENTE, VIRTUAL_AVISO_ORFAO)
+                ),
+                db.and_(
+                    VirtualPaymentNotification.state == VIRTUAL_AVISO_STATE_DECIDIDO,
+                    VirtualPaymentNotification.outcome.in_(
+                        (VIRTUAL_AVISO_RETIDO, VIRTUAL_AVISO_PENDENTE_PROVA)
+                    ),
+                ),
+            ),
+        )
+        .order_by(VirtualPaymentNotification.id.desc())
+        .all()
+    )
+    for aviso in avisos:
+        try:
+            corpo = json.loads(aviso.raw_payload or "{}")
+        except ValueError:
+            corpo = {}
+        pedido = aviso.order
+        pago = corpo.get("paid_amount")
+        itens.append({
+            "tipo": "aviso",
+            "id": aviso.id,
+            "order_nsu": aviso.order_nsu,
+            "pedido_id": aviso.order_id,
+            "campanha": pedido.campaign.title if pedido and pedido.campaign else None,
+            "motivo": aviso.outcome,
+            "valor_pedido": _money(pedido.total_value) if pedido else None,
+            "valor_pago": _money(Decimal(pago) / 100) if pago is not None else None,
+            "invoice_slug": corpo.get("invoice_slug"),
+            "transaction_nsu": aviso.transaction_nsu,
+            "receipt_url": corpo.get("receipt_url"),
+            "criado_em": aviso.created_at.isoformat() if aviso.created_at else None,
+            "ocorrencias": 1,
+        })
+
+    # Só enquanto o pedido continua expirado: se o aviso chegou depois e virou venda (ou virou
+    # cancelamento com devolução aberta), mostrar "pode ter sido paga" levaria a equipe a devolver
+    # o Pix de uma venda válida. A marca `unverified_reason` fica como histórico.
+    pedidos = (
+        VirtualOrder.query.filter(
+            VirtualOrder.unverified_reason.isnot(None),
+            VirtualOrder.status == VIRTUAL_ORDER_STATUS_EXPIRADO,
+            VirtualOrder.conferido_em.is_(None),
+            VirtualOrder.updated_at >= desde,
+        )
+        .order_by(VirtualOrder.updated_at.desc())
+        .all()
+    )
+    for pedido in pedidos:
+        itens.append({
+            "tipo": "pedido",
+            "id": pedido.id,
+            "order_nsu": pedido.order_nsu,
+            "pedido_id": pedido.id,
+            "campanha": pedido.campaign.title if pedido.campaign else None,
+            "motivo": pedido.unverified_reason,
+            "valor_pedido": _money(pedido.total_value),
+            "valor_pago": None,
+            "invoice_slug": pedido.invoice_slug,
+            "transaction_nsu": pedido.transaction_nsu,
+            "receipt_url": pedido.receipt_url,
+            "criado_em": pedido.updated_at.isoformat() if pedido.updated_at else None,
+            "ocorrencias": 1,
+        })
+
+    falhas: dict[str, dict[str, Any]] = {}
+    for pedido in (
+        VirtualOrder.query.filter(
+            VirtualOrder.payment_link_error.isnot(None),
+            VirtualOrder.conferido_em.is_(None),
+            VirtualOrder.created_at >= desde,
+        )
+        .order_by(VirtualOrder.created_at.desc())
+        .all()
+    ):
+        codigo = pedido.payment_link_error
+        if codigo in falhas:
+            falhas[codigo]["ocorrencias"] += 1
+            continue
+        falhas[codigo] = {
+            "tipo": "falha_link",
+            "id": pedido.id,
+            "order_nsu": pedido.order_nsu,
+            "pedido_id": pedido.id,
+            "campanha": pedido.campaign.title if pedido.campaign else None,
+            "motivo": codigo,
+            "valor_pedido": _money(pedido.total_value),
+            "valor_pago": None,
+            "invoice_slug": None,
+            "transaction_nsu": None,
+            "receipt_url": None,
+            "criado_em": pedido.created_at.isoformat() if pedido.created_at else None,
+            "ocorrencias": 1,
+        }
+    itens.extend(falhas.values())
+    itens.sort(key=lambda i: i["criado_em"] or "", reverse=True)
+    return itens
+
+
+def resolver_a_conferir(tipo: str, item_id: int, *, quem: str, nota: str = "") -> bool:
+    """Marca um item "a conferir" como resolvido — irreversível e auditado (R-07)."""
+    momento = agora()
+    if tipo == "aviso":
+        aviso = db.session.get(VirtualPaymentNotification, item_id)
+        if aviso is None or not aviso.secret_ok:
+            return False
+        aviso.resolvido_em, aviso.resolvido_por = momento, quem[:120]
+        rotulo = aviso.order_nsu or str(item_id)
+    elif tipo in ("pedido", "falha_link"):
+        pedido = db.session.get(VirtualOrder, item_id)
+        if pedido is None:
+            return False
+        alvo = [pedido]
+        if tipo == "falha_link" and pedido.payment_link_error:
+            # A falha de link aparece agrupada por código: resolver resolve o grupo.
+            alvo = VirtualOrder.query.filter(
+                VirtualOrder.payment_link_error == pedido.payment_link_error,
+                VirtualOrder.conferido_em.is_(None),
+            ).all()
+        for p in alvo:
+            p.conferido_em, p.conferido_por = momento, quem[:120]
+        rotulo = pedido.order_nsu
+    else:
+        return False
+    audit("edit", "VirtualOrder", item_id, rotulo,
+          f"'A conferir' ({tipo}) resolvido por {quem}" + (f": {nota[:200]}" if nota else ""))
+    db.session.commit()
+    return True
+
+
+def cancelar_pedido_pago(order_id: int, *, motivo: str, quem: str) -> VirtualRefundRequest:
+    """Equipe cancela um pedido pago e abre a devolução (feature 310, FR-034, R15, R-19).
+
+    Trava pedido → horário. O horário volta à vitrine só se ainda faltar mais que a antecedência
+    de reserva; senão fica vendido sem dono (não reaparece em cima da hora). Evento local e do
+    Google saem (a venda some dos relatórios), a entrega sai. Presente 3D já em impressão
+    bloqueia o cancelamento: a peça existe, e a decisão é da produção.
+
+    Raises:
+        VirtuaisValidationError: Motivo vazio.
+        VirtuaisConflitoError: Pedido não está pago, ou presente já em produção.
+    """
+    from app.models import Event3DGift
+
+    if not (motivo or "").strip():
+        raise VirtuaisValidationError("motivo", "Diga o motivo do cancelamento.")
+    order = _travar_pedido(order_id)
+    if order is None or order.status != VIRTUAL_ORDER_STATUS_PAGO:
+        db.session.rollback()
+        raise VirtuaisConflitoError("Só um pedido pago pode ser cancelado por aqui.")
+
+    presentes = Event3DGift.query.filter_by(event_id=order.event_id).all() if order.event_id else []
+    if any(g.status != GIFT_3D_STATUS_PENDENTE for g in presentes):
+        db.session.rollback()
+        raise VirtuaisConflitoError(
+            "O presente 3D deste pedido já está em produção — combine com a produção antes."
+        )
+
+    if order.slot_id:
+        slot = _travar_horario(order.slot_id)
+        if slot is not None and slot.order_id == order.id:
+            slot.order_id = None
+            slot.locked_until = None
+            slot.status = (
+                VIRTUAL_SLOT_STATUS_LIVRE
+                if slot.start_at > _limite_de_reserva()
+                else VIRTUAL_SLOT_STATUS_VENDIDO
+            )
+
+    evento = db.session.get(CalendarEvent, order.event_id) if order.event_id else None
+    google_id = evento.google_event_id if evento else None
+    for presente in presentes:
+        db.session.delete(presente)
+    VirtualMediaDelivery.query.filter_by(order_id=order.id).delete()
+    if evento is not None:
+        # Mesma limpeza da exclusão de evento (Princípio I): o evento da venda pode ter histórico
+        # (a divergência do Google grava EventLog), pagamento ou avaliação, e apagar só a escala
+        # estourava a chave estrangeira no meio do cancelamento.
+        from app.calendar.routes import _clear_event_side_tables
+
+        _clear_event_side_tables(evento.id)
+        EventRole.query.filter_by(event_id=evento.id).delete()
+        order.event_id = None
+        db.session.flush()
+        db.session.delete(evento)
+    if order.modality == VIRTUAL_MODALITY_GRAVADO and order.campaign_id:
+        # Trava a campanha (ordem pedido → horário → campanha) e relê: sem isso, um pagamento de
+        # vídeo confirmado ao mesmo tempo tinha o seu +1 sobrescrito por este -1 calculado em cima
+        # do valor velho, e sobrava uma vaga fantasma.
+        campanha = (
+            db.session.query(VirtualCampaign)
+            .filter(VirtualCampaign.id == order.campaign_id)
+            .options(lazyload("*"))
+            .populate_existing()
+            .with_for_update()
+            .first()
+        )
+        if campanha is not None:
+            campanha.recorded_sold = max(0, (campanha.recorded_sold or 0) - 1)
+
+    devolucao = VirtualRefundRequest(
+        order_id=order.id,
+        amount=Decimal(order.total_value),
+        reason=VIRTUAL_REFUND_REASON_DESISTENCIA,
+        status=VIRTUAL_REFUND_STATUS_PENDENTE,
+        invoice_slug=order.invoice_slug,
+        transaction_nsu=order.transaction_nsu,
+    )
+    db.session.add(devolucao)
+    order.status = VIRTUAL_ORDER_STATUS_CANCELADO
+    audit("edit", "VirtualOrder", order.id, order.order_nsu,
+          f"Pedido pago cancelado por {quem}: {motivo.strip()[:200]} — devolução aberta")
+    db.session.commit()
+
+    # Devolução nova é dinheiro a devolver: o sino toca como nas outras origens (FR-032).
+    _avisar_equipe_devolucao(order, VIRTUAL_REFUND_REASON_DESISTENCIA)
+    if google_id and not google_id.startswith(GOOGLE_ID_LOCAL_PREFIX):
+        _apagar_evento_google(google_id)
+    _enviar_aviso(order, VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO)
+    return devolucao
+
+
+def _apagar_evento_google(google_id: str) -> None:
+    """Remove o evento da venda no Google, respeitando a trava de escrita (XIV)."""
+    if current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True):
+        logger.info("[virtuais] remoção do evento %s no Google travada neste ambiente", google_id)
+        return
+    try:
+        from app.calendar.routes import CALENDAR_ID
+        from app.calendar.service import delete_event
+
+        delete_event(CALENDAR_ID, google_id)
+    except Exception as exc:  # noqa: BLE001 — o pedido já foi cancelado; o evento fica a conferir
+        logger.warning("[virtuais] não consegui apagar o evento %s do Google: %s", google_id, exc)
+        # Sem o sino, o evento ficava na agenda do Google para sempre e o talento aparecia no
+        # horário de uma chamada cancelada.
+        _avisar_a_conferir(
+            f"virtual.google:{google_id}",
+            "Loja virtual: evento cancelado ficou no Google",
+            "Um pedido foi cancelado, mas o evento dele não saiu da agenda do Google. Apague à "
+            "mão na agenda da empresa para ninguém aparecer na chamada.",
+        )

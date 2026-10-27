@@ -1766,8 +1766,8 @@ def resolve_ensaio_location(location_type: str, custom_location: str) -> str:
 
 
 # Feature 312: as recusas de ensaio no show cancelado (a API e o Jinja leem estas).
-ENSAIO_DO_CANCELADO = "Este show foi cancelado — não dá para agendar ensaio para ele."
-ENSAIO_VINCULO_CANCELADO = "Este evento foi cancelado — não dá para vincular um ensaio a ele."
+ENSAIO_DO_CANCELADO = "Este show foi cancelado — não é possível agendar ensaio para ele."
+ENSAIO_VINCULO_CANCELADO = "Este evento foi cancelado — não é possível vincular um ensaio a ele."
 
 
 def create_ensaio(
@@ -1842,7 +1842,7 @@ def update_ensaio(
                 description=desc, location=ensaio.location or "",
             )
         except RuntimeError as exc:
-            return f"Salvo no banco, mas erro ao atualizar o Google Calendar: {exc}"
+            return f"Ensaio salvo, mas não foi possível atualizar o Google Calendar: {exc}"
     return None
 
 

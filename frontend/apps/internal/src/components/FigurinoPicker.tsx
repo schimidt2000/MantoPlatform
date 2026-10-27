@@ -79,7 +79,7 @@ export function FigurinoPicker({
 
   function enviarSolicitacao() {
     if (!personagem.trim()) {
-      setErroMsg("Diga o nome do personagem da ficha.");
+      setErroMsg("Informe o nome do personagem da ficha.");
       return;
     }
     setErroMsg(null);
@@ -145,7 +145,7 @@ export function FigurinoPicker({
             onClick={abrirSolicitacao}
             className="text-xs text-accent hover:underline"
           >
-            Não achou? Solicitar ficha
+            Não encontrou? Solicitar ficha
           </button>
           {solicitadoMsg && (
             <span className="text-xs text-green" role="status">
@@ -185,7 +185,7 @@ export function FigurinoPicker({
                 className="h-20 w-full resize-y rounded-md border border-line bg-panel px-3 py-2 text-sm text-ink"
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
-                placeholder="Contexto pro figurino (evento, prazo, referências)…"
+                placeholder="Contexto para o figurino (evento, prazo, referências)…"
               />
             </div>
             {erroMsg && (

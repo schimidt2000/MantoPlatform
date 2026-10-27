@@ -7,7 +7,22 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
+> Última atualização: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10;
+> migration **`e8b4a1c7d310`**, aditiva — head: interruptor `virtuais_pagamento_ativo` e o segredo
+> anterior do aviso em `site_settings`, §2.10; colunas novas da loja em `virtual_*`, §2.10.1; o aviso
+> que grava e responde, o retorno do checkout, "pagamentos a conferir", cancelar pedido pago e os 503/
+> 400 novos, §3.13.4; `virtuais_pagamento_ativo`/`virtuais_pedidos_aguardando` e o 400 com campo em
+> `/api/admin/settings`, §3.11; `INFINITEPAY_SUPPRESS_CALLS`, `INFINITEPAY_API_KEY`,
+> `X-Manto-Client-Ip` e a máscara do segredo, §3.13.4 e §5.2.1; gate dos endpoints novos, §4.3).
+> Antes: **2026-10-22** · **315-pedido-de-cancelamento** (migration **`d8b4e15f2c31`** — head:
+> `calendar_events.deletion_request_scope` e `deletion_request_refund`, §2.2; `POST/DELETE
+> /api/events/<id>/pedido-cancelamento` com o caminho velho `/solicitar-exclusao` nas mesmas views, a chave `pedidos` da
+> faixa, o bloco do pedido com corte por papel no detalhe e na fila, a herança do pedido de "todos" no dia da venda, §3.3;
+> kinds `evento.pedido_cancelamento` e `evento.pedido_decidido`, §3.13.5; `em_confirmacao` com o pedido, §3.15; gates e
+> recusas, §4.3). Antes: **2026-10-21** · **313-desconto-e-pix-na-calculadora** (EM PRODUÇÃO desde 22/10/2026 ~04:58; sem migration; o desconto
+> negociado e o PIX que vale o maior em `/orcamento/calcular`, a ordem da conta da Q7 marcada por `versao_conta: 2` no
+> snapshot, o cheio e o final no prefill, no Novo evento e no vínculo 273, `duracoes_do_desconto` no 400 — §3.13,
+> "Feature 313"; nenhum gate muda, §4.3). Antes: **2026-10-20** · **312-cancelado-fora-das-listas** (sem migration; o cancelado sai do Dia, da busca, das
 > fichas, dos seletores, das filas e do painel do grupo; a trava `exigir_evento_vivo` e as recusas de vínculo com `codigo:
 > "cancelado"`; `GET /api/events/cancelamentos` também para o FINANCEIRO, com `mes`/`devolucao`; o card `cancelamentos` no
 > pipeline; `casting.cancelados_a_avisar`; a avaliação pública 410 — §4.3, "O cancelado fora das listas"). Antes: **2026-10-20** · **306b-motivo-editavel** (sem migration; `PATCH /api/events/<id>/motivo-cancelamento`, §3.3; `pode_editar_motivo_do_cancelado` e a flag
@@ -197,7 +212,7 @@ chamam `*_ops` e serializam.
 | Banco | PostgreSQL (produção no Render — serviço `manto-postgres`, `render.yaml`; cópia local `manto_local`); SQLite só faz o app subir |
 | Frontend | React + TypeScript + Vite + Tailwind CSS + shadcn/ui + Framer Motion + TanStack Query |
 | Pacotes internos | `@manto/ui` (design system), `@manto/api-client` (`apiFetch`/`assetUrl`), `@manto/money` (`formatBRL`/`parseBRL`) |
-| Integrações | Google Calendar API (OAuth 2.0), Google Sheets API (service account), Google Maps Distance Matrix, ClickSign, Vimeo/Drive (mídia) |
+| Integrações | Google Calendar API (OAuth 2.0), Google Sheets API (service account), Google Maps Distance Matrix, ClickSign (API v3, só leitura + aviso — feature 317, §3.13.6), InfinitePay, Vimeo/Drive (mídia) |
 | Storage | `app/storage.py` — `instance/uploads/` local e o disco persistente do `manto-backend` em produção (`USE_S3=false`; não há S3/R2) |
 
 ### 1.1 Escopo migrado vs. legado
@@ -239,11 +254,11 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido do Comercial aguardando o Superadmin; zerados ao recusar ou ao atender), **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
-| `event_payments` | `EventPayment` | comprovantes de pagamento com valor | `event_id` |
+| `event_payments` | `EventPayment` | comprovantes de pagamento com valor. Feature 318: `origem` (`comprovante` \| `pix_email`), `conta_id` (conta que recebeu, opcional) e `file_path` **NULL só na origem PIX** (CHECK `ck_event_payments_arquivo_ou_pix`): o pagamento criado pelo aviso do banco nasce sem arquivo | `event_id`, `conta_id` |
 | `event_installments` | `EventInstallment` | parcelas (`due_date`) | `event_id` |
 | `event_invoices` | `EventInvoice` | notas fiscais (`issue_date`) | `event_id` |
 | `event_acrescimos` | `EventAcrescimo` | acréscimos tipados (`BV`, `Taxa de urgência`, `Outro`…) | `event_id` |
@@ -442,9 +457,10 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
   de escrever na agenda real — `manto_local` traz o token de produção e o calendário é fixo. A
   trava irmã da feature 303, **`CALENDAR_SUPPRESS_EVENT_WRITES`**
   (`config._suppress_calendar_event_writes`; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`), cobre
-  **só** duas escritas: a devolução de evento marcado ao Google e, desde a feature 306, a remoção
+  **só** estas escritas: a devolução de evento marcado ao Google e, desde a feature 306, a remoção
   do Google no cancelamento (os dias e os ensaios do ato, `cancel_ops._remover_do_google`;
-  travada, o ato cancela no sistema e só avisa na tela) — ver §5.4.
+  travada, o ato cancela no sistema e só avisa na tela) — ver §5.4. Desde a 310 cobre também o
+  evento de venda da loja virtual (criar na venda, apagar no cancelamento de pedido pago; §3.13.4).
 - **O fluxo depende do tipo** (225b): `FIGURINO_PROD_FLUXOS` define a ordem por `kind` e
   `producao_ops._transicoes_do_fluxo` **deriva** as transições dela — nunca escrever duas
   tabelas. Manutenção pula `aprovado`; nem SUPERADMIN consegue aprovar uma.
@@ -507,6 +523,8 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 | `special_expenses` | `SpecialExpense` | gastos extras com fluxo de aprovação e reembolso a funcionário. `CATEGORIES`: Figurino, Escritório, Marketing, Manutenção, **Devolução a cliente** (224, `CATEGORY_DEVOLUCAO`), **Multa de cancelamento** (306, `CATEGORY_MULTA_CANCELAMENTO`) e Outros — categoria fora da lista vira "Outros" na primeira edição em Gastos Extras. `disbursement_type` ∈ `reembolso`\|`fornecedor`\|`cliente`. **Feature 306**: a devolução e a multa do cancelamento nascem **aprovadas** pelo `cancel_ops`, nunca por `create_expense`. A devolução se reconhece pela categoria, pelo evento e pela aprovação (`cancel_ops.filtro_devolucao`), não pelo `disbursement_type`; a de evento cancelado sai dos gastos extras da DRE (já está descontada no retido) e fica **travada** em Gastos Extras (§3.7). A multa é uma por escalação, `fornecedor`, a pagar ao artista (nome e `Talent.pix_key`), ligada ao dia, e conta como gasto do mês da `expense_date` (o dia do ato, ou o do lançamento depois dele) | `created_by_id`, `approved_by_id`, `reimburse_user_id`, `event_id` |
 | `recurring_expenses` | `RecurringExpense` | contas recorrentes | `created_by_id` |
 | `recurring_expense_entries` | `RecurringExpenseEntry` | parcelas geradas da conta recorrente | `recurring_id`, `filled_by_id` |
+| `contas_recebimento` | `ContaRecebimento` | feature 318: as contas da empresa que recebem de cliente (Inter MEI, Inter Prime, InfinitePay Prime, Cora Monta), semeadas **sem número**; `numero_conta` (UNIQUE) é o "na conta …" do aviso do Inter, preenchido pelo Superadmin em `/pix` — número de conta não vai para o repositório | — |
+| `pix_recebidos` | `PixRecebido` | feature 318: um aviso "Pix recebido" lido da caixa por linha (`message_id` UNIQUE = idempotência; o corpo do e-mail **não** é guardado). `estado`: `novo` · `ligado_auto` · `ligado_confirmado` · `para_conferir` · `sem_venda` · `conta_propria` · `ignorado` · `nao_entendido`; `tipo_sugestao` `venda`\|`repasse_infinitepay`; `candidatos`/`descartados`/`pagamentos_extra` em JSON; `autenticado` = DKIM do Inter aprovado pelo `mx.google.com`; `recebido_em` em horário de parede de SP | `conta_id`, `event_payment_id` (UNIQUE, SET NULL), `decidido_por_id` |
 
 ### 2.7 Clientes, Formulários, Feedback e Orçamento
 
@@ -629,10 +647,22 @@ Pontos que valem para quem for ler esses dados:
 fábrica; `event.commission_rate` continua sobrepondo os dois),
 `infinitepay_handle`/`infinitepay_webhook_token` (conta que recebe as vendas da Loja de
 Interações Virtuais e o segredo que autentica o aviso de pagamento — editáveis em Configurações
-desde a 224f; **nulos, nenhuma reserva passa do checkout**. O token é gerado pelo sistema e
-nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`), `tax_rate`,
+desde a 224f. O token é gerado pelo sistema e
+nunca sai pela API: a leitura devolve só `infinitepay_webhook_configured`. **Desde a 310** a tag é
+validada (`config_ops._INFINITETAG`, `^[a-z0-9][a-z0-9_.-]{1,62}$`, depois de tirar o `$` e passar
+para minúsculas — URL colada ou espaço viram 400 no campo) e a troca grava auditoria com o valor
+antigo e o novo; regerar o token move o atual para `infinitepay_webhook_token_anterior`, aceito até
+`infinitepay_webhook_token_anterior_ate` (**24 h**, `VIRTUAL_TOKEN_ANTERIOR_HORAS`), porque trocar
+derrubava o aviso de todo link já aberto; e `virtuais_pagamento_ativo` é o **interruptor** da loja,
+que nasce **desligado** (migration `server_default false`): a venda só abre com tag, token **e**
+interruptor ligados (`virtuais_ops._pagamento_ligado`). Desligado ou sem configuração, a reserva
+responde **503** "As reservas estão fechadas por enquanto." sem travar horário e publicar campanha é
+recusado; aviso, retorno e reconsulta de pedidos já abertos continuam fechando. Ligar e desligar o
+interruptor, regerar o segredo e trocar a tag ficam no `AuditLog`), `tax_rate`,
 `fator_r_threshold`, `manto_address`, `departure_margin_minutes`, `google_maps_api_key`,
-`clicksign_token`/`clicksign_sandbox`, `email_notifications_enabled`, `ratings_fully_anonymous`,
+`clicksign_token`/`clicksign_sandbox` (**inertes** desde a 021 — o token da 317 vem só da env), os
+`clicksign_webhook_id`/`_secret`/`_secret_anterior(_ate)` e `clicksign_sync_at`/`_cursor`/`_pendente`
+da feature 317 (§3.13.6), `email_notifications_enabled`, `ratings_fully_anonymous`,
 `release_date`, `google_token` (OAuth persistido para sobreviver a redeploy), `pricing_config`
 (JSON da calculadora — schema em `app/orcamento/settings.py`; desde a **307** tem o bloco
 `datas_especiais` `{<chave>: {rotulo, dias["MM-DD"], markup[4], cache{especial: [4]},
@@ -651,6 +681,39 @@ engenharia reversa da 307 — "Papai Noel" `[712, 800, 850, 900]` → `[600, 650
 do Noel" `[423, 480, 510, 540]` → `[270, 320, 345, 370]`, só quando estiverem exatamente nesses
 valores; a troca 600→712 de `_migrar_307` foi removida: cachê é cachê, o preço da Visita vem do
 produto), `calendar_sync_cache`, `calendar_auto_sync_at`, `whatsapp_form_number`.
+
+Desde a **310**, `config_ops.update_settings` só muda o que veio no envio para
+`educamanto_seller_id`, `email_notifications_enabled`, `whatsapp_form_number` e `release_date`: o
+upload do logo manda só o arquivo, e as atribuições incondicionais desligavam de carona todos os
+e-mails (a confirmação de compra da loja inclusive), o WhatsApp e a data de corte.
+
+### 2.10.1 Loja de Interações Virtuais — colunas de pagamento (feature 310)
+
+Migration **`e8b4a1c7d310`** (`down_revision = c5d2f7a9e306`), aditiva: todas as colunas têm default
+ou aceitam nulo, e o código anterior lê e grava no banco migrado.
+
+| Tabela | Coluna | Para quê |
+|---|---|---|
+| `virtual_campaigns` | `listada` bool not null default `true` | campanha publicada **fora da vitrine** (só pelo link) — teste real de baixo valor e oferta fechada; `listar_vitrine` filtra |
+| `virtual_orders` | `unverified_reason` varchar(24) | por que o pedido foi liberado sem prova: `nao_sei` (operadora não respondeu nas 3 tentativas) ou `divergente` (pago com valor menor); nulo com `expired_unverified` = legado da 205. Abandono de checkout não marca nada |
+| | `payment_link_error` varchar(200) | código da recusa da operadora ao criar o link (`external_checkout_not_enabled`…; `travado_neste_ambiente` no local). Pedido com ele não conta no teto por origem |
+| | `receipt_url` varchar(500) | comprovante da operadora, gravado só depois de a reconsulta provar o pagamento |
+| | `conferido_em`, `conferido_por` | o "a conferir" do pedido resolvido pela equipe (irreversível, auditado) |
+| `virtual_payment_notifications` | `state` varchar(12) not null default `'pendente'` | `pendente` → `processando` → `decidido`: claim por linha do processamento fora da requisição |
+| | `attempts` int not null default 0, `last_attempt_at` | política de reprocessamento (0/1/2 min, depois a cada 10 min, até 48 h) |
+| | `resolvido_em`, `resolvido_por` | o "a conferir" do aviso resolvido |
+
+- **Backfill** na própria migration: aviso antigo com `outcome` vira `state='decidido'`, para a
+  varredura não reprocessar o histórico da 205.
+- `transaction_nsu` continua `UNIQUE`, e o aviso com **segredo errado** grava `transaction_nsu = NULL`
+  (outcome `token_invalido`): gravar o NSU deixava um aviso legítimo posterior cair como "duplicado".
+- Desfechos do aviso em `constants.VIRTUAL_AVISO_*`: finais `efetivado`, `devolucao_aberta`,
+  `conflito`, `duplicado`, `divergente`, `orfao`, `token_invalido`; não finais `retido` e
+  `pendente_prova`. Motivos novos de devolução: `pagamento_em_dobro`, `pagamento_sem_pedido_ativo`,
+  `horario_passou`, `sem_vaga_de_video`, `desistencia` (rótulos em `VIRTUAL_REFUND_REASON_LABELS`).
+- Constantes de prazo: `VIRTUAL_ANTECEDENCIA_RESERVA_HORAS = 2` (reservar),
+  `VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO = 30` (pagar), `VIRTUAL_SALA_ALERTA_HORAS = 6`,
+  `VIRTUAL_SALA_RETRY_LONGO_MIN = 10`, `VIRTUAL_AVISO_REPROCESSA_HORAS = 48`.
 
 ### 2.11 Migrations
 
@@ -749,7 +812,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 |---|---|
 | GET | `/api/agenda`, `/api/agenda/day/<date_str>`, `/api/talents`, `/api/events/<id>`, `/api/events/new/options`, `/api/events/new/prefill` |
 | GET | `/api/events/<id>/casting-options` *(feature 215)* |
-| GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio)* |
+| GET | `/api/events/sumidos-google` *(feature 303 — a faixa: `{pode_ver, total, limit, items: [{id, title, start_at}]}`; quem não vê recebe 200 vazio; a 315 soma a chave opcional `pedidos: {total, items}` com os pedidos de cancelamento pendentes, na mesma ordem — `total`/`items` seguem só do sumiço)* |
+| POST, DELETE | `/api/events/<id>/pedido-cancelamento` *(feature 315 — pedir: Comercial ou Superadmin real, corpo `{motivo, alcance?, devolucao: {modo, valor?, nome?, pix?}, venda_nova?}`; recusar: só Superadmin real, `{motivo?}`; os dois respondem o detalhe. Alias `/api/events/<id>/solicitar-exclusao` nas mesmas views — o bundle de antes do deploy; pelo alias o corpo só com `motivo` vale, sem devolução e com alcance nulo. Recusas em §4.3; o 409 `cache_pago` traz `dias: [{id, titulo, data}]` e a frase com os dias)* |
 | POST | `/api/events/<id>/devolver-ao-google` *(feature 303 — só Superadmin; responde o detalhe + `devolucao_google: {resultado}`; erros com `codigo`)* |
 | POST | `/api/events/<id>/cancelar` *(feature 224; corpo, resposta e recusas reescritos na 306 — ver "Feature 306" abaixo)* |
 | GET | `/api/events/<id>/impacto-exclusao` *(224; a 306 soma as chaves do ato e a prévia `?devolucao=`)*, `/api/events/cancelamentos` *(224; a 306 soma `resumo` a cada cancelado; a 312 abre ao FINANCEIRO e filtra por `mes` e `devolucao` — §4.3)* |
@@ -1065,6 +1129,37 @@ Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 `pay_seller_month`). O Jinja legado `app/financeiro/routes.py` **não** importa deste módulo
 (decisão explícita da 187).
 
+### 3.6.1 PIX recebido — `pix_read.py` / `pix_write.py` (feature 318)
+
+Núcleo: `app/financeiro/pix_ops.py` (regra de vínculo e respostas do "É esta?"),
+`app/financeiro/pix_email_ops.py` (rodada da thread, claim, reavaliação, saúde), `app/financeiro/pix_aviso.py`
+(leitor puro do aviso do Inter). Contrato: `specs/318-pix-recebido-por-email/contracts/api-318.md`.
+
+| Método e rota | Papéis | O quê |
+|---|---|---|
+| `GET /api/pix?aba=conferir\|ligados` | COMERCIAL, FINANCEIRO, SUPERADMIN | fila "É esta?" ou ligados de 30 dias; o repasse da InfinitePay só para FINANCEIRO/SUPERADMIN; `flags` |
+| `GET /api/pix/sem-comprovante` | COMERCIAL, FINANCEIRO, SUPERADMIN | a tarefa (23/10): pagamentos de PIX sem arquivo; incluir = `POST /api/events/<id>/payments` com `anexar_a` (só COMERCIAL, FINANCEIRO, SUPERADMIN); o sino `pix.sem_comprovante` vai ao FINANCEIRO e é marcado lido quando o arquivo entra |
+| `GET /api/pix/saude` | COMERCIAL, FINANCEIRO, SUPERADMIN | última leitura, lidos/não entendidos/conta não cadastrada em 7 dias, contas vistas, `alerta` (`parada`\|`erro`) |
+| `GET /api/pix/resumo-por-conta?meses=6` | FINANCEIRO, SUPERADMIN | Σ `event_payments.amount` por conta e mês (mês de SP) |
+| `POST /api/pix/<id>/confirmar` `{event_id\|event_ids, novo?}` | COMERCIAL, FINANCEIRO, SUPERADMIN; repasse só FINANCEIRO/SUPERADMIN | liga pelo núcleo de comprovante; com comprovante manual do mesmo valor, `novo=false` concilia e `novo=true` cria outro; repasse só numa combinação sugerida |
+| `POST /api/pix/<id>/descartar` `{event_id}` · `POST /api/pix/<id>/nao-e-venda` | idem | tira a venda das sugestões / tira o PIX da fila |
+| `POST /api/pix/<id>/desfazer` | FINANCEIRO, SUPERADMIN | pagamento de PIX sem arquivo sai; com arquivo ou conciliado vira manual; o PIX volta a "para conferir" |
+| `GET`/`PATCH /api/pix/config` | SUPERADMIN | interruptor (ligar grava `pix_email_ativo_desde`), pagadores próprios, número das contas |
+
+Alterados: `POST /api/events/<id>/payments` ganha `conta_id`, `anexar_a` (arquivo no pagamento de PIX sem
+arquivo) e `forcar_novo`; sem eles, comprovante do mesmo valor de um PIX que já entrou volta **409
+`possivel_duplicata`** (checado no núcleo, sob a trava do grupo). `DELETE /api/payments/<id>` recusa com **409
+`pagamento_de_pix`** o pagamento ligado a PIX (sai pelo "Desfazer"; o Jinja recusa com flash). `GET /api/events/<id>`
+traz `pagamentos.items[].origem/conta_id/conta/pix` e `pagamentos.contas`. `/api/dashboard` → `comercial.pix_para_conferir`.
+
+**Thread `pix-email`** (`app/__init__.py`, 900 s): claim em `import_state` (`key='pix_email'`), lê por IMAP só
+leitura a caixa `MAIL_USERNAME` (`fetch_messages`, `FROM no-reply@inter.co SUBJECT "Pix recebido"`, 3 dias),
+guarda cada aviso num commit próprio e decide em outro (um aviso que quebra fica `novo`, volta na próxima rodada e
+o erro vai para `site_settings.pix_email_ultimo_erro`); reavalia por 7 dias o PIX sem venda. Config:
+`PIX_EMAIL_SWEEP_ENABLED` (default `"false" if _suppress_mail() else "true"`), `PIX_EMAIL_SWEEP_INTERVAL=900`,
+`PIX_EMAIL_LOOKBACK_DAYS=3`; e o interruptor da tela `site_settings.pix_email_ativo` (nasce desligado). A Prime chega
+à caixa por um filtro do Gmail de joao@primedreams (criado em 22/10/2026).
+
 ### 3.7 Gastos — `gastos_read.py` / `gastos_write.py`
 `GET /api/gastos`, `/api/gastos/eventos`, `/api/gastos/funcionarios`, `/api/gastos/recorrentes` ·
 `GET /api/gastos/recorrentes/<id>/historico` (**feature 189**) ·
@@ -1167,6 +1262,14 @@ FKs sem `ondelete`) não se exclui. Mesmo status e formato dos outros bloqueios:
 `/migrar-arquivos/status`, `/importar-catalogo/status` · `PATCH /api/admin/settings` ·
 `POST /api/admin/sync/run`, `/portal-announcement`, `/migrar-arquivos/start`,
 `/importar-catalogo/start`.
+
+Feature 310: `GET /api/admin/settings` acrescenta `virtuais_pagamento_ativo` e
+`virtuais_pedidos_aguardando` (pedidos `reservado`/`aguardando` — a tela mostra o número antes de
+regerar o segredo). `PATCH /api/admin/settings` aceita `virtuais_pagamento_ativo` (bool); InfiniteTag
+inválida → **400** com `fields.infinitepay_handle` (`config_ops.ConfigValidationError`, com rollback);
+`infinitepay_regenerate_token` passa o atual a `_anterior` por 24 h; e `educamanto_seller_id`,
+`email_notifications_enabled`, `whatsapp_form_number` e `release_date` só mudam se vierem no envio
+(§2.10).
 
 `POST /api/admin/sync/run` com `action: "cleanup_past"` (feature 303): cada linha de `results[]`
 traz `removed`, `marcados`, `movidos`, `desmarcados`, `inconclusivos` e `falhas` (números), com
@@ -1280,6 +1383,32 @@ EducaManto remove `produtos` em `_totais_contratacao`. CLI pós-deploy:
 DIFERENÇA da coluna — 712→600, 800→650, 423→270… — lendo a base na nota do teto da 239 (cobre 762 =
 712 + noturno, fora de SP e 2h–4h) só em "Papai Noel"/"Ajudante do Noel" sem cachê e sem artista, em
 eventos desde 16/10/2026; nome diferente ou base fora da lista só no relatório).
+**Feature 313 (sem migration) — desconto negociado, PIX que vale o maior e a ordem da conta.** Chaves e tipos em
+`specs/313-desconto-e-pix-na-calculadora/data-model.md`; o contrato em `contracts/api.md`. `POST /calcular` aceita
+`desconto_pct` (0 ≤ d < 100) **ou** `desconto_valor` + `desconto_duracao` (`"1h".."4h"|"extra"`: o valor final de uma
+duração; o servidor acha o % exato sobre o cheio dela e ignora `desconto_pct`; igual ao cheio ± R$ 0,005 = sem
+desconto). 400 com `fields.desconto_pct` (fora da faixa, não numérico) ou `fields.desconto_valor` (só um dos dois, ≤ 0,
+acima do cheio, duração que o resultado não mostra — esta com `duracoes_do_desconto: [...]` no objeto de erro, para a
+tela trocar o seletor). **A ordem da conta** (uma função, `quote_ops.aplicar_acrescimos(base, acrescimos, nota)`): base
+(apresentação + transporte + produto) → acréscimos em R$ **uma vez** → os % que não são BV sobre a base → o BV em %
+sobre tudo isso (o BV em R$ entra uma vez, no passo do BV) → a nota → o desconto, o último passo, sobre o total. Acima
+de 4h, `_preco_extra`: a base de 4h ÷ 4 × horas (produto fixo), os acréscimos pela mesma função — sem parte fixa fica
+o `round(bruto_4h ÷ 4 × h, 2)` de antes. O snapshot novo leva `versao_conta: 2`, `bases`, `brutos` e o desconto
+digitado (`desconto_pct_digitado`/`desconto_valor`/`desconto_duracao`) e o aplicado (`desconto_aplicado`, o que os
+leitores leem); `total_1h..4h` do `OrcamentoHistory` passam a ser o **final**. Snapshot sem a marca (todo orçamento de
+antes) segue o caminho de antes em toda leitura — histórico, PDF, prefill, evento, 305 (`snapshot_v2` cruza `bases` ×
+`brutos` e, inválido, também cai no de antes). O `quote` ganha `bruto_*`, `base_4h`, `desconto_pct`/`_texto`/`_modo`,
+`pix_pct = max(5, d)` e `pix_*` (sobre o **cheio**: vale o maior), `bv_*`/`bv_pix_*` (o BV a repassar com o desconto e
+no PIX, por `bv_que_acompanha`; `null` sem BV); o texto do % é `texto_do_percentual` (uma casa, **para baixo**, vírgula,
+sem ",0"). Mensagem e PDF: "de R$ X por R$ Y" + "_(desconto de N% aplicado)_" por duração; com d ≥ 5% o PIX diz "o
+mesmo valor — o desconto de N% já está aplicado", abaixo disso o bloco de 5% de sempre; sem desconto, byte a byte a de
+antes. A memória ganha "Desconto (N%)" e "BV a repassar a quem indicou" só com desconto. `GET /historico` traz
+`desconto_pct` por item. **Prefill** (`_build_orcamento_prefill`, só orçamento v2): `bruto_1h..4h`, `bruto_custom`,
+`desconto_pct`, `extra_por_horas: {"5".."24": {bruto, total}}` (no personalizado, a régua sobre o cheio de 4h) e, em cada
+`acrescimos_do_orcamento.linhas[]`, `valores_final` (o que a linha vale com o desconto; `valores_brl` segue o cheio).
+**Evento**: a tela manda `sale_value_gross` = cheio e `sale_value` = final; o BV gravado (305) e `deduzir_duracao`
+usam o **cheio** da duração como denominador (cheio primeiro, depois o final); o vínculo 273
+(`aplicar_valores_do_orcamento`) grava o mesmo par. O EducaManto tira `desconto_*` do payload em `_totais_contratacao`.
 **Feature 273 (sem migration)**: cada item de `GET /api/orcamento/historico` traz `event_id` /
 `event_title` do evento **não cancelado** que aponta para ele (uma consulta para a página inteira);
 `DELETE .../historico/<id>` responde **409 + `event_id`** enquanto houver evento vivo vinculado — a
@@ -1447,7 +1576,7 @@ no máximo 5 itens, descartando predições sem `description`.
 - **`publish_date` automática**: `PATCH {"status": "publicado"}` sem data preenche hoje — é o que
   faz o post contar para as metas de frequência (ver §2.9.1).
 
-### 3.13.4 Loja de Interações Virtuais — `virtuais_*.py` (feature 205, parcial: US1)
+### 3.13.4 Loja de Interações Virtuais — `virtuais_*.py` (feature 205; pagamento ligado na 310)
 
 Canal B2C que vende chamadas de vídeo de 10 min e vídeos gravados com Personagens do catálogo.
 Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
@@ -1458,14 +1587,14 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 | `GET` | `/api/virtuais/campanhas` | Lista campanhas com vendidos, faturado, horários restantes e capacidade de vídeo consumida. |
 | `POST` | `/api/virtuais/campanhas` | Cria campanha (JSON ou multipart com `cover`). Nasce em `rascunho`. |
 | `GET` | `/api/virtuais/campanhas/<id>/admin` | Detalhe completo + `slots` + `available_gift_items` (o Acervo 3D ativo inteiro, para o seletor). |
-| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). |
-| `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. |
+| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). Desde a 310 aceita `listada` (bool): desligado, a campanha publicada some da vitrine e só abre pelo link. |
+| `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. Desde a 310 também exige o pagamento configurado **e ligado** (tag, token e interruptor): senão **400** no campo `pagamento` — publicar com o pagamento desligado punha no ar uma campanha em que a família preenchia a ficha para receber erro no fim. |
 | `PUT` | `/api/virtuais/campanhas/<id>/acervo` | `{"item_ids": [...]}` — substitui a seleção inteira. Peça inativa é recusada. |
 | `POST` | `/api/virtuais/campanhas/<id>/horarios` | `{date, start, end}` → `{created, skipped}`. **Idempotente**: reexecutar a mesma janela devolve tudo em `skipped`. Teto de 500 slots por chamada. |
 | `DELETE` | `/api/virtuais/horarios/<id>` | Remove horário **livre**; reservado/vendido devolve **409**. |
 | `GET` | `/api/virtuais/campanhas/<slug>` | **Público.** Landing. Rascunho → 404; pausada → **410**. |
-| `GET` | `/api/virtuais/campanhas/<slug>/horarios` | **Público.** Só horários disponíveis e futuros; nunca revela quem reservou. |
-| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path** (`SiteSetting.infinitepay_webhook_token`). Só valida o segredo e delega. Segredo errado → **404** (403 confirmaria a existência do endereço). Processamento entra na US3. |
+| `GET` | `/api/virtuais/campanhas/<slug>/horarios` | **Público.** Só horários disponíveis que começam **a mais de 2 h** (`VIRTUAL_ANTECEDENCIA_RESERVA_HORAS`, desde a 310 — a equipe lê as dicas e o artista se prepara); nunca revela quem reservou. |
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Reescrita na 310 — ver o bloco "Pagamento ligado com segurança" abaixo. |
 
 - **RBAC**: os endpoints administrativos exigem `COMERCIAL` **ou** `SUPERADMIN`
   (`require_virtuais_access()` em `virtuais_read.py`, chamada no início de cada view conforme §4.3).
@@ -1480,8 +1609,8 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento. `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada) · `429` limite anti-abuso · `502` operadora fora (a reserva já foi desfeita). |
-| `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. |
+| `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento (desde a 310 com `seconds_left`). `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada; desde a 310 também "Este horário fecha 2 horas antes. Escolha outro.") · `429` limite anti-abuso · **`503`** "As reservas estão fechadas por enquanto." com o pagamento desligado ou sem configuração (310; nada é travado) · `502` operadora fora, recusa da operadora ("Não conseguimos abrir o pagamento. A equipe já foi avisada…", código gravado em `payment_link_error`, sino para a equipe) ou "Pagamento travado neste ambiente (cópia de teste)." — em todos a reserva já foi desfeita. |
+| `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. Desde a 310: `seconds_left` (segundos até a trava vencer, calculados no servidor — `locked_until` é hora de parede sem fuso e o aparelho em Manaus contava 75 min) e `confirming` (há aviso de pagamento deste pedido ainda sem decisão). `locked_until` continua no payload para o bundle antigo em cache. |
 | `GET` | `/api/virtuais/enderecos/autocomplete` | **Público, com teto por origem.** Variante sem login de `/api/maps/address-autocomplete`; reusa `app.maps.address_autocomplete`. |
 
 - **Concorrência**: toda mudança de posse do slot passa por `with_for_update()`. Dois visitantes
@@ -1500,18 +1629,20 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 
 | Método | Rota | O que faz |
 |---|---|---|
-| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Só valida o segredo e delega a `processar_notificacao_pagamento()`. Segredo errado → `404` (e a tentativa fica registrada). Todos os demais casos → `200`. |
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, com segredo no path.** Na 205c validava, processava e respondia na mesma requisição; desde a 310 grava e responde (bloco abaixo). |
 | `GET` | `/api/virtuais/devolucoes?status=` | Devoluções a executar no painel da operadora. |
 | `PATCH` | `/api/virtuais/devolucoes/<id>` | `{"status": "concluida"}` depois de devolver o dinheiro. |
 | `POST` | `/api/virtuais/pedidos/<id>/sala` | Tenta obter a sala que ficou pendente no Google. |
 
-- **O aviso não decide nada.** `processar_notificacao_pagamento()` registra a notificação (a
-  unicidade de `transaction_nsu` barra a reentrega), trava o slot, **reconsulta a cobrança** e só
-  então decide. Desfechos possíveis: `efetivado`, `duplicado`, `recusado`, `conflito`, `retido`,
-  `orfao` — todos gravados em `virtual_payment_notifications`.
-- **A efetivação é atômica**: evento (`event_type='VIRTUAL'`, `source='platform'`, `sale_value`),
-  ficha, `EventRole` pré-escalado, `VirtualMediaDelivery`, presente 3D na fila existente e baixa de
-  estoque nascem juntos. Falha → rollback e notificação como `retido`.
+- **O aviso não decide nada.** O corpo só identifica o pedido; quem prova é a **reconsulta da
+  cobrança** na operadora. Na 205c, `processar_notificacao_pagamento()` fazia tudo na requisição; desde
+  a 310 ela é só um atalho de compatibilidade (scripts e verifies antigos) e a decisão é de
+  `decidir_pagamento` (bloco abaixo). Desfechos gravados em `virtual_payment_notifications` (§2.10.1).
+- **A efetivação é atômica no banco**: evento (`event_type='VIRTUAL'`, `source='platform'`,
+  `sale_value`), ficha, `EventRole` pré-escalado, `VirtualMediaDelivery`, presente 3D na fila
+  existente e baixa de estoque nascem num commit só. Desde a 310 o evento nasce com id local
+  (`virtual-local-<nsu>`) e sala pendente, e o Google e o e-mail vêm **depois** do commit
+  (`_pos_venda`): a disputa se decide no banco e o perdedor não deixa evento órfão no Google.
 - **Sala do Meet** vem da Calendar API (`conferenceData` + `conferenceDataVersion=1`) e fica em
   `VirtualOrder.meet_url`. **Não confundir** com `CalendarEvent.google_html_link`, que abre o
   Calendar e exige login. Criação pendente → `meet_pending=True`, venda válida, pendência
@@ -1544,6 +1675,64 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 - **Segregação financeira (FR-052–055): implementada** na feature 205e. `app/api/financeiro_read.py`
   trata `incluir_loja_virtual` e `resumo_loja_virtual` tanto no pipeline de vendas quanto na DRE
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
+
+**Pagamento ligado com segurança** — feature 310 (pronta, aguardando deploy). A máquina de estados
+e as invariantes estão em `docs/04` §4; a tela, em `docs/02`.
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, segredo no path, `60 per minute` por IP do cliente.** Corpo acima de **64 KB** → **413** antes do parse. O token vale se for o atual **ou** o anterior dentro das 24 h (`token_do_aviso_valido`, `hmac.compare_digest`); sem segredo configurado nada é aceito. Token certo: `registrar_aviso` grava o aviso como `pendente`, dispara `processar_aviso` numa thread curta e responde **200** `{"success": true, "message": null}` — a reconsulta, a decisão, o Google e o e-mail levam segundos e a InfinitePay pede resposta em menos de 1 s. Reentrega de aviso sem desfecho final volta para a fila (antes caía como "duplicado"). Token errado → **404** (403 confirmaria o endereço) e `registrar_aviso_invalido` grava um resumo de até 2 KB **com `transaction_nsu = NULL`**, para não ocupar o NSU de um aviso legítimo. Erro ao gravar → 200 mesmo assim (500 faria a operadora reenviar em loop). Se a thread morre, a varredura reprocessa o que ficou `pendente` |
+| `POST` | `/api/virtuais/pedidos/<public_token>/retorno` | **Público, `20 per minute` por IP do cliente.** A página do pedido manda os identificadores que a InfinitePay põe na URL de retorno (`order_nsu`, `slug`, `transaction_nsu`, `capture_method`, `receipt_url`). `order_nsu` diferente do do token → **404** "Pedido não encontrado." (nada gravado). Sem `slug`/`transaction_nsu`, ou pedido já pago → **200** com o resumo atual. Com eles → reconsulta + `decidir_pagamento` (`origem=retorno`) → **200** com o resumo, que pode já vir `pago` ou `cancelado`. Operadora fora, travada ou cobrança ainda não achada → 200 com o resumo, e os identificadores ficam num registro de aviso PRÓPRIO (`"origem": "retorno"` no corpo; nunca no pedido; no máximo um pendente por pedido) que a varredura de avisos reconsulta; retorno com valor divergente nasce decidido em "a conferir" com sino. Se o aviso autenticado da mesma transação chegar depois, ele sobrescreve esse registro (um retorno forjado com o NSU de outra família não sequestra o aviso dela). É a segunda prova de pagamento além do aviso: sem os identificadores a reconsulta não distingue "não pago" de "não achei" (teste 0 em produção) |
+| `POST` | `/api/virtuais/pedidos/<public_token>/abandonar` | **Público, `20 per minute`.** A família desiste de uma reserva ainda não paga (FR-020a da 205, que mandava "abandonar" sem existir como; 310). Exige `{"client_token"}` da aba que criou a reserva (`prova_da_aba`, tempo constante) — sem ela **404**: o link do pedido circula, e só ele não desfaz a reserva de ninguém. Antes de liberar, reconsulta a cobrança como a varredura: "pago" ou operadora fora → **409**. Sem sinal de pagamento (nenhum identificador provado e nenhum aviso ou retorno esperando decisão) → `_liberar_reserva` e **200** com o resumo (`expirado`). Com sinal → **409** "Já recebemos um sinal de pagamento deste pedido…". Pedido que já não está ativo → 200 sem efeito |
+| `GET` | `/api/virtuais/vitrine` | **Público.** Desde a 310 lista só campanhas publicadas com `listada = true`; a fora da vitrine abre normalmente pelo link |
+| `GET` | `/api/virtuais/pagamentos-a-conferir` | `{"itens": [...]}` dos últimos 30 dias, não resolvidos, mais recentes primeiro (`listar_a_conferir`). Três origens: aviso `divergente`/`orfao` ou esgotado em 48 h sem desfecho (`tipo: "aviso"`); pedido liberado sem prova, `unverified_reason` `nao_sei`/`divergente`, enquanto seguir `expirado` — se o pagamento atrasado virou venda ou devolução, sai da lista (`tipo: "pedido"`); recusa da operadora ao criar o link, agrupada por código com `ocorrencias` (`tipo: "falha_link"`). Cada item traz `order_nsu`, campanha, motivo, valor do pedido e o pago (quando o aviso informou), `invoice_slug`, `transaction_nsu`, `receipt_url` e `criado_em` — o que a equipe precisa para achar a cobrança no app. Abandono de checkout nunca entra |
+| `PATCH` | `/api/virtuais/pagamentos-a-conferir/<tipo>/<id>` | `{"resolvido": true, "nota"?}` → grava `resolvido_em/por` (aviso) ou `conferido_em/por` (pedido; na `falha_link` resolve o grupo inteiro do mesmo código) + `AuditLog`. Irreversível. Sem `resolvido: true` → 400 com campo; id ou tipo inexistente → 404 |
+| `POST` | `/api/virtuais/pedidos/<id>/cancelar` | `{"motivo": "…"}` (obrigatório → 400 no campo; cortado em 300). Só pedido `pago` (senão **409**); presente 3D que já saiu de `pendente` na fila → **409** "combine com a produção antes". Trava pedido → horário; o horário volta a `livre` só se começar depois de 2 h, senão fica vendido sem dono; saem presente, entrega, escala e evento local (a venda some dos relatórios), o evento do Google é apagado depois do commit respeitando `CALENDAR_SUPPRESS_EVENT_WRITES`; nasce a devolução `desistencia` pendente e a família recebe o e-mail de cancelamento. Resposta `{"refund": …}` |
+
+- **RBAC**: `pagamentos-a-conferir` (GET e PATCH) e `cancelar` usam `require_virtuais_access()` —
+  `COMERCIAL`, `SUPERADMIN`, o mesmo gate das devoluções. O retorno é público por token não
+  adivinhável e só aceita identificadores do próprio pedido.
+- **Sino**: `notificacoes_ops.notificar_virtual_atencao` (kind `virtual.atencao`, para `COMERCIAL` e
+  `SUPERADMIN`, link `/virtuais/devolucoes`) avisa devolução nova (dedupe por pedido e motivo), item
+  "a conferir" novo (por item), recusa de link (por código e hora) e venda sem sala a menos de 6 h
+  da chamada (por pedido).
+- **Pacote à operadora** (`_gerar_link_pagamento`): descrição "<título> — pedido <order_nsu>" e
+  `customer` só com `email` e `phone_number` (dígitos). O nome da criança deixou de ir como comprador
+  e na descrição — dado de menor a terceiro sem necessidade. Recusa (4xx) não é repetida; só
+  indisponibilidade entra no retry.
+- **Trava fora da produção**: `INFINITEPAY_SUPPRESS_CALLS` (`config._suppress_infinitepay`) é
+  verdadeira com banco em localhost/sqlite ou com `INFINITEPAY_SUPPRESS_CALLS=true`; escape
+  `INFINITEPAY_ALLOW_LOCAL_CALLS=true` (cobra de verdade). Travado, o cliente levanta
+  `InfinitePayTravada` (subclasse de "não sei") antes de qualquer requisição: o link não nasce (o
+  `webhook_url` local apontaria para a produção), a reconsulta não sai, nada é efetivado nem
+  cancelado. A camada `_ops` lê a chave a cada chamada e a passa ao cliente, que não importa Flask;
+  chave ausente = travado. `CALENDAR_SUPPRESS_EVENT_WRITES` passa a cobrir também a criação do evento
+  de venda da loja (`_criar_evento_google`) e a remoção no cancelamento de pedido pago: travada, a
+  venda existe com id local e sala pendente.
+- **`INFINITEPAY_API_KEY`** (opcional, segredo, `sync: false` no `render.yaml`; nunca no
+  `SiteSetting`, que vai para o backup e o espelho). Com ela o link leva `X-Api-Key` e
+  `options{valid_until: fim da trava com -03:00, single_payment: true}` — vence junto com a reserva
+  e aceita um pagamento só. Sem ela, o pacote provado no teste A. O `create_app()` registra no log do
+  deploy `[infinitepay] travada=… api_key=configurada|ausente (link sem validade)`.
+- **IP do cliente**: o `frontend/server.js` põe `X-Manto-Client-Ip` = último item do
+  `X-Forwarded-For` que recebe (o IP que a borda do Render viu — lido ANTES do `proxy.web`, porque o
+  `xfwd` do http-proxy acrescenta o socket ao cabeçalho), sobrescrevendo o que o cliente mandar com
+  esse nome (§5.2.1), e `X-Manto-Proxy-Secret` = `MANTO_PROXY_SECRET`. `api_utils.ip_do_cliente()`
+  só aceita o IP informado junto com a prova certa (`hmac.compare_digest`); sem ela, `remote_addr`.
+  Sem `MANTO_PROXY_SECRET` no backend o cabeçalho é aceito sem prova e o boot avisa `[proxy]` no
+  log — o backend tem URL pública, e quem o chamasse direto trocando o cabeçalho escapava de todo
+  limite, o de login inclusive (achado da revisão da 310). A reserva loga `[virtuais] origem:
+  hash=<8> publico=sim|nao`, sem o IP. `ip_do_cliente()` e é a `key_func` do `Limiter` — portanto de **todo** `@limiter.limit` do
+  sistema (login, portal, cadastro, formulários, NFC, loja) — e a origem anti-abuso da reserva. Antes o
+  limitador via o IP da infraestrutura — o `ProxyFix(x_for=1)` confia em um salto e o caminho tem
+  pelo menos dois — e o limite valia para a loja inteira (e o do login, para a empresa inteira). Só
+  vale com o `MANTO_PROXY_SECRET` igual nos dois serviços.
+- **Segredo fora dos logs**: o caminho do aviso **é** o segredo. `_MascaraSegredoDoAviso`
+  (`app/__init__.py`) filtra `gunicorn.access` e `werkzeug` trocando o trecho depois de
+  `/webhooks/infinitepay/` por `***` (`api_utils.mascarar_url_webhook`), sem tocar no
+  `startCommand`; o `server.js` mascara o mesmo trecho no `console.error` do proxy.
+- **Costura de verificação**: `VIRTUAIS_AVISO_SINCRONO` na config faz a rota processar o aviso na
+  própria requisição (só o `verify_205` e o `verify_310` ligam).
 
 ### 3.13.5 Notificações internas — `notificacoes_read.py` / `notificacoes_write.py` (feature 272)
 
@@ -1587,6 +1776,18 @@ dos dois avisa o Superadmin, que é quem cancela:
   pelo WhatsApp"); `urgent` quando o dia é em até 7 dias, como a recusa de convite; link para a aba
   Produção do dia (`/events/<dia>?aba=producao`); chave `evento.cancelado_escala:<id da URL>:<dia>`.
 
+Produtores da feature 315 (o pedido de cancelamento), chamados por `solicitacao_ops`:
+- `notificar_pedido_cancelamento` (kind `evento.pedido_cancelamento`, SUPERADMIN ativos, entidade
+  `calendar_event`, link `/events/<id>`): na transação do pedido (regime A); `urgent` quando o evento é em até 7 dias ou
+  já passou; o corpo diz data · venda · recebido · escalados nos dias que o pedido alcança · alcance · quem pediu e o
+  motivo — nunca nome nem PIX de quem recebe a devolução; chave `evento.pedido_cancelamento:<id>:<carimbo>`. Toda
+  decisão o marca lido (sempre com o kind); a exclusão o apaga.
+- `notificar_pedido_decidido` (kind `evento.pedido_decidido`, **só o autor**, por lista explícita): "Pedido recusado —
+  <título>: <motivo>", "Evento cancelado — <título> (dd/mm)", "Dia dd/mm cancelado — <título>: a venda segue nos outros
+  dias" ou "…: a venda passou para o dia dd/mm; os outros dias seguem", e "Evento excluído — <título>" (sem entidade e
+  sem link, depois do commit da exclusão, regime B). O produtor não responde a quem perdeu o acesso nem a quem decidiu
+  o próprio pedido; chave `evento.pedido_decidido:<id>:<decisão>:<carimbo do pedido>`.
+
 Os ensaios que o ato apaga levam junto os avisos do sino deles (`event_ops._apagar_ensaio_no_banco`,
 o mesmo caminho do botão e da troca de tipo). O e-mail de remoção ao elenco, um por talento com
 e-mail, sai depois do commit.
@@ -1598,6 +1799,53 @@ gera aviso. Correções únicas pós-deploy, dry-run por padrão e com `MANTO_SE
 `flask formularios-avisos-resolvidos [--execute]` (FR-019: avisos acesos de formulário com destino,
 em lote via `marcar_lidas_por_entidades`) e `flask formularios-cliente-do-evento [--execute]`
 (FR-020: formulários desde o corte ligados a evento com cliente e ainda sem cliente).
+
+### 3.13.6 Contratos da ClickSign — `contratos_read.py` / `contratos_write.py` / `clicksign_webhook.py` (feature 317)
+
+A Manto **lê** a conta ClickSign (PRIME DREAMS LTDA, API v3) e liga cada contrato de cliente à venda
+(principal do grupo ou avulso). Fluxo e regras de domínio em `docs/04` §Contratos da ClickSign.
+
+- **Cliente HTTP** `app/integracoes/clicksign_client.py` (sem Flask; `Authorization: <token>` puro,
+  JSON:API, `page[size]` ≤ 50, `filter[status|created|modified]` com `AAAA-MM-DD,AAAA-MM-DD`; respeita
+  `X-Rate-Limit-Remaining`). Exceções: `ClicksignRecusou` (4xx) × `ClicksignIndisponivel` ("não sei":
+  timeout, 5xx, 429) × `ClicksignTravada`. Pré-condição da conta: **"E-mail do usuário da API"**
+  preenchido em Configurações › API (sem ele, todo GET dá 403).
+- **Núcleo**: `app/contratos/contratos_ops.py` (puro: leitor do nome, classificação, escolha da venda,
+  documento vigente, situação, régua), `sincronizar_ops.py` (passada incremental, vínculo, anexo do PDF
+  assinado, ligar/desligar/descartar/cobrança) e `situacao_ops.py` (leitura em lote para evento, Home e
+  `/vendas`).
+- **Tabelas** (migration `d3c7a1e5b317`, aditiva): `clicksign_documentos` (um envelope; UNIQUE
+  `envelope_id`; `event_id` = principal, SET NULL; `vinculo` ligado/a_conferir/descartado/fora;
+  `contrato_anexo_id` → `event_contracts`), `clicksign_desvinculos` (par documento × venda que a
+  comercial desligou; CASCADE), `clicksign_cobrancas` (quem cobrou e quando; CASCADE).
+- **Config** (`app/config.py`): `CLICKSIGN_ACCESS_TOKEN` (só env, `render.yaml` `sync: false`; vazio =
+  integração desligada, aviso na subida), `CLICKSIGN_API_BASE` (default produção), trava
+  `_suppress_clicksign()` (`CLICKSIGN_SUPPRESS_CALLS` / `CLICKSIGN_ALLOW_LOCAL_CALLS`; banco local =
+  travado), `CLICKSIGN_SYNC_ENABLED`/`CLICKSIGN_SYNC_INTERVAL` (1800 s), `CLICKSIGN_AVISO_SINCRONO`
+  (costura do verify).
+- **Thread** `_start_clicksign_sync` (atrás de `MANTO_SEM_THREADS`; dorme 90 s; lock
+  `site_settings.clicksign_sync_at`; repete se `clicksign_sync_pendente`).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/clicksign` | **Público, assinado.** `Content-Hmac: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `site_settings.clicksign_webhook_secret` (ou o `_anterior` por 24 h), `compare_digest`; inválido ou sem segredo → **404**; corpo > 64 KB → 413; `60/min`. Válido → **200** e uma passada incremental fora da requisição. **O conteúdo do aviso não é lido** — só a reconsulta à ClickSign decide. |
+| `GET` | `/api/contratos/a-conferir` | Lista completa de documentos a conferir, com motivo e vendas sugeridas. |
+| `POST` | `/api/contratos/<id>/cobranca` | Registra o "Cobrar contrato" (a tela copia a mensagem). 201 `{ultima_cobranca}` · 409 `nao_cobravel` (assinado, vencido, satélite, venda cancelada, não vigente). |
+| `POST` | `/api/contratos/<id>/ligar` | `{event_id}` → liga à venda do evento (sempre o principal). 409 `ja_ligado` / `tipo_fora` / `cancelado` (trava 312 no núcleo, `exigir_evento_vivo`). |
+| `POST` | `/api/contratos/<id>/desligar` | Volta a "a conferir" e grava o par em `clicksign_desvinculos` (não religa sozinho). 409 `nao_ligado`. |
+| `POST` | `/api/contratos/<id>/descartar` | "Não é de nenhuma venda": sai da conferência para sempre. 409 `ja_ligado`. |
+
+Leitura embutida: `GET /api/events/<id>` ganha o bloco `contrato` (dentro de `show_comercial`, num
+savepoint — falha vira `null`) e `mensagens.contrato_canal`/`contrato_prazo`; `GET /api/dashboard`
+ganha `comercial.contratos` (`None` na volta cedo de falha das vendas); a coluna Contrato de `/vendas`
+(`contract_status_map`) passa a ler a situação da venda com a integração ligada (FR-019).
+
+**Comandos** (Shell do Render, `MANTO_SEM_THREADS=1`): `flask clicksign-sincronizar [--desde AAAA-MM-DD]
+[--ate] [--aplicar]` (sem `--desde`, começa em `corte_dia_sp()` = 01/06/2026; sem `--aplicar` lê, conta
+e desfaz — nem lock, nem marco; envelope que falha é pulado e o marco para nele; todo anexo pendente é varrido
+em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <id> [--aplicar]` (a URL
+sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
+segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
@@ -1718,7 +1966,8 @@ serializador (`portal_ops._role_summary`) e carrega, desde a feature 302, mais d
   guarda endereço, não observação. O bloco vai em `pending_invites` e `upcoming`; no `history` é
   sempre `null`.
 - **`em_confirmacao`** (feature 303) — booleano, verdadeiro quando o evento está marcado "Sumiu do
-  Google Agenda" e não cancelado. Vai o código, nunca o motivo: a tela escreve "Evento em
+  Google Agenda" e não cancelado, ou (feature 315) tem pedido de cancelamento pendente — dele ou do 1º dia da venda,
+  quando o pedido é de "todos os dias" (lote `solicitacoes_da_venda`, uma consulta por lista). Vai o código, nunca o motivo: a tela escreve "Evento em
   confirmação — entre em contato com a produção". Em `pending_invites`, `upcoming` e `history` da
   agenda e em `items` do histórico; opcional no TypeScript, como as duas acima.
 
@@ -1886,6 +2135,7 @@ Gates por módulo (todos em `app/api/`):
 |---|---|---|
 | `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
+| `_require_vendas()` / `_require_financeiro()` / `_require_superadmin()` de `pix_read` (feature 318) | `pix_read`, `pix_write` | fila, saúde e respostas ao "É esta?": `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (repasse da InfinitePay: `ve_repasse()` = `FINANCEIRO`, `SUPERADMIN`); resumo por conta e Desfazer: `FINANCEIRO`, `SUPERADMIN`; config: `SUPERADMIN` — sempre pelo papel real |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |
 | `_can_delete()` | `agenda_write` (delega para `_CAN_DELETE`): excluir, cancelar (e o `GET …/impacto-exclusao` com a prévia `?devolucao=`), recusar solicitação e — feature 303 — `POST /api/events/<id>/devolver-ao-google`, sempre depois do 404. Os dois endpoints da 306, `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, usam a mesma régua por `cancel_ops.pode_editar_venda_do_cancelado` (linha abaixo) | `SUPERADMIN` (papel real; desde a 224 o Comercial só **solicita**) |
 | `cancel_ops.pode_editar_venda_do_cancelado(user)` — **a regra única do cancelado** (feature 306) | gate de `PATCH /api/events/<id>/devolucao` e `POST /api/events/<id>/multas`, depois do 404 (os demais → 403); nas portas de dinheiro do evento, a recusa **depois** do gate de hoje — quem passa nele e não passa na regra leva **409 `codigo: "cancelado"`** (`EventoCanceladoError`), em geral por `cancel_ops.recusar_se_cancelado`, que trava o evento e relê antes de decidir. Porta a porta em "RBAC do evento cancelado", abaixo | `SUPERADMIN` pelo **papel real** (`user.roles`; o "Ver como" não conta) — a régua de `_can_delete()` e `_is_superadmin()` |
@@ -1897,6 +2147,9 @@ Gates por módulo (todos em `app/api/`):
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
 | `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
+| `_require_cobrar()` (feature 317) | `contratos_write`: cobrar, ligar, desligar e descartar contrato da ClickSign; no detalhe, `contrato.pode_cobrar`/`pode_conferir` seguem `can_confirm` (zerado no cancelado) e, na Home, `contratos.pode_cobrar` o papel efetivo | `COMERCIAL`, `SUPERADMIN` (papel real) — FINANCEIRO leva **403** (vê a situação, não age: decisão do dono) |
+| papéis de `show_comercial` (feature 317) | `contratos_read`: `GET /api/contratos/a-conferir`; o bloco `contrato` do detalhe e `comercial.contratos` da Home vêm no mesmo `show_comercial` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` — CASTING e os demais: 403 / sem a chave |
+| HMAC do aviso (sem papel) | `POST /api/webhooks/clicksign` | público; vale só com `Content-Hmac` correto (404 nos demais) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
@@ -1905,11 +2158,14 @@ Gates por módulo (todos em `app/api/`):
 | `_require_vendas()` | `clientes_read.py:24`, `clientes_write.py:25`, `formularios_admin_read.py:34` (importado por `formularios_admin_write`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_require_vendas()` — endpoints da 298 | `formularios_admin_write`: `…/encerrar`, `…/reabrir`, `…/manter-entre-repetidos`, `…/sugestao/<id>/confirmar`, `…/sugestao/<id>/descartar`, `…/usar-cliente-do-evento` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (papel real — o "Ver como" não se aplica, dívida §3.5) |
 | `_pode_criar_evento()` | `formularios_admin_read`: `GET …/para-evento` e a flag do detalhe (delega para `_CAN_CREATE`, sem repetir a lista) | `COMERCIAL`, `SUPERADMIN` — FINANCEIRO leva 403 |
-| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py` (importado por `orcamento_write.py`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403**. Gate de **módulo**: passado ele, **não há** checagem de dono (feature 301) — exceto no `DELETE .../historico/<id>`, por `_get_entry_para_excluir` (autor ou SUPERADMIN). A regra de escopo está em §3.13 |
+| `_require_vendas()` ⚠️ **homônimo, regra diferente** | `orcamento_read.py` (importado por `orcamento_write.py`) | `COMERCIAL`, `SUPERADMIN` — **FINANCEIRO leva 403**. Gate de **módulo**: passado ele, **não há** checagem de dono (feature 301) — exceto no `DELETE .../historico/<id>`, por `_get_entry_para_excluir` (autor ou SUPERADMIN). A regra de escopo está em §3.13. A 313 não muda gate: o desconto vive no mesmo `POST /calcular` (Financeiro, Casting e Revendedor continuam 403 — `verify_313` cenário 15) |
 | `_has_role(COMERCIAL, FIGURINO, SUPERADMIN)` | `catalogo_read.api_catalogo_elenco_busca` | busca visual de elenco / vínculo de ficha |
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
+| `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções) | `COMERCIAL`, `SUPERADMIN` |
+| `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |
@@ -1941,7 +2197,10 @@ rollback e 409 `tente_de_novo` (`cancel_ops.traduzir_erro_de_banco`).
 | `GET /api/events/<id>/impacto-exclusao` | `_can_delete()`, sem mudança | Sem trava. Na prévia (`?devolucao=`): 400 `fields.devolucao` ou `fields.venda_nova`; evento já cancelado → `ja_cancelado` |
 | `PATCH /api/events/<id>/devolucao` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | 400 `devolucao_total` (falta ou não é número), antes da trava → trava → `nao_cancelado` → `regime_sem_retido` (`satelite`, `virtual`) → 400 com os `fields` → `abaixo_do_piso` (`piso`) → `acima_do_teto` (`teto`, só no `dia`) |
 | `POST /api/events/<id>/multas` **(novo)** | `pode_editar_venda_do_cancelado`: `SUPERADMIN` real, depois do 404 | Trava → `nao_cancelado` → 400 `fields.multas` ou `fields.multa_<elenco_id>` |
-| `GET /api/events/cancelamentos` | `_can_read_cancelamentos()` (feature 312: `SUPERADMIN` ou `FINANCEIRO`, papel real) | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro`; filtros da 312 abaixo |
+| `GET /api/events/cancelamentos` | `_can_read_cancelamentos()` (feature 312: `SUPERADMIN` ou `FINANCEIRO`, papel real) | Só contrato: `resumo` em cada cancelado, com o PIX só para `show_financeiro`; filtros da 312 abaixo; feature 315: cada pendente com `alcance`, `devolucao` e `venda_nova`, com o corte do detalhe |
+| `POST /api/events/<id>/pedido-cancelamento` (e o alias `…/solicitar-exclusao`) **(315)** | `_can_request_delete()`: `COMERCIAL` ou `SUPERADMIN` real, depois do 404 | `cancelado` (trava da 312) → `ensaio` → `cache_pago` do próprio dia → 400 com todos os `fields` (`motivo`, `alcance`, `devolucao_modo`, `devolucao_valor`, `devolucao_nome`, `devolucao_pix`, `venda_nova`) → `cache_pago` dos outros dias que "todos" alcança (`dias`) → claim → `pedido_pendente` ("Já existe um pedido de <nome>…"). Não confere dinheiro (máximo e mínimo são do cancelar) |
+| `DELETE /api/events/<id>/pedido-cancelamento` (e o alias) **(315)** | `_can_delete()`: só `SUPERADMIN` real — o autor do pedido também leva 403 | claim pelo carimbo lido → `sem_pedido` quando outra decisão fechou o pedido antes |
+| `GET /api/events/<id>` — bloco `deletion_request` **(315)** | sem mudança no gate | Todos veem `requested_at`, `alcance` e `alcance_texto` (texto pronto; ausente no avulso); `sem_devolucao_informada: true` no pedido sem devolução fora da venda virtual (com o motivo); `requested_by(_id)`, `reason`, `devolucao.modo/valor` e `venda_nova` com `show_comercial`; `devolucao.nome/pix` também com `show_financeiro` ou para o autor sem "Ver como". `pedido_bloqueado` e `escolha_do_alcance` só com `can_request_delete` |
 | `GET /api/events/<id>` | sem mudança | Só contrato: `event.cancelamento` só com `show_comercial` (§3.3) |
 | `PATCH /api/events/<id>/comercial` | `_can_create_event()` (`COMERCIAL`, `SUPERADMIN`), sem mudança | Depois do 409 de satélite e antes do 400 de data e do 403 da 215b: Comercial → `cancelado`; o Financeiro segue fora do gate (403). O Superadmin grava e recongela; o evento que mudou de estado entre a leitura e a trava → `estado_mudou` |
 | `PATCH /api/events/<id>` ("Editar tudo") | `_can_create_event()`, sem mudança | Depois do 400 de validação: `sale_value`, `sale_value_gross`, `commission_rate`, `seller_id`, `is_cortesia_permuta` ou `with_invoice` **diferente** do gravado → `cancelado` **para todos, o Superadmin inclusive** (a porta não recongela; `event_ops.venda_mudaria`). Campo igual ao gravado passa |
@@ -2243,6 +2502,15 @@ sem ele, um `BACKEND_URL` de domínio público faria o roteador de borda do host
 requisição para o próprio serviço frontend, em laço. `xfwd: true` envia os `X-Forwarded-*`. Falha
 de conexão com o backend responde **502**, sem derrubar os SPAs.
 
+Desde a **310**, o `proxyReq` põe **`X-Manto-Client-Ip`** = último item do `X-Forwarded-For` recebido
+(ou `req.socket.remoteAddress`), sobrescrevendo o que o cliente mandar com esse nome: é a chave do
+limitador do Flask (`ip_do_cliente()`, §3.13.4). Sem ele o Flask via o IP da infraestrutura e todo
+limite valia para todo mundo junto. O IP é lido no handler, antes do `proxy.web` (o `xfwd` acrescenta
+o socket ao `X-Forwarded-For` antes do `proxyReq`), e vai junto `X-Manto-Proxy-Secret` =
+`MANTO_PROXY_SECRET` — sem a prova o Flask ignora o IP informado, porque o backend também tem URL
+pública. A variável precisa do MESMO valor nos dois serviços. O `console.error` do proxy mascara `/webhooks/infinitepay/<segredo>` como
+`***` (`mascararUrl`).
+
 > ⚠️ **O proxy só entra em ação com `VITE_API_BASE_URL` vazia no build.** Com ela preenchida,
 > `API_BASE`/`assetUrl()` geram URL absoluta do Flask e o browser fura o proxy — inclusive para
 > `/uploads` e `/figurinos/<id>/print`.
@@ -2298,7 +2566,9 @@ flask db upgrade && python seed.py && gunicorn run:app \
   no `sys.path`. Plano B quando o classificador bloqueia um script por SSH: Shell do painel do Render.
 - **Access log** (desde 26/08/2026): `IP MÉTODO CAMINHO STATUS BYTES MICROSSEGUNDOS`. Antes disso
   nenhuma requisição de produção era registrada; `%(b)s` (bytes) é o campo que nomeia o culpado num
-  incidente de lentidão.
+  incidente de lentidão. O caminho do aviso de pagamento carrega o segredo: desde a 310 um filtro
+  de logging no processo (`_MascaraSegredoDoAviso`, `app/__init__.py`) o troca por `***` — tirar o
+  `%(U)s` do formato exigiria mexer no `startCommand`.
 - **Concorrência**: teto `workers × threads` = **36 requisições simultâneas**. Cada download de mídia
   segura uma thread do primeiro ao último byte, na velocidade de quem assiste — com 4 threads, dois
   ou três vídeos travavam um worker inteiro e o site parava **sem gerar um único 5xx** (incidente
@@ -2334,15 +2604,16 @@ commit isolado. (`npm install` está no blueprint; `npm ci` seria mais seguro �
 `/google/callback`, nunca a local; `AUDIT_AGENT_TOKEN` e `MARKETING_AGENT_TOKEN` **não foram
 preenchidos** na migração — os agentes semanais respondem 404 desde 28/08 (`docs/05`); `TALENTS_*`,
 `FIGURINO_DRIVE_FOLDER_ID` e `GOOGLE_SHEETS_CREDENTIALS` ficaram vazios de propósito (integrações
-de planilha aposentadas). Rate limit em memória por worker e threads de background ×3 são
-trade-offs herdados, documentados acima.
+de planilha aposentadas). `INFINITEPAY_API_KEY` (310) é opcional e também `sync: false`: ausente, a
+loja funciona com o link sem validade (`docs/05`). Rate limit em memória por worker e threads de
+background ×3 são trade-offs herdados, documentados acima.
 
 ### 5.4 Dev local
 
 | Alvo | Comando |
 |---|---|
 | Backend (SQLite casual) | `python run.py` |
-| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google (303) e a remoção do Google no cancelamento (306; travada, o ato cancela no sistema e avisa na tela) — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar e excluir evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
+| Backend contra a cópia real | `$env:MANTO_SEM_THREADS='1'; $env:FLASK_ENV='development'; .\scripts\db\run-local.ps1` (aponta `DATABASE_URL` para `manto_local`). ⚠️ **O espelho traz o token do Google e as credenciais de e-mail reais** — sem as duas variáveis o `create_app()` sobe as threads de fundo e escreve na agenda da empresa; as travas `_suppress_mail`/`_suppress_calendar_invites` (`app/config.py`) cobrem só e-mail e convite, e `_suppress_calendar_event_writes` (`CALENDAR_SUPPRESS_EVENT_WRITES`, feature 303; escape `CALENDAR_ALLOW_LOCAL_EVENT_WRITES=true`) cobre só a devolução ao Google (303), a remoção do Google no cancelamento (306; travada, o ato cancela no sistema e avisa na tela) e o evento de venda da loja virtual (310: criar e apagar) — e `_suppress_infinitepay` (`INFINITEPAY_SUPPRESS_CALLS`, feature 310; escape `INFINITEPAY_ALLOW_LOCAL_CALLS=true`, que cobra de verdade) impede link e reconsulta na InfinitePay com a tag e o segredo reais do espelho — o sync, a limpeza e o "Sincronizar" continuam LENDO o Google real no local, e criar, editar e excluir evento continuam escrevendo. `/scripts/db/` é gitignored (entrada `/scripts/db/`): contém caminhos e credenciais locais; o conteúdo esperado está em `DEVELOPMENT.md`. Verificação funcional = `specs/NNN-nome/verify_NNN.py` (versionado; os anteriores à 266 em `scripts/db/`) — não há `tests/` nem pytest |
 | Frontend staff | `cd frontend && npm run dev:internal` |
 | Frontend público | `cd frontend && npm run dev:public` |
 | Frontend portal | `cd frontend && npm run dev:portal` |

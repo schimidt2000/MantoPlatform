@@ -28,6 +28,10 @@ staging. "Push" = merge da branch na `main` (merge commit, estilo `merge: NNN �
 5. Horário: publicar em lote e fora do expediente (~19h BRT em diante). Cada deploy abre ~1 min
    de 502 na porta pública (o `manto-frontend` não tem healthcheck); a calculadora de orçamento
    dispara request a cada tecla e é a primeira a sangrar.
+6. **Campanha da loja virtual (spec 310, R-20)**: de **1º/11 a 25/12**, nenhum deploy entre **9h e
+   23h** BRT — um aviso de pagamento perdido no 502 só aparece no app da InfinitePay. Depois de
+   cada deploy, conferir "Pagamentos a conferir" (`/virtuais/devolucoes`) e o painel da InfinitePay
+   (`DEVELOPMENT.md` §Operar a produção).
 
 ## Publicar
 

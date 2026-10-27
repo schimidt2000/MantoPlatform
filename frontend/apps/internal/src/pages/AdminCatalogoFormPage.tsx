@@ -254,7 +254,7 @@ export function AdminCatalogoFormPage() {
               className={INPUT}
               value={videoUrl}
               onChange={(e) => setVideoUrl(e.target.value)}
-              placeholder="https://..."
+              placeholder="https://…"
             />
             {fieldErrors.video_url && (
               <p className="mt-1 text-xs text-red">{fieldErrors.video_url}</p>
@@ -284,7 +284,7 @@ export function AdminCatalogoFormPage() {
                   void categoriesQuery.refetch().finally(() => setTentandoCategorias(false));
                 }}
               >
-                Tentar de novo
+                Tentar novamente
               </Button>
             </p>
           )}

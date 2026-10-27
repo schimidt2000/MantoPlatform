@@ -309,7 +309,7 @@ export function FinanceiroDashboardPage() {
 
       {query.isError && (
         <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-          Não foi possível carregar o dashboard financeiro.
+          Não foi possível carregar o painel financeiro.
         </div>
       )}
 
@@ -576,7 +576,7 @@ export function FinanceiroDashboardPage() {
                 <div className="mt-3 space-y-1.5">
                   {data.paineis.auditoria.length === 0 ? (
                     <p className="text-sm text-muted">
-                      Tudo certo ✓ Nenhum evento com receita zerada sem justificativa.
+                      Nenhum evento com receita zerada sem justificativa.
                     </p>
                   ) : (
                     <>
@@ -751,7 +751,7 @@ export function FinanceiroDashboardPage() {
                         <th className="px-3 py-2">Data</th>
                         <th className="px-3 py-2">Evento</th>
                         <th className="px-3 py-2">Tipo</th>
-                        <th className="px-3 py-2">Status</th>
+                        <th className="px-3 py-2">Situação</th>
                         <th className="px-3 py-2 text-right">Receita</th>
                         <th className="px-3 py-2 text-right">Custo</th>
                         <th className="px-3 py-2 text-right">Lucro</th>

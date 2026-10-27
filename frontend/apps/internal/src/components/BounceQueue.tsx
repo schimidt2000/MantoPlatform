@@ -37,13 +37,13 @@ function contactMessage(item: EmailBounceItem): string {
   const saudacao = nome ? `Oi, ${nome}! ` : "Oi! ";
   if (item.kind === "caixa_cheia") {
     return (
-      `${saudacao}Aqui é da Manto Produções. Nossos emails estão voltando porque sua caixa de ` +
+      `${saudacao}Aqui é da Manto Produções. Nossos e-mails estão voltando porque sua caixa de ` +
       `entrada (${item.email}) está cheia. Consegue liberar espaço para você receber os convites?`
     );
   }
   return (
-    `${saudacao}Aqui é da Manto Produções. Nossos emails para ${item.email} estão voltando — ` +
-    `parece que o endereço tem algum erro. Qual é o seu email correto?`
+    `${saudacao}Aqui é da Manto Produções. Nossos e-mails para ${item.email} estão voltando — ` +
+    `parece que o endereço tem algum erro. Qual é o seu e-mail correto?`
   );
 }
 
@@ -68,7 +68,7 @@ function BounceRow({ item }: { item: EmailBounceItem }) {
           <span className="truncate" title={item.email}>
             {item.email}
           </span>
-          <CopyButton value={item.email} label="Copiar email" />
+          <CopyButton value={item.email} label="Copiar e-mail" />
         </div>
       </TableCell>
       <TableCell>
@@ -102,7 +102,7 @@ function BounceRow({ item }: { item: EmailBounceItem }) {
             Resolver
           </Button>
         </div>
-        {resolve.isError && <p className="text-right text-xs text-red">Não foi possível.</p>}
+        {resolve.isError && <p className="text-right text-xs text-red">Não foi possível resolver.</p>}
       </TableCell>
     </TableRow>
   );
@@ -131,7 +131,7 @@ export function BounceQueue() {
   if (query.isError) {
     return (
       <div className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
-        Não foi possível carregar a fila de emails devolvidos.
+        Não foi possível carregar a fila de e-mails devolvidos.
       </div>
     );
   }
@@ -140,7 +140,7 @@ export function BounceQueue() {
   if (items.length === 0) {
     return (
       <p className="rounded-md border border-line bg-panel px-4 py-6 text-center text-sm text-muted">
-        Nenhum email devolvido pendente. 🎉
+        Nenhum e-mail devolvido pendente. 🎉
       </p>
     );
   }
@@ -148,8 +148,8 @@ export function BounceQueue() {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted">
-        {items.length} pessoa(s) não estão recebendo nossos emails. A varredura roda sozinha a cada
-        30 minutos; "Resolver" tira da fila depois do contato — e corrigir o email na ficha também.
+        {items.length} pessoa(s) não estão recebendo nossos e-mails. A varredura roda sozinha a cada
+        30 minutos; "Resolver" tira da fila depois do contato — e corrigir o e-mail na ficha também.
       </p>
       <div className="rounded-md border border-line bg-panel">
         <Table>

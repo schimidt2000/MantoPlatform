@@ -125,7 +125,7 @@ function AcoesStatus({
             </DialogDescription>
           </DialogHeader>
           <label className="text-xs text-muted" htmlFor="motivo-cancel">
-            Por quê?
+            Motivo
           </label>
           <textarea
             id="motivo-cancel"
@@ -237,7 +237,7 @@ function AnexoUploader({ producaoId }: { producaoId: number }) {
       </Button>
       <Button size="sm" variant="outline" onClick={() => setOrcamentoAberto(true)}>
         <FileText className="mr-1 h-4 w-4" />
-        Anexar orçamento
+        Inserir orçamento
       </Button>
       {add.isError && <p className="w-full text-sm text-red">{(add.error as Error).message}</p>}
 
@@ -246,7 +246,7 @@ function AnexoUploader({ producaoId }: { producaoId: number }) {
           <DialogHeader>
             <DialogTitle>Orçamento de fornecedor</DialogTitle>
             <DialogDescription>
-              Guarde as propostas aqui para comparar antes de decidir. Aceita foto ou PDF.
+              Guarde as propostas para comparar antes de decidir. Aceita foto ou PDF.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -315,7 +315,7 @@ function AnexoUploader({ producaoId }: { producaoId: number }) {
                 )
               }
             >
-              Anexar
+              Inserir
             </Button>
           </div>
         </DialogContent>
@@ -449,7 +449,7 @@ function Gastos({
       </div>
       {estourou && (
         <p className="mt-1 text-xs text-red">
-          Passou {formatBRL(producao.total_gasto - (producao.estimated_cost ?? 0))} do previsto.
+          {formatBRL(producao.total_gasto - (producao.estimated_cost ?? 0))} acima do previsto.
         </p>
       )}
 
@@ -561,7 +561,7 @@ function Historico({
             </p>
           </li>
         ))}
-        {logs.length === 0 && <p className="text-sm text-muted">Nada registrado ainda.</p>}
+        {logs.length === 0 && <p className="text-sm text-muted">Nenhum registro ainda.</p>}
       </ol>
     </Card>
   );
@@ -618,7 +618,7 @@ export function FigurinoProducaoDetailPage() {
           p.event_title ? (
             <span>
               para <span className="text-ink">{p.event_title}</span>{" "}
-              <SeloSituacao situacao={p.event_situacao} />
+              <SeloSituacao situacao={p.event_situacao} desde={p.event_situacao_desde} />
             </span>
           ) : (
             "sem evento vinculado"
@@ -814,7 +814,7 @@ export function FigurinoProducaoDetailPage() {
 
           {podeEditar && (
             <Card className="px-4 py-3">
-              <h3 className="mb-2 text-sm font-semibold text-ink">Anexar</h3>
+              <h3 className="mb-2 text-sm font-semibold text-ink">Anexos</h3>
               <AnexoUploader producaoId={p.id} />
             </Card>
           )}
@@ -830,7 +830,7 @@ export function FigurinoProducaoDetailPage() {
               Lançar um gasto novo
             </Link>
             <p className="mt-1 text-xs text-muted">
-              Depois de lançar, volte aqui e use “Vincular”.
+              Depois de lançar, volte a esta tela e use “Vincular”.
             </p>
           </Card>
         </div>

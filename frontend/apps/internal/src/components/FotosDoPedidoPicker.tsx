@@ -138,7 +138,7 @@ export function FotosDoPedidoPicker({
         onClick={() => inputRef.current?.click()}
       >
         <Camera className="mr-1 h-4 w-4" />
-        {fotos.length > 0 ? "Adicionar mais fotos" : "Adicionar fotos"}
+        {fotos.length > 0 ? "Inserir mais fotos" : "Inserir fotos"}
       </Button>
 
       <p className="mt-1 text-xs text-muted">
@@ -149,12 +149,12 @@ export function FotosDoPedidoPicker({
       {grandes.length > 0 && (
         <p className="mt-1 text-xs text-muted">
           {grandes.length === 1 ? "Uma foto é grande" : `${grandes.length} fotos são grandes`} e o
-          envio pode demorar num 4G — elas chegam reduzidas do outro lado.
+          envio pode demorar no 4G — elas chegam reduzidas.
         </p>
       )}
       {recusados.length > 0 && (
         <p className="mt-1 text-xs text-red">
-          Não anexei {recusados.join(", ")}: passa de {MAX_BYTES / (1024 * 1024)} MB, e esse
+          Não anexado: {recusados.join(", ")} — passa de {MAX_BYTES / (1024 * 1024)} MB, e esse
           tamanho quase sempre é vídeo ou arquivo trocado.
         </p>
       )}

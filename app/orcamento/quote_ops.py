@@ -9,13 +9,14 @@ alteração `pricing.py`/`transport.py`/`settings.py`/`pdf.py`, já existentes.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
 from app import db
 from app.constants import ACRESCIMO_TIPO_BV
-from app.educamanto.pricing_ops import NF_DIVISOR
+from app.educamanto.pricing_ops import AVISTA_FATOR, NF_DIVISOR
 from app.models import OrcamentoHistory, User
 from app.money import format_brl
 
@@ -41,12 +42,17 @@ _MARKUP_SERVICE = 1.5
 
 
 class QuoteValidationError(Exception):
-    """Erro de validação de negócio (ex.: orçamento personalizado sem valores)."""
+    """Erro de validação de negócio (ex.: orçamento personalizado sem valores).
 
-    def __init__(self, field: str, message: str) -> None:
+    ``extra`` vai dentro do objeto de erro da API (``json_error(**extra)``) para a tela agir, não só mostrar — a
+    feature 313 manda nele as durações que o orçamento mostra quando o "fechar por R$" aponta para outra.
+    """
+
+    def __init__(self, field: str, message: str, extra: dict | None = None) -> None:
         super().__init__(message)
         self.field = field
         self.message = message
+        self.extra = extra or {}
 
 
 def _fmt_brl(value: float) -> str:
@@ -84,6 +90,230 @@ def bv_que_acompanha(bv: Any, venda: Any, total: Any) -> Decimal:
     if abs(venda_d - total_d) <= _CENTAVO:
         return bv_d.quantize(_CENTAVO, rounding=ROUND_HALF_UP)
     return (bv_d * venda_d / total_d).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
+
+
+#: Feature 313 — a marca de regra gravada no snapshot: orçamento com ela foi cotado pela ordem da conta da Q7 (o
+#: acréscimo em R$ uma vez; o BV sobre a base com os outros acréscimos) e tem `bases`/`brutos`. Sem ela, todo leitor
+#: (prefill, evento) segue o caminho de antes — o que foi cotado não muda (020). A noite dos dias será a versão 3.
+VERSAO_CONTA = 2
+
+#: O PIX à vista padrão, em %: o mesmo fator do EducaManto. Arredondado porque `(1 − 0,95) × 100` em float dá
+#: 5,000000000000004 — e o negociado de exatamente 5% (o caso mais comum) perderia o "já está aplicado".
+PIX_PCT_PADRAO = round((1 - AVISTA_FATOR) * 100, 6)
+
+
+def aplicar_acrescimos(base: float, acrescimos: list[dict], nota: bool) -> dict[str, Any]:
+    """O que é do pedido, por cima da base de uma duração, na ordem que o dono deu (feature 313, Q7/Q9).
+
+    "O acréscimo adicionado manualmente é colocado por cima de tudo no valor. E o BV é calculado em cima de tudo
+    isso" (Q7). Em ordem: (a) os acréscimos que não são BV — em R$ entram inteiros, uma vez; em % incidem sobre a
+    ``base``; (b) o BV em % incide sobre ``base + (a)``, cada linha de BV sobre o mesmo número (os BVs não se veem);
+    o BV em reais entra inteiro, uma vez (Q9 = B); (c) a nota fiscal sobre a soma (``÷ NF_DIVISOR``).
+
+    A soma é feita na ordem do snapshot e com os mesmos ``round`` da conta de antes: onde a regra do dono não muda
+    o número (BV sozinho, só acréscimos sem BV em %), o centavo é o de sempre — a paridade com os orçamentos salvos.
+
+    Returns:
+        ``{"valores": [float por linha], "base_bv": float, "antes_nf": float, "preco": float}`` — ``valores`` sem
+        arredondar (a memória arredonda); ``antes_nf`` e ``preco`` ao centavo.
+    """
+    valores = [0.0] * len(acrescimos)
+    add_nao_bv = 0.0
+    for k, a in enumerate(acrescimos):
+        if a.get("is_bv"):
+            continue
+        valores[k] = (base * a["value"] / 100.0) if a["is_percent"] else a["value"]
+        add_nao_bv += valores[k]
+    base_bv = base + add_nao_bv
+    for k, a in enumerate(acrescimos):
+        if a.get("is_bv"):
+            valores[k] = (base_bv * a["value"] / 100.0) if a["is_percent"] else a["value"]
+    add = 0.0
+    for v in valores:
+        add += v
+    antes_nf = round(base + add, 2)
+    preco = round(antes_nf / NF_DIVISOR, 2) if nota else antes_nf
+    return {"valores": valores, "base_bv": base_bv, "antes_nf": antes_nf, "preco": preco}
+
+
+def _tem_parte_fixa(acrescimos: list[dict], produtos_total: float) -> bool:
+    """Acréscimo em R$ (BV em reais inclusive) ou produto de tabela: a duração extra deixa de ser linear."""
+    return bool(produtos_total) or any(not a["is_percent"] for a in acrescimos)
+
+
+def _preco_extra(
+    base_4h: float, total_4h: float, produtos_total: float, horas: int, acrescimos: list[dict], nota: bool
+) -> dict[str, Any]:
+    """O preço de uma duração acima de 4h pela régua da Q7 (feature 313, research R1).
+
+    A régua de horas vale só para a base (o produto de tabela fica fixo, 309); os acréscimos, o BV e a nota vêm por
+    cima, uma vez. Sem parte fixa a conta é linear e dá o mesmo número que escalar o preço de 4h — e aí ela escala o
+    preço de 4h, com o arredondamento de sempre (refazer pela base mudaria o centavo de metade dos orçamentos com
+    nota ou %).
+
+    Returns:
+        ``{"preco": float, "valores": [float por linha]}``.
+    """
+    if not _tem_parte_fixa(acrescimos, produtos_total):
+        preco = round(total_4h / 4 * horas, 2)
+        quatro = aplicar_acrescimos(base_4h, acrescimos, nota)["valores"]
+        return {"preco": preco, "valores": [v / 4 * horas for v in quatro]}
+    base_h = (base_4h - produtos_total) / 4 * horas + produtos_total
+    conta = aplicar_acrescimos(base_h, acrescimos, nota)
+    return {"preco": conta["preco"], "valores": conta["valores"]}
+
+
+def _linhas_do_snapshot_313(snap: dict) -> list[dict]:
+    """Os acréscimos do snapshot na forma que `aplicar_acrescimos` lê (`value` numérico, sem linha vazia)."""
+    linhas = []
+    for a in snap.get("acrescimos") or []:
+        if not isinstance(a, dict) or not a.get("tipo"):
+            continue
+        try:
+            valor = float(a.get("value"))
+        except (TypeError, ValueError):
+            continue
+        if not valor:
+            continue
+        linhas.append({
+            "tipo": a["tipo"],
+            "is_percent": bool(a.get("is_percent")),
+            "value": valor,
+            "is_bv": a["tipo"] == ACRESCIMO_TIPO_BV,
+        })
+    return linhas
+
+
+def preco_na_duracao(snap: dict, horas: int) -> dict[str, Any] | None:
+    """O preço de um orçamento da versão 2 numa duração qualquer, a partir do snapshot salvo (research R1).
+
+    Fonte única do que a calculadora mostrou, para o prefill do Novo evento ("Outra (h)") e o evento (o BV e a
+    dedução de duração). 1–4h: o cheio gravado (`brutos`) e as linhas do `valores_brl`; acima de 4h: `_preco_extra`
+    sobre as bases. No personalizado o cheio acima de 4h é a régua sobre `brutos["4h"]` (o produto fixo, sem
+    acréscimos nem nota). O total aplica o desconto do snapshot.
+
+    Returns:
+        ``{"bruto": float, "linhas": [float por acréscimo], "total": float}``, ou ``None`` quando o snapshot não é
+        da versão 2 ou não se sustenta (o chamador segue o caminho de antes).
+    """
+    if not isinstance(snap, dict) or snap.get("versao_conta") != VERSAO_CONTA:
+        return None
+    try:
+        brutos = snap.get("brutos") or {}
+        d = float(snap.get("desconto_aplicado") or 0)
+        horas = int(horas)
+        produtos_total = float(snap.get("produtos_total") or 0)
+        personalizado = bool(snap.get("personalizado_ativo"))
+        linhas_acr = _linhas_do_snapshot_313(snap)
+        if horas in (1, 2, 3, 4):
+            bruto = float(brutos[f"{horas}h"])
+            linhas = []
+            for a in snap.get("acrescimos") or []:
+                if isinstance(a, dict) and a.get("tipo") and a.get("value"):
+                    lista = a.get("valores_brl") or [0, 0, 0, 0]
+                    linhas.append(float(lista[horas - 1]))
+        elif personalizado:
+            quatro = float(brutos["4h"])
+            bruto = round((quatro - produtos_total) / 4 * horas + produtos_total, 2)
+            linhas = [0.0] * len(linhas_acr)
+        else:
+            bases = snap.get("bases") or []
+            extra = _preco_extra(
+                float(bases[3]), float(brutos["4h"]), produtos_total, horas, linhas_acr, bool(snap.get("nota_fiscal"))
+            )
+            bruto, linhas = extra["preco"], extra["valores"]
+        total = round(bruto * (1 - d / 100), 2) if d else bruto
+        # A duração em que a comercial digitou o valor final sai com o valor exato (Q8 = B); a extra só é "a
+        # digitada" se for a mesma duração extra do orçamento.
+        alvo = f"{horas}h" if horas <= 4 else ("extra" if int(float(snap.get("duracao_custom") or 0)) == horas else None)
+        if d and alvo and snap.get("desconto_duracao") == alvo and snap.get("desconto_valor") is not None:
+            total = round(float(snap["desconto_valor"]), 2)
+    except (KeyError, IndexError, TypeError, ValueError, OverflowError):
+        return None
+    # Converge (T056): nada não finito sai daqui (vira NaN no JSON do prefill), e o final nunca passa do cheio.
+    if not all(math.isfinite(v) for v in (bruto, total, *linhas)) or total > bruto + 0.005:
+        return None
+    return {"bruto": bruto, "linhas": linhas, "total": total}
+
+
+def _vazio(valor: Any) -> bool:
+    return valor is None or (isinstance(valor, str) and not valor.strip())
+
+
+def _ler_desconto(
+    payload: dict, brutos: list[float], bruto_custom: float | None, mostradas: list[str]
+) -> tuple[float, str | None, float | None, float | None, str | None]:
+    """O desconto negociado da entrada (feature 313, Q8 = B: "ou digita o valor e mostra a porcentagem, ou digita a
+    porcentagem e calcula o valor").
+
+    Com ``desconto_valor`` + ``desconto_duracao``, o % é achado sem arredondar sobre o cheio daquela duração (e
+    ``desconto_pct`` é ignorado); sem eles, vale ``desconto_pct``. Vazio, 0 ou o valor igual ao cheio = sem desconto.
+
+    Returns:
+        ``(d, modo, pct digitado, valor digitado, duração)`` — ``d`` é o % exato (0 sem desconto).
+
+    Raises:
+        QuoteValidationError: o campo que está errado (`desconto_pct` ou `desconto_valor`).
+    """
+    raw_valor, raw_dur, raw_pct = (payload.get(k) for k in ("desconto_valor", "desconto_duracao", "desconto_pct"))
+    sem = (0.0, None, None, None, None)
+    if not _vazio(raw_valor) or not _vazio(raw_dur):
+        if _vazio(raw_valor) or _vazio(raw_dur):
+            raise QuoteValidationError("desconto_valor", "Informe o valor final e a duração a que ele se refere.")
+        try:
+            if isinstance(raw_valor, bool):
+                raise TypeError
+            valor = float(raw_valor)
+        except (TypeError, ValueError):
+            raise QuoteValidationError("desconto_valor", "O valor final precisa ser um número.") from None
+        if raw_dur not in mostradas:
+            # As mostradas vão junto: a tela troca o seletor por elas (sem isso, ele ficava preso nas durações do
+            # resultado anterior — ex.: "fechar 2h por" e a comercial deixa só um produto, que mostra um valor).
+            raise QuoteValidationError(
+                "desconto_valor",
+                "Escolha uma das durações que o orçamento mostra.",
+                {"duracoes_do_desconto": list(mostradas)},
+            )
+        cheio = bruto_custom if raw_dur == "extra" else brutos[int(raw_dur[0]) - 1]
+        if not cheio or valor != valor or valor <= 0 or valor > cheio + 0.005:
+            raise QuoteValidationError(
+                "desconto_valor",
+                f"O valor final precisa ser maior que zero e até o valor cheio ({_fmt_brl(cheio or 0)}).",
+            )
+        if abs(valor - cheio) <= 0.005:
+            return sem
+        return (1 - valor / cheio) * 100, "valor", None, round(valor, 2), raw_dur
+    if _vazio(raw_pct):
+        return sem
+    try:
+        pct = float(raw_pct)
+    except (TypeError, ValueError):
+        raise QuoteValidationError("desconto_pct", "O desconto precisa ser um número.") from None
+    if isinstance(raw_pct, bool) or pct != pct or pct < 0 or pct >= 100:
+        raise QuoteValidationError("desconto_pct", "O desconto precisa ser de 0 a menos de 100%.")
+    if pct == 0:
+        return sem
+    return pct, "pct", pct, None, None
+
+
+def texto_do_percentual(d: float) -> str | None:
+    """O % como a proposta mostra (feature 313, Q3 = A): uma casa, para baixo, com vírgula e sem ",0".
+
+    A proposta nunca promete mais desconto do que dá (4,96% → "4,9"). O ``round(d, 6)`` antes do piso evita que 10%
+    achado pelo valor digitado (9,9999999…) vire "9,9". Abaixo de 0,1% devolve ``None``: "desconto de 0%" seria
+    anunciar um desconto que não aparece — a proposta fica só com o "de/por" (converge, T055).
+    """
+    piso = Decimal(str(round(d, 6))).quantize(Decimal("0.1"), rounding="ROUND_FLOOR")
+    if piso <= 0:
+        return None
+    texto = f"{piso:.1f}".replace(".", ",")
+    return texto[:-2] if texto.endswith(",0") else texto
+
+
+def pix_vale_o_desconto(d: float | None) -> bool:
+    """O PIX à vista é o próprio valor final? (D4: vale o maior entre os 5% e o negociado.) Regra única da mensagem,
+    do quote e do PDF — comparar ``d >= 5`` por outro caminho divergia entre 4,999999 e 4,9999995 (converge, T058)."""
+    return bool(d) and round(float(d), 6) >= PIX_PCT_PADRAO
 
 
 def _is_noturno(raw_time: str) -> bool:
@@ -156,7 +386,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         raise QuoteValidationError(
             "produtos",
             f'O produto "{exc.chave}" não está mais na tabela de preços — remova-o do orçamento ou '
-            "peça ao superadmin para recriá-lo.",
+            "peça ao Superadmin para recriá-lo.",
         ) from exc
     # O coordenador do produto não é cobrado em dobro: `coordenador_qty` passa a ser o total vendido
     # (vai ao snapshot e ao teto) e só `coord_formula` entra na fórmula.
@@ -440,36 +670,33 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
                 f"{transporte_tipo} · {num_colaboradores} pessoa(s) · {km_ida:g} km (ida)",
             )
 
+    # Feature 313: a base de cada duração antes do que é do pedido (acréscimos, BV, nota) — gravada no snapshot
+    # para o prefill e o evento refazerem qualquer duração pela mesma conta (`preco_na_duracao`).
+    bases = list(totals)
     if acrescimos:
-        for a in acrescimos:
-            valores = [
-                round(t * a["value"] / 100.0, 2) if a["is_percent"] else a["value"]
-                for t in totals
-            ]
+        # Feature 313 (Q7/Q9): a ordem do dono — acréscimo manual uma vez, BV sobre tudo isso, nota no fim.
+        contas = [aplicar_acrescimos(t, acrescimos, False) for t in totals]
+        for k, a in enumerate(acrescimos):
+            valores = [round(c["valores"][k], 2) for c in contas]
             rotulo = a["tipo"] + (f" — {a['descricao']}" if a["descricao"] else "")
             sufixo = f"{a['value']:g}%" if a["is_percent"] else _fmt_brl(a["value"])
             _linha(f"Acréscimo: {rotulo}", valores, "pos", sufixo)
             # Feature 305: o que este acréscimo somou ao preço em cada duração, em reais, gravado no
             # snapshot — é daqui que o evento tira o BV do orçamento (a memória acima é só exibição,
             # em float). A conta é a mesma, em Decimal HALF_UP; no meio centavo pode diferir da
-            # memória em R$ 0,01, e quem lê aceita essa tolerância.
+            # memória em R$ 0,01, e quem lê aceita essa tolerância. O BV em % incide sobre a base COM os
+            # outros acréscimos (313, Q7) — `base_bv` da conta.
             a["valores_brl"] = [
                 float(
-                    (Decimal(str(t)) * Decimal(str(a["value"])) / 100).quantize(
-                        _CENTAVO, rounding=ROUND_HALF_UP
-                    )
+                    (
+                        Decimal(str(c["base_bv"] if a["is_bv"] else t)) * Decimal(str(a["value"])) / 100
+                    ).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
                 )
                 if a["is_percent"]
                 else float(Decimal(str(a["value"])).quantize(_CENTAVO, rounding=ROUND_HALF_UP))
-                for t in totals
+                for t, c in zip(totals, contas, strict=True)
             ]
-        new_totals = []
-        for t in totals:
-            add = 0.0
-            for a in acrescimos:
-                add += (t * a["value"] / 100.0) if a["is_percent"] else a["value"]
-            new_totals.append(round(t + add, 2))
-        totals = new_totals
+        totals = [c["antes_nf"] for c in contas]
 
     if nota_fiscal:
         antes_nf = list(totals)
@@ -480,12 +707,12 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         )
 
     total_custom = None
+    conta_extra: dict[str, Any] | None = None
     if duracao_custom > 0 and duracao_custom not in (1, 2, 3, 4):
-        if produtos:
-            # Feature 309: o produto fica fixo na régua — a mesma função do prefill e do evento.
-            total_custom = _produtos.total_na_duracao(totals[3], produtos_total, duracao_custom, acrescimos, nota_fiscal)
-        else:
-            total_custom = round(totals[3] / 4 * duracao_custom, 2)
+        # Feature 313 (Q7): a régua de horas só na base; o acréscimo em R$ uma vez; o produto fixo (309). Sem parte
+        # fixa, o mesmo número de sempre (o preço de 4h escalado). A mesma conta do prefill e do evento.
+        conta_extra = _preco_extra(bases[3], totals[3], produtos_total, duracao_custom, acrescimos, nota_fiscal)
+        total_custom = conta_extra["preco"]
 
     # No personalizado "multiplicador" o produto NÃO é multiplicado: soma por fora. A validação de
     # "valores válidos" olha a base × multiplicador, como hoje — senão um multiplicador zerado passaria.
@@ -533,7 +760,80 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             # zero no quote/snapshot para a régua do evento (prefill, `_total_da_duracao`) ser a linear.
             produtos_total = 0.0
 
+    # Feature 313: o preço cheio de cada duração — o "valor antes do desconto" que vai ao evento.
+    brutos = list(totals)
+    bruto_custom = total_custom
+
+    # Feature 313 (D3, Q1 = A, Q8 = B): o desconto negociado é o ÚLTIMO passo, sobre o total (apresentação,
+    # transporte, acréscimos e nota). As durações que a proposta mostra são as que aceitam "fechar por R$".
+    so_produto_d = bool(produtos) and not performers and coord_formula == 0
+    incluir_d = payload.get("incluir_duracao") or ["1h", "2h", "3h", "4h"]
+    mostradas = ["1h"] if so_produto_d else [d for d in ("1h", "2h", "3h", "4h") if d in incluir_d]
+    if total_custom and not so_produto_d:
+        mostradas.append("extra")
+    desconto, desconto_modo, desconto_digitado, desconto_valor, desconto_duracao = _ler_desconto(
+        payload, brutos, bruto_custom, mostradas
+    )
+    if desconto:
+        totals = [round(b * (1 - desconto / 100), 2) for b in brutos]
+        if total_custom:
+            total_custom = round(bruto_custom * (1 - desconto / 100), 2)
+        if desconto_modo == "valor":
+            # A duração digitada sai com o valor exato (R$ 2.200,00, não R$ 2.199,99).
+            if desconto_duracao == "extra":
+                total_custom = desconto_valor
+            else:
+                totals[int(desconto_duracao[0]) - 1] = desconto_valor
+        # Converge (T050): um desconto perto de 100% (ou "fechar por R$ 0,004") arredonda alguma duração a zero — a
+        # proposta sairia "por R$ 0,00" e o BV a repassar não tem proporção. Recusa no campo digitado.
+        if any(b > 0 and t <= 0 for b, t in zip(brutos, totals, strict=True)) or (bruto_custom and total_custom is not None and total_custom <= 0):
+            campo = "desconto_valor" if desconto_modo == "valor" else "desconto_pct"
+            raise QuoteValidationError(campo, "Este desconto zera o valor de uma das durações — use um desconto menor.")
+        _linha(
+            f"Desconto ({texto_do_percentual(desconto) or 'menos de 0,1'}%)",
+            [totals[i] - brutos[i] for i in range(4)],
+            "pos",
+            "sobre o total — apresentação, transporte, acréscimos e nota",
+        )
+
     _linha("TOTAL FINAL AO CLIENTE", totals, "total")
+
+    # Feature 313 (3a-Q1 = B): o BV de quem indicou acompanha o valor final, na mesma proporção — pela função
+    # única da 305. O BV cheio é o que as linhas de BV somaram ao preço (no personalizado, nada).
+    linhas_bv = [a for a in acrescimos if a["is_bv"]] if not personalizado else []
+    bv_cheio = [sum(a["valores_brl"][i] for a in linhas_bv) for i in range(4)] if linhas_bv else None
+    bv_cheio_custom = None
+    if linhas_bv and conta_extra is not None:
+        bv_cheio_custom = float(
+            sum(
+                (Decimal(str(conta_extra["valores"][k])) for k, a in enumerate(acrescimos) if a["is_bv"]),
+                Decimal("0"),
+            ).quantize(_CENTAVO, rounding=ROUND_HALF_UP)
+        )
+
+    def _bv_acompanha(cheio: float | None, venda: float | None, bruto: float | None) -> float | None:
+        if cheio is None or not venda or not bruto:
+            return None
+        return float(bv_que_acompanha(cheio, venda, bruto))
+
+    # Feature 313 (D4): o PIX à vista vale o maior entre o padrão (5%) e o negociado — nunca soma. Com o negociado de
+    # 5% ou mais, o PIX é o próprio valor final (e o BV, o mesmo), sem refazer a conta.
+    pix_maior = pix_vale_o_desconto(desconto)
+    pix_pct = desconto if pix_maior else PIX_PCT_PADRAO
+    pix = [totals[i] if pix_maior else round(brutos[i] * AVISTA_FATOR, 2) for i in range(4)]
+    pix_custom = None
+    if total_custom:
+        pix_custom = total_custom if pix_maior else round(bruto_custom * AVISTA_FATOR, 2)
+    bv_final = [_bv_acompanha(bv_cheio[i], totals[i], brutos[i]) for i in range(4)] if bv_cheio else [None] * 4
+    bv_pix = (
+        [bv_final[i] if pix_maior else _bv_acompanha(bv_cheio[i], pix[i], brutos[i]) for i in range(4)]
+        if bv_cheio
+        else [None] * 4
+    )
+    bv_final_custom = _bv_acompanha(bv_cheio_custom, total_custom, bruto_custom)
+    bv_pix_custom = bv_final_custom if pix_maior else _bv_acompanha(bv_cheio_custom, pix_custom, bruto_custom)
+    if desconto and bv_cheio:
+        _linha("BV a repassar a quem indicou (acompanha o desconto)", bv_final, "subtotal")
 
     raw_time = event_time
     try:
@@ -552,13 +852,21 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     saudacao = f"Olá, *{client_name}*!" if client_name else "Olá!"
     team_text = "\n".join(f"• {line}" for line in team_lines)
 
-    def _dur_block(label: str, total: float) -> str:
+    def _dur_block(label: str, total: float, bruto: float | None = None) -> str:
+        # Feature 313 (Q3 = A): com desconto, "de R$ X por R$ Y" e o % arredondado; a quebra apresentação/transporte
+        # sai do CHEIO — as duas linhas somam o "de" (o desconto é do total, Q1 = A, nunca só da apresentação).
+        bruto = total if bruto is None else bruto
         lines = [label]
         if transport_total > 0:
-            apres = round(total - transport_total, 2)
+            apres = round(bruto - transport_total, 2)
             lines.append(f"  • Valor da Apresentação: {_fmt_brl(apres)}")
             lines.append(f"  • Logística e Transporte: {_fmt_brl(transport_total)}")
-        lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
+        if desconto and abs(bruto - total) >= 0.005:
+            lines.append(f"  • *VALOR TOTAL: de {_fmt_brl(bruto)} por {_fmt_brl(total)}*")
+            if texto_do_percentual(desconto):
+                lines.append(f"  _(desconto de {texto_do_percentual(desconto)}% aplicado)_")
+        else:
+            lines.append(f"  • *VALOR TOTAL: {_fmt_brl(total)}*")
         return "\n".join(lines)
 
     if modo_duracao == "entradas":
@@ -581,6 +889,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     if so_produto:
         show = [True, False, False, False]
         total_custom = None
+        bruto_custom = pix_custom = bv_final_custom = bv_pix_custom = None
     bloco_produto = _produtos.bloco_da_mensagem(produtos)
 
     if so_produto:
@@ -588,9 +897,9 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # Converge 309: com NF, transporte, BV, noturno por fora ou dois exemplares o total NÃO é o
         # preço do produto — o cliente precisa ver o VALOR TOTAL (e a logística), como nas durações.
         if len(produtos) > 1 or abs(totals[0] - produtos_total) >= 0.005:
-            investimento += f"\n\n{_dur_block('🎅 *Total da visita*', totals[0])}"
+            investimento += f"\n\n{_dur_block('🎅 *Total da visita*', totals[0], brutos[0])}"
     else:
-        investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i]) for i in range(4) if show[i])
+        investimento = "\n\n".join(_dur_block(dur_labels[i], totals[i], brutos[i]) for i in range(4) if show[i])
         if bloco_produto:
             investimento = f"{bloco_produto}\n\n{investimento}"
 
@@ -600,17 +909,24 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
             custom_label = f"🎭 *{entradas_custom} entradas de 30 min ({duracao_custom}h)*"
         else:
             custom_label = f"🕐 *{duracao_custom} horas*"
-        investimento += f"\n\n{_dur_block(custom_label, total_custom)}"
+        investimento += f"\n\n{_dur_block(custom_label, total_custom, bruto_custom)}"
 
     pix_durs = [("1h", totals[0]), ("2h", totals[1]), ("3h", totals[2]), ("4h", totals[3])]
     if so_produto:
-        pix_vista = f"  • *{_fmt_brl(round(totals[0] * 0.95, 2))}*"
+        pix_vista = f"  • *{_fmt_brl(pix[0])}*"
     else:
         pix_vista = "\n".join(
-            f"  • {lbl}: *{_fmt_brl(round(tot * 0.95, 2))}*" for i, (lbl, tot) in enumerate(pix_durs) if show[i]
+            f"  • {lbl}: *{_fmt_brl(pix[i])}*" for i, (lbl, _tot) in enumerate(pix_durs) if show[i]
         )
     if total_custom:
-        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(round(total_custom * 0.95, 2))}*"
+        pix_vista += f"\n  • {duracao_custom}h: *{_fmt_brl(pix_custom)}*"
+
+    # Feature 313 (D4, Q3 = A): o PIX vale o maior. Com o negociado de 5% ou mais não há o que baixar — a proposta
+    # diz que o desconto já está aplicado, sem repetir os valores; abaixo disso, o 5% de sempre, pelo cheio.
+    if pix_maior:
+        pix_bloco = f" o mesmo valor — o desconto de {texto_do_percentual(desconto)}% já está aplicado.\n\n"
+    else:
+        pix_bloco = f"\n{pix_vista}\n_(desconto especial de 5% aplicado)_\n\n"
 
     nf_header = "\n🧾 _Valores com Nota Fiscal inclusa_" if nota_fiscal else ""
 
@@ -645,9 +961,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         f"💰 *INVESTIMENTO*{nf_header}\n\n"
         f"{investimento}{deslocamento_nota}{nota_especial}\n\n"
         f"💳 *FORMAS DE PAGAMENTO*\n\n"
-        f"1️⃣ *À Vista (PIX):*\n"
-        f"{pix_vista}\n"
-        f"_(desconto especial de 5% aplicado)_\n\n"
+        f"1️⃣ *À Vista (PIX):*{pix_bloco}"
         f"2️⃣ *Reserva Programada (PIX):* 50% no ato do contrato + 50% até 2 dias antes do evento.\n\n"
         f"3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n"
         f"✨ Podemos seguir com a reserva da sua data? "
@@ -710,6 +1024,21 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # Detalhamento linha a linha da conta (só exibição). Vai junto no `form_snapshot` do
         # histórico, então um orçamento salvo reabre com a mesma memória que foi apresentada.
         "memoria": memoria,
+        # Feature 313: a base de 4h (antes dos acréscimos) — o ponto de partida de qualquer duração extra.
+        "base_4h": None if personalizado else bases[3],
+        # Feature 313: o cheio (antes do desconto), o desconto, o PIX que vale o maior e o BV que acompanha.
+        **{f"bruto_{i + 1}h": brutos[i] for i in range(4)},
+        "bruto_custom": bruto_custom,
+        "desconto_pct": desconto or None,
+        "desconto_pct_texto": texto_do_percentual(desconto) if desconto else None,
+        "desconto_modo": desconto_modo,
+        "pix_pct": pix_pct,
+        **{f"pix_{i + 1}h": pix[i] for i in range(4)},
+        "pix_custom": pix_custom,
+        **{f"bv_{i + 1}h": bv_final[i] for i in range(4)},
+        "bv_custom": bv_final_custom,
+        **{f"bv_pix_{i + 1}h": bv_pix[i] for i in range(4)},
+        "bv_pix_custom": bv_pix_custom,
     }
 
     snapshot = {
@@ -746,6 +1075,18 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         # valor do cachê vem da tabela viva na data do evento); a régua do prefill lê `produtos_total`.
         "produtos": _produtos.para_snapshot(produtos),
         "produtos_total": produtos_total,
+        # Feature 313 (research R2): a marca de regra e o que o prefill e o evento precisam para refazer qualquer
+        # duração pela mesma conta (`preco_na_duracao`), sem a conta inversa da regra antiga.
+        "versao_conta": VERSAO_CONTA,
+        "desconto_pct_digitado": desconto_digitado,
+        "desconto_valor": desconto_valor,
+        "desconto_duracao": desconto_duracao,
+        "desconto_aplicado": desconto,
+        "bases": None if personalizado else [float(b) for b in bases],
+        "brutos": {
+            **{f"{i + 1}h": brutos[i] for i in range(4)},
+            **({"custom": bruto_custom} if bruto_custom else {}),
+        },
     }
 
     return {"quote": quote, "snapshot": snapshot}

@@ -92,7 +92,7 @@ export function NfcVideoCard({ tag, onManage, onShowInTable, onVerRecados }: Nfc
 
       <div className="flex flex-1 flex-col gap-2 p-3">
         <p className="text-sm font-medium text-ink">
-          {delivery.title || <span className="text-muted">Sem título — a página usa a copy padrão</span>}
+          {delivery.title || <span className="text-muted">Sem título — a página usa o texto padrão</span>}
         </p>
         <p className="flex flex-wrap items-center gap-1.5">
           <span className="font-display text-base font-bold text-ink">nº {tag.sequence}</span>

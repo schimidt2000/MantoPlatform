@@ -372,6 +372,8 @@ def serialize_tag(tag: NfcTag) -> dict[str, Any]:
                 "start_at": event.start_at.isoformat() if event.start_at else None,
                 # Feature 312: a tag ligada a um evento cancelado leva o selo na lista.
                 "situacao": event.situacao,
+                # Feature 315: a data do selo (o tooltip "Cancelamento pedido em dd/mm/aaaa").
+                "situacao_desde": event.situacao_desde.isoformat() if event.situacao_desde else None,
             }
             if event
             else None
@@ -497,7 +499,7 @@ def add_delivery(
 
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise NfcValidationError("file", "Escolha o arquivo do vídeo.")
+        raise NfcValidationError("file", "Selecione o arquivo do vídeo.")
 
     extensao = extension_of(nome_original)
     if extensao not in NFC_DELIVERY_VIDEO_EXTENSIONS:
@@ -514,7 +516,7 @@ def add_delivery(
     if anterior is not None and anterior.processing_status in ("pendente", "processando"):
         raise NfcValidationError(
             "file",
-            "Ainda estamos preparando o vídeo anterior desta tag. Aguarde ele ficar pronto para "
+            "O vídeo anterior desta tag ainda está em preparação. Aguarde a conclusão para "
             "enviar outro.",
         )
 
@@ -950,7 +952,7 @@ def salvar_arquivo_de_sistema(file_obj: Any, *, tipo: str) -> str:
     """
     nome_original = getattr(file_obj, "filename", "") or ""
     if not nome_original:
-        raise NfcValidationError("file", "Escolha o arquivo.")
+        raise NfcValidationError("file", "Selecione o arquivo.")
     extensao = extension_of(nome_original)
 
     if tipo == "moldura":

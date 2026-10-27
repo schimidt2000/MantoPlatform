@@ -25,6 +25,7 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 from app import db
+from app.constants import EVENT_PAYMENT_ORIGEM_PIX
 from app.models import (
     CalendarEvent,
     CommissionPayment,
@@ -176,7 +177,7 @@ def editar_motivo_do_cancelado(event: CalendarEvent, *, corpo: dict[str, Any] | 
         raise CancelValidationError("Este evento não está cancelado.", status=409, codigo=CODIGO_NAO_CANCELADO)
     novo = _texto(corpo.get("motivo"))
     if not novo:
-        raise CancelValidationError("Explique o motivo do cancelamento.", field="motivo")
+        raise CancelValidationError("Informe o motivo do cancelamento.", field="motivo")
     antigo = event.cancellation_reason or ""
     dias = [
         e for e in eventos if e.id == event.id or (antigo and e.is_cancelled and e.cancellation_reason == antigo)
@@ -967,7 +968,7 @@ def traduzir_erro_de_banco(exc: Exception) -> CancelValidationError | None:
     )
     if codigo_pg == "40P01":
         return CancelValidationError(
-            "Outra pessoa mexeu neste evento ao mesmo tempo: tente de novo.",
+            "Outra pessoa alterou este evento ao mesmo tempo: tente novamente.",
             status=409,
             codigo=CODIGO_TENTE_DE_NOVO,
         )
@@ -1351,7 +1352,7 @@ def _erros_do_corte(pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> dict[s
 
     erros: dict[str, str] = {}
     if not pedido.motivo:
-        erros["motivo"] = "Explique o motivo do cancelamento."
+        erros["motivo"] = "Informe o motivo do cancelamento."
     if conta.venda_nova is None:
         erros["venda_nova"] = f"Informe o novo valor da venda do grupo: maior que zero e até {_brl(conta.venda)}."
     if pedido.imposto_enviado:
@@ -1367,7 +1368,7 @@ def _erros_do_corte(pedido: PedidoDeCancelamento, conta: ContaDoCorte) -> dict[s
         if pedido.valor_invalido or pedido.valor is None or pedido.valor <= 0:
             erros["devolucao_valor"] = "Informe quanto devolve à cliente."
         elif pedido.valor > conta.max_devolucao:
-            erros["devolucao_valor"] = f"Acima do que dá para devolver ({_brl(conta.max_devolucao)})."
+            erros["devolucao_valor"] = f"Acima do que é possível devolver ({_brl(conta.max_devolucao)})."
         elif pedido.valor < conta.minima:
             erros["devolucao_valor"] = _frase_da_minima(conta)
     elif conta.minima > 0:
@@ -1592,14 +1593,19 @@ def _brl(valor: Any) -> str:
 
 
 def ao_cancelar(event: CalendarEvent, *, alcance: str, novo_principal: CalendarEvent | None = None) -> None:
-    """Ponto de extensão da 2a (data-model §6.4, FR-062), sem efeito nesta entrega.
+    """O que o cancelamento faz além do dinheiro em cada dia que encerra (data-model §6.4, FR-062).
 
     Roda em **todo** cancelamento, na transação, logo depois de `cancelled_at`: o avulso e cada
     dia do "todos" com `(ALCANCE_TODOS, None)`; o corte de um dia que não é o principal com
     `(ALCANCE_SO_ESTE_DIA, None)`; o antigo 1º dia, **depois** de `passar_venda`, com
-    `(ALCANCE_SO_ESTE_DIA, novo_principal)`. O verify o chama pelo módulo.
+    `(ALCANCE_SO_ESTE_DIA, novo_principal)`. O verify o chama pelo módulo (o espião da 306 envolve
+    esta função: a assinatura não muda).
+
+    Feature 315: fecha o pedido de cancelamento do dia, se havia, e responde a quem pediu.
     """
-    return None
+    from app.calendar import solicitacao_ops  # tardio: solicitacao_ops importa este módulo
+
+    solicitacao_ops.fechar_no_cancelamento(event, alcance=alcance, novo_principal=novo_principal)
 
 
 def _recusas_de_estado(event: CalendarEvent) -> None:
@@ -1642,7 +1648,7 @@ def _erros_do_pedido(
 
     erros: dict[str, str] = {}
     if not pedido.motivo:
-        erros["motivo"] = "Explique o motivo do cancelamento."
+        erros["motivo"] = "Informe o motivo do cancelamento."
     if pedido.venda_nova_enviada:
         erros["venda_nova"] = "O novo valor da venda só vale ao cancelar um dia do grupo."
     if regime != REGIME_VENDA:
@@ -1658,7 +1664,7 @@ def _erros_do_pedido(
         if pedido.valor_invalido or pedido.valor is None or pedido.valor <= 0:
             erros["devolucao_valor"] = "Informe quanto devolve à cliente."
         elif pedido.valor > conta.max_devolucao:
-            erros["devolucao_valor"] = f"Acima do que dá para devolver ({_brl(conta.max_devolucao)})."
+            erros["devolucao_valor"] = f"Acima do que é possível devolver ({_brl(conta.max_devolucao)})."
     elif modo == MODO_TUDO and (pedido.valor_invalido or pedido.valor is None):
         erros["devolucao_valor"] = "Recarregue a página: falta o total a devolver."
     if modo in (MODO_TUDO, MODO_PARTE) and "devolucao_modo" not in erros:
@@ -2055,10 +2061,7 @@ def _encerrar_os_dias(
         dia.cancelled_at = now_sp()
         dia.cancelled_by_id = actor.id
         dia.cancellation_reason = pedido.motivo
-        # A solicitação foi atendida: limpa para o evento não ficar marcado como pendente.
-        dia.deletion_requested_at = None
-        dia.deletion_requested_by_id = None
-        dia.deletion_request_reason = None
+        # O pedido de cancelamento do dia fecha em `ao_cancelar` (feature 315), que lê o autor antes.
         if forma.corta:
             novo = forma.vivo if forma.tipo == "passagem" else None
             ao_cancelar(dia, alcance=ALCANCE_SO_ESTE_DIA, novo_principal=novo)
@@ -2945,7 +2948,15 @@ def recongelar_do_comercial(
     return plano
 
 
-def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User) -> None:
+def _quem(actor: User | None) -> tuple[str, str | None]:
+    """Nome e papel para o `EventLog`. Sem usuário (a leitura de PIX da 318, numa thread) é o
+    "Sistema" — o mesmo rótulo do sumiço do Google e da sincronização."""
+    if actor is None:
+        return "Sistema", "Sistema"
+    return actor.name, (", ".join(r.name for r in actor.roles)[:60] or None)
+
+
+def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User | None) -> None:
     """Depois de um comprovante gravado (decisão (c)): a guarda e o principal refeito. Não faz commit.
 
     - pago do grupo abaixo do já devolvido → 409 `pago_abaixo_do_devolvido` (em todo cancelado e
@@ -2980,20 +2991,23 @@ def reaplicar_por_dinheiro(event: CalendarEvent, *, actor: User) -> None:
         return
     _travar_linhas_de_comissao(ids, {canc.commission_seller_id, *_beneficiarios_das_linhas(ids)})
     reaplicar_cancelado(principal, motivo=MOTIVO_AJUSTE_RETIDO)
-    papel = ", ".join(r.name for r in actor.roles)[:60] or None
+    nome, papel = _quem(actor)
     texto = "Comprovante corrigido no cancelado: retido e comissão refeitos pelo pago do grupo."
     for alvo in {principal.id, event.id}:
-        db.session.add(EventLog(event_id=alvo, actor_name=actor.name, actor_role=papel, message=texto))
+        db.session.add(EventLog(event_id=alvo, actor_name=nome, actor_role=papel, message=texto))
 
 
 def gravar_comprovante_no_grupo(
     event: CalendarEvent,
     acao: str,
     *,
-    actor: User,
+    actor: User | None,
     valor: Decimal | None = None,
     arquivo=None,
     comprovante: EventPayment | None = None,
+    origem: str | None = None,
+    conta_id: int | None = None,
+    checar_pix: bool = False,
 ) -> EventPayment | None:
     """O núcleo das três portas de comprovante (decisão (c); contracts §9). Não faz commit.
 
@@ -3002,8 +3016,12 @@ def gravar_comprovante_no_grupo(
     `reaplicar_por_dinheiro`. Se algo recusar depois de o POST ter salvo o arquivo, o arquivo novo
     é removido aqui mesmo (a view só faz o rollback).
 
+    Feature 318: `actor=None` é o "Sistema" (a leitura de PIX roda numa thread, sem usuário);
+    `origem="pix_email"` grava sem arquivo (a prova é o aviso do banco); `conta_id` marca a conta
+    que recebeu; a ação "anexar" põe o arquivo num pagamento de PIX que ainda não tinha.
+
     Args:
-        acao: "adicionar", "editar" ou "excluir".
+        acao: "adicionar", "editar", "excluir" ou "anexar".
 
     Raises:
         CancelValidationError: 409 `cancelado`; 400 com `fields` (valor/arquivo); 409
@@ -3018,11 +3036,50 @@ def gravar_comprovante_no_grupo(
     travar_grupo(event)
     if acao == "adicionar" and event.is_cancelled and not pode_editar_venda_do_cancelado(actor):
         raise EventoCanceladoError()
+    if acao == "anexar":
+        from app.calendar.routes import _attach_payment_file
+
+        # Mesma regra do "adicionar" no cancelado; e, sob a trava, o pagamento ainda tem de ser de
+        # PIX sem arquivo (um "Desfazer" ao mesmo tempo pode tê-lo apagado ou mudado).
+        if event.is_cancelled and not pode_editar_venda_do_cancelado(actor):
+            raise EventoCanceladoError()
+        db.session.refresh(comprovante)
+        if comprovante.origem != EVENT_PAYMENT_ORIGEM_PIX or comprovante.file_path:
+            raise CancelValidationError(
+                "Esse pagamento mudou agora. Recarregue a página.", status=409, codigo="estado_mudou"
+            )
+        if not _attach_payment_file(comprovante, file_storage=arquivo):
+            raise CancelValidationError(
+                "Insira o arquivo do comprovante.", fields={"file": "Obrigatório"}
+            )
+        from app.financeiro import pix_ops
+
+        pix_ops.comprovante_incluido(comprovante)  # a tarefa "incluir o comprovante" some do sino
+        return comprovante
+    if acao == "adicionar" and checar_pix and valor:
+        # Feature 318: sob a trava do grupo (a thread do PIX grava sob a mesma trava), um comprovante
+        # do mesmo valor de um PIX que já entrou é devolvido como possível duplicata.
+        from app.financeiro import pix_ops
+
+        duplicata = pix_ops.pagamento_pix_sem_arquivo_igual(event, valor)
+        if duplicata is not None:
+            raise CancelValidationError(
+                "Esse comprovante pode ser do PIX que já entrou.",
+                status=409,
+                codigo="possivel_duplicata",
+                pagamento=pix_ops.resumo_da_duplicata(duplicata),
+            )
     if acao == "adicionar":
-        comprovante = _add_payment_record(event, amount=valor, file_storage=arquivo)
+        comprovante = _add_payment_record(
+            event,
+            amount=valor,
+            file_storage=arquivo,
+            sem_arquivo=origem == EVENT_PAYMENT_ORIGEM_PIX,
+            conta_id=conta_id,
+        )
         if comprovante is None:
             raise CancelValidationError(
-                "Informe o valor e anexe o comprovante para adicionar o pagamento.",
+                "Informe o valor e insira o comprovante para registrar o pagamento.",
                 fields={"amount": "Obrigatório", "file": "Obrigatório"},
             )
     elif acao == "editar":
@@ -3353,7 +3410,7 @@ def alterar_devolucao(event: CalendarEvent, *, corpo: dict[str, Any] | None, act
         )
     if regua.teto_e_409 and total > regua.teto:
         raise CancelValidationError(
-            f"Acima do que dá para devolver neste dia ({_brl(regua.teto)}: o pago do grupo menos as "
+            f"Acima do que é possível devolver neste dia ({_brl(regua.teto)}: o pago do grupo menos as "
             "devoluções dos outros dias).",
             status=409,
             codigo=CODIGO_ACIMA_DO_TETO,
@@ -3499,48 +3556,6 @@ def aplicar_estorno_comissao(event: CalendarEvent) -> None:
             cp.event_id = None
 
 
-def solicitar_exclusao(event: CalendarEvent, *, motivo: str, actor: User) -> None:
-    """Registra o pedido do Comercial. O Superadmin decide depois. Commita."""
-    motivo = (motivo or "").strip()
-    if not motivo:
-        raise CancelValidationError("Explique o motivo da exclusão.")
-    if event.is_cancelled:
-        raise CancelValidationError("Este evento já está cancelado.")
-
-    agora = datetime.now(tz=TZ).replace(tzinfo=None)
-    event.deletion_requested_at = agora
-    event.deletion_requested_by_id = actor.id
-    event.deletion_request_reason = motivo
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=actor.name,
-        actor_role=", ".join(r.name for r in actor.roles),
-        message=f"Solicitou a exclusão do evento: {motivo}",
-        created_at=agora,
-    ))
-    db.session.commit()
-
-
-def recusar_solicitacao(event: CalendarEvent, *, actor: User, motivo: str = "") -> None:
-    """Superadmin recusa o pedido — os campos da solicitação voltam a nulo. Commita."""
-    if event.deletion_requested_at is None:
-        raise CancelValidationError("Não há solicitação de exclusão neste evento.")
-
-    agora = datetime.now(tz=TZ).replace(tzinfo=None)
-    sufixo = f": {motivo.strip()}" if (motivo or "").strip() else "."
-    db.session.add(EventLog(
-        event_id=event.id,
-        actor_name=actor.name,
-        actor_role=", ".join(r.name for r in actor.roles),
-        message=f"Recusou a solicitação de exclusão{sufixo}",
-        created_at=agora,
-    ))
-    event.deletion_requested_at = None
-    event.deletion_requested_by_id = None
-    event.deletion_request_reason = None
-    db.session.commit()
-
-
 def _tem_devolucao(resumo: ResumoCancelado, estado: str) -> bool:
     """O cancelado entra no filtro `estado` da página (feature 312): `sem` = nenhuma devolução.
 
@@ -3566,6 +3581,8 @@ def listar_cancelamentos(
     flags: dict[str, Any] | None = None,
     mes: date | None = None,
     devolucao: str | None = None,
+    usuario: Any = None,
+    impersonando: bool = False,
 ) -> dict[str, Any]:
     """A página de Cancelamentos: pedidos pendentes + eventos cancelados (features 224, 306, 312).
 
@@ -3578,7 +3595,13 @@ def listar_cancelamentos(
       divergiria da coluna que a tela mostra). O evento entra em cada estado que tem; `sem` = nenhuma
       devolução. Aplicado antes do corte de 200;
     - sai o objeto `devolucao` legado (o "ciclo" da 306 passou; o bundle dela só o lia sem `resumo`).
+
+    Feature 315: cada pendente traz o bloco do pedido (alcance e devolução combinada) com o corte
+    do detalhe (`solicitacao_ops.serializar_para`, pelo papel em uso e o autor) — `usuario` e
+    `impersonando` são de quem pede a página.
     """
+    from app.calendar import solicitacao_ops
+
     pendentes = (
         CalendarEvent.query.filter(
             CalendarEvent.deletion_requested_at.isnot(None),
@@ -3614,12 +3637,10 @@ def listar_cancelamentos(
                 "title": e.title,
                 "start_at": e.start_at.isoformat() if e.start_at else None,
                 "sale_value": float(e.sale_value or 0),
-                "requested_at": e.deletion_requested_at.isoformat(),
-                "requested_by": (
-                    db.session.get(User, e.deletion_requested_by_id).name
-                    if e.deletion_requested_by_id else None
+                **(
+                    solicitacao_ops.serializar_para(e, flags=flags, usuario=usuario, impersonando=impersonando)
+                    or {}
                 ),
-                "reason": e.deletion_request_reason,
             }
             for e in pendentes
         ],

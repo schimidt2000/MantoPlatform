@@ -28,6 +28,7 @@ import { CancelamentoBvBloco, type BvEntrada } from "./CancelamentoBvBloco";
 import { CancelamentoDevolucaoBloco, type DevolucaoState } from "./CancelamentoDevolucaoBloco";
 import { CancelamentoDiasBloco } from "./CancelamentoDiasBloco";
 import { MultaAoElencoBloco, type LinhaDeMulta } from "./MultaAoElencoBloco";
+import { type PedidoDeCancelamento, QuadroDoPedido } from "./QuadroDoPedido";
 
 const LABEL = "mb-1 block text-xs font-semibold uppercase text-muted";
 const FIELD =
@@ -71,7 +72,7 @@ function ResumoImpacto({ impacto }: { impacto: ImpactoExclusao }) {
   if (impacto.acao === "excluir") {
     return (
       <div className="rounded-md border border-line bg-surface-2 p-3 text-sm text-ink">
-        <p className="font-semibold">Este evento está vazio — será excluído de vez.</p>
+        <p className="font-semibold">Este evento está vazio — será excluído definitivamente.</p>
         <p className="mt-1 text-muted">
           Sem venda, sem pagamento recebido, sem contrato e sem ninguém escalado. Sai do sistema
           e do Google Agenda, sem deixar registro.
@@ -157,6 +158,11 @@ export interface ExcluirEventoDialogProps {
   eventTitle: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Feature 315: o pedido de cancelamento pendente, mostrado só para leitura depois do impacto — o
+   * diálogo continua abrindo vazio (nada é copiado do pedido para os campos).
+   */
+  pedido?: PedidoDeCancelamento | null;
 }
 
 /**
@@ -167,7 +173,7 @@ export interface ExcluirEventoDialogProps {
  * conta da execução); Cancelar fica desabilitado até tudo estar informado; cada recusa aparece no
  * campo certo (`fields`) ou pela frase do `codigo`. Nenhuma conta de dinheiro no navegador.
  */
-export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }: ExcluirEventoDialogProps) {
+export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange, pedido }: ExcluirEventoDialogProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const impacto = useImpactoExclusao(eventId, open);
@@ -324,16 +330,16 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
     if (!dados || !cancelando) return null;
     if (atualizando) return "O sistema está atualizando — tente em um minuto.";
     if (cachePago) return "Há cachê pago ao elenco: o evento não pode ser cancelado.";
-    if (!motivo.trim()) return "Explique o motivo do cancelamento.";
+    if (!motivo.trim()) return "Informe o motivo do cancelamento.";
     if (outrosVivos && alcance === null) return "Escolha se cancela todos os dias ou só este.";
     if (!comDevolucao) return null;
     if (corta && !vendaNovaValida) return "Informe o novo valor da venda do grupo (até o de hoje).";
     if (devolucao.modo === null) return "Escolha quanto devolver à cliente.";
-    if (devolucao.modo === "parte" && devolucao.valor <= 0) return "Informe quanto devolve.";
+    if (devolucao.modo === "parte" && devolucao.valor <= 0) return "Informe o valor a devolver.";
     if (devolucao.modo !== "nada" && (!devolucao.nome.trim() || !devolucao.pix.trim()))
       return "Informe quem recebe a devolução e o PIX.";
     if (devolucao.modo === "parte" && devolucao.valor > maxDevolucao)
-      return `Acima do que dá para devolver (${brl(maxDevolucao)}).`;
+      return `Acima do máximo a devolver (${brl(maxDevolucao)}).`;
     // A prévia recusou (o valor passou do pago, a venda mudou, o dia foi cancelado no meio): a frase
     // do servidor, em qualquer modo — nunca o efeito sumindo calado com o botão habilitado, nem
     // "conferindo" para sempre no corte.
@@ -516,11 +522,13 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
 
             <ResumoImpacto impacto={dados} />
 
+            {pedido && <QuadroDoPedido pedido={pedido} />}
+
             {dados.acao === "excluir" && dados.is_group_leader && (
               <div className="rounded-md border border-red/40 bg-surface-2 p-3 text-sm" role="alert">
                 <p className="font-semibold text-red">Este evento é o principal de um grupo comercial.</p>
                 <p className="mt-1 text-ink">
-                  Para excluí-lo, tire os satélites do grupo primeiro — na aba Comercial, no painel{" "}
+                  Para excluí-lo, remova os satélites do grupo primeiro — na aba Comercial, no painel{" "}
                   <strong>Grupo comercial</strong>.
                 </p>
                 <Button
@@ -586,7 +594,9 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                     placeholder="Ex.: cliente desistiu do evento"
                     aria-invalid={Boolean(erros.motivo)}
                   />
-                  <p className="mt-1 text-xs text-muted">Aparece para quem abre o evento.</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Aparece para Comercial, Financeiro e Superadmin; os outros papéis veem só que foi cancelado.
+                  </p>
                   {erros.motivo && (
                     <p className="mt-1 text-xs text-red" role="alert">
                       {erros.motivo}
@@ -596,7 +606,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
 
                 {virtual && (
                   <p className="text-sm text-muted">
-                    Venda da Loja Virtual: o dinheiro segue o pedido; aqui só o motivo.
+                    Venda da Loja Virtual: o dinheiro segue o pedido; informe só o motivo.
                   </p>
                 )}
 
@@ -684,7 +694,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
                           <p className={ensaiosDoAto.length > 0 ? "mt-1" : undefined}>
                             {comEmailDoAto > 0 &&
                               `${comEmailDoAto === 1 ? "1 artista recebe" : `${comEmailDoAto} artistas recebem`} o e-mail de cancelamento${semEmailDoAto > 0 ? ` (${semEmailDoAto} sem e-mail cadastrado)` : ""}. `}
-                            O Casting é avisado no sistema para tirar{" "}
+                            O Casting é avisado no sistema para remover{" "}
                             {artistasDoAto === 1 ? "o artista" : `os ${artistasDoAto} artistas`} da escala e avisá-
                             {artistasDoAto === 1 ? "lo" : "los"} pelo WhatsApp.
                           </p>
@@ -719,7 +729,7 @@ export function ExcluirEventoDialog({ eventId, eventTitle, open, onOpenChange }:
               }
               onClick={confirmar}
             >
-              {dados?.acao === "excluir" ? "Excluir de vez" : "Cancelar evento"}
+              {dados?.acao === "excluir" ? "Excluir definitivamente" : "Cancelar evento"}
             </Button>
           )}
         </DialogFooter>

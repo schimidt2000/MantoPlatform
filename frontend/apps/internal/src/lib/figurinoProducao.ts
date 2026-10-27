@@ -94,7 +94,7 @@ export type ProducaoSeveridade = "impede_uso" | "pode_esperar";
 
 export const PRODUCAO_SEV_LABELS: Record<ProducaoSeveridade, string> = {
   impede_uso: "Não pode ir para evento",
-  pode_esperar: "Dá para usar assim",
+  pode_esperar: "Pode ir para o evento assim",
 };
 
 export type AnexoKind = "foto" | "orcamento";
@@ -153,6 +153,8 @@ export interface Producao {
   event_start_at: string | null;
   /** Feature 312: a situação do evento do pedido (o selo do cancelado). */
   event_situacao?: SituacaoEvento | null;
+  /** Feature 315: desde quando vale a situação (o tooltip do selo). */
+  event_situacao_desde?: string | null;
   figurino_sheet_id: number | null;
   figurino_sheet_name: string | null;
   figurino_sheet_photo: string | null;

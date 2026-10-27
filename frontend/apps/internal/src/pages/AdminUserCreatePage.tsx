@@ -89,7 +89,7 @@ export function AdminUserCreatePage() {
             </div>
             <div>
               <label className={LABEL}>
-                Email{userType === "access" ? "" : " (opcional)"}
+                E-mail{userType === "access" ? "" : " (opcional)"}
               </label>
               <input
                 type="email"

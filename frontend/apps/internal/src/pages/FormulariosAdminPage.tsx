@@ -262,7 +262,7 @@ function SituacaoBadges({ response }: { response: FormResponseSummary }) {
             Evento vinculado · {response.event_link_source === "manual" ? "manual" : "auto"}
           </MetricBadge>
           {/* Feature 312 (converge): o selo também na lista, não só ao abrir o detalhe. */}
-          <SeloSituacao situacao={response.event_situacao} />
+          <SeloSituacao situacao={response.event_situacao} desde={response.event_situacao_desde} />
         </>
       ) : response.destino === "encerrados" ? (
         <MetricBadge tone="neutral">
@@ -495,7 +495,7 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
             <MetricBadge tone="green" size="sm">
               {response.event_title ?? "Evento vinculado"}
             </MetricBadge>
-            <SeloSituacao situacao={response.event_situacao} />
+            <SeloSituacao situacao={response.event_situacao} desde={response.event_situacao_desde} />
           </span>
           <Button size="sm" variant="ghost" loading={unlinkEvent.isPending} onClick={() => unlinkEvent.mutate()}>
             Desvincular
@@ -546,11 +546,11 @@ function EventoSection({ id, onPrefillEvent }: { id: number; onPrefillEvent: () 
             {linkEvent.isPending
               ? "Vinculando…"
               : !effectiveDate
-                ? "Escolha uma data primeiro…"
+                ? "Selecione uma data primeiro…"
                 : eventos.isLoading
                   ? "Carregando eventos…"
                   : eventos.isError
-                    ? "Erro ao buscar eventos"
+                    ? "Não foi possível buscar os eventos"
                     : "Selecione o evento…"}
           </option>
           {eventos.data?.events.map((ev) => (
@@ -874,7 +874,7 @@ export function FormulariosAdminPage() {
     <div className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6">
       <PageHeader
         title="Formulários"
-        subtitle="Copie o link, envie para a cliente e acompanhe as respostas aqui"
+        subtitle="Copie o link, envie para a cliente e acompanhe as respostas"
         className="mb-0"
         actions={
           canEditStructure ? (
@@ -953,7 +953,7 @@ export function FormulariosAdminPage() {
             <p className="text-sm text-muted">
               {isSearching || formFilter !== "todos"
                 ? "Nenhuma resposta encontrada com esses filtros."
-                : "Nenhuma resposta ainda. Envie o link de um formulário para uma cliente — as respostas aparecem aqui assim que ela enviar."}
+                : "Nenhuma resposta ainda. Envie o link de um formulário para uma cliente — as respostas aparecem nesta lista assim que ela enviar."}
             </p>
           )}
 
@@ -969,7 +969,7 @@ export function FormulariosAdminPage() {
 
           {!isSearching && list.data?.truncado && (
             <p className="text-xs text-muted">
-              Mostrando as 200 mais recentes — use a busca para achar uma resposta mais antiga.
+              Mostrando as 200 mais recentes — use a busca para encontrar uma resposta mais antiga.
             </p>
           )}
         </CardContent>
