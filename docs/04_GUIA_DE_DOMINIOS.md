@@ -638,6 +638,22 @@ assinatura) nunca vira pendência (`:1075-1081`).
   `DEFAULT_FATOR_R`, `FATOR_R_RATE_LOW/HIGH`), longe de `app/constants.py`, e nada diz de onde vem o
   corte de 28% nem quando revisar.
 
+### A nota pedida (feature 323)
+
+- **Chip ligado ⇒ a venda tem nota.** Ligar "Precisa de nota fiscal" numa venda sem nenhuma nota cria uma
+  `a_emitir` com o valor da venda e "pedida por" — em qualquer porta (criação, "Editar tudo", card Comercial), com
+  o evento travado (`estado_da_venda` → `travar_evento`), então o clique duplo não duplica. Núcleo único:
+  `app/calendar/pedido_de_nota_ops.acompanhar_pedido`.
+- **Desligar exclui só as `a_emitir`, e só na transição** ligado → desligado (a venda que nunca teve o chip pode
+  ter nota lançada à mão pelo Financeiro); nota emitida é documento contábil e fica. O Jinja legado
+  (`sincronizar_notas`) apaga tudo — divergência registrada, o Jinja não muda.
+- **Nota única a emitir acompanha a venda**: enquanto for a única e não tiver arquivo, o valor segue `sale_value`.
+- **Cancelado e satélite não ganham pedido** (o cancelado segue a 306; o satélite não tem venda).
+- **Um aviso por nota**: depois do commit da venda, `avisar_notas_pedidas` reivindica `aviso_enviado_em` por UPDATE
+  condicional e só então manda o e-mail aos Superadmins; falha no envio só loga.
+- Os dados da nota são da **venda** (`calendar_events.nota_*`): documento em branco vale o CNPJ (senão o CPF) do
+  cliente contratante; documento informado completa o cadastro do cliente só se estiver vazio.
+
 ### Invariantes que valem para todo relatório financeiro
 
 1. **Satélites nunca são linha própria.** Venda e comissão vivem só no líder; os cachês entram via

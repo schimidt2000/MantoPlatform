@@ -306,6 +306,15 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
 - **Acesso**: todos exceto `REVENDEDOR_EDUCAMANTO` puro.
 - **API**: `GET /api/dashboard` (`dashboard_service.py`).
 - **Vínculos**: cards levam a Agenda, Casting, Figurino e Financeiro.
+- **Feature 323 — painel "🧾 Notas a emitir"**, o primeiro da Home, só do Superadmin real (some no "Ver como").
+  Toda nota pedida e ainda não emitida, **sempre urgente** (card "Notas a emitir" no topo com N urgentes; o painel
+  abre sozinho). Cada linha: valor (ou "Valor a definir"), selo "Urgente", "ISS retido · <município>" e "Evento
+  cancelado" quando for o caso; tomador com CNPJ/CPF (vermelho "CNPJ não informado" quando falta), e-mail e
+  endereço; evento (link para a aba Comercial), data e "pedida por <nome> em dd/mm às hh:mm"; a **discriminação**
+  pronta (referência → "Personagens para evento dd/mm" ou "Apresentações Educamanto — dd/mm" → "Vencimento: dd/mm"
+  → dados do Inter → observações). Botões "Copiar discriminação" e "Inserir nota" (PDF/imagem; manda o valor e a
+  data junto, senão o PATCH apagaria o valor) — inserida, a nota fica emitida e a linha sai. Vazio: "Nenhuma nota
+  a emitir.".
 - **Feature 298 — painel "📝 Formulários sem evento na agenda"** (substituiu os quatro números da
   266, que contavam o histórico importado e diziam 1.347): logo depois do "💼 Comercial", mesmo
   gate, **respeita "Ver como"**. Dois grupos — "A data informada ainda vai chegar" (a mais próxima
@@ -696,7 +705,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     completa" abaixo do `FormResponsePicker`.
   - **Aba Comercial**: *Clientes* (**editável inline**) · *Pré-contrato* (**editável inline**) ·
     *Comercial — dados da venda* (**editável inline**: bruto/desconto/final, transporte, comissão,
-    forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta) · painel
+    forma de pagamento, parcelas, datas, vendedor, nota fiscal, cortesia/permuta; feature 323: com
+    "Cliente solicitou nota fiscal" abrem os **Dados da nota** — "CNPJ ou CPF do tomador" (em branco, vale o do
+    cadastro, mostrado na ajuda), "Referência do cliente", "ISS retido pelo tomador" → "Município da prestação *",
+    "Observações para a nota"; a leitura mostra Tomador, ISS, Referência e Observações; o mesmo bloco abre sob o
+    chip "Precisa de nota fiscal" na criação e no "Editar tudo"; o card de notas fiscais mostra "pedida por") · painel
     **"Acréscimos"** (editável; feature 305: BV com "Quem recebe" e "Chave PIX" obrigatórios, "% do
     preço" no BV, valor com vírgula, BV pago travado, origem sob a linha, erro na própria linha) ·
     **alerta da 305** quando o orçamento tem BV e a venda foi digitada sem ele (no painel Acréscimos,

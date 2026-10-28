@@ -264,7 +264,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
 | `event_payments` | `EventPayment` | comprovantes de pagamento com valor. Feature 318: `origem` (`comprovante` \| `pix_email`), `conta_id` (conta que recebeu, opcional) e `file_path` **NULL só na origem PIX** (CHECK `ck_event_payments_arquivo_ou_pix`): o pagamento criado pelo aviso do banco nasce sem arquivo | `event_id`, `conta_id` |
 | `event_installments` | `EventInstallment` | parcelas (`due_date`) | `event_id` |
-| `event_invoices` | `EventInvoice` | notas fiscais (`issue_date`) | `event_id` |
+| `event_invoices` | `EventInvoice` | notas fiscais (`issue_date`). Feature 323: `pedida_por_id` (FK `users`, `SET NULL`), `pedida_em` e `aviso_enviado_em` (os dois em `now_sp()`); o aviso é reivindicado por UPDATE condicional (`aviso_enviado_em IS NULL`) — uma nota, um e-mail; nota sem `pedida_por_id` (legado) nunca avisa. Os dados da nota moram na venda: `calendar_events.nota_tomador_doc` (só dígitos, 11/14; vazio = o do cliente contratante), `nota_iss_retido`, `nota_municipio`, `nota_referencia`, `nota_observacoes` | `event_id`, `pedida_por_id` |
 | `event_acrescimos` | `EventAcrescimo` | acréscimos tipados (`BV`, `Taxa de urgência`, `Outro`…) | `event_id` |
 | `event_clients` | `EventClient` | múltiplos clientes por evento com tipo de relação (`Contratante`, `Assessora`, `Mãe/Pai`, `Familiar`, `Outros`) | `event_id`, `client_id` |
 | `event_reimbursements` | `EventReimbursement` | reembolso de despesa da cliente | `event_id`, `created_by_id`, `collected_by_id` |
@@ -762,6 +762,18 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 
 ### 3.2 Dashboard e RH
 `GET /api/dashboard` (`dashboard.py` + `dashboard_service.py`) · `GET /api/rh/dashboard`.
+
+> **Feature 323**: `GET /api/dashboard` ganhou `notas_a_emitir: {itens: [...]} | null` — toda nota `a_emitir`,
+> a pedida há mais tempo primeiro (legado no fim, pela data do evento), com `amount`, `tomador {nome, doc, email,
+> endereco}`, `iss_retido`, `municipio`, `referencia`, `observacoes`, `pedida_por`, `pedida_em` (SP),
+> `vencimento`, `discriminacao` (texto pronto; o bloco bancário vem de `NOTA_DADOS_BANCARIOS`, `app/config.py`,
+> default real) e `cancelado`. Só o **Superadmin real sem "Ver como"**; para os demais, `null`. As três portas da
+> venda (`POST /api/events`, `PATCH /api/events/<id>`, `PATCH /api/events/<id>/comercial`) aceitam a chave
+> opcional `nota: {tomador_doc, iss_retido, municipio, referencia, observacoes}` (ausente = não mexe; 400
+> `fields.nota_tomador_doc` / `nota_municipio` / `nota_observacoes`; na criação, valida antes do Google). O detalhe
+> traz `venda.nota` (com `doc_do_cliente`) e `notas_fiscais[].pedida_por`/`pedida_em`. Ligar o chip em qualquer
+> porta cria a nota a emitir (antes só a criação); desligar (na transição) exclui só as a emitir. Contrato completo:
+> `specs/323-nota-pedida-ao-superadmin/contracts/api.md`.
 
 > **Feature 239**: `GET /api/dashboard` ganhou `portal_url` (raiz do Portal do Artista, mesma
 > fonte de `_portal_url()` em `app/email_service.py`; `null` quando a env `PORTAL_URL` não está
@@ -2178,6 +2190,7 @@ Gates por módulo (todos em `app/api/`):
 | `_can_casting()` | `agenda_write` (remover cargo) | `CASTING`, `SUPERADMIN` |
 | `_can_manage_sale()` | `agenda_write` (nota fiscal; `PUT /api/events/<id>/acrescimos` e `/parcelas` — na 305 o PUT de acréscimos passa a recusar BV sem quem recebe/PIX e a sincronizar a comissão) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_manage_sale()` | `PATCH /api/events/<id>/orcamento` (feature 273; na 299 o valor simbólico passou a contar como "sem venda") | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`. **Autoria (feature 301)**: *vincular* em evento sem orçamento é livre para quem tem o módulo de Orçamento (COMERCIAL/SUPERADMIN) — FINANCEIRO passa neste gate mas leva **404** ao apontar orçamento que não é dele; *trocar, desvincular ou re-aplicar* sobre vínculo de outra pessoa → **409 `orcamento_de_outro`**, nomeando o autor. Os três verbos: `aplicar` escreve `sale_date`, que decide o mês da comissão |
+| superadmin **real** sem "Ver como" (`is_superadmin` do `dashboard_service`) | `GET /api/dashboard` — bloco `notas_a_emitir` (feature 323; os outros papéis recebem `null`). Inserir o PDF pelo painel usa `PATCH /api/events/<id>/invoices/<id>` (`_can_manage_sale`, sem mudança) | `SUPERADMIN` |
 | `show_comercial` (papel efetivo, respeita "Ver como") | `GET /api/dashboard` — blocos `comercial` e `formularios` (feature 299: o conteúdo mudou, o gate não); o detalhe do evento usa o mesmo corte para `cobranca`/`venda`/`pagamentos`. **Feature 301**: passado este gate, `venda.orcamento` e `orcamento_history_id` saem para quem tem o **módulo de Orçamento** (COMERCIAL ou SUPERADMIN), sem checagem de dono; FINANCEIRO passa no gate mas fica só com `tem_orcamento`. A chave `pode_gerir`, essa sim, depende da autoria do orçamento vinculado | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` |
 | `_can_confirm()` | `agenda_write` | `COMERCIAL`, `SUPERADMIN` |
 | `_require_cobrar()` (feature 317) | `contratos_write`: cobrar, ligar, desligar e descartar contrato da ClickSign; no detalhe, `contrato.pode_cobrar`/`pode_conferir` seguem `can_confirm` (zerado no cancelado) e, na Home, `contratos.pode_cobrar` o papel efetivo | `COMERCIAL`, `SUPERADMIN` (papel real) — FINANCEIRO leva **403** (vê a situação, não age: decisão do dono) |

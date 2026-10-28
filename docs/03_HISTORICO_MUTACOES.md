@@ -186,6 +186,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **323-nota-pedida-ao-superadmin** | *(PRONTA, aguardando merge e deploy)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **317b-ligacao-de-contratos** | *(EM PRODUÇÃO 28/10, madrugada)* O contrato da ClickSign acha a venda quando data + telefone não bastam: mesmo telefone a um dia, formulário do mesmo telefone e data ligado a um evento (festa remarcada), e-mail no lugar do telefone e **tema por palavra** ("Arraiá com o Snoopy" × "SNOOPY + CHARLIE"); a venda cancelada certa liga (o PDF não entra no cancelado) e o envelope cancelado na ClickSign sem venda sai de "A conferir". Nos 246 envelopes desde 01/06: 57 a conferir → 16, 19 vínculos novos conferidos um a um | 2026-10-28 | — | (aqui) | ver Registro |
 | **322-o-que-o-casting-fecha** | *(EM PRODUÇÃO 28/10 ~03h25)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
@@ -381,6 +382,59 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 323 — A nota pedida chega ao Superadmin com tudo o que a emissão precisa   (323-nota-pedida-ao-superadmin · 2026-10-28 · migration `d323b5a1c0e7`)
+
+> **PRONTA, aguardando merge e deploy** (worktree `C:\tmp\mp323`, base `origin/main 4eb09108`). Nível 1
+> (migration, agenda + Home + e-mail, telas). Detalhes em `specs/323-nota-pedida-ao-superadmin/` (spec, plan,
+> research, data-model, contracts/api.md, checklists, verify).
+
+**O pedido.** O dono (28/10): "quando for vendido um evento e ele for marcado que precisa de nota, gerar uma task
+para o superadmin gerar essa nota", com e-mail "seguindo aquele formato que a gente usou para o gasto extra",
+"urgente", e com o que a emissão precisa — o cliente avisa por WhatsApp se quer ISS retido e o que vai na
+descrição. Mandou as NFS-e 99 a 103 como modelo.
+
+**O que já existia (069) e o furo.** O chip na **criação** já criava a nota `a_emitir`, visível só no card "Notas a
+Emitir" do Financeiro. Ligar o chip no **"Editar tudo" ou no card Comercial** (as portas do React) só gravava
+`with_invoice`: nenhuma nota nascia e ninguém era avisado — o verify confirma (cenários 2 e 3 falhavam no código
+antigo).
+
+**O que mudou.**
+- `app/calendar/pedido_de_nota_ops.py` (novo): `acompanhar_pedido` (chip ligado e venda sem nota → `a_emitir` com
+  "pedida por"; desligado → exclui só as a emitir; nota única a emitir acompanha o valor da venda; cancelado e
+  satélite não mudam), `gravar_dados_da_nota`, `discriminacao`, `painel`, `avisar_notas_pedidas` (reivindica
+  `aviso_enviado_em` por UPDATE condicional e manda o e-mail depois do commit).
+- Os três núcleos chamam o pedido com o evento já travado (`estado_da_venda`) e avisam depois do commit; as três
+  views aceitam a chave `nota` (400 com `fields`; na criação, antes do Google; no cancelado, conta como "venda
+  mudaria").
+- Discriminação no texto das notas do dono: referência → "Personagens para evento dd/mm" (EducaManto:
+  "Apresentações Educamanto — dd/mm") → "Vencimento: dd/mm" (faturado, ou a 1ª parcela a receber) → bloco do Inter
+  (`NOTA_DADOS_BANCARIOS`, default real em `app/config.py`) → observações.
+- E-mail `send_nota_pedida_email`: assunto `Nota R$ 2.127,98 · <tomador> · pedida por <nome>`, prévia com evento,
+  ISS e vencimento, corpo com tomador, ISS, referência, discriminação e "Emitir nota →".
+- Home: painel "🧾 Notas a emitir" primeiro, só do Superadmin real, tudo urgente, com "Copiar discriminação" e
+  "Inserir nota" (reusa o PATCH da 251, mandando valor e data — sem eles o PATCH apagava o valor). Formulário do
+  evento e card Comercial ganham "Dados da nota"; o card de notas mostra "pedida por".
+
+**Decisões.** Os dados são da **venda** (`calendar_events.nota_*`), não de cada nota: o cliente pede uma vez e a
+069 já divide a venda em várias notas. Documento em branco vale o do cadastro do cliente contratante; documento
+digitado completa o cadastro só se vazio (119). Desligar o chip não apaga nota emitida (o Jinja apaga — dívida 176).
+
+**Verificação.** `verify_323.py` 15/15 (e-mail por coletor, Google dublado). O converge, numa leitura independente,
+achou dois defeitos, corrigidos com cenário próprio: o "Editar tudo" que troca o contratante completava o documento
+do cliente **antigo** (os vínculos eram refeitos depois), e desligar valia em toda gravação — apagava a nota lançada
+à mão pelo Financeiro numa venda que nunca teve o chip; agora só na transição ligado → desligado. Telas abertas com backend do worktree
+sem Google: Home do Superadmin (desktop e 375×812, sem rolagem lateral), inserir PDF tirou a linha e emitiu a nota
+com o valor preservado; card Comercial com erro no município e foco nele, gravação criando a nota "pedida por";
+"Editar tudo" hidratado e gravando; o e-mail montado para os 4 Superadmins do espelho e suprimido localmente.
+Typecheck das três SPAs e `ruff` limpos.
+
+**Atenção no deploy.** A Home do Superadmin passa a listar como urgentes as notas `a_emitir` que já existiam (6 no
+espelho, de setembro, várias sem CNPJ) — dívida 177. E a venda que ficou "com nota" pelo furo da edição (chip ligado,
+nenhuma nota) ganha o pedido, com e-mail, na próxima vez que alguém salvar a venda.
+
+**Fora de escopo.** Emissão automática na prefeitura; aviso no sino e por WhatsApp; tomador diferente por nota;
+editar os dados bancários por tela; lembrete de nota parada.
 
 ### 317b — O contrato da ClickSign acha a venda por outros sinais   (317b-ligacao-de-contratos · 2026-10-28 · sem migration)
 
