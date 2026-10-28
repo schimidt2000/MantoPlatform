@@ -46,6 +46,15 @@ Decisões do dono no mesmo dia, antes da spec:
 - O título já não aceita "Maquiador", "Coordenador" nem "Técnico de Som" (feature 239, decisão 6);
   nenhum título atual tem "maquia".
 
+## Clarifications
+
+### Session 2026-10-28
+
+- Q: Na edição de um evento que já existe, quem não é superadmin pode marcar maquiagem num
+  personagem NOVO? → A: Não, só o superadmin; a caixa aparece travada para os outros (FR-012).
+- Q: O coordenador escolhido no campo "Coordenador" do formulário de criação mostra "adicionado
+  pelo sistema"? → A: Não; só a vaga que o sistema cria quando o campo fica vazio (FR-011).
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — O casting vê o que é cada personagem (Prioridade: P1)
@@ -283,9 +292,5 @@ nascerem).
 
 - O texto do tipo segue o que a calculadora já chama de cada coisa, com caixa de frase ("Boneco
   grande especial", "Ator cara-limpa"), e as marcas na ordem show · cantor · com maquiagem.
-- "Personagem novo na edição" conta como "depois que o evento existe": quem não é superadmin não o
-  marca com maquiagem (leitura da frase do dono "só deve ser alterado depois se superadmin o fizer").
-- O coordenador escolhido no campo "Coordenador" do formulário de criação foi pedido por uma pessoa
-  e não leva a marca; a vaga de coordenador que o sistema garante quando o campo fica vazio leva.
 - A vaga de maquiador da FR-005 não tem teto: o orçamento é que define quanto se paga de make; sem
   orçamento o casting combina o valor, como faz hoje com toda vaga sem teto.

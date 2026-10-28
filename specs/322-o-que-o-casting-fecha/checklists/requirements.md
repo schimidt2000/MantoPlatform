@@ -34,5 +34,5 @@
 
 - As quatro decisões do dono (tipo só do orçamento; maquiagem só o superadmin muda depois; sem
   retroativo; marca em toda vaga automática) foram tomadas antes da spec e estão em "O pedido".
-- Duas premissas merecem o `/speckit-clarify`: personagem novo na edição conta como "depois", e o
-  coordenador escolhido no formulário não leva a marca.
+- As duas premissas (personagem novo na edição conta como "depois"; coordenador escolhido no
+  formulário não leva a marca) foram confirmadas pelo dono no `/speckit-clarify` de 28/10.
