@@ -2,6 +2,7 @@ import { useMutation, useQueryClient, type QueryClient, type QueryKey } from "@t
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe, RelatorioOrcamento } from "./agenda";
 import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
+import type { NotaInput } from "./notaFiscal";
 
 /**
  * Edição pontual por bloco da tela de detalhe (feature 215).
@@ -91,6 +92,8 @@ export interface EventComercialInput {
   sale_value_gross: number | null;
   transport_value: number | null;
   with_invoice: boolean;
+  /** Feature 323: os dados da nota — só com o chip ligado; ausente = o servidor não mexe. */
+  nota?: NotaInput;
   is_cortesia_permuta: boolean;
   seller_id: number | null;
   sale_date: string | null;

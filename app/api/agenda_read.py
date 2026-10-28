@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import or_
 
+from app.calendar import pedido_de_nota_ops
 from app.constants import (
     EVENT_TYPE_SHOW,
     EVENT_TYPE_VIRTUAL,
@@ -1245,6 +1246,8 @@ def serialize_event_detail(
                 if form_response
                 else None
             ),
+            # Feature 323: os dados da nota, para o formulário e a leitura da aba Comercial.
+            "nota": pedido_de_nota_ops.serializar_dados(event),
         }
         data["contratos"] = [
             {
@@ -1264,6 +1267,9 @@ def serialize_event_detail(
                 "issue_date": inv.issue_date.isoformat() if inv.issue_date else None,
                 "status": inv.status,
                 "file": inv.file,
+                # Feature 323: quem pediu a emissão (legado: o vendedor da venda).
+                "pedida_por": pedido_de_nota_ops.nome_de_quem_pediu(inv),
+                "pedida_em": inv.pedida_em.isoformat() if inv.pedida_em else None,
             }
             for inv in EventInvoice.query.filter_by(event_id=event.id)
             .order_by(EventInvoice.created_at.desc())

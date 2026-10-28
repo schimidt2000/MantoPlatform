@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { EventoDetalhe } from "./agenda";
 import { invalidarDestinoDeFormulario } from "./formulariosAdmin";
+import type { NotaInput } from "./notaFiscal";
 
 /** Ficha de figurino selecionável no elenco — `photo_url` alimenta a miniatura quadrada da busca. */
 export interface FigurinoSheetOption {
@@ -182,6 +183,8 @@ export interface EventCreateInput {
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
+  /** Feature 323: os dados da nota — só com o chip ligado; ausente = o servidor não mexe. */
+  nota?: NotaInput;
   is_cortesia_permuta: boolean;
   seller_id: number | null;
   sale_date: string | null;
@@ -222,6 +225,8 @@ export interface EventUpdateInput {
   transport_value: number;
   acrescimo_value: number;
   with_invoice: boolean;
+  /** Feature 323: os dados da nota — só com o chip ligado; ausente = o servidor não mexe. */
+  nota?: NotaInput;
   is_cortesia_permuta: boolean;
   seller_id: number | null;
   sale_date: string | null;

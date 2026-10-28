@@ -25,6 +25,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.calendar import pedido_de_nota_ops
 from app.constants import (
     DEPARTURE_DEFAULT_LOCATION,
     EVENT_TYPE_SHOW,
@@ -869,7 +870,15 @@ def venda_mudaria(event: Any, data: dict) -> bool:
     )
 
 
-def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz: Any = None) -> str | None:
+def _gravar_venda_da_edicao(
+    event: Any,
+    data: dict,
+    *,
+    actor_name: str = "",
+    tz: Any = None,
+    dados_nota: Any = None,
+    pedida_por_id: int | None = None,
+) -> str | None:
     """Campos comerciais da edição completa — nunca no outro evento de um grupo (feature 299).
 
     A venda do grupo mora no principal: o `/comercial` já recusa satélite com 409, mas a edição
@@ -906,6 +915,9 @@ def _gravar_venda_da_edicao(event: Any, data: dict, *, actor_name: str = "", tz:
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
+    # Feature 323: o chip ligado na edição pede a nota (antes só a criação pedia).
+    pedido_de_nota_ops.gravar_dados_da_nota(event, dados_nota)
+    pedido_de_nota_ops.acompanhar_pedido(event, pedida_por_id=pedida_por_id, nota_antes=antes[1])
     return acompanhar_bv_da_venda(event, antes, actor_name=actor_name, tz=tz)
 
 
@@ -917,6 +929,8 @@ def update_event_core(
     actor_name: str,
     tz: ZoneInfo,
     sincronizar_comissao: Any = None,
+    dados_nota: Any = None,
+    pedida_por_id: int | None = None,
 ) -> list[str]:
     """Atualiza em bloco os campos centrais de um evento existente (feature 184) — título, tipo,
     data/horário, local, descrição, ensaio, valores, pagamento, vendedor, elenco (reconciliado),
@@ -981,12 +995,17 @@ def update_event_core(
     )
     event.needs_rehearsal = bool(data.get("needs_rehearsal"))
 
-    aviso_bv = _gravar_venda_da_edicao(event, data, actor_name=actor_name, tz=tz)
+    aviso_bv = _gravar_venda_da_edicao(
+        event, data, actor_name=actor_name, tz=tz, dados_nota=dados_nota, pedida_por_id=pedida_por_id
+    )
     if aviso_bv:
         warnings.append(aviso_bv)
 
     EventClient.query.filter_by(event_id=event.id).delete()
     _create_client_links(event, data.get("client_pairs") or [])
+    # Feature 323: só agora o contratante desta gravação está no banco.
+    if not event.is_satellite and not event.is_cancelled:
+        pedido_de_nota_ops.completar_documento_do_cliente(event, dados_nota)
 
     # Feature 298: pré-contrato de OUTRO evento levanta `FormularioJaTemDestino` (409) em vez de ser
     # ignorado em silêncio; `None` continua não desligando (a tela manda o id atual em toda gravação).
@@ -1022,6 +1041,7 @@ def update_event_core(
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+    pedido_de_nota_ops.avisar_notas_pedidas(event.id)
 
     # Quem acabou de ser pré-escalado recebe o convite agora (feature 233): antes o cargo nascia
     # com pessoa e SEM convite, e nenhuma tela pedia para alguém clicar em "Convidar".
@@ -1213,6 +1233,8 @@ def update_event_comercial(
     actor_name: str,
     tz: ZoneInfo,
     sincronizar_comissao: Any = None,
+    dados_nota: Any = None,
+    pedida_por_id: int | None = None,
 ) -> str | None:
     """Grava os valores comerciais do evento na própria aba Comercial (feature 215).
 
@@ -1226,6 +1248,8 @@ def update_event_comercial(
             `payment_method`, `payment_installments`, `payment_due_date`).
         actor_name: Nome de quem editou, para o `EventLog`.
         tz: Fuso usado no carimbo do log.
+        dados_nota: Os dados da nota (`pedido_de_nota_ops.DadosDaNota`); `None` não mexe (323).
+        pedida_por_id: Quem grava — vira "pedida por" se o chip pedir a nota agora (323).
         sincronizar_comissao: Chamada com o evento depois de gravar, para criar ou atualizar a
             linha de comissão. Esta função escreve `sale_value`, `seller_id` e `commission_rate`
             — os três insumos da comissão — e até aqui não mexia nela: o gêmeo Jinja
@@ -1283,6 +1307,10 @@ def update_event_comercial(
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
+    # Feature 323: o chip ligado aqui pede a nota; no cancelado, só os dados mudam.
+    pedido_de_nota_ops.gravar_dados_da_nota(event, dados_nota)
+    pedido_de_nota_ops.completar_documento_do_cliente(event, dados_nota)
+    pedido_de_nota_ops.acompanhar_pedido(event, pedida_por_id=pedida_por_id, nota_antes=antes[1])
 
     # Feature 305 (B10): o BV a pagar acompanha a venda nova — antes do sync, que já vê o BV certo.
     aviso_bv = acompanhar_bv_da_venda(event, antes, actor_name=actor_name, tz=tz)
@@ -1303,6 +1331,7 @@ def update_event_comercial(
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+    pedido_de_nota_ops.avisar_notas_pedidas(event.id)
     return aviso_bv
 
 

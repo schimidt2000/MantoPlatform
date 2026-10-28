@@ -38,6 +38,7 @@ import { BotaoMostrarTodas, GrupoDeLinhas, LIMITE_LINHAS_PAINEL, PanelGroup } fr
 import { LinhaDaHome } from "../components/home/LinhaDaHome";
 import { PainelCobrancas } from "../components/home/PainelCobrancas";
 import { PainelContratos } from "../components/home/PainelContratos";
+import { PainelNotasAEmitir } from "../components/home/PainelNotasAEmitir";
 import { PainelSemValor } from "../components/home/PainelSemValor";
 import { SectorPanel, getUrgency } from "../components/SectorPanel";
 import { EncerrarFormularioDialog } from "../components/formularios/EncerrarFormularioDialog";
@@ -817,6 +818,7 @@ function FormulariosPanel({
 
 /** Ordem fixa das seções — a mesma na visão geral e na pilha de painéis (previsibilidade). */
 type SectionKey =
+  | "notas"
   | "minhas_pecas"
   | "oficina"
   | "casting"
@@ -935,6 +937,20 @@ function statsComerciais(c: ComercialSummary): SectionStat[] {
  */
 function computeSectionStats(data: DashboardSummary): SectionStat[] {
   const stats: SectionStat[] = [];
+
+  // Feature 323: nota pedida é sempre urgente — a cliente espera a nota para pagar. Primeira da
+  // Home do Superadmin, que é o único que recebe o bloco.
+  if (data.notas_a_emitir) {
+    const total = data.notas_a_emitir.itens.length;
+    stats.push({
+      key: "notas",
+      emoji: "🧾",
+      label: "Notas a emitir",
+      count: total,
+      urgent: total,
+      detail: null,
+    });
+  }
 
   if (data.figurino_producao) {
     stats.push({
@@ -1210,6 +1226,21 @@ export function DashboardPage() {
           {/* `grid-cols-1` explícito: sem template, a coluna implícita dimensiona por
               max-content e um título de evento comprido estoura a página no celular. */}
           <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2">
+            {/* Feature 323: a nota pedida vem antes de tudo na Home do Superadmin — é urgente. */}
+            {data.notas_a_emitir && (
+              <div {...propsSecao("notas")}>
+                <SectorPanel
+                  title="🧾 Notas a emitir"
+                  count={data.notas_a_emitir.itens.length}
+                  urgentCount={data.notas_a_emitir.itens.length}
+                  open={painelAberto("notas")}
+                  onOpenChange={aoAlternar("notas")}
+                >
+                  <PainelNotasAEmitir itens={data.notas_a_emitir.itens} />
+                </SectorPanel>
+              </div>
+            )}
+
             {/* Primeiro painel da home de propósito (feature 225): é o único pessoal — o que está
                 nas mãos de quem está lendo. Só aparece para quem tem peça sob sua responsabilidade. */}
             {data.figurino_producao && (
@@ -1566,7 +1597,8 @@ export function DashboardPage() {
             !data.ensaio &&
             !data.comercial &&
             !data.formularios &&
-            !data.financeiro && (
+            !data.financeiro &&
+            !data.notas_a_emitir && (
               <Card>
                 <CardContent className="p-5">
                   <p className="text-sm text-muted">Tudo em dia ✓</p>

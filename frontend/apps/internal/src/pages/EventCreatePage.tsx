@@ -13,9 +13,11 @@ import {
   DEFAULT_EVENT_FORM_VALUES,
   FIELD_ORDER,
   SERVER_FIELD_MAP,
+  notaDoFormulario,
   primeiroCampoDoErro,
   type EventFormValues,
 } from "../lib/eventFormSchema";
+import { useDocDoContratante } from "../lib/notaFiscal";
 import {
   useCreateEvent,
   precoDaDuracao,
@@ -165,6 +167,8 @@ export function EventCreatePage() {
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
   const [clients, setClients] = useState<(ClientLinkInput & { name: string })[]>([]);
+  // Feature 323: o documento do contratante escolhido, sugestão do campo do tomador.
+  const docDoContratante = useDocDoContratante(clients);
   const [formResponse, setFormResponse] = useState<SelectedFormResponse | null>(null);
   const [hasReembolso, setHasReembolso] = useState(false);
   const [reembolsoDescription, setReembolsoDescription] = useState("");
@@ -444,6 +448,7 @@ export function EventCreatePage() {
         transport_value: values.transport_value,
         acrescimo_value: values.acrescimo_value,
         with_invoice: values.with_invoice,
+        nota: notaDoFormulario(values),
         is_cortesia_permuta: values.is_cortesia_permuta,
         seller_id: values.seller_id ? Number(values.seller_id) : null,
         sale_date: values.sale_date || null,
@@ -815,7 +820,7 @@ export function EventCreatePage() {
               talents={opts.assignable_talents}
             />
 
-            <ValoresBlock sellers={opts.sellers} />
+            <ValoresBlock sellers={opts.sellers} docDoCliente={docDoContratante} />
 
             {(prefill.data?.acrescimos_do_orcamento || bvErros.bv_recipient || bvErros.bv_pix) && (
               <BvDoOrcamentoBlock

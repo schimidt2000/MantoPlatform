@@ -18,6 +18,7 @@ from flask_mail import Mail, Message
 
 from app.config import PLATFORM_BASE_URL, host_e_local
 from app.constants import DEPARTURE_DEFAULT_LOCATION
+from app.money import format_brl
 
 log = logging.getLogger(__name__)
 mail = Mail()
@@ -1023,6 +1024,101 @@ def send_new_expense_alert_email(expense, users: list) -> int:
         )
         html = _html_wrap(content, preheader=preheader)
         if _send(to=user.email, subject=subject, html=html):
+            sent += 1
+    return sent
+
+
+# ── Email da nota fiscal pedida (feature 323) ────────────────────────────────
+
+_ASSUNTO_TOMADOR_MAX = 40
+
+
+def _assunto_da_nota(valor_str: str | None, tomador_nome: str | None, quem: str) -> str:
+    """`Nota R$ 2.127,98 · Esporte Clube Sírio · pedida por Thaís` — o que fazer, sem abrir."""
+    nome = (tomador_nome or "").strip() or "cliente não informado"
+    if len(nome) > _ASSUNTO_TOMADOR_MAX:
+        nome = nome[: _ASSUNTO_TOMADOR_MAX - 1].rstrip() + "…"
+    partes = [f"Nota {valor_str}" if valor_str else "Nota (valor a definir)", nome]
+    if quem:
+        partes.append(f"pedida por {quem}")
+    return " · ".join(partes)
+
+
+def _linhas_da_nota(nota, tomador: dict, valor_str: str | None, evento_str: str) -> str:
+    """A caixa de dados do e-mail da nota pedida, na ordem em que o site da prefeitura pede."""
+    from app.calendar.pedido_de_nota_ops import formatar_doc
+
+    event = nota.event
+    rows = _info_row("Valor", valor_str or "A definir")
+    rows += _info_row("Tomador", escape(tomador["nome"] or "Cliente não informado"))
+    doc = formatar_doc(tomador["doc"])
+    # Sem documento a nota não sai: o destaque é o mesmo do painel da Home.
+    rows += _info_row(
+        "CNPJ/CPF", escape(doc) if doc else '<span style="color:#c0392b;">Não informado</span>'
+    )
+    if tomador["email"]:
+        rows += _info_row("E-mail", escape(tomador["email"]))
+    if tomador["endereco"]:
+        rows += _info_row("Endereço", escape(tomador["endereco"]))
+    iss = f"Retido pelo tomador — {event.nota_municipio}" if event.nota_iss_retido else "Não retido"
+    rows += _info_row("ISS", escape(iss))
+    if event.nota_referencia:
+        rows += _info_row("Referência", escape(event.nota_referencia))
+    if event.nota_observacoes:
+        rows += _info_row("Observações", escape(event.nota_observacoes))
+    rows += _info_row("Evento", escape(evento_str))
+    return rows
+
+
+def send_nota_pedida_email(nota, users: list) -> int:
+    """Avisa os Superadmins de que uma nota fiscal foi pedida (feature 323), no formato da 319.
+
+    O assunto diz valor, cliente e quem pediu; a prévia, evento, ISS e vencimento; o corpo traz os
+    dados do tomador e a discriminação pronta para colar no site da prefeitura.
+    """
+    from app.calendar.pedido_de_nota_ops import discriminacao, tomador, vencimento
+
+    if not users or nota is None or nota.event is None:
+        return 0
+    event = nota.event
+    dados_tomador = tomador(event)
+    valor_str = format_brl(nota.amount, prefix=True) if nota.amount is not None else None
+    quem = _primeiro_nome(nota.pedida_por or event.seller)
+    subject = _assunto_da_nota(valor_str, dados_tomador["nome"], quem)
+
+    evento_str = event.title or "Evento"
+    if event.start_at:
+        evento_str += f" — {event.start_at.strftime('%d/%m')}"
+    partes = [evento_str]
+    if event.nota_iss_retido:
+        partes.append(f"ISS retido ({event.nota_municipio})")
+    venc = vencimento(event)
+    if venc:
+        partes.append(f"vencimento {venc.strftime('%d/%m')}")
+    # Mesmo enchimento invisível da 319: impede o celular de completar a prévia com a saudação.
+    preheader = escape(" · ".join(partes)) + "&#847;&zwnj;&nbsp;" * 90
+
+    texto_nota = escape(discriminacao(event))
+    bloco_discriminacao = (
+        '<p style="font-size:13px;color:#888;margin:16px 0 6px;">Discriminação</p>'
+        '<pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;color:#1a1a2e;'
+        f'background:#f7f6fb;border-radius:8px;padding:12px 14px;margin:0;">{texto_nota}</pre>'
+    )
+    base_plataforma = (current_app.config.get("PUBLIC_BASE_URL") or PLATFORM_BASE_URL).rstrip("/")
+    pedido = f"{escape(quem)} pediu a emissão de uma nota fiscal." if quem else "Uma nota fiscal foi pedida."
+
+    sent = 0
+    for user in users:
+        if not user.email:
+            continue
+        content = (
+            _greeting(_primeiro_nome(user))
+            + _paragraph(pedido)
+            + _info_box(_linhas_da_nota(nota, dados_tomador, valor_str, evento_str))
+            + bloco_discriminacao
+            + _btn("Emitir nota →", f"{base_plataforma}/")
+        )
+        if _send(to=user.email, subject=subject, html=_html_wrap(content, preheader=preheader)):
             sent += 1
     return sent
 

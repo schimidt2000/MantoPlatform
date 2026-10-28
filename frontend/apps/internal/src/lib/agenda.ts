@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { ContratoDaVenda } from "./contratos";
+import type { DadosDaNotaDoEvento } from "./notaFiscal";
 import type { Event3DGift } from "./impressoes3d";
 import type { AvisoFalho } from "./virtuais";
 
@@ -622,6 +623,8 @@ export interface EventoDetalhe {
     acrescimo_value: number | null;
     is_cortesia_permuta: boolean;
     with_invoice: boolean;
+    /** Feature 323 — opcional: servidor antigo não manda. */
+    nota?: DadosDaNotaDoEvento;
     seller: string | null;
     seller_id: number | null;
     sale_date: string | null;
@@ -674,6 +677,9 @@ export interface EventoDetalhe {
     issue_date: string | null;
     status: string;
     file: string | null;
+    /** Feature 323 — quem pediu a emissão (legado: o vendedor); opcional no servidor antigo. */
+    pedida_por?: string | null;
+    pedida_em?: string | null;
   }[];
   /**
    * Cobrança da venda (feature 299: o grupo é uma venda só — a conta é a mesma da Home). As três
