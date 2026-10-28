@@ -76,7 +76,7 @@ teto, e erra o perfil.
 
 1. **Dado** um orçamento com um especial "Boneco Grande Especial" chamado "Bumblebee", um cantor com
    maquiagem chamado "Moana" e um ator cara-limpa, **Quando** o evento é criado a partir dele,
-   **Então** cada vaga guarda o seu tipo e o casting lê "Boneco grande especial", "Cantor · show ·
+   **Então** cada vaga guarda o seu tipo e o casting lê "Boneco Grande Especial", "Cantor · show ·
    com maquiagem" e "Ator cara-limpa".
 2. **Dado** um evento do Google sem orçamento, **Quando** a comercial liga um orçamento a ele (o
    vínculo da feature 273), **Então** cada personagem que casa pelo nome ganha o tipo do orçamento;
@@ -332,8 +332,9 @@ nascerem).
 
 ## Premissas
 
-- O texto do tipo segue o que a calculadora já chama de cada coisa, com caixa de frase ("Boneco
-  grande especial", "Ator cara-limpa"), e as marcas na ordem show · cantor · com maquiagem.
+- O texto do tipo segue o que a calculadora já chama de cada coisa, com a grafia da tabela de
+  preços ("Boneco Grande Especial", "Ator cara-limpa" — nomes próprios como "Homem-Aranha" não
+  perdem a maiúscula), e as marcas na ordem show · cantor · com maquiagem (research R1).
 - "Inserido pelo comercial" vale para todo talento que entra pelo formulário do evento, que é a
   ferramenta da comercial — mesmo quando quem salva é o superadmin. A marca acompanha o talento:
   quem escala pelo card do casting é o casting.
