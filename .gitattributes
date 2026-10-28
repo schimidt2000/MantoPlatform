@@ -1,0 +1,2 @@
+# Gancho de shell: com CRLF o `#!/bin/sh` quebra. Mantém LF em qualquer máquina (feature 321).
+scripts/hooks/* text eol=lf
