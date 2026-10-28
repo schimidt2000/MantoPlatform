@@ -486,6 +486,7 @@ export function EventEditPage() {
               coordinatorTalentId={coordinatorTalentId}
               onCoordinatorTalentIdChange={setCoordinatorTalentId}
               talents={opts.assignable_talents}
+              maquiagemTravada={!data.flags.is_superadmin}
             />
 
             <ValoresBlock

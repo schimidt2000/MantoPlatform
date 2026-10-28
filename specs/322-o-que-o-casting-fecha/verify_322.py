@@ -587,11 +587,18 @@ def main() -> int:
         ("21. edição que troca o talento liga a marca; sem troca não mexe", cen_21_edicao_liga_e_preserva),
         ("22. casting troca ou tira o talento: a marca sai (DEVE falhar no antigo)", cen_22_casting_troca_ou_tira),
     ]
+    manter = os.environ.get("VERIFY_322_MANTER") == "1"
     try:
         for nome, fn in passos:
             cenario(nome, fn)
     finally:
-        cenario("23. limpeza", cen_23_limpeza)
+        if manter:
+            # Para a conferência de tela (quickstart): os eventos e os usuários __v322_ ficam; a
+            # próxima rodada sem a variável limpa tudo.
+            print("  (VERIFY_322_MANTER=1: limpeza pulada) eventos:",
+                  {k: v for k, v in estado.items() if k.startswith("ev_")})
+        else:
+            cenario("23. limpeza", cen_23_limpeza)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} OK")
     for nome, passou, erro in resultados:

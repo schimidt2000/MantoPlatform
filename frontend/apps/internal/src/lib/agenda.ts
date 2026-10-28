@@ -189,6 +189,16 @@ export interface RoleItem {
    * sem convite, sem pagamento). O servidor nem manda os campos de dinheiro dela.
    */
   is_presence?: boolean;
+  /**
+   * Feature 322 — o que o casting precisa saber para fechar a vaga: o tipo que o orçamento
+   * vendeu ("Cantor · show · com maquiagem") ou, sem orçamento, as marcas do formulário. Pronto
+   * no servidor; `null` quando não há nada a dizer. Opcional: servidor antigo na janela do deploy.
+   */
+  perfil?: string | null;
+  /** Feature 322 — a vaga nasceu de uma regra do sistema (coordenador, técnico, maquiador). */
+  criada_pelo_sistema?: boolean;
+  /** Feature 322 — o talento atual entrou pelo formulário do evento (a comercial). */
+  escalado_pelo_comercial?: boolean;
 }
 
 /** O que o orçamento vinculado vendeu (feature 273) — chips da aba Comercial e base do "Aplicar". */

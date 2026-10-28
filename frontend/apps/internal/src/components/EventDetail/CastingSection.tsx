@@ -56,6 +56,18 @@ function ehVagaDeMaquiador(role: RoleItem): boolean {
   return role.role_type === "extra" && /maquiad/i.test(role.character_name);
 }
 
+/**
+ * De onde veio a vaga ou o talento (feature 322) — complemento do nome, não rótulo: minúsculas,
+ * menor e na cor de texto secundário, sem parênteses nem selo (o dono: "uma letra só um pouco
+ * mais clara, para que não fique tão poluído"). Texto corrido, então o leitor de tela o lê
+ * junto com o nome.
+ */
+function MarcaDeOrigem({ children }: { children: string }) {
+  return (
+    <span className="text-xs font-normal normal-case tracking-normal text-muted">{children}</span>
+  );
+}
+
 /** Badge de atenção quando o talento tem outro compromisso na mesma data. */
 function AvailabilityBadge({ role }: { role: RoleItem }) {
   const availability = role.availability;
@@ -266,6 +278,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
               {role.character_name}
             </span>
+            {role.criada_pelo_sistema && <MarcaDeOrigem>adicionado pelo sistema</MarcaDeOrigem>}
             {role.needs_makeup && (
               <span title="Precisa de maquiagem" aria-label="Precisa de maquiagem">
                 💄
@@ -292,11 +305,21 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
               </Badge>
             )}
           </div>
+          {/* Feature 322: o que foi vendido — quem procurar antes de olhar o nome de alguém. */}
+          {role.perfil && <div className="text-xs font-medium text-ink">{role.perfil}</div>}
           <div className="text-sm text-muted">
             {role.talent ? (
-              <Link to={`/talents/${role.talent.id}`} className="hover:underline">
-                {role.talent.name}
-              </Link>
+              <>
+                <Link to={`/talents/${role.talent.id}`} className="hover:underline">
+                  {role.talent.name}
+                </Link>
+                {role.escalado_pelo_comercial && (
+                  <>
+                    {" "}
+                    <MarcaDeOrigem>inserido pelo comercial</MarcaDeOrigem>
+                  </>
+                )}
+              </>
             ) : (
               "— sem talento —"
             )}
@@ -553,6 +576,7 @@ function PresencaCard({ role }: { role: RoleItem }) {
             <span className="text-sm font-bold uppercase tracking-wide text-ink">
               {role.character_name}
             </span>
+            {role.criada_pelo_sistema && <MarcaDeOrigem>adicionado pelo sistema</MarcaDeOrigem>}
             <Badge>somente leitura</Badge>
           </div>
           <div className="text-sm text-muted">

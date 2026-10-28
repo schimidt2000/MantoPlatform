@@ -1,0 +1,24 @@
+﻿  OK     1. criação do orçamento grava o tipo de cada personagem
+  OK     2. vínculo grava o tipo do casado; o não casado fica vazio
+  OK     3. vínculo de novo e edição não trocam o tipo
+  OK     4. personagem à mão: sem tipo gravado, marcas no payload
+  OK     5. casting recebe o perfil e não recebe teto nem conta
+  OK     6. produto de tabela: tipo do produto no Noel e no ajudante
+  OK     7. criação manual com maquiagem cria 1 Maquiador vazio, com histórico
+  OK     8. criação do orçamento: 1 Maquiador só, com teto
+  OK     9. edição de evento com make e sem maquiador cria a vaga
+  OK     10. evento com Maquiadora não ganha outra vaga
+  OK     11. sem make e cancelado: nenhuma vaga
+  OK     12. título sem Maquiador
+  OK     13. vagas automáticas marcadas como do sistema
+  OK     14. vaga de pessoa e coordenador escolhido sem a marca do sistema
+  OK     15. vagas anteriores ao deploy sem marca
+  OK     16. superadmin muda a maquiagem na edição
+  OK     17. comercial não desmarca a maquiagem (DEVE falhar no antigo)
+  OK     18. comercial não marca maquiagem em personagem novo (DEVE falhar no antigo)
+  OK     19. vínculo do comercial marca a maquiagem do orçamento e traz o maquiador
+  OK     20. pré-escala de personagem e coordenador: inserido pelo comercial
+  OK     21. edição que troca o talento liga a marca; sem troca não mexe
+  OK     22. casting troca ou tira o talento: a marca sai (DEVE falhar no antigo)
+  OK     23. limpeza
+23/23 OK

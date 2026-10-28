@@ -48,9 +48,13 @@ interface CharacterRowProps {
   onChange: (next: CharacterInput) => void;
   onRemove: () => void;
   talentOpts: ComboboxOption[];
+  maquiagemTravada: boolean;
 }
 
-function CharacterRow({ value, onChange, onRemove, talentOpts }: CharacterRowProps) {
+/** Feature 322 — a explicação da caixa travada, uma vez no bloco e no `title` de cada caixa. */
+const AVISO_MAQUIAGEM_TRAVADA = "Só o superadmin muda a maquiagem depois que o evento existe.";
+
+function CharacterRow({ value, onChange, onRemove, talentOpts, maquiagemTravada }: CharacterRowProps) {
   return (
     <li className="space-y-2 border-b border-line pb-3 last:border-none">
       <div className="flex flex-wrap items-center gap-2">
@@ -92,11 +96,15 @@ function CharacterRow({ value, onChange, onRemove, talentOpts }: CharacterRowPro
           onValueChange={(v) => onChange({ ...value, cache_value: v })}
           aria-label="Cachê"
         />
-        <label className="flex items-center gap-1.5 text-sm text-ink">
+        <label
+          className={`flex items-center gap-1.5 text-sm ${maquiagemTravada ? "text-muted" : "text-ink"}`}
+          title={maquiagemTravada ? AVISO_MAQUIAGEM_TRAVADA : undefined}
+        >
           <input
             type="checkbox"
             className="h-4 w-4"
             checked={value.needs_makeup}
+            disabled={maquiagemTravada}
             onChange={(e) => onChange({ ...value, needs_makeup: e.target.checked })}
           />
           Maquiagem
@@ -121,6 +129,11 @@ export interface ElencoBlockProps {
   coordinatorTalentId: number | null;
   onCoordinatorTalentIdChange: (id: number | null) => void;
   talents: AssignableTalent[];
+  /**
+   * Feature 322 — na edição, quem não é superadmin não muda a maquiagem (o servidor também
+   * recusa). A criação não passa a prop: lá quem cria define.
+   */
+  maquiagemTravada?: boolean;
 }
 
 /** Bloco 3 — Personagens e equipe (elenco dinâmico) + título do evento (feature 184). */
@@ -130,6 +143,7 @@ export function ElencoBlock({
   coordinatorTalentId,
   onCoordinatorTalentIdChange,
   talents,
+  maquiagemTravada = false,
 }: ElencoBlockProps) {
   const {
     register,
@@ -199,9 +213,11 @@ export function ElencoBlock({
             onChange={(next) => onCharactersChange(characters.map((p, j) => (j === i ? next : p)))}
             onRemove={() => onCharactersChange(characters.filter((_, j) => j !== i))}
             talentOpts={talentOpts}
+            maquiagemTravada={maquiagemTravada}
           />
         ))}
       </ul>
+      {maquiagemTravada && characters.length > 0 && <p className={HELP}>{AVISO_MAQUIAGEM_TRAVADA}</p>}
       <div className="flex flex-wrap items-center gap-2">
         <Button type="button" variant="outline" size="sm" onClick={addCharacter}>
           + Adicionar personagem / equipe
