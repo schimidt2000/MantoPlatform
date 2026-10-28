@@ -42,6 +42,8 @@ export interface VagaDoProduto {
 export interface ProdutoDeTabela {
   rotulo: string;
   descricao: string;
+  /** 309b — "o que inclui", em itálico sob a linha do produto na mensagem e no PDF. Opcional: backend velho. */
+  detalhes?: string;
   ativo: boolean;
   preco: number;
   por_faixa: Record<string, { preco: number }>;
@@ -60,6 +62,7 @@ export interface ProdutoAplicado {
   chave: string;
   rotulo: string;
   descricao: string;
+  detalhes?: string;
   preco_aplicado: number;
   faixa_chave: string | null;
   estimado: boolean;

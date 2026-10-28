@@ -182,6 +182,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **309b-visita-magica-30-minutos** | Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
 | **322-o-que-o-casting-fecha** | *(EM PRODUÇÃO 28/10 ~03h25)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
@@ -376,6 +377,36 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 309b — A Visita Mágica no orçamento diz o que se entrega: até 30 minutos   (309b-visita-magica-30-minutos · 2026-10-28 · sem migration)
+
+> Nível 2, hotfix da 309 (entrada da 309 mais abaixo; a linha "`descricao` padrão … ("visita padrão, até
+> 1h")" de lá descreve o texto de então). Detalhes em `specs/309b-visita-magica-30-minutos/`.
+
+**O pedido.** O dono (28/10), com a arte da campanha anexada: o orçamento dos pacotes de Natal dizia uma
+hora, e a visita é de até 30 minutos; o orçamento tem de ser "totalmente condizente com o produto
+oferecido de verdade". Escolheu, entre só corrigir a duração e duração + o que inclui, a segunda.
+
+**O que havia.** A 309 nasceu com `descricao: "visita padrão, até 1h"` nos dois produtos padrão; a
+mensagem e o PDF a imprimem entre parênteses na linha do preço. Nada do que a arte promete (chegada
+mágica, músicas, até 10 presentes da contratante, mensagem sobre o Natal) chegava ao cliente.
+
+**O que mudou.**
+- Produto ganha `detalhes` ("o que inclui", uma linha, ≤ 300). Padrão dos dois: "visita de até 30
+  minutos" + o texto da arte. Mensagem: `_detalhes_` na linha abaixo do preço; PDF: itálico, até 3 linhas.
+  Dois exemplares do mesmo produto: o parágrafo sai uma vez.
+- `_migrar_309b` no `load()` (sem gravar): descrição EXATAMENTE a antiga vira a nova; Visita salva sem a
+  chave `detalhes` ganha o texto. Vazio salvo pela tela e produto criado pelo time ficam como estão.
+- Tela de preços: caixa "O que inclui".
+
+**Pegadinhas.** (1) A tabela é JSON em `site_settings.pricing_config`: trocar só o padrão do código não
+corrigiria uma produção que já salvou a tela depois da 309 — por isso a troca na carga, pelo texto exato.
+(2) `INPUT_PRECOS` tem `h-9`: num `textarea` corta o texto em linha e meia (`h-auto py-1.5`). (3) Na
+conferência, a porta 5000 estava com outro Flask vivo (código velho) e o Vite do interno aponta fixo para
+ela — a resposta "até 1h" na tela vinha dele; a tela foi aberta com backend e Vite em portas próprias.
+
+**Verificação.** `verify_309b.py` 10/10 (0/10 no código de antes); `ruff`; `npm run typecheck`; tela de
+preços e calculadora abertas.
 
 ### 322 — O casting vê o que está fechando, e o maquiador aparece sozinho   (322-o-que-o-casting-fecha · 2026-10-28 · migration `c322a7e1b9d4`)
 

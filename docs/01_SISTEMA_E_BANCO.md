@@ -673,8 +673,10 @@ da feature 317 (§3.13.6), `email_notifications_enabled`, `ratings_fully_anonymo
 coordenador[4], piso[4], nota_mensagem}}`, com a faixa `natal` (24 e 25/12) garantida na carga;
 `_migrate` injeta "Ajudante do Noel" salvo se estiver em `especiais_excluidos` e descarta
 sobrescrita de especial que não existe na tabela. Desde a **309** tem o bloco `produtos`
-`{<chave>: {rotulo, descricao, ativo, preco, por_faixa{<faixa>: {preco}}, vagas[{label, tipo
-especial|ator|coordenador|maquiador, cache: null|R$, needs_makeup}], inclui_noturno}}` (preço FIXO
+`{<chave>: {rotulo, descricao, detalhes, ativo, preco, por_faixa{<faixa>: {preco}}, vagas[{label, tipo
+especial|ator|coordenador|maquiador, cache: null|R$, needs_makeup}], inclui_noturno}}` (`detalhes` =
+"o que inclui", uma linha até 300, desde a **309b**; `_migrar_309b` troca a descrição antiga exata
+"visita padrão, até 1h" por "visita de até 30 minutos" e dá o texto da arte a Visita salva sem a chave) (preço FIXO
 por visita, fora do markup; `cache: null` = pela tabela vigente na data do evento; labels de
 coordenador/maquiador forçados a "Coordenador"/"Maquiador") e `produtos_estimativa {fator_cache,
 markup}` (produto sem preço numa faixa: Σ cachês × fator × markup, marcado "estimativa"); os dois
@@ -1374,13 +1376,13 @@ prefill e em `_total_da_duracao`/`fator_regua`); o coordenador do produto não �
 (`split_coordenadores`: `total = max(qty, inclusos)`, só `total − inclusos` na fórmula); UM
 Maquiador por orçamento (`incremento_make`); noturno só com `inclui_noturno: false`; personalizado
 "valor final" vence tudo e "multiplicador" não multiplica o produto. O `quote` traz SEMPRE
-`produtos: [{chave, rotulo, descricao, preco_aplicado, faixa_chave, estimado, vagas[labels]}]`,
+`produtos: [{chave, rotulo, descricao, detalhes, preco_aplicado, faixa_chave, estimado, vagas[labels]}]`,
 `produtos_total`, `coordenadores_inclusos`, `avisos: [str]` (deduplicados) e `valor_unico: bool` (só
 produto, sem avulso e sem coordenador da fórmula — a tela e o PDF rotulam "Preço de tabela" por ela;
 vazios/false sem produto — a presença das chaves é o sinal de backend novo para o React), linhas
 `tipo: "produto"` + "= Após produtos" na
 `memoria`, os personagens do produto em `team_lines`, o bloco "🎅 *rótulo* (descrição): *R$ X*" na
-`message` (só produto = UM valor: `show_1h` apenas, `total_custom` null, PIX único — e, quando NF,
+`message`, com `_detalhes_` em itálico na linha de baixo (309b; uma vez por texto — no PDF, até 3 linhas) (só produto = UM valor: `show_1h` apenas, `total_custom` null, PIX único — e, quando NF,
 transporte, BV ou noturno por fora mudam o total, ou há dois exemplares, o bloco "Total da visita" com
 VALOR TOTAL e logística); o `snapshot` grava `produtos` com preço E vagas congelados e `produtos_total`
 (0 no personalizado "valor final": o produto não está dentro do digitado — régua do evento linear; no
@@ -1392,7 +1394,8 @@ de antes (gabarito `specs/309-…/verify_309_golden.json`). `GET /orcamento/opco
 `settings.validar_produtos` → 400 `"Produtos de tabela inválidos."` com `fields`): `produtos` →
 "bloco inválido"; `produtos.<chave>` → "produto inválido" (`^[a-z0-9_]{1,30}$`); `.rotulo` →
 "informe o rótulo" / "rótulo com mais de 60 caracteres"; `.descricao` → "descrição com mais de 120
-caracteres" (parênteses externos são tirados — mensagem, PDF e tela já os põem); `.preco` → "preço
+caracteres" (parênteses externos são tirados — mensagem, PDF e tela já os põem); `.detalhes` → "texto
+com mais de 300 caracteres" (quebra de linha vira espaço — quebraria o itálico do WhatsApp); `.preco` → "preço
 em R$ maior que zero e até 100.000"; `.por_faixa.<faixa>.preco` → idem (faixa inexistente é
 DESCARTADA com aviso em `avisos` do 200, não 400); `.vagas` → "de 1 a 10 vagas"; `.vagas.<i>.label`
 → "informe o nome da vaga"; `.vagas.<i>.tipo` → "tipo de vaga desconhecido: <tipo>"; `.vagas.<i>.cache`

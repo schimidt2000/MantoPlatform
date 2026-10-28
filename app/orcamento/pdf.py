@@ -129,9 +129,14 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
     # o produto não tinha preço para a faixa da data.
     produtos = quote.get("produtos") or []
     if produtos:
-        c.setFont(_FONT_NORMAL, 8.5)
-        c.setFillColor(_GRAY)
+        from reportlab.lib.utils import simpleSplit
+
+        # 309b: "o que inclui" em itálico sob a linha do produto, como na mensagem — uma vez por texto
+        # (dois exemplares repetiriam o parágrafo) e no máximo 3 linhas (página única, sem paginação).
+        ja_detalhados: set[str] = set()
         for produto in produtos:
+            c.setFont(_FONT_NORMAL, 8.5)
+            c.setFillColor(_GRAY)
             descricao = f" ({produto['descricao']})" if produto.get("descricao") else ""
             marca = " (estimativa)" if produto.get("estimado") else ""
             c.drawString(
@@ -139,6 +144,15 @@ def gerar_orcamento_pdf(quote: dict[str, Any]) -> bytes:
                 f"• {produto['rotulo']}{descricao}: {_fmt_brl(float(produto.get('preco_aplicado') or 0))}{marca}",
             )
             y -= 13
+            detalhes = (produto.get("detalhes") or "").strip()
+            if detalhes and detalhes not in ja_detalhados:
+                ja_detalhados.add(detalhes)
+                c.setFont(_FONT_ITALIC, 7.5)
+                c.setFillColor(_LIGHT)
+                for linha in simpleSplit(detalhes, _FONT_ITALIC, 7.5, _RIGHT - _LEFT - 16)[:3]:
+                    c.drawString(_LEFT + 16, y, linha)
+                    y -= 10
+                y -= 3
         y -= 4
 
     # ── Investimento ───────────────────────────────────────────────────────

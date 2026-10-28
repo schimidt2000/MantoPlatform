@@ -106,6 +106,7 @@ def resolver_produtos(selecao: Any, cfg: dict, *, tolerar_ausente: bool = False)
                 "chave": chave,
                 "rotulo": str(item.get("rotulo") or chave),
                 "descricao": "",
+                "detalhes": "",
                 "ativo": False,
                 "preco": float(item.get("preco_aplicado") or 0),
                 "por_faixa": {},
@@ -123,6 +124,7 @@ def resolver_produtos(selecao: Any, cfg: dict, *, tolerar_ausente: bool = False)
             "chave": chave,
             "rotulo": definicao["rotulo"],
             "descricao": definicao.get("descricao") or "",
+            "detalhes": definicao.get("detalhes") or "",
             "ativo": bool(definicao.get("ativo", True)),
             "preco": float(definicao["preco"]),
             "por_faixa": definicao.get("por_faixa") or {},
@@ -349,12 +351,18 @@ def avisos_para(performers: list[dict], aplicados: list[dict]) -> list[str]:
 
 
 def bloco_da_mensagem(aplicados: list[dict]) -> str:
-    """Linhas do produto para a mensagem WhatsApp (uma por exemplar)."""
+    """Linhas do produto para a mensagem WhatsApp (uma por exemplar), com o "o que inclui" em itálico
+    logo abaixo (309b). Dois exemplares do mesmo produto repetiriam o mesmo parágrafo: só o primeiro leva."""
     linhas = []
+    ja_detalhados: set[str] = set()
     for p in aplicados:
         descricao = f" ({p['descricao']})" if p.get("descricao") else ""
         marca = " (estimativa)" if p.get("estimado") else ""
         linhas.append(f"🎅 *{p['rotulo']}*{descricao}: *{_fmt_brl(p['preco_aplicado'])}*{marca}")
+        detalhes = p.get("detalhes") or ""
+        if detalhes and detalhes not in ja_detalhados:
+            ja_detalhados.add(detalhes)
+            linhas.append(f"_{detalhes}_")
     return "\n".join(linhas)
 
 
@@ -364,6 +372,7 @@ def para_quote(aplicados: list[dict]) -> list[dict]:
             "chave": p["chave"],
             "rotulo": p["rotulo"],
             "descricao": p.get("descricao") or "",
+            "detalhes": p.get("detalhes") or "",
             "preco_aplicado": p["preco_aplicado"],
             "faixa_chave": p.get("faixa_chave"),
             "estimado": bool(p.get("estimado")),
