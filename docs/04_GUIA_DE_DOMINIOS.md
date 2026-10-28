@@ -304,9 +304,9 @@ ato (306), não da vaga de hoje.
     (`PATCH /events/<id>/orcamento`) e em `reclassificar_fora_de_sp`. **Nunca apaga nem rebaixa**
     o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova.
     **Feature 322 — personagem com maquiagem traz o maquiador**: depois de criar, editar ou ligar
-    orçamento, `casting_ops.garantir_vaga_de_maquiador` cria a vaga `Maquiador` (extra, sem talento,
-    sem teto, `criada_pelo_sistema`) se algum personagem tem `needs_makeup` e nenhuma vaga tem
-    "maquiad" no nome — o MESMO critério do selo "Falta maquiador". Nunca em cancelado, nunca por
+    orçamento (as três edições: completa, cabeçalho e comercial), `casting_ops.garantir_vaga_de_maquiador`
+    cria a vaga `Maquiador` (extra, sem talento, sem teto, `criada_pelo_sistema`) se algum personagem tem
+    `needs_makeup` e nenhuma vaga de APOIO tem "maquiad" no nome — o critério de `ehVagaDeMaquiador`. Nunca em cancelado, nunca por
     script. Depois que o evento existe, `needs_makeup` só muda pelo superadmin (edição) ou pelo
     orçamento (vínculo); o sistema não apaga a vaga quando a maquiagem sai de todos.
 12. **Venda e cobrança: o grupo é uma venda só** (feature 299, `app/financeiro/cobranca_ops.py`,

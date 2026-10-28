@@ -20,5 +20,11 @@
   OK     20. pré-escala de personagem e coordenador: inserido pelo comercial
   OK     21. edição que troca o talento liga a marca; sem troca não mexe
   OK     22. casting troca ou tira o talento: a marca sai (DEVE falhar no antigo)
-  OK     23. limpeza
-23/23 OK
+  OK     24. comercial cria com maquiagem: marca vale e maquiador nasce
+  OK     25. casting escala na vaga do sistema: a marca fica
+  OK     26. vaga do sistema com talento da edição: as duas marcas
+  OK     27. linha do prefill removida: o tipo casa pelo nome
+  OK     28. personagem 'Maquiadora' não segura a vaga
+  OK     29. edição do cabeçalho traz o maquiador
+  OK     30. limpeza
+29/29 OK

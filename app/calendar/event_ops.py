@@ -1108,6 +1108,11 @@ def update_event_basics(
     reclassificar_fora_de_sp(
         event, local_mudou=(event.location or "").strip() != (old_location or "").strip()
     )
+    # Feature 322 (converge): evento antigo com personagem maquiado e sem maquiador ganha a vaga em
+    # qualquer edição, não só na completa.
+    from app.calendar.casting_ops import garantir_vaga_de_maquiador
+
+    garantir_vaga_de_maquiador(event, tz=tz)
 
     db.session.add(EventLog(
         event_id=event.id,
@@ -1287,6 +1292,9 @@ def update_event_comercial(
         # A cortesia de antes: o recongelamento do cancelado só relê o portão quando ela mudou.
         sincronizar_comissao(event, cortesia_antes=antes[2])
 
+    from app.calendar.casting_ops import garantir_vaga_de_maquiador
+
+    garantir_vaga_de_maquiador(event, tz=tz)
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=actor_name,

@@ -869,7 +869,6 @@ PIX_KIND_SEM_COMPROVANTE = "pix.sem_comprovante"
 PIX_ENTIDADE_PAGAMENTO = "event_payment"
 
 # ── Feature 322 — o que o casting precisa saber para fechar a vaga ─────────────────────────────
-# Separador do perfil vendido de cada personagem ("Cantor · show · com maquiagem"). Uma fonte só
-# para a conta do orçamento (`calendar/routes._perfil_do_performer`) e o produto de tabela
-# (`orcamento/produtos._perfil_da_vaga`).
+# Separador do perfil de cada personagem ("Cantor · show · com maquiagem"). Uma fonte só para o
+# que se grava (`calendar/routes._perfil_do_performer`) e o que se lê (`api/agenda_read._perfil_da_vaga`).
 SEPARADOR_PERFIL = " · "

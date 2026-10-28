@@ -2961,14 +2961,18 @@ def _perfil_do_performer(p: dict) -> str | None:
 
     Mesmos ingredientes da `descricao` da conta do teto (`_compute_performer_caches`), sem valor e
     sem a faixa de Natal — o casting precisa saber QUEM procurar (quem canta, quem dança, quem
-    aguenta um boneco grande, se tem maquiagem), não quanto se cobrou. Especial sai com a grafia da
-    tabela de preços ("Boneco Grande Especial", "Homem-Aranha").
+    aguenta um boneco grande), não quanto se cobrou. Especial sai com a grafia da tabela de preços
+    ("Boneco Grande Especial", "Homem-Aranha").
+
+    Só entra o que as flags da vaga NÃO guardam — o tipo e o "show". "Cantor" e "com maquiagem" vêm de
+    `is_singer`/`needs_makeup` na leitura (`agenda_read._perfil_da_vaga`): gravados aqui, ficariam
+    congelados e o card desmentiria o 💄 depois que o superadmin mudasse a maquiagem (converge da 322).
 
     Args:
         p: Um performer do `form_snapshot["performers"]`.
 
     Returns:
-        "Tipo · marcas", ou `None` quando o tipo não é um dos que a calculadora conhece.
+        "Tipo" ou "Tipo · show", ou `None` quando o tipo não é um dos que a calculadora conhece.
     """
     ptype = p.get("type", "")
     show = bool(p.get("show", False))
@@ -2983,15 +2987,11 @@ def _perfil_do_performer(p: dict) -> str | None:
         marcas.append("show")
     elif ptype == "especial":
         tipo = (p.get("personagem") or "").strip() or "Especial"
-        # Mesma precedência da conta do teto: o especial que canta já é show.
-        if p.get("cantor"):
-            marcas.append("cantor")
-        elif show:
+        # Mesma precedência da conta do teto: o especial que canta já é show (o "cantor" vem da flag).
+        if p.get("cantor") or show:
             marcas.append("show")
     else:
         return None
-    if p.get("makeup"):
-        marcas.append("com maquiagem especial" if p.get("makeup_tipo") == "especial" else "com maquiagem")
     return SEPARADOR_PERFIL.join([tipo, *marcas])
 
 
@@ -3803,6 +3803,15 @@ def _create_roles_from_input(
     # depois do laço, em `_create_extra_roles_from_orcamento`.
     orc_chars = [c for c in orc_caches if (c.get("role_type") or "character") == "character"]
     roles_by_name: dict[str, list[EventRole]] = {}
+    # Feature 322 (converge): o tipo vendido casa pelo NOME, como no vínculo 273 — não pela posição
+    # do teto. Linha do prefill removida no formulário deslocaria o tipo dos seguintes, e o casting
+    # leria "Boneco Grande Especial" no lugar de "Cantor". Cada item do orçamento serve uma vaga só.
+    from app.calendar.orcamento_evento_ops import _chave
+
+    perfis_por_nome: dict[str, list[str]] = {}
+    for item in orc_chars:
+        if item.get("perfil"):
+            perfis_por_nome.setdefault(_chave(item.get("label")), []).append(str(item["perfil"]))
 
     for i, char_data in enumerate(characters):
         name = (char_data.get("name") or "").strip()
@@ -3825,9 +3834,10 @@ def _create_roles_from_input(
         # orçamento vinculado (`orc_caches` cru do cliente) não há como decompor a conta.
         notas = orc_chars[i].get("cap_notes") if i < len(orc_chars) else None
         cap_note = notas.get(chave_cache) if isinstance(notas, dict) and cap is not None else None
-        # Feature 322: o tipo vendido vem do MESMO item pareado que deu o teto — e chega ao casting,
-        # que não lê a conta do teto. Linha além da lista do orçamento nasce sem tipo.
-        perfil = orc_chars[i].get("perfil") if i < len(orc_chars) else None
+        # Feature 322: o tipo vendido chega ao casting, que não lê a conta do teto. Nome que não está
+        # no orçamento (acrescentado ou renomeado à mão) nasce sem tipo.
+        fila = perfis_por_nome.get(_chave(name))
+        perfil = fila.pop(0) if fila else None
 
         talent_id = char_data.get("talent_id")
         pre_tid = None

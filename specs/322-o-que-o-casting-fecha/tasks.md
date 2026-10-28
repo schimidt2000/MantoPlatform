@@ -160,8 +160,8 @@ ciclo, um deploy só.
 Leitura independente (agente, só leitura) contra spec/plan/contrato e o diff `main...HEAD`: 0 CRITICAL,
 0 HIGH, 2 MEDIUM, 10 LOW. Os itens sem tarefa ficam como decisão registrada no `docs/03`.
 
-- [ ] T029 Gravar em `perfil_vendido` só o que o orçamento vendeu e as flags não guardam (tipo + "show"); `_perfil_da_vaga` (agenda_read) acrescenta "cantor" e "com maquiagem" pelas flags ATUAIS — o card nunca contradiz o 💄 depois que o superadmin muda a maquiagem per US4/AC3, FR-003 (contradicts)
-- [ ] T030 Parear o perfil da criação pelo NOME normalizado (como o vínculo 273), não pela posição — linha removida do prefill não desloca o tipo dos seguintes per FR-001, US1/AC1 (partial)
-- [ ] T031 Regra do maquiador: "já tem maquiador" só conta vaga `extra` (o critério do `ehVagaDeMaquiador` da tela) e o comentário cita os dois critérios certos per FR-005 (contradicts)
-- [ ] T032 Chamar `garantir_vaga_de_maquiador` também em `update_event_basics` e `update_event_comercial` (evento antigo editado por outro caminho) per SC-002, US2/AC3 (partial)
-- [ ] T033 `verify_322.py`: desmarcar não apaga a vaga e o perfil perde "com maquiagem" (US4/AC4); comercial cria com maquiagem (FR-013); casting escala na vaga do sistema e a marca fica (US3/AC3); duas marcas na mesma vaga pela edição (edge); linha removida do prefill (T030) per US4/AC4, FR-013, US3/AC3 (partial)
+- [X] T029 Gravar em `perfil_vendido` só o que o orçamento vendeu e as flags não guardam (tipo + "show"); `_perfil_da_vaga` (agenda_read) acrescenta "cantor" e "com maquiagem" pelas flags ATUAIS — o card nunca contradiz o 💄 depois que o superadmin muda a maquiagem per US4/AC3, FR-003 (contradicts)
+- [X] T030 Parear o perfil da criação pelo NOME normalizado (como o vínculo 273), não pela posição — linha removida do prefill não desloca o tipo dos seguintes per FR-001, US1/AC1 (partial)
+- [X] T031 Regra do maquiador: "já tem maquiador" só conta vaga `extra` (o critério do `ehVagaDeMaquiador` da tela) e o comentário cita os dois critérios certos per FR-005 (contradicts)
+- [X] T032 Chamar `garantir_vaga_de_maquiador` também em `update_event_basics` e `update_event_comercial` (evento antigo editado por outro caminho) per SC-002, US2/AC3 (partial)
+- [X] T033 `verify_322.py`: desmarcar não apaga a vaga e o perfil perde "com maquiagem" (US4/AC4); comercial cria com maquiagem (FR-013); casting escala na vaga do sistema e a marca fica (US3/AC3); duas marcas na mesma vaga pela edição (edge); linha removida do prefill (T030) per US4/AC4, FR-013, US3/AC3 (partial)

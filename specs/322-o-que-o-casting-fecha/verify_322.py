@@ -25,7 +25,14 @@ Cenários (spec §Verificação):
 20. Criação com pré-escala de personagem e de coordenador: "inserido pelo comercial" nas duas.
 21. Edição que troca o talento pelo formulário liga a marca; salvar sem trocar não mexe nela.
 22. Casting troca ou tira o talento pelo card: a marca sai.               (DEVE falhar no código antigo)
-23. Limpeza.
+Converge (leitura independente, 28/10):
+24. Comercial cria evento com maquiagem: a marca vale e o maquiador nasce (FR-013).
+25. Casting escala alguém na vaga do sistema: a marca do sistema fica (US3/AC3).
+26. Vaga do sistema com talento posto pela edição: as duas marcas (caso de borda).
+27. Linha do prefill removida: o tipo casa pelo nome, não pela posição.
+28. Personagem chamado "Maquiadora" não segura a vaga de maquiador.
+29. Edição do cabeçalho (`/basico`) também traz o maquiador.
+30. Limpeza.
 
 Google DUBLADO (Agenda no-op; Maps não é chamado). E-mail: `MAIL_SUPPRESS_SEND` conferido no início
 (a pré-escala dispara convite a talento real do espelho). Requisições HTTP FORA do `app_context`
@@ -297,6 +304,11 @@ def preparar() -> None:
             {"type": "especial", "personagem": "Boneco Grande Especial", "nome": "Bumblebee"},
             {"type": "cantor", "nome": "Moana", "makeup": True},
         ])
+        estado["orc_b"] = _orcamento(estado["sa"], has_show=True, data=data, performers=[
+            {"type": "especial", "personagem": "Boneco Grande Especial", "nome": "Bumblebee"},
+            {"type": "cantor", "nome": "Moana", "makeup": True},
+            {"type": "ator", "subtipo": "cara_limpa", "nome": "Fada"},
+        ])
         estado["orc_produto"] = _orcamento(estado["sa"], has_show=False, data=data, performers=[],
                                            produtos=[{"chave": "visita_magica_ajudante"}])
         estado["orc_da_com"] = _orcamento(estado["com"], has_show=False, data=data, performers=[
@@ -336,9 +348,11 @@ def cen_01_criacao_grava_o_tipo() -> None:
     perfis = {v.character_name: v.perfil_vendido for v in _vagas(eid) if v.role_type == "character"}
     _garante(perfis == {
         "Bumblebee": "Boneco Grande Especial",
-        "Moana": "Cantor · show · com maquiagem",
+        "Moana": "Cantor · show",
         "Fada": "Ator cara-limpa",
-    }, f"perfis: {perfis}")
+    }, f"perfis gravados: {perfis}")
+    elenco = {r["character_name"]: r.get("perfil") for r in _elenco("sa", eid)}
+    _garante(elenco["Moana"] == "Cantor · show · com maquiagem", f"payload Moana: {elenco['Moana']!r}")
 
 
 def cen_02_vinculo_grava_o_tipo() -> None:
@@ -388,8 +402,11 @@ def cen_06_produto_de_tabela() -> None:
     eid = _criar("sa", corpo)
     estado["ev_produto"] = eid
     noel, aj = _vaga(eid, "Papai Noel").perfil_vendido, _vaga(eid, "Ajudante do Noel").perfil_vendido
-    _garante(noel == "Visita Mágica — Papai Noel + Ajudante · com maquiagem", f"Noel: {noel!r}")
+    _garante(noel == "Visita Mágica — Papai Noel + Ajudante", f"Noel: {noel!r}")
     _garante(aj == "Visita Mágica — Papai Noel + Ajudante", f"Ajudante: {aj!r}")
+    elenco = {r["character_name"]: r.get("perfil") for r in _elenco("cast", eid)}
+    _garante(elenco["Papai Noel"] == "Visita Mágica — Papai Noel + Ajudante · com maquiagem",
+             f"payload Noel: {elenco['Papai Noel']!r}")
     _garante(len(_maquiadores(eid)) == 1, f"produto: {len(_maquiadores(eid))} maquiadores")
 
 
@@ -489,6 +506,9 @@ def cen_16_superadmin_muda_a_maquiagem() -> None:
     eid = estado["ev_edicao"]
     _editar("sa", eid, _corpo_edicao(eid, _personagens_do_form(eid, Elsa={"needs_makeup": False})))
     _garante(not _vaga(eid, "Elsa").needs_makeup, "superadmin não conseguiu desmarcar")
+    _garante(len(_maquiadores(eid)) == 1, "desmarcar apagou a vaga de maquiador")
+    perfil = {r["character_name"]: r.get("perfil") for r in _elenco("cast", eid)}["Elsa"]
+    _garante(perfil is None, f"o perfil continuou dizendo maquiagem: {perfil!r}")
     _editar("sa", eid, _corpo_edicao(eid, _personagens_do_form(eid, Elsa={"needs_makeup": True})))
     _garante(_vaga(eid, "Elsa").needs_makeup is True, "superadmin não conseguiu marcar")
     _garante(len(_maquiadores(eid)) == 1, "desmarcar/marcar duplicou ou apagou o maquiador")
@@ -552,6 +572,68 @@ def cen_22_casting_troca_ou_tira() -> None:
     _garante(_vaga(eid, "Coordenador").escalado_pelo_comercial is None, "tirar o talento manteve a marca")
 
 
+# ───────────────────────────── Converge ─────────────────────────────
+
+def cen_24_comercial_cria_com_maquiagem() -> None:
+    corpo = _corpo_criacao("comercial", dias=59, tipo="R&I", characters=[{"name": "Elsa", "needs_makeup": True}])
+    corpo["seller_id"] = estado["com"]
+    eid = _criar("com", corpo)
+    _garante(_vaga(eid, "Elsa").needs_makeup is True, "a criação do comercial perdeu a maquiagem")
+    _garante(len(_maquiadores(eid)) == 1, f"criação do comercial: {len(_maquiadores(eid))} maquiadores")
+
+
+def cen_25_marca_do_sistema_fica_com_talento() -> None:
+    mq = _vaga(estado["ev_orc"], "Maquiador")
+    c = _cliente("cast")
+    r = c.post(f"/api/roles/{mq.id}/assign", json={"talent_id": estado["talentos"][3], "cache_value": None})
+    _garante(r.status_code == 200, f"assign → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    depois = _vaga(estado["ev_orc"], "Maquiador")
+    _garante(depois.talent_id == estado["talentos"][3] and depois.criada_pelo_sistema is True, f"marca sumiu: {tuple(depois)}")
+    _garante(depois.escalado_pelo_comercial is None, "escala do casting marcada como do comercial")
+
+
+def cen_26_duas_marcas() -> None:
+    eid = estado["ev_orc"]
+    _editar("sa", eid, _corpo_edicao(eid, _personagens_do_form(eid), coordenador=estado["talentos"][2]))
+    coord = _vaga(eid, "Coordenador")
+    _garante(coord.criada_pelo_sistema is True and coord.escalado_pelo_comercial is True, f"duas marcas: {tuple(coord)}")
+    elenco = {r["character_name"]: r for r in _elenco("cast", eid)}
+    _garante(elenco["Coordenador"]["criada_pelo_sistema"] and elenco["Coordenador"]["escalado_pelo_comercial"],
+             "payload sem as duas marcas")
+
+
+def cen_27_tipo_casa_pelo_nome() -> None:
+    corpo = _corpo_criacao("semprimeira", dias=60, orc_id=estado["orc_b"], characters=[
+        {"name": "MOANA", "needs_makeup": True, "is_singer": True}, {"name": "Fada"},
+    ])
+    eid = _criar("sa", corpo)
+    _garante(_vaga(eid, "MOANA").perfil_vendido == "Cantor · show", f"Moana: {_vaga(eid, 'MOANA').perfil_vendido!r}")
+    _garante(_vaga(eid, "Fada").perfil_vendido == "Ator cara-limpa", f"Fada: {_vaga(eid, 'Fada').perfil_vendido!r}")
+
+
+def cen_28_personagem_maquiadora() -> None:
+    with app.app_context():
+        eid = _evento_google("fantasia", [("Maquiadora", "character", True), ("Coordenador", "extra", False)], dias=61)
+    _editar("sa", eid, _corpo_edicao(eid, _personagens_do_form(eid)))
+    extras = [m for m in _maquiadores(eid) if m.role_type == "extra"]
+    _garante(len(extras) == 1, f"personagem 'Maquiadora' segurou a vaga: {[tuple(m) for m in _maquiadores(eid)]}")
+
+
+def cen_29_edicao_do_cabecalho() -> None:
+    with app.app_context():
+        eid = _evento_google("basico", [("Elsa", "character", True), ("Coordenador", "extra", False)], dias=62)
+        ev = CalendarEvent.query.get(eid)
+        corpo = {
+            "title": ev.title, "event_type": ev.event_type, "date": ev.start_at.date().isoformat(),
+            "start": ev.start_at.strftime("%H:%M"), "end": ev.end_at.strftime("%H:%M"),
+            "location": ev.location, "description": "",
+        }
+    c = _cliente("sa")
+    r = c.patch(f"/api/events/{eid}/basico", json=corpo)
+    _garante(r.status_code == 200, f"PATCH basico → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(len(_maquiadores(eid)) == 1, f"basico: {len(_maquiadores(eid))} maquiadores")
+
+
 def cen_23_limpeza() -> None:
     with app.app_context():
         limpar()
@@ -586,6 +668,12 @@ def main() -> int:
         ("20. pré-escala de personagem e coordenador: inserido pelo comercial", cen_20_pre_escala_marcada),
         ("21. edição que troca o talento liga a marca; sem troca não mexe", cen_21_edicao_liga_e_preserva),
         ("22. casting troca ou tira o talento: a marca sai (DEVE falhar no antigo)", cen_22_casting_troca_ou_tira),
+        ("24. comercial cria com maquiagem: marca vale e maquiador nasce", cen_24_comercial_cria_com_maquiagem),
+        ("25. casting escala na vaga do sistema: a marca fica", cen_25_marca_do_sistema_fica_com_talento),
+        ("26. vaga do sistema com talento da edição: as duas marcas", cen_26_duas_marcas),
+        ("27. linha do prefill removida: o tipo casa pelo nome", cen_27_tipo_casa_pelo_nome),
+        ("28. personagem 'Maquiadora' não segura a vaga", cen_28_personagem_maquiadora),
+        ("29. edição do cabeçalho traz o maquiador", cen_29_edicao_do_cabecalho),
     ]
     manter = os.environ.get("VERIFY_322_MANTER") == "1"
     try:
@@ -598,7 +686,7 @@ def main() -> int:
             print("  (VERIFY_322_MANTER=1: limpeza pulada) eventos:",
                   {k: v for k, v in estado.items() if k.startswith("ev_")})
         else:
-            cenario("23. limpeza", cen_23_limpeza)
+            cenario("30. limpeza", cen_23_limpeza)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} OK")
     for nome, passou, erro in resultados:

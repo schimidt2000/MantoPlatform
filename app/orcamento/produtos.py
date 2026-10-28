@@ -15,8 +15,6 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
-from app.constants import SEPARADOR_PERFIL
-
 from . import settings as _cfg
 from .pricing import (
     cache_na_faixa,
@@ -422,12 +420,10 @@ def _item(label: str, cache: float | None, *, role_type: str, needs_makeup: bool
     }
 
 
-def _perfil_da_vaga(vaga: dict, produto: dict) -> str:
-    """O que o casting lê na vaga do produto (feature 322): o produto vendido, e a maquiagem."""
-    partes = [str(produto.get("rotulo") or produto["chave"])]
-    if vaga.get("needs_makeup"):
-        partes.append("com maquiagem")
-    return SEPARADOR_PERFIL.join(partes)
+def _perfil_da_vaga(produto: dict) -> str:
+    """O que o casting lê na vaga do produto (feature 322): o produto vendido. A maquiagem vem da flag
+    da vaga na leitura, como nos avulsos (`agenda_read._perfil_da_vaga`)."""
+    return str(produto.get("rotulo") or produto["chave"])
 
 
 def itens_do_teto(produtos: list[dict], faixa: dict | None, cfg: dict, *, transport_add: float, noturno_add: int) -> list[dict]:
@@ -453,7 +449,7 @@ def itens_do_teto(produtos: list[dict], faixa: dict | None, cfg: dict, *, transp
             itens.append(_item(
                 vaga["label"], cache, role_type="character", needs_makeup=bool(vaga.get("needs_makeup")),
                 descricao=descricao, adicionais=adicionais, nota_sem_teto=sem, produto=produto,
-                perfil=_perfil_da_vaga(vaga, produto),
+                perfil=_perfil_da_vaga(produto),
             ))
     return itens
 

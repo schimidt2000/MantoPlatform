@@ -394,22 +394,23 @@ def _serialize_talent(talent: Any, show_pii: bool) -> dict[str, Any]:
 def _perfil_da_vaga(role: Any) -> str | None:
     """O texto que o casting lê sob o nome do personagem (feature 322, FR-001 a FR-003).
 
-    O tipo vendido no orçamento, quando há; sem orçamento, as marcas que o formulário grava
-    ("Cantor", "Com maquiagem"). Pronto aqui para a tela não montar frase nem conhecer a tabela.
-    Vaga de apoio (`extra`) não tem perfil: o nome dela já diz o que é.
+    O tipo vendido no orçamento (`perfil_vendido`: tipo e "show"), seguido das marcas que as flags
+    dizem AGORA ("cantor", "com maquiagem") — as flags mudam depois da venda (o superadmin desmarca a
+    maquiagem) e o card não pode desmentir o 💄. Sem orçamento, só as marcas ("Cantor · com
+    maquiagem"). Pronto aqui para a tela não montar frase nem conhecer a tabela. Vaga de apoio
+    (`extra`) não tem perfil: o nome dela já diz o que é.
     """
     if role.role_type == "extra":
         return None
-    if role.perfil_vendido:
-        return role.perfil_vendido
-    marcas = []
-    if role.is_singer:
-        marcas.append("cantor")
+    partes = [role.perfil_vendido] if role.perfil_vendido else []
+    # "Cantor · show" já diz que canta; repetir "cantor" seria ruído.
+    if role.is_singer and not (role.perfil_vendido or "").startswith("Cantor"):
+        partes.append("cantor")
     if role.needs_makeup:
-        marcas.append("com maquiagem")
-    if not marcas:
+        partes.append("com maquiagem")
+    if not partes:
         return None
-    texto = SEPARADOR_PERFIL.join(marcas)
+    texto = SEPARADOR_PERFIL.join(partes)
     return texto[0].upper() + texto[1:]
 
 

@@ -6,9 +6,10 @@ Chaves novas (todo papel que já recebe `elenco` recebe estas; nenhuma carrega d
 
 ```jsonc
 {
-  "perfil": "Cantor · show · com maquiagem", // string | null — o vendido (perfil_vendido) ou, sem ele,
-                                              // as marcas das flags: "Cantor", "Com maquiagem",
-                                              // "Cantor · com maquiagem"; null quando não há nada
+  "perfil": "Cantor · show · com maquiagem", // string | null — perfil_vendido (tipo + "show") seguido
+                                              // das marcas das flags atuais ("cantor", "com maquiagem");
+                                              // sem orçamento só as marcas; null quando não há nada
+                                              // (converge: as marcas não são gravadas)
   "criada_pelo_sistema": true,                // boolean — vaga criada por regra do sistema
   "escalado_pelo_comercial": false            // boolean — o talento atual veio do formulário do evento
 }

@@ -58,10 +58,10 @@ def e_vaga_de_presenca(role: Any) -> bool:
     )
 
 
-#: Feature 322 — o nome da vaga que a regra cria e o trecho que reconhece qualquer vaga de
-#: maquiagem já existente ("Maquiadora", "Maquiador 2"). O critério é o MESMO do selo
-#: `maquiagem.fechado` (`agenda_read`) e de `ehVagaDeMaquiador` (`CastingSection.tsx`), para o
-#: selo "Falta maquiador" e a regra nunca discordarem.
+#: Feature 322 — o nome da vaga que a regra cria e o trecho que reconhece uma vaga de maquiagem já
+#: existente ("Maquiadora", "Maquiador 2"): vaga de APOIO com "maquiad" no nome — o critério de
+#: `ehVagaDeMaquiador` (`CastingSection.tsx`), que dá a borda dourada ao card. Um personagem chamado
+#: "Maquiadora" (fantasia) não é maquiador e não segura a vaga.
 MAQUIADOR_CHARACTER = "Maquiador"
 _TRECHO_MAQUIADOR = "maquiad"
 
@@ -90,7 +90,7 @@ def garantir_vaga_de_maquiador(event: Any, *, tz: ZoneInfo) -> Any:
     vagas = EventRole.query.filter_by(event_id=event.id).all()
     if not any(v.needs_makeup for v in vagas if v.role_type != "extra"):
         return None
-    if any(_TRECHO_MAQUIADOR in (v.character_name or "").lower() for v in vagas):
+    if any(v.role_type == "extra" and _TRECHO_MAQUIADOR in (v.character_name or "").lower() for v in vagas):
         return None
     vaga = EventRole(
         event_id=event.id,

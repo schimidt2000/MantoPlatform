@@ -7,7 +7,7 @@
 > Última atualização: **2026-10-28** · Branch **322-o-que-o-casting-fecha** pronta, sem merge (migration
 > `c322a7e1b9d4`, aditiva; o casting vê o tipo vendido de cada personagem, a vaga de Maquiador nasce com a
 > maquiagem, as vagas do sistema e as escalas do comercial ganham marca discreta, e a maquiagem só muda
-> pelo superadmin depois que o evento existe; `verify_322.py` 23/23; dívidas 172–174). Estado da `main`:
+> pelo superadmin depois que o evento existe; `verify_322.py` 29/29 depois do converge; dívidas 172–174). Estado da `main`:
 > pós-feature **320-voltar-sem-perder-o-lugar** (sem
 > migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
 > voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
@@ -413,11 +413,22 @@ nascia pelo orçamento: no espelho de 20/10, 3 eventos futuros tinham personagem
 - Tela: linha do perfil sob o nome; `MarcaDeOrigem` (`text-xs`, cor secundária) nas vagas e talentos;
   caixa "Maquiagem" travada na edição para quem não é superadmin, com a frase.
 
-**Verificação.** `verify_322.py` 23/23 (antes do núcleo, 8/23; 17, 18 e 22 falham no código antigo, e o
+**Verificação.** `verify_322.py` 23/23 no implement e 29/29 depois do converge (antes do núcleo, 8/23; 17, 18 e 22 falham no código antigo, e o
 22 ganhou um controle depois de passar a vazio na primeira rodada). `verify_309 --regressao` 20/20.
 `verify_273` 8/15 — **igual na `main`** (verify velho desde a 301/305; dívida 172). `ruff` limpo nos
 tocados (`routes.py` com o mesmo I001 da `main`); typecheck das três SPAs; tela aberta em desktop e
 375×812 (casting com perfil e marcas; edição travada como comercial, livre como superadmin).
+
+**Converge.** Uma leitura independente (agente, só leitura) achou 0 CRITICAL, 0 HIGH, 2 MEDIUM e 10 LOW.
+Corrigidos: (1) o perfil gravado congelava "com maquiagem" — se o superadmin desmarcasse, o card
+desmentia o 💄; agora `perfil_vendido` guarda só tipo + "show" e a leitura acrescenta "cantor" e "com
+maquiagem" pelas flags atuais; (2) o perfil da criação pareava pela posição do teto — linha removida do
+prefill deslocava o tipo; agora casa pelo nome normalizado (`_chave` da 273); (3) personagem chamado
+"Maquiadora" segurava a vaga — só vaga de apoio conta; (4) as edições do cabeçalho e comercial também
+chamam a regra. `verify_322.py` ganhou os cenários 24–29 (29/29). Ficaram como decisão: renomear o
+personagem mantém o tipo; o "Ver como" trava a tela pelo papel efetivo e o servidor olha o real (a tela
+fica mais restrita, nunca mais solta); o `orc_caches` do cliente sem orçamento ligado é a mesma porta
+que o teto já tinha; na janela do deploy, bundle velho deixa marcar a caixa e o servidor ignora.
 
 **Pegadinhas.** O `node_modules` do checkout principal não tem o `pdfjs-dist` da 320 — o typecheck do
 worktree precisa da junção para o `node_modules` de um worktree pós-320. O verify de vínculo precisa de
