@@ -1,7 +1,7 @@
 # Feature 322 — O casting vê o que está fechando, e o maquiador aparece sozinho
 
 **Branch**: `322-o-que-o-casting-fecha` (da `main` `6f706fa6`, worktree `C:\tmp\mp322`) ·
-**Created**: 2026-10-28 · **Status**: Rascunho · **Migration**: uma, aditiva (duas colunas novas na
+**Created**: 2026-10-28 · **Status**: Rascunho · **Migration**: uma, aditiva (três colunas novas na
 vaga do evento) · **Nível**: 1 (feature) — constituição, Princípio VI
 
 **Input**: pedido do dono (28/10/2026), resumido em "O pedido" abaixo.
@@ -54,6 +54,8 @@ Decisões do dono no mesmo dia, antes da spec:
   personagem NOVO? → A: Não, só o superadmin; a caixa aparece travada para os outros (FR-012).
 - Q: O coordenador escolhido no campo "Coordenador" do formulário de criação mostra "adicionado
   pelo sistema"? → A: Não; só a vaga que o sistema cria quando o campo fica vazio (FR-011).
+- Pedido novo do dono no meio da sessão: "os pré-escalados pelo comercial devem aparecer esse aviso
+  de que foi inserido pelo comercial" → História 5, FR-014 a FR-016.
 
 ## Cenários e Verificação *(obrigatório)*
 
@@ -165,6 +167,33 @@ decisão explícita do dono.
 
 ---
 
+### História 5 — O pré-escalado pelo comercial aparece como tal (Prioridade: P2)
+
+Quando o comercial já escolhe a pessoa no formulário do evento ("Pré-escalar talento específico" de
+um personagem, ou o campo "Coordenador"), o card do casting mostra, junto ao nome do talento,
+"inserido pelo comercial" no mesmo estilo discreto da marca do sistema. O casting sabe que aquela
+escala não foi dele e confere antes de seguir.
+
+**Por que esta prioridade**: pedido do dono no meio da spec (28/10): "os pré-escalados pelo
+comercial devem aparecer esse aviso de que foi inserido pelo comercial".
+
+**Verificação**: cenários 20 a 22 do `verify_322.py`.
+
+**Cenários de aceite**:
+
+1. **Dado** o formulário de criação com um talento pré-escalado num personagem e outro no campo
+   "Coordenador", **Quando** o evento é salvo, **Então** as duas vagas mostram "inserido pelo
+   comercial".
+2. **Dado** o formulário de edição em que o comercial troca ou põe um talento num personagem,
+   **Quando** salva, **Então** a vaga passa a mostrar a marca.
+3. **Dado** uma vaga com a marca, **Quando** o casting troca o talento pelo card da página do
+   evento, **Então** a marca sai (quem escalou agora foi o casting); **e quando** o casting tira o
+   talento, a marca sai também.
+4. **Dado** um evento salvo de novo pelo formulário sem mexer no talento, **Quando** salva,
+   **Então** a marca de cada vaga fica como estava.
+
+---
+
 ### Casos de borda
 
 - Personagem do orçamento que não casa pelo nome no vínculo: fica sem tipo (como hoje fica sem
@@ -213,11 +242,19 @@ decisão explícita do dono.
   anterior (ou "sem maquiagem" no personagem novo) e a tela mostra a caixa travada com a explicação.
 - **FR-013**: Na criação do evento, quem cria DEVE continuar podendo marcar a maquiagem (como hoje);
   o vínculo de orçamento DEVE continuar marcando a maquiagem que o orçamento diz.
+- **FR-014**: O talento posto numa vaga pelo formulário do evento (criação ou edição: pré-escala de
+  personagem e campo "Coordenador") DEVE ficar marcado como inserido pelo comercial.
+- **FR-015**: A página do evento DEVE mostrar "inserido pelo comercial" junto ao talento da vaga
+  marcada, no mesmo estilo discreto da FR-010.
+- **FR-016**: A marca da FR-014 DEVE sair quando o talento da vaga muda por outro caminho
+  (escalação ou remoção pelo card do casting) e NÃO DEVE mudar quando o formulário é salvo sem
+  trocar o talento.
 
 ### Entidades *(se houver dados)*
 
 - **Vaga do evento** (`EventRole`): ganha o **tipo vendido** (texto curto, vazio quando não veio de
-  orçamento) e a marca **criada pelo sistema** (sim/não; vazio nas vagas anteriores ao deploy).
+  orçamento), a marca **criada pelo sistema** (sim/não; vazio nas vagas anteriores ao deploy) e a
+  marca **talento inserido pelo comercial** (sim/não; acompanha o talento atual, não a vaga).
   Modelo em `app/models.py`, migration à mão, aditiva.
 
 ### RBAC *(obrigatório se houver endpoint novo ou alterado)*
@@ -257,7 +294,10 @@ teste criados pela API e apagados no fim (nunca vaga com nome inventado em event
 | 17 | comercial desmarca a maquiagem pela API | a marca continua | **sim** (no código antigo desmarca) |
 | 18 | comercial marca personagem novo | nasce sem maquiagem | **sim** (no código antigo marca) |
 | 19 | vínculo de orçamento por comercial | a maquiagem do orçamento é marcada | não |
-| 20 | limpeza | eventos, vagas e usuários descartáveis apagados | — |
+| 20 | criação com pré-escala de personagem e coordenador | as duas vagas marcadas "inserido pelo comercial" | não |
+| 21 | edição troca o talento pelo formulário / salva sem trocar | marca nasce / fica como estava | não |
+| 22 | casting troca ou tira o talento pelo card | a marca sai | **sim** (sem a regra da FR-016 ficaria) |
+| 23 | limpeza | eventos, vagas e usuários descartáveis apagados | — |
 
 Conferência de tela: página do evento (card de personagem com tipo, equipe de apoio com "adicionado
 pelo sistema") em desktop e 375×812; formulário de edição com a caixa de maquiagem travada para
@@ -272,6 +312,8 @@ comercial e livre para superadmin.
 - **SC-003**: O casting distingue, só olhando a página, a vaga que o sistema criou da que alguém
   adicionou.
 - **SC-004**: Nenhum título de evento contém "Maquiador".
+- **SC-005**: O casting distingue, só olhando a página, a escala que o comercial fez da que ele
+  mesmo fez.
 
 ## Fora de escopo
 
@@ -292,5 +334,10 @@ nascerem).
 
 - O texto do tipo segue o que a calculadora já chama de cada coisa, com caixa de frase ("Boneco
   grande especial", "Ator cara-limpa"), e as marcas na ordem show · cantor · com maquiagem.
+- "Inserido pelo comercial" vale para todo talento que entra pelo formulário do evento, que é a
+  ferramenta da comercial — mesmo quando quem salva é o superadmin. A marca acompanha o talento:
+  quem escala pelo card do casting é o casting.
+- Escalas feitas pelo formulário antes do deploy não levam a marca (não há registro de por onde
+  entraram).
 - A vaga de maquiador da FR-005 não tem teto: o orçamento é que define quanto se paga de make; sem
   orçamento o casting combina o valor, como faz hoje com toda vaga sem teto.
