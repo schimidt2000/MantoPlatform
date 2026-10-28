@@ -312,11 +312,16 @@ def _reconcile_characters(
             role.character_name = name
             role.figurino_sheet_id = sheet_id
             role.cache_value = char_data.get("cache_value")
-            role.needs_makeup = bool(char_data.get("needs_makeup")) or None
+            # Feature 322 (decisão do dono): a maquiagem se define quando o evento nasce — pelo
+            # orçamento ou por quem cria; depois, só o superadmin a muda. Para os demais o valor
+            # gravado fica (sem erro: a tela já trava a caixa). É a marca que cria o maquiador.
+            if is_superadmin:
+                role.needs_makeup = bool(char_data.get("needs_makeup")) or None
             role.is_singer = bool(char_data.get("is_singer")) or None
             if pre_tid and role.talent_id != pre_tid:
                 role.talent_id = pre_tid
                 role.assigned_at = datetime.now(tz=start.tzinfo)
+                role.escalado_pelo_comercial = True
                 used_talent_ids.add(pre_tid)
                 assigned_now.append((pre_tid, name))
         else:
@@ -326,10 +331,12 @@ def _reconcile_characters(
                 role_type="character",
                 figurino_sheet_id=sheet_id,
                 cache_value=char_data.get("cache_value"),
-                needs_makeup=bool(char_data.get("needs_makeup")) or None,
+                # Personagem novo num evento que já existe: a mesma trava (clarify da 322).
+                needs_makeup=(bool(char_data.get("needs_makeup")) or None) if is_superadmin else None,
                 is_singer=bool(char_data.get("is_singer")) or None,
                 talent_id=pre_tid,
                 assigned_at=datetime.now(tz=start.tzinfo) if pre_tid else None,
+                escalado_pelo_comercial=True if pre_tid else None,
             ))
             if pre_tid:
                 used_talent_ids.add(pre_tid)
@@ -350,6 +357,7 @@ def _reconcile_characters(
             if coordinator.talent_id != coordinator_talent_id:
                 coordinator.talent_id = coordinator_talent_id
                 coordinator.assigned_at = datetime.now(tz=start.tzinfo)
+                coordinator.escalado_pelo_comercial = True
                 assigned_now.append((coordinator_talent_id, "Coordenador"))
         else:
             db.session.add(EventRole(
@@ -358,6 +366,7 @@ def _reconcile_characters(
                 role_type="extra",
                 talent_id=coordinator_talent_id,
                 assigned_at=datetime.now(tz=start.tzinfo),
+                escalado_pelo_comercial=True,
             ))
             assigned_now.append((coordinator_talent_id, "Coordenador"))
 
@@ -953,6 +962,11 @@ def update_event_core(
         start=st,
         end=et,
     )
+    # Feature 322: evento antigo com personagem maquiado e sem maquiador ganha a vaga na primeira
+    # edição depois do deploy (sem retroativo por script — decisão do dono).
+    from app.calendar.casting_ops import garantir_vaga_de_maquiador
+
+    garantir_vaga_de_maquiador(event, tz=tz)
 
     event.event_type = data["event_type"] or None
     # O prefixo "(TIPO)" do título é reescrito junto com o tipo (feature 239): é ele que o sync

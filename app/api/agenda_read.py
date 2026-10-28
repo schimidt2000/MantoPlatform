@@ -32,6 +32,7 @@ from app.constants import (
     PIX_ESTADO_LIGADO_AUTO,
     PIX_ESTADOS_LIGADOS,
     PIX_SUGESTAO_REPASSE,
+    SEPARADOR_PERFIL,
     SITUACAO_EXCLUSAO_SOLICITADA,
     RoleName,
     now_sp,
@@ -390,6 +391,28 @@ def _serialize_talent(talent: Any, show_pii: bool) -> dict[str, Any]:
     return data
 
 
+def _perfil_da_vaga(role: Any) -> str | None:
+    """O texto que o casting lê sob o nome do personagem (feature 322, FR-001 a FR-003).
+
+    O tipo vendido no orçamento, quando há; sem orçamento, as marcas que o formulário grava
+    ("Cantor", "Com maquiagem"). Pronto aqui para a tela não montar frase nem conhecer a tabela.
+    Vaga de apoio (`extra`) não tem perfil: o nome dela já diz o que é.
+    """
+    if role.role_type == "extra":
+        return None
+    if role.perfil_vendido:
+        return role.perfil_vendido
+    marcas = []
+    if role.is_singer:
+        marcas.append("cantor")
+    if role.needs_makeup:
+        marcas.append("com maquiagem")
+    if not marcas:
+        return None
+    texto = SEPARADOR_PERFIL.join(marcas)
+    return texto[0].upper() + texto[1:]
+
+
 def _serialize_role(
     role: Any,
     show_casting: bool,
@@ -449,6 +472,11 @@ def _serialize_role(
         # mostra quem está designado, sem campo de dinheiro nem ações. O flag vem SEMPRE (fora
         # do `show_casting`) porque é ele que define a anatomia do card, não a permissão.
         "is_presence": e_vaga_de_presenca(role),
+        # Feature 322: o que o casting precisa saber para fechar a vaga — vai a TODO leitor do
+        # elenco (não carrega dinheiro) — e de onde vieram a vaga e o talento atual.
+        "perfil": _perfil_da_vaga(role),
+        "criada_pelo_sistema": bool(role.criada_pelo_sistema),
+        "escalado_pelo_comercial": bool(role.escalado_pelo_comercial),
     }
     # Nenhum dado de dinheiro sai para a vaga de presença: sem valor no payload, nenhuma tela
     # futura consegue reintroduzir o campo por descuido.

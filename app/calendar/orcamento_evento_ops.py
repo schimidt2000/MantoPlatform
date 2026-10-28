@@ -884,6 +884,9 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
         if item.get("is_singer") and not alvo.is_singer:
             alvo.is_singer = True
             relatorio["cantor_marcado"] += 1
+        # Feature 322: o tipo vendido entra só onde não havia — a mesma regra do teto.
+        if item.get("perfil") and not alvo.perfil_vendido:
+            alvo.perfil_vendido = str(item["perfil"])[:200]
         cap, nota = _cap_e_nota(item, chave)
         if cap is not None and alvo.cache_cap is None:
             alvo.cache_cap = cap
@@ -908,7 +911,7 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
         cap, nota = _cap_e_nota(item, chave)
         db.session.add(EventRole(
             event_id=event.id, character_name="Coordenador", role_type="extra",
-            cache_cap=cap, cache_cap_note=nota,
+            cache_cap=cap, cache_cap_note=nota, criada_pelo_sistema=True,
         ))
         relatorio["coordenadores_criados"] += 1
 
@@ -928,7 +931,7 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
         if existente is None:
             db.session.add(EventRole(
                 event_id=event.id, character_name=rotulo, role_type="extra",
-                cache_cap=cap, cache_cap_note=nota,
+                cache_cap=cap, cache_cap_note=nota, criada_pelo_sistema=True,
             ))
             relatorio[chave_relatorio] = True
         elif cap is not None and existente.cache_cap is None:
@@ -1190,6 +1193,12 @@ def set_event_orcamento(
     if aplicar_equipe:
         relatorio["fora_sp"] = aplicar_fora_sp_do_orcamento(event, entry)
         relatorio.update(aplicar_equipe_do_orcamento(event, entry))
+    # Feature 322: o vínculo pode ter acendido a maquiagem de um personagem cujo orçamento não traz
+    # o maquiador (ou o evento já tinha a marca à mão) — a vaga nasce aqui, uma só.
+    from app.calendar.casting_ops import garantir_vaga_de_maquiador
+
+    if garantir_vaga_de_maquiador(event, tz=tz) is not None:
+        relatorio["maquiador_criado"] = True
     resultado_bv = None
     if aplicar_valores_duracao:
         resultado_bv = aplicar_valores_do_orcamento(

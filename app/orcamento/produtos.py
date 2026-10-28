@@ -15,6 +15,8 @@ from __future__ import annotations
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
+from app.constants import SEPARADOR_PERFIL
+
 from . import settings as _cfg
 from .pricing import (
     cache_na_faixa,
@@ -394,7 +396,7 @@ def _nota(descricao: str, base: float, adicionais: list[tuple[str, float]], tota
     return " ".join(partes) + f" — teto {_fmt_brl(total)}"
 
 
-def _item(label: str, cache: float | None, *, role_type: str, needs_makeup: bool, descricao: str, adicionais: list[tuple[str, float]], nota_sem_teto: str, produto: dict) -> dict:
+def _item(label: str, cache: float | None, *, role_type: str, needs_makeup: bool, descricao: str, adicionais: list[tuple[str, float]], nota_sem_teto: str, produto: dict, perfil: str | None = None) -> dict:
     if cache is None:
         notas = {f"cache_{h}": nota_sem_teto for h in _DURACOES}
         notas["cache_custom"] = nota_sem_teto
@@ -416,7 +418,16 @@ def _item(label: str, cache: float | None, *, role_type: str, needs_makeup: bool
         "cap_notes": notas,
         "origem": "produto",
         "produto_chave": produto["chave"],
+        "perfil": perfil,
     }
+
+
+def _perfil_da_vaga(vaga: dict, produto: dict) -> str:
+    """O que o casting lê na vaga do produto (feature 322): o produto vendido, e a maquiagem."""
+    partes = [str(produto.get("rotulo") or produto["chave"])]
+    if vaga.get("needs_makeup"):
+        partes.append("com maquiagem")
+    return SEPARADOR_PERFIL.join(partes)
 
 
 def itens_do_teto(produtos: list[dict], faixa: dict | None, cfg: dict, *, transport_add: float, noturno_add: int) -> list[dict]:
@@ -442,6 +453,7 @@ def itens_do_teto(produtos: list[dict], faixa: dict | None, cfg: dict, *, transp
             itens.append(_item(
                 vaga["label"], cache, role_type="character", needs_makeup=bool(vaga.get("needs_makeup")),
                 descricao=descricao, adicionais=adicionais, nota_sem_teto=sem, produto=produto,
+                perfil=_perfil_da_vaga(vaga, produto),
             ))
     return itens
 

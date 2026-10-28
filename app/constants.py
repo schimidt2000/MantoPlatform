@@ -867,3 +867,9 @@ PIX_KIND_REPASSE = "pix.repasse_infinitepay"
 # tarefa de gente — o Financeiro é avisado, e Comercial/Financeiro/Superadmin anexam.
 PIX_KIND_SEM_COMPROVANTE = "pix.sem_comprovante"
 PIX_ENTIDADE_PAGAMENTO = "event_payment"
+
+# ── Feature 322 — o que o casting precisa saber para fechar a vaga ─────────────────────────────
+# Separador do perfil vendido de cada personagem ("Cantor · show · com maquiagem"). Uma fonte só
+# para a conta do orçamento (`calendar/routes._perfil_do_performer`) e o produto de tabela
+# (`orcamento/produtos._perfil_da_vaga`).
+SEPARADOR_PERFIL = " · "

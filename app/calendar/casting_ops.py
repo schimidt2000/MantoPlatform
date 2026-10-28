@@ -58,6 +58,57 @@ def e_vaga_de_presenca(role: Any) -> bool:
     )
 
 
+#: Feature 322 — o nome da vaga que a regra cria e o trecho que reconhece qualquer vaga de
+#: maquiagem já existente ("Maquiadora", "Maquiador 2"). O critério é o MESMO do selo
+#: `maquiagem.fechado` (`agenda_read`) e de `ehVagaDeMaquiador` (`CastingSection.tsx`), para o
+#: selo "Falta maquiador" e a regra nunca discordarem.
+MAQUIADOR_CHARACTER = "Maquiador"
+_TRECHO_MAQUIADOR = "maquiad"
+
+
+def garantir_vaga_de_maquiador(event: Any, *, tz: ZoneInfo) -> Any:
+    """Personagem com maquiagem traz a vaga de Maquiador junto (feature 322, FR-005).
+
+    Antes, a vaga só nascia pelo orçamento; quem marcava a maquiagem no formulário (ou ligava um
+    orçamento cujo maquiador já tinha outro nome) ficava com o selo "Falta maquiador" apontando
+    para uma vaga que não existia. Chamada no fim da criação, da edição e do vínculo de orçamento
+    — nunca por script (o dono decidiu: sem retroativo) nem pelo sync do Google (personagem do
+    título nasce sem maquiagem). Não comita: quem chama comita.
+
+    A consulta passa pela sessão, então enxerga as vagas que o mesmo salvamento acabou de
+    adicionar (autoflush) — a do orçamento, com teto, conta e esta não duplica.
+
+    Args:
+        event: O `CalendarEvent` (já com `id`).
+        tz: Fuso para o horário do histórico (São Paulo).
+
+    Returns:
+        A vaga criada, ou `None` quando não havia o que criar.
+    """
+    if getattr(event, "is_cancelled", False):
+        return None
+    vagas = EventRole.query.filter_by(event_id=event.id).all()
+    if not any(v.needs_makeup for v in vagas if v.role_type != "extra"):
+        return None
+    if any(_TRECHO_MAQUIADOR in (v.character_name or "").lower() for v in vagas):
+        return None
+    vaga = EventRole(
+        event_id=event.id,
+        character_name=MAQUIADOR_CHARACTER,
+        role_type="extra",
+        criada_pelo_sistema=True,
+    )
+    db.session.add(vaga)
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name="Sistema",
+        actor_role="Sistema",
+        message="Vaga de Maquiador criada: há personagem com maquiagem",
+        created_at=datetime.now(tz=tz),
+    ))
+    return vaga
+
+
 def _manda_email_de_remocao(event: Any) -> bool:
     """Feature 306 (FR-069): tirar o artista da vaga de um evento cancelado não manda "você foi
     removido" — o ato já avisou o elenco. Gancho da mutação do 45c (chamado pelo módulo)."""
@@ -155,6 +206,9 @@ def assign_role(
     if role.talent_id != old_talent_id:
         role.figurino_done_at = None
         role.invite_status = None
+        # Feature 322: "inserido pelo comercial" diz quem pôs o talento ATUAL — quem troca ou
+        # tira pelo card agora é o casting.
+        role.escalado_pelo_comercial = None
     # A presença também não entra no fluxo de pagamento: marcá-la como "a pagar" a colocaria
     # de volta na planilha por outra porta (paridade com `assign_tech_presence`, que só mexe
     # no `talent_id`).
