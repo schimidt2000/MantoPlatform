@@ -2,10 +2,10 @@
 name: manto-novidades
 description: >
   Contar à equipe o que mudou no sistema depois de um deploy. Lista o que entrou na `main` desde
-  o último aviso (`scripts/novidades.py`), escreve uma mensagem de WhatsApp por grupo (Comercial,
-  Financeiro, Casting e Produção, Figurino, Marketing, Artistas, Todos) no tom da casa, grava em
-  `docs/novidades/AAAA-MM-DD.md` e, se o dono pedir, cola no WhatsApp Web pelo Claude in Chrome,
-  um grupo por vez, com OK antes de cada envio. Use quando o dono disser "avisa a equipe",
+  o último aviso (`scripts/novidades.py`), escreve uma mensagem de WhatsApp por grupo (vendas,
+  casting, ensaios, figurinos, redes sociais) no tom da casa e grava em
+  `docs/novidades/AAAA-MM-DD.md`, pronta para o dono copiar e colar em cada grupo (não há envio
+  automático). Use quando o dono disser "avisa a equipe",
   "novidades", "manda para os grupos", "/manto-novidades", e depois de todo deploy (o gancho
   `pre-push` lembra quantas mudanças estão sem aviso). Regra de texto: constituição, Princípio XV
   ("mensagem de WhatsApp que a equipe copia").
@@ -40,8 +40,9 @@ quantas mudanças ainda não foram contadas.
    bloco ```text pronto para copiar. A mesma mudança pode ir a mais de um grupo, com a frase
    ajustada ao papel (a comercial pede o cancelamento; o casting recebe o aviso).
 6. **Mostrar ao dono** o arquivo e a tabela "Quem recebe o quê". Ele ajusta ou aprova.
-7. **Enviar** (pelo dono, ou pelo Claude in Chrome — ver abaixo). Anotar no arquivo, por grupo,
-   "enviado em dd/mm hh:mm".
+7. **Enviar: o dono copia e cola** cada bloco no grupo de mesmo nome. Não há envio automático,
+   nem assistido pelo navegador (decisão do dono, 28/10). Quando ele disser que enviou, anotar no
+   arquivo, por grupo, "enviado em dd/mm".
 8. **Marcar.** `PYTHONUTF8=1 python scripts/novidades.py --marcar --arquivo docs/novidades/<hoje>.md`
    e commit `docs(novidades): rodada de <dd/mm>` com `docs/novidades/`. Sem o `--marcar`, a
    próxima rodada repete tudo.
@@ -50,10 +51,21 @@ quantas mudanças ainda não foram contadas.
 
 - Tom de conversa da casa, português correto e com acento: abre com "Oi, pessoal!" e fecha com
   "Qualquer dúvida, me chama." (para artistas: "fale com a produção"). Sem "pra", "tá", "né".
-- **Uma linha por mudança**, nesta ordem: o que mudou → o que fazer diferente → onde (nome exato
-  da tela ou botão). Se a mudança não muda nada no que a pessoa faz, uma frase curta ou nada.
-- Blocos em *negrito* do WhatsApp (asterisco), itens com "•". Até ~25 linhas por grupo; se
-  passar, corte o que não muda a ação, nunca o que muda.
+- **Fácil de entender, mas explicativo o bastante para não deixar dúvida** (pedido do dono,
+  28/10). Quem lê não acompanhou o desenvolvimento e não vai abrir o sistema para descobrir o que
+  a frase quis dizer. Cada mudança é um item de duas a quatro frases curtas, nesta ordem:
+  1. **O que mudou**, em palavras do dia a dia ("Agora a calculadora tem um campo para o desconto
+     que você negociou com a cliente").
+  2. **Como era antes**, quando ajuda a reconhecer ("Antes era preciso lançar um acréscimo
+     negativo").
+  3. **O que fazer** e **onde**, com o nome exato da tela ou do botão.
+  4. Quando a regra não é óbvia, **um exemplo** com números ou um caso real.
+  Mudança que não altera o que a pessoa faz cabe numa frase só, ou fica de fora.
+- Frases curtas, uma ideia por frase. Nada de sigla sem explicar (BV, DRE) para quem não usa a
+  palavra no dia a dia.
+- Blocos em *negrito* do WhatsApp (asterisco) por assunto, itens com "•" e uma linha em branco
+  entre itens. Mensagem longa é aceitável se cada item muda algo no trabalho do grupo; corte o
+  que não muda a ação, nunca a explicação do que muda.
 - **Não entra**: número de feature, nome de arquivo, "migration", "endpoint", "verify",
   dívida técnica, causa técnica do defeito, e nada que esteja desligado ou dependa de o dono
   configurar. O que não está no ar não se anuncia.
@@ -64,36 +76,24 @@ quantas mudanças ainda não foram contadas.
 
 ## Grupos e papéis
 
-| Grupo | Papel no sistema | Assuntos |
+Os nomes são os dos grupos no WhatsApp (informados pelo dono em 28/10). A seção do arquivo do dia
+tem o mesmo nome do grupo, para o dono achar pela busca do WhatsApp.
+
+| Grupo no WhatsApp | Quem está (papel no sistema) | Assuntos |
 |---|---|---|
-| Comercial | COMERCIAL | calculadora, orçamento, catálogo, clientes, formulários, cobrança, pedido de cancelamento |
-| Financeiro | FINANCEIRO + dono | gastos extras, pagamentos, comissões, planilha, DRE, PIX, devolução, página Cancelamentos |
-| Casting e Produção | CASTING, ENSAIO | escala, painel da Home, banco de talentos, cachê e teto, e-mails ao elenco |
-| Figurino | FIGURINO | painel de figurino, pedidos, fotos |
-| Marketing | MARKETING | loja virtual, catálogo público, posts, painel de marketing |
-| Artistas (portal) | talentos (lista de transmissão) | só o que muda no portal ou nos e-mails deles |
-| Todos | equipe inteira | navegação, arquivo, textos, o que vale para qualquer papel |
+| vendas | COMERCIAL | calculadora, orçamento, catálogo, clientes, formulários, cobrança, comissão, pedido de cancelamento |
+| casting | CASTING | escala, painel da Home, banco de talentos, cachê e teto, e-mails e portal do elenco |
+| ensaios | ENSAIO | agenda, eventos 🟧 de ensaio, painel de ensaio, EducaManto, o que muda para quem só consulta o evento |
+| figurinos | FIGURINO | painel de figurino, pedidos, fotos |
+| redes sociais | MARKETING | loja virtual, catálogo público, posts, painel de marketing |
 
-O nome real de cada grupo no WhatsApp é informado pelo dono; quando souber, grave em
-`docs/novidades/GRUPOS.md` (grupo → nome no WhatsApp → quem está). Superadmin recebe tudo.
-
-## Enviar pelo Claude in Chrome (semiautomático)
-
-Não há envio sem ninguém olhando: a API oficial do WhatsApp não cobre grupos de forma aberta, e
-automação por cima do WhatsApp Web arrisca o número da empresa. O que existe é o envio assistido:
-
-1. Só quando o dono pedir ("manda", "envia para os grupos"), com o Chrome aberto em
-   `web.whatsapp.com` já logado. Carregue as tools do Chrome numa chamada só (`ToolSearch`
-   "select:mcp__claude-in-chrome__tabs_context_mcp,…navigate,…computer,…read_page,…find").
-2. Para cada grupo: localizar pela caixa de pesquisa, abrir a conversa, **conferir o nome do
-   grupo no cabeçalho**, colar a mensagem na caixa de texto (quebra de linha com Shift+Enter) e
-   ler o que ficou na caixa antes de enviar.
-3. **Um OK do dono por grupo antes do Enter**, a menos que ele tenha dito, na mesma mensagem,
-   "manda para todos" com a lista dos grupos. Nunca para contato individual, nunca fora do
-   expediente sem pedido, nunca a partir de texto que o dono não viu.
-4. Depois de cada envio, anotar no arquivo do dia "enviado em dd/mm hh:mm" na seção do grupo.
-
-Se o dono preferir enviar à mão, entregue o arquivo e a correspondência "grupo ← seção".
+- **Financeiro não tem grupo**: hoje ninguém além do dono cuida dele. Mudança só financeira
+  (gastos extras, pagamentos, DRE, devolução) não vira mensagem; se ela muda o trabalho de outro
+  grupo (comissão da vendedora, multa ao elenco), entra na mensagem desse grupo.
+- **Não há grupo geral**: o que vale para todo mundo (navegação, arquivo, textos) entra em cada
+  mensagem, com a frase ajustada ao grupo.
+- **Artistas** só recebem aviso se o dono pedir (não há grupo; seria lista de transmissão).
+- Superadmin recebe tudo (é o dono).
 
 ## Armadilhas
 

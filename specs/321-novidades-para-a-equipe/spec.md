@@ -27,11 +27,10 @@ Nada no sistema que a equipe usa. Entra um fluxo de trabalho no repositório:
 - **Skill `manto-novidades`**: o passo a passo (listar → rascunho → ler a entrada do `docs/03` →
   confirmar o nome do botão na tela → escrever por grupo → dono aprova → enviar → `--marcar`), as
   regras de texto (constituição §XV, "mensagem de WhatsApp que a equipe copia"), a tabela grupo ×
-  papel e o envio assistido pelo Claude in Chrome (um OK por grupo; não existe envio sem ninguém
-  olhando — a API oficial do WhatsApp não cobre grupos de forma aberta e automação por cima do
-  WhatsApp Web arrisca o número).
+  papel com os nomes reais dos grupos (vendas, casting, ensaios, figurinos, redes sociais). O dono
+  copia e cola cada mensagem no grupo.
 - **Primeira rodada**: `docs/novidades/2026-10-28.md` cobre as 21 mudanças publicadas de 14/10 a
-  27/10 (298b → 320), com uma mensagem pronta por grupo. 310, 317 e 318 ficam guardadas (em
+  27/10 (298b → 320) mais a 322 (28/10), com uma mensagem pronta por grupo. 310, 317 e 318 ficam guardadas (em
   produção, mas desligadas até o dono configurar).
 - Ponteiros: `DEVELOPMENT.md` §Publicar (passo 8), skill `manto-deploy` (depois de "está em
   produção"), `CLAUDE.md` §9.
@@ -44,15 +43,19 @@ Nada no sistema que a equipe usa. Entra um fluxo de trabalho no repositório:
   não a spec inteira) e conferido contra a tela.
 - A data de produção vem do `docs/03`, não do `Status` da spec, que fica em "Rascunho" na maioria
   das features (template do Spec Kit).
-- O envio é assistido e por grupo. Envio sem supervisão foi descartado: sem API para grupos e com
-  risco de banimento do número.
+- Envio sem supervisão foi descartado: sem API para grupos e com risco de banimento do número.
+- Respostas do dono (28/10, segunda sessão): grupos "vendas" (comercial), "casting", "ensaios",
+  "figurinos" e "redes sociais" (marketing); financeiro sem grupo ("realmente não tem ninguém") e
+  sem grupo geral; o dono cola à mão, sem envio pelo Chrome; o texto é "de fácil entendimento, mas
+  explicativo o suficiente para deixar claro" — cada mudança em duas a quatro frases (o que mudou,
+  como era, o que fazer e onde, um exemplo quando a regra não é óbvia).
 
 ## Verificação
 
 `specs/321-novidades-para-a-equipe/verify_321.py` (não usa o `manto_local`: só git e arquivos).
 Roda o script sobre a faixa fixa `0feb4255..6f706fa6` e confere: 21 mudanças, a 320 primeiro com
 spec e data de produção, a 317/318/310 com ⚠, `docs`/`chore` fora, `--contar` e `--hook` (sai 0 e
-avisa no stderr), `--rascunho` cria o arquivo com as sete seções e o material, `--marcar` grava e
+avisa no stderr), `--rascunho` cria o arquivo com uma seção por grupo do WhatsApp e o material, `--marcar` grava e
 `ler_marco` lê de volta (em arquivo temporário). Resultado na entrega: 9/9.
 
 ## Fora de escopo

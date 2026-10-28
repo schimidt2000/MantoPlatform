@@ -180,7 +180,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **321-novidades-para-a-equipe** | *(na branch, aguardando o dono)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo e envia assistida pelo Claude in Chrome (um OK por grupo). Primeira rodada: 21 mudanças de 14/10 a 27/10 | 2026-10-28 | — | (aqui) | ver Registro |
+| **321-novidades-para-a-equipe** | *(na branch, aguardando o dono)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
@@ -393,18 +393,23 @@ preferência por checagem no push e disparo automático — e, se não der, o te
   lembra a skill. Nunca bloqueia.
 - Skill `manto-novidades`: listar → rascunho → ler a entrada do `docs/03` → confirmar o nome do botão na tela →
   escrever por grupo (constituição §XV, "mensagem de WhatsApp que a equipe copia") → dono aprova → enviar →
-  `--marcar`. Tabela grupo × papel. Envio assistido pelo Claude in Chrome, um OK por grupo.
-- Primeira rodada: `docs/novidades/2026-10-28.md`, com as 21 mudanças de 14/10 a 27/10 (298b → 320) e uma mensagem
-  pronta por grupo; 310, 317 e 318 ficam guardadas (desligadas até o dono configurar).
+  `--marcar`. Tabela grupo × papel com os nomes reais dos grupos (vendas, casting, ensaios, figurinos, redes
+  sociais). O dono copia e cola; não há envio automático nem assistido.
+- Primeira rodada: `docs/novidades/2026-10-28.md`, com as 21 mudanças de 14/10 a 27/10 (298b → 320) mais a 322 (28/10)
+  e uma mensagem pronta por grupo; 310, 317 e 318 ficam guardadas (desligadas até o dono configurar).
 - Ponteiros em `DEVELOPMENT.md` §Publicar (passo 8), na skill `manto-deploy` e no `CLAUDE.md` §9.
 
 **Decisões.** Envio sem supervisão foi descartado: a API oficial do WhatsApp não cobre grupos de forma aberta e
-automação por cima do WhatsApp Web arrisca o número da empresa. A data de produção vem deste documento, não do
+automação por cima do WhatsApp Web arrisca o número da empresa. Respostas do dono (28/10, segunda sessão): os grupos
+são "vendas" (comercial), "casting", "ensaios", "figurinos" e "redes sociais" (marketing); o financeiro não tem grupo
+("realmente não tem ninguém") e não há grupo geral; o dono cola as mensagens, sem envio pelo Chrome; o texto tem de
+ser "de fácil entendimento, mas explicativo o suficiente" — cada mudança em duas a quatro frases (o que mudou, como
+era, o que fazer e onde, exemplo quando a regra não é óbvia), não mais uma linha. A data de produção vem deste documento, não do
 `Status` da spec (que fica "Rascunho" na maioria das features, pelo template). O marco é arquivo versionado, não tag.
 
 **Verificação.** `verify_321.py` 9/9 (só git e arquivos; não usa o `manto_local`): 21 mudanças na faixa fixa
 `0feb4255..6f706fa6`, 320 primeiro com spec e data, ⚠ em 310/317/318 e não na 320/313, `docs`/`chore` fora,
-sufixos reconhecidos, `--contar`/`--hook`, `--rascunho` com as sete seções, `--marcar` + `ler_marco` em arquivo
+sufixos reconhecidos, `--contar`/`--hook`, `--rascunho` com uma seção por grupo do WhatsApp, `--marcar` + `ler_marco` em arquivo
 temporário. `ruff` limpo. O gancho foi exercitado com um push simulado da `main` (saída `[pre-push] novidades: 21
 mudança(s) …`, exit 0).
 

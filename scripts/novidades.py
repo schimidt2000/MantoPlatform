@@ -40,24 +40,25 @@ RE_NUM_NO_ASSUNTO = re.compile(r"^(?:\w+)\((?P<num>\d+[a-z]?)\)")
 
 # Pistas de grupo pelos caminhos tocados. Não decidem nada: a skill lê a spec.
 PISTAS = [
-    (r"frontend/apps/portal|app/api/portal|portal_", "Artistas (portal)"),
-    (r"frontend/apps/public|lojaTema|virtuais|loja", "Marketing / loja e catálogo"),
-    (r"orcamento|quote|calculadora|catalogo|catalog|clientes|formulario|cobranca|vendas", "Comercial"),
-    (r"gastos|expense|financeiro|comiss|pagamento|dre_|/pix|contas_rec|devolu", "Financeiro"),
-    (r"casting|talent|escala|cache_|elenco", "Casting"),
-    (r"figurino", "Figurino"),
-    (r"cancel", "Comercial · Financeiro · Casting"),
+    (r"frontend/apps/portal|app/api/portal|portal_", "casting (portal do elenco)"),
+    (r"frontend/apps/public|lojaTema|virtuais|loja", "redes sociais"),
+    (r"orcamento|quote|calculadora|catalogo|catalog|clientes|formulario|cobranca|vendas", "vendas"),
+    (r"gastos|expense|financeiro|comiss|pagamento|dre_|/pix|contas_rec|devolu", "financeiro (sem grupo: só o dono)"),
+    (r"casting|talent|escala|cache_|elenco", "casting"),
+    (r"ensaio|educamanto", "ensaios"),
+    (r"figurino", "figurinos"),
+    (r"cancel", "vendas · casting"),
     (r"email_service|notific", "(aviso por e-mail ou sino)"),
 ]
 
+# Nomes reais dos grupos no WhatsApp (dono, 28/10). Financeiro não tem grupo nem há grupo geral:
+# a tabela grupo × papel está na skill manto-novidades.
 GRUPOS_PADRAO = [
-    "Comercial",
-    "Financeiro",
-    "Casting e Produção",
-    "Figurino",
-    "Marketing",
-    "Artistas (portal)",
-    "Todos",
+    "vendas",
+    "casting",
+    "ensaios",
+    "figurinos",
+    "redes sociais",
 ]
 
 

@@ -75,9 +75,9 @@ def main() -> int:
     try:
         r = rodar("--desde", DESDE, "--ate", ATE, "--rascunho", "--hoje", data_teste)
         texto = alvo.read_text(encoding="utf-8") if alvo.exists() else ""
-        secoes = ["### Comercial", "### Financeiro", "### Casting e Produção", "### Figurino", "### Marketing", "### Artistas (portal)", "### Todos"]
+        secoes = ["### vendas", "### casting", "### ensaios", "### figurinos", "### redes sociais"]
         cenario(
-            "8. --rascunho cria o arquivo do dia com as sete seções e o material da 320",
+            "8. --rascunho cria o arquivo do dia com uma seção por grupo do WhatsApp e o material da 320",
             r.returncode == 0 and all(s in texto for s in secoes) and "### 320 — " in texto and "specs/320-voltar-sem-perder-o-lugar/spec.md" in texto,
             f"rc={r.returncode} tamanho={len(texto)}",
         )
