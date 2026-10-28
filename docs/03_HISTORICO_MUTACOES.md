@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-28** · Estado do repositório: pós-feature **322-o-que-o-casting-fecha**
+> Última atualização: **2026-10-28** · Estado do repositório: pós-correção **317b-ligacao-de-contratos** (sem
+> migration; **EM PRODUÇÃO desde 28/10/2026, de madrugada**, a pedido do dono, logo depois da 322 — o contrato da
+> ClickSign acha a venda também pelo telefone a um dia, pelo formulário ligado, pelo e-mail e pela palavra do tema; a
+> venda cancelada certa liga e o envelope cancelado sem venda sai de "A conferir": 57 → 16 na simulação desde 01/06;
+> `verify_317b.py` 12/12, `verify_317.py` 36/36; dívida 175) — antes dela pós-feature **322-o-que-o-casting-fecha**
 > (**EM PRODUÇÃO desde 28/10/2026 ~03h25**, a pedido do dono, fora do horário; migration `c322a7e1b9d4`, aditiva; o casting vê o tipo vendido de cada personagem, a vaga de Maquiador nasce com a
 > maquiagem, as vagas do sistema e as escalas do comercial ganham marca discreta, e a maquiagem só muda
 > pelo superadmin depois que o evento existe; `verify_322.py` 29/29 depois do converge; dívidas 172–174) — antes
@@ -182,6 +186,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **317b-ligacao-de-contratos** | *(EM PRODUÇÃO 28/10, madrugada)* O contrato da ClickSign acha a venda quando data + telefone não bastam: mesmo telefone a um dia, formulário do mesmo telefone e data ligado a um evento (festa remarcada), e-mail no lugar do telefone e **tema por palavra** ("Arraiá com o Snoopy" × "SNOOPY + CHARLIE"); a venda cancelada certa liga (o PDF não entra no cancelado) e o envelope cancelado na ClickSign sem venda sai de "A conferir". Nos 246 envelopes desde 01/06: 57 a conferir → 16, 19 vínculos novos conferidos um a um | 2026-10-28 | — | (aqui) | ver Registro |
 | **322-o-que-o-casting-fecha** | *(EM PRODUÇÃO 28/10 ~03h25)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
@@ -376,6 +381,54 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 317b — O contrato da ClickSign acha a venda por outros sinais   (317b-ligacao-de-contratos · 2026-10-28 · sem migration)
+
+> **EM PRODUÇÃO desde 28/10/2026, de madrugada**, a pedido do dono, na mesma noite em que o token da 317 entrou no
+> Render. Nível 2 (correção da 317): uma regra num domínio, sem migration. Spec em `specs/317b-ligacao-de-contratos/`.
+
+**O pedido.** Com o token no Render, a simulação desde 01/06 deu 246 contratos: 175 ligados e **57 "a conferir"**. O
+dono: "será que podemos pensar um pouco mais para ver sobre esses 57? Tem alguma outra ligação que funciona?". Depois
+da análise: "pode seguir, liga os cancelados à venda cancelada".
+
+**O que a análise mostrou** (só leitura, em produção, envelope a envelope). 22 eram envelopes **cancelados na própria
+ClickSign** (negócio que não fechou, contrato refeito). Nos outros 35, o evento na agenda quase nunca tinha o telefone
+de quem assina: estava sem cliente ou ligado a uma **ficha duplicada** sem o telefone; em 23 deles o **formulário da
+cliente tinha telefone e data certos, mas estava solto**. O título do evento lista personagens e o contrato diz o
+tema, então o texto inteiro não cabe um no outro (a regra da 317), mas a palavra sim. Houve ainda datas digitadas um dia
+fora e uma festa remarcada. A ponte catálogo → personagens foi testada e não serve: o catálogo não tem "Patrulha
+Canina" nem "K-Pop" com esses nomes.
+
+**O que mudou.**
+- `contratos_ops.palavras_do_tema` / `tema_por_palavra`: a única venda viva do dia com uma palavra do tema no título ou
+  no tema do formulário, sem as palavras que não dizem a festa (ligação, cor, figurino, "festa", "turma", razão social).
+- `sincronizar_ops._outra_ligacao`, quando `escolher_candidato` não acha venda única, nesta ordem e só com venda viva
+  única: telefone a um dia; formulário do mesmo telefone e da mesma data ligado a um evento; e-mail (ficha e formulário
+  da venda); tema por palavra (dia sem venda olha o anterior e o seguinte). No empate pelo telefone, a palavra desempata.
+- **Venda cancelada certa liga sozinha** (decisão do dono — o contrato assinado embasa a multa); o PDF fica pendente e
+  não entra no evento cancelado (312). Ligar **à mão** a cancelada continua recusado.
+- **Envelope cancelado na ClickSign sem venda vai para `fora`**: não foi assinado nem vira cobrança.
+- `_Venda` ganhou os e-mails da ficha e do formulário. Ligado à mão, desligado e descartado não mudam (FR-005).
+
+**Verificação.** `verify_317b.py` 12/12 com a correção e **2/12 no código antigo** (caem os 10 cenários dos sinais
+novos; ficam o idempotente e a limpeza); datas em 2028 porque a regra da palavra olha todas as vendas do dia e o
+`manto_local` só tem eventos até 2027. `verify_317.py` 36/36, com três ajustes de propósito (cenários 6, 9 e 18: a
+cancelada agora liga; a trava de ligar à mão se prova com outro documento). **Ensaio em produção** antes do merge: o
+código novo carregado só num processo, por cima do de produção, aplicando os 246 envelopes reais numa transação
+desfeita (`commit` proibido): 194 ligados (+19), 36 fora (+22 cancelados), **16 a conferir**; os 19 vínculos novos
+conferidos um a um contra a análise (Snoopy #363, Mônica #1293, Pequeno Príncipe #1307, Ghostbusters remarcada #1237,
+Minecraft 12/07 → #335 em 13/07, Amanda pelo e-mail #294, Rei Leão e Ballet nas canceladas #388 e #1354…); os 175 de
+antes não mudaram.
+
+**O que sobra (16).** 9 que só uma pessoa liga (o contrato diz o desenho, o título lista personagens: "Patrulha
+Canina" × "SKYE + MARSHALL", "K-Pop" × "RUMI + ZOEY + MIRA", "Alice" × "GATO + COELHO + CHAPELEIRO"; ou o evento não tem
+cliente: Esporte Clube Sírio, Allcubo, Instituto Salesiano, Iddhi), 2 que a 317b deixou de propósito ("4122026 + Natal"
+com a festa em 24/12 — a data no formulário é outra; e o "Náutico" do mesmo dia da "Bela e a Fera", que só sairia por
+eliminação) e 5 sem venda achada na agenda (Studica 10/12, "Livia Land" 29/11, "Casa Mágica da Gabby" 13/09, "Jardim
+Encantado" 07/11/2026 e 25/09/2027) — vale a comercial conferir se esses eventos estão cadastrados.
+
+**Fora de escopo.** Ligar o formulário solto ao evento e juntar fichas duplicadas (dívida 175); personagem × tema; a
+tela "A conferir".
 
 ### 322 — O casting vê o que está fechando, e o maquiador aparece sozinho   (322-o-que-o-casting-fecha · 2026-10-28 · migration `c322a7e1b9d4`)
 

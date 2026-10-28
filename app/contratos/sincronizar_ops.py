@@ -31,7 +31,10 @@ from app.constants import (
     CLICKSIGN_CURSOR_FOLGA_MINUTOS,
     CLICKSIGN_TIPO_ARTISTA,
     CLICKSIGN_TIPO_CLIENTE,
+    CONFERIR_CANCELADA,
     CONFERIR_DESLIGADO,
+    CONFERIR_EMPATE,
+    CONFERIR_SEM_CANDIDATO,
     CONFERIR_SEM_TELEFONE,
     CONFERIR_TELEFONE_DIVERGE,
     FORM_SUGESTAO_JANELA_DIAS,
@@ -203,6 +206,8 @@ class _Venda:
     eventos: list[CalendarEvent]
     chaves: set[str]
     temas: tuple[str, ...]
+    # E-mails das fichas e dos formulários (317b): o contrato do fluxo antigo traz o e-mail no nome.
+    emails: frozenset[str] = frozenset()
 
 
 def _principal(evento: CalendarEvent) -> CalendarEvent:
@@ -242,31 +247,37 @@ def _vendas_na_data(inicio: date, fim: date | None = None) -> list[_Venda]:
     grupos = {p.id: [p, *p.satellites] for p in principais}
     dono = {e.id: pid for pid, evs in grupos.items() for e in evs}
     telefones: dict[int, set[str]] = {pid: set() for pid in grupos}
+    emails: dict[int, set[str]] = {pid: set() for pid in grupos}
     temas: dict[int, list[str]] = {p.id: [p.title or ""] for p in principais}
     client_ids = {e.client_id: dono[e.id] for evs in grupos.values() for e in evs if e.client_id}
-    for event_id, phone in (
-        db.session.query(EventClient.event_id, Client.phone)
+    for event_id, phone, email in (
+        db.session.query(EventClient.event_id, Client.phone, Client.email)
         .join(Client, Client.id == EventClient.client_id)
         .filter(EventClient.event_id.in_(dono))
     ):
         telefones[dono[event_id]].add(phone)
-    for client_id, phone in db.session.query(Client.id, Client.phone).filter(
+        emails[dono[event_id]].add(email)
+    for client_id, phone, email in db.session.query(Client.id, Client.phone, Client.email).filter(
         Client.id.in_(client_ids)
     ):
         telefones[client_ids[client_id]].add(phone)
+        emails[client_ids[client_id]].add(email)
     for resposta in FormResponse.query.filter(FormResponse.event_id.in_(dono)):
         pid = dono[resposta.event_id]
         if resposta.contact_phone:
             telefones[pid].add(resposta.contact_phone)
-        tema = _valor(_campos(resposta), "tema")
+        campos = _campos(resposta)
+        tema = _valor(campos, "tema")
         if tema:
             temas[pid].append(tema)
+        emails[pid].add(_valor(campos, "email"))
     return [
         _Venda(
             p,
             grupos[p.id],
             {c for c in (nucleo.chave_telefone(t) for t in telefones[p.id]) if c},
             tuple(temas[p.id]),
+            frozenset(e.strip().lower() for e in emails[p.id] if e and e.strip()),
         )
         for p in principais
     ]
@@ -359,11 +370,14 @@ def _vincular(documento: ClicksignDocumento) -> None:
         documento.tema_lido,
     )
     event_id, motivo = nucleo.escolher_candidato(lido, candidatos(documento))
+    cancelado = documento.status == nucleo.STATUS_CANCELADO
+    if event_id is None and not cancelado:
+        event_id = _outra_ligacao(documento, motivo)
     if event_id is None:
+        # 317b: envelope cancelado na ClickSign sem venda não tem o que conferir — não foi assinado e
+        # não vira cobrança. Com venda (data + telefone) ele continua ligando, como histórico.
         documento.vinculo, documento.vinculo_motivo, documento.event_id = (
-            VINCULO_A_CONFERIR,
-            motivo,
-            None,
+            (VINCULO_FORA, None, None) if cancelado else (VINCULO_A_CONFERIR, motivo, None)
         )
         return
     documento.vinculo = VINCULO_LIGADO
@@ -371,6 +385,84 @@ def _vincular(documento: ClicksignDocumento) -> None:
     documento.vinculo_motivo = None
     documento.event_id = event_id
     documento.vinculado_em = now_sp()
+
+
+def _unica(vendas: list[_Venda], fora: set[int], cond) -> int | None:
+    """O principal da única venda viva (fora as desligadas) que passa em `cond`."""
+    achadas = {
+        v.principal.id
+        for v in vendas
+        if not v.principal.cancelled_at and v.principal.id not in fora and cond(v)
+    }
+    return achadas.pop() if len(achadas) == 1 else None
+
+
+def _outra_ligacao(documento: ClicksignDocumento, motivo: str | None) -> int | None:
+    """Quando data + telefone não decidem, os sinais da 317b — nesta ordem, só venda única liga.
+
+    Medido nos 57 "a conferir" de 01/06 a 28/10/2026: o evento na agenda quase nunca tem o telefone
+    de quem assina (sem cliente, ou ligado a uma ficha duplicada) e o formulário da cliente fica
+    solto. 1) venda cancelada certa; 2) mesmo telefone a um dia (data digitada errada); 3) formulário
+    do mesmo telefone e da mesma data já ligado a um evento (festa remarcada); 4) e-mail no lugar do
+    telefone; 5) tema por palavra no dia (no dia seguinte/anterior só se o dia não tem venda).
+    """
+    data = documento.data_lida
+    if data is None:
+        return None
+    if motivo == CONFERIR_CANCELADA:
+        # O dono (28/10): o contrato assinado fica com a venda cancelada — é o que embasa a multa.
+        # O PDF não entra no evento cancelado (312); o vínculo sim.
+        canceladas = {c.event_id for c in candidatos(documento) if c.cancelada}
+        return canceladas.pop() if len(canceladas) == 1 else None
+    fora = _desvinculados(documento)
+    if motivo == CONFERIR_EMPATE:
+        vivos = [c for c in candidatos(documento) if not c.cancelada]
+        return nucleo.tema_por_palavra(documento.tema_lido, vivos)
+    if motivo not in (CONFERIR_SEM_CANDIDATO, CONFERIR_SEM_TELEFONE):
+        return None
+
+    chaves = {
+        c
+        for c in (
+            nucleo.chave_telefone(documento.telefone_lido),
+            nucleo.chave_telefone(documento.signatario_telefone),
+        )
+        if c
+    }
+    um_dia = timedelta(days=1)
+    if chaves and (
+        event_id := _unica(
+            _vendas_na_data(data - um_dia, data + um_dia), fora, lambda v: bool(chaves & v.chaves)
+        )
+    ):
+        return event_id
+    if chaves:
+        principais = {
+            _principal(r.event)
+            for r in FormResponse.query.filter(
+                FormResponse.event_date == data, FormResponse.event_id.isnot(None)
+            )
+            if r.event is not None and nucleo.chave_telefone(r.contact_phone) in chaves
+        }
+        ligados = {p.id for p in principais if nucleo.venda_entra(p) and p.id not in fora}
+        if len(ligados) == 1:
+            return ligados.pop()
+
+    na_data = _vendas_na_data(data)
+    email = nucleo.ler_nome(documento.nome).email
+    emails = {e.strip().lower() for e in (email, documento.signatario_email) if e}
+    if emails and (event_id := _unica(na_data, fora, lambda v: bool(emails & v.emails))):
+        return event_id
+    vivas = [v for v in na_data if not v.principal.cancelled_at and v.principal.id not in fora]
+    if not vivas:
+        vivas = [
+            v
+            for v in _vendas_na_data(data - um_dia, data + um_dia)
+            if not v.principal.cancelled_at and v.principal.id not in fora
+        ]
+    return nucleo.tema_por_palavra(
+        documento.tema_lido, [nucleo.Candidato(v.principal.id, v.temas) for v in vivas]
+    )
 
 
 def _ler_signatario(documento: ClicksignDocumento, conexao: dict[str, Any]) -> None:

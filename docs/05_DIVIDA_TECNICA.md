@@ -786,3 +786,11 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 172 | **P4** | `specs/273-orcamento-para-evento/verify_273.py` | o verify da 273 dá **8/15 na `main`** (mesmo número com e sem a 322): o cenário 6 espera 404 para orçamento de outro comercial e recebe 409 (a 301 mudou a regra), o 7 recebe 409 no `POST /api/events` e os 8, 10, 13, 14 e 15 caem em cascata (`'ev_criado'`). Verify velho, não regressão | atualizar os cenários 6 e 7 à regra da 301/305 e rodar de novo |
 | 173 | **P5** | eventos anteriores à 322 | sem retroativo (decisão do dono): personagem de evento já criado não tem `perfil_vendido`, e nenhuma vaga antiga leva "adicionado pelo sistema"/"inserido pelo comercial". No espelho de 20/10, 87 dos 147 personagens futuros nem vieram de orçamento. O "Aplicar" do vínculo 273 preenche o tipo dos personagens casados | se o dono quiser, um script dry-run → `--execute` que relê o orçamento ligado e grava o tipo |
 | 174 | **P5** | Portal do Artista, e-mail de convite, tela de figurino | o perfil vendido só aparece na página do evento (escopo da 322); o artista convidado não lê "Cantor · com maquiagem" no convite | estender `perfil` ao `portal_ops` e ao e-mail de convite quando o dono pedir |
+
+## Baixa da correção 317b-ligacao-de-contratos (2026-10-28; em produção na mesma madrugada, logo depois da 322)
+
+**Criada.** (175; a 322 entrou antes com 172–174.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 175 | **P3** | agenda × formulários × fichas (`form_responses.event_id`, `clients`, `event_clients`) | a causa de fundo dos contratos "a conferir": em 23 dos 35 assinados de 01/06 a 28/10, o **formulário da cliente tinha o telefone e a data certos, mas estava solto** (sem evento), e o evento ficava sem cliente ou ligado a uma **ficha duplicada sem o telefone** ("Miriam" × "Miriam Scanferla", "Clécia Aragão" × "Clécia", "Só Alegria - Camila" × "E so alegria"). A 317b contorna pela palavra do tema; o vínculo pelo telefone continua cego para essas vendas, e a mesma falta atrapalha a 318 (PIX) e a 298 (formulário) | ligar o formulário ao evento quando a comercial cria a venda (ou sugerir na Home) e juntar fichas duplicadas pelo telefone |

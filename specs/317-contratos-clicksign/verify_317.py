@@ -666,9 +666,9 @@ def cen_05() -> None:
 
 
 def cen_06() -> None:
-    """Venda cancelada não liga."""
+    """Venda cancelada certa (data + telefone): liga a ela sozinha — 317b, decisão do dono em 28/10."""
     d = _doc("c")
-    _garante(d[4] == "a_conferir" and d[6] == "cancelada" and d[3] is None, f"c → {d}")
+    _garante(d[4] == "ligado" and d[5] == "auto" and d[3] == estado["ids"]["c"], f"c → {d}")
 
 
 def cen_07() -> None:
@@ -722,7 +722,8 @@ def cen_09() -> None:
         linha_a["severidade"] == "vermelho" and linha_a["documento_id"], f"linha a → {linha_a}"
     )
     conferir = {linha["documento_id"] for linha in p["a_conferir"]}
-    _garante({_doc("e2")[0], _doc("s")[0], _doc("c")[0]} <= conferir, f"a_conferir → {conferir}")
+    _garante({_doc("e2")[0], _doc("s")[0]} <= conferir, f"a_conferir → {conferir}")
+    _garante(_doc("c")[0] not in conferir, "ligado à venda cancelada continua a conferir (317b)")
     with app.app_context():
         from app.financeiro.vendas_ops import contract_status_map
 
@@ -884,14 +885,16 @@ def cen_18() -> None:
     _garante(r.status_code == 200, f"ligar → {r.status_code} {r.get_data(as_text=True)[:200]}")
     d = _doc("e2")
     _garante(d[4] == "ligado" and d[5] == "manual" and d[3] == estado["ids"]["e2"], f"e2 → {d}")
-    # Ligar a venda cancelada é recusado (trava da 312, no núcleo).
+    # Ligar À MÃO a venda cancelada é recusado (trava da 312, no núcleo). Desde a 317b o "c" já liga
+    # sozinho, então a trava se prova com outro documento a conferir (o "s").
     r = _chamar(
         estado["comercial"],
         "post",
-        f"/api/contratos/{_doc('c')[0]}/ligar",
+        f"/api/contratos/{_doc('s')[0]}/ligar",
         {"event_id": estado["ids"]["c"]},
     )
     _garante(r.status_code == 409, f"ligar a cancelada → {r.status_code}")
+    _garante(_doc("s")[4] == "a_conferir", f"s mudou com a recusa: {_doc('s')}")
 
 
 def cen_19() -> None:
@@ -1379,7 +1382,7 @@ CENARIOS = [
     ("3. vínculo único por data + telefone", cen_03),
     ("4. empate: tema resolve; sem tema, a conferir", cen_04),
     ("5. sem candidato e data ilegível, a conferir", cen_05),
-    ("6. venda cancelada não liga", cen_06),
+    ("6. venda cancelada certa liga (317b)", cen_06),
     ("7. grupo: situação pelo principal", cen_07),
     ("8. documento vigente", cen_08),
     ("9. situação no evento, na Home e em /vendas", cen_09),
