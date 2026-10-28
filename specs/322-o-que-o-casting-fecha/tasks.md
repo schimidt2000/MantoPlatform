@@ -68,7 +68,7 @@ caminhos.
       `_apply_default_roles`): chamar `garantir_vaga_de_maquiador`
 - [ ] T013 [US2] `app/calendar/event_ops.py` `update_event_core`: chamar `garantir_vaga_de_maquiador`
       no fim (depois do laço e do coordenador)
-- [ ] T014 [US2] `app/calendar/orcamento_evento_ops.py` vínculo (`vincular_orcamento`, depois de
+- [ ] T014 [US2] `app/calendar/orcamento_evento_ops.py` vínculo (`set_event_orcamento`, depois de
       `aplicar_equipe`): chamar `garantir_vaga_de_maquiador`; relatório diz "maquiador criado"
 
 **Checkpoint**: cenários 7–12 verdes.
@@ -127,7 +127,7 @@ caminhos.
 
 - [ ] T025 `verify_322.py` inteiro verde → `verify_322_resultado.txt`; verifies vizinhos que tocam as
       mesmas funções (`specs/309-produtos-de-tabela/verify_309.py --regressao`,
-      `specs/273-*/verify_273.py` se existir) sem regressão nova
+      `specs/273-orcamento-para-evento/verify_273.py`) sem regressão nova
 - [ ] T026 `ruff check` nos `.py` tocados; `cd frontend && npm run typecheck`
 - [ ] T027 Tela aberta (skill `manto-conferir-tela`): página do evento em desktop e 375×812;
       formulário de edição como comercial (travado) e superadmin (livre)
