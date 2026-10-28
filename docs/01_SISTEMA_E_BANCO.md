@@ -7,7 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10;
+> Última atualização: **2026-10-28** · **322-o-que-o-casting-fecha** (migration **`c322a7e1b9d4`**,
+> aditiva — head: `event_roles.perfil_vendido`, `criada_pelo_sistema` e `escalado_pelo_comercial`, §2;
+> `perfil`/`criada_pelo_sistema`/`escalado_pelo_comercial` em cada item de `elenco`, §3 "Feature 322";
+> a maquiagem só muda por superadmin em `PATCH /api/events/<id>`, §4.3).
+> Antes: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10;
 > migration **`e8b4a1c7d310`**, aditiva — head: interruptor `virtuais_pagamento_ativo` e o segredo
 > anterior do aviso em `site_settings`, §2.10; colunas novas da loja em `virtual_*`, §2.10.1; o aviso
 > que grava e responde, o retorno do checkout, "pagamentos a conferir", cancelar pedido pago e os 503/
@@ -255,7 +259,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
 | `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
-| `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at` | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
+| `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at`, **`perfil_vendido`** (String 200, nullable — feature 322: o tipo que o orçamento vendeu, pronto para ler, ex. "Cantor · show · com maquiagem"; gravado na criação do orçamento e no vínculo 273 só onde está vazio; NULL = vaga sem orçamento), **`criada_pelo_sistema`** e **`escalado_pelo_comercial`** (Boolean, nullable — feature 322: marcadores puros `True`\|`NULL`; o primeiro diz que a vaga nasceu de regra do sistema, o segundo que o talento ATUAL entrou pelo formulário do evento e sai quando o casting troca ou tira pelo card) | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users` |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
 | `event_payments` | `EventPayment` | comprovantes de pagamento com valor. Feature 318: `origem` (`comprovante` \| `pix_email`), `conta_id` (conta que recebeu, opcional) e `file_path` **NULL só na origem PIX** (CHECK `ck_event_payments_arquivo_ou_pix`): o pagamento criado pelo aviso do banco nasce sem arquivo | `event_id`, `conta_id` |
@@ -865,6 +869,19 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > tabela `EventRole` (fonte de verdade) quando o evento já tem roles de personagem, caindo para o
 > parse do título só em evento sem nenhuma — decisão 6, para o texto livre do título nunca mais ser
 > a única fonte de quem é personagem.
+>
+> **Feature 322 — o que o casting fecha.** Cada item de `elenco` ganhou, para TODO papel que lê o
+> elenco (nenhum carrega dinheiro): `perfil` (texto pronto — `perfil_vendido` ou, sem ele, as marcas
+> das flags: "Cantor", "Com maquiagem", "Cantor · com maquiagem"; `null` em vaga `extra` e quando
+> não há nada), `criada_pelo_sistema` e `escalado_pelo_comercial` (booleanos). A fonte do perfil é a
+> mesma da conta do teto: `_perfil_do_performer` (`calendar/routes.py`) e `produtos._perfil_da_vaga`;
+> o separador é `constants.SEPARADOR_PERFIL`. Criação (`POST /api/events`), edição (`PATCH
+> /api/events/<id>`) e vínculo (`PATCH /api/events/<id>/orcamento`, relatório `maquiador_criado`)
+> chamam `casting_ops.garantir_vaga_de_maquiador`: personagem com `needs_makeup` e nenhuma vaga com
+> "maquiad" no nome → vaga `Maquiador` (extra, sem talento, sem teto, `criada_pelo_sistema`) e um
+> `EventLog` do Sistema; nunca em cancelado, nunca por script (sem retroativo). Vagas marcadas como do
+> sistema: `_ensure_coordinator`, `_ensure_sound_technician` (as duas), `_create_extra_roles_from_orcamento`,
+> os extras de `aplicar_equipe_do_orcamento` e o maquiador acima — a partir de 28/10/2026.
 >
 > **Feature 305 — o BV do orçamento no evento.** `GET /api/events/new/prefill` ganha
 > `acrescimos_do_orcamento` (`{personalizado, linhas: [{tipo, descricao, is_bv, percentual,
@@ -2334,6 +2351,12 @@ Devolve **404, não 403**, para não confirmar a existência do arquivo. `GET /p
 (`app/talent_portal/routes.py:78`) é restrito às subpastas de `PORTAL_PHOTO_SUBFOLDERS`
 (`routes.py:41`) — sem essa allowlist a rota entregava a árvore inteira de `uploads/` ao usuário de
 menor privilégio.
+
+**Feature 322 — a maquiagem depois que o evento existe.** `PATCH /api/events/<id>` (gate inalterado,
+`_can_create_event()`) ignora `characters[].needs_makeup` quando quem salva não é superadmin: a vaga
+existente mantém o valor e a nova nasce sem maquiagem, sem erro (`event_ops._reconcile_characters`; a
+tela trava a caixa). Criação e vínculo de orçamento continuam marcando — o vínculo é o orçamento
+falando, qualquer que seja o papel de quem liga.
 
 ### 4.4 Escopo de dados no servidor (não confiar no cliente)
 

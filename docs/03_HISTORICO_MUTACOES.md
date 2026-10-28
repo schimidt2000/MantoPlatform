@@ -4,7 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **320-voltar-sem-perder-o-lugar** (sem
+> Última atualização: **2026-10-28** · Branch **322-o-que-o-casting-fecha** pronta, sem merge (migration
+> `c322a7e1b9d4`, aditiva; o casting vê o tipo vendido de cada personagem, a vaga de Maquiador nasce com a
+> maquiagem, as vagas do sistema e as escalas do comercial ganham marca discreta, e a maquiagem só muda
+> pelo superadmin depois que o evento existe; `verify_322.py` 23/23; dívidas 172–174). Estado da `main`:
+> pós-feature **320-voltar-sem-perder-o-lugar** (sem
 > migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
 > voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
 > "Baixar", e o app da Tela de Início do iPhone não prende mais; `verify_320.py` 12/12; dívidas 168–171) — antes dela
@@ -178,6 +182,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **322-o-que-o-casting-fecha** | *(branch, sem merge)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
@@ -371,6 +376,53 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 322 — O casting vê o que está fechando, e o maquiador aparece sozinho   (322-o-que-o-casting-fecha · 2026-10-28 · migration `c322a7e1b9d4`)
+
+> **Branch pronta, sem merge** (worktree `C:	mp\mp322`, base `main 6f706fa6`). Nível 1 (migration, calendar
+> + orcamento, tela). Detalhes em `specs/322-o-que-o-casting-fecha/` (spec com 5 histórias, plan, research,
+> data-model, contracts/evento-elenco.md, checklists, verify).
+
+**O pedido.** O dono (28/10): o casting escala pelo teto do cachê "mas não necessariamente sabe o que
+exatamente foi fechado" — precisa ver, na página do evento, se a vaga é de cantor, bailarino, boneco
+grande especial, se tem maquiagem. Todo evento com maquiagem marcada precisa ganhar a vaga de maquiador
+sozinho, com uma marca discreta de "adicionado pelo sistema" ("uma letra só um pouco mais clara"); o
+maquiador não pode aparecer no título. No meio da spec: o talento que o comercial pré-escala mostra
+"inserido pelo comercial". Decidiu: o tipo vem só do orçamento (sem campo novo); a maquiagem só muda
+pelo superadmin depois que o evento existe (personagem novo na edição incluído); sem retroativo; a marca
+vale para toda vaga automática; o coordenador escolhido no formulário não leva a marca do sistema.
+
+**O que havia.** O orçamento já sabia o tipo, mas ele só ia para a conta do teto (`cache_cap_note`), que
+só o superadmin lê; o card mostrava nome e 💄 (nem a marca "cantor" aparecia). A vaga de Maquiador só
+nascia pelo orçamento: no espelho de 20/10, 3 eventos futuros tinham personagem maquiado sem maquiador
+(1319, 403, 382). O título já recusava "Maquiador" desde a 239 (decisão 6).
+
+**O que mudou.**
+- `event_roles`: `perfil_vendido`, `criada_pelo_sistema`, `escalado_pelo_comercial` (nulas, sem backfill).
+- O perfil nasce ao lado da conta do teto: `routes._perfil_do_performer` (tipo da calculadora + show ·
+  cantor · com maquiagem) e `produtos._perfil_da_vaga` (rótulo do produto); a criação o grava pelo
+  pareamento posicional do teto, o vínculo 273 só onde está vazio. `_serialize_role` manda `perfil`
+  pronto a todo leitor do elenco (gravado, ou as marcas das flags).
+- `casting_ops.garantir_vaga_de_maquiador` no fim da criação, de `_reconcile_characters` (edição) e de
+  `set_event_orcamento` (vínculo); critério "maquiad" no nome, o mesmo do selo; `EventLog` do Sistema.
+- `criada_pelo_sistema` em `_ensure_coordinator`, `_ensure_sound_technician`,
+  `_create_extra_roles_from_orcamento` e nos extras de `aplicar_equipe_do_orcamento`;
+  `escalado_pelo_comercial` na pré-escala e no coordenador do formulário (criação e edição), desligado
+  por `assign_role` ao trocar ou tirar.
+- `_reconcile_characters`: `needs_makeup` só muda com `is_superadmin`.
+- Tela: linha do perfil sob o nome; `MarcaDeOrigem` (`text-xs`, cor secundária) nas vagas e talentos;
+  caixa "Maquiagem" travada na edição para quem não é superadmin, com a frase.
+
+**Verificação.** `verify_322.py` 23/23 (antes do núcleo, 8/23; 17, 18 e 22 falham no código antigo, e o
+22 ganhou um controle depois de passar a vazio na primeira rodada). `verify_309 --regressao` 20/20.
+`verify_273` 8/15 — **igual na `main`** (verify velho desde a 301/305; dívida 172). `ruff` limpo nos
+tocados (`routes.py` com o mesmo I001 da `main`); typecheck das três SPAs; tela aberta em desktop e
+375×812 (casting com perfil e marcas; edição travada como comercial, livre como superadmin).
+
+**Pegadinhas.** O `node_modules` do checkout principal não tem o `pdfjs-dist` da 320 — o typecheck do
+worktree precisa da junção para o `node_modules` de um worktree pós-320. O verify de vínculo precisa de
+um orçamento próprio: o vínculo é 1:1 entre eventos vivos (273) e o mesmo orçamento já tinha criado outro
+evento.
 
 ### 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivo no app instalado)   (320-voltar-sem-perder-o-lugar · 2026-10-27 · sem migration)
 
