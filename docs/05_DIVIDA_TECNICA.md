@@ -774,3 +774,11 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 169 | **P4** | links de página pública abertos do interno (formulário "Abrir" em `FormulariosAdminPage`, "Abrir página ↗" do personagem, `/gastos/recorrentes` no Dashboard, impressão de figurino) | no app instalado (iPhone pela Tela de Início) continuam abrindo "em outra aba" — uma janela sem botão de voltar, a mesma armadilha que a 320 tirou dos arquivos | abrir na mesma janela no modo app (`estaComoAppInstalado()`) com caminho de volta, como o item "Catálogo" do menu |
 | 170 | **P5** | `frontend/apps/internal/e2e/` + `playwright.config.ts` (feature 180) | a suíte e2e parou na 186 (precisa de `E2E_USER_*` e ninguém roda); a 320 usou o Playwright por fora, num `verify_320_navegador.mjs` | decidir: reviver a suíte (usuário descartável como o `verify_320.py`) ou apagar |
 | 171 | **P5** | build do `public` e do `portal` | o `VisualizadorDeArquivo` sai do `index.ts` do `@manto/ui`, e o Vite emite o chunk do pdf.js (366 kB) e o worker (1,4 MB) também nesses dois apps, que não abrem PDF — arquivo no `dist`, nunca baixado | subpath de export (`@manto/ui/visualizador`) se o tamanho do deploy incomodar |
+
+## Baixa da correção 317b-ligacao-de-contratos (2026-10-28, branch)
+
+**Criada.** (175; a 322, ainda sem merge, usa 172–174 — quem mergear por último renumera.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 175 | **P3** | agenda × formulários × fichas (`form_responses.event_id`, `clients`, `event_clients`) | a causa de fundo dos contratos "a conferir": em 23 dos 35 assinados de 01/06 a 28/10, o **formulário da cliente tinha o telefone e a data certos, mas estava solto** (sem evento), e o evento ficava sem cliente ou ligado a uma **ficha duplicada sem o telefone** ("Miriam" × "Miriam Scanferla", "Clécia Aragão" × "Clécia", "Só Alegria - Camila" × "E so alegria"). A 317b contorna pela palavra do tema; o vínculo pelo telefone continua cego para essas vendas, e a mesma falta atrapalha a 318 (PIX) e a 298 (formulário) | ligar o formulário ao evento quando a comercial cria a venda (ou sugerir na Home) e juntar fichas duplicadas pelo telefone |

@@ -60,6 +60,24 @@ STATUS_RASCUNHO = "draft"
 _ORDEM_DA_COR = {COR_VERMELHO: 0, COR_AMARELO: 1, COR_CINZA: 2}
 # Menor tema (sem acento e pontuação) que serve para desempatar.
 TEMA_MINIMO = 3
+# Palavras que não dizem qual é a festa (317b): ligam frases, cores e tipos de figurino que aparecem
+# em metade dos títulos ("FADA GLOW PINK", "CARRO VERMELHO", "BONECO"), o genérico de festa e o de
+# razão social. Sem elas, "Turma da Mônica" casa com "MONICA + MAGALI" e não com "CARRO VERMELHO".
+_PALAVRAS_VAZIAS = frozenset(
+    {
+        "com", "sem", "para", "por", "dos", "das", "nos", "nas", "uma", "uns", "umas", "aos", "the",
+        "and",
+        "festa", "festas", "aniversario", "infantil", "anos", "ano", "evento", "eventos", "show",
+        "turma", "encontro", "casa", "tema", "personagem", "personagens", "corp", "educamanto",
+        "boneco", "boneca", "humanizado", "humanizada", "classico", "classica", "apresentador",
+        "ajudante", "assistente", "roupa", "vestido",
+        "vermelho", "vermelha", "azul", "rosa", "amarelo", "amarela", "verde", "roxo", "roxa",
+        "preto", "preta", "branco", "branca", "dourado", "dourada", "prata", "lilas", "laranja",
+        "pink",
+        "ltda", "eireli", "comercio", "servicos", "marketing", "producoes", "brasil", "empresa",
+        "grupo",
+    }
+)
 
 _RE_DATA = re.compile(r"^(\d{1,2})[-./]?(\d{2})[-./]?(\d{4})$")
 _RE_TELEFONE = re.compile(r"^\(?\s*(\d{2})\s*\)?\s*(\d{4,5})\s*-?\s*(\d{4})$")
@@ -223,6 +241,32 @@ def escolher_candidato(
     if len(pelo_tema) == 1:
         return pelo_tema[0].event_id, None
     return None, CONFERIR_EMPATE
+
+
+def palavras_do_tema(texto: str | None) -> set[str]:
+    """As palavras que dizem qual é a festa: 3+ letras, sem acento, sem número e sem as vazias."""
+    return {
+        p
+        for p in texto_comparavel(texto).split()
+        if len(p) >= 3 and not p.isdigit() and p not in _PALAVRAS_VAZIAS
+    }
+
+
+def tema_por_palavra(tema: str | None, candidatos: Sequence[Candidato]) -> int | None:
+    """A única venda viva que divide uma palavra do tema com o título ou o tema do formulário (317b).
+
+    O título do evento lista personagens ("SNOOPY + CHARLIE") e o contrato diz o tema ("Arraiá com o
+    Snoopy"): o texto inteiro não cabe um no outro, a palavra sim. Duas vendas com a palavra = nenhuma.
+    """
+    alvo = palavras_do_tema(tema)
+    if not alvo:
+        return None
+    achadas = {
+        c.event_id
+        for c in candidatos
+        if not c.cancelada and any(alvo & palavras_do_tema(t) for t in c.temas if t)
+    }
+    return achadas.pop() if len(achadas) == 1 else None
 
 
 # ── Documento vigente e situação da venda ─────────────────────────────────────────────────────
