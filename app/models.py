@@ -618,6 +618,18 @@ class EventRole(db.Model):
     # sendo um número só em `cache_value`.
     does_transport = db.Column(db.Boolean, nullable=True)
 
+    # Feature 322 — o que o casting precisa saber para fechar a vaga sem abrir o orçamento.
+    # `perfil_vendido`: o tipo que o orçamento vendeu, pronto para ler ("Cantor · show · com
+    # maquiagem"); antes só existia dentro de `cache_cap_note`, que só o superadmin lê. NULL = vaga
+    # sem orçamento. Vínculo e edição nunca o apagam.
+    perfil_vendido = db.Column(db.String(200), nullable=True)
+    # Marcadores puros (True | NULL, como `needs_makeup`): a vaga nasceu de uma regra do sistema
+    # (coordenador/técnico garantidos, extras do orçamento, maquiador da 322) — e o talento ATUAL
+    # entrou pelo formulário do evento, a ferramenta da comercial. O segundo acompanha o talento:
+    # `assign_role` (card do casting) o desliga ao trocar ou tirar a pessoa.
+    criada_pelo_sistema = db.Column(db.Boolean, nullable=True)
+    escalado_pelo_comercial = db.Column(db.Boolean, nullable=True)
+
     # Dispensa de tarefa de casting obsoleta (feature 108): o cargo continua existindo (por
     # isso a sincronização com o Google Agenda não o recria) mas para de contar como pendente.
     dismissed_at = db.Column(db.DateTime, nullable=True)

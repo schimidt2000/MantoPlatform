@@ -1,0 +1,24 @@
+﻿  FALHA  1. criação do orçamento grava o tipo de cada personagem: perfis: {'Bumblebee': None, 'Moana': None, 'Fada': None}
+  FALHA  2. vínculo grava o tipo do casado; o não casado fica vazio: casado: (22330, 'BUMBLEBEE', 'character', None, Decimal('450.00'), None, None, None, None, None)
+  OK     3. vínculo de novo e edição não trocam o tipo
+  FALHA  4. personagem à mão: sem tipo gravado, marcas no payload: payload Cantora: None
+  FALHA  5. casting recebe o perfil e não recebe teto nem conta: casting não recebeu o perfil: None
+  FALHA  6. produto de tabela: tipo do produto no Noel e no ajudante: Noel: None
+  FALHA  7. criação manual com maquiagem cria 1 Maquiador vazio, com histórico: maquiadores: []
+  OK     8. criação do orçamento: 1 Maquiador só, com teto
+  FALHA  9. edição de evento com make e sem maquiador cria a vaga: edição: 0 maquiadores
+  OK     10. evento com Maquiadora não ganha outra vaga
+  FALHA  11. sem make e cancelado: nenhuma vaga: cannot import name 'garantir_vaga_de_maquiador' from 'app.calendar.casting_ops' (C:\tmp\mp322\app\calendar\casting_ops.py)
+  OK     12. título sem Maquiador
+  FALHA  13. vagas automáticas marcadas como do sistema: orçamento: Coordenador sem a marca
+  OK     14. vaga de pessoa e coordenador escolhido sem a marca do sistema
+  OK     15. vagas anteriores ao deploy sem marca
+  FALHA  16. superadmin muda a maquiagem na edição: desmarcar/marcar duplicou ou apagou o maquiador
+  FALHA  17. comercial não desmarca a maquiagem (DEVE falhar no antigo): o comercial desmarcou a maquiagem
+  FALHA  18. comercial não marca maquiagem em personagem novo (DEVE falhar no antigo): o comercial marcou maquiagem num personagem novo
+  OK     19. vínculo do comercial marca a maquiagem do orçamento e traz o maquiador
+  FALHA  20. pré-escala de personagem e coordenador: inserido pelo comercial: pré-escala do personagem sem a marca
+  FALHA  21. edição que troca o talento liga a marca; sem troca não mexe: a troca pelo formulário não ligou a marca
+  FALHA  22. casting troca ou tira o talento: a marca sai (DEVE falhar no antigo): pré-condição: Simples=None Coordenador=None
+  OK     23. limpeza
+8/23 OK
