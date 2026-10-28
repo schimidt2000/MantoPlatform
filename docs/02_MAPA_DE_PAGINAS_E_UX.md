@@ -6,7 +6,11 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10):
+> Última atualização: **2026-10-28** · **322-o-que-o-casting-fecha**: em `/events/:id` (aba Produção),
+> o card do personagem mostra o que foi vendido sob o nome, e as vagas e talentos ganham
+> "adicionado pelo sistema" / "inserido pelo comercial"; em `/events/:id/edit`, a caixa Maquiagem
+> travada para quem não é superadmin.
+> Antes: **2026-10-23** · **310-pagamento-loja-virtual** (lote de 23/10):
 > card de pagamento em `/admin/configuracoes` com o interruptor "Pagamento da loja ligado", diálogo
 > com a contagem de pedidos antes de gerar segredo novo e o erro da InfiniteTag no campo; aba
 > "Pagamentos a conferir" em `/virtuais/devolucoes`; "Cancelar e abrir devolução" na Fila de
@@ -524,6 +528,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `GoogleAddressInput` da feature 195 — os blocos são os mesmos componentes da criação. Ao abrir um
   evento já salvo, o endereço existente aparece no campo **sem** consultar o Google (só o que o
   usuário digitar dispara busca).
+- **Maquiagem (feature 322)**: para quem não é superadmin, a caixa "Maquiagem" de cada personagem
+  (inclusive o acrescentado agora) vem desabilitada, com a frase "Só o superadmin muda a maquiagem
+  depois que o evento existe." abaixo da lista e no `title`; o servidor ignora a mudança. Na criação
+  (`/events/new`) a caixa continua livre.
 - **API**: `PATCH /api/events/<id>`.
 
 #### `/events/:id` — Detalhe do Evento
@@ -909,6 +917,15 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   extra de maquiador com talento atribuído, ou **"Maquiador fechado"** (verde) quando existe.
   Cada personagem com `needs_makeup` ganha 💄 ao lado do nome. O card da vaga de Maquiador sem
   talento herda o destaque visual (borda dourada) já usado para conflito de agenda.
+- **O que o casting fecha (feature 322)**: logo abaixo do nome de cada personagem, o `perfil` que
+  o servidor manda (`text-xs`, cor de texto principal) — o tipo vendido no orçamento ("Boneco Grande
+  Especial", "Cantor · show · com maquiagem", "Visita Mágica — Papai Noel + Ajudante · com
+  maquiagem") ou, sem orçamento, as marcas ("Cantor · com maquiagem"); sem nada, não há linha. Ao lado
+  do nome da vaga criada pelo sistema (coordenador, técnico de som, presença, maquiador),
+  "adicionado pelo sistema"; ao lado do talento que veio do formulário do evento, "inserido pelo
+  comercial" — as duas em minúsculas, `text-xs`, cor de texto secundário, sem selo (`MarcaDeOrigem`
+  em `CastingSection.tsx`). A vaga de Maquiador agora existe sempre que há personagem com
+  maquiagem (criação, edição e vínculo de orçamento), então "Falta maquiador" aponta para uma vaga real.
 - **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
   · `POST /api/roles/<id>/figurino-sheet` · `POST|DELETE /api/roles/<id>/figurino-done` ·
   `POST /api/events/<id>/travel-estimate` · `POST /api/events/<id>/materials` ·

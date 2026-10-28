@@ -32,6 +32,7 @@ from app.constants import (
     PIX_ESTADO_LIGADO_AUTO,
     PIX_ESTADOS_LIGADOS,
     PIX_SUGESTAO_REPASSE,
+    SEPARADOR_PERFIL,
     SITUACAO_EXCLUSAO_SOLICITADA,
     RoleName,
     now_sp,
@@ -390,6 +391,29 @@ def _serialize_talent(talent: Any, show_pii: bool) -> dict[str, Any]:
     return data
 
 
+def _perfil_da_vaga(role: Any) -> str | None:
+    """O texto que o casting lê sob o nome do personagem (feature 322, FR-001 a FR-003).
+
+    O tipo vendido no orçamento (`perfil_vendido`: tipo e "show"), seguido das marcas que as flags
+    dizem AGORA ("cantor", "com maquiagem") — as flags mudam depois da venda (o superadmin desmarca a
+    maquiagem) e o card não pode desmentir o 💄. Sem orçamento, só as marcas ("Cantor · com
+    maquiagem"). Pronto aqui para a tela não montar frase nem conhecer a tabela. Vaga de apoio
+    (`extra`) não tem perfil: o nome dela já diz o que é.
+    """
+    if role.role_type == "extra":
+        return None
+    partes = [role.perfil_vendido] if role.perfil_vendido else []
+    # "Cantor · show" já diz que canta; repetir "cantor" seria ruído.
+    if role.is_singer and not (role.perfil_vendido or "").startswith("Cantor"):
+        partes.append("cantor")
+    if role.needs_makeup:
+        partes.append("com maquiagem")
+    if not partes:
+        return None
+    texto = SEPARADOR_PERFIL.join(partes)
+    return texto[0].upper() + texto[1:]
+
+
 def _serialize_role(
     role: Any,
     show_casting: bool,
@@ -449,6 +473,11 @@ def _serialize_role(
         # mostra quem está designado, sem campo de dinheiro nem ações. O flag vem SEMPRE (fora
         # do `show_casting`) porque é ele que define a anatomia do card, não a permissão.
         "is_presence": e_vaga_de_presenca(role),
+        # Feature 322: o que o casting precisa saber para fechar a vaga — vai a TODO leitor do
+        # elenco (não carrega dinheiro) — e de onde vieram a vaga e o talento atual.
+        "perfil": _perfil_da_vaga(role),
+        "criada_pelo_sistema": bool(role.criada_pelo_sistema),
+        "escalado_pelo_comercial": bool(role.escalado_pelo_comercial),
     }
     # Nenhum dado de dinheiro sai para a vaga de presença: sem valor no payload, nenhuma tela
     # futura consegue reintroduzir o campo por descuido.

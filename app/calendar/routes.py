@@ -31,7 +31,7 @@ from .. import db
 from app.constants import (
     EVENT_PAYMENT_ORIGEM_PIX,
     RoleName, event_requires_client, ACRESCIMO_TIPO_BV, CLIENT_RELATION_TIPOS, GCAL_KIND_KEY,
-    EVENT_TYPE_SHOW,
+    EVENT_TYPE_SHOW, SEPARADOR_PERFIL,
 )
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
@@ -2219,6 +2219,7 @@ def _ensure_coordinator(event_id: int) -> None:
             event_id=event_id,
             character_name="Coordenador",
             role_type="extra",
+            criada_pelo_sistema=True,
         ))
 
 
@@ -2240,6 +2241,7 @@ def _ensure_sound_technician(event_id: int) -> None:
             character_name=SOUND_TECH_CHARACTER,
             role_type="extra",
             talent_id=SOUND_TECH_TALENT_ID,
+            criada_pelo_sistema=True,
         ))
 
     presence_exists = EventRole.query.filter_by(
@@ -2252,6 +2254,7 @@ def _ensure_sound_technician(event_id: int) -> None:
             event_id=event_id,
             character_name=PRESENCE_CHARACTER,
             role_type="extra",
+            criada_pelo_sistema=True,
         ))
 
 
@@ -2953,6 +2956,44 @@ ATOR_SUBTIPO_LABELS = {
     "cantor": "Cantor",
 }
 
+def _perfil_do_performer(p: dict) -> str | None:
+    """O que o orçamento vendeu neste personagem, para o casting ler (feature 322).
+
+    Mesmos ingredientes da `descricao` da conta do teto (`_compute_performer_caches`), sem valor e
+    sem a faixa de Natal — o casting precisa saber QUEM procurar (quem canta, quem dança, quem
+    aguenta um boneco grande), não quanto se cobrou. Especial sai com a grafia da tabela de preços
+    ("Boneco Grande Especial", "Homem-Aranha").
+
+    Só entra o que as flags da vaga NÃO guardam — o tipo e o "show". "Cantor" e "com maquiagem" vêm de
+    `is_singer`/`needs_makeup` na leitura (`agenda_read._perfil_da_vaga`): gravados aqui, ficariam
+    congelados e o card desmentiria o 💄 depois que o superadmin mudasse a maquiagem (converge da 322).
+
+    Args:
+        p: Um performer do `form_snapshot["performers"]`.
+
+    Returns:
+        "Tipo" ou "Tipo · show", ou `None` quando o tipo não é um dos que a calculadora conhece.
+    """
+    ptype = p.get("type", "")
+    show = bool(p.get("show", False))
+    marcas: list[str] = []
+    if ptype == "ator":
+        subtipo = p.get("subtipo", "cara_limpa")
+        tipo = ATOR_SUBTIPO_LABELS.get(subtipo, f"Ator {subtipo.replace('_', ' ')}")
+        if show:
+            marcas.append("show")
+    elif ptype == "cantor":
+        tipo = "Cantor"
+        marcas.append("show")
+    elif ptype == "especial":
+        tipo = (p.get("personagem") or "").strip() or "Especial"
+        # Mesma precedência da conta do teto: o especial que canta já é show (o "cantor" vem da flag).
+        if p.get("cantor") or show:
+            marcas.append("show")
+    else:
+        return None
+    return SEPARADOR_PERFIL.join([tipo, *marcas])
+
 
 def _fmt_valor_nota(valor: float) -> str:
     """Formata um valor em reais para a explicação do teto do cachê.
@@ -3167,6 +3208,7 @@ def _compute_performer_caches(
             "needs_makeup": makeup,
             "is_singer":    is_singer,
             "role_type":   "character",
+            "perfil":      _perfil_do_performer(p),
         }
         adicionais_papel = [
             ("noturno", float(noturno_add)),
@@ -3761,6 +3803,15 @@ def _create_roles_from_input(
     # depois do laço, em `_create_extra_roles_from_orcamento`.
     orc_chars = [c for c in orc_caches if (c.get("role_type") or "character") == "character"]
     roles_by_name: dict[str, list[EventRole]] = {}
+    # Feature 322 (converge): o tipo vendido casa pelo NOME, como no vínculo 273 — não pela posição
+    # do teto. Linha do prefill removida no formulário deslocaria o tipo dos seguintes, e o casting
+    # leria "Boneco Grande Especial" no lugar de "Cantor". Cada item do orçamento serve uma vaga só.
+    from app.calendar.orcamento_evento_ops import _chave
+
+    perfis_por_nome: dict[str, list[str]] = {}
+    for item in orc_chars:
+        if item.get("perfil"):
+            perfis_por_nome.setdefault(_chave(item.get("label")), []).append(str(item["perfil"]))
 
     for i, char_data in enumerate(characters):
         name = (char_data.get("name") or "").strip()
@@ -3783,6 +3834,10 @@ def _create_roles_from_input(
         # orçamento vinculado (`orc_caches` cru do cliente) não há como decompor a conta.
         notas = orc_chars[i].get("cap_notes") if i < len(orc_chars) else None
         cap_note = notas.get(chave_cache) if isinstance(notas, dict) and cap is not None else None
+        # Feature 322: o tipo vendido chega ao casting, que não lê a conta do teto. Nome que não está
+        # no orçamento (acrescentado ou renomeado à mão) nasce sem tipo.
+        fila = perfis_por_nome.get(_chave(name))
+        perfil = fila.pop(0) if fila else None
 
         talent_id = char_data.get("talent_id")
         pre_tid = None
@@ -3803,6 +3858,9 @@ def _create_roles_from_input(
             is_singer=bool(char_data.get("is_singer")) or None,
             talent_id=pre_tid,
             assigned_at=datetime.now(tz=TZ) if pre_tid else None,
+            perfil_vendido=(str(perfil)[:200] if perfil else None),
+            # Feature 322: a pré-escala é do formulário do evento, a ferramenta da comercial.
+            escalado_pelo_comercial=True if pre_tid else None,
         )
         db.session.add(role)
         roles_by_name.setdefault(name.lower(), []).append(role)
@@ -3855,6 +3913,7 @@ def _create_extra_roles_from_orcamento(
             role.role_type = "extra"
             role.cache_cap = cap
             role.cache_cap_note = cap_note
+            role.criada_pelo_sistema = True
             continue
 
         db.session.add(EventRole(
@@ -3863,6 +3922,7 @@ def _create_extra_roles_from_orcamento(
             role_type="extra",
             cache_cap=cap,
             cache_cap_note=cap_note,
+            criada_pelo_sistema=True,
         ))
 
 
@@ -3900,6 +3960,8 @@ def _apply_default_roles(
             role_type="extra",
             talent_id=coordinator_talent_id,
             assigned_at=datetime.now(tz=TZ),
+            # Feature 322: escolhido no formulário — vaga pedida por gente, talento da comercial.
+            escalado_pelo_comercial=True,
         ))
         assigned = (coordinator_talent_id, "Coordenador")
     else:
@@ -4117,6 +4179,11 @@ def _create_event_core(
     )
     if coord:
         assigned_now.append(coord)
+    # Feature 322: personagem com maquiagem traz o maquiador junto — o do orçamento (com teto),
+    # quando ele vendeu, já está na sessão e não duplica.
+    from app.calendar.casting_ops import garantir_vaga_de_maquiador
+
+    garantir_vaga_de_maquiador(event, tz=TZ)
 
     if data.get("has_reembolso"):
         _create_reembolso_entry(
