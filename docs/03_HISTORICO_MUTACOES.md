@@ -379,7 +379,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 322 — O casting vê o que está fechando, e o maquiador aparece sozinho   (322-o-que-o-casting-fecha · 2026-10-28 · migration `c322a7e1b9d4`)
 
-> **Branch pronta, sem merge** (worktree `C:	mp\mp322`, base `main 6f706fa6`). Nível 1 (migration, calendar
+> **Branch pronta, sem merge** (worktree `C:\tmp\mp322`, base `main 6f706fa6`). Nível 1 (migration, calendar
 > + orcamento, tela). Detalhes em `specs/322-o-que-o-casting-fecha/` (spec com 5 histórias, plan, research,
 > data-model, contracts/evento-elenco.md, checklists, verify).
 
