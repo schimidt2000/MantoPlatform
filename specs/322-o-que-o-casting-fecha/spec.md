@@ -62,7 +62,7 @@ Decisões do dono no mesmo dia, antes da spec:
 ### História 1 — O casting vê o que é cada personagem (Prioridade: P1)
 
 Quem escala abre o evento e, em cada personagem, lê logo abaixo do nome o que foi vendido: "Boneco
-grande especial", "Cantor · show · com maquiagem", "Ator cara-limpa · com maquiagem", "Bailarino".
+Grande Especial", "Cantor · show · com maquiagem", "Ator cara-limpa · com maquiagem", "Bailarino".
 Sabe, antes de procurar alguém, se precisa de quem canta, de quem dança, de quem aguenta um boneco
 grande e se vai ter maquiagem. Personagem sem orçamento mostra só as marcas que existem ("Cantor",
 "Com maquiagem").
@@ -207,6 +207,9 @@ comercial devem aparecer esse aviso de que foi inserido pelo comercial".
   então não cria maquiador.
 - Personagem acrescentado na edição por quem não é superadmin com o tipo vazio: continua sem tipo
   (o tipo só vem do orçamento).
+- Vaga do sistema em que o comercial pôs o talento (o coordenador garantido e preenchido depois
+  pela edição): mostra as duas marcas — "adicionado pelo sistema" no nome da vaga e "inserido pelo
+  comercial" no talento.
 
 ## Requisitos *(obrigatório)*
 
@@ -234,12 +237,14 @@ comercial devem aparecer esse aviso de que foi inserido pelo comercial".
   coordenador, técnico de som e presença do técnico — DEVE ficar marcada como criada pelo sistema,
   a partir do deploy.
 - **FR-010**: A página do evento DEVE mostrar "adicionado pelo sistema" ao lado do nome das vagas
-  marcadas, em letra menor e mais clara que o nome, sem parênteses nem selo.
+  marcadas, em letra menor que o nome e na cor de texto secundário da página (legível, não apagada),
+  sem parênteses nem selo; o leitor de tela lê a marca junto com o nome.
 - **FR-011**: Vaga adicionada por uma pessoa (formulário, "Adicionar pessoa", coordenador escolhido
   no formulário de criação) NÃO DEVE ter a marca.
 - **FR-012**: Na edição do evento, só o superadmin DEVE poder mudar a marca de maquiagem de um
   personagem existente ou marcar um personagem novo; para os demais, o servidor mantém o valor
-  anterior (ou "sem maquiagem" no personagem novo) e a tela mostra a caixa travada com a explicação.
+  anterior (ou "sem maquiagem" no personagem novo), sem erro, e a tela mostra a caixa travada com o
+  texto "Só o superadmin muda a maquiagem depois que o evento existe."
 - **FR-013**: Na criação do evento, quem cria DEVE continuar podendo marcar a maquiagem (como hoje);
   o vínculo de orçamento DEVE continuar marcando a maquiagem que o orçamento diz.
 - **FR-014**: O talento posto numa vaga pelo formulário do evento (criação ou edição: pré-escala de
@@ -249,6 +254,8 @@ comercial devem aparecer esse aviso de que foi inserido pelo comercial".
 - **FR-016**: A marca da FR-014 DEVE sair quando o talento da vaga muda por outro caminho
   (escalação ou remoção pelo card do casting) e NÃO DEVE mudar quando o formulário é salvo sem
   trocar o talento.
+- **FR-017**: A vaga de maquiador criada pela regra da FR-005 DEVE deixar uma linha no histórico do
+  evento, em nome do Sistema ("Vaga de Maquiador criada: há personagem com maquiagem").
 
 ### Entidades *(se houver dados)*
 
@@ -281,7 +288,7 @@ teste criados pela API e apagados no fim (nunca vaga com nome inventado em event
 | 4 | personagem à mão cantor + maquiagem | sem tipo; flags no payload | não |
 | 5 | casting lê o evento | recebe o tipo, não recebe teto nem conta | não |
 | 6 | produto de tabela (Visita Mágica) | Noel e ajudante com tipo do produto | não |
-| 7 | criação manual com maquiagem | nasce 1 maquiador sem talento nem teto | não |
+| 7 | criação manual com maquiagem | nasce 1 maquiador sem talento nem teto, com linha no histórico | não |
 | 8 | criação do orçamento com maquiagem | 1 maquiador só, com teto | não |
 | 9 | edição de evento com make e sem maquiador | a vaga nasce | não |
 | 10 | evento que já tem "Maquiadora" | nenhuma vaga nova | não |
@@ -335,6 +342,9 @@ nascerem).
 - O texto do tipo segue o que a calculadora já chama de cada coisa, com a grafia da tabela de
   preços ("Boneco Grande Especial", "Ator cara-limpa" — nomes próprios como "Homem-Aranha" não
   perdem a maiúscula), e as marcas na ordem show · cantor · com maquiagem (research R1).
+- Na janela do deploy (servidor e tela publicados separadamente), a tela sem os campos novos no
+  servidor simplesmente não mostra perfil nem marcas; o servidor novo com a tela antiga só manda
+  chaves a mais. A migration é aditiva.
 - "Inserido pelo comercial" vale para todo talento que entra pelo formulário do evento, que é a
   ferramenta da comercial — mesmo quando quem salva é o superadmin. A marca acompanha o talento:
   quem escala pelo card do casting é o casting.
