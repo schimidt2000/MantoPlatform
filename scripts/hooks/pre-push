@@ -1,0 +1,17 @@
+#!/bin/sh
+# Gancho pre-push da Manto (feature 321): ao empurrar a `main`, diz quantas mudanças publicadas
+# ainda não foram contadas à equipe (docs/novidades/ULTIMO_AVISO) e lembra a skill
+# `manto-novidades`. Nunca bloqueia o push. Instalar: copiar para .git/hooks/pre-push
+# (DEVELOPMENT.md §Publicar). Em worktree, o hook vale pelo repositório principal.
+empurra_main=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  case "$remote_ref" in
+    refs/heads/main) empurra_main=1 ;;
+  esac
+done
+[ "$empurra_main" = "1" ] || exit 0
+raiz=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+[ -f "$raiz/scripts/novidades.py" ] || exit 0
+if command -v python >/dev/null 2>&1; then py=python; elif command -v py >/dev/null 2>&1; then py=py; else exit 0; fi
+PYTHONUTF8=1 "$py" "$raiz/scripts/novidades.py" --hook --ate main 2>&1 >/dev/null | sed 's/^/[pre-push] /' >&2
+exit 0

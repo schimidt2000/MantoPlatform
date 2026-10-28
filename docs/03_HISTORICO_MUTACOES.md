@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-27** · Estado do repositório: pós-feature **320-voltar-sem-perder-o-lugar** (sem
+> Última atualização: **2026-10-28** · Estado do repositório: a branch **321-novidades-para-a-equipe** (harness: fluxo
+> "novidades para a equipe", `scripts/novidades.py` + gancho `pre-push` + skill `manto-novidades`; na branch, merge
+> só a pedido do dono) sobre a `main` pós-feature **320-voltar-sem-perder-o-lugar** (sem
 > migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
 > voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
 > "Baixar", e o app da Tela de Início do iPhone não prende mais; `verify_320.py` 12/12; dívidas 168–171) — antes dela
@@ -178,6 +180,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **321-novidades-para-a-equipe** | *(na branch, aguardando o dono)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo e envia assistida pelo Claude in Chrome (um OK por grupo). Primeira rodada: 21 mudanças de 14/10 a 27/10 | 2026-10-28 | — | (aqui) | ver Registro |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
@@ -371,6 +374,43 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
+
+> **Na branch, aguardando o dono** (merge só a pedido; nada muda no sistema em produção). Nível 2 (harness e
+> documentação). Detalhe: `specs/321-novidades-para-a-equipe/spec.md`.
+
+**O pedido.** O dono (28/10): as mudanças que entram em produção "não passam para o time, eles muitas vezes não
+sabem que mudou"; quer uma forma sob demanda de mandar aos grupos de WhatsApp o que mexe com cada função, de
+preferência por checagem no push e disparo automático — e, se não der, o texto pronto e para quem enviar.
+
+**O que mudou.**
+- `scripts/novidades.py`: lista o que entrou na `main` (`--first-parent`) desde o marco `docs/novidades/ULTIMO_AVISO`;
+  para cada merge `merge: NNN — …` acha a spec e "O pedido", a data de produção na entrada deste documento e o sinal
+  de "interruptor/desligada" (⚠ = não anunciar); pistas de grupo pelos arquivos. `--rascunho` grava
+  `docs/novidades/<hoje>.md`; `--marcar` grava a `main` como avisada; `--hook`/`--contar` servem ao gancho.
+- `scripts/hooks/pre-push` (cópia em `.git/hooks/`): ao empurrar a `main`, imprime quantas mudanças estão sem aviso e
+  lembra a skill. Nunca bloqueia.
+- Skill `manto-novidades`: listar → rascunho → ler a entrada do `docs/03` → confirmar o nome do botão na tela →
+  escrever por grupo (constituição §XV, "mensagem de WhatsApp que a equipe copia") → dono aprova → enviar →
+  `--marcar`. Tabela grupo × papel. Envio assistido pelo Claude in Chrome, um OK por grupo.
+- Primeira rodada: `docs/novidades/2026-10-28.md`, com as 21 mudanças de 14/10 a 27/10 (298b → 320) e uma mensagem
+  pronta por grupo; 310, 317 e 318 ficam guardadas (desligadas até o dono configurar).
+- Ponteiros em `DEVELOPMENT.md` §Publicar (passo 8), na skill `manto-deploy` e no `CLAUDE.md` §9.
+
+**Decisões.** Envio sem supervisão foi descartado: a API oficial do WhatsApp não cobre grupos de forma aberta e
+automação por cima do WhatsApp Web arrisca o número da empresa. A data de produção vem deste documento, não do
+`Status` da spec (que fica "Rascunho" na maioria das features, pelo template). O marco é arquivo versionado, não tag.
+
+**Verificação.** `verify_321.py` 9/9 (só git e arquivos; não usa o `manto_local`): 21 mudanças na faixa fixa
+`0feb4255..6f706fa6`, 320 primeiro com spec e data, ⚠ em 310/317/318 e não na 320/313, `docs`/`chore` fora,
+sufixos reconhecidos, `--contar`/`--hook`, `--rascunho` com as sete seções, `--marcar` + `ler_marco` em arquivo
+temporário. `ruff` limpo. O gancho foi exercitado com um push simulado da `main` (saída `[pre-push] novidades: 21
+mudança(s) …`, exit 0).
+
+**Pegadinhas.** O gancho vive em `.git/hooks/` e não é versionado: máquina nova copia de `scripts/hooks/`. Em
+worktree, o `.git/hooks` do repositório principal vale para todos. Heredoc do Bash ao escrever o script virou `\n`
+literal em quebra de linha real (`texto.find("\n## Registro")`) — regra do `CLAUDE.md` §7 confirmada de novo.
 
 ### 320 — Voltar sem perder o lugar (catálogo, banco de talentos e arquivo no app instalado)   (320-voltar-sem-perder-o-lugar · 2026-10-27 · sem migration)
 

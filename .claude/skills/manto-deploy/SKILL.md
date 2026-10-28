@@ -53,6 +53,9 @@ falha e finge que voltou.
 
 Antes de dizer "está em produção": `git log --oneline -1` = cabeçalho do `docs/03`.
 
+Depois de "está em produção": a equipe ainda não sabe. Rode a skill `manto-novidades` (o gancho
+`pre-push` já disse quantas mudanças estão sem aviso) e entregue ao dono a mensagem por grupo.
+
 ## Se caiu
 
 - `git revert <merge>` + push (rollback = novo deploy). Nunca `--force`.

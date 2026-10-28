@@ -283,6 +283,11 @@ ensaios.
    repita. `curl -w '%{http_code}' || echo 000` vira `000000` em falha.
 7. Caiu? `git revert <merge>` + push. Antes de um segundo deploy às cegas, peça ao dono o log do
    painel.
+8. **Conte à equipe** (skill `manto-novidades`): `PYTHONUTF8=1 python scripts/novidades.py` lista
+   o que entrou na `main` desde o último aviso (`docs/novidades/ULTIMO_AVISO`); `--rascunho` monta
+   `docs/novidades/<hoje>.md` com uma mensagem de WhatsApp por grupo; depois de enviar, `--marcar`.
+   O gancho `scripts/hooks/pre-push` (copie para `.git/hooks/pre-push` em máquina nova) imprime
+   no push da `main` quantas mudanças ainda não foram contadas.
 
 ---
 
