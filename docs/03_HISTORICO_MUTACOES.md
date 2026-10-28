@@ -4,11 +4,11 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-28** · Branch **322-o-que-o-casting-fecha** pronta, sem merge (migration
-> `c322a7e1b9d4`, aditiva; o casting vê o tipo vendido de cada personagem, a vaga de Maquiador nasce com a
+> Última atualização: **2026-10-28** · Estado do repositório: pós-feature **322-o-que-o-casting-fecha**
+> (**EM PRODUÇÃO desde 28/10/2026 ~03h25**, a pedido do dono, fora do horário; migration `c322a7e1b9d4`, aditiva; o casting vê o tipo vendido de cada personagem, a vaga de Maquiador nasce com a
 > maquiagem, as vagas do sistema e as escalas do comercial ganham marca discreta, e a maquiagem só muda
-> pelo superadmin depois que o evento existe; `verify_322.py` 29/29 depois do converge; dívidas 172–174). Estado da `main`:
-> pós-feature **320-voltar-sem-perder-o-lugar** (sem
+> pelo superadmin depois que o evento existe; `verify_322.py` 29/29 depois do converge; dívidas 172–174) — antes
+> dela pós-feature **320-voltar-sem-perder-o-lugar** (sem
 > migration; **EM PRODUÇÃO desde 27/10/2026 ~19h10**, a pedido do dono, logo depois da 314 — catálogo e banco de talentos
 > voltam no mesmo ponto, com busca e filtros no endereço; todo arquivo do interno abre num visualizador com "Voltar" e
 > "Baixar", e o app da Tela de Início do iPhone não prende mais; `verify_320.py` 12/12; dívidas 168–171) — antes dela
@@ -182,7 +182,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **322-o-que-o-casting-fecha** | *(branch, sem merge)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
+| **322-o-que-o-casting-fecha** | *(EM PRODUÇÃO 28/10 ~03h25)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
 | **314-gastos-extras-filtros** | *(EM PRODUÇÃO 27/10 ~19h)* A `/gastos` ocupa a tela inteira e para de rolar para o lado (tabela de 7 colunas a partir de `xl`, cartões abaixo); cada gasto ganha uma **situação** do servidor (aguardando aprovação, a pagar, no banco, pago, rejeitado); à vista só o que pede ação, **"Pagos" e "Rejeitados" recolhidos**; cartões-filtro, busca, categoria, desembolso e mês, como em Pagamentos, com o estado na URL | 2026-10-27 | — | (aqui) | ver Registro |
 | **310-pagamento-loja-virtual** | *(EM PRODUÇÃO 23/10 ~19h, lote)* O pagamento da loja de conversas pela InfinitePay ligado com segurança para o Natal: `decidir_pagamento` é a única regra que transforma pagamento provado em venda ou devolução (o mesmo horário não se vende duas vezes, venda paga nunca regride); o aviso grava e responde, e a varredura reprocessa; o retorno do checkout vira segunda prova; interruptor "pagamento da loja ligado" que nasce desligado; "Pagamentos a conferir" e "Cancelar e abrir devolução"; trava da operadora fora da produção, limite por família (`X-Manto-Client-Ip`) e segredo fora dos logs | 2026-10-20 | `e8b4a1c7d310` | (aqui) | ver Registro |
@@ -379,7 +379,8 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 322 — O casting vê o que está fechando, e o maquiador aparece sozinho   (322-o-que-o-casting-fecha · 2026-10-28 · migration `c322a7e1b9d4`)
 
-> **Branch pronta, sem merge** (worktree `C:\tmp\mp322`, base `main 6f706fa6`). Nível 1 (migration, calendar
+> **EM PRODUÇÃO desde 28/10/2026 ~03h25**, a pedido do dono, fora do horário (worktree `C:\tmp\mp322`, base
+> `main 6f706fa6`; merge sem conflito). Nível 1 (migration, calendar
 > + orcamento, tela). Detalhes em `specs/322-o-que-o-casting-fecha/` (spec com 5 histórias, plan, research,
 > data-model, contracts/evento-elenco.md, checklists, verify).
 

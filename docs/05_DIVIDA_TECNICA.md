@@ -775,7 +775,7 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 170 | **P5** | `frontend/apps/internal/e2e/` + `playwright.config.ts` (feature 180) | a suíte e2e parou na 186 (precisa de `E2E_USER_*` e ninguém roda); a 320 usou o Playwright por fora, num `verify_320_navegador.mjs` | decidir: reviver a suíte (usuário descartável como o `verify_320.py`) ou apagar |
 | 171 | **P5** | build do `public` e do `portal` | o `VisualizadorDeArquivo` sai do `index.ts` do `@manto/ui`, e o Vite emite o chunk do pdf.js (366 kB) e o worker (1,4 MB) também nesses dois apps, que não abrem PDF — arquivo no `dist`, nunca baixado | subpath de export (`@manto/ui/visualizador`) se o tamanho do deploy incomodar |
 
-## Baixa da feature 322-o-que-o-casting-fecha (2026-10-28, branch)
+## Baixa da feature 322-o-que-o-casting-fecha (2026-10-28; em produção desde 28/10 ~03h25)
 
 **Quitada.** Nenhuma.
 
