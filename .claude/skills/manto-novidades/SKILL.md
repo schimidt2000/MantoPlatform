@@ -4,8 +4,8 @@ description: >
   Contar à equipe o que mudou no sistema depois de um deploy. Lista o que entrou na `main` desde
   o último aviso (`scripts/novidades.py`), escreve uma mensagem de WhatsApp por grupo (vendas,
   casting, ensaios, figurinos, redes sociais) no tom da casa e grava em
-  `docs/novidades/AAAA-MM-DD.md`, pronta para o dono copiar e colar em cada grupo (não há envio
-  automático). Use quando o dono disser "avisa a equipe",
+  `docs/novidades/AAAA-MM-DD.md` e, com o texto aprovado pelo dono, envia pelo WhatsApp Web no
+  Claude in Chrome, um grupo por vez. Use quando o dono disser "avisa a equipe",
   "novidades", "manda para os grupos", "/manto-novidades", e depois de todo deploy (o gancho
   `pre-push` lembra quantas mudanças estão sem aviso). Regra de texto: constituição, Princípio XV
   ("mensagem de WhatsApp que a equipe copia").
@@ -40,17 +40,17 @@ quantas mudanças ainda não foram contadas.
    bloco ```text pronto para copiar. A mesma mudança pode ir a mais de um grupo, com a frase
    ajustada ao papel (a comercial pede o cancelamento; o casting recebe o aviso).
 6. **Mostrar ao dono** o arquivo e a tabela "Quem recebe o quê". Ele ajusta ou aprova.
-7. **Enviar: o dono copia e cola** cada bloco no grupo de mesmo nome. Não há envio automático,
-   nem assistido pelo navegador (decisão do dono, 28/10). Quando ele disser que enviou, anotar no
-   arquivo, por grupo, "enviado em dd/mm".
+7. **Enviar** pelo Claude in Chrome (seção abaixo), com o texto que o dono aprovou, ou o dono cola
+   à mão. Anotar no arquivo, por grupo, "enviado em dd/mm hh:mm".
 8. **Marcar.** `PYTHONUTF8=1 python scripts/novidades.py --marcar --arquivo docs/novidades/<hoje>.md`
    e commit `docs(novidades): rodada de <dd/mm>` com `docs/novidades/`. Sem o `--marcar`, a
    próxima rodada repete tudo.
 
 ## Regras de texto (constituição §XV, "mensagem de WhatsApp que a equipe copia")
 
-- Tom de conversa da casa, português correto e com acento: abre com "Oi, pessoal!" e fecha com
-  "Qualquer dúvida, me chama." (para artistas: "fale com a produção"). Sem "pra", "tá", "né".
+- Tom de conversa da casa, português correto e com acento. Abre de forma amigável (pedido do
+  dono, 29/10): "Oi, pessoal, tudo bem? Passando aqui para contar as últimas novidades do sistema.
+  Aqui vai:". Fecha com "Qualquer dúvida, me chama." (para artistas: "fale com a produção"). Sem "pra", "tá", "né".
 - **Fácil de entender, mas explicativo o bastante para não deixar dúvida** (pedido do dono,
   28/10). Quem lê não acompanhou o desenvolvimento e não vai abrir o sistema para descobrir o que
   a frase quis dizer. Cada mudança é um item de duas a quatro frases curtas, nesta ordem:
@@ -79,6 +79,10 @@ quantas mudanças ainda não foram contadas.
 Os nomes são os dos grupos no WhatsApp (informados pelo dono em 28/10). A seção do arquivo do dia
 tem o mesmo nome do grupo, para o dono achar pela busca do WhatsApp.
 
+Nome exato no WhatsApp (conferido em 29/10): "MANTO - VENDAS", "MANTO - CASTING", "MANTO -
+ENSAIOS", "* FIGURINOS *" e "MANTO - REDES SOCIAIS". Cuidado: "✨ CASTING MANTO ✨" é outro grupo,
+e "MANTO - PAGAMENTOS" e "MANTO - CONTRATOS" não recebem novidades.
+
 | Grupo no WhatsApp | Quem está (papel no sistema) | Assuntos |
 |---|---|---|
 | vendas | COMERCIAL | calculadora, orçamento, catálogo, clientes, formulários, cobrança, comissão, pedido de cancelamento |
@@ -94,6 +98,25 @@ tem o mesmo nome do grupo, para o dono achar pela busca do WhatsApp.
   mensagem, com a frase ajustada ao grupo.
 - **Artistas** só recebem aviso se o dono pedir (não há grupo; seria lista de transmissão).
 - Superadmin recebe tudo (é o dono).
+
+## Enviar pelo Claude in Chrome
+
+O dono deixa o WhatsApp Web aberto no Chrome dele, já logado. Não existe envio sem ninguém
+olhando: a API oficial do WhatsApp não cobre grupos de forma aberta, e automação por cima do
+WhatsApp Web arrisca o número da empresa. O envio é assistido:
+
+1. O texto de cada grupo é o que o dono aprovou no arquivo do dia. Nada que ele não viu vai.
+2. Carregue as tools do Chrome numa chamada só (`ToolSearch` com
+   "select:mcp__claude-in-chrome__tabs_context_mcp,…navigate,…computer,…read_page,…find,
+   …javascript_tool") e use a aba do WhatsApp que já está aberta.
+3. Para cada grupo: buscar pelo nome exato na caixa de pesquisa, abrir a conversa, **conferir o
+   nome do grupo no cabeçalho**, colocar a mensagem na caixa de texto e **ler o que ficou na caixa**
+   antes de enviar. Quebra de linha no WhatsApp Web é Shift+Enter: Enter sozinho envia pela
+   metade. O mais seguro é colar o texto inteiro (área de transferência ou evento de colar na
+   caixa), não digitar linha a linha.
+4. Um grupo por vez; se algo sair diferente do aprovado (texto cortado, grupo errado), pare e
+   avise o dono antes de seguir. Nunca contato individual, nunca grupo fora da lista.
+5. Depois de cada envio, anotar "enviado em dd/mm hh:mm" na seção do grupo.
 
 ## Armadilhas
 
