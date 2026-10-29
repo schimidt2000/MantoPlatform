@@ -4,7 +4,7 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-29** · Estado do repositório: pós-**deploy em lote de 29/10/2026 (HORA)**, a
+> Última atualização: **2026-10-29** · Estado do repositório: pós-**deploy em lote de 29/10/2026 (~03h35)**, a
 > pedido do dono, fora do horário, num push só, na ordem dos merges: **309b-visita-magica-30-minutos** (sem migration;
 > a Visita Mágica no orçamento diz "visita de até 30 minutos" e o que inclui; `verify_309b.py` 10/10),
 > **323-nota-pedida-ao-superadmin** (migration `d323b5a1c0e7`, aditiva, sobre `c322a7e1b9d4`; o chip "Precisa de
@@ -192,9 +192,9 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **321-novidades-para-a-equipe** | *(na branch, aguardando o dono)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
-| **323-nota-pedida-ao-superadmin** | *(PRONTA, aguardando merge e deploy)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
-| **309b-visita-magica-30-minutos** | Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
+| **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
+| **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
+| **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
 | **317b-ligacao-de-contratos** | *(EM PRODUÇÃO 28/10, madrugada)* O contrato da ClickSign acha a venda quando data + telefone não bastam: mesmo telefone a um dia, formulário do mesmo telefone e data ligado a um evento (festa remarcada), e-mail no lugar do telefone e **tema por palavra** ("Arraiá com o Snoopy" × "SNOOPY + CHARLIE"); a venda cancelada certa liga (o PDF não entra no cancelado) e o envelope cancelado na ClickSign sem venda sai de "A conferir". Nos 246 envelopes desde 01/06: 57 a conferir → 16, 19 vínculos novos conferidos um a um | 2026-10-28 | — | (aqui) | ver Registro |
 | **322-o-que-o-casting-fecha** | *(EM PRODUÇÃO 28/10 ~03h25)* O casting vê o que está fechando: cada personagem mostra o tipo vendido no orçamento (`event_roles.perfil_vendido`; sem orçamento, as marcas cantor/maquiagem); personagem com maquiagem traz a vaga de Maquiador em criação, edição e vínculo (`casting_ops.garantir_vaga_de_maquiador`); "adicionado pelo sistema" nas vagas automáticas e "inserido pelo comercial" no talento do formulário; maquiagem só muda pelo superadmin na edição | 2026-10-28 | `c322a7e1b9d4` | (aqui) | — |
 | **320-voltar-sem-perder-o-lugar** | *(EM PRODUÇÃO 27/10 ~19h10)* Voltar sem perder o lugar: catálogo público, gerenciador de catálogo e banco de talentos guardam busca/filtros/aba/página no endereço e voltam na mesma rolagem (`useRestaurarRolagem`); "Voltar" do detalhe volta pelo histórico quando a pessoa veio da lista. Todo arquivo do app interno abre num visualizador dentro do sistema (foto, PDF pelo pdf.js, "Voltar" e "Baixar") — o iPhone com o sistema na Tela de Início não prende mais. No app instalado, "Catálogo" do menu abre na mesma janela com "← Voltar ao sistema" | 2026-10-27 | — | (aqui) | ver Registro |
@@ -393,7 +393,8 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 
-> **Na branch, aguardando o dono** (merge só a pedido; nada muda no sistema em produção). Nível 2 (harness e
+> **EM PRODUÇÃO desde 29/10/2026 ~03h35** (deploy em lote com a 309b e a 323, a pedido do dono; nada muda no
+> sistema que a equipe usa). Nível 2 (harness e
 > documentação). Detalhe: `specs/321-novidades-para-a-equipe/spec.md`.
 
 **O pedido.** O dono (28/10): as mudanças que entram em produção "não passam para o time, eles muitas vezes não
@@ -435,7 +436,8 @@ literal em quebra de linha real (`texto.find("\n## Registro")`) — regra do `CL
 
 ### 323 — A nota pedida chega ao Superadmin com tudo o que a emissão precisa   (323-nota-pedida-ao-superadmin · 2026-10-28 · migration `d323b5a1c0e7`)
 
-> **PRONTA, aguardando merge e deploy** (worktree `C:\tmp\mp323`, base `origin/main 4eb09108`). Nível 1
+> **EM PRODUÇÃO desde 29/10/2026 ~03h35** (deploy em lote com a 309b e a 321, a pedido do dono, fora do horário;
+> worktree `C:\tmp\mp323`, base `origin/main 4eb09108`). Nível 1
 > (migration, agenda + Home + e-mail, telas). Detalhes em `specs/323-nota-pedida-ao-superadmin/` (spec, plan,
 > research, data-model, contracts/api.md, checklists, verify).
 
@@ -488,6 +490,7 @@ editar os dados bancários por tela; lembrete de nota parada.
 
 ### 309b — A Visita Mágica no orçamento diz o que se entrega: até 30 minutos   (309b-visita-magica-30-minutos · 2026-10-28 · sem migration)
 
+> **EM PRODUÇÃO desde 29/10/2026 ~03h35** (deploy em lote com a 323 e a 321, a pedido do dono, fora do horário).
 > Nível 2, hotfix da 309 (entrada da 309 mais abaixo; a linha "`descricao` padrão … ("visita padrão, até
 > 1h")" de lá descreve o texto de então). Detalhes em `specs/309b-visita-magica-30-minutos/`.
 
