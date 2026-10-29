@@ -13,6 +13,7 @@ import { INPUT_PRECOS } from "./PriceTable";
 const LABEL = "mb-1 block text-xs font-medium text-muted";
 const ROTULO_MAX = 60;
 const DESCRICAO_MAX = 120;
+const DETALHES_MAX = 300;
 const VAGAS_MAX = 10;
 const CHAVE_RE = /^[a-z0-9_]{1,30}$/;
 
@@ -32,6 +33,7 @@ function produtoNovo(): ProdutoDeTabela {
   return {
     rotulo: "",
     descricao: "",
+    detalhes: "",
     ativo: true,
     preco: 0,
     por_faixa: {},
@@ -46,6 +48,7 @@ function rotuloDoCampo(campo: string, faixas: Record<string, FaixaEspecial>): st
   if (campo === "produto") return "Produto";
   if (campo === "rotulo") return "Rótulo";
   if (campo === "descricao") return "Descrição";
+  if (campo === "detalhes") return "O que inclui";
   if (campo === "vagas") return "Vagas";
   const vaga = /^vagas\.(\d+)\.(\w+)$/.exec(campo);
   if (vaga) return `Vaga ${Number(vaga[1]) + 1} — ${vaga[2] === "cache" ? "cachê" : vaga[2]}`;
@@ -199,6 +202,21 @@ export function ProdutosConfigCard({
                   maxLength={DESCRICAO_MAX}
                   value={produto.descricao}
                   onChange={(e) => setProduto(chave, { descricao: e.target.value })}
+                />
+              </div>
+
+              <div>
+                <label className={LABEL}>
+                  O que inclui (vai em itálico logo abaixo do preço, na mensagem e no PDF, até {DETALHES_MAX})
+                </label>
+                <textarea
+                  // `h-auto py-1.5`: o h-9 do INPUT_PRECOS cortaria o texto em uma linha e meia.
+                  className={`${classeDe(!!erro("detalhes"))} h-auto py-1.5`}
+                  aria-invalid={erro("detalhes") ? true : undefined}
+                  rows={3}
+                  maxLength={DETALHES_MAX}
+                  value={produto.detalhes ?? ""}
+                  onChange={(e) => setProduto(chave, { detalhes: e.target.value })}
                 />
               </div>
 

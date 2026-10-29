@@ -27,6 +27,7 @@ TIPOS_DE_VAGA = ("especial", "ator", "coordenador", "maquiador")
 LABEL_FIXO_POR_TIPO = {"coordenador": "Coordenador", "maquiador": "Maquiador"}
 PRODUTO_ROTULO_MAX = 60
 PRODUTO_DESCRICAO_MAX = 120
+PRODUTO_DETALHES_MAX = 300
 PRODUTO_VAGAS_MAX = 10
 NOTA_FAIXA_MAX_CHARS = 200
 ROTULO_FAIXA_MAX_CHARS = 60
@@ -71,10 +72,19 @@ _FAIXA_NATAL_PADRAO: dict = {
 # (`cache: null`) — Noel 600 / Ajudante 270 / Coordenador 250 / Maquiador 250 normal, 1.000 / 650 /
 # 500 / 250 na faixa natal. Markup não entra; noturno embutido. Tipo `coordenador`/`maquiador` tem o
 # label fixo porque `_ensure_coordinator` e o vínculo 273 casam por esses nomes.
+# 309b: descrição e "o que inclui" saem da arte da campanha (visita de até 30 minutos — a 309 nasceu
+# dizendo "até 1h", e o orçamento prometia ao cliente o dobro do que se entrega).
+_DESCRICAO_VISITA = "visita de até 30 minutos"
+_DESCRICAO_VISITA_ANTIGA = "visita padrão, até 1h"
+_DETALHES_VISITA = (
+    "Chegada mágica, músicas natalinas cantadas com a família, entrega de até 10 presentes "
+    "(fornecidos pela contratante) e, ao final, uma mensagem especial sobre o verdadeiro significado do Natal."
+)
 _PRODUTOS_PADRAO: dict = {
     "visita_magica": {
         "rotulo": "Visita Mágica — Papai Noel",
-        "descricao": "visita padrão, até 1h",
+        "descricao": _DESCRICAO_VISITA,
+        "detalhes": _DETALHES_VISITA,
         "ativo": True,
         "preco": 2500,
         "por_faixa": {"natal": {"preco": 5000}},
@@ -87,7 +97,8 @@ _PRODUTOS_PADRAO: dict = {
     },
     "visita_magica_ajudante": {
         "rotulo": "Visita Mágica — Papai Noel + Ajudante",
-        "descricao": "visita padrão, até 1h",
+        "descricao": _DESCRICAO_VISITA,
+        "detalhes": _DETALHES_VISITA,
         "ativo": True,
         "preco": 3600,
         "por_faixa": {"natal": {"preco": 6500}},
@@ -651,6 +662,7 @@ def _normalizar_produto(produto, faixas: set[str]) -> dict | None:
     return {
         "rotulo": rotulo,
         "descricao": _descricao_limpa(produto.get("descricao"))[:PRODUTO_DESCRICAO_MAX],
+        "detalhes": _nota_limpa(produto.get("detalhes"))[:PRODUTO_DETALHES_MAX],
         "ativo": bool(produto.get("ativo", True)),
         "preco": preco,
         "por_faixa": por_faixa,
@@ -678,6 +690,22 @@ def _normalizar_estimativa(raw) -> dict:
     return limpo
 
 
+def _migrar_309b(chave: str, bruto: dict, produto: dict) -> None:
+    """309b: a Visita Mágica salva antes da correção dizia "até 1h" e não tinha "o que inclui".
+
+    Só os dois produtos padrão, e só o que o time não mexeu: descrição EXATAMENTE a antiga vira a nova;
+    `detalhes` AUSENTE (config salva antes da 309b) ganha o texto da arte — vazio salvo pela tela é
+    escolha do time e fica vazio.
+    """
+    padrao = _PRODUTOS_PADRAO.get(chave)
+    if padrao is None:
+        return
+    if produto["descricao"] == _DESCRICAO_VISITA_ANTIGA:
+        produto["descricao"] = padrao["descricao"]
+    if "detalhes" not in bruto:
+        produto["detalhes"] = padrao["detalhes"]
+
+
 def _migrar_309(data: dict) -> None:
     """Feature 309: garante `produtos` e `produtos_estimativa` e desfaz a troca 600 → 712 da 307.
 
@@ -696,6 +724,7 @@ def _migrar_309(data: dict) -> None:
             normalizado = _normalizar_produto(produto, faixas)
             if normalizado is not None and CHAVE_FAIXA_RE.fullmatch(str(chave)):
                 limpo[str(chave)] = normalizado
+                _migrar_309b(str(chave), produto, normalizado)
         data["produtos"] = limpo
     data["produtos_estimativa"] = _normalizar_estimativa(data.get("produtos_estimativa"))
 
@@ -757,6 +786,9 @@ def _validar_produto(chave: str, produto, especiais: dict, faixas: set[str], err
     descricao = _descricao_limpa(produto.get("descricao"))
     if len(descricao) > PRODUTO_DESCRICAO_MAX:
         erros[f"{pref}.descricao"] = f"descrição com mais de {PRODUTO_DESCRICAO_MAX} caracteres"
+    detalhes = _nota_limpa(produto.get("detalhes"))
+    if len(detalhes) > PRODUTO_DETALHES_MAX:
+        erros[f"{pref}.detalhes"] = f"texto com mais de {PRODUTO_DETALHES_MAX} caracteres"
     for campo in ("ativo", "inclui_noturno"):
         if not isinstance(produto.get(campo, True), bool):
             erros[f"{pref}.{campo}"] = "verdadeiro ou falso"
@@ -789,6 +821,7 @@ def _validar_produto(chave: str, produto, especiais: dict, faixas: set[str], err
     return {
         "rotulo": rotulo,
         "descricao": descricao,
+        "detalhes": detalhes,
         "ativo": bool(produto.get("ativo", True)),
         "preco": preco,
         "por_faixa": por_faixa,

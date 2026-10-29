@@ -883,7 +883,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
     show = [("1h" in incluir), ("2h" in incluir), ("3h" in incluir), ("4h" in incluir)]
 
     # Feature 309: só produto no orçamento (sem avulso e sem coordenador da fórmula) = UM valor — a
-    # Visita é "visita padrão (até 1h)"; listar 2h–4h diria ao cliente que 4 horas de Noel custam o
+    # Visita é "visita de até 30 minutos" (309b); listar 2h–4h diria ao cliente que 4 horas de Noel custam o
     # mesmo que 1. Com avulsos, o bloco do produto vem antes das durações.
     so_produto = bool(produtos) and not performers and coord_formula == 0
     if so_produto:

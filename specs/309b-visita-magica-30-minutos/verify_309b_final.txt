@@ -1,0 +1,21 @@
+﻿[2026-10-28 04:17:26,616] INFO in __init__: [links externos] portal=https://portal.mantoproducoes.com.br plataforma=https://app.mantoproducoes.com.br
+[2026-10-28 04:17:26,616] INFO in __init__: [infinitepay] travada=True api_key=ausente (link sem validade)
+[2026-10-28 04:17:26,616] WARNING in __init__: [proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend.
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\flask_limiter\extension.py:333: UserWarning: Using the in-memory storage for tracking rate limits as no storage was explicitly specified. This is not recommended for production use. See: https://flask-limiter.readthedocs.io#configuring-a-storage-backend for documentation about configuring the storage backend.
+  warnings.warn(
+C:\Users\schim\Desktop\Manto_Platform\.venv\Lib\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.3)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+[2026-10-28 04:17:27,650] INFO in __init__: MANTO_SEM_THREADS=1 — threads de fundo desligadas neste processo
+verify 309b — Visita Mágica: 30 minutos + o que inclui
+  OK     1. padrões do código dizem 30 minutos e trazem o texto da arte
+  OK     2. tabela salva antes da 309b é corrigida ao carregar (preço intacto)
+  OK     3. edição do time e produto do time não são tocados
+  OK     4. mensagem só com a Visita: 30 minutos + o que inclui logo abaixo
+  OK     5. 24/12 com ajudante: preço do Natal e o mesmo texto
+  OK     6. dois exemplares: o parágrafo sai uma vez
+  OK     7. Visita + avulso: texto antes das durações
+  OK     8. PDF diz 30 minutos e traz o que inclui
+  OK     9. orçamento salvo antes (sem detalhes) gera PDF como era
+  OK     10. tela de preços: salva o texto numa linha e recusa acima do limite
+
+10/10 OK
