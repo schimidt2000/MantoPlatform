@@ -13,9 +13,12 @@ import {
   DEFAULT_EVENT_FORM_VALUES,
   FIELD_ORDER,
   SERVER_FIELD_MAP,
+  camposDaNota,
+  notaDoFormulario,
   primeiroCampoDoErro,
   type EventFormValues,
 } from "../lib/eventFormSchema";
+import { useDocDoContratante } from "../lib/notaFiscal";
 import {
   useEventCreateOptions,
   useUpdateEvent,
@@ -84,6 +87,8 @@ export function EventEditPage() {
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
   const [clients, setClients] = useState<(ClientLinkInput & { name: string })[]>([]);
+  // Feature 323: o documento do contratante que está na tela (trocar o cliente troca a sugestão).
+  const docDoContratante = useDocDoContratante(clients);
   const [formResponse, setFormResponse] = useState<SelectedFormResponse | null>(null);
   const [hasReembolso, setHasReembolso] = useState(false);
   const [reembolsoDescription, setReembolsoDescription] = useState("");
@@ -141,6 +146,7 @@ export function EventEditPage() {
       transport_value: data.venda?.transport_value ?? 0,
       acrescimo_value: data.venda?.acrescimo_value ?? 0,
       with_invoice: data.venda?.with_invoice ?? false,
+      ...camposDaNota(data.venda?.nota),
       seller_id: data.venda?.seller_id ? String(data.venda.seller_id) : "",
       sale_date: data.venda?.sale_date || "",
       payment_method: data.venda?.payment_method || "",
@@ -273,6 +279,7 @@ export function EventEditPage() {
         transport_value: values.transport_value,
         acrescimo_value: values.acrescimo_value,
         with_invoice: values.with_invoice,
+        nota: notaDoFormulario(values),
         is_cortesia_permuta: values.is_cortesia_permuta,
         seller_id: values.seller_id ? Number(values.seller_id) : null,
         sale_date: values.sale_date || null,
@@ -491,6 +498,7 @@ export function EventEditPage() {
 
             <ValoresBlock
               sellers={opts.sellers}
+              docDoCliente={docDoContratante}
               satelite={Boolean(data.event.is_satellite)}
               principal={data.event.group?.leader ?? null}
               vendedorTravado={

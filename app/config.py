@@ -16,6 +16,16 @@ PLATFORM_BASE_URL = "https://app.mantoproducoes.com.br"
 # por WhatsApp, então tem valor fixo e não pode depender de a env estar setada.
 PORTAL_BASE_URL = "https://portal.mantoproducoes.com.br"
 
+# Bloco bancário das notas fiscais (feature 323) — o texto exato das NFS-e 99 a 103.
+NOTA_DADOS_BANCARIOS_PADRAO = (
+    "Esses são os dados da minha conta no Inter:\n"
+    "INTER - 077\n"
+    "PRIME DREAMS EVENTOS LTDA\n"
+    "CNPJ: 60.708.296/0001-21 (PIX)\n"
+    "Agência: 0001\n"
+    "Conta: 44689668-3"
+)
+
 #: Hosts que só existem dentro da máquina/rede de quem roda o processo. Link com qualquer um
 #: deles é lixo para quem está do outro lado do e-mail.
 _HOST_LOCAL = re.compile(
@@ -368,6 +378,15 @@ class Config:
     PUBLIC_BASE_URL = _url_para_fora(
         os.getenv("PUBLIC_BASE_URL"), PLATFORM_BASE_URL, "PUBLIC_BASE_URL",
         permitir_local=MAIL_SUPPRESS_SEND,
+    )
+
+    # Dados bancários que fecham a discriminação de toda nota fiscal (feature 323), copiados das
+    # notas que o dono emite. Default real no código (Princípio XIV): sem ele a discriminação
+    # sairia sem conta para o cliente pagar. A env só sobrepõe (troca de banco), com "\n" literal
+    # para quebra de linha — o painel do Render não aceita valor em várias linhas.
+    NOTA_DADOS_BANCARIOS = (
+        os.getenv("NOTA_DADOS_BANCARIOS", "").replace("\\n", "\n").strip()
+        or NOTA_DADOS_BANCARIOS_PADRAO
     )
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).

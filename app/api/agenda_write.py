@@ -1052,6 +1052,17 @@ def api_sync_event(event_id: int) -> Any:
 # ── Criar evento (feature 152) ───────────────────────────────────────────────
 
 
+def _dados_da_nota(body: dict) -> tuple[Any, dict[str, str]]:
+    """Feature 323 — a chave `nota` do corpo, validada. Ausente = `None` (não mexe no gravado:
+    a tela aberta antes do deploy não manda a chave). Devolve `(dados, erros_por_campo)`."""
+    from app.calendar.pedido_de_nota_ops import NotaInvalida, ler_dados_da_nota
+
+    try:
+        return ler_dados_da_nota(body.get("nota")), {}
+    except NotaInvalida as exc:
+        return None, exc.fields
+
+
 def _client_pairs_from_json(raw: list) -> list[tuple[int, str]]:
     """Normaliza clientes vindos do corpo JSON — mesma regra de `_parse_client_pairs` (routes.py):
     dedup por cliente, ids inexistentes ignorados, relação fora da lista vira "Outros".
@@ -1250,7 +1261,8 @@ def api_create_event() -> Any:
 
     from app.calendar.routes import _validate_event_core
 
-    errors = _validate_event_core(data)
+    data["nota"], erros_nota = _dados_da_nota(body)
+    errors = {**_validate_event_core(data), **erros_nota}
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
@@ -1410,15 +1422,19 @@ def api_update_event(event_id: int) -> Any:
         bruto_atual=event.sale_value_gross,
         satelite=event.is_satellite,
     )
+    dados_nota, erros_nota = _dados_da_nota(body)
+    errors = {**errors, **erros_nota}
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
     # Feature 306: no cancelado, a edição completa não corrige venda — para todos os papéis (a
     # correção do Superadmin é pela aba Comercial, que recongela). Os outros campos salvam.
+    # Os dados da nota (323) são da venda e entram na mesma régua.
     from app.calendar.event_ops import venda_mudaria
+    from app.calendar.pedido_de_nota_ops import dados_mudariam
     from app.constants import CODIGO_EVENTO_CANCELADO
 
-    if event.is_cancelled and venda_mudaria(event, data):
+    if event.is_cancelled and (venda_mudaria(event, data) or dados_mudariam(event, dados_nota)):
         return json_error(
             "Evento cancelado: corrija os dados de venda pela aba Comercial.",
             409,
@@ -1459,6 +1475,8 @@ def api_update_event(event_id: int) -> Any:
             actor_name=current_user.name,
             tz=_TZ_SP,
             sincronizar_comissao=_sync_commission_payment,
+            dados_nota=dados_nota,
+            pedida_por_id=current_user.id,
         )
     except EventCoreUpdateBlocked as exc:
         return json_error(exc.message, 409)
@@ -1598,7 +1616,8 @@ def api_update_event_comercial(event_id: int) -> Any:
     if negado is not None:
         return negado
 
-    erros = erros_do_valor_na_aba_comercial(data, event)
+    dados_nota, erros_nota = _dados_da_nota(body)
+    erros = {**erros_do_valor_na_aba_comercial(data, event), **erros_nota}
     if erros:
         return json_error("Corrija os campos destacados", 400, fields=erros)
 
@@ -1621,6 +1640,8 @@ def api_update_event_comercial(event_id: int) -> Any:
             actor_name=current_user.name,
             tz=_TZ_SP,
             sincronizar_comissao=comissao_da_aba,
+            dados_nota=dados_nota,
+            pedida_por_id=current_user.id,
         )
     except cancel_ops.CancelValidationError as exc:
         db.session.rollback()

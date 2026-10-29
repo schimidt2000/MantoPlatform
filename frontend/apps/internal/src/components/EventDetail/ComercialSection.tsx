@@ -28,6 +28,13 @@ import { ColecoesComerciaisPanel } from "./ColecoesComerciaisPanel";
 import { GastosVinculados } from "./GastosVinculados";
 import { DataRow, Empty, INPUT_CLASS, Panel, brl, formatDay } from "./parts";
 import { ResultadoCancelamento } from "./ResultadoCancelamento";
+import { DadosDaNotaCampos } from "../EventFormBlocks/DadosDaNotaCampos";
+import {
+  dadosDoEvento,
+  formatarDoc,
+  notaInput,
+  type DadosDaNota,
+} from "../../lib/notaFiscal";
 
 /** Rótulos legíveis das formas de pagamento gravadas no evento. */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
@@ -188,6 +195,12 @@ function VendaForm({
     payment_due_date: venda.payment_due_date ? venda.payment_due_date.slice(0, 10) : null,
   }));
 
+  // Feature 323: os dados da nota ficam fora de `form` — só vão no corpo com o chip ligado, e o
+  // campo escondido (chip desligado) nunca vira um 400 que a pessoa não vê.
+  const [nota, setNota] = useState<DadosDaNota>(() => dadosDoEvento(venda.nota));
+  const refDoc = useRef<HTMLInputElement>(null);
+  const refMunicipio = useRef<HTMLInputElement>(null);
+
   // Hotfix 215b: o vendedor já gravado só o Financeiro e o Superadmin trocam (o servidor recusa).
   const vendedorTravado = venda.seller_id != null && !venda.pode_trocar_vendedor;
 
@@ -199,7 +212,7 @@ function VendaForm({
   const cancelado = Boolean(data.event.cancelled_at);
   const [confirmando, setConfirmando] = useState(false);
   const enviar = () =>
-    salvar.mutate(form, {
+    salvar.mutate({ ...form, nota: form.with_invoice ? notaInput(nota) : undefined }, {
       onSuccess: (r) => {
         setConfirmando(false);
         onClose(r.aviso_bv);
@@ -217,6 +230,8 @@ function VendaForm({
   useEffect(() => {
     if (camposDoErro?.sale_value_gross) refBruto.current?.focus();
     else if (camposDoErro?.sale_value) refValor.current?.focus();
+    else if (camposDoErro?.nota_tomador_doc) refDoc.current?.focus();
+    else if (camposDoErro?.nota_municipio) refMunicipio.current?.focus();
   }, [camposDoErro]);
 
   return (
@@ -397,6 +412,21 @@ function VendaForm({
         />
         Cliente solicitou nota fiscal
       </label>
+      {form.with_invoice && (
+        <DadosDaNotaCampos
+          idPrefixo="venda_nota"
+          valor={nota}
+          onChange={(patch) => setNota((prev) => ({ ...prev, ...patch }))}
+          erros={{
+            nota_tomador_doc: camposDoErro?.nota_tomador_doc,
+            nota_municipio: camposDoErro?.nota_municipio,
+            nota_observacoes: camposDoErro?.nota_observacoes,
+          }}
+          docDoCliente={venda.nota?.doc_do_cliente}
+          refDoc={refDoc}
+          refMunicipio={refMunicipio}
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button
@@ -1122,6 +1152,31 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
           <DataRow label="Nota fiscal">
             <Badge tone="blue">Solicitada</Badge>
           </DataRow>
+        )}
+        {/* Feature 323: o que a emissão precisa, como a vendedora informou. */}
+        {venda.with_invoice && venda.nota && (
+          <>
+            <DataRow label="Tomador">
+              {venda.nota.tomador_doc
+                ? formatarDoc(venda.nota.tomador_doc)
+                : venda.nota.doc_do_cliente
+                  ? `${formatarDoc(venda.nota.doc_do_cliente)} (do cadastro)`
+                  : "Não informado"}
+            </DataRow>
+            <DataRow label="ISS">
+              {venda.nota.iss_retido
+                ? `Retido pelo tomador — ${venda.nota.municipio ?? ""}`
+                : "Não retido"}
+            </DataRow>
+            {venda.nota.referencia && (
+              <DataRow label="Referência">{venda.nota.referencia}</DataRow>
+            )}
+            {venda.nota.observacoes && (
+              <DataRow label="Observações da nota">
+                <span className="whitespace-pre-line">{venda.nota.observacoes}</span>
+              </DataRow>
+            )}
+          </>
         )}
       </div>
 

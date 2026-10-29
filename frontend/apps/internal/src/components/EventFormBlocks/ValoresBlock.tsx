@@ -4,7 +4,18 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MoneyInput, formatBRL } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import { percentualDoDesconto, textoDoPercentual } from "../../lib/desconto";
+import type { DadosDaNota } from "../../lib/notaFiscal";
+import { DadosDaNotaCampos } from "./DadosDaNotaCampos";
 import { FIELD, FIELD_ERROR, LABEL, FieldError, BlockCard } from "./shared";
+
+/** Campo da tela → campo do formulário (os nomes do formulário são os do `fields` do servidor). */
+const CAMPO_DA_NOTA = {
+  tomador_doc: "nota_tomador_doc",
+  iss_retido: "nota_iss_retido",
+  municipio: "nota_municipio",
+  referencia: "nota_referencia",
+  observacoes: "nota_observacoes",
+} as const;
 
 const CHIP = "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors";
 const CHIP_LIGADO = "border-accent bg-accent-soft text-accent-dark";
@@ -21,6 +32,8 @@ export interface ValoresBlockProps {
    * Superadmin). O nome aparece no lugar do seletor; o valor gravado segue no formulário.
    */
   vendedorTravado?: string | null;
+  /** Feature 323: o CNPJ/CPF do cadastro do cliente, que vale com o campo do tomador em branco. */
+  docDoCliente?: string | null;
 }
 
 /**
@@ -55,6 +68,7 @@ export function ValoresBlock({
   satelite = false,
   principal = null,
   vendedorTravado = null,
+  docDoCliente = null,
 }: ValoresBlockProps) {
   const {
     register,
@@ -69,6 +83,20 @@ export function ValoresBlock({
   const isCortesia = watch("is_cortesia_permuta");
   const aDefinir = watch("valor_a_definir");
   const withInvoice = watch("with_invoice");
+  const dadosDaNota: DadosDaNota = {
+    tomador_doc: watch("nota_tomador_doc"),
+    iss_retido: watch("nota_iss_retido"),
+    municipio: watch("nota_municipio"),
+    referencia: watch("nota_referencia"),
+    observacoes: watch("nota_observacoes"),
+  };
+  const alterarNota = (patch: Partial<DadosDaNota>) => {
+    for (const [chave, valor] of Object.entries(patch) as [keyof DadosDaNota, string | boolean][]) {
+      const campo = CAMPO_DA_NOTA[chave];
+      setValue(campo, valor as never, { shouldDirty: true });
+      clearErrors(campo);
+    }
+  };
   const gross = watch("sale_value_gross");
   const finalValue = watch("sale_value");
   const valorGravado = watch("valor_original");
@@ -222,6 +250,32 @@ export function ValoresBlock({
       >
         {withInvoice ? "✓ " : ""}Precisa de nota fiscal
       </button>
+
+      {/* Feature 323: o pedido da nota leva o que a emissão precisa. */}
+      <AnimatePresence initial={false}>
+        {withInvoice && (
+          <motion.div
+            initial={reduceMotion ? false : { height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={reduceMotion ? { opacity: 0 } : { height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <DadosDaNotaCampos
+              valor={dadosDaNota}
+              onChange={alterarNota}
+              erros={{
+                nota_tomador_doc: errors.nota_tomador_doc?.message,
+                nota_municipio: errors.nota_municipio?.message,
+                nota_observacoes: errors.nota_observacoes?.message,
+              }}
+              docDoCliente={docDoCliente}
+              refDoc={register("nota_tomador_doc").ref}
+              refMunicipio={register("nota_municipio").ref}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div>
         <label className={LABEL} htmlFor="seller_id">

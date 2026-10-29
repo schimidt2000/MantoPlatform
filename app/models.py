@@ -349,6 +349,13 @@ class CalendarEvent(db.Model):
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
     invoice_due_date     = db.Column(db.Date, nullable=True)          # data prevista de emissão da NF (feature 065)
+    # Dados da nota (feature 323): são da VENDA, não de cada nota — o cliente pede uma vez, por
+    # WhatsApp, e a 069 já divide a venda em várias notas. Documento vazio = vale o do cliente.
+    nota_tomador_doc     = db.Column(db.String(14), nullable=True)    # só dígitos: CNPJ (14) ou CPF (11)
+    nota_iss_retido      = db.Column(db.Boolean, nullable=True)       # ISS retido pelo tomador
+    nota_municipio       = db.Column(db.String(120), nullable=True)   # município da prestação (com ISS retido)
+    nota_referencia      = db.Column(db.String(120), nullable=True)   # AF, pedido de compra do cliente
+    nota_observacoes     = db.Column(db.Text, nullable=True)          # o que o cliente pediu na discriminação
 
     roles = db.relationship("EventRole", backref="event", lazy=True, cascade="all, delete-orphan")
     installments = db.relationship(
@@ -837,6 +844,16 @@ class EventInvoice(db.Model):
     file = db.Column(db.String(300), nullable=True)           # arquivo da nota
     issued_at = db.Column(db.DateTime, nullable=True)        # quando marcada emitida
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Pedido de emissão (feature 323). Os dois carimbos são `now_sp()` — nunca compare com
+    # `created_at`, que é UTC. `aviso_enviado_em` é reivindicado por UPDATE condicional: é ele que
+    # impede o segundo e-mail da mesma nota. Nota sem `pedida_por_id` (legado) nunca avisa.
+    pedida_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    pedida_em = db.Column(db.DateTime, nullable=True)
+    aviso_enviado_em = db.Column(db.DateTime, nullable=True)
+
+    pedida_por = db.relationship("User", lazy=True, foreign_keys=[pedida_por_id])
 
 
 class EventObservation(db.Model):

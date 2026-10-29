@@ -657,6 +657,12 @@ def build_dashboard_summary(
         else []
     )
 
+    # Feature 323: a nota pedida é tarefa do Superadmin real — o "Ver como" mostra a Home do papel
+    # simulado, que não emite nota. `None` = não desenhe (o Financeiro segue com o card dele).
+    from app.calendar import pedido_de_nota_ops
+
+    notas_a_emitir = _bloco("notas_a_emitir", pedido_de_nota_ops.painel) if is_superadmin else None
+
     # Painel PESSOAL (feature 225) — o único da home cujo gate é a identidade, não o papel:
     # quem tem peça de figurino sob sua responsabilidade precisa ver isso, seja qual for o papel,
     # e o "Ver como" de um super admin não muda de quem são os pedidos. Devolve None quando a
@@ -686,6 +692,7 @@ def build_dashboard_summary(
         "financeiro": financeiro,
         "performance": performance,
         "dismissed_casting": dismissed,
+        "notas_a_emitir": notas_a_emitir,
         "portal_url": portal_url,
     }
 

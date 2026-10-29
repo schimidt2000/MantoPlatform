@@ -562,6 +562,10 @@ function NotasFiscaisPanel({ data }: { data: EventoDetalhe }) {
               <span className="text-ink tabular-nums">
                 {brl(nota.amount)}
                 {nota.issue_date && ` · ${formatDay(nota.issue_date)}`}
+                {/* Feature 323: quem pediu a emissão. */}
+                {nota.status !== "emitida" && nota.pedida_por && (
+                  <span className="text-muted"> · pedida por {nota.pedida_por}</span>
+                )}
               </span>
               <span className="flex items-center gap-2">
                 <Badge tone={nota.status === "emitida" ? "green" : "neutral"}>

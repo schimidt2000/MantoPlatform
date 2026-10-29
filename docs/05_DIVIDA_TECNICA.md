@@ -794,3 +794,12 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 175 | **P3** | agenda × formulários × fichas (`form_responses.event_id`, `clients`, `event_clients`) | a causa de fundo dos contratos "a conferir": em 23 dos 35 assinados de 01/06 a 28/10, o **formulário da cliente tinha o telefone e a data certos, mas estava solto** (sem evento), e o evento ficava sem cliente ou ligado a uma **ficha duplicada sem o telefone** ("Miriam" × "Miriam Scanferla", "Clécia Aragão" × "Clécia", "Só Alegria - Camila" × "E so alegria"). A 317b contorna pela palavra do tema; o vínculo pelo telefone continua cego para essas vendas, e a mesma falta atrapalha a 318 (PIX) e a 298 (formulário) | ligar o formulário ao evento quando a comercial cria a venda (ou sugerir na Home) e juntar fichas duplicadas pelo telefone |
+
+## Baixa da feature 323-nota-pedida-ao-superadmin (2026-10-28)
+
+**Criada.** (176–177.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 176 | **P5** | `app/calendar/routes.py` (`_handle_update_comercial` → `comercial_ops.sincronizar_notas`, Jinja) | o editor Jinja da venda, inalcançável em produção mas registrado, ainda **apaga a nota emitida** ao desligar o chip e não carimba "pedida por" nem avisa; as portas da API seguem a 323 (desligar exclui só as a emitir) | sai junto com o Jinja (`docs/PARADA_REMOCAO_JINJA.md`); não corrigir de passagem |
+| 177 | **P4** | notas `a_emitir` antigas (antes da 323) | a Home do Superadmin passa a listar como urgentes as notas a emitir que já existiam — no espelho de 28/10 eram 6, de eventos de setembro, várias sem CNPJ; podem ter sido emitidas fora do sistema sem o PDF inserido | o Superadmin insere o PDF (vira emitida); nota que não será emitida não tem botão de excluir no React (o `useDeleteNotaFiscal` de `lib/eventOps.ts` existe sem tela) — pôr "Excluir" no card de notas fiscais resolve; sem script |

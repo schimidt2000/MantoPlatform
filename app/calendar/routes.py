@@ -4097,6 +4097,11 @@ def _create_event_core(
 
     _create_client_links(event, data.get("client_pairs") or [])
     _link_form_response(data.get("form_response_id"), event.id)
+    # Feature 323: depois dos vínculos — o documento informado completa o cliente contratante.
+    from app.calendar import pedido_de_nota_ops
+
+    pedido_de_nota_ops.gravar_dados_da_nota(event, data.get("nota"))
+    pedido_de_nota_ops.completar_documento_do_cliente(event, data.get("nota"))
 
     figurino_by_name = {
         s.character_name.lower(): s.id for s in FigurinoSheet.query.all()
@@ -4208,9 +4213,14 @@ def _create_event_core(
             message=frase_bv, created_at=datetime.now(tz=TZ),
         ))
     _log_sync("platform_created", event, actor=actor_name, actor_role=actor_role)
+    # Feature 323: a nota que `_create_event_row` criou ganha "pedida por"; o valor acompanha a
+    # venda, que o orçamento pode ter recalculado acima.
+    pedido_de_nota_ops.carimbar_pedido_da_criacao(event, pedida_por_id=actor_id)
+    pedido_de_nota_ops.acompanhar_pedido(event, pedida_por_id=actor_id)
     from app.financeiro.routes import _sync_commission_payment
     _sync_commission_payment(event)
     db.session.commit()
+    pedido_de_nota_ops.avisar_notas_pedidas(event.id)
 
     if event.needs_rehearsal:
         _notify_ensaio_team(event)

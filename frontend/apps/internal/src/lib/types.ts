@@ -3,6 +3,7 @@
 import type { StatusCounts } from "./formulariosAdmin";
 import type { ContratosResumo } from "./contratos";
 import type { Severidade } from "./homeListas";
+import type { NotasAEmitirSummary } from "./notaFiscal";
 
 /** Usuário autenticado — resposta de /api/auth/me e /api/auth/login. */
 export interface AuthUser {
@@ -329,6 +330,11 @@ export interface DashboardSummary {
   financeiro: { recurring_expense_alerts: RecurringExpenseAlert[] } | null;
   performance: PerformanceSummary | null;
   dismissed_casting: DashboardTaskRef[];
+  /**
+   * Feature 323 — notas pedidas à espera de emissão, só para o Superadmin real (sem "Ver como").
+   * `undefined` (servidor antigo) e `null` (outro papel ou painel que falhou): não desenhe.
+   */
+  notas_a_emitir?: NotasAEmitirSummary | null;
   /** URL raiz do portal do artista (PORTAL_URL), ou `null` quando a env var não está setada. */
   portal_url: string | null;
 }

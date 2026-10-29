@@ -1,4 +1,13 @@
 import { z } from "zod";
+import {
+  MENSAGEM_DOC_INVALIDO,
+  MENSAGEM_MUNICIPIO,
+  dadosDoEvento,
+  docValido,
+  notaInput,
+  type DadosDaNotaDoEvento,
+  type NotaInput,
+} from "./notaFiscal";
 
 /** O que o campo de valor diz quando o valor não fecha uma venda (feature 299) — o texto do servidor. */
 export const MENSAGEM_VALOR_A_DEFINIR = "Informe o valor de venda ou marque “Valor a definir”.";
@@ -48,6 +57,13 @@ export const eventSchema = z
     payment_method: z.string(),
     payment_installments: z.string(),
     payment_due_date: z.string(),
+    // Feature 323 — os dados da nota, planos (o nome é o do `fields` do servidor). Só valem com o
+    // chip ligado, mas ficam no formulário ao desligar: religar recupera o que o cliente pediu.
+    nota_tomador_doc: z.string(),
+    nota_iss_retido: z.boolean(),
+    nota_municipio: z.string(),
+    nota_referencia: z.string(),
+    nota_observacoes: z.string(),
     // Feature 299 — campos da tela, não do banco: a marca "Valor a definir" (vai no corpo, mas o
     // servidor não a grava), os valores que o evento já tinha (para a exceção do R32) e se o
     // evento é outro evento de um grupo (a venda mora no principal).
@@ -76,6 +92,14 @@ export const eventSchema = z
       (Number(v.payment_installments) >= 2 && Number(v.payment_installments) <= 12),
     { message: "Informe o número de parcelas (2 a 12).", path: ["payment_installments"] },
   )
+  .refine((v) => !v.with_invoice || docValido(v.nota_tomador_doc), {
+    message: MENSAGEM_DOC_INVALIDO,
+    path: ["nota_tomador_doc"],
+  })
+  .refine((v) => !v.with_invoice || !v.nota_iss_retido || v.nota_municipio.trim() !== "", {
+    message: MENSAGEM_MUNICIPIO,
+    path: ["nota_municipio"],
+  })
   .refine((v) => v.start === "" || v.end === "" || v.start !== v.end, {
     message: "O horário de fim deve ser diferente do início.",
     path: ["end"],
@@ -92,6 +116,9 @@ export const SERVER_FIELD_MAP: Partial<Record<string, keyof EventFormValues>> = 
   sale_value: "sale_value",
   seller_id: "seller_id",
   payment_installments: "payment_installments",
+  nota_tomador_doc: "nota_tomador_doc",
+  nota_municipio: "nota_municipio",
+  nota_observacoes: "nota_observacoes",
 };
 
 /** Ordem visual dos campos obrigatórios, do Bloco 2 ao Bloco 5 — usada para achar o primeiro erro
@@ -105,6 +132,9 @@ export const FIELD_ORDER: (keyof EventFormValues)[] = [
   "end",
   "sale_value_gross",
   "sale_value",
+  "nota_tomador_doc",
+  "nota_municipio",
+  "nota_observacoes",
   "seller_id",
   "payment_installments",
 ];
@@ -138,8 +168,45 @@ export const DEFAULT_EVENT_FORM_VALUES: EventFormValues = {
   payment_method: "",
   payment_installments: "",
   payment_due_date: "",
+  nota_tomador_doc: "",
+  nota_iss_retido: false,
+  nota_municipio: "",
+  nota_referencia: "",
+  nota_observacoes: "",
   valor_a_definir: false,
   valor_original: null,
   valor_original_bruto: null,
   satelite: false,
 };
+
+/** Feature 323: os dados da nota gravados → os campos do formulário (vazio quando não há). */
+export function camposDaNota(
+  nota?: DadosDaNotaDoEvento | null,
+): Pick<
+  EventFormValues,
+  "nota_tomador_doc" | "nota_iss_retido" | "nota_municipio" | "nota_referencia" | "nota_observacoes"
+> {
+  const d = dadosDoEvento(nota);
+  return {
+    nota_tomador_doc: d.tomador_doc,
+    nota_iss_retido: d.iss_retido,
+    nota_municipio: d.municipio,
+    nota_referencia: d.referencia,
+    nota_observacoes: d.observacoes,
+  };
+}
+
+/**
+ * Feature 323: a chave `nota` do corpo — só com o chip ligado. Sem a chave o servidor não mexe nos
+ * dados gravados, e o campo escondido (chip desligado) nunca vira um 400 que a pessoa não vê.
+ */
+export function notaDoFormulario(v: EventFormValues): NotaInput | undefined {
+  if (!v.with_invoice) return undefined;
+  return notaInput({
+    tomador_doc: v.nota_tomador_doc,
+    iss_retido: v.nota_iss_retido,
+    municipio: v.nota_municipio,
+    referencia: v.nota_referencia,
+    observacoes: v.nota_observacoes,
+  });
+}
