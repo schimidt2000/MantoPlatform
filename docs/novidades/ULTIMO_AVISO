@@ -1,0 +1,5 @@
+# Até onde a equipe já foi avisada (feature 321). Uma linha por rodada: <hash da main> <data> <comunicado>.
+# Só a última linha vale. Gravado por `python scripts/novidades.py --marcar`; não edite à mão.
+# Linha inicial: o que entrou antes do lote de 14/10/2026 fica fora deste fluxo (foi contado à equipe
+# caso a caso, ou não foi — ver docs/03). A primeira rodada (docs/novidades/2026-10-28.md) cobre 298b → 320.
+0feb4255 2026-10-14

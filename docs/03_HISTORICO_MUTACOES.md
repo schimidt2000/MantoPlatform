@@ -4,7 +4,13 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-28** · Estado do repositório: pós-correção **317b-ligacao-de-contratos** (sem
+> Última atualização: **2026-10-29** · Estado do repositório: pós-**deploy em lote de 29/10/2026 (HORA)**, a
+> pedido do dono, fora do horário, num push só, na ordem dos merges: **309b-visita-magica-30-minutos** (sem migration;
+> a Visita Mágica no orçamento diz "visita de até 30 minutos" e o que inclui; `verify_309b.py` 10/10),
+> **323-nota-pedida-ao-superadmin** (migration `d323b5a1c0e7`, aditiva, sobre `c322a7e1b9d4`; o chip "Precisa de
+> nota fiscal" pede a nota com os dados da emissão e avisa o Superadmin por e-mail e na Home; `verify_323.py` 15/15)
+> e **321-novidades-para-a-equipe** (harness: `scripts/novidades.py`, gancho `pre-push` e skill `manto-novidades`;
+> nada muda no sistema) — antes dele pós-correção **317b-ligacao-de-contratos** (sem
 > migration; **EM PRODUÇÃO desde 28/10/2026, de madrugada**, a pedido do dono, logo depois da 322 — o contrato da
 > ClickSign acha a venda também pelo telefone a um dia, pelo formulário ligado, pelo e-mail e pela palavra do tema; a
 > venda cancelada certa liga e o envelope cancelado sem venda sai de "A conferir": 57 → 16 na simulação desde 01/06;
@@ -186,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **321-novidades-para-a-equipe** | *(na branch, aguardando o dono)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(PRONTA, aguardando merge e deploy)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
 | **317b-ligacao-de-contratos** | *(EM PRODUÇÃO 28/10, madrugada)* O contrato da ClickSign acha a venda quando data + telefone não bastam: mesmo telefone a um dia, formulário do mesmo telefone e data ligado a um evento (festa remarcada), e-mail no lugar do telefone e **tema por palavra** ("Arraiá com o Snoopy" × "SNOOPY + CHARLIE"); a venda cancelada certa liga (o PDF não entra no cancelado) e o envelope cancelado na ClickSign sem venda sai de "A conferir". Nos 246 envelopes desde 01/06: 57 a conferir → 16, 19 vínculos novos conferidos um a um | 2026-10-28 | — | (aqui) | ver Registro |
@@ -383,6 +390,48 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
+
+> **Na branch, aguardando o dono** (merge só a pedido; nada muda no sistema em produção). Nível 2 (harness e
+> documentação). Detalhe: `specs/321-novidades-para-a-equipe/spec.md`.
+
+**O pedido.** O dono (28/10): as mudanças que entram em produção "não passam para o time, eles muitas vezes não
+sabem que mudou"; quer uma forma sob demanda de mandar aos grupos de WhatsApp o que mexe com cada função, de
+preferência por checagem no push e disparo automático — e, se não der, o texto pronto e para quem enviar.
+
+**O que mudou.**
+- `scripts/novidades.py`: lista o que entrou na `main` (`--first-parent`) desde o marco `docs/novidades/ULTIMO_AVISO`;
+  para cada merge `merge: NNN — …` acha a spec e "O pedido", a data de produção na entrada deste documento e o sinal
+  de "interruptor/desligada" (⚠ = não anunciar); pistas de grupo pelos arquivos. `--rascunho` grava
+  `docs/novidades/<hoje>.md`; `--marcar` grava a `main` como avisada; `--hook`/`--contar` servem ao gancho.
+- `scripts/hooks/pre-push` (cópia em `.git/hooks/`): ao empurrar a `main`, imprime quantas mudanças estão sem aviso e
+  lembra a skill. Nunca bloqueia.
+- Skill `manto-novidades`: listar → rascunho → ler a entrada do `docs/03` → confirmar o nome do botão na tela →
+  escrever por grupo (constituição §XV, "mensagem de WhatsApp que a equipe copia") → dono aprova → enviar →
+  `--marcar`. Tabela grupo × papel com os nomes reais dos grupos (vendas, casting, ensaios, figurinos, redes
+  sociais). O dono copia e cola; não há envio automático nem assistido.
+- Primeira rodada: `docs/novidades/2026-10-28.md`, com as 21 mudanças de 14/10 a 27/10 (298b → 320) mais a 322 (28/10)
+  e uma mensagem pronta por grupo; 310, 317 e 318 ficam guardadas (desligadas até o dono configurar).
+- Ponteiros em `DEVELOPMENT.md` §Publicar (passo 8), na skill `manto-deploy` e no `CLAUDE.md` §9.
+
+**Decisões.** Envio sem supervisão foi descartado: a API oficial do WhatsApp não cobre grupos de forma aberta e
+automação por cima do WhatsApp Web arrisca o número da empresa. Respostas do dono (28/10, segunda sessão): os grupos
+são "vendas" (comercial), "casting", "ensaios", "figurinos" e "redes sociais" (marketing); o financeiro não tem grupo
+("realmente não tem ninguém") e não há grupo geral; o dono cola as mensagens, sem envio pelo Chrome; o texto tem de
+ser "de fácil entendimento, mas explicativo o suficiente" — cada mudança em duas a quatro frases (o que mudou, como
+era, o que fazer e onde, exemplo quando a regra não é óbvia), não mais uma linha. A data de produção vem deste documento, não do
+`Status` da spec (que fica "Rascunho" na maioria das features, pelo template). O marco é arquivo versionado, não tag.
+
+**Verificação.** `verify_321.py` 9/9 (só git e arquivos; não usa o `manto_local`): 21 mudanças na faixa fixa
+`0feb4255..6f706fa6`, 320 primeiro com spec e data, ⚠ em 310/317/318 e não na 320/313, `docs`/`chore` fora,
+sufixos reconhecidos, `--contar`/`--hook`, `--rascunho` com uma seção por grupo do WhatsApp, `--marcar` + `ler_marco` em arquivo
+temporário. `ruff` limpo. O gancho foi exercitado com um push simulado da `main` (saída `[pre-push] novidades: 21
+mudança(s) …`, exit 0).
+
+**Pegadinhas.** O gancho vive em `.git/hooks/` e não é versionado: máquina nova copia de `scripts/hooks/`. Em
+worktree, o `.git/hooks` do repositório principal vale para todos. Heredoc do Bash ao escrever o script virou `\n`
+literal em quebra de linha real (`texto.find("\n## Registro")`) — regra do `CLAUDE.md` §7 confirmada de novo.
 
 ### 323 — A nota pedida chega ao Superadmin com tudo o que a emissão precisa   (323-nota-pedida-ao-superadmin · 2026-10-28 · migration `d323b5a1c0e7`)
 

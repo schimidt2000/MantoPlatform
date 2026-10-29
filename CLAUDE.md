@@ -164,6 +164,7 @@ RBAC ou convenção; `docs/01` §5 só se mudou deploy/infra.
 ## 9. Skills de projeto
 
 `manto-verify` (escrever/rodar verify contra o `manto_local`), `manto-deploy` (publicar e operar a
-produção no Render), `manto-conferir-tela` (verificar tela React no Browser pane), `financeiro`,
+produção no Render), `manto-novidades` (depois do deploy: contar à equipe o que mudou, uma mensagem
+de WhatsApp por grupo), `manto-conferir-tela` (verificar tela React no Browser pane), `financeiro`,
 `financeiro-auditor`, `marketing-auditor`. As skills `speckit-*` são geradas pelo Spec Kit — não
 edite à mão; regra do projeto vai na constituição e nos templates de `.specify/templates/`.
