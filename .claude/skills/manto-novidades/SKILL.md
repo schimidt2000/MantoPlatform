@@ -3,7 +3,8 @@ name: manto-novidades
 description: >
   Contar à equipe o que mudou no sistema depois de um deploy. Lista o que entrou na `main` desde
   o último aviso (`scripts/novidades.py`), escreve uma mensagem de WhatsApp por grupo (vendas,
-  casting, ensaios, figurinos, redes sociais) no tom da casa e grava em
+  casting, ensaios, figurinos, redes sociais), mais o resumo completo da Maria Gabriella
+  (Superadmin), no tom da casa e grava em
   `docs/novidades/AAAA-MM-DD.md` e, com o texto aprovado pelo dono, envia pelo WhatsApp Web no
   Claude in Chrome, um grupo por vez. Use quando o dono disser "avisa a equipe",
   "novidades", "manda para os grupos", "/manto-novidades", e depois de todo deploy (o gancho
@@ -97,7 +98,15 @@ e "MANTO - PAGAMENTOS" e "MANTO - CONTRATOS" não recebem novidades.
 - **Não há grupo geral**: o que vale para todo mundo (navegação, arquivo, textos) entra em cada
   mensagem, com a frase ajustada ao grupo.
 - **Artistas** só recebem aviso se o dono pedir (não há grupo; seria lista de transmissão).
-- Superadmin recebe tudo (é o dono).
+- **Maria Gabriella** (Superadmin, assistente do dono em tudo) recebe em **toda** rodada um texto
+  com **todas** as mudanças (regra do dono, 29/10), numa conversa individual, não em grupo. Seção
+  `### Maria Gabriella (Superadmin)` no arquivo do dia. Diferenças dos textos de grupo:
+  - entra também o que é só financeiro e o que só o Superadmin faz (decidir cancelamento, emitir
+    nota, taxa, dispensa), e isso vem primeiro;
+  - o que está pronto mas desligado entra num bloco à parte, "Pronto, mas ainda desligado (não
+    avisei a equipe)", dizendo o que falta para ligar;
+  - o resto segue as regras de texto acima, com o mesmo cuidado de explicar.
+- O dono recebe o arquivo do dia (é ele quem aprova).
 
 ## Enviar pelo Claude in Chrome
 
@@ -115,7 +124,8 @@ WhatsApp Web arrisca o número da empresa. O envio é assistido:
    metade. O mais seguro é colar o texto inteiro (área de transferência ou evento de colar na
    caixa), não digitar linha a linha.
 4. Um grupo por vez; se algo sair diferente do aprovado (texto cortado, grupo errado), pare e
-   avise o dono antes de seguir. Nunca contato individual, nunca grupo fora da lista.
+   avise o dono antes de seguir. Nunca contato individual (a única exceção é a conversa da Maria
+   Gabriella, conferida pelo nome no cabeçalho), nunca grupo fora da lista.
 5. Depois de cada envio, anotar "enviado em dd/mm hh:mm" na seção do grupo.
 
 ## Armadilhas

@@ -52,13 +52,15 @@ PISTAS = [
 ]
 
 # Nomes reais dos grupos no WhatsApp (dono, 28/10). Financeiro não tem grupo nem há grupo geral:
-# a tabela grupo × papel está na skill manto-novidades.
+# a tabela grupo × papel está na skill manto-novidades. A Maria Gabriella (Superadmin, assistente
+# do dono) recebe tudo em conversa individual a cada rodada (dono, 29/10).
 GRUPOS_PADRAO = [
     "vendas",
     "casting",
     "ensaios",
     "figurinos",
     "redes sociais",
+    "Maria Gabriella (Superadmin)",
 ]
 
 
