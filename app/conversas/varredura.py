@@ -64,11 +64,12 @@ def reprocessar_midias(limite: int = K.VARREDURA_LOTE) -> dict[str, int]:
         for linha in db.session.execute(
             text(
                 "SELECT id FROM conversa_midias WHERE estado = :pend "
-                "AND (tentado_em IS NULL OR tentado_em < :antes) ORDER BY id LIMIT :limite"
+                f"AND {midia_ops.PRONTA_PARA_TENTAR} ORDER BY id LIMIT :limite"
             ),
             {
                 "pend": K.MIDIA_PENDENTE,
-                "antes": agora_utc() - midia_ops.INTERVALO_ENTRE_TENTATIVAS,
+                "agora": agora_utc(),
+                "teto_min": midia_ops.TETO_DO_ESPACAMENTO_MIN,
                 "limite": limite,
             },
         ).fetchall()

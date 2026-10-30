@@ -189,10 +189,16 @@ def _processar_mensagens(valor: dict[str, Any]) -> list[int]:
     }
     midias: list[int] = []
     for mensagem in valor.get("messages") or []:
-        if isinstance(mensagem, dict):
-            midia_id = _gravar_recebida(mensagem, contatos.get(mensagem.get("from")) or {})
-            if midia_id:
-                midias.append(midia_id)
+        if not isinstance(mensagem, dict):
+            continue
+        if mensagem.get("group_id"):
+            # Mensagem de grupo (Groups API) não é conversa 1:1 com a cliente: cairia na caixa do
+            # participante como se ele tivesse escrito para a Manto.
+            logger.info("[whatsapp] mensagem de grupo %s ignorada", mensagem.get("group_id"))
+            continue
+        midia_id = _gravar_recebida(mensagem, contatos.get(mensagem.get("from")) or {})
+        if midia_id:
+            midias.append(midia_id)
     for status in valor.get("statuses") or []:
         if isinstance(status, dict):
             _aplicar_status(status)
@@ -236,14 +242,20 @@ def conversa_do_contato(
 
 
 def _vincular_cliente(conversa: Conversa) -> None:
-    """Liga à ficha pelo telefone, com e sem o nono dígito (FR-005). Duas fichas = não liga."""
+    """Liga à ficha pelo telefone, com e sem o nono dígito (FR-005).
+
+    Com duas fichas (uma gravada com o 9 e outra sem), vale a do telefone exato da conversa; sem
+    ela, não liga — escolher "a primeira" ligaria a conversa à cliente errada.
+    """
     if conversa.client_id is not None or not conversa.telefone:
         return
     candidatos = Client.query.filter(
         Client.phone.in_(variantes_de_telefone(conversa.telefone))
     ).all()
-    if len(candidatos) == 1:
-        conversa.client_id = candidatos[0].id
+    exatos = [c for c in candidatos if c.phone == conversa.telefone]
+    escolhido = candidatos[0] if len(candidatos) == 1 else (exatos[0] if len(exatos) == 1 else None)
+    if escolhido is not None:
+        conversa.client_id = escolhido.id
 
 
 def atualizar_previa(conversa: Conversa, tipo: str, texto: str | None, momento: datetime) -> None:
@@ -393,32 +405,34 @@ def _processar_ecos(valor: dict[str, Any]) -> list[int]:
     """Mensagens que a equipe mandou pelo app WhatsApp Business (FR-017, research R12)."""
     midias: list[int] = []
     for eco in valor.get("message_echoes") or []:
-        if (
-            not isinstance(eco, dict)
-            or not eco.get("id")
-            or not (eco.get("to") or eco.get("to_user_id"))
-        ):
-            continue
-        conversa = conversa_do_contato(
-            str(eco.get("to") or eco.get("to_user_id")), bsuid=eco.get("to_user_id")
+        valido = (
+            isinstance(eco, dict) and eco.get("id") and (eco.get("to") or eco.get("to_user_id"))
         )
-        tipo, texto = _texto_do_eco(eco, eco.get("type") or "")
-        momento = _momento(eco.get("timestamp"))
-        mensagem_id = _inserir_mensagem(
-            conversa_id=conversa.id,
-            direcao=K.ENVIADA,
-            tipo=tipo,
-            texto=texto,
-            externo_id=str(eco["id"]),
-            situacao=K.SITUACAO_ENVIADA,
-            origem=K.ORIGEM_CELULAR,
-            dados=json.dumps(eco),
-            momento=momento,
-        )
-        if mensagem_id is None:
-            continue
-        # Só a cliente reabre a janela (R9): o eco atualiza a prévia, não `ultima_recebida_em`.
-        atualizar_previa(conversa, tipo, texto, momento)
-        if tipo in K.TIPOS_COM_MIDIA and (midia_id := _criar_midia(mensagem_id, eco)):
+        if valido and (midia_id := _gravar_eco(eco)):
             midias.append(midia_id)
     return midias
+
+
+def _gravar_eco(eco: dict[str, Any]) -> int | None:
+    """Grava um eco como enviada pelo celular. Devolve o id da mídia a baixar, se houver."""
+    conversa = conversa_do_contato(
+        str(eco.get("to") or eco.get("to_user_id")), bsuid=eco.get("to_user_id")
+    )
+    tipo, texto = _texto_do_eco(eco, eco.get("type") or "")
+    momento = _momento(eco.get("timestamp"))
+    mensagem_id = _inserir_mensagem(
+        conversa_id=conversa.id,
+        direcao=K.ENVIADA,
+        tipo=tipo,
+        texto=texto,
+        externo_id=str(eco["id"]),
+        situacao=K.SITUACAO_ENVIADA,
+        origem=K.ORIGEM_CELULAR,
+        dados=json.dumps(eco),
+        momento=momento,
+    )
+    if mensagem_id is None:
+        return None
+    # Só a cliente reabre a janela (R9): o eco atualiza a prévia, não `ultima_recebida_em`.
+    atualizar_previa(conversa, tipo, texto, momento)
+    return _criar_midia(mensagem_id, eco) if tipo in K.TIPOS_COM_MIDIA else None

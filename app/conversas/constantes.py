@@ -131,6 +131,18 @@ MIME_DE_ENVIO = {
     "application/vnd.ms-powerpoint": TIPO_DOCUMENTO,
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": TIPO_DOCUMENTO,
 }
+# O navegador manda nomes que a Meta não reconhece para o mesmo formato (o m4a do iPhone, o mp3 do
+# Windows): normalizados antes de validar e de subir.
+APELIDOS_DE_MIME = {
+    "audio/x-m4a": "audio/mp4",
+    "audio/m4a": "audio/mp4",
+    "audio/mp3": "audio/mpeg",
+    "audio/x-mpeg": "audio/mpeg",
+    "audio/opus": "audio/ogg",
+    "audio/x-aac": "audio/aac",
+    "image/jpg": "image/jpeg",
+    "image/pjpeg": "image/jpeg",
+}
 # Teto da Meta por tipo de envio (bytes).
 TETO_DE_ENVIO = {
     TIPO_IMAGEM: 5 * 1024 * 1024,

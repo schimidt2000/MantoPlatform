@@ -193,8 +193,14 @@ def enviar_texto(
 # ── Arquivo ──────────────────────────────────────────────────────────────────────────────────────
 
 
-def _tipo_do_arquivo(mime: str | None, tamanho: int) -> str:
-    tipo = K.MIME_DE_ENVIO.get((mime or "").split(";")[0].strip().lower())
+def mime_normalizado(mime: str | None) -> str:
+    """O MIME sem parâmetros, em minúsculas, com os apelidos do navegador trocados pelo da Meta."""
+    limpo = (mime or "").split(";")[0].strip().lower()
+    return K.APELIDOS_DE_MIME.get(limpo, limpo)
+
+
+def _tipo_do_arquivo(mime: str, tamanho: int) -> str:
+    tipo = K.MIME_DE_ENVIO.get(mime)
     if tipo is None:
         raise _campo(
             "arquivo",
@@ -222,39 +228,58 @@ def enviar_arquivo(
     chave = _validar_chave(chave)
     if existente := _ja_enviada(chave):
         return Envio(existente, nova=False)
-    tipo = _tipo_do_arquivo(mime, len(dados))
-    mime_limpo = (mime or "").split(";")[0].strip().lower()
+    mime_limpo = mime_normalizado(mime)
+    tipo = _tipo_do_arquivo(mime_limpo, len(dados))
     conversa = conversa_ou_404(conversa_id)
     _pre_condicoes(cfg, conversa, exige_janela=True)
     legenda = (legenda or "").strip()[: K.TEXTO_MAXIMO] or None
     envio = _reservar(conversa, chave, tipo, legenda, autor_id)
-    if not envio.nova:
-        return envio
-    mensagem = envio.mensagem
+    if envio.nova:
+        midia = _guardar_copia_local(envio.mensagem, dados, nome, mime_limpo, cfg)
+        _subir_e_despachar(envio.mensagem, midia, conversa, dados, tipo, legenda, cfg)
+    return envio
+
+
+def _guardar_copia_local(
+    mensagem: ConversaMensagem, dados: bytes, nome: str, mime: str, cfg: CfgWhatsapp
+) -> ConversaMidia:
+    """A cópia que a conversa exibe, guardada ANTES do upload (a falha da Meta não a perde)."""
     midia = ConversaMidia(
         mensagem_id=mensagem.id,
-        mime=mime_limpo,
+        mime=mime,
         tamanho=len(dados),
         nome_original=nome[:255],
-        caminho=midia_ops.guardar_bytes(dados, mime_limpo, cfg),
+        caminho=midia_ops.guardar_bytes(dados, mime, cfg),
         estado=K.MIDIA_GUARDADA,
     )
     db.session.add(midia)
     db.session.commit()
+    return midia
+
+
+def _subir_e_despachar(
+    mensagem: ConversaMensagem,
+    midia: ConversaMidia,
+    conversa: Conversa,
+    dados: bytes,
+    tipo: str,
+    legenda: str | None,
+    cfg: CfgWhatsapp,
+) -> None:
+    """Sobe o arquivo à Meta e manda a mensagem com o id dele."""
     try:
-        midia.externo_id = wc.subir_midia(cfg.conexao, dados, mime_limpo, nome)
+        midia.externo_id = wc.subir_midia(cfg.conexao, dados, midia.mime, midia.nome_original)
     except wc.WhatsappErro as exc:
         _registrar_falha(mensagem, exc)
         db.session.commit()
-        return envio
+        return
     chave_meta = K.CHAVE_DA_META[tipo]
     bloco: dict[str, Any] = {"id": midia.externo_id}
     if legenda and tipo != K.TIPO_AUDIO:
         bloco["caption"] = legenda
     if tipo == K.TIPO_DOCUMENTO:
-        bloco["filename"] = nome
+        bloco["filename"] = midia.nome_original
     _despachar(mensagem, conversa, {"type": chave_meta, chave_meta: bloco}, cfg)
-    return envio
 
 
 # ── Modelos ──────────────────────────────────────────────────────────────────────────────────────
@@ -345,6 +370,27 @@ def _corpo_do_modelo(modelo: dict[str, Any], valores: list[str]) -> dict[str, An
     }
 
 
+def _modelo_escolhido(cfg: CfgWhatsapp, nome: str | None, idioma: str | None) -> dict[str, Any]:
+    for modelo in modelos_aprovados(cfg):
+        if modelo["nome"] == nome and (not idioma or modelo["idioma"] == idioma):
+            return modelo
+    raise _campo("nome", "Selecione um modelo aprovado.")
+
+
+def texto_das_variaveis(quantidade: int) -> str:
+    """ "Preencha a variável do modelo." / "Preencha as 2 variáveis do modelo." (XV: contagem)."""
+    if quantidade == 1:
+        return "Preencha a variável do modelo."
+    return f"Preencha as {quantidade} variáveis do modelo."
+
+
+def _valores_do_modelo(modelo: dict[str, Any], variaveis: list[Any] | None) -> list[str]:
+    valores = [str(v or "").strip() for v in (variaveis or [])]
+    if len(valores) != modelo["variaveis"] or not all(valores):
+        raise _campo("variaveis", texto_das_variaveis(modelo["variaveis"]))
+    return valores
+
+
 def enviar_modelo(
     conversa_id: int,
     nome: str | None,
@@ -360,19 +406,8 @@ def enviar_modelo(
         return Envio(existente, nova=False)
     conversa = conversa_ou_404(conversa_id)
     _pre_condicoes(cfg, conversa, exige_janela=False)
-    modelo = next(
-        (
-            m
-            for m in modelos_aprovados(cfg)
-            if m["nome"] == nome and (not idioma or m["idioma"] == idioma)
-        ),
-        None,
-    )
-    if modelo is None:
-        raise _campo("nome", "Selecione um modelo aprovado.")
-    valores = [str(v or "").strip() for v in (variaveis or [])]
-    if len(valores) != modelo["variaveis"] or not all(valores):
-        raise _campo("variaveis", f"Preencha as {modelo['variaveis']} variáveis do modelo.")
+    modelo = _modelo_escolhido(cfg, nome, idioma)
+    valores = _valores_do_modelo(modelo, variaveis)
     envio = _reservar(
         conversa, chave, K.TIPO_MODELO, _texto_final(modelo, valores), autor_id, modelo["nome"]
     )

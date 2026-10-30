@@ -396,7 +396,20 @@ def _start_virtual_sweep(app):
     app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
 
 
-def _start_whatsapp_sweep(app):
+def _passada_whatsapp(app: Flask) -> None:
+    """Uma passada da varredura do WhatsApp (feature 325), só com o módulo ligado."""
+    from app.conversas.configuracao import cfg_whatsapp
+    from app.conversas.varredura import ciclo_de_varredura
+
+    with app.app_context():
+        if not cfg_whatsapp().ligado:
+            return
+        resumo = ciclo_de_varredura()
+        if any(resumo.values()):
+            app.logger.info("[whatsapp-sweep] %s", resumo)
+
+
+def _start_whatsapp_sweep(app: Flask) -> None:
     """Thread que refaz avisos e mídias do WhatsApp que ficaram pelo caminho (feature 325).
 
     O webhook grava o aviso cru e responde 200; o processamento roda numa thread que o deploy
@@ -407,6 +420,7 @@ def _start_whatsapp_sweep(app):
     """
     import os as _os
     import threading
+    import time
 
     flask_env = _os.environ.get("FLASK_ENV", "")
     if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
@@ -414,18 +428,11 @@ def _start_whatsapp_sweep(app):
 
     from app.conversas.constantes import VARREDURA_INTERVALO_S
 
-    def _loop():
-        import time
+    def _loop() -> None:
         time.sleep(45)  # aguarda o app estar pronto
-        from app.conversas.configuracao import cfg_whatsapp
-        from app.conversas.varredura import ciclo_de_varredura
         while True:
             try:
-                with app.app_context():
-                    if cfg_whatsapp().ligado:
-                        resumo = ciclo_de_varredura()
-                        if any(resumo.values()):
-                            app.logger.info("[whatsapp-sweep] %s", resumo)
+                _passada_whatsapp(app)
             except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
                 app.logger.warning(f"[whatsapp-sweep] erro: {exc}")
             time.sleep(VARREDURA_INTERVALO_S)

@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion, useReducedMotion } from "framer-motion";
 import { MessageCircle } from "lucide-react";
 import { cn } from "@manto/ui";
 import { ConversaAberta } from "../components/conversas/ConversaAberta";
 import { ListaDeConversas } from "../components/conversas/ListaDeConversas";
-import { intervaloDaLista, useConversas } from "../lib/conversas";
+import { intervaloDaLista, useConversas, useConversasAnteriores, type ConversaResumo } from "../lib/conversas";
 
 /**
  * Conversas (feature 325) — o WhatsApp da Manto dentro da Plataforma.
@@ -16,16 +17,27 @@ import { intervaloDaLista, useConversas } from "../lib/conversas";
 
 const ESPERA_DA_BUSCA_MS = 300;
 
+/** Topo (com polling) + páginas antigas, sem repetir a conversa que subiu para o topo. */
+function juntarPaginas(topo: ConversaResumo[] | undefined, antigas: ConversaResumo[][]): ConversaResumo[] | undefined {
+  if (!topo) return undefined;
+  const vistas = new Set(topo.map((c) => c.id));
+  return [...topo, ...antigas.flat().filter((c) => (vistas.has(c.id) ? false : (vistas.add(c.id), true)))];
+}
+
 export function ConversasPage() {
+  const reduzir = useReducedMotion();
   const [params, setParams] = useSearchParams();
   const selecionada = Number(params.get("c")) || null;
   const [busca, setBusca] = useState(params.get("busca") ?? "");
   const [buscaEfetiva, setBuscaEfetiva] = useState(busca);
+  const [cursorDaLista, setCursorDaLista] = useState<string | null>(null);
   const lista = useConversas(buscaEfetiva);
+  const anteriores = useConversasAnteriores(buscaEfetiva, cursorDaLista);
 
   useEffect(() => {
     const espera = setTimeout(() => {
       setBuscaEfetiva(busca.trim());
+      setCursorDaLista(null);
       setParams(
         (atuais) => {
           const novos = new URLSearchParams(atuais);
@@ -38,6 +50,12 @@ export function ConversasPage() {
     }, ESPERA_DA_BUSCA_MS);
     return () => clearTimeout(espera);
   }, [busca, setParams]);
+
+  const conversas = useMemo(
+    () => juntarPaginas(lista.data?.conversas, (anteriores.data?.pages ?? []).map((p) => p.conversas)),
+    [lista.data, anteriores.data],
+  );
+  const temMais = cursorDaLista === null ? Boolean(lista.data?.proximo) : Boolean(anteriores.hasNextPage);
 
   const selecionar = (id: number | null) =>
     setParams(
@@ -70,7 +88,7 @@ export function ConversasPage() {
           O envio pelo WhatsApp está travado neste ambiente: as mensagens não saem para o celular da cliente.
         </p>
       ) : null}
-      <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(280px,360px)_1fr]">
+      <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(280px,360px)_1fr] [&>*]:min-w-0">
         <section
           aria-label="Lista de conversas"
           className={cn("min-h-0 border-r border-line bg-panel", selecionada ? "hidden md:block" : "block")}
@@ -78,10 +96,16 @@ export function ConversasPage() {
           <ListaDeConversas
             busca={busca}
             onBusca={setBusca}
-            conversas={lista.data?.conversas}
+            conversas={conversas}
             carregando={lista.isLoading}
             falhou={lista.isError}
+            buscando={lista.isFetching}
             onTentarDeNovo={() => void lista.refetch()}
+            temMais={temMais}
+            carregandoMais={anteriores.isFetching}
+            onCarregarMais={() =>
+              cursorDaLista === null ? setCursorDaLista(lista.data?.proximo ?? null) : void anteriores.fetchNextPage()
+            }
             selecionada={selecionada}
             onSelecionar={selecionar}
           />
@@ -90,18 +114,27 @@ export function ConversasPage() {
           aria-label="Conversa aberta"
           className={cn("min-h-0 bg-surface", selecionada ? "block" : "hidden md:block")}
         >
-          {selecionada ? (
-            <ConversaAberta
-              key={selecionada}
-              conversaId={selecionada}
-              intervaloMs={intervaloDaLista(lista.data)}
-              onVoltar={() => selecionar(null)}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted">
-              Selecione uma conversa para ler e responder.
-            </div>
-          )}
+          {/* Só entrada (a `key` remonta): uma saída com `AnimatePresence mode="wait"` trava a troca
+              quando a aba não pinta quadros — a conversa nova nunca entrava. */}
+          <motion.div
+            key={selecionada ?? "nenhuma"}
+            className="h-full"
+            initial={reduzir ? false : { opacity: 0, x: 12 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ duration: 0.2 }}
+          >
+            {selecionada ? (
+              <ConversaAberta
+                conversaId={selecionada}
+                intervaloMs={intervaloDaLista(lista.data)}
+                onVoltar={() => selecionar(null)}
+              />
+            ) : (
+              <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted">
+                Selecione uma conversa para ler e responder.
+              </div>
+            )}
+          </motion.div>
         </section>
       </div>
     </div>

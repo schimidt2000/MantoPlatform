@@ -44,7 +44,7 @@ def _envio_de_arquivo(conversa_id: int) -> envio_ops.Envio:
     arquivo = request.files.get("arquivo")
     if arquivo is None or not arquivo.filename:
         raise envio_ops.EnvioRecusado(
-            "invalido", "Escolha o arquivo.", 422, {"arquivo": "Escolha o arquivo."}
+            "invalido", "Insira o arquivo.", 422, {"arquivo": "Insira o arquivo."}
         )
     dados = arquivo.stream.read(MIDIA_TETO_BYTES + 1)
     return envio_ops.enviar_arquivo(

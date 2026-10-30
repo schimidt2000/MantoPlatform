@@ -24,23 +24,28 @@ from app.models import ConversaMidia
 
 logger = logging.getLogger(__name__)
 
-# Duas tentativas de download da mesma mídia ficam a pelo menos isto de distância (e é por isso
-# que dois workers da varredura não baixam o mesmo arquivo juntos).
-INTERVALO_ENTRE_TENTATIVAS = timedelta(seconds=60)
+# Espaçamento entre tentativas de download: 1, 2, 4, 8… minutos, até 60. Com a Meta fora do ar
+# ou o token vencido por algumas horas, a mídia continua pendente (o id da Meta vale 7 dias) em
+# vez de esgotar 10 tentativas em minutos; só a IDADE (48 h) a dá por perdida (research R6).
+TETO_DO_ESPACAMENTO_MIN = 60
+IDADE_MAXIMA = timedelta(hours=48)
+# Condição SQL "já pode tentar de novo" (usada no claim e na varredura — uma regra só).
+PRONTA_PARA_TENTAR = (
+    "(tentado_em IS NULL OR tentado_em < :agora - make_interval("
+    "mins => LEAST(power(2, GREATEST(tentativas - 1, 0))::int, :teto_min)))"
+)
 
 
 def _reivindicar(midia_id: int) -> bool:
-    """Claim atômico da mídia: uma tentativa por vez, e não antes do intervalo."""
-    agora = agora_utc()
+    """Claim atômico da mídia: uma tentativa por vez, e não antes do espaçamento."""
     resultado = db.session.execute(
         text(
             "UPDATE conversa_midias SET tentativas = tentativas + 1, tentado_em = :agora "
-            "WHERE id = :id AND estado = :pend "
-            "AND (tentado_em IS NULL OR tentado_em < :antes)"
+            f"WHERE id = :id AND estado = :pend AND {PRONTA_PARA_TENTAR}"
         ),
         {
-            "agora": agora,
-            "antes": agora - INTERVALO_ENTRE_TENTATIVAS,
+            "agora": agora_utc(),
+            "teto_min": TETO_DO_ESPACAMENTO_MIN,
             "pend": K.MIDIA_PENDENTE,
             "id": midia_id,
         },
@@ -73,9 +78,9 @@ def caminho_absoluto(midia: ConversaMidia, cfg: CfgWhatsapp) -> str | None:
 
 
 def _falhar(midia: ConversaMidia, erro: str, definitivo: bool) -> str:
-    esgotou = midia.tentativas >= K.TENTATIVAS_MAXIMAS
+    velha = midia.created_at < agora_utc() - IDADE_MAXIMA
     midia.erro = erro[: K.ERRO_MAXIMO]
-    midia.estado = K.MIDIA_FALHOU if (definitivo or esgotou) else K.MIDIA_PENDENTE
+    midia.estado = K.MIDIA_FALHOU if (definitivo or velha) else K.MIDIA_PENDENTE
     db.session.commit()
     return midia.estado
 

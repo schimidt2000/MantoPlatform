@@ -1,7 +1,7 @@
 import { motion, useReducedMotion } from "framer-motion";
 import { AlertCircle, Check, CheckCheck, Clock, FileText, Smartphone } from "lucide-react";
 import { assetUrl } from "@manto/api-client";
-import { Foto, cn } from "@manto/ui";
+import { Button, Foto, cn } from "@manto/ui";
 import { LinkDeArquivo } from "../ArquivoViewer";
 import { horaDaMensagem, type Mensagem as MensagemTipo, type Situacao } from "../../lib/conversas";
 
@@ -72,7 +72,14 @@ function MidiaDaMensagem({ mensagem }: { mensagem: MensagemTipo }) {
   );
 }
 
-export function Mensagem({ mensagem }: { mensagem: MensagemTipo }) {
+interface MensagemProps {
+  mensagem: MensagemTipo;
+  /** Reenvia o texto que falhou (com chave nova). Só para texto enviado pela Plataforma. */
+  onTentarDeNovo?: (mensagem: MensagemTipo) => void;
+  reenviando?: boolean;
+}
+
+export function Mensagem({ mensagem, onTentarDeNovo, reenviando = false }: MensagemProps) {
   const reduzir = useReducedMotion();
   const daEquipe = mensagem.direcao === "enviada";
   const rodape = [
@@ -111,9 +118,22 @@ export function Mensagem({ mensagem }: { mensagem: MensagemTipo }) {
           ) : null}
         </p>
         {mensagem.erro ? (
-          <p role="alert" className="text-xs text-red">
-            Não entregue: {mensagem.erro.motivo}
-          </p>
+          <div className="space-y-1">
+            <p role="alert" className="text-xs text-red">
+              Não entregue: {mensagem.erro.motivo}
+            </p>
+            {onTentarDeNovo && mensagem.tipo === "texto" && mensagem.origem === "plataforma" && mensagem.texto ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                loading={reenviando}
+                onClick={() => onTentarDeNovo(mensagem)}
+              >
+                Tentar novamente
+              </Button>
+            ) : null}
+          </div>
         ) : null}
       </div>
     </motion.li>

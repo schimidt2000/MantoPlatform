@@ -73,11 +73,11 @@ def api_webhook_whatsapp() -> Any:
     cfg = cfg_whatsapp()
     if not cfg.ligado:
         return _nao_encontrado()
-    if (request.content_length or 0) > AVISO_CORPO_MAXIMO:
-        return jsonify({"error": {"message": "Corpo grande demais"}}), 413
     # Lê com teto também o corpo sem `Content-Length` (chunked), como o C-12 da ClickSign.
-    corpo = request.stream.read(AVISO_CORPO_MAXIMO + 1)
-    if len(corpo) > AVISO_CORPO_MAXIMO:
+    grande = (request.content_length or 0) > AVISO_CORPO_MAXIMO
+    corpo = b"" if grande else request.stream.read(AVISO_CORPO_MAXIMO + 1)
+    if grande or len(corpo) > AVISO_CORPO_MAXIMO:
+        # A Meta reenvia o que leva 413: o log é o único sinal de que avisos estão sendo perdidos.
         current_app.logger.warning(
             "[whatsapp] aviso acima de %s bytes recusado", AVISO_CORPO_MAXIMO
         )

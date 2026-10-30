@@ -10,9 +10,10 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-from sqlalchemy import or_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import joinedload
 
+from app import db
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc
 from app.conversas.telefone import so_digitos
@@ -162,12 +163,22 @@ def listar_conversas(busca: str | None, antes: str | None) -> tuple[list[Convers
 def mensagens_da_conversa(
     conversa_id: int, antes_id: int | None
 ) -> tuple[list[ConversaMensagem], bool]:
-    """As 50 mensagens mais recentes (ou anteriores a ``antes_id``), em ordem cronológica."""
+    """As 50 mensagens mais recentes (ou anteriores a ``antes_id``), em ordem cronológica.
+
+    O cursor é a mensagem, mas a ordem é ``(momento, id)``: um aviso atrasado grava id novo com
+    momento antigo, e cortar só por ``id < antes`` abriria buraco ou repetiria mensagem.
+    """
     consulta = ConversaMensagem.query.options(
         joinedload(ConversaMensagem.autor), joinedload(ConversaMensagem.midia)
     ).filter(ConversaMensagem.conversa_id == conversa_id)
-    if antes_id:
-        consulta = consulta.filter(ConversaMensagem.id < antes_id)
+    cursor = db.session.get(ConversaMensagem, antes_id) if antes_id else None
+    if cursor is not None:
+        consulta = consulta.filter(
+            or_(
+                ConversaMensagem.momento < cursor.momento,
+                and_(ConversaMensagem.momento == cursor.momento, ConversaMensagem.id < cursor.id),
+            )
+        )
     linhas = (
         consulta.order_by(ConversaMensagem.momento.desc(), ConversaMensagem.id.desc())
         .limit(K.PAGINA_MENSAGENS + 1)

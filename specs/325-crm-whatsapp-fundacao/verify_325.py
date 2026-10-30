@@ -95,9 +95,12 @@ WA_DA_FICHA = "551187325325"
 WA_NOVO = "5511963250001"
 WA_ECO = "5511963250002"
 WA_MIDIA = "5511963250003"
+WA_GRUPO = "5511963250004"
 PASTA_MIDIA = tempfile.mkdtemp(prefix="v325-midia-")
 
 app = create_app()
+# A trava REAL, antes de qualquer override: contra o `manto_local` ela tem de nascer ligada (T050).
+TRAVA_DE_FABRICA = app.config.get("WHATSAPP_SUPPRESS_SEND")
 app.config["TESTING"] = True
 app.config["WHATSAPP_ACCESS_TOKEN"] = "token-falso-v325"
 app.config["WHATSAPP_APP_SECRET"] = SEGREDO
@@ -381,7 +384,18 @@ def cen_02() -> None:
     _garante(aviso is not None and aviso.estado == "processado", f"aviso cru {aviso}")
 
 
+def cen_02b_grupo() -> None:
+    """Mensagem de grupo (Groups API) não vira conversa 1:1 (T052)."""
+    aviso = _aviso_texto(WA_GRUPO, f"{PREFIX}Grupo", f"wamid.{PREFIX}grupo-1", "oi, grupo")
+    aviso["entry"][0]["changes"][0]["value"]["messages"][0]["group_id"] = f"{PREFIX}grupo"
+    r = _post_aviso(aviso)
+    _garante(r.status_code == 200, f"POST → {r.status_code}")
+    _garante(_conversa(WA_GRUPO) is None, "a mensagem de grupo virou conversa")
+    _garante(_mensagem(f"wamid.{PREFIX}grupo-1") is None, "a mensagem de grupo foi gravada")
+
+
 def cen_03() -> None:
+    cen_02b_grupo()
     r = _post_aviso(
         _aviso_texto(WA_NOVO, f"{PREFIX}Ana Nova", f"wamid.{PREFIX}in-1", "Oi, quero um orçamento")
     )
@@ -398,6 +412,12 @@ def cen_03() -> None:
 
 
 def cen_04() -> None:
+    # Duas fichas para o mesmo número (uma com o 9, outra sem): vale a do telefone exato (T053).
+    with app.app_context():
+        db.session.add(
+            Client(name=f"{PREFIX}Ficha duplicada sem o 9", phone=WA_DA_FICHA, source="manual")
+        )
+        db.session.commit()
     r = _post_aviso(
         _aviso_texto(WA_DA_FICHA, f"{PREFIX}Cliente da ficha", f"wamid.{PREFIX}in-ficha", "Olá")
     )
@@ -634,8 +654,23 @@ def cen_12() -> None:
     )
     midia = _no_banco("SELECT id, estado, erro FROM conversa_midias WHERE mensagem_id=:m", m=msg.id)
     _garante(midia.estado == "pendente" and midia.erro, f"mídia devia ficar pendente: {midia}")
+    with app.app_context():
+        cedo = varredura.reprocessar_midias()
+    _garante(cedo.get("guardadas", 0) == 0, f"a varredura não respeitou o espaçamento: {cedo}")
+    # Muitas tentativas não matam a mídia nova (T049): só a idade de 48 h.
+    meta.falhar_download = 1
     _no_banco_escrever(
-        "UPDATE conversa_midias SET tentado_em = tentado_em - interval '5 minutes' WHERE id=:i",
+        "UPDATE conversa_midias SET tentativas = 12, tentado_em = tentado_em - interval '2 hours' WHERE id=:i",
+        i=midia.id,
+    )
+    with app.app_context():
+        varredura.reprocessar_midias()
+    depois = _no_banco("SELECT estado, tentativas FROM conversa_midias WHERE id=:i", i=midia.id)
+    _garante(
+        depois.estado == "pendente" and depois.tentativas == 13, f"mídia nova esgotou: {depois}"
+    )
+    _no_banco_escrever(
+        "UPDATE conversa_midias SET tentado_em = tentado_em - interval '2 hours' WHERE id=:i",
         i=midia.id,
     )
     with app.app_context():
@@ -709,7 +744,14 @@ def cen_15() -> None:
     )
 
 
+def _conversas_ligadas(email: str) -> bool | None:
+    return _chamar(email, "get", "/api/auth/me").get_json().get("conversas_ligadas")
+
+
 def cen_16() -> None:
+    _garante(
+        _conversas_ligadas(estado["comercial"]) is True, "Comercial com o módulo ligado sem o menu"
+    )
     token = app.config["WHATSAPP_ACCESS_TOKEN"]
     app.config["WHATSAPP_ACCESS_TOKEN"] = ""
     try:
@@ -725,8 +767,10 @@ def cen_16() -> None:
             f"/api/conversas/{conv.id}/mensagens",
             {"texto": "x", "chave_envio": f"{PREFIX}chave-16"},
         )
+        menu = _conversas_ligadas(estado["comercial"])
     finally:
         app.config["WHATSAPP_ACCESS_TOKEN"] = token
+    _garante(menu is False, f"menu com a configuração vazia: conversas_ligadas={menu}")
     _garante(
         g.status_code == 404 and p.status_code == 404,
         f"webhook desligado → {g.status_code}/{p.status_code}",
@@ -739,6 +783,19 @@ def cen_16() -> None:
 
 
 def cen_17() -> None:
+    from app.config import _suppress_whatsapp
+
+    _garante(
+        TRAVA_DE_FABRICA is True,
+        f"create_app() contra o manto_local nasceu destravado ({TRAVA_DE_FABRICA})",
+    )
+    _garante(_suppress_whatsapp() is True, "_suppress_whatsapp() não travou o banco local")
+    os.environ["WHATSAPP_ALLOW_LOCAL_SEND"] = "true"
+    try:
+        liberado = _suppress_whatsapp()
+    finally:
+        os.environ.pop("WHATSAPP_ALLOW_LOCAL_SEND", None)
+    _garante(liberado is False, "WHATSAPP_ALLOW_LOCAL_SEND=true não liberou o local")
     app.config["WHATSAPP_SUPPRESS_SEND"] = True
     antes = sum(len(v) for v in meta.chamadas.values())
     try:
@@ -772,6 +829,8 @@ def cen_18() -> None:
     )
     _garante(lista.status_code == 403, f"Casting na lista → {lista.status_code} (esperado 403)")
     _garante(envio.status_code == 403, f"Casting no envio → {envio.status_code} (esperado 403)")
+    menu = _conversas_ligadas(estado["casting"])
+    _garante(menu is False, f"Casting vê o menu Conversas: conversas_ligadas={menu}")
 
 
 def cen_19() -> None:
@@ -844,7 +903,7 @@ def cen_leitura() -> None:
 
 
 def preparar() -> None:
-    for tel in (TEL_FICHA, WA_DA_FICHA, WA_NOVO, WA_ECO, WA_MIDIA):
+    for tel in (TEL_FICHA, WA_DA_FICHA, WA_NOVO, WA_ECO, WA_MIDIA, WA_GRUPO):
         dono = Client.query.filter_by(phone=tel).first()
         _garante(
             dono is None or dono.name.startswith(PREFIX),
@@ -864,7 +923,7 @@ def preparar() -> None:
 def limpar() -> None:
     db.session.rollback()
     padrao = f"{PREFIX}%"
-    contatos = [WA_DA_FICHA, WA_NOVO, WA_ECO, WA_MIDIA]
+    contatos = [WA_DA_FICHA, WA_NOVO, WA_ECO, WA_MIDIA, WA_GRUPO]
     db.session.execute(
         text("DELETE FROM conversas WHERE nome_perfil LIKE :p OR contato_id = ANY(:c)"),
         {"p": padrao, "c": contatos},

@@ -243,6 +243,9 @@ enviada, sem autor da equipe e com a origem "celular".
 - **FR-012**: O sistema DEVE listar os modelos aprovados da conta (lidos da Meta) e permitir o envio
   de um modelo com as variáveis preenchidas, dentro ou fora da janela. A mensagem fica gravada com o
   texto final.
+  - Nesta fase só aparecem os modelos cujas variáveis estão todas no **corpo**.
+  - Ficam de fora (`docs/05` 182; convergência de 30/10): modelo com cabeçalho de
+    imagem/vídeo/documento/localização, com variável no cabeçalho ou com botão de URL variável.
 - **FR-013**: A tela **Conversas** DEVE mostrar a lista ordenada pela última mensagem, com nome,
   telefone, trecho da última mensagem, horário e quantidade de mensagens não lidas. A lista DEVE se
   atualizar sozinha em poucos segundos e permitir busca por nome ou telefone.

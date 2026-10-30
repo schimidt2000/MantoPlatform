@@ -1110,7 +1110,7 @@ def register_commands(app):
 
     @app.cli.command("whatsapp-reprocessar")
     @click.option("--aplicar", is_flag=True, help="refaz de verdade (padrão: só conta o que está parado)")
-    def whatsapp_reprocessar(aplicar: bool):
+    def whatsapp_reprocessar(aplicar: bool) -> None:
         """Refaz os avisos e as mídias do WhatsApp que ficaram parados (feature 325).
 
         É a mesma passada da thread de varredura, para quando ela estiver desligada ou atrasada.

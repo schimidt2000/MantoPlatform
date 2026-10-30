@@ -127,7 +127,11 @@ def _requisitar(
     except requests.RequestException as exc:
         logger.warning("[whatsapp] erro de rede em %s %s: %s", metodo, url, exc)
         raise WhatsappIndisponivel("Falha de rede ao falar com a Meta.") from exc
+    return _corpo_da_resposta(response, metodo, url)
 
+
+def _corpo_da_resposta(response: requests.Response, metodo: str, url: str) -> dict[str, Any]:
+    """O JSON da resposta: 429/5xx = "não sei"; 4xx = recusa com o código da Meta."""
     if response.status_code == 429 or response.status_code >= 500:
         logger.warning("[whatsapp] %s %s devolveu %s", metodo, url, response.status_code)
         raise WhatsappIndisponivel(f"Meta indisponível (HTTP {response.status_code}).")

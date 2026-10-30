@@ -6,8 +6,10 @@ import { Button, Skeleton } from "@manto/ui";
 import {
   diaDaMensagem,
   horaNaLista,
+  novaChaveDeEnvio,
   rotuloDoDia,
   useConversa,
+  useEnviarTexto,
   useMarcarLida,
   useMensagensAnteriores,
   type Mensagem as MensagemTipo,
@@ -31,20 +33,24 @@ interface ConversaAbertaProps {
   onVoltar: () => void;
 }
 
+/** Junta as páginas antigas e a atual sem repetir mensagem (a mesma pode estar nas duas). */
+function semRepetir(listas: MensagemTipo[][]): MensagemTipo[] {
+  const vistas = new Set<number>();
+  return listas.flat().filter((m) => (vistas.has(m.id) ? false : (vistas.add(m.id), true)));
+}
+
 export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAbertaProps) {
   const dados = useConversa(conversaId, intervaloMs);
   const marcarLida = useMarcarLida();
+  const reenviar = useEnviarTexto(conversaId);
   const queryClient = useQueryClient();
   const [modeloAberto, setModeloAberto] = useState(false);
-  const [verAnteriores, setVerAnteriores] = useState(false);
+  const [cursorDasAnteriores, setCursorDasAnteriores] = useState<number | null>(null);
+  const [reenviandoId, setReenviandoId] = useState<number | null>(null);
   const fim = useRef<HTMLDivElement>(null);
   const mensagens = dados.data?.mensagens;
   const ultimaId = mensagens?.at(-1)?.id ?? null;
-  const anteriores = useMensagensAnteriores(conversaId, mensagens?.[0]?.id ?? null, verAnteriores);
-
-  useEffect(() => {
-    setVerAnteriores(false);
-  }, [conversaId]);
+  const anteriores = useMensagensAnteriores(conversaId, cursorDasAnteriores);
 
   const naoLidas = dados.data?.conversa.nao_lidas ?? 0;
   useEffect(() => {
@@ -57,8 +63,8 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
   }, [ultimaId]);
 
   const todas = useMemo<MensagemTipo[]>(() => {
-    const antigas = (anteriores.data?.pages ?? []).slice().reverse().flatMap((p) => p.mensagens);
-    return [...antigas, ...(mensagens ?? [])];
+    const antigas = (anteriores.data?.pages ?? []).slice().reverse().map((p) => p.mensagens);
+    return semRepetir([...antigas, mensagens ?? []]);
   }, [anteriores.data, mensagens]);
 
   if (dados.isLoading) {
@@ -76,7 +82,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
         <p role="alert" className="text-sm text-red">
           Não foi possível carregar a conversa. Tente novamente.
         </p>
-        <Button type="button" variant="outline" onClick={() => void dados.refetch()}>
+        <Button type="button" variant="outline" loading={dados.isFetching} onClick={() => void dados.refetch()}>
           Tentar novamente
         </Button>
       </div>
@@ -84,12 +90,32 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
   }
 
   const { conversa, tem_mais } = dados.data;
-  const temMaisAntigas = verAnteriores ? anteriores.hasNextPage : tem_mais;
+  const temMaisAntigas = cursorDasAnteriores === null ? tem_mais : anteriores.hasNextPage;
+
+  const carregarAnteriores = () => {
+    if (cursorDasAnteriores === null) setCursorDasAnteriores(todas[0]?.id ?? null);
+    else void anteriores.fetchNextPage();
+  };
+
+  const tentarDeNovo = (mensagem: MensagemTipo) => {
+    if (!mensagem.texto) return;
+    setReenviandoId(mensagem.id);
+    reenviar.mutate(
+      { texto: mensagem.texto, chave_envio: novaChaveDeEnvio() },
+      { onSettled: () => setReenviandoId(null) },
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex items-center gap-2 border-b border-line bg-panel px-3 py-2">
-        <Button type="button" variant="ghost" size="sm" className="md:hidden" onClick={onVoltar} aria-label="Voltar">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-11 w-11 px-0 md:hidden"
+          onClick={onVoltar}
+          aria-label="Voltar"
+        >
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </Button>
         <div className="min-w-0 flex-1">
@@ -117,7 +143,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
               variant="outline"
               size="sm"
               loading={anteriores.isFetching}
-              onClick={() => (verAnteriores ? void anteriores.fetchNextPage() : setVerAnteriores(true))}
+              onClick={carregarAnteriores}
             >
               Carregar anteriores
             </Button>
@@ -128,7 +154,8 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
         ) : (
           <ul className="space-y-2">
             {todas.map((mensagem, indice) => {
-              const novoDia = indice === 0 || diaDaMensagem(todas[indice - 1]?.momento ?? null) !== diaDaMensagem(mensagem.momento);
+              const novoDia =
+                indice === 0 || diaDaMensagem(todas[indice - 1]?.momento ?? null) !== diaDaMensagem(mensagem.momento);
               return (
                 <Fragment key={mensagem.id}>
                   {novoDia ? (
@@ -136,7 +163,11 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
                       {rotuloDoDia(mensagem.momento)}
                     </li>
                   ) : null}
-                  <Mensagem mensagem={mensagem} />
+                  <Mensagem
+                    mensagem={mensagem}
+                    onTentarDeNovo={conversa.janela_aberta ? tentarDeNovo : undefined}
+                    reenviando={reenviandoId === mensagem.id}
+                  />
                 </Fragment>
               );
             })}

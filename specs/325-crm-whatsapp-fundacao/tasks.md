@@ -278,7 +278,7 @@ pelo celular".
 - [X] T037 `quickstart.md` §1–2 executados. A §3 (número de teste da Meta) fica listada como o que é
   do dono, com o teste de deploy do SC-003: mandar mensagens durante um deploy e conferir que nenhuma
   se perde.
-- [ ] T038 `/speckit-converge` sem gaps.
+- [X] T038 `/speckit-converge` sem gaps.
 
 ---
 
@@ -300,3 +300,26 @@ pelo celular".
 - **MVP**: Setup + Foundational + US1 + US2 + US5 (as P1). É possível receber, responder e ter a trava.
 - **Incremental**: US3 (mídia) → US4 (modelos) → US6 (eco). Cada uma fecha com o seu trecho do verify.
 - Commits por grupo lógico (`feat(325): …`), sempre por caminho, nunca `git add -A`.
+
+## Phase 10: Convergence
+
+- [X] T039 CRITICAL: quebrar as funções acima de ~30 linhas (`envio_ops.enviar_arquivo`, `envio_ops.enviar_modelo`, `whatsapp_client._requisitar`, `aviso_ops._processar_ecos`), anotar os tipos e achatar o aninhamento de `_start_whatsapp_sweep` em `app/__init__.py` e o retorno de `whatsapp_reprocessar` em `app/cli.py` per Constitution II (contradicts)
+- [X] T040 CRITICAL: realçar e focar o campo com problema no `EnviarModeloDialog` (`aria-invalid` nas variáveis, `fields.nome`/`fields.variaveis` do 422 apontados no campo) e dar realce visual ao `aria-invalid` da caixa de envio per Constitution V (partial)
+- [X] T041 CRITICAL: "Tentar novamente" da lista e da conversa com estado de carregando (`Button` com `loading` ligado a `isFetching`) per Constitution V (partial)
+- [X] T042 CRITICAL: transição de 150–250 ms na troca de conversa e na entrada de item da lista, com `useReducedMotion`, per Constitution XI / plan XI (partial)
+- [X] T043 CRITICAL: concordar número nas mensagens de variáveis ("Preencha a variável do modelo." × "Preencha as N variáveis do modelo.") e trocar "Escolha o arquivo." por "Insira o arquivo." per Constitution XV (contradicts)
+- [X] T044 Manter a `chave_envio` por rascunho até o sucesso (troca só quando o texto ou o arquivo mudam), para que um reenvio depois de 502 não duplique, per FR-018 (partial)
+- [X] T045 Inserir a mensagem otimista no cache (`pendente`, relógio) no `onMutate` e trocá-la pela resposta, per research R14 / plan V (missing)
+- [X] T046 Pôr "Tentar novamente" na mensagem de texto que falhou (reenvia o mesmo texto com chave nova) per contracts/api.md §mensagens (missing)
+- [X] T047 Mostrar `telefone_legivel` em cada item da lista per FR-013 (partial)
+- [X] T048 Paginar a lista pelo `proximo` ("Carregar mais"), sem polling das páginas antigas, per FR-013 / contrato `antes` (partial)
+- [X] T049 Abandonar a mídia por idade (48 h desde a mensagem), com espaçamento crescente entre as tentativas (1, 2, 4… até 60 min), em vez de 10 tentativas seguidas, per FR-007 / research R6 (partial)
+- [X] T050 Verify: conferir que `create_app()` contra o `manto_local` nasce com `WHATSAPP_SUPPRESS_SEND=True` antes do override, e que `WHATSAPP_ALLOW_LOCAL_SEND=true` libera, per FR-016 / cenário 17 (partial)
+- [X] T051 Verify: `/api/auth/me` devolve `conversas_ligadas` falso para o Casting e com a configuração vazia, e verdadeiro para o Comercial, per US5/AC3 / FR-015 (missing)
+- [X] T052 Ignorar com log as mensagens de grupo (`group_id`) no processador per Spec §Casos de borda (missing)
+- [X] T053 Com mais de uma ficha candidata, preferir a de `Client.phone == conversa.telefone` per Spec §Casos de borda "ficha duplicada" (partial)
+- [X] T054 "Voltar" do celular com alvo de 44 px per FR-020 (partial)
+- [X] T055 Paginar as mensagens por `(momento, id)` e estabilizar a chave da consulta de anteriores (sem buraco nem duplicata quando chega mensagem nova) per FR-014 (partial)
+- [X] T056 Logar também o 413 pelo `Content-Length` no webhook per research R2 (partial)
+- [X] T057 Alinhar o `accept` do arquivo com os MIMEs aceitos (PowerPoint) e normalizar apelidos comuns do navegador (`audio/x-m4a`, `audio/opus`, `audio/mp3`, `image/jpg`) per FR-011 (partial)
+- [X] T058 Registrar na spec (Living Spec, FR-012) que modelos com cabeçalho de mídia, variável no cabeçalho ou botão de URL variável não aparecem nesta fase (`docs/05` 182) per FR-012 / US4-AC1 (partial)

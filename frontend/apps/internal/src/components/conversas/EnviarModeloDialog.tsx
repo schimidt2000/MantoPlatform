@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ApiRequestError } from "@manto/api-client";
 import {
   Button,
   Combobox,
@@ -23,6 +24,9 @@ import {
  * "Enviar modelo" (feature 325, FR-012): o único jeito de falar com quem sumiu há mais de 24 h.
  * Os modelos são criados e aprovados no gerenciador da Meta; aqui só se escolhe e preenche as
  * variáveis. A prévia mostra o texto exatamente como a cliente vai ler.
+ *
+ * Erro sempre aponta o campo (Princípio V): o modelo não escolhido realça o seletor, a variável
+ * vazia é realçada e recebe o foco — tanto na conferência local quanto nos `fields` do 422.
  */
 
 interface EnviarModeloDialogProps {
@@ -43,12 +47,22 @@ function textoFinal(modelo: ModeloAprovado, valores: string[]): string {
   });
 }
 
+/** Princípio XV, contagem: "a variável" no singular, "as N variáveis" no plural. */
+function textoDasVariaveis(quantidade: number): string {
+  return quantidade === 1 ? "Preencha a variável do modelo." : `Preencha as ${quantidade} variáveis do modelo.`;
+}
+
 export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChange }: EnviarModeloDialogProps) {
   const modelos = useModelos(open);
   const enviar = useEnviarModelo(conversaId);
   const [escolhido, setEscolhido] = useState<string | null>(null);
   const [valores, setValores] = useState<string[]>([]);
   const [erro, setErro] = useState<string | null>(null);
+  const [modeloInvalido, setModeloInvalido] = useState(false);
+  const [variaveisInvalidas, setVariaveisInvalidas] = useState<boolean[]>([]);
+  const campos = useRef<(HTMLInputElement | null)[]>([]);
+  // A chave é do rascunho (FR-018): o reenvio depois de uma resposta perdida não manda duas vezes.
+  const chaveDoRascunho = useRef<string | null>(null);
 
   const modelo = useMemo(
     () => modelos.data?.modelos.find((m) => chaveDoModelo(m) === escolhido) ?? null,
@@ -59,6 +73,8 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
     if (!open) {
       setEscolhido(null);
       setErro(null);
+      setModeloInvalido(false);
+      chaveDoRascunho.current = null;
     }
   }, [open]);
 
@@ -67,27 +83,48 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
     if (!modelo) return;
     const primeiroNome = nomeDoContato.split(/\s+/)[0] ?? "";
     setValores(Array.from({ length: modelo.variaveis }, (_, i) => (i === 0 ? primeiroNome : "")));
+    setVariaveisInvalidas(Array.from({ length: modelo.variaveis }, () => false));
   }, [modelo, nomeDoContato]);
 
-  const faltando = modelo ? valores.some((v) => !v.trim()) : true;
+  const apontarVariaveisVazias = (atual: ModeloAprovado) => {
+    const vazias = valores.map((v) => !v.trim());
+    setVariaveisInvalidas(vazias);
+    setErro(textoDasVariaveis(atual.variaveis));
+    campos.current[vazias.indexOf(true)]?.focus();
+  };
+
+  const aoFalhar = (falha: unknown, atual: ModeloAprovado) => {
+    const campo = falha instanceof ApiRequestError ? falha.fields : undefined;
+    if (campo?.nome) setModeloInvalido(true);
+    if (campo?.variaveis) {
+      apontarVariaveisVazias(atual);
+      return;
+    }
+    setErro(mensagemDoErro(falha, "Não foi possível enviar o modelo. Tente novamente."));
+  };
 
   const aoEnviar = () => {
     if (!modelo) {
+      setModeloInvalido(true);
       setErro("Selecione um modelo aprovado.");
       return;
     }
-    if (faltando) {
-      setErro(`Preencha as ${modelo.variaveis} variáveis do modelo.`);
+    if (valores.some((v) => !v.trim())) {
+      apontarVariaveisVazias(modelo);
       return;
     }
     setErro(null);
+    chaveDoRascunho.current ??= novaChaveDeEnvio();
     enviar.mutate(
-      { nome: modelo.nome, idioma: modelo.idioma, variaveis: valores, chave_envio: novaChaveDeEnvio() },
-      {
-        onSuccess: () => onOpenChange(false),
-        onError: (falha) => setErro(mensagemDoErro(falha, "Não foi possível enviar o modelo. Tente novamente.")),
-      },
+      { nome: modelo.nome, idioma: modelo.idioma, variaveis: valores, chave_envio: chaveDoRascunho.current },
+      { onSuccess: () => onOpenChange(false), onError: (falha) => aoFalhar(falha, modelo) },
     );
+  };
+
+  const alterarValor = (indice: number, valor: string) => {
+    chaveDoRascunho.current = null;
+    setValores((atuais) => atuais.map((v, i) => (i === indice ? valor : v)));
+    setVariaveisInvalidas((atuais) => atuais.map((v, i) => (i === indice ? false : v)));
   };
 
   return (
@@ -103,9 +140,14 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
         {modelos.isLoading ? (
           <Skeleton className="h-11 w-full" />
         ) : modelos.isError ? (
-          <p role="alert" className="text-sm text-red">
-            Não foi possível carregar os modelos. Tente novamente.
-          </p>
+          <div className="space-y-2">
+            <p role="alert" className="text-sm text-red">
+              Não foi possível carregar os modelos. Tente novamente.
+            </p>
+            <Button type="button" variant="outline" loading={modelos.isFetching} onClick={() => void modelos.refetch()}>
+              Tentar novamente
+            </Button>
+          </div>
         ) : (
           <div className="space-y-4">
             <div className="space-y-1.5">
@@ -120,7 +162,13 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
                   description: m.texto,
                 }))}
                 value={escolhido}
-                onChange={(valor) => setEscolhido(valor)}
+                onChange={(valor) => {
+                  setEscolhido(valor);
+                  setModeloInvalido(false);
+                  setErro(null);
+                  chaveDoRascunho.current = null;
+                }}
+                invalid={modeloInvalido}
                 placeholder="Selecione o modelo"
                 emptyMessage="Nenhum modelo aprovado encontrado."
               />
@@ -133,10 +181,13 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
                     </label>
                     <Input
                       id={`variavel-${indice}`}
+                      ref={(elemento) => {
+                        campos.current[indice] = elemento;
+                      }}
                       value={valor}
-                      onChange={(e) =>
-                        setValores((atuais) => atuais.map((v, i) => (i === indice ? e.target.value : v)))
-                      }
+                      aria-invalid={variaveisInvalidas[indice] ? true : undefined}
+                      className="aria-[invalid=true]:border-red aria-[invalid=true]:ring-1 aria-[invalid=true]:ring-red"
+                      onChange={(e) => alterarValor(indice, e.target.value)}
                     />
                   </div>
                 ))
@@ -159,7 +210,7 @@ export function EnviarModeloDialog({ conversaId, nomeDoContato, open, onOpenChan
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={enviar.isPending}>
             Cancelar
           </Button>
-          <Button type="button" onClick={aoEnviar} loading={enviar.isPending} disabled={!modelo}>
+          <Button type="button" onClick={aoEnviar} loading={enviar.isPending}>
             {enviar.isPending ? "Enviando…" : "Enviar modelo"}
           </Button>
         </DialogFooter>

@@ -126,15 +126,36 @@ export function useConversa(id: number | null, intervaloMs: number) {
   });
 }
 
-/** Mensagens anteriores (rolar para cima) — página por cursor `antes=<id>`. */
-export function useMensagensAnteriores(id: number | null, primeiraId: number | null, ativo: boolean) {
+/**
+ * Mensagens anteriores (rolar para cima) — página por cursor `antes=<id>`.
+ *
+ * O cursor inicial é FIXADO no clique em "Carregar anteriores" (`cursorInicial`), não a primeira
+ * mensagem do momento: com ela na chave, cada mensagem nova trocava a chave e jogava fora as páginas
+ * já carregadas. O servidor ordena por `(momento, id)`, então não há buraco nem repetição.
+ */
+export function useMensagensAnteriores(id: number | null, cursorInicial: number | null) {
   return useInfiniteQuery({
-    queryKey: [...CHAVE, "anteriores", id, primeiraId],
+    queryKey: [...CHAVE, "anteriores", id, cursorInicial],
     queryFn: ({ pageParam }) =>
       apiFetch<ConversaAbertaResposta>(`/api/conversas/${id}?antes=${pageParam}`),
-    initialPageParam: primeiraId ?? 0,
+    initialPageParam: cursorInicial ?? 0,
     getNextPageParam: (ultima) => (ultima.tem_mais ? ultima.mensagens[0]?.id : undefined),
-    enabled: ativo && id !== null && primeiraId !== null,
+    enabled: id !== null && cursorInicial !== null,
+  });
+}
+
+/** Conversas mais antigas que a primeira página (sem polling: só o topo da lista muda sozinho). */
+export function useConversasAnteriores(busca: string, cursorInicial: string | null) {
+  return useInfiniteQuery({
+    queryKey: [...CHAVE, "lista-anteriores", busca, cursorInicial],
+    queryFn: ({ pageParam }) => {
+      const params = new URLSearchParams({ antes: pageParam });
+      if (busca) params.set("busca", busca);
+      return apiFetch<ListaDeConversas>(`/api/conversas?${params.toString()}`);
+    },
+    initialPageParam: cursorInicial ?? "",
+    getNextPageParam: (ultima) => ultima.proximo ?? undefined,
+    enabled: cursorInicial !== null,
   });
 }
 
@@ -167,15 +188,51 @@ export interface EnvioDeTexto {
   chave_envio: string;
 }
 
+function mensagemOtimista(texto: string): Mensagem {
+  return {
+    id: -Date.now(),
+    direcao: "enviada",
+    tipo: "texto",
+    texto,
+    momento: new Date().toISOString(),
+    situacao: "pendente",
+    autor: null,
+    origem: "plataforma",
+    modelo_nome: null,
+    erro: null,
+    midia: null,
+  };
+}
+
+/**
+ * Texto com envio otimista: a mensagem aparece na hora com o relógio (`pendente`) — a resposta da
+ * Meta pode levar até 30 s — e é trocada pela gravada quando o servidor responde. No erro, some.
+ */
 export function useEnviarTexto(conversaId: number) {
+  const queryClient = useQueryClient();
   const atualizar = useAtualizarAposEnvio(conversaId);
+  const chave = [...CHAVE, "aberta", conversaId];
   return useMutation({
     mutationFn: (corpo: EnvioDeTexto) =>
       apiFetch<{ mensagem: Mensagem }>(`/api/conversas/${conversaId}/mensagens`, {
         method: "POST",
         body: JSON.stringify(corpo),
       }),
-    onSuccess: atualizar,
+    onMutate: async (corpo) => {
+      await queryClient.cancelQueries({ queryKey: chave });
+      const anterior = queryClient.getQueryData<ConversaAbertaResposta>(chave);
+      if (anterior) {
+        queryClient.setQueryData<ConversaAbertaResposta>(chave, {
+          ...anterior,
+          mensagens: [...anterior.mensagens, mensagemOtimista(corpo.texto)],
+        });
+      }
+      return { anterior };
+    },
+    onError: (_erro, _corpo, contexto) => {
+      if (contexto?.anterior) queryClient.setQueryData(chave, contexto.anterior);
+    },
+    onSettled: atualizar,
   });
 }
 
