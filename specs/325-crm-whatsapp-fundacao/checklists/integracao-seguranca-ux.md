@@ -14,17 +14,17 @@ rodada (FR-019 a FR-021, limiter e troca de segredo).
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_325.py` verde contra `manto_local`, escrita conferida por conexão separada, um cenário que falha
-- [ ] CHK004 Tela aberta de verdade; Conversas conferida também em viewport mobile (375×812)
-- [ ] CHK005 Migration manual criada e aplicada no `manto_local`
-- [ ] CHK006 `scripts/validar_startcommand.py` — não se aplica (o `startCommand` não muda)
-- [ ] CHK007 Gate de RBAC declarado em todo endpoint novo e linha em `docs/01` §4.3
-- [ ] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03`; `00` §3, `04` e `05`
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo revisado pelo Princípio XV (superfície interna), lido na tela aberta
-- [ ] CHK011 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo (legado: mesma contagem da `main`)
+- [x] CHK003 `verify_325.py` verde contra `manto_local` (22/22, 0 escapes), escrita conferida por conexão separada, seis cenários que falham
+- [x] CHK004 Tela aberta de verdade; Conversas conferida também em viewport mobile (375×812)
+- [x] CHK005 Migration manual `e325a7c1d9f2` criada e aplicada no `manto_local`
+- [x] CHK006 `scripts/validar_startcommand.py` — não se aplica (o `startCommand` não muda)
+- [x] CHK007 Gate de RBAC declarado em todo endpoint novo e linha em `docs/01` §4.3
+- [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03`; `00` §3, `04` e `05`
+- [x] CHK009 Nível 1: `/speckit-converge` — 20 lacunas encontradas e fechadas (T039–T058)
+- [x] CHK010 Texto novo revisado pelo Princípio XV (superfície interna), lido na tela aberta
+- [ ] CHK011 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/` — pendente: só no deploy, quando o dono pedir
 
 ## Webhook e autenticação da Meta
 

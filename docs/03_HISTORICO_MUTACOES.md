@@ -451,7 +451,20 @@ tocado.
   falsas, envio travado): sem rolagem lateral, botão Enviar com 44 px, recusa "travado" com o texto mantido no campo.
 - O ponta a ponta no número de teste da Meta depende do dono (quickstart §3).
 
-**Commits:** `587b0fd8` (esteira), `5307b5fe` (backend), `2c927013` (tela).
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura, e achou **20 lacunas**:
+5 da constituição, sem bloquear a P1 (função longa, campo sem realce, "Tentar novamente" sem estado, troca de
+conversa sem transição, "1 variáveis"), 7 médias e 8 baixas. Todas fecharam em T039–T058:
+- chave de envio por rascunho e envio otimista;
+- "Tentar novamente" na mensagem que falhou;
+- paginação da lista e das anteriores por `(momento, id)`;
+- mídia abandonada só por idade, com espaçamento crescente;
+- grupo ignorado e ficha exata;
+- a trava real de `create_app()` e o `conversas_ligadas` provados no verify.
+
+Pegadinha da tela: `AnimatePresence mode="wait"` travava a troca de conversa quando a aba não pinta quadros; ficou só
+a animação de entrada.
+
+**Commits:** `587b0fd8` (esteira), `5307b5fe` (backend), `2c927013` (tela), `d914a258` (docs), `0420db8c` (convergência).
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 
