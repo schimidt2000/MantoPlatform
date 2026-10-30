@@ -182,6 +182,60 @@ reenvio do webhook. Resultado registrado abaixo, em "Confirmações".
 - **Áudio**: `<audio controls>`; vídeo: `<video controls>`; imagem: `Foto` + `VisualizadorDeArquivo`;
   documento: `LinkDeArquivo` (feature 320 — nunca outra aba).
 
-## Confirmações (preenchido após a pesquisa externa)
+## Confirmações (pesquisa externa de 30/10/2026; D/ = developers.facebook.com/documentation/business-messaging/whatsapp/)
 
-_(ver abaixo)_
+- **R1 — versão**: **v26.0** (lançada em 29/07/2026, sem data de fim; a v25.0 vale até 29/07/2028).
+  Os exemplos atuais da documentação usam a v26.0. A partir da v24, o status perdeu o objeto
+  `conversation` e o `pricing` vem em um só aviso. Default: `WHATSAPP_GRAPH_VERSION = "v26.0"`
+  (fonte: developers.facebook.com/docs/graph-api/changelog).
+- **R2 — assinatura**: `X-Hub-Signature-256` = HMAC-SHA256 do corpo com o App Secret, confirmado.
+  Reenvio: qualquer resposta diferente de 200 é falha; a Meta tenta de novo na hora e depois com
+  frequência decrescente por **até 7 dias**, gerando duplicatas (dedup pelo wamid, R5). O payload
+  pode ter até 3 MB. Alguns webhooks não chegam com o app em modo Dev (`D/webhooks/overview`). O teto
+  de 256 KB continua: um lote de texto nunca chega perto, e mídia não vem no corpo. Acima disso, 413
+  e a Meta reenvia (registrado no log).
+- **BSUID (novo, desde abril de 2026)**: os avisos trazem `contacts[].user_id`,
+  `messages[].from_user_id` e `statuses[].recipient_user_id` (`"BR.123…"`), e `profile.username`.
+  Quem usa nome de usuário e não conversou com a Manto nos últimos 30 dias pode chegar **sem
+  telefone**. Envio por BSUID: campo `"recipient"` no lugar de `"to"` (`D/business-scoped-user-ids/`).
+  → **Decisão**: `conversas` ganha `contato_bsuid` (String(64), null). O `contato_id` é o `wa_id`
+  quando ele vem; senão, o BSUID. O envio usa `to` com o `wa_id` e, sem ele, `recipient` com o BSUID.
+  O telefone não é obrigatório.
+- **Status**: os valores são `sent`, `delivered`, `read`, **`played`** (nota de voz ouvida) e
+  `failed`. → `played` conta como `lida`. Erros de conta chegam em `value.errors` e só vão para o log.
+- **Mídia**: o `GET /{media-id}` devolve `url`, `mime_type`, `sha256` e `file_size`. A url **expira
+  em 5 min** e exige Bearer. O id recebido vale **7 dias** (o de upload, 30), cobrindo com folga o
+  abandono em 48 h. A partir de nov/2025 o aviso pode trazer a `url` direto; continuamos pedindo pelo
+  id, que é o caminho garantido. Limites para envio: imagem JPEG/PNG 5 MB; áudio
+  aac/amr/mpeg/mp4/ogg-opus 16 MB; vídeo mp4/3gpp 16 MB; documento 100 MB; figurinha WebP. Upload
+  multipart com `file`, `type` e `messaging_product`.
+- **Envio**: `POST /{phone-number-id}/messages` devolve `contacts[0].wa_id` e `messages[0].id`. O
+  texto vai até 4096 caracteres. "Marcar como lida": `{"messaging_product":"whatsapp","status":"read",
+  "message_id":…}` devolve `{"success":true}`.
+- **R9/R10 — 131047**: pelo que a comunidade relata, a API aceita o envio e a recusa chega depois,
+  num status `failed` (não está documentado como síncrono). → A recusa no núcleo (409) continua sendo
+  a primeira barreira. O `failed` assíncrono é coberto pelo `_aplicar_status`. Códigos acrescentados
+  ao mapa: 131049, 131050, 131048, 131052, 131053, 131000, 131008, 131009, 131005/10, 200, 4, 80007,
+  368/131031, 131042, 133010, 132012, 132015, 132016, 132018 (`D/support/error-codes`).
+- **R11 — nono dígito**: não há documentação oficial. A comunidade confirma `wa_id` e `from` de
+  celular brasileiro **sem o 9** (12 dígitos) e diz que enviar com o 9 funciona. → A decisão R11 vale
+  como está: o `wa_id` recebido é a chave e o endereço, e o vínculo aceita as duas formas.
+- **R12 — eco**: `field = "smb_message_echoes"`, com `value.message_echoes[]` e
+  `{from, to, id, timestamp, type, text|image|video|document}`. Também chegam os tipos `revoke`
+  (apagou) e `edit` (editou, com `original_message_id`). O contato é o `to`
+  (`D/webhooks/reference/smb_message_echoes`). → `revoke` e `edit` viram mensagem de texto curto
+  ("Mensagem apagada pelo celular." / "Mensagem editada pelo celular.") e não alteram a original
+  nesta fase.
+- **Novo modelo de contas**: a URL de templates **não muda** (`/{waba-id}/message_templates`, em que o
+  id passa a denotar a Messaging account). Na Fase 1, nada muda no código. O `messaging_account_id`
+  só é exigido quando o token enxerga várias Messaging accounts no mesmo número, o que **não** é o
+  caso do número de teste. **O roteamento das mensagens recebidas entre várias Messaging accounts
+  segue sem documentação**: é o teste obrigatório da porta C, antes da Fase 4.
+- **Coexistência**: confirmado de novo que exige Solution Partner ou Tech Provider, via Embedded
+  Signup, e que limita a 20 msg/s, sem grupos e com os aparelhos vinculados desconectados. A
+  sincronização de histórico (até 180 dias, em fases) só pode ser pedida uma vez, até 24 h depois do
+  onboarding. Fica para a Fase 4.
+- **Número de teste**: +1 555 grátis, para até 5 destinatários verificados. Token permanente via
+  System User com `whatsapp_business_messaging`, `whatsapp_business_management` e
+  `business_management` (`D/access-tokens`). Assinatura do webhook pelo painel do app ou por
+  `POST /{waba-id}/subscribed_apps`.

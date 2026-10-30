@@ -94,6 +94,19 @@ services:
       # reconsulta fica autenticada; sem ela a loja funciona do mesmo jeito. O dono cola no painel.
       - key: INFINITEPAY_API_KEY
         sync: false
+      # Feature 325 (Conversas): WhatsApp pela Cloud API da Meta. Vazios = módulo desligado
+      # (webhook 404, menu oculto, aviso na subida). Token de System User, App Secret do app Meta,
+      # Verify token do webhook e os IDs do número e da conta. O dono cola no painel.
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_WABA_ID
+        sync: false
       # Feature 310: o MESMO valor no manto-frontend. Prova que a requisição veio do Node — sem
       # ele, o IP do cliente informado pelo Node é aceito sem prova (o boot avisa no log).
       - key: MANTO_PROXY_SECRET

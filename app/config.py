@@ -223,6 +223,27 @@ def _suppress_infinitepay() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_whatsapp() -> bool:
+    """Decide se este processo está proibido de enviar pelo WhatsApp real (feature 325, XIV).
+
+    O `manto_local` é espelho da produção: as conversas e os telefones são de clientes de
+    verdade, e o `.env` do dono pode ter o token do número. Sem a trava, um verify ou um teste
+    local mandaria mensagem para cliente. Cobre tudo que escreve na Meta: texto, mídia, modelo e
+    "marcar como lida" (o tique azul também é efeito externo). Ler modelos e baixar mídia também
+    passam por ela — o local não fala com a Meta sem a liberação.
+
+    ``WHATSAPP_SUPPRESS_SEND=true`` trava em qualquer ambiente;
+    ``WHATSAPP_ALLOW_LOCAL_SEND=true`` libera o local (o teste com o número de teste da Meta,
+    quickstart §3). O núcleo relê a chave de ``current_app.config`` a cada chamada; ausente = travado.
+    """
+    if os.getenv("WHATSAPP_SUPPRESS_SEND", "").lower() == "true":
+        return True
+    if os.getenv("WHATSAPP_ALLOW_LOCAL_SEND", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -417,6 +438,28 @@ class Config:
     # (*.onrender.com); sem a prova, quem chamasse direto trocava o cabeçalho a cada requisição e
     # escapava de todo limite — o de login inclusive. Mesmo valor nos dois serviços do Render.
     MANTO_PROXY_SECRET = os.getenv("MANTO_PROXY_SECRET", "").strip()
+
+    # WhatsApp pela Cloud API da Meta (feature 325 — Conversas). Os quatro primeiros são o
+    # mínimo para o módulo existir; vazios = webhook 404, envio recusado, menu oculto, aviso no
+    # log da subida (Princípio XIV). Segredos só por env (`render.yaml`, `sync: false`), nunca no
+    # `SiteSetting`, que vai para o backup e para o espelho. O WABA_ID só serve para listar modelos.
+    WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+    WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+    WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+    WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+    WHATSAPP_WABA_ID = os.getenv("WHATSAPP_WABA_ID", "").strip()
+    # Versão fixa da Graph API (research R1): revisar uma vez por ano, nunca "a mais nova" solta.
+    WHATSAPP_GRAPH_VERSION = os.getenv("WHATSAPP_GRAPH_VERSION", "v26.0").strip()
+    WHATSAPP_GRAPH_BASE = os.getenv("WHATSAPP_GRAPH_BASE", "https://graph.facebook.com").rstrip("/")
+    WHATSAPP_SUPPRESS_SEND = _suppress_whatsapp()
+    # Costura do verify: processa o aviso na própria requisição em vez de numa thread.
+    WHATSAPP_AVISO_SINCRONO = os.getenv("WHATSAPP_AVISO_SINCRONO", "").lower() == "true"
+    # Intervalo da consulta periódica da tela (s): devolvido no payload, a tela obedece.
+    WHATSAPP_POLL_SEGUNDOS = int(os.getenv("WHATSAPP_POLL_SEGUNDOS", "5"))
+    # Pasta da mídia das conversas — irmã de `UPLOAD_FOLDER` pelo mesmo motivo da 205/261: foto,
+    # áudio e comprovante de cliente nunca viram URL de bucket público; só saem pelo endpoint com
+    # gate. Default em `create_app` (`instance/conversas_midia`).
+    CONVERSAS_MEDIA_FOLDER = os.getenv("CONVERSAS_MEDIA_FOLDER", "")
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

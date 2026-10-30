@@ -18,6 +18,7 @@ Um POST da Meta = uma linha, gravada **antes** de qualquer processamento (FR-003
 | `tentativas` | Integer, default 0 | incrementado no claim |
 | `erro` | String(500), null | última falha legível (sem stack) |
 | `recebido_em` | DateTime | UTC |
+| `tentado_em` | DateTime, null | UTC do último claim (resgate do `processando` parado) |
 | `processado_em` | DateTime, null | UTC |
 
 Máquina de estados: `pendente` → (claim atômico `UPDATE … WHERE estado='pendente'`, `tentativas+1`)
@@ -32,7 +33,8 @@ thread morreu no deploy).
 |---|---|---|
 | `id` | Integer PK | |
 | `canal` | String(20) | `whatsapp` (Fase 2: `instagram`) — constante `CANAL_*` |
-| `contato_id` | String(64) | identificador do contato no canal (`wa_id` da Meta, como veio) |
+| `contato_id` | String(64) | identificador do contato no canal: o `wa_id` da Meta como veio; sem `wa_id` (usuário só com nome de usuário), o BSUID |
+| `contato_bsuid` | String(64), null | BSUID da Meta (`contacts[].user_id`, `"BR.…"`, desde abril de 2026); envio por `recipient` quando não há `wa_id` |
 | `telefone` | String(20), null, index | dígitos com DDI, **com** nono dígito (forma de `Client.phone`) |
 | `nome_perfil` | String(255), null | `contacts[].profile.name`; atualizado a cada aviso |
 | `client_id` | FK `clients.id` SET NULL, null, index | ficha ligada pelo telefone (FR-005) |
@@ -71,7 +73,8 @@ Janela: `janela_aberta = ultima_recebida_em is not None and agora_utc - ultima_r
 | `created_at` | DateTime | UTC |
 
 Ordem das situações (nunca regride — FR-009): `pendente`(0) < `enviada`(1) < `entregue`(2) <
-`lida`(3). `falhou` só substitui `pendente`/`enviada`; nunca sobrescreve `entregue`/`lida`.
+`lida`(3). O `played` da Meta (nota de voz ouvida) vira `lida`. `falhou` só substitui
+`pendente`/`enviada`; nunca sobrescreve `entregue`/`lida`.
 
 ## `conversa_midias` — o arquivo de uma mensagem (`ConversaMidia`)
 
@@ -87,6 +90,7 @@ Ordem das situações (nunca regride — FR-009): `pendente`(0) < `enviada`(1) <
 | `estado` | String(10) | `pendente` → `guardada` \| `falhou` (download esgotado ou acima do teto) |
 | `tentativas` | Integer, default 0 | |
 | `erro` | String(500), null | |
+| `tentado_em` | DateTime, null | UTC do último claim de download |
 | `created_at` / `updated_at` | DateTime | UTC |
 
 ## Relações e o que NÃO muda

@@ -1108,6 +1108,34 @@ def register_commands(app):
         click.echo(f"formularios-cliente-do-evento: {len(pares)} formulário(s) receberam a "
                    "cliente do evento.")
 
+    @app.cli.command("whatsapp-reprocessar")
+    @click.option("--aplicar", is_flag=True, help="refaz de verdade (padrão: só conta o que está parado)")
+    def whatsapp_reprocessar(aplicar: bool):
+        """Refaz os avisos e as mídias do WhatsApp que ficaram parados (feature 325).
+
+        É a mesma passada da thread de varredura, para quando ela estiver desligada ou atrasada.
+        Sem `--aplicar`, só conta avisos pendentes e mídias pendentes. Idempotente. Rodar no
+        `manto-backend` com `MANTO_SEM_THREADS=1` na frente. Numa cópia local, a trava
+        (`WHATSAPP_ALLOW_LOCAL_SEND`) decide se o download de mídia fala com a Meta.
+        """
+        from sqlalchemy import text as _text
+
+        from app import db
+        from app.conversas import varredura
+        from app.conversas.configuracao import cfg_whatsapp
+
+        if not cfg_whatsapp().ligado:
+            click.echo("whatsapp-reprocessar: módulo desligado (faltam as variáveis WHATSAPP_*).")
+            return
+        if not aplicar:
+            avisos = len(varredura.avisos_a_refazer(limite=10_000))
+            midias = db.session.execute(
+                _text("SELECT count(*) FROM conversa_midias WHERE estado = 'pendente'")
+            ).scalar()
+            click.echo(f"whatsapp-reprocessar [SIMULAÇÃO]: {avisos} aviso(s) e {midias} mídia(s) a refazer.")
+            return
+        click.echo(f"whatsapp-reprocessar [GRAVADO]: {varredura.ciclo_de_varredura()}")
+
     @app.cli.command("clicksign-sincronizar")
     @click.option("--desde", type=click.DateTime(formats=["%Y-%m-%d"]), default=None,
                   help="início (AAAA-MM-DD) do 'modificado desde'; padrão: a data de início (01/06/2026)")

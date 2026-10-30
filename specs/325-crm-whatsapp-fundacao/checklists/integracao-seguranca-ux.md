@@ -66,7 +66,7 @@ rodada (FR-019 a FR-021, limiter e troca de segredo).
 - [x] CHK035 Os códigos de erro mais comuns têm motivo legível definido, e há uma regra para os códigos não mapeados? [Completeness, Research §R10]
 - [x] CHK036 O teto de tamanho da mídia guardada está quantificado, com o texto do que a equipe vê acima dele? [Clarity, Research §R6]
 - [x] CHK037 O nono dígito brasileiro está tratado no vínculo com a ficha e no endereço de resposta? [Edge Case, Spec §FR-005, Research §R11]
-- [ ] CHK038 A versão da Graph API e o formato do eco da coexistência estão confirmados contra a documentação vigente? [Dependency, Research §R13 — aguardando a pesquisa]
+- [x] CHK038 A versão da Graph API e o formato do eco da coexistência estão confirmados contra a documentação vigente? [Dependency, Research §Confirmações — v26.0; `message_echoes[]`]
 
 ## UX da tela (celular e computador)
 

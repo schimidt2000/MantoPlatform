@@ -71,3 +71,6 @@ from app.api import figurino_producao_read as _figurino_producao_read  # noqa: E
 from app.api import figurino_producao_write as _figurino_producao_write  # noqa: E402,F401
 from app.api import pix_read as _pix_read  # noqa: E402,F401
 from app.api import pix_write as _pix_write  # noqa: E402,F401
+from app.api import whatsapp_webhook as _whatsapp_webhook  # noqa: E402,F401
+from app.api import conversas_read as _conversas_read  # noqa: E402,F401
+from app.api import conversas_write as _conversas_write  # noqa: E402,F401

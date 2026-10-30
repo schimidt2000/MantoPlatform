@@ -18,21 +18,21 @@ cada história fechar. Usa disjuntor de rede e dublê do cliente da Meta (molde 
 
 ## Phase 1: Setup
 
-- [ ] T001 [P] Constantes do domínio em `app/conversas/constantes.py` (+ `app/conversas/__init__.py` vazio):
+- [X] T001 [P] Constantes do domínio em `app/conversas/constantes.py` (+ `app/conversas/__init__.py` vazio):
   - `CANAL_WHATSAPP`/`CANAL_INSTAGRAM`; direções; tipos; situações com `ORDEM_DA_SITUACAO`; origens;
     estados de aviso e de mídia;
   - `TEXTO_DO_TIPO` (pt-BR, Princípio XV); `MOTIVO_DO_ERRO` (R10); MIMEs aceitos por tipo de envio
     (R8);
   - tetos: corpo do aviso 256 KB, mídia 25 MB, texto 4096;
   - `JANELA_HORAS = 24`; limites da varredura (30 s, 10 min, 48 h, 10 tentativas); `MODELOS_CACHE_S = 300`.
-- [ ] T002 [P] Configuração em `app/config.py`:
+- [X] T002 [P] Configuração em `app/config.py`:
   - `_suppress_whatsapp()`, mesmo corpo de `_suppress_clicksign`, com `WHATSAPP_SUPPRESS_SEND` /
     `WHATSAPP_ALLOW_LOCAL_SEND`;
   - `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN`,
     `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_WABA_ID` (env, `""`);
   - `WHATSAPP_GRAPH_VERSION`, `WHATSAPP_GRAPH_BASE` (default real); `WHATSAPP_AVISO_SINCRONO=False`;
     `WHATSAPP_POLL_SEGUNDOS=5`; `CONVERSAS_MEDIA_FOLDER` (env, `""`).
-- [ ] T003 [P] `render.yaml`: `envVars` `sync: false` para os cinco segredos/IDs `WHATSAPP_*` do
+- [X] T003 [P] `render.yaml`: `envVars` `sync: false` para os cinco segredos/IDs `WHATSAPP_*` do
   `manto-backend`, com comentário da 325 no molde da ClickSign. O `startCommand` **não** muda.
 
 ---
@@ -41,28 +41,28 @@ cada história fechar. Usa disjuntor de rede e dublê do cliente da Meta (molde 
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T004 Models em `app/models.py`, conforme `data-model.md`, com docstrings do porquê:
+- [X] T004 Models em `app/models.py`, conforme `data-model.md`, com docstrings do porquê:
   - `WhatsappAviso`, `Conversa` (`UNIQUE(canal, contato_id)`), `ConversaMensagem` (`UNIQUE
     externo_id`, `UNIQUE chave_envio`), `ConversaMidia` (`UNIQUE mensagem_id`);
   - propriedade tolerante `dados_dict`; backref `Client.conversas`;
   - `created_at` com `datetime.utcnow`.
-- [ ] T005 Migration **manual** `migrations/versions/e325a7c1d9f2_conversas_whatsapp.py`:
+- [X] T005 Migration **manual** `migrations/versions/e325a7c1d9f2_conversas_whatsapp.py`:
   - `down_revision = "d323b5a1c0e7"`; `create_table` ×4, com índices e constraints nomeados;
     `downgrade` derruba na ordem inversa;
   - aplicar no `manto_local` com `flask db upgrade`.
-- [ ] T006 [P] Cliente da Graph API, sem Flask, em `app/integracoes/whatsapp_client.py`, molde de
+- [X] T006 [P] Cliente da Graph API, sem Flask, em `app/integracoes/whatsapp_client.py`, molde de
   `clicksign_client.py`:
   - exceções `WhatsappErro` → `WhatsappIndisponivel` → `WhatsappTravado`, e `WhatsappRecusou(code)`;
   - `_requisitar` com timeout `(5, 30)`;
   - `enviar_mensagem`, `subir_midia` (multipart), `consultar_midia`, `baixar_midia` (stream com
     teto), `listar_modelos` (paginado, só `APPROVED`), `marcar_lida`;
   - token, base, versão e `travado` sempre por parâmetro; o default é travado.
-- [ ] T007 [P] `app/conversas/telefone.py`: `variantes_de_telefone(digitos)` sobre
+- [X] T007 [P] `app/conversas/telefone.py`: `variantes_de_telefone(digitos)` sobre
   `contratos_ops.chave_telefone`, e `telefone_com_nono(digitos)` (R11).
-- [ ] T008 [P] `app/conversas/configuracao.py`: `cfg_whatsapp()` lê o `current_app.config` e devolve
+- [X] T008 [P] `app/conversas/configuracao.py`: `cfg_whatsapp()` lê o `current_app.config` e devolve
   um dataclass (`ligado`, `travado`, token, ids, base, versão, segredo, verify, pasta de mídia), molde
   `_ipc_cfg()`. `ligado` = os quatro obrigatórios preenchidos.
-- [ ] T009 **`specs/325-crm-whatsapp-fundacao/verify_325.py`**, com os 21 cenários da spec:
+- [X] T009 **`specs/325-crm-whatsapp-fundacao/verify_325.py`**, com os 21 cenários da spec:
   - disjuntor de rede antes do import; `MANTO_SEM_THREADS=1`; `pop` de `WHATSAPP_ALLOW_LOCAL_SEND`;
   - config falsa injetada no `app.config`; dublê `MetaFalsa` trocando as funções de
     `whatsapp_client` (registra chamadas, devolve wamids e bytes conhecidos);
@@ -70,7 +70,7 @@ cada história fechar. Usa disjuntor de rede e dublê do cliente da Meta (molde 
     /api/auth/login`; conferência por `create_engine` separado;
   - `--so=N` e `--manter`; limpeza no `finally`.
   - Escrito AGORA, e FALHANDO.
-- [ ] T010 Infra em `app/__init__.py` e `app/backup_drive.py`:
+- [X] T010 Infra em `app/__init__.py` e `app/backup_drive.py`:
   - default `CONVERSAS_MEDIA_FOLDER = instance/conversas_midia` + `makedirs` (molde `NFC_MEDIA_FOLDER`);
   - log da subida `"[whatsapp] ligado=%s travado=%s"` e aviso quando desligado;
   - `_MEDIA_SUBDIRS` ganha `"conversas_midia"`.
@@ -87,7 +87,7 @@ reprocessamento.
 
 **Verificação**: cenários 1–6 em PASS; tela da lista e da conversa aberta.
 
-- [ ] T011 [US1] `app/conversas/aviso_ops.py`:
+- [X] T011 [US1] `app/conversas/aviso_ops.py`:
   - `gravar_aviso(corpo: bytes)` (estado `pendente`) e `reivindicar(aviso_id)` (UPDATE atômico,
     resgata `processando` > 10 min);
   - `processar_aviso(aviso_id, cfg)`: itera `entry/changes` com `field=messages`; ignora outro
@@ -96,27 +96,27 @@ reprocessamento.
   - `_gravar_recebida` com `ON CONFLICT (externo_id)`; mídia ganha `ConversaMidia` `pendente`;
   - atualiza `ultima_recebida_em`, `ultima_mensagem_em`, `ultima_previa`, `nao_lidas`;
   - fecha em `processado` ou volta a `pendente` com `erro`.
-- [ ] T012 [US1] `app/api/whatsapp_webhook.py`:
+- [X] T012 [US1] `app/api/whatsapp_webhook.py`:
   - GET (`hub.*` + `compare_digest`, `text/plain`); POST (teto com `stream.read`, HMAC
     `X-Hub-Signature-256` com `compare_digest`; desligado ou inválido → 404);
   - grava e comita, responde 200; thread, ou síncrono com `WHATSAPP_AVISO_SINCRONO`;
     `@limiter.limit("300 per minute")`; comentário `RBAC:` (público, assinado);
   - registrar em `app/api/__init__.py`.
-- [ ] T013 [US1] `app/conversas/varredura.py`:
+- [X] T013 [US1] `app/conversas/varredura.py`:
   - `reprocessar_avisos(limite)`, que pega `pendente` com mais de 30 s ou `processando` parado, e
     `descartado` com 48 h ou 10 tentativas;
   - thread `_start_whatsapp_sweep` em `app/__init__.py` (atrás de `MANTO_SEM_THREADS`, só com o
     módulo ligado, a cada 60 s);
   - comando `flask whatsapp-reprocessar [--aplicar]` em `app/cli.py`.
-- [ ] T014 [US1] `app/conversas/leitura_ops.py`: `listar_conversas(busca, antes)`,
+- [X] T014 [US1] `app/conversas/leitura_ops.py`: `listar_conversas(busca, antes)`,
   `abrir_conversa(id, antes)` e serializadores (`_iso_utc`; `nome` = ficha › perfil › telefone;
   `janela_aberta` e `janela_fecha_em`).
-- [ ] T015 [US1] `app/api/conversas_read.py`:
+- [X] T015 [US1] `app/api/conversas_read.py`:
   - `GET /api/conversas` e `GET /api/conversas/<id>`; gate `_pode_conversas()` (COMERCIAL,
     SUPERADMIN) no início da view;
   - comentário `RBAC:`; `configurado`/`envio_travado`/`poll_segundos` no payload da lista;
   - registrar em `app/api/__init__.py`.
-- [ ] T016 [US1] `app/api/auth.py`: `serialize_user` ganha `conversas_ligadas` (COMERCIAL ou
+- [X] T016 [US1] `app/api/auth.py`: `serialize_user` ganha `conversas_ligadas` (COMERCIAL ou
   SUPERADMIN real e módulo ligado). `frontend/apps/internal/src/lib/types.ts`: `conversas_ligadas?:
   boolean`.
 - [ ] T017 [P] [US1] `frontend/apps/internal/src/lib/conversas.ts`:
@@ -144,16 +144,16 @@ clique duplo inofensivo.
 
 **Verificação**: cenários 7–10 e 20 em PASS.
 
-- [ ] T019 [US2] `app/conversas/envio_ops.py`, `enviar_texto(conversa_id, texto, chave_envio,
+- [X] T019 [US2] `app/conversas/envio_ops.py`, `enviar_texto(conversa_id, texto, chave_envio,
   autor_id, cfg)`, na ordem R8:
   - não configurado → `NaoConfigurado`; travado → `EnvioTravado`; janela → `JanelaFechada`;
   - `INSERT` `pendente` com chave (conflito → devolve a existente); commit; chamada sem trava;
   - `enviada` + `externo_id`, ou `falhou` com motivo; prévia da conversa;
   - `marcar_lida(conversa_id, cfg)`: zera `nao_lidas`; na Meta, melhor esforço.
-- [ ] T020 [US2] `app/conversas/aviso_ops.py`, `_aplicar_status`:
+- [X] T020 [US2] `app/conversas/aviso_ops.py`, `_aplicar_status`:
   - monotônico (`ORDEM_DA_SITUACAO`); `failed` com `errors[0].code` → `MOTIVO_DO_ERRO`;
   - id desconhecido → o aviso volta a `pendente` com "mensagem ainda não gravada".
-- [ ] T021 [US2] `app/api/conversas_write.py`:
+- [X] T021 [US2] `app/api/conversas_write.py`:
   - `POST /api/conversas/<id>/mensagens` (JSON texto) e `POST /api/conversas/<id>/lida` (204);
   - gate no início; exceções → 409 `janela_fechada`/`envio_travado`, 503 `nao_configurado`, 422
     `fields`;
@@ -180,9 +180,10 @@ clique duplo inofensivo.
     (texto, mídia, modelo, lida);
   - estado "O WhatsApp ainda não foi configurado." na tela;
   - menu oculto com `conversas_ligadas` falso.
-- [ ] T024 [US5] Rodar os cenários 16–18 isolados (`--so=16,17,18`) e conferir que cada um falha
-  pelo motivo certo (404, 409 `envio_travado` sem chamada ao dublê, 403). O registro no `docs/05`
-  fica na T036.
+- [X] T024 [US5] Rodar os cenários 16–18 e conferir que cada um falha pelo motivo certo (404, 409
+  `envio_travado` sem chamada ao dublê, 403). Eles dependem da conversa do cenário 2, então rodam
+  na sequência completa: antes do núcleo falhavam por "rota não existe" e agora falham pelo motivo
+  esperado (30/10). O registro no `docs/05` fica na T036.
 
 **Checkpoint**: cenários 16–18 verdes (os três **devem** falhar e falham).
 
@@ -195,18 +196,18 @@ a partir de arquivo.
 
 **Verificação**: cenários 11–13 em PASS.
 
-- [ ] T025 [US3] `app/conversas/midia_ops.py`:
+- [X] T025 [US3] `app/conversas/midia_ops.py`:
   - `baixar_e_guardar(midia_id, cfg)`: claim da linha, `consultar_midia` → `baixar_midia` com
     teto, gravação em `CONVERSAS_MEDIA_FOLDER/AAAA/MM/<uuid>.<ext>`, `guardada`; ou `pendente`/
     `falhou` com motivo;
   - chamado depois do commit do aviso (mesma thread) e pela varredura (`reprocessar_midias` em
     `varredura.py`).
-- [ ] T026 [US3] `app/conversas/envio_ops.py`, `enviar_midia(conversa_id, arquivo, legenda,
+- [X] T026 [US3] `app/conversas/envio_ops.py`, `enviar_midia(conversa_id, arquivo, legenda,
   chave_envio, autor_id, cfg)`:
   - valida MIME e tamanho (422 `fields.arquivo`); guarda a cópia local;
     `subir_midia` → `enviar_mensagem`;
   - multipart em `POST /api/conversas/<id>/mensagens` (`conversas_write.py`).
-- [ ] T027 [US3] `app/api/conversas_read.py`: `GET /api/conversas/midia/<id>` → `send_file(caminho,
+- [X] T027 [US3] `app/api/conversas_read.py`: `GET /api/conversas/midia/<id>` → `send_file(caminho,
   mimetype, conditional=True)`; 404 sem papel, sem arquivo ou não `guardada`.
 - [ ] T028 [US3] Frontend:
   - `Mensagem.tsx`: imagem com `Foto` + `VisualizadorDeArquivo`; `<audio controls>`; `<video
@@ -224,11 +225,11 @@ a partir de arquivo.
 
 **Verificação**: cenários 14–15 em PASS.
 
-- [ ] T029 [US4] `app/conversas/envio_ops.py`:
+- [X] T029 [US4] `app/conversas/envio_ops.py`:
   - `listar_modelos(cfg)`: cache de 5 min por processo, só aprovados, contagem de `{{n}}` do BODY;
   - `enviar_modelo(conversa_id, nome, idioma, variaveis, chave_envio, autor_id, cfg)`: valida
     aprovado e quantidade de variáveis (422); grava o texto final e `modelo_nome`.
-- [ ] T030 [US4] Endpoints `GET /api/conversas/modelos` (`conversas_read.py`; 503 com mensagem) e
+- [X] T030 [US4] Endpoints `GET /api/conversas/modelos` (`conversas_read.py`; 503 com mensagem) e
   `POST /api/conversas/<id>/modelo` (`conversas_write.py`).
 - [ ] T031 [US4] `components/conversas/EnviarModeloDialog.tsx`:
   - `Combobox` do `@manto/ui`, campos por variável e prévia do texto final;

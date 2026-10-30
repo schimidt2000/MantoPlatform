@@ -4073,3 +4073,152 @@ class PixRecebido(db.Model):
     conta = db.relationship("ContaRecebimento", lazy=True)
     pagamento = db.relationship("EventPayment", lazy=True, foreign_keys=[event_payment_id])
     decidido_por = db.relationship("User", lazy=True, foreign_keys=[decidido_por_id])
+
+
+# ── Conversas: WhatsApp na Plataforma (feature 325) ─────────────────────────────
+# Relógio: UTC naive em todas as colunas de horário destas tabelas (como `Client.created_at`).
+# A API serializa com `+00:00` explícito (`leitura_ops._iso_utc`) — armadilha 1 do `docs/00` §6.
+
+
+class WhatsappAviso(db.Model):
+    """Um POST da Meta, cru, gravado ANTES de qualquer processamento (feature 325, FR-003).
+
+    A Meta reenvia por até 7 dias o que não teve 200, e o deploy mata as threads: gravar antes
+    torna a perda impossível e o reenvio inofensivo (a idempotência mora nas mensagens). Máquina de
+    estados em ``data-model.md``: ``pendente`` → ``processando`` (claim atômico) → ``processado``
+    ou ``descartado`` (48 h ou 10 tentativas).
+    """
+
+    __tablename__ = "whatsapp_avisos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    corpo = db.Column(db.Text, nullable=False)
+    estado = db.Column(db.String(20), nullable=False, default="pendente", server_default="pendente", index=True)
+    tentativas = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    erro = db.Column(db.String(500), nullable=True)
+    recebido_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Último claim: é por ele que a varredura resgata o `processando` parado (thread morta).
+    tentado_em = db.Column(db.DateTime, nullable=True)
+    processado_em = db.Column(db.DateTime, nullable=True)
+
+
+class Conversa(db.Model):
+    """Um contato num canal (feature 325). Unicidade por (canal, contato_id).
+
+    ``contato_id`` é o ``wa_id`` exatamente como a Meta mandou — é o endereço que ela aceita na
+    resposta, inclusive o celular brasileiro sem o nono dígito. Sem ``wa_id`` (pessoa só com nome
+    de usuário, desde abr/2026), é o BSUID. ``telefone`` é a forma com o nono dígito, a mesma de
+    ``Client.phone``, e serve à busca e ao vínculo. ``ultima_recebida_em`` é a base da janela de
+    24 h: só a mensagem da cliente a reabre.
+    """
+
+    __tablename__ = "conversas"
+    __table_args__ = (
+        db.UniqueConstraint("canal", "contato_id", name="uq_conversas_canal_contato"),
+        db.Index("ix_conversas_ultima_mensagem_em", "ultima_mensagem_em"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    canal = db.Column(db.String(20), nullable=False)
+    contato_id = db.Column(db.String(64), nullable=False)
+    contato_bsuid = db.Column(db.String(64), nullable=True)
+    telefone = db.Column(db.String(20), nullable=True, index=True)
+    nome_perfil = db.Column(db.String(255), nullable=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    ultima_recebida_em = db.Column(db.DateTime, nullable=True)
+    ultima_mensagem_em = db.Column(db.DateTime, nullable=True)
+    ultima_previa = db.Column(db.String(200), nullable=True)
+    # Contagem da EQUIPE (um número, uma caixa — clarify de 30/10), não de cada pessoa.
+    nao_lidas = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    cliente = db.relationship("Client", lazy=True, backref=db.backref("conversas", lazy=True))
+
+
+class ConversaMensagem(db.Model):
+    """Uma mensagem de uma conversa (feature 325).
+
+    ``externo_id`` (o wamid) é UNIQUE: o reenvio da Meta não duplica. ``chave_envio`` é UNIQUE: o
+    clique duplo devolve a mensagem já gravada em vez de mandar de novo (FR-018). A situação da
+    enviada só avança (``constantes.ORDEM_DA_SITUACAO``); ``falhou`` nunca cobre entregue/lida.
+    """
+
+    __tablename__ = "conversa_mensagens"
+    __table_args__ = (
+        db.Index("ix_conversa_mensagens_conversa_momento", "conversa_id", "momento"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="CASCADE"), nullable=False
+    )
+    direcao = db.Column(db.String(10), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)
+    texto = db.Column(db.Text, nullable=True)
+    externo_id = db.Column(db.String(128), nullable=True, unique=True)
+    chave_envio = db.Column(db.String(64), nullable=True, unique=True)
+    situacao = db.Column(db.String(12), nullable=False)
+    erro_codigo = db.Column(db.Integer, nullable=True)
+    erro_motivo = db.Column(db.String(500), nullable=True)
+    autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    origem = db.Column(db.String(12), nullable=False)
+    modelo_nome = db.Column(db.String(255), nullable=True)
+    resposta_a = db.Column(db.String(128), nullable=True)
+    # Item cru do aviso (JSON em texto): ler por `dados_dict`, nunca `json.loads` direto.
+    dados = db.Column(db.Text, nullable=True)
+    momento = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    conversa = db.relationship(
+        "Conversa", lazy=True,
+        backref=db.backref("mensagens", lazy="dynamic", cascade="all, delete-orphan", passive_deletes=True),
+    )
+    autor = db.relationship("User", lazy=True, foreign_keys=[autor_id])
+    midia = db.relationship(
+        "ConversaMidia", uselist=False, lazy=True, back_populates="mensagem",
+        cascade="all, delete-orphan", passive_deletes=True,
+    )
+
+    @property
+    def dados_dict(self) -> dict:
+        """O item cru do aviso, tolerante a JSON corrompido (armadilha 11 do `docs/00` §6)."""
+        import json
+
+        try:
+            valor = json.loads(self.dados or "{}")
+        except (ValueError, TypeError):
+            return {}
+        return valor if isinstance(valor, dict) else {}
+
+
+class ConversaMidia(db.Model):
+    """O arquivo de uma mensagem (feature 325), guardado em ``CONVERSAS_MEDIA_FOLDER``.
+
+    Pasta irmã de ``uploads`` (research R7): nunca bucket público. ``caminho`` é relativo à pasta;
+    o arquivo só sai por ``GET /api/conversas/midia/<id>``. ``pendente`` é retentado pela
+    varredura (o id da Meta vale 7 dias; a url de download, 5 minutos).
+    """
+
+    __tablename__ = "conversa_midias"
+
+    id = db.Column(db.Integer, primary_key=True)
+    mensagem_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_mensagens.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    externo_id = db.Column(db.String(128), nullable=True)
+    mime = db.Column(db.String(120), nullable=True)
+    tamanho = db.Column(db.Integer, nullable=True)
+    nome_original = db.Column(db.String(255), nullable=True)
+    caminho = db.Column(db.String(500), nullable=True)
+    estado = db.Column(db.String(10), nullable=False, default="pendente", server_default="pendente", index=True)
+    tentativas = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    erro = db.Column(db.String(500), nullable=True)
+    tentado_em = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    mensagem = db.relationship("ConversaMensagem", lazy=True, back_populates="midia")

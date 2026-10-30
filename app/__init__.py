@@ -396,6 +396,45 @@ def _start_virtual_sweep(app):
     app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _start_whatsapp_sweep(app):
+    """Thread que refaz avisos e mídias do WhatsApp que ficaram pelo caminho (feature 325).
+
+    O webhook grava o aviso cru e responde 200; o processamento roda numa thread que o deploy
+    pode matar. Esta varredura pega o que ficou ``pendente``/``processando`` e a mídia que não
+    baixou. Cada um dos 3 workers do gunicorn roda a sua cópia, sem lock de ciclo: o claim é por
+    linha (``UPDATE … WHERE estado='pendente'``), então ninguém processa a mesma linha duas vezes
+    (research R5). Só sobe com o módulo ligado.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    from app.conversas.constantes import VARREDURA_INTERVALO_S
+
+    def _loop():
+        import time
+        time.sleep(45)  # aguarda o app estar pronto
+        from app.conversas.configuracao import cfg_whatsapp
+        from app.conversas.varredura import ciclo_de_varredura
+        while True:
+            try:
+                with app.app_context():
+                    if cfg_whatsapp().ligado:
+                        resumo = ciclo_de_varredura()
+                        if any(resumo.values()):
+                            app.logger.info("[whatsapp-sweep] %s", resumo)
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[whatsapp-sweep] erro: {exc}")
+            time.sleep(VARREDURA_INTERVALO_S)
+
+    t = threading.Thread(target=_loop, daemon=True, name="whatsapp-sweep")
+    t.start()
+    app.logger.info(f"[whatsapp-sweep] thread iniciada (intervalo: {VARREDURA_INTERVALO_S}s)")
+
+
 def _start_nfc_video_worker(app):
     """Thread que converte os vídeos das tags NFC, um de cada vez (feature 297).
 
@@ -692,6 +731,20 @@ def create_app():
             "[proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar "
             "o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend."
         )
+    # Feature 325 (XIV): o WhatsApp sem as quatro chaves é um módulo desligado — precisa aparecer
+    # no log do deploy, senão some em silêncio como os tokens da migração para o Render.
+    _whatsapp_minimo = ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
+                        "WHATSAPP_PHONE_NUMBER_ID")
+    _whatsapp_faltando = [k for k in _whatsapp_minimo if not app.config.get(k)]
+    app.logger.info(
+        "[whatsapp] ligado=%s travado=%s versao=%s",
+        not _whatsapp_faltando, app.config.get("WHATSAPP_SUPPRESS_SEND"),
+        app.config.get("WHATSAPP_GRAPH_VERSION"),
+    )
+    if _whatsapp_faltando and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[whatsapp] Conversas desligado: faltam %s (painel do Render).", ", ".join(_whatsapp_faltando)
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl
@@ -717,6 +770,11 @@ def create_app():
     if not app.config.get("NFC_MEDIA_FOLDER"):
         app.config["NFC_MEDIA_FOLDER"] = os.path.join(_instance, "nfc_media")
     os.makedirs(app.config["NFC_MEDIA_FOLDER"], exist_ok=True)
+    # Mídia das conversas do WhatsApp (feature 325): mesmo racional — irmã de `uploads`, só sai
+    # por `GET /api/conversas/midia/<id>`, e entra no backup (`_MEDIA_SUBDIRS`).
+    if not app.config.get("CONVERSAS_MEDIA_FOLDER"):
+        app.config["CONVERSAS_MEDIA_FOLDER"] = os.path.join(_instance, "conversas_midia")
+    os.makedirs(app.config["CONVERSAS_MEDIA_FOLDER"], exist_ok=True)
     # Subpastas da conversão de vídeo (feature 297). O arquivo ENTREGUE continua na raiz de
     # `nfc_media`, com os mesmos nomes de sempre — quem muda de lugar é só o que é novo:
     #   entrada/  o arquivo cru recebido, que vive entre o envio e o fim da conversão
@@ -1093,6 +1151,9 @@ def create_app():
 
         # ── Conferência periódica com a ClickSign (feature 317) ────
         _start_clicksign_sync(app)
+
+        # ── Reprocessamento de avisos e mídias do WhatsApp (feature 325) ──
+        _start_whatsapp_sweep(app)
 
         # ── Backup automático para o Google Drive (feature 264) ────
         from app.backup_drive import start_backup_thread
