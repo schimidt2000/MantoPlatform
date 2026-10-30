@@ -2034,6 +2034,36 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
   valor já entrou por PIX — anexe pela página do evento".
 
+#### `/conversas` — Conversas (WhatsApp) *(feature 325)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
+  módulo configurado (`conversas_ligadas` de `/api/auth/me`); o "Ver como" não abre a caixa. Sem as chaves
+  `WHATSAPP_*`, a tela diz "O WhatsApp ainda não foi configurado. Peça ao Superadmin para preencher as chaves no
+  Render." (desligado em produção até o dono configurar — `docs/05` 178).
+- **Objetivo**: ler e responder o WhatsApp da Manto dentro da Plataforma (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`). Por
+  enquanto só com o número de teste da Meta; o número principal continua no Kommo e no app do celular.
+- **Layout**: no computador, a lista (360 px) e a conversa lado a lado; no celular (até 767 px), uma de cada vez, com
+  a seta de voltar. `?c=<id>` e `?busca=` ficam no endereço (feature 320).
+- **Lista**: busca por nome ou telefone, da última mensagem para trás; cada linha tem inicial, nome (ficha › perfil
+  do WhatsApp › telefone), horário (hoje = hora; outro dia = dd/mm), trecho da última mensagem e a contagem de **não
+  lidas da equipe**, que zera quando qualquer pessoa abre. Atualiza sozinha a cada 5 s (aba visível). Vazia:
+  "Nenhuma conversa encontrada.".
+- **Conversa aberta**: cabeçalho com nome, telefone, "janela de 24 h fechada" quando for o caso e "Ver ficha" (se
+  ligada a um cliente). As mensagens vêm separadas por dia ("Hoje", "Ontem", data), com "Carregar anteriores". Balão à
+  esquerda para a cliente e à direita para a equipe, com autor, horário e situação da enviada (relógio, um tique, dois
+  tiques, dois tiques azuis; "Não entregue: motivo" em vermelho). O eco do app do celular aparece como "Enviada pelo
+  celular". A mídia aparece como foto (abre no visualizador), áudio e vídeo com player e documento com nome;
+  enquanto baixa, "Arquivo sendo carregado…"; quando falhou ou passou de 25 MB, "Arquivo indisponível. Abra no
+  celular.". Abrir a conversa marca como lida (e dá o tique azul para a cliente). Atualiza a cada 4 s.
+- **Envio**: "Inserir arquivo" (clipe), campo "Mensagem" (Enter envia no computador, Shift+Enter quebra a linha; no
+  celular, só o botão) e o botão Enviar ("Enviando…"). O texto só sai do campo quando a gravação é confirmada; em
+  qualquer erro ele fica, com a mensagem em vermelho. Com a janela de 24 h fechada, a caixa vira o aviso e o botão
+  "Enviar modelo".
+- **Enviar modelo** (diálogo): modelos aprovados pela Meta num `Combobox`, um campo por variável (a primeira vem com o
+  primeiro nome do contato) e a prévia do texto final.
+- **Ambiente local**: faixa dourada "O envio pelo WhatsApp está travado neste ambiente…" quando o banco é a cópia
+  local; enviar responde com a mesma frase (409 `envio_travado`). Para conferir a tela: `.claude/launch.json` →
+  `manto-backend-local-conversas-demo` + `verify_325.py --manter`.
+
 ### A.6 Financeiro
 
 #### `/financeiro` — Painel Financeiro *(reconstruído na feature 189)*

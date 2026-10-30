@@ -589,6 +589,20 @@ Pontos que valem para quem for ler esses dados:
   WhatsForm (`Response`, `Time`, `Delivered to`) removidas e as chaves-sistema (`cpf`, `cnpj`,
   `endereco_contratante`, `endereco_empresa`) preservadas — então
   `formularios_ops.fill_client_from_response` continua funcionando nessas respostas.
+- **Conversas — WhatsApp** (feature 325, migration `e325a7c1d9f2`, aditiva). Horário: **UTC ingênuo** nas quatro
+  tabelas (a API serializa com `+00:00`). Campos e máquinas de estado em `specs/325-crm-whatsapp-fundacao/data-model.md`.
+  - `whatsapp_avisos`: o POST cru da Meta (`corpo` Text ≤ 256 KB), com `estado` `pendente` → `processando` →
+    `processado`/`descartado`, `tentativas`, `tentado_em` (resgate do processando parado) e `erro`.
+  - `conversas`: um contato num canal. `UNIQUE(canal, contato_id)` (`uq_conversas_canal_contato`). `contato_id` é o
+    `wa_id` como veio ou, sem ele, o BSUID. Também `contato_bsuid`, `telefone` (com o nono dígito, a forma de
+    `clients.phone`), `nome_perfil`, `client_id` → `clients` (SET NULL), `ultima_recebida_em` (base da janela de 24 h),
+    `ultima_mensagem_em`, `ultima_previa` e `nao_lidas` (da equipe).
+  - `conversa_mensagens`: `conversa_id` (CASCADE), `direcao`, `tipo`, `texto`, `externo_id` (wamid,
+    `uq_conversa_mensagens_externo_id`), `chave_envio` (`uq_conversa_mensagens_chave_envio`), `situacao`,
+    `erro_codigo`, `erro_motivo`, `autor_id` → `users` (SET NULL), `origem`
+    (`contato`/`plataforma`/`celular`/`outro`), `modelo_nome`, `resposta_a`, `dados` (item cru) e `momento`.
+  - `conversa_midias`: `mensagem_id` (CASCADE, UNIQUE), `externo_id` (id da mídia na Meta), `mime`, `tamanho`,
+    `nome_original`, `caminho` (relativo a `CONVERSAS_MEDIA_FOLDER`) e `estado` `pendente`/`guardada`/`falhou`.
 
 ### 2.8 EducaManto
 
@@ -1895,6 +1909,34 @@ em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <
 sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
 segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
+### 3.13.7 Conversas (WhatsApp) — `whatsapp_webhook.py` / `conversas_read.py` / `conversas_write.py` (feature 325)
+
+A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`).
+
+- **Fluxo e invariantes**: `docs/04` §6, linha "Conversas".
+- **Contrato completo**: `specs/325-crm-whatsapp-fundacao/contracts/api.md`.
+- **Cliente HTTP** `app/integracoes/whatsapp_client.py`: sem Flask, `ConexaoMeta` por parâmetro, Graph `v26.0`,
+  `Authorization: Bearer`.
+- **Núcleo** `app/conversas/` (puro).
+- **Comando** `flask whatsapp-reprocessar [--aplicar]` (Shell do Render, `MANTO_SEM_THREADS=1`): sem `--aplicar`,
+  só conta.
+- **Thread** `_start_whatsapp_sweep` (atrás de `MANTO_SEM_THREADS`; sobe só com o módulo ligado; a cada 60 s).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/webhooks/whatsapp` | **Público.** Desafio da Meta: com `hub.mode=subscribe` e `hub.verify_token` = `WHATSAPP_VERIFY_TOKEN` (`compare_digest`) → 200 `text/plain` com o `hub.challenge`; senão, ou com o módulo desligado → **404**. `60/min`. |
+| `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
+| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. |
+| `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais`. Não zera as não lidas. |
+| `GET` | `/api/conversas/midia/<id>[/<nome>]` | O arquivo (`send_file`, `conditional`). Sem papel, inexistente ou não `guardada` → **404**. O `<nome>` só serve à extensão do visualizador. |
+| `GET` | `/api/conversas/modelos` | Modelos aprovados e suportados (só variáveis no corpo), com cache de 5 min por processo; falha → 503. |
+| `POST` | `/api/conversas/<id>/mensagens` | JSON `{texto, chave_envio}` ou multipart `arquivo`, `legenda`, `chave_envio`. 201 (nova) ou 200 (mesma chave), com `mensagem`. 409 `janela_fechada` / `envio_travado`; 503 `nao_configurado`; 422 `invalido` + `fields`. Falha da Meta = 201 com `situacao: "falhou"` e motivo. |
+| `POST` | `/api/conversas/<id>/modelo` | `{nome, idioma, variaveis[], chave_envio}`; vale com a janela fechada; 422 se o modelo não é aprovado ou o número de variáveis não confere. |
+| `POST` | `/api/conversas/<id>/lida` | Zera `nao_lidas` e marca a última recebida como lida na Meta (melhor esforço). 204. |
+
+`GET /api/auth/me` ganha `conversas_ligadas` (papel real COMERCIAL/SUPERADMIN **e** módulo ligado), que controla o
+item do menu.
+
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
 guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
@@ -2199,6 +2241,9 @@ Gates por módulo (todos em `app/api/`):
 | `_require_cobrar()` (feature 317) | `contratos_write`: cobrar, ligar, desligar e descartar contrato da ClickSign; no detalhe, `contrato.pode_cobrar`/`pode_conferir` seguem `can_confirm` (zerado no cancelado) e, na Home, `contratos.pode_cobrar` o papel efetivo | `COMERCIAL`, `SUPERADMIN` (papel real) — FINANCEIRO leva **403** (vê a situação, não age: decisão do dono) |
 | papéis de `show_comercial` (feature 317) | `contratos_read`: `GET /api/contratos/a-conferir`; o bloco `contrato` do detalhe e `comercial.contratos` da Home vêm no mesmo `show_comercial` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` — CASTING e os demais: 403 / sem a chave |
 | HMAC do aviso (sem papel) | `POST /api/webhooks/clicksign` | público; vale só com `Content-Hmac` correto (404 nos demais) |
+| assinatura / token da Meta (sem papel) (feature 325) | `GET`/`POST /api/webhooks/whatsapp` | público; o GET vale só com `hub.verify_token` correto e o POST só com `X-Hub-Signature-256` correto; desligado → 404 |
+| `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
+| `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
@@ -2662,6 +2707,21 @@ preenchidos** na migração — os agentes semanais respondem 404 desde 28/08 (`
 de planilha aposentadas). `INFINITEPAY_API_KEY` (310) é opcional e também `sync: false`: ausente, a
 loja funciona com o link sem validade (`docs/05`). Rate limit em memória por worker e threads de
 background ×3 são trade-offs herdados, documentados acima.
+
+**Conversas / WhatsApp (feature 325)** — `sync: false` no `manto-backend`, vazios por padrão (= módulo desligado,
+aviso `[whatsapp] Conversas desligado: faltam …` na subida; `docs/05` 178):
+- os quatro mínimos: `WHATSAPP_ACCESS_TOKEN` (token de System User), `WHATSAPP_APP_SECRET` (assina o webhook),
+  `WHATSAPP_VERIFY_TOKEN` (desafio do GET) e `WHATSAPP_PHONE_NUMBER_ID`;
+- `WHATSAPP_WABA_ID`, só para os modelos.
+
+Com default real em `app/config.py`:
+- `WHATSAPP_GRAPH_VERSION=v26.0` (revisão anual) e `WHATSAPP_GRAPH_BASE`;
+- `WHATSAPP_POLL_SEGUNDOS=5`;
+- `CONVERSAS_MEDIA_FOLDER` = `instance/conversas_midia`, no disco persistente, irmã de `uploads` e incluída no
+  backup (`_MEDIA_SUBDIRS`).
+
+Trava: `_suppress_whatsapp()` (`WHATSAPP_SUPPRESS_SEND` / `WHATSAPP_ALLOW_LOCAL_SEND`). Banco local = nada sai para a
+Meta (envio, lida, modelos e download).
 
 ### 5.4 Dev local
 

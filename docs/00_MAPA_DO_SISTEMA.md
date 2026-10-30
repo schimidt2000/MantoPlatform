@@ -72,6 +72,7 @@ o `JSON.parse` estoura e o erro vira lista vazia em silêncio.
 | Orçamento | `app/orcamento/quote_ops.py` (a ordem da conta em `aplicar_acrescimos`; desconto e PIX, 313), `pricing.py`, `settings.py`, `transport.py`, `produtos.py` (produtos de tabela, 309), `pdf.py`; o orçamento que vira evento em `app/calendar/orcamento_evento_ops.py` | `orcamento_read/write.py` | `OrcamentoCalculadoraPage`, `lib/desconto.ts` |
 | EducaManto | `app/educamanto/pricing_ops.py`, `package_ops.py`, `quote_ops.py` | `educamanto_read/write.py` | `EducaManto*Page` |
 | Clientes | `app/clientes/client_ops.py` | `clientes_read/write.py` | `ClientesPage` |
+| Conversas (WhatsApp, 325) | `app/conversas/` (`aviso_ops`, `envio_ops`, `midia_ops`, `leitura_ops`, `varredura`) + `app/integracoes/whatsapp_client.py` (única fronteira com a Meta) | `whatsapp_webhook.py` (público, assinado), `conversas_read/write.py` | `ConversasPage` |
 | Formulários | `app/formularios/formularios_ops.py` (auto-vínculo de evento em `:582`, de cliente em `attempt_auto_link_client`) | `formularios_write.py`, `formularios_admin_*` | `apps/public` `/f/*` + `FormulariosAdminPage` |
 | Revisão de mídia | `app/revisao/review_ops.py`, `cleanup.py` | `revisao_read/write.py` | `Revisao*Page` |
 | Feedback da cliente | `app/feedback/routes.py` (sem ops; ~167 l.) | `feedback_write.py` | `apps/public` `/avaliar/:token` |

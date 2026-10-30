@@ -803,3 +803,15 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 |---|---|---|---|---|
 | 176 | **P5** | `app/calendar/routes.py` (`_handle_update_comercial` → `comercial_ops.sincronizar_notas`, Jinja) | o editor Jinja da venda, inalcançável em produção mas registrado, ainda **apaga a nota emitida** ao desligar o chip e não carimba "pedida por" nem avisa; as portas da API seguem a 323 (desligar exclui só as a emitir) | sai junto com o Jinja (`docs/PARADA_REMOCAO_JINJA.md`); não corrigir de passagem |
 | 177 | **P4** | notas `a_emitir` antigas (antes da 323) | a Home do Superadmin passa a listar como urgentes as notas a emitir que já existiam — no espelho de 28/10 eram 6, de eventos de setembro, várias sem CNPJ; podem ter sido emitidas fora do sistema sem o PDF inserido | o Superadmin insere o PDF (vira emitida); nota que não será emitida não tem botão de excluir no React (o `useDeleteNotaFiscal` de `lib/eventOps.ts` existe sem tela) — pôr "Excluir" no card de notas fiscais resolve; sem script |
+
+## Baixa da feature 325-crm-whatsapp-fundacao (2026-10-30)
+
+**Criada.** (178–182.) Nenhuma quitada.
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 178 | **P3** | `render.yaml` / painel do Render (`manto-backend`) | **Conversas nasce desligado em produção** (Princípio XIV): sem `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` e `WHATSAPP_PHONE_NUMBER_ID`, o webhook responde 404, o envio é recusado e o menu não mostra o item. O log da subida diz `[whatsapp] Conversas desligado: faltam …`. `WHATSAPP_WABA_ID` só serve aos modelos | o dono cria o app Meta no portfólio Manto Produções (número de teste primeiro), gera o token de System User e cola as cinco chaves no painel (nunca pelo chat) — `specs/325-crm-whatsapp-fundacao/quickstart.md` §3 |
+| 179 | **P3** | `conversas` / `conversa_mensagens` / `conversa_midias` | **sem prazo de guarda (LGPD)**: conversa e mídia ficam para sempre, como no Kommo hoje. Aceito na Fase 1 (número de teste) | definir prazo de guarda e rotina de expurgo antes da virada do número principal (Fase 4 do `docs/PLANO_CRM_PROPRIO.md`) |
+| 180 | **P4** | `CONVERSAS_MEDIA_FOLDER` no disco de 10 GB + backup de mídia no Drive (`_MEDIA_SUBDIRS`, `_KEEP_MEDIA` ~15 GB) | o volume de mídia do número principal (~4.500 recebidas/mês em out/2026, com foto, áudio e vídeo) não foi medido; o disco e o orçamento do backup podem não comportar | medir no piloto da Fase 4 e decidir entre disco maior ou object storage **privado** (nunca o bucket público do `save_file`) |
+| 181 | **P5** | `app/conversas/constantes.py` (`MIDIA_TETO_BYTES`) | mídia acima de 25 MB (documento de até 100 MB do WhatsApp) vira "Arquivo acima de 25 MB. Abra no celular." e não é guardada | subir o teto junto com a decisão do item 180 |
+| 182 | **P5** | `envio_ops._suportado` | modelos com variável no cabeçalho, cabeçalho de imagem/vídeo/documento ou botão de URL com variável não aparecem no "Enviar modelo" (a Fase 1 só preenche variáveis do corpo) | aceitar componentes de cabeçalho e botão quando a Fase 6 (automações) precisar |

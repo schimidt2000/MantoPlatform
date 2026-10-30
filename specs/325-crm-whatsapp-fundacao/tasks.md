@@ -265,7 +265,7 @@ pelo celular".
   - desktop e 375×812.
 - [X] T035 Texto novo revisado pelo Princípio XV (superfície interna; glossário: "Situação",
   "Inserir arquivo", "Tentar novamente"), lido na tela aberta.
-- [ ] T036 Docs por fonte única:
+- [X] T036 Docs por fonte única:
   - `docs/01`: §2 tabelas, §3 seção nova "Conversas", §4.3 uma linha por endpoint, §5 variáveis e
     trava;
   - `docs/02`: tela Conversas;
@@ -275,7 +275,7 @@ pelo celular".
     25 MB;
   - `docs/00` §3: linha do domínio;
   - `docs/PLANO_CRM_PROPRIO.md`: Fase 1 marcada.
-- [ ] T037 `quickstart.md` §1–2 executados. A §3 (número de teste da Meta) fica listada como o que é
+- [X] T037 `quickstart.md` §1–2 executados. A §3 (número de teste da Meta) fica listada como o que é
   do dono, com o teste de deploy do SC-003: mandar mensagens durante um deploy e conferir que nenhuma
   se perde.
 - [ ] T038 `/speckit-converge` sem gaps.

@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **325-crm-whatsapp-fundacao** | *(NÃO PUBLICADO; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -357,6 +358,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
+| Conversas / WhatsApp / CRM próprio | 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -390,6 +392,66 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 325 — Conversas: o WhatsApp da Manto dentro da Plataforma (fundação do CRM próprio)   (325-crm-whatsapp-fundacao · 2026-10-30 · migration `e325a7c1d9f2`)
+
+> **NÃO PUBLICADO** — branch `325-crm-whatsapp-fundacao`, aguardando o dono pedir o push. Mesmo depois do deploy, o módulo
+> fica **desligado** até o dono criar o app na Meta e preencher as cinco variáveis `WHATSAPP_*` no Render
+> (`docs/05` 178; dívidas 178–182). Nível 1. Detalhe: `specs/325-crm-whatsapp-fundacao/`. Panorama e fases:
+> `docs/PLANO_CRM_PROPRIO.md`.
+
+**O pedido.** O dono (30/10) quer um CRM próprio no lugar do Kommo: o app dele é "muito feio, muito ruim de
+mexer", o que a equipe usa é basicamente a conversa, e ele quer "ver clientes que chegam por campanhas". Perguntou se
+é viável e se o número corre risco de banimento, ainda mais com IA. Esta é a Fase 1 do plano: a Plataforma recebe e
+envia WhatsApp pela API oficial, com uma tela mínima, provada no número de teste da Meta. O número principal não é
+tocado.
+
+**O que mudou.**
+- **Webhook** `GET|POST /api/webhooks/whatsapp` (`app/api/whatsapp_webhook.py`): o GET responde o `hub.challenge` e o
+  POST exige `X-Hub-Signature-256` (HMAC do corpo bruto com o App Secret). Desligado ou inválido → 404. O aviso é
+  gravado cru (`whatsapp_avisos`) antes de qualquer processamento e a resposta é 200 na hora.
+- **Núcleo** `app/conversas/`:
+  - `aviso_ops`: processamento idempotente (UNIQUE do wamid e de canal+contato); status que nunca regride (`played`
+    vale "lida"); eco do app do celular (`smb_message_echoes`, para a coexistência da Fase 4); vínculo com a ficha pelo
+    telefone com e sem o nono dígito, sobre `contratos_ops.chave_telefone`.
+  - `midia_ops`: a mídia baixa depois do commit para `CONVERSAS_MEDIA_FOLDER`, pasta irmã de `uploads`, nunca bucket
+    público, servida só por endpoint com gate.
+  - `envio_ops`: texto, arquivo e modelo; janela de 24 h; chave de clique duplo; a mensagem é gravada antes de chamar
+    a Meta.
+  - `varredura`: thread `whatsapp-sweep` e o comando `flask whatsapp-reprocessar`.
+- **Cliente** `app/integracoes/whatsapp_client.py`: Graph API v26.0, sem Flask. As exceções separam Recusou,
+  Indisponível, Travado e ArquivoGrande.
+- **Trava** `_suppress_whatsapp()`: banco local não envia, nem lê modelos ou mídia, sem `WHATSAPP_ALLOW_LOCAL_SEND`.
+- **Tela** `/conversas`, para Comercial e Superadmin. No computador, lista e conversa lado a lado; no celular, uma de
+  cada vez. Busca, não lidas compartilhadas pela equipe, situação da enviada, mídia, "janela fechada" que vira "Enviar
+  modelo" e link para a ficha. O item do menu vem do `conversas_ligadas` de `/api/auth/me`.
+
+**Decisões e pegadinhas.**
+- **Fase 0 (Chrome do dono, só leitura).** O Kommo está na Cloud API **oficial**, em **coexistência** com o app WhatsApp
+  Business (o tipo da conta de mensagens é "App WhatsApp Business"). A WABA é da Manto e a empresa está verificada
+  desde 13/03/2026. O custo é de **1 licença**, ~US$ 300 por ano, com o limite de leads (78%) vencendo junto com a
+  renovação de 13/02/2027. A Meta custou ~US$ 17 em outubro.
+- **IA.** Pelos termos de 15/01/2026, IA genérica como função principal do número é proibida; IA da própria empresa é
+  permitida. Por isso a Fase 5 é copiloto, e desligável.
+- **Custo da Meta.** Desde 01/10/2026 a Meta cobra a resposta dentro da janela, com 1.000 grátis por número por mês. O
+  custo é o mesmo com ou sem o Kommo.
+- **BSUID (abril de 2026).** Quem usa nome de usuário pode chegar sem telefone. A conversa guarda `contato_bsuid` e o
+  envio usa `recipient`.
+- **Varredura sem lock de ciclo.** O claim é por linha, então os 3 workers varrem juntos sem tocar no `site_settings`.
+- **URL da mídia.** Termina no nome do arquivo, porque o visualizador da 320 decide imagem ou PDF pela extensão.
+- **Porta C.** O novo modelo de contas da Meta (23/09/2026) permite várias contas de mensagens no mesmo número. Como
+  as recebidas se repartem entre elas ainda não está documentado: é teste obrigatório antes da Fase 4.
+
+**Verificação.**
+- `verify_325.py` deu 22/22 contra o `manto_local`, com zero escapes de rede: a Meta é um dublê e há disjuntor de
+  socket. Seis cenários **devem** falhar: assinatura errada, janela fechada, Casting na mídia, configuração vazia, banco
+  local travado, Casting na lista.
+- `ruff` limpo e `npm run typecheck` limpo nas três SPAs.
+- Tela aberta em 1024×768 e 375×812, com a entrada `manto-backend-local-conversas-demo` do `launch.json` (chaves
+  falsas, envio travado): sem rolagem lateral, botão Enviar com 44 px, recusa "travado" com o texto mantido no campo.
+- O ponta a ponta no número de teste da Meta depende do dono (quickstart §3).
+
+**Commits:** `587b0fd8` (esteira), `5307b5fe` (backend), `2c927013` (tela).
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 
