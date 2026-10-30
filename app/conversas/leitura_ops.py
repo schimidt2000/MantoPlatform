@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy import or_
 from sqlalchemy.orm import joinedload
@@ -97,8 +98,16 @@ def _midia(mensagem: ConversaMensagem) -> dict[str, Any] | None:
         "mime": midia.mime,
         "tamanho": midia.tamanho,
         "nome": midia.nome_original,
-        "url": f"/api/conversas/midia/{midia.id}" if midia.estado == K.MIDIA_GUARDADA else None,
+        "url": _url_da_midia(midia) if midia.estado == K.MIDIA_GUARDADA else None,
     }
+
+
+def _url_da_midia(midia: Any) -> str:
+    """URL com o nome do arquivo no fim: é pela extensão que o visualizador (feature 320) sabe
+    se abre imagem, PDF ou "outro". O nome não decide nada no servidor — só o id."""
+    mime = (midia.mime or "").split(";")[0].strip()
+    nome = midia.nome_original or f"arquivo{K.EXTENSAO_DO_MIME.get(mime, '.bin')}"
+    return f"/api/conversas/midia/{midia.id}/{quote(nome)}"
 
 
 def serializar_mensagem(mensagem: ConversaMensagem) -> dict[str, Any]:

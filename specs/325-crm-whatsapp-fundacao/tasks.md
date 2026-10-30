@@ -119,11 +119,11 @@ reprocessamento.
 - [X] T016 [US1] `app/api/auth.py`: `serialize_user` ganha `conversas_ligadas` (COMERCIAL ou
   SUPERADMIN real e módulo ligado). `frontend/apps/internal/src/lib/types.ts`: `conversas_ligadas?:
   boolean`.
-- [ ] T017 [P] [US1] `frontend/apps/internal/src/lib/conversas.ts`:
+- [X] T017 [P] [US1] `frontend/apps/internal/src/lib/conversas.ts`:
   - tipos do contrato;
   - `useConversas(busca)` com `refetchInterval` do payload (padrão 5 s), sem refetch em segundo plano;
   - `useConversa(id)` a cada 4 s; chaves de query.
-- [ ] T018 [US1] Tela no app interno:
+- [X] T018 [US1] Tela no app interno:
   - `pages/ConversasPage.tsx`: lista e conversa por `?c=<id>` no endereço (feature 320);
   - `components/conversas/ListaDeConversas.tsx`: busca com debounce, não lidas, horário em SP;
   - `components/conversas/ConversaAberta.tsx`: cabeçalho com link à ficha, mensagens em ordem e
@@ -158,7 +158,7 @@ clique duplo inofensivo.
   - gate no início; exceções → 409 `janela_fechada`/`envio_travado`, 503 `nao_configurado`, 422
     `fields`;
   - comentário `RBAC:`; registrar em `app/api/__init__.py`.
-- [ ] T022 [US2] Frontend:
+- [X] T022 [US2] Frontend:
   - `components/conversas/CaixaDeEnvio.tsx`: Enter envia e Shift+Enter quebra linha (FR-021);
     "Enviando…"; `chave_envio` nova por tentativa (`crypto.randomUUID`); texto só sai do campo no
     sucesso; envio otimista; aviso "janela fechada" com o botão "Enviar modelo";
@@ -175,7 +175,7 @@ clique duplo inofensivo.
 
 **Verificação**: cenários 16–18 em PASS.
 
-- [ ] T023 [US5] Conferir e fechar as pontas do desligado:
+- [X] T023 [US5] Conferir e fechar as pontas do desligado:
   - webhook 404 e envio 503 sem configuração; `envio_travado` em toda escrita que fala com a Meta
     (texto, mídia, modelo, lida);
   - estado "O WhatsApp ainda não foi configurado." na tela;
@@ -209,7 +209,7 @@ a partir de arquivo.
   - multipart em `POST /api/conversas/<id>/mensagens` (`conversas_write.py`).
 - [X] T027 [US3] `app/api/conversas_read.py`: `GET /api/conversas/midia/<id>` → `send_file(caminho,
   mimetype, conditional=True)`; 404 sem papel, sem arquivo ou não `guardada`.
-- [ ] T028 [US3] Frontend:
+- [X] T028 [US3] Frontend:
   - `Mensagem.tsx`: imagem com `Foto` + `VisualizadorDeArquivo`; `<audio controls>`; `<video
     controls>`; documento com nome e "Ver"; "Arquivo sendo carregado…" e "Arquivo indisponível. Abra
     no celular.";
@@ -231,7 +231,7 @@ a partir de arquivo.
     aprovado e quantidade de variáveis (422); grava o texto final e `modelo_nome`.
 - [X] T030 [US4] Endpoints `GET /api/conversas/modelos` (`conversas_read.py`; 503 com mensagem) e
   `POST /api/conversas/<id>/modelo` (`conversas_write.py`).
-- [ ] T031 [US4] `components/conversas/EnviarModeloDialog.tsx`:
+- [X] T031 [US4] `components/conversas/EnviarModeloDialog.tsx`:
   - `Combobox` do `@manto/ui`, campos por variável e prévia do texto final;
   - "Enviar modelo" com "Enviando…"; `Dialog` centralizado por flex (armadilha 16).
 
@@ -246,7 +246,7 @@ pelo celular".
 
 **Verificação**: cenário 19 em PASS.
 
-- [ ] T032 [US6] `app/conversas/aviso_ops.py`: `field == "smb_message_echoes"` → mensagem `enviada`,
+- [X] T032 [US6] `app/conversas/aviso_ops.py`: `field == "smb_message_echoes"` → mensagem `enviada`,
   `origem=celular`, sem autor, idempotente pelo `externo_id`; não reabre a janela. Formato
   conforme `research.md` §Confirmações. `Mensagem.tsx` mostra "Enviada pelo celular".
 
@@ -256,14 +256,14 @@ pelo celular".
 
 ## Phase 9: Polimento e transversais
 
-- [ ] T033 `cd frontend && npm run typecheck` limpo (três SPAs); `ruff check` nos arquivos Python
+- [X] T033 `cd frontend && npm run typecheck` limpo (três SPAs); `ruff check` nos arquivos Python
   tocados e `ruff format` nos novos.
-- [ ] T034 Tela aberta de verdade (skill `manto-conferir-tela`), com a conversa semeada pelo verify
+- [X] T034 Tela aberta de verdade (skill `manto-conferir-tela`), com a conversa semeada pelo verify
   `--manter`:
   - lista, conversa, envio, modelo e mídia;
   - estados vazio, desligado e erro;
   - desktop e 375×812.
-- [ ] T035 Texto novo revisado pelo Princípio XV (superfície interna; glossário: "Situação",
+- [X] T035 Texto novo revisado pelo Princípio XV (superfície interna; glossário: "Situação",
   "Inserir arquivo", "Tentar novamente"), lido na tela aberta.
 - [ ] T036 Docs por fonte única:
   - `docs/01`: §2 tabelas, §3 seção nova "Conversas", §4.3 uma linha por endpoint, §5 variáveis e

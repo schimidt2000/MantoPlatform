@@ -18,6 +18,11 @@ export interface AuthUser {
   impersonating: string | null;
   /** Responsável EducaManto (feature 109) — afeta visibilidade de Pipeline/Comissões. */
   is_educamanto_responsavel: boolean;
+  /**
+   * Feature 325: papel Comercial/Superadmin E o WhatsApp configurado — mostra "Conversas" no menu.
+   * Opcional: backend e bundle ficam em versões diferentes por minutos em todo deploy.
+   */
+  conversas_ligadas?: boolean;
 }
 
 /** Referência enxuta de um evento/cargo dentro do resumo do dashboard. */

@@ -1,0 +1,109 @@
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { MessageCircle } from "lucide-react";
+import { cn } from "@manto/ui";
+import { ConversaAberta } from "../components/conversas/ConversaAberta";
+import { ListaDeConversas } from "../components/conversas/ListaDeConversas";
+import { intervaloDaLista, useConversas } from "../lib/conversas";
+
+/**
+ * Conversas (feature 325) — o WhatsApp da Manto dentro da Plataforma.
+ *
+ * No computador, lista e conversa lado a lado; no celular (até 767 px), uma de cada vez, com
+ * "Voltar" (FR-020). A conversa aberta e a busca moram no endereço (`?c=`, `?busca=`, sempre
+ * `replace` — feature 320), então recarregar ou voltar não perde o lugar.
+ */
+
+const ESPERA_DA_BUSCA_MS = 300;
+
+export function ConversasPage() {
+  const [params, setParams] = useSearchParams();
+  const selecionada = Number(params.get("c")) || null;
+  const [busca, setBusca] = useState(params.get("busca") ?? "");
+  const [buscaEfetiva, setBuscaEfetiva] = useState(busca);
+  const lista = useConversas(buscaEfetiva);
+
+  useEffect(() => {
+    const espera = setTimeout(() => {
+      setBuscaEfetiva(busca.trim());
+      setParams(
+        (atuais) => {
+          const novos = new URLSearchParams(atuais);
+          if (busca.trim()) novos.set("busca", busca.trim());
+          else novos.delete("busca");
+          return novos;
+        },
+        { replace: true },
+      );
+    }, ESPERA_DA_BUSCA_MS);
+    return () => clearTimeout(espera);
+  }, [busca, setParams]);
+
+  const selecionar = (id: number | null) =>
+    setParams(
+      (atuais) => {
+        const novos = new URLSearchParams(atuais);
+        if (id) novos.set("c", String(id));
+        else novos.delete("c");
+        return novos;
+      },
+      { replace: true },
+    );
+
+  if (lista.data && !lista.data.configurado) {
+    return (
+      <div className="mx-auto max-w-xl p-6 text-center">
+        <MessageCircle className="mx-auto mb-3 h-10 w-10 text-muted" aria-hidden />
+        <h1 className="text-lg font-semibold">Conversas</h1>
+        <p className="mt-2 text-sm text-muted">
+          O WhatsApp ainda não foi configurado. Peça ao Superadmin para preencher as chaves no Render.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    // Altura da janela menos a barra do topo do celular (56 px); no computador não há barra.
+    <div className="flex h-[calc(100dvh-3.5rem)] min-h-[420px] flex-col md:h-[100dvh]">
+      {lista.data?.envio_travado ? (
+        <p role="status" className="border-b border-gold bg-gold-50 px-4 py-2 text-xs text-gold-ink">
+          O envio pelo WhatsApp está travado neste ambiente: as mensagens não saem para o celular da cliente.
+        </p>
+      ) : null}
+      <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(280px,360px)_1fr]">
+        <section
+          aria-label="Lista de conversas"
+          className={cn("min-h-0 border-r border-line bg-panel", selecionada ? "hidden md:block" : "block")}
+        >
+          <ListaDeConversas
+            busca={busca}
+            onBusca={setBusca}
+            conversas={lista.data?.conversas}
+            carregando={lista.isLoading}
+            falhou={lista.isError}
+            onTentarDeNovo={() => void lista.refetch()}
+            selecionada={selecionada}
+            onSelecionar={selecionar}
+          />
+        </section>
+        <section
+          aria-label="Conversa aberta"
+          className={cn("min-h-0 bg-surface", selecionada ? "block" : "hidden md:block")}
+        >
+          {selecionada ? (
+            <ConversaAberta
+              key={selecionada}
+              conversaId={selecionada}
+              intervaloMs={intervaloDaLista(lista.data)}
+              onVoltar={() => selecionar(null)}
+            />
+          ) : (
+            <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted">
+              Selecione uma conversa para ler e responder.
+            </div>
+          )}
+        </section>
+      </div>
+    </div>
+  );
+}

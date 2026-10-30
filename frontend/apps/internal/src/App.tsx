@@ -21,6 +21,7 @@ import { VendasPipelinePage } from "./pages/VendasPipelinePage";
 import { FinanceiroDashboardPage } from "./pages/FinanceiroDashboardPage";
 import { ComissoesPage } from "./pages/ComissoesPage";
 import { PixRecebidosPage } from "./pages/PixRecebidosPage";
+import { ConversasPage } from "./pages/ConversasPage";
 import { PagamentosPage } from "./pages/PagamentosPage";
 import { ClientsListPage } from "./pages/ClientsListPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
@@ -140,6 +141,7 @@ export function App() {
             <Route path="/financeiro/comissoes" element={<ComissoesPage />} />
             <Route path="/financeiro/pagamentos" element={<PagamentosPage />} />
             <Route path="/pix" element={<PixRecebidosPage />} />
+            <Route path="/conversas" element={<ConversasPage />} />
             <Route path="/gastos" element={<GastosExtrasPage />} />
             <Route path="/gastos/recorrentes" element={<GastosRecorrentesPage />} />
             <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />

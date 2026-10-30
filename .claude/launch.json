@@ -22,6 +22,16 @@
       "port": 5000
     },
     {
+      "name": "manto-backend-local-conversas-demo",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": [
+        "-NoProfile",
+        "-Command",
+        "$env:MANTO_SEM_THREADS = '1'; $env:FLASK_ENV = 'development'; $env:DATABASE_URL = (Get-Content .local-db-url -Raw).Trim(); $env:WHATSAPP_ACCESS_TOKEN = 'demo-falso'; $env:WHATSAPP_APP_SECRET = 'demo-falso'; $env:WHATSAPP_VERIFY_TOKEN = 'demo-falso'; $env:WHATSAPP_PHONE_NUMBER_ID = 'demo-falso'; Remove-Item Env:WHATSAPP_ALLOW_LOCAL_SEND -ErrorAction SilentlyContinue; $env:PYTHONPATH = (Get-Location).Path; $env:FLASK_APP = 'app:create_app'; .venv\\Scripts\\python.exe -m flask run --port 5000"
+      ],
+      "port": 5000
+    },
+    {
       "name": "manto-prod-server",
       "runtimeExecutable": "node",
       "runtimeArgs": ["frontend/server.js"],

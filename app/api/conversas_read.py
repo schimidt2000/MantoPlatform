@@ -73,8 +73,9 @@ def api_conversas_detalhe(conversa_id: int) -> Any:
 
 
 @api_bp.route("/conversas/midia/<int:midia_id>")
+@api_bp.route("/conversas/midia/<int:midia_id>/<path:_nome>")
 @api_login_required
-def api_conversas_midia(midia_id: int) -> Any:
+def api_conversas_midia(midia_id: int, _nome: str | None = None) -> Any:
     """O arquivo de uma mensagem. Sem papel, inexistente ou não guardado → 404."""
     if not pode_conversas(current_user):
         return json_error("Não encontrado", 404)

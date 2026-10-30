@@ -17,6 +17,7 @@ import {
   LineChart,
   ListChecks,
   Megaphone,
+  MessageCircle,
   Nfc,
   Package,
   PenSquare,
@@ -308,6 +309,17 @@ const SECTIONS: NavSectionConfig[] = [
           notRevendedor(user) &&
           (hasRole(user, "COMERCIAL", "FINANCEIRO", "SUPERADMIN") ||
             user.is_educamanto_responsavel),
+      },
+      {
+        // Feature 325: o WhatsApp da Manto dentro da Plataforma. Quem decide é o servidor
+        // (`conversas_ligadas` = papel REAL Comercial/Superadmin E o módulo configurado); sem o
+        // módulo ligado, o item não existe (FR-015).
+        key: "conversas",
+        label: "Conversas",
+        href: "/conversas",
+        icon: <MessageCircle />,
+        isActive: (path) => path.startsWith("/conversas"),
+        isVisible: (user) => notRevendedor(user) && user.conversas_ligadas === true,
       },
       {
         key: "clientes",
