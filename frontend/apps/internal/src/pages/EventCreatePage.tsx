@@ -4,7 +4,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { FormProvider, useForm, type UseFormSetValue } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion, useReducedMotion } from "framer-motion";
-import { Button, PageHeader, Skeleton, Card, CardContent, formatShortDate } from "@manto/ui";
+import { Button, PageHeader, Skeleton, formatShortDate } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { useCurrentUser } from "../lib/useAuth";
@@ -53,6 +53,8 @@ import { BvDoOrcamentoBlock, bvVaiNascerNaTela } from "../components/EventFormBl
 import { PagamentoBlock } from "../components/EventFormBlocks/PagamentoBlock";
 import { ContratoBlock } from "../components/EventFormBlocks/ContratoBlock";
 import { ObservacoesBlock } from "../components/EventFormBlocks/ObservacoesBlock";
+import { OrcamentoBlock } from "../components/EventFormBlocks/OrcamentoBlock";
+import type { OrcamentoHistoricoEntry } from "../lib/orcamento";
 import { PendingAttachmentsPanel, type AttachmentUploadStatus } from "../components/PendingAttachmentsPanel";
 
 /** Um anexo pendente de envio na fase 2 (feature 184) — guarda os dados originais para permitir
@@ -115,6 +117,44 @@ function personagensDoFormulario(atuais: CharacterInput[], nomes: string[]): Cha
   }));
 }
 
+/** Nome de personagem comparável: sem acento, sem caixa, sem espaço repetido (o `_chave` do servidor). */
+function chaveDoPersonagem(nome: string): string {
+  return nome.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/\s+/).filter(Boolean).join(" ");
+}
+
+/**
+ * O elenco ao vincular um orçamento (feature 326). O do orçamento vem primeiro e na ordem dele: o
+ * servidor casa o teto do cachê por POSIÇÃO (`_create_roles_from_input`). Quem já estava na lista
+ * com o mesmo nome leva talento, figurino e cachê; o que o orçamento anterior trouxe sai; o
+ * personagem que a pessoa digitou e este orçamento não tem vai para o fim, como linha à mão.
+ */
+function elencoComOrcamento(
+  atuais: CharacterInput[],
+  caches: OrcamentoCache[],
+  doOrcamentoAnterior: ReadonlySet<string>,
+): CharacterInput[] {
+  const sobra = [...atuais];
+  const doOrcamento = caches
+    .filter((c) => c.role_type === "character")
+    .map((c) => {
+      const i = sobra.findIndex((a) => chaveDoPersonagem(a.name) === chaveDoPersonagem(c.label));
+      const mesmo = i >= 0 ? sobra.splice(i, 1)[0] : undefined;
+      return {
+        role_id: null,
+        name: c.label,
+        figurino_sheet_id: mesmo?.figurino_sheet_id ?? null,
+        cache_value: mesmo?.cache_value ?? null,
+        needs_makeup: c.needs_makeup,
+        is_singer: c.is_singer,
+        talent_id: mesmo?.talent_id ?? null,
+      };
+    });
+  const digitados = sobra.filter(
+    (a) => a.name.trim() && !doOrcamentoAnterior.has(chaveDoPersonagem(a.name)),
+  );
+  return [...doOrcamento, ...digitados];
+}
+
 /**
  * Tema, aniversariante, espaço, briefing… viram observações rotuladas, nunca a descrição (que vai
  * para o Google Agenda).
@@ -137,7 +177,9 @@ export function EventCreatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const reduceMotion = useReducedMotion();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // O orçamento mora no endereço: o "Criar evento" do histórico entra por ele, e o bloco Orçamento
+  // (feature 326) vincula e desvincula pelo mesmo parâmetro, sem remontar a tela.
   const orcamentoIdParam = searchParams.get("orcamento_id");
   const orcamentoId = orcamentoIdParam ? Number(orcamentoIdParam) : null;
   // Pré-preenchimento a partir de um formulário (Home "Criar evento", tela `/formularios`). A
@@ -189,6 +231,9 @@ export function EventCreatePage() {
     divergencia: DivergenciaCliente;
   } | null>(null);
   const formularioAplicado = useRef<number | null>(null);
+  // Feature 326: os personagens que o último orçamento vinculado trouxe — trocar de orçamento tira
+  // esses, nunca os que a pessoa digitou.
+  const personagensDoOrcamento = useRef<ReadonlySet<string>>(new Set());
 
   const [createdEventId, setCreatedEventId] = useState<number | null>(null);
   const [attachments, setAttachments] = useState<PendingAttachment[]>([]);
@@ -204,38 +249,76 @@ export function EventCreatePage() {
     // servidor também assume hoje quando o campo vem vazio; aqui é para a pessoa VER a data.
     defaultValues: { ...DEFAULT_EVENT_FORM_VALUES, sale_date: hojeYmd() },
   });
-  const { handleSubmit, setError, setValue, setFocus, clearErrors, watch, formState } = methods;
+  const { handleSubmit, setError, setValue, setFocus, clearErrors, watch, getFieldState, formState } = methods;
   const { errors, isSubmitting } = formState;
 
-  // Pré-fill do orçamento: campos essenciais + elenco a partir dos cachês (feature 152, US4).
+  // Pré-fill do orçamento: campos essenciais + elenco a partir dos cachês (feature 152, US4). Desde
+  // a 326 o orçamento também se vincula com a tela já começada: só entra no campo que a pessoa não
+  // alterou à mão (o que o orçamento anterior preencheu não conta como alterado e é trocado).
   useEffect(() => {
     if (!prefill.data?.orcamento_id) return;
     const p = prefill.data;
-    if (p.date) setValue("date", p.date);
-    if (p.start_time) setValue("start", p.start_time);
-    if (p.location) setValue("location", p.location);
-    // Feature 313: o cheio e o final separados (orçamento de antes: os dois são o total).
-    setValue("sale_value_gross", p.bruto_1h ?? p.total_1h ?? 0);
-    setValue("sale_value", p.total_1h ?? 0);
-    setValue("transport_value", p.transport_value ?? 0);
-    setValue("acrescimo_value", p.acrescimo_value ?? 0);
-    setValue("with_invoice", Boolean(p.with_invoice));
+    const livre = (campo: keyof EventFormValues) => !getFieldState(campo).isDirty;
+    if (p.date && livre("date")) setValue("date", p.date);
+    if (p.start_time && livre("start")) setValue("start", p.start_time);
+    if (p.location && livre("location")) setValue("location", p.location);
+    // Duração acima de 4h gravada no orçamento (feature 236) já nasce escolhida.
+    const custom = p.duracao_custom && p.duracao_custom > 4 ? p.duracao_custom : null;
+    setDuracao(custom ? String(custom) : "1");
+    setDuracaoExtra(custom ? String(custom) : "");
+    if (livre("sale_value") && livre("sale_value_gross")) {
+      // Feature 313: o cheio e o final separados (orçamento de antes: os dois são o total).
+      const preco = custom ? precoDaDuracao(p, custom) : null;
+      setValue("sale_value_gross", custom ? (preco?.bruto ?? 0) : (p.bruto_1h ?? p.total_1h ?? 0));
+      setValue("sale_value", custom ? (preco?.total ?? 0) : (p.total_1h ?? 0));
+    }
+    if (livre("transport_value")) setValue("transport_value", p.transport_value ?? 0);
+    if (livre("acrescimo_value")) setValue("acrescimo_value", p.acrescimo_value ?? 0);
+    if (livre("with_invoice")) setValue("with_invoice", Boolean(p.with_invoice));
     setOrcCaches(p.caches ?? []);
-    setCharacters(
-      (p.caches ?? [])
-        .filter((c) => c.role_type === "character")
-        .map((c) => ({
-          role_id: null,
-          name: c.label,
-          figurino_sheet_id: null,
-          cache_value: null,
-          needs_makeup: c.needs_makeup,
-          is_singer: c.is_singer,
-          talent_id: null,
-        })),
+    // O elenco sai do estado DESTE render (o efeito roda depois dele), nunca de um updater: o
+    // StrictMode chama o updater duas vezes e o ref de quem veio do orçamento ficaria errado.
+    setCharacters(elencoComOrcamento(characters, p.caches ?? [], personagensDoOrcamento.current));
+    personagensDoOrcamento.current = new Set(
+      (p.caches ?? []).filter((c) => c.role_type === "character").map((c) => chaveDoPersonagem(c.label)),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill.data?.orcamento_id]);
+
+  /** Quem recebe e o PIX são do orçamento: no próximo, o BV iria para a pessoa errada (como na 273). */
+  const limparBv = () => {
+    setBvRecipient("");
+    setBvPix("");
+    setBvErros({});
+  };
+
+  const vincularOrcamento = (entry: OrcamentoHistoricoEntry) => {
+    limparBv();
+    setSearchParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        proximo.set("orcamento_id", String(entry.id));
+        return proximo;
+      },
+      { replace: true },
+    );
+  };
+
+  /** Os valores e o elenco que o orçamento preencheu ficam na tela; saem os cachês dele. */
+  const desvincularOrcamento = () => {
+    limparBv();
+    setOrcCaches([]);
+    setDuracao("1");
+    setDuracaoExtra("");
+    setSearchParams(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        proximo.delete("orcamento_id");
+        return proximo;
+      },
+      { replace: true },
+    );
+  };
 
   // Pré-fill do formulário (feature 298) — as regras de cada parte estão nas funções acima.
   // Chaveado pelo id e guardado num ref: o StrictMode roda o efeito duas vezes, e observações e
@@ -282,12 +365,6 @@ export function EventCreatePage() {
     if (isSeller) setValue("seller_id", String(currentUser.data.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [options.data, currentUser.data]);
-
-  useEffect(() => {
-    const custom = prefill.data?.duracao_custom;
-    if (custom && custom > 4) selectDuracaoExtra(String(custom));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefill.data?.duracao_custom]);
 
   const selectDuracao = (dur: "1" | "2" | "3" | "4") => {
     setDuracao(dur);
@@ -719,6 +796,61 @@ export function EventCreatePage() {
 
         <FormProvider {...methods}>
           <form ref={formRef} onSubmit={onSubmit} noValidate className="mt-4 space-y-4">
+            <OrcamentoBlock
+              orcamentoId={orcamentoId}
+              prefill={prefill.data}
+              carregando={prefill.isLoading}
+              erro={prefill.isError}
+              onTentarNovamente={() => prefill.refetch()}
+              onVincular={vincularOrcamento}
+              onDesvincular={desvincularOrcamento}
+            >
+              {prefill.data?.orcamento_id && (
+                <div className="flex flex-wrap gap-2">
+                  {(["1", "2", "3", "4"] as const).map((dur) => (
+                    <button
+                      key={dur}
+                      type="button"
+                      onClick={() => selectDuracao(dur)}
+                      className={`rounded-md border px-3 py-2 text-sm ${
+                        duracao === dur
+                          ? "border-accent bg-accent-soft text-ink"
+                          : "border-line bg-panel text-ink"
+                      }`}
+                    >
+                      {dur}h — R$ {formatBRL(prefill.data[`total_${dur}h` as "total_1h"] ?? 0)}
+                    </button>
+                  ))}
+                  <label
+                    className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
+                      duracaoExtra && duracao === duracaoExtra
+                        ? "border-accent bg-accent-soft text-ink"
+                        : "border-line bg-panel text-ink"
+                    }`}
+                  >
+                    Outra (h):
+                    <input
+                      type="number"
+                      min={5}
+                      max={prefill.data.extra_por_horas ? 24 : undefined}
+                      className="w-16 rounded border border-line bg-panel px-1 py-0.5 text-sm text-ink"
+                      value={duracaoExtra}
+                      onChange={(e) => selectDuracaoExtra(e.target.value)}
+                      aria-label="Outra duração em horas"
+                    />
+                    {duracaoExtra && duracao === duracaoExtra && prefill.data && (
+                      <span className="text-xs text-muted">
+                        {(() => {
+                          const preco = precoDaDuracao(prefill.data, Number(duracaoExtra));
+                          return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, informe o valor";
+                        })()}
+                      </span>
+                    )}
+                  </label>
+                </div>
+              )}
+            </OrcamentoBlock>
+
             <ClienteBlock
               clients={clients}
               onClientsChange={setClients}
@@ -753,59 +885,6 @@ export function EventCreatePage() {
               reembolsoInvoiceFile={reembolsoInvoiceFile}
               onReembolsoInvoiceFileChange={setReembolsoInvoiceFile}
             />
-
-            {prefill.data?.orcamento_id && (
-              <Card>
-                <CardContent className="space-y-3 p-4">
-                  <p className="text-sm text-muted">
-                    Criando a partir do orçamento de{" "}
-                    <strong>{prefill.data.client_name || "cliente"}</strong>.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {(["1", "2", "3", "4"] as const).map((dur) => (
-                      <button
-                        key={dur}
-                        type="button"
-                        onClick={() => selectDuracao(dur)}
-                        className={`rounded-md border px-3 py-2 text-sm ${
-                          duracao === dur
-                            ? "border-accent bg-accent-soft text-ink"
-                            : "border-line bg-panel text-ink"
-                        }`}
-                      >
-                        {dur}h — R$ {formatBRL(prefill.data[`total_${dur}h` as "total_1h"] ?? 0)}
-                      </button>
-                    ))}
-                    <label
-                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm ${
-                        duracaoExtra && duracao === duracaoExtra
-                          ? "border-accent bg-accent-soft text-ink"
-                          : "border-line bg-panel text-ink"
-                      }`}
-                    >
-                      Outra (h):
-                      <input
-                        type="number"
-                        min={5}
-                        max={prefill.data.extra_por_horas ? 24 : undefined}
-                        className="w-16 rounded border border-line bg-panel px-1 py-0.5 text-sm text-ink"
-                        value={duracaoExtra}
-                        onChange={(e) => selectDuracaoExtra(e.target.value)}
-                        aria-label="Outra duração em horas"
-                      />
-                      {duracaoExtra && duracao === duracaoExtra && prefill.data && (
-                        <span className="text-xs text-muted">
-                          {(() => {
-                            const preco = precoDaDuracao(prefill.data, Number(duracaoExtra));
-                            return preco ? `R$ ${formatBRL(preco.total)}` : "acima de 24 h, informe o valor";
-                          })()}
-                        </span>
-                      )}
-                    </label>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {doFormulario.has("characters") && (
               <p className="-mb-2 text-xs text-muted">

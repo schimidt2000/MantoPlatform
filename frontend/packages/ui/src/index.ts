@@ -1,5 +1,6 @@
 export { cn } from "./lib/cn";
 export { formatRelativeDay, formatShortDate } from "./lib/date";
+export { mascaraTelefone } from "./lib/telefone";
 export { StarRating } from "./components/star-rating";
 export type { StarRatingProps } from "./components/star-rating";
 export { Button, buttonVariants } from "./components/button";
