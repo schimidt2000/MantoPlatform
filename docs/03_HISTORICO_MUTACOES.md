@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **239c-coordenador-pre-escalado-com-orcamento** | Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -390,6 +391,24 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 239c — O coordenador escolhido na criação vale também com orçamento   (239c-coordenador-pre-escalado-com-orcamento · 2026-10-30 · sem migration)
+
+> Nível 2 (hotfix da 239). Detalhe: `specs/239c-coordenador-pre-escalado-com-orcamento/spec.md`.
+
+**O pedido.** O dono (30/10): a Thays vendeu o evento 1432 (`(R&I) MICKEY - TRADICIONAL`, 20/12) com a Miminha
+como coordenadora pré-escalada, e o evento nasceu com a vaga aberta.
+
+**Causa.** `_apply_default_roles` só aplicava `coordinator_talent_id` sem orçamento (`came_from_orcamento`). Trava
+herdada da 152, quando a vaga do orçamento vinha em `characters`; a 239 moveu a vaga para o servidor e manteve a
+trava (a entrada da 239 a registra). O campo aparece na tela em qualquer caso: a escolha sumia sem aviso e sem
+convite (233). A edição sempre aplicou a escolha.
+
+**O que mudou.** A escolha ocupa a primeira vaga de Coordenador aberta (a do orçamento mantém o teto e a marca do
+sistema e ganha `escalado_pelo_comercial`); sem vaga aberta, nasce uma, como antes. Entra em `assigned_now`:
+convite e aviso de conflito. Parâmetro `came_from_orcamento` removido.
+
+**Verificação.** `verify_239c.py` 7/7 (cenários 1–3 falham no código antigo); `verify_322.py` 29/29.
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 

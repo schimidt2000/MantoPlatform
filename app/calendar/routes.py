@@ -3930,7 +3930,6 @@ def _apply_default_roles(
     event: CalendarEvent,
     *,
     event_type: str | None,
-    came_from_orcamento: bool,
     coordinator_talent_id: int | None,
     valid_talent_ids: set[int],
     used_talent_ids: set[int],
@@ -3938,31 +3937,48 @@ def _apply_default_roles(
     """Garante coordenador + (SHOW) técnico de som na criação (feature 152) — mesma regra de
     `_ensure_coordinator`/`_ensure_sound_technician`.
 
-    Feature 239: a rede de segurança do Coordenador vale AGORA em qualquer caminho. O gate
-    `came_from_orcamento` cobre só a pré-escala por `coordinator_talent_id` (que continua sendo
-    ignorada quando os coordenadores vêm do orçamento, inclusive com `coordenador_qty` > 1). O
+    Feature 239: a rede de segurança do Coordenador vale em qualquer caminho. O
     `_ensure_coordinator` é idempotente: com orçamento a vaga já nasceu em
     `_create_extra_roles_from_orcamento`, com teto, e ele não duplica — sem orçamento (ou com um
-    orçamento sem coordenador) ele cria a vaga que antes simplesmente não existia.
+    orçamento sem coordenador) ele cria a vaga.
+
+    Hotfix 239c: a pré-escala por `coordinator_talent_id` vale também com orçamento. Antes ela era
+    descartada em silêncio quando o evento vinha do orçamento — a comercial escolhia a
+    coordenadora, o campo aparecia na tela, e a vaga nascia aberta (evento 1432, 29/10/2026).
+    Agora a escolha ocupa a primeira vaga de Coordenador aberta (a do orçamento, que mantém o
+    teto); sem vaga aberta, nasce uma, como sempre foi sem orçamento.
 
     Devolve a pré-escala do coordenador (para o aviso de conflito), se houver.
     """
     assigned: tuple[int, str] | None = None
     if (
-        not came_from_orcamento
-        and coordinator_talent_id is not None
+        coordinator_talent_id is not None
         and coordinator_talent_id in valid_talent_ids
         and coordinator_talent_id not in used_talent_ids
     ):
-        db.session.add(EventRole(
-            event_id=event.id,
-            character_name="Coordenador",
-            role_type="extra",
-            talent_id=coordinator_talent_id,
-            assigned_at=datetime.now(tz=TZ),
-            # Feature 322: escolhido no formulário — vaga pedida por gente, talento da comercial.
-            escalado_pelo_comercial=True,
-        ))
+        # O autoflush materializa as vagas do orçamento, ainda só na sessão, antes deste SELECT.
+        vaga = (
+            EventRole.query.filter_by(
+                event_id=event.id, character_name="Coordenador", role_type="extra"
+            )
+            .filter(EventRole.talent_id.is_(None))
+            .order_by(EventRole.id)
+            .first()
+        )
+        if vaga is not None:
+            vaga.talent_id = coordinator_talent_id
+            vaga.assigned_at = datetime.now(tz=TZ)
+            vaga.escalado_pelo_comercial = True
+        else:
+            db.session.add(EventRole(
+                event_id=event.id,
+                character_name="Coordenador",
+                role_type="extra",
+                talent_id=coordinator_talent_id,
+                assigned_at=datetime.now(tz=TZ),
+                # Feature 322: escolhido no formulário — vaga pedida por gente, talento da comercial.
+                escalado_pelo_comercial=True,
+            ))
         assigned = (coordinator_talent_id, "Coordenador")
     else:
         _ensure_coordinator(event.id)
@@ -4177,7 +4193,6 @@ def _create_event_core(
     coord = _apply_default_roles(
         event,
         event_type=data.get("event_type"),
-        came_from_orcamento=bool(orc_caches),
         coordinator_talent_id=data.get("coordinator_talent_id"),
         valid_talent_ids=valid_talent_ids,
         used_talent_ids={tid for tid, _ in assigned_now},
