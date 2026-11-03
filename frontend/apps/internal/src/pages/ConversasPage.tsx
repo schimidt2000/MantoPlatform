@@ -5,17 +5,28 @@ import { MessageCircle } from "lucide-react";
 import { cn } from "@manto/ui";
 import { ConversaAberta } from "../components/conversas/ConversaAberta";
 import { ListaDeConversas } from "../components/conversas/ListaDeConversas";
-import { intervaloDaLista, useConversas, useConversasAnteriores, type ConversaResumo } from "../lib/conversas";
+import {
+  intervaloDaLista,
+  useConversas,
+  useConversasAnteriores,
+  type ConversaResumo,
+  type FiltroDaLista,
+} from "../lib/conversas";
 
 /**
  * Conversas (feature 325) — o WhatsApp da Manto dentro da Plataforma.
  *
  * No computador, lista e conversa lado a lado; no celular (até 767 px), uma de cada vez, com
- * "Voltar" (FR-020). A conversa aberta e a busca moram no endereço (`?c=`, `?busca=`, sempre
- * `replace` — feature 320), então recarregar ou voltar não perde o lugar.
+ * "Voltar" (FR-020). A conversa aberta, a busca e o filtro moram no endereço (`?c=`, `?busca=`,
+ * `?filtro=`, sempre `replace` — feature 320), então recarregar ou voltar não perde o lugar.
  */
 
 const ESPERA_DA_BUSCA_MS = 300;
+const FILTROS: FiltroDaLista[] = ["todas", "minhas", "sem_responsavel"];
+
+function filtroDoEndereco(valor: string | null): FiltroDaLista {
+  return FILTROS.find((f) => f === valor) ?? "todas";
+}
 
 /** Topo (com polling) + páginas antigas, sem repetir a conversa que subiu para o topo. */
 function juntarPaginas(topo: ConversaResumo[] | undefined, antigas: ConversaResumo[][]): ConversaResumo[] | undefined {
@@ -30,9 +41,10 @@ export function ConversasPage() {
   const selecionada = Number(params.get("c")) || null;
   const [busca, setBusca] = useState(params.get("busca") ?? "");
   const [buscaEfetiva, setBuscaEfetiva] = useState(busca);
+  const filtro = filtroDoEndereco(params.get("filtro"));
   const [cursorDaLista, setCursorDaLista] = useState<string | null>(null);
-  const lista = useConversas(buscaEfetiva);
-  const anteriores = useConversasAnteriores(buscaEfetiva, cursorDaLista);
+  const lista = useConversas(buscaEfetiva, filtro);
+  const anteriores = useConversasAnteriores(buscaEfetiva, filtro, cursorDaLista);
 
   useEffect(() => {
     const espera = setTimeout(() => {
@@ -56,6 +68,19 @@ export function ConversasPage() {
     [lista.data, anteriores.data],
   );
   const temMais = cursorDaLista === null ? Boolean(lista.data?.proximo) : Boolean(anteriores.hasNextPage);
+
+  const filtrar = (valor: FiltroDaLista) => {
+    setCursorDaLista(null);
+    setParams(
+      (atuais) => {
+        const novos = new URLSearchParams(atuais);
+        if (valor === "todas") novos.delete("filtro");
+        else novos.set("filtro", valor);
+        return novos;
+      },
+      { replace: true },
+    );
+  };
 
   const selecionar = (id: number | null) =>
     setParams(
@@ -96,6 +121,8 @@ export function ConversasPage() {
           <ListaDeConversas
             busca={busca}
             onBusca={setBusca}
+            filtro={filtro}
+            onFiltro={filtrar}
             conversas={conversas}
             carregando={lista.isLoading}
             falhou={lista.isError}

@@ -1,17 +1,24 @@
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Search } from "lucide-react";
 import { Button, Input, Skeleton, cn } from "@manto/ui";
-import { horaNaLista, type ConversaResumo } from "../../lib/conversas";
+import { horaNaLista, tempoDeEspera, type ConversaResumo, type FiltroDaLista as Filtro } from "../../lib/conversas";
+import { FiltroDaLista } from "./FiltroDaLista";
 
 /**
  * A lista de conversas (feature 325, FR-013): da última mensagem para trás, com a busca por nome
  * ou telefone, o telefone, o trecho da última mensagem e a contagem de não lidas da equipe.
  * O topo se atualiza sozinho; as páginas antigas vêm pelo "Carregar mais", sem polling.
+ *
+ * Feature 328: o filtro por responsável, o nome de quem atende e, com a cliente esperando, "há N
+ * min" — em vermelho a partir de 15 min, recontado a cada minuto sem nova requisição.
  */
 
 interface ListaDeConversasProps {
   busca: string;
   onBusca: (valor: string) => void;
+  filtro: Filtro;
+  onFiltro: (valor: Filtro) => void;
   conversas: ConversaResumo[] | undefined;
   carregando: boolean;
   falhou: boolean;
@@ -35,14 +42,42 @@ function Inicial({ nome }: { nome: string }) {
   );
 }
 
+/** O relógio da espera: um "agora" que anda de minuto em minuto. */
+function useAgoraPorMinuto(): number {
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const relogio = setInterval(() => setAgora(Date.now()), 60_000);
+    return () => clearInterval(relogio);
+  }, []);
+  return agora;
+}
+
+function LinhaDaEquipe({ conversa, agora }: { conversa: ConversaResumo; agora: number }) {
+  const espera = tempoDeEspera(conversa.aguardando_desde, agora);
+  return (
+    <span className="flex items-center justify-between gap-2 text-xs">
+      <span className="truncate text-muted">
+        {conversa.responsavel ? conversa.responsavel.nome : "Sem responsável"}
+      </span>
+      {espera ? (
+        <span className={cn("shrink-0", espera.urgente ? "font-semibold text-red" : "text-muted")}>
+          Esperando {espera.texto}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 function ItemDaLista({
   conversa,
   selecionada,
   onSelecionar,
+  agora,
 }: {
   conversa: ConversaResumo;
   selecionada: boolean;
   onSelecionar: (id: number) => void;
+  agora: number;
 }) {
   const mostrarTelefone = conversa.telefone_legivel && conversa.telefone_legivel !== conversa.nome;
   return (
@@ -73,6 +108,7 @@ function ItemDaLista({
             </span>
           ) : null}
         </span>
+        <LinhaDaEquipe conversa={conversa} agora={agora} />
       </span>
     </button>
   );
@@ -81,6 +117,8 @@ function ItemDaLista({
 export function ListaDeConversas({
   busca,
   onBusca,
+  filtro,
+  onFiltro,
   conversas,
   carregando,
   falhou,
@@ -93,9 +131,10 @@ export function ListaDeConversas({
   onSelecionar,
 }: ListaDeConversasProps) {
   const reduzir = useReducedMotion();
+  const agora = useAgoraPorMinuto();
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="border-b border-line bg-panel p-3">
+      <div className="space-y-2 border-b border-line bg-panel p-3">
         <label htmlFor="busca-conversas" className="sr-only">
           Buscar conversa
         </label>
@@ -109,6 +148,7 @@ export function ListaDeConversas({
             className="pl-9"
           />
         </div>
+        <FiltroDaLista valor={filtro} onMudar={onFiltro} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {carregando ? (
@@ -127,7 +167,13 @@ export function ListaDeConversas({
             </Button>
           </div>
         ) : !conversas?.length ? (
-          <p className="p-6 text-center text-sm text-muted">Nenhuma conversa encontrada.</p>
+          <p className="p-6 text-center text-sm text-muted">
+            {filtro === "minhas"
+              ? "Nenhuma conversa com você."
+              : filtro === "sem_responsavel"
+                ? "Nenhuma conversa sem responsável."
+                : "Nenhuma conversa encontrada."}
+          </p>
         ) : (
           <>
             <ul>
@@ -144,6 +190,7 @@ export function ListaDeConversas({
                       conversa={conversa}
                       selecionada={selecionada === conversa.id}
                       onSelecionar={onSelecionar}
+                      agora={agora}
                     />
                   </motion.li>
                 ))}

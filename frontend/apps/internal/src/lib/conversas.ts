@@ -34,6 +34,15 @@ export interface ClienteDaConversa {
   nome: string;
 }
 
+/** Pessoa da equipe (responsável, autor de nota, destino de transferência) — feature 328. */
+export interface Pessoa {
+  id: number;
+  nome: string;
+}
+
+export type FiltroDaLista = "todas" | "minhas" | "sem_responsavel";
+export type AcaoDoResponsavel = "assumir" | "transferir" | "devolver";
+
 export interface ConversaResumo {
   id: number;
   canal: string;
@@ -47,6 +56,26 @@ export interface ConversaResumo {
   nao_lidas: number;
   janela_aberta: boolean;
   janela_fecha_em: string | null;
+  /** Feature 328 (opcionais: o payload da 325 não os tinha — armadilha 21). */
+  responsavel?: Pessoa | null;
+  /** Falso quando o responsável perdeu o papel ou o acesso: qualquer um pode assumir. */
+  responsavel_ativo?: boolean;
+  /** UTC; a primeira mensagem da cliente ainda sem resposta. */
+  aguardando_desde?: string | null;
+}
+
+export interface Nota {
+  id: number;
+  texto: string;
+  autor: Pessoa | null;
+  momento: string | null;
+}
+
+export interface RespostaRapida {
+  id: number;
+  titulo: string;
+  atalho: string | null;
+  texto: string;
 }
 
 export interface MidiaDaMensagem {
@@ -84,6 +113,7 @@ export interface ConversaAbertaResposta {
   conversa: ConversaResumo;
   mensagens: Mensagem[];
   tem_mais: boolean;
+  notas?: Nota[];
 }
 
 export interface ModeloAprovado {
@@ -103,11 +133,20 @@ export function intervaloDaLista(lista: ListaDeConversas | undefined): number {
   return Math.max(2, lista?.poll_segundos ?? POLL_PADRAO_S) * 1000;
 }
 
-export function useConversas(busca: string) {
+function parametrosDaLista(busca: string, filtro: FiltroDaLista): URLSearchParams {
+  const params = new URLSearchParams();
+  if (busca) params.set("busca", busca);
+  if (filtro !== "todas") params.set("filtro", filtro);
+  return params;
+}
+
+export function useConversas(busca: string, filtro: FiltroDaLista = "todas") {
   return useQuery<ListaDeConversas>({
-    queryKey: [...CHAVE, "lista", busca],
-    queryFn: () =>
-      apiFetch<ListaDeConversas>(`/api/conversas${busca ? `?busca=${encodeURIComponent(busca)}` : ""}`),
+    queryKey: [...CHAVE, "lista", busca, filtro],
+    queryFn: () => {
+      const params = parametrosDaLista(busca, filtro).toString();
+      return apiFetch<ListaDeConversas>(`/api/conversas${params ? `?${params}` : ""}`);
+    },
     refetchInterval: (query) => intervaloDaLista(query.state.data),
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: true,
@@ -145,12 +184,12 @@ export function useMensagensAnteriores(id: number | null, cursorInicial: number 
 }
 
 /** Conversas mais antigas que a primeira página (sem polling: só o topo da lista muda sozinho). */
-export function useConversasAnteriores(busca: string, cursorInicial: string | null) {
+export function useConversasAnteriores(busca: string, filtro: FiltroDaLista, cursorInicial: string | null) {
   return useInfiniteQuery({
-    queryKey: [...CHAVE, "lista-anteriores", busca, cursorInicial],
+    queryKey: [...CHAVE, "lista-anteriores", busca, filtro, cursorInicial],
     queryFn: ({ pageParam }) => {
-      const params = new URLSearchParams({ antes: pageParam });
-      if (busca) params.set("busca", busca);
+      const params = parametrosDaLista(busca, filtro);
+      params.set("antes", pageParam);
       return apiFetch<ListaDeConversas>(`/api/conversas?${params.toString()}`);
     },
     initialPageParam: cursorInicial ?? "",
@@ -285,6 +324,118 @@ export function useMarcarLida() {
       apiFetch<void>(`/api/conversas/${conversaId}/lida`, { method: "POST", body: "{}" }),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: [...CHAVE, "lista"] }),
   });
+}
+
+// ── Equipe na caixa (feature 328) ────────────────────────────────────────────────────────────────
+
+/** Quem pode receber uma conversa transferida (Comercial e Superadmin ativos). */
+export function useEquipe(ativo: boolean) {
+  return useQuery<{ equipe: Pessoa[] }>({
+    queryKey: [...CHAVE, "equipe"],
+    queryFn: () => apiFetch<{ equipe: Pessoa[] }>("/api/conversas/equipe"),
+    enabled: ativo,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export interface MudancaDeResponsavel {
+  acao: AcaoDoResponsavel;
+  responsavel_id?: number;
+}
+
+/** Assumir, transferir ou devolver. Atualiza a lista (filtros "Minhas"/"Sem responsável") e a conversa. */
+export function useDefinirResponsavel(conversaId: number) {
+  const atualizar = useAtualizarAposEnvio(conversaId);
+  return useMutation({
+    mutationFn: (corpo: MudancaDeResponsavel) =>
+      apiFetch<{ conversa: ConversaResumo }>(`/api/conversas/${conversaId}/responsavel`, {
+        method: "POST",
+        body: JSON.stringify(corpo),
+      }),
+    onSettled: atualizar,
+  });
+}
+
+export function useGravarNota(conversaId: number) {
+  const atualizar = useAtualizarAposEnvio(conversaId);
+  return useMutation({
+    mutationFn: (texto: string) =>
+      apiFetch<{ nota: Nota }>(`/api/conversas/${conversaId}/notas`, {
+        method: "POST",
+        body: JSON.stringify({ texto }),
+      }),
+    onSuccess: atualizar,
+  });
+}
+
+const CHAVE_DAS_RESPOSTAS = [...CHAVE, "respostas-rapidas"] as const;
+
+export function useRespostasRapidas(ativo = true) {
+  return useQuery<{ respostas: RespostaRapida[] }>({
+    queryKey: CHAVE_DAS_RESPOSTAS,
+    queryFn: () => apiFetch<{ respostas: RespostaRapida[] }>("/api/conversas/respostas-rapidas"),
+    enabled: ativo,
+    staleTime: 60_000,
+  });
+}
+
+export interface DadosDaResposta {
+  titulo: string;
+  atalho: string | null;
+  texto: string;
+}
+
+function useAtualizarRespostas() {
+  const queryClient = useQueryClient();
+  return () => void queryClient.invalidateQueries({ queryKey: CHAVE_DAS_RESPOSTAS });
+}
+
+export function useSalvarResposta() {
+  const atualizar = useAtualizarRespostas();
+  return useMutation({
+    mutationFn: ({ id, ...dados }: DadosDaResposta & { id: number | null }) =>
+      apiFetch<{ resposta: RespostaRapida }>(
+        id === null ? "/api/conversas/respostas-rapidas" : `/api/conversas/respostas-rapidas/${id}`,
+        { method: id === null ? "POST" : "PATCH", body: JSON.stringify(dados) },
+      ),
+    onSuccess: atualizar,
+  });
+}
+
+export function useExcluirResposta() {
+  const atualizar = useAtualizarRespostas();
+  return useMutation({
+    mutationFn: (id: number) => apiFetch<void>(`/api/conversas/respostas-rapidas/${id}`, { method: "DELETE" }),
+    onSuccess: atualizar,
+  });
+}
+
+/**
+ * Troca `{nome}` pelo primeiro nome do contato (FR-011). Sem nome, o marcador sai junto com a
+ * vírgula e o espaço que sobrariam: "Olá, {nome}! Segue" vira "Olá! Segue".
+ */
+export function aplicarNome(texto: string, nomeDoContato: string | null | undefined): string {
+  const primeiro = (nomeDoContato ?? "").trim().split(/\s+/)[0] ?? "";
+  // Telefone não é nome: "+55 11 9…" não vira "Olá, +55!".
+  const nome = /\p{L}/u.test(primeiro) ? primeiro : "";
+  if (nome) return texto.replace(/\{nome\}/g, nome);
+  return texto
+    .replace(/,?\s*\{nome\}/g, "")
+    .replace(/\s+([!?.,])/g, "$1")
+    .trimStart();
+}
+
+/** Tela de toque (celular): lá o Enter quebra a linha, porque o teclado não tem Shift. */
+export function ehToque(): boolean {
+  return typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches === true;
+}
+
+/** Há quanto tempo a cliente espera, para a lista: "há 20 min", "há 2 h". Urgente a partir de 15 min. */
+export function tempoDeEspera(iso: string | null | undefined, agora: number): { texto: string; urgente: boolean } | null {
+  if (!iso) return null;
+  const minutos = Math.max(0, Math.floor((agora - new Date(iso).getTime()) / 60_000));
+  const texto = minutos < 60 ? `há ${minutos} min` : `há ${Math.floor(minutos / 60)} h`;
+  return { texto, urgente: minutos >= 15 };
 }
 
 /** O `codigo` da recusa (`janela_fechada`, `envio_travado`, `nao_configurado`) — nunca a mensagem. */

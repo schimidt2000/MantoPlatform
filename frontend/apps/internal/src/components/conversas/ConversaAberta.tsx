@@ -13,10 +13,14 @@ import {
   useMarcarLida,
   useMensagensAnteriores,
   type Mensagem as MensagemTipo,
+  type Nota,
 } from "../../lib/conversas";
+import { useCurrentUser } from "../../lib/useAuth";
 import { CaixaDeEnvio } from "./CaixaDeEnvio";
 import { EnviarModeloDialog } from "./EnviarModeloDialog";
 import { Mensagem } from "./Mensagem";
+import { NotaInterna } from "./NotaInterna";
+import { ResponsavelDaConversa } from "./ResponsavelDaConversa";
 
 /**
  * A conversa aberta (feature 325, FR-014): cabeçalho com a ficha, mensagens separadas por dia,
@@ -25,7 +29,29 @@ import { Mensagem } from "./Mensagem";
  * Ao abrir — e quando chega mensagem nova com a conversa aberta — chama o "lida": zera a contagem
  * da equipe e dá o tique azul para a cliente. Só quando há não lidas, para o polling não ficar
  * marcando lida a cada 4 s.
+ *
+ * Feature 328: a faixa do responsável sob o cabeçalho, e as notas internas intercaladas às
+ * mensagens pelo horário. A nota mais antiga que a primeira mensagem carregada só aparece quando
+ * não há mais mensagens antigas a carregar — senão ela ficaria fora de ordem no topo.
  */
+
+type ItemDaLinha =
+  | { tipo: "mensagem"; chave: string; momento: string | null; mensagem: MensagemTipo }
+  | { tipo: "nota"; chave: string; momento: string | null; nota: Nota };
+
+function instante(iso: string | null): number {
+  return iso ? Date.parse(iso) : 0;
+}
+
+/** Mensagens e notas numa linha do tempo só, por horário (o sort é estável: empate mantém a ordem). */
+function linhaDoTempo(mensagens: MensagemTipo[], notas: Nota[], haMaisAntigas: boolean): ItemDaLinha[] {
+  const inicio = mensagens[0]?.momento ?? null;
+  const visiveis = notas.filter((n) => !haMaisAntigas || !inicio || instante(n.momento) >= instante(inicio));
+  return [
+    ...mensagens.map((m): ItemDaLinha => ({ tipo: "mensagem", chave: `m${m.id}`, momento: m.momento, mensagem: m })),
+    ...visiveis.map((n): ItemDaLinha => ({ tipo: "nota", chave: `n${n.id}`, momento: n.momento, nota: n })),
+  ].sort((a, b) => instante(a.momento) - instante(b.momento));
+}
 
 interface ConversaAbertaProps {
   conversaId: number;
@@ -41,6 +67,7 @@ function semRepetir(listas: MensagemTipo[][]): MensagemTipo[] {
 
 export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAbertaProps) {
   const dados = useConversa(conversaId, intervaloMs);
+  const usuario = useCurrentUser();
   const marcarLida = useMarcarLida();
   const reenviar = useEnviarTexto(conversaId);
   const queryClient = useQueryClient();
@@ -50,6 +77,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
   const fim = useRef<HTMLDivElement>(null);
   const mensagens = dados.data?.mensagens;
   const ultimaId = mensagens?.at(-1)?.id ?? null;
+  const ultimaNotaId = dados.data?.notas?.at(-1)?.id ?? null;
   const anteriores = useMensagensAnteriores(conversaId, cursorDasAnteriores);
 
   const naoLidas = dados.data?.conversa.nao_lidas ?? 0;
@@ -60,12 +88,16 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
 
   useEffect(() => {
     fim.current?.scrollIntoView({ block: "end" });
-  }, [ultimaId]);
+  }, [ultimaId, ultimaNotaId]);
 
   const todas = useMemo<MensagemTipo[]>(() => {
     const antigas = (anteriores.data?.pages ?? []).slice().reverse().map((p) => p.mensagens);
     return semRepetir([...antigas, mensagens ?? []]);
   }, [anteriores.data, mensagens]);
+
+  const haMaisAntigas = cursorDasAnteriores === null ? Boolean(dados.data?.tem_mais) : Boolean(anteriores.hasNextPage);
+  const notas = dados.data?.notas;
+  const itens = useMemo(() => linhaDoTempo(todas, notas ?? [], haMaisAntigas), [todas, notas, haMaisAntigas]);
 
   if (dados.isLoading) {
     return (
@@ -89,8 +121,8 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
     );
   }
 
-  const { conversa, tem_mais } = dados.data;
-  const temMaisAntigas = cursorDasAnteriores === null ? tem_mais : anteriores.hasNextPage;
+  const { conversa } = dados.data;
+  const temMaisAntigas = haMaisAntigas;
 
   const carregarAnteriores = () => {
     if (cursorDasAnteriores === null) setCursorDasAnteriores(todas[0]?.id ?? null);
@@ -134,6 +166,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
           </Button>
         ) : null}
       </header>
+      <ResponsavelDaConversa conversa={conversa} usuarioId={usuario.data?.id ?? null} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-3 py-3">
         {temMaisAntigas ? (
@@ -149,25 +182,29 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
             </Button>
           </div>
         ) : null}
-        {todas.length === 0 ? (
+        {itens.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted">Nenhuma mensagem nesta conversa ainda.</p>
         ) : (
           <ul className="space-y-2">
-            {todas.map((mensagem, indice) => {
+            {itens.map((item, indice) => {
               const novoDia =
-                indice === 0 || diaDaMensagem(todas[indice - 1]?.momento ?? null) !== diaDaMensagem(mensagem.momento);
+                indice === 0 || diaDaMensagem(itens[indice - 1]?.momento ?? null) !== diaDaMensagem(item.momento);
               return (
-                <Fragment key={mensagem.id}>
+                <Fragment key={item.chave}>
                   {novoDia ? (
                     <li className="py-1 text-center text-xs font-medium text-muted" aria-hidden>
-                      {rotuloDoDia(mensagem.momento)}
+                      {rotuloDoDia(item.momento)}
                     </li>
                   ) : null}
-                  <Mensagem
-                    mensagem={mensagem}
-                    onTentarDeNovo={conversa.janela_aberta ? tentarDeNovo : undefined}
-                    reenviando={reenviandoId === mensagem.id}
-                  />
+                  {item.tipo === "nota" ? (
+                    <NotaInterna nota={item.nota} />
+                  ) : (
+                    <Mensagem
+                      mensagem={item.mensagem}
+                      onTentarDeNovo={conversa.janela_aberta ? tentarDeNovo : undefined}
+                      reenviando={reenviandoId === item.mensagem.id}
+                    />
+                  )}
                 </Fragment>
               );
             })}
