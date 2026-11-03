@@ -2034,7 +2034,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
   valor já entrou por PIX — anexe pela página do evento".
 
-#### `/conversas` — Conversas (WhatsApp) *(features 325 e 328)*
+#### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328 e 330)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
   módulo configurado (`conversas_ligadas` de `/api/auth/me`); o "Ver como" não abre a caixa. Sem as chaves
   `WHATSAPP_*`, a tela diz "O WhatsApp ainda não foi configurado. Peça ao Superadmin para preencher as chaves no
@@ -2077,7 +2077,22 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - **Gravar áudio**: com o campo vazio, o botão Enviar vira o microfone. Gravando: ponto vermelho, tempo correndo,
     "Cancelar" e Enviar; para sozinha em 5 minutos. Sem permissão: "Não foi possível usar o microfone. Libere o acesso
     nas configurações do navegador.". Se o envio falhar, o áudio fica anexado para tentar de novo.
-- **Ambiente local**: faixa dourada "O envio pelo WhatsApp está travado neste ambiente…" quando o banco é a cópia
+- **Instagram Direct** (feature 330):
+  - **Lista**: ícone do canal ao lado do nome (balão verde no WhatsApp, marca do Instagram); "@usuário" no lugar
+    do telefone; com os dois canais ligados, o filtro "Todos · WhatsApp · Instagram" (`?canal=`). Sem nome de
+    perfil, "Contato do Instagram".
+  - **Conversa**: ícone e "@usuário" no cabeçalho, com " · fora das 24 h" ou " · janela de 7 dias fechada".
+    Mensagens da equipe pelo app do Instagram ou pelo Kommo aparecem como "Enviada por outro app"; o que a cliente
+    apagou, "Mensagem apagada pela cliente.".
+  - **Envio**:
+    - de 24 h a 7 dias, a faixa dourada "Fora das 24 horas: a resposta vai como resposta da equipe, até 7 dias
+      depois da última mensagem da cliente.";
+    - depois de 7 dias, só o aviso "Passaram 7 dias…", sem campo;
+    - sem "Enviar modelo";
+    - o clipe aceita só foto, vídeo, áudio e PDF, e o texto vai até 1.000 caracteres;
+    - arquivo com texto sai em duas mensagens (o arquivo primeiro).
+- **Ambiente local**: faixa dourada "O envio pelo WhatsApp está travado neste ambiente…" (com o Instagram ligado,
+  "O envio pelo WhatsApp e pelo Instagram está travado…") quando o banco é a cópia
   local; enviar responde com a mesma frase (409 `envio_travado`). Para conferir a tela: `.claude/launch.json` →
   `manto-backend-local-conversas-demo` + `verify_325.py --manter` (e `verify_328.py --manter` para responsáveis,
   esperas, notas e respostas rápidas).

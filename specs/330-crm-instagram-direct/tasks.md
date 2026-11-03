@@ -36,7 +36,7 @@ push.
 
 ## Phase 1: Setup
 
-- [ ] T001 Constantes do Instagram em `app/conversas/constantes.py`:
+- [X] T001 Constantes do Instagram em `app/conversas/constantes.py`:
   - `TIPO_DO_ANEXO_IG`: `image`/`video`/`audio`/`file` → tipos da casa;
   - os anexos que viram texto: `share`, `ig_reel`, `reel`, `story_mention` e `ephemeral`;
   - envio: `MIME_DE_ENVIO_IG` (png/jpeg/gif, mp4/ogg/avi/mov/webm de vídeo, aac/m4a/wav/mp4 de áudio, pdf) e
@@ -49,19 +49,19 @@ push.
     - aviso da janela humana, janela de 7 dias fechada, Instagram não configurado, sem modelos, tipo não aceito e texto
       longo;
     - os motivos de recusa da marca humana e do roteamento.
-- [ ] T002 [P] `app/config.py` com `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_PAGE_ID` e `INSTAGRAM_ACCOUNT_ID` (default
+- [X] T002 [P] `app/config.py` com `INSTAGRAM_ACCESS_TOKEN`, `INSTAGRAM_PAGE_ID` e `INSTAGRAM_ACCOUNT_ID` (default
   vazio = desligado); `app/__init__.py` com o log `[instagram] ligado=… travado=…` na subida; `render.yaml` com as três
   entradas `sync: false` no `manto-backend`.
-- [ ] T003 [P] `app/integracoes/whatsapp_client.py`: `_requisitar` vira público `requisitar`, e o nome antigo continua
+- [X] T003 [P] `app/integracoes/whatsapp_client.py`: `_requisitar` vira público `requisitar`, e o nome antigo continua
   como alias, para não quebrar ninguém.
-- [ ] T004 [P] `app/integracoes/instagram_client.py` (novo, sem Flask) sobre o `requisitar`:
+- [X] T004 [P] `app/integracoes/instagram_client.py` (novo, sem Flask) sobre o `requisitar`:
   - `ConexaoInstagram(base, versao, token, page_id, account_id, travada)`, com uma conversão para o `ConexaoMeta` do
     transporte;
   - `enviar(conexao, corpo) -> {"id"}` (`POST /{page_id}/messages`, JSON);
   - `enviar_arquivo(conexao, destino, tipo, dados, mime, nome, extras) -> {"id"}` (multipart: `recipient` e `message`
     como JSON, mais `filedata`);
   - `perfil(conexao, igsid) -> {"nome", "usuario"}` (`GET /{igsid}?fields=name,username`).
-- [ ] T005 `app/conversas/configuracao.py`: `cfg_instagram() -> CfgInstagram(ligado, travado, app_secret, verify_token,
+- [X] T005 `app/conversas/configuracao.py`: `cfg_instagram() -> CfgInstagram(ligado, travado, app_secret, verify_token,
   account_id, pasta_midia, conexao)`.
   - `ligado` exige o token, a Página, a conta, o segredo e a verificação.
   - `travado` usa a mesma `WHATSAPP_SUPPRESS_SEND` (R9).
@@ -70,15 +70,15 @@ push.
 
 ## Phase 2: Foundational
 
-- [ ] T006 `app/models.py`: `Conversa.usuario` (String 64) e `Conversa.perfil_em`; `ConversaMensagem.externo_id` e
+- [X] T006 `app/models.py`: `Conversa.usuario` (String 64) e `Conversa.perfil_em`; `ConversaMensagem.externo_id` e
   `resposta_a` em String(255). Migration **manual** `migrations/versions/a330c4e8f1b2_conversas_instagram.py`
   (`down_revision="f328b2d4e6a1"`), com downgrade. Aplicar no `manto_local`, ensaiar o downgrade e conferir que há um
   head só.
-- [ ] T007 `app/conversas/aviso_ops.py`:
+- [X] T007 `app/conversas/aviso_ops.py`:
   - `conversa_do_contato` só deriva telefone e vínculo com a ficha no canal WhatsApp (R3: o IGSID é numérico);
   - `processar_aviso` despacha por `corpo["object"] == "instagram"` para `instagram_ops.processar_entradas(corpo,
     cfg_instagram())`, com import tardio. A garantia de transação, devolução e descarte é a mesma.
-- [ ] T008 **`specs/330-crm-instagram-direct/verify_330.py`** com os 23 cenários da spec, mais o standby (cenário 18b) e a
+- [X] T008 **`specs/330-crm-instagram-direct/verify_330.py`** com os 23 cenários da spec, mais o standby (cenário 18b) e a
   recusa do roteamento (17b).
   - **Dublê** do `instagram_client` (envio JSON e multipart, perfil) e do `baixar_midia`.
   - **Usuários descartáveis**: Ana e Bia (COMERCIAL) e Cris (CASTING).
@@ -95,10 +95,10 @@ push.
 
 **Verificação**: cenários 1–9 e 22.
 
-- [ ] T009 [US1] `app/api/instagram_webhook.py` (novo): `GET` (desafio com `WHATSAPP_VERIFY_TOKEN`) e `POST`
+- [X] T009 [US1] `app/api/instagram_webhook.py` (novo): `GET` (desafio com `WHATSAPP_VERIFY_TOKEN`) e `POST`
   (assinatura pela `assinatura_valida` do `whatsapp_webhook`, teto de 256 KB, grava cru, processa fora ou síncrono).
   Desligado → 404. Comentário `RBAC:` no topo. Registrar em `app/api/__init__.py`.
-- [ ] T010 [US1] `app/conversas/instagram_ops.py` (novo): `processar_entradas(corpo, cfg) -> list[int]` (mídias a
+- [X] T010 [US1] `app/conversas/instagram_ops.py` (novo): `processar_entradas(corpo, cfg) -> list[int]` (mídias a
   baixar).
   - Para cada `entry` da conta (`entry.id` igual ao `account_id`; senão log e ignora), processa os itens de
     `messaging[]` **e** de `standby[]`.
@@ -108,19 +108,19 @@ push.
     - texto pronto para story, reels, publicação, efêmera e não suportada, e o `reply_to.story`;
     - `is_deleted` troca o texto da mensagem existente;
     - não lidas, prévia, `ultima_recebida_em` e `abrir_espera` (não para reação).
-- [ ] T011 [US1] `instagram_ops`:
+- [X] T011 [US1] `instagram_ops`:
   - `_gravar_reacao` (`TIPO_REACAO`, `externo_id="reacao:{mid}:{ts}:{acao}"`);
   - `_aplicar_visto` (`read.mid` → `lida` na enviada e nas anteriores abaixo de lida, sem regredir).
-- [ ] T012 [US1] `instagram_ops.atualizar_perfis(conversa_ids, cfg)`, depois do commit do aviso e fora da transação:
+- [X] T012 [US1] `instagram_ops.atualizar_perfis(conversa_ids, cfg)`, depois do commit do aviso e fora da transação:
   - busca o perfil quando `perfil_em` é nulo, ou quando falta o nome e o carimbo tem mais de 24 h;
   - grava `nome_perfil` e `usuario`, e carimba sempre;
   - a falha só loga.
 
   É chamada no fim do `processar_aviso` do Instagram.
-- [ ] T013 [US1] `app/conversas/midia_ops.py`: `baixar_e_guardar` despacha pelo canal da conversa. No Instagram, o link
+- [X] T013 [US1] `app/conversas/midia_ops.py`: `baixar_e_guardar` despacha pelo canal da conversa. No Instagram, o link
   vem do `dados` da mensagem (o anexo daquela posição), passa pelo `baixar_midia` com teto de 25 MB, e o MIME sai da
   resposta ou do tipo. O `_criar_midia_ig` grava sem `externo_id`.
-- [ ] T014 [US1] `app/conversas/leitura_ops.py`:
+- [X] T014 [US1] `app/conversas/leitura_ops.py`:
   - `serializar_conversa` ganha `usuario`, `janela` e `janela_aberta`/`janela_fecha_em` pela regra do canal (R10);
   - `listar_conversas` ganha o filtro `canal`.
 
@@ -128,7 +128,7 @@ push.
   - `app/api/conversas_read.py`: `canal` com 422 se inválido, e `canais_ligados` na lista; o `configurado` passa a
     valer com qualquer canal ligado (só o Instagram ligado não pode mostrar "O WhatsApp ainda não foi configurado.");
   - `app/api/auth.py`: `conversas_ligadas` com qualquer canal ligado.
-- [ ] T015 [P] [US1] Tela (`frontend/apps/internal/src/`):
+- [X] T015 [P] [US1] Tela (`frontend/apps/internal/src/`):
   - `lib/conversas.ts`: tipos `Canal`, `Janela`, campos opcionais e `useConversas(busca, filtro, canal)`;
   - `components/conversas/IconeDoCanal.tsx` (novo);
   - `FiltroDaLista` ganha os botões de canal, mostrados com `canais_ligados.length > 1`;
@@ -144,7 +144,9 @@ push.
 
 **Verificação**: cenários 10–17 (com 17b).
 
-- [ ] T016 [US2] `app/conversas/canais.py` (novo) com `CanalWhatsapp` e `CanalInstagram`, as duas com a mesma
+- [X] T016 [US2] `app/conversas/canais.py` (novo). *Feito:* sem mover o WhatsApp — `canais.py` traz só o que é do
+  Instagram, e o `envio_ops` desvia pelo canal da conversa (`_concluir` comum); o `verify_325` ficou 22/22. Plano original:
+  `CanalWhatsapp` e `CanalInstagram`, as duas com a mesma
   interface:
   - `ligado`, `travado` e `texto_nao_configurado`;
   - `pre_condicoes(conversa, exige_janela) -> extras`;
@@ -162,17 +164,17 @@ push.
 
   `canal_da_conversa(conversa, cfg_whatsapp)` escolhe o canal. O `CanalWhatsapp` chama `wc.enviar`/`wc.subir_midia`
   pelo **módulo** (`wc.<função>`), nunca por import direto da função, para o dublê do `verify_325` seguir valendo.
-- [ ] T017 [US2] `app/conversas/envio_ops.py`: `enviar_texto` e `enviar_arquivo` orquestram pelo canal (chave, reserva,
+- [X] T017 [US2] `app/conversas/envio_ops.py`: `enviar_texto` e `enviar_arquivo` orquestram pelo canal (chave, reserva,
   cópia local, despacho, `resposta_da_equipe`, falha com motivo). Áudio webm ou ogg numa conversa do Instagram passa
   por `midia_ops.audio_para_m4a`. `enviar_modelo` no Instagram → 409 `sem_modelos`. `marcar_lida` vai pelo canal.
-- [ ] T018 [P] [US2] `app/conversas/midia_ops.py`: `audio_para_m4a(dados)` (ffmpeg `-vn -c:a aac -b:a 96k -f ipod`,
+- [X] T018 [P] [US2] `app/conversas/midia_ops.py`: `audio_para_m4a(dados)` (ffmpeg `-vn -c:a aac -b:a 96k -f ipod`,
   arquivo temporário, 60 s; `AudioIndisponivel`).
-- [ ] T019 [US2] `app/conversas/constantes.py` + `canais`: o motivo da recusa no Instagram.
+- [X] T019 [US2] `app/conversas/constantes.py` + `canais`: o motivo da recusa no Instagram.
   - Com a marca humana enviada e a Meta recusando por permissão (`code` 10 ou 200), o texto é o da marca não
     liberada.
   - Recusa por roteamento ou controle de conversa (subcódigos a confirmar no teste): o texto do roteamento.
   - O resto: o `motivo_do_erro` da 325.
-- [ ] T020 [P] [US2] Tela: a `CaixaDeEnvio` no Instagram:
+- [X] T020 [P] [US2] Tela: a `CaixaDeEnvio` no Instagram:
   - aviso da janela humana acima do campo;
   - depois de 7 dias, só o aviso, sem campo;
   - sem "Enviar modelo";
@@ -189,11 +191,11 @@ push.
 
 **Verificação**: cenários 18–21 (com 18b).
 
-- [ ] T021 [US3] `instagram_ops._gravar_eco_ig` (`message.is_echo`):
+- [X] T021 [US3] `instagram_ops._gravar_eco_ig` (`message.is_echo`):
   - grava ENVIADA com origem `outro`, sem duplicar o próprio `mid`;
   - com envio da Plataforma em voo na conversa e o `mid` ainda desconhecido, levanta `MensagemAindaNaoGravada`;
   - encerra a espera com o momento do eco, sem atribuir.
-- [ ] T022 [US3] Canal desligado:
+- [X] T022 [US3] Canal desligado:
   - webhook 404;
   - envio 503 `nao_configurado` com o texto do Instagram;
   - `canais_ligados` sem o Instagram (filtro oculto);
@@ -205,12 +207,12 @@ push.
 
 ## Phase 6: Polimento e portões
 
-- [ ] T023 `ruff check` nos arquivos tocados; `ruff format` só nos novos (`instagram_client.py`, `instagram_ops.py`,
+- [X] T023 `ruff check` nos arquivos tocados; `ruff format` só nos novos (`instagram_client.py`, `instagram_ops.py`,
   `canais.py`, `instagram_webhook.py`, a migration e o verify). Não usar `--fix` no `app/api/__init__.py`.
-- [ ] T024 `npm run typecheck` limpo (três SPAs).
-- [ ] T025 `verify_330`, `verify_328` e `verify_325` verdes, com zero escapes.
-- [ ] T026 Tela pela worktree (backend e Vite em portas próprias), em desktop e 375×812 (quickstart §2).
-- [ ] T027 Textos novos pelo Princípio XV, na tela.
+- [X] T024 `npm run typecheck` limpo (três SPAs).
+- [X] T025 `verify_330`, `verify_328` e `verify_325` verdes, com zero escapes.
+- [X] T026 Tela pela worktree (backend e Vite em portas próprias), em desktop e 375×812 (quickstart §2).
+- [X] T027 Textos novos pelo Princípio XV, na tela.
 - [ ] T028 Docs por fonte única:
   - `docs/01`: coluna, webhook, envio, variáveis, RBAC §4.3 e §5 (envs);
   - `docs/02`;

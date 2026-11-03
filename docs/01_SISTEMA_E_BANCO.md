@@ -613,6 +613,14 @@ Pontos que valem para quem for ler esses dados:
   - `respostas_rapidas`: `titulo` (80; único sem caixa, índice `uq_respostas_rapidas_titulo` em `lower(titulo)`),
     `atalho` (30, opcional, minúsculas, sem "/" nem espaço; `uq_respostas_rapidas_atalho`), `texto` (≤ 4.096, pode ter
     `{nome}`), `criado_por_id`/`alterado_por_id` → `users` (SET NULL) e horários.
+- **Instagram Direct** (feature 330, migration `a330c4e8f1b2`, aditiva sobre `f328b2d4e6a1`). Detalhe em
+  `specs/330-crm-instagram-direct/data-model.md`.
+  - `conversas` ganha `usuario` (o @usuário do Instagram, sem a arroba) e `perfil_em` (UTC, a última busca do
+    perfil). No canal `instagram`, `contato_id` é o IGSID e `telefone`/`client_id` ficam vazios.
+  - `conversa_mensagens.externo_id` e `resposta_a` vão para 255: o `mid` do Instagram passa de 128. O anexo n de
+    uma mensagem usa `"{mid}#{n}"`, e a reação usa `"reacao:{mid}:{ts}:{acao}"`. O eco de outro app tem
+    `origem = outro`.
+  - O aviso cru do Instagram mora na mesma `whatsapp_avisos` (`"object": "instagram"`).
 
 ### 2.8 EducaManto
 
@@ -1919,7 +1927,7 @@ em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <
 sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
 segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
-### 3.13.7 Conversas (WhatsApp) — `whatsapp_webhook.py` / `conversas_read.py` / `conversas_write.py` / `conversas_equipe_write.py` (features 325 e 328)
+### 3.13.7 Conversas (WhatsApp e Instagram) — `whatsapp_webhook.py` / `instagram_webhook.py` / `conversas_read.py` / `conversas_write.py` / `conversas_equipe_write.py` (features 325, 328 e 330)
 
 A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`).
 
@@ -1938,6 +1946,8 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 | `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
 | `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. |
 | `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
+| `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
+| `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
 | `GET` | `/api/conversas/equipe` | (328) Para quem se pode transferir: `{equipe: [{id, nome}]}` — ativos, com acesso e papel COMERCIAL/SUPERADMIN, por nome. |
 | `POST` | `/api/conversas/<id>/responsavel` | (328) `{acao: assumir · transferir · devolver, responsavel_id?}` → 200 `{conversa}`. 409 `ja_assumida` (com o nome; também para quem perde a corrida do "Assumir") e `alterada` (corrida na transferência ou na devolução); 422 `fields.responsavel_id` (destino fora da equipe) e `fields.acao`; 404. Transferir avisa o destino no sino. |
 | `POST` | `/api/conversas/<id>/notas` | (328) `{texto}` → 201 `{nota}`. Vazio ou > 2.000 → 422 `fields.texto`. Nunca fala com a Meta. |
@@ -1951,6 +1961,27 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 
 `GET /api/auth/me` ganha `conversas_ligadas` (papel real COMERCIAL/SUPERADMIN **e** módulo ligado), que controla o
 item do menu.
+
+**Instagram Direct (feature 330, Fase 2b do plano).** Ligado **pela Página do Facebook** (mensageria do Instagram
+na Graph API, `graph.facebook.com/v26.0`), no mesmo app Meta do WhatsApp. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
+- **Núcleo**: `instagram_ops` (aviso → conversa, mensagem por anexo, eco, reação, visto, apagada, perfil depois do
+  commit) e `canais` (pré-condições, janela, tipos, envio e motivo). O `aviso_ops.processar_aviso` despacha pelo
+  `object`; o `envio_ops` desvia pelo canal da conversa (`_concluir` comum). Cliente `app/integracoes/instagram_client.py`
+  sobre o mesmo transporte (`whatsapp_client.requisitar`, agora público, e `WhatsappRecusou.subcode`).
+- **Lista**: `GET /api/conversas?canal=whatsapp|instagram` (outro → 422 `fields.canal`); a resposta ganha
+  `canais_ligados`, e `configurado` vale com qualquer canal. Cada cartão ganha `usuario` e `janela`
+  (`aberta`/`humana`/`fechada`).
+- **Envio no Instagram** (`POST /{INSTAGRAM_PAGE_ID}/messages`):
+  - a janela é de 24 h normal, até 7 dias com `MESSAGE_TAG`/`HUMAN_AGENT`, e depois 409 `janela_fechada`;
+  - o texto vai até 1.000 bytes;
+  - os arquivos aceitos são foto até 8 MB e vídeo, áudio e PDF até 25 MB, com upload direto (`filedata`);
+  - o áudio gravado (webm/ogg) vira m4a (`midia_ops.audio_para_m4a`);
+  - o modelo responde 409 `sem_modelos`, e a lida não chama a Meta;
+  - recusa da marca humana (código 10/200 com a tag) ou do roteamento (subcódigos de outro app no controle)
+    vira "não entregue" com o motivo próprio.
+- **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
+  bytes.
 
 **Equipe na caixa (feature 328, Fase 2a do plano).** Fluxo e invariantes em `docs/04` §6; contrato em
 `specs/328-crm-equipe-na-caixa/contracts/api.md`.
@@ -2279,6 +2310,7 @@ Gates por módulo (todos em `app/api/`):
 | assinatura / token da Meta (sem papel) (feature 325) | `GET`/`POST /api/webhooks/whatsapp` | público; o GET vale só com `hub.verify_token` correto e o POST só com `X-Hub-Signature-256` correto; desligado → 404 |
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
+| assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
@@ -2749,6 +2781,11 @@ aviso `[whatsapp] Conversas desligado: faltam …` na subida; `docs/05` 178):
 - os quatro mínimos: `WHATSAPP_ACCESS_TOKEN` (token de System User), `WHATSAPP_APP_SECRET` (assina o webhook),
   `WHATSAPP_VERIFY_TOKEN` (desafio do GET) e `WHATSAPP_PHONE_NUMBER_ID`;
 - `WHATSAPP_WABA_ID`, só para os modelos.
+
+**Conversas / Instagram Direct (feature 330)** — `sync: false`, vazios por padrão (= canal desligado, aviso
+`[instagram] Direct desligado: faltam …` na subida; `docs/05` 186): `INSTAGRAM_ACCESS_TOKEN` (token da Página ou
+de usuário do sistema com a Página atribuída), `INSTAGRAM_PAGE_ID` (envio) e `INSTAGRAM_ACCOUNT_ID` (filtro do
+aviso). Usa também o `WHATSAPP_APP_SECRET` e o `WHATSAPP_VERIFY_TOKEN` (mesmo app) e a mesma trava.
 
 Com default real em `app/config.py`:
 - `WHATSAPP_GRAPH_VERSION=v26.0` (revisão anual) e `WHATSAPP_GRAPH_BASE`;

@@ -5,7 +5,9 @@
 > **sem publicar** e o módulo fica desligado até o app da Meta e as variáveis `WHATSAPP_*` (`docs/03` 325) ·
 > **Fase 2a implementada** em 03/11, na feature `328-crm-equipe-na-caixa` (sobre a 325, também sem publicar):
 > responsável com fila livre, alerta de cliente esperando (15 min, 9h–21h), notas internas, respostas rápidas e
-> áudio gravado no navegador (`docs/03` 328). Faltam a 2b (Instagram Direct na mesma caixa) e a 2c (push no celular) ·
+> áudio gravado no navegador (`docs/03` 328) · **Fase 2b implementada** em 03/11, na feature
+> `330-crm-instagram-direct` (sobre a 328, sem publicar): Instagram Direct na mesma caixa, ligado **pela Página do
+> Facebook** (decisão do dono), só o Direct (sem comentários). Falta a 2c (push no celular) ·
 > **Base**: código em `main` `fe64252d` (citações conferidas contra o HEAD); números de volume do espelho
 > de 30/09 (plano 6a, seção 3); documentação da Meta consultada em 30/10/2026 · **Antecede**: a memória
 > de 29/06 ("WhatsApp CRM para substituir o Kommo").
@@ -187,8 +189,11 @@ formulário → evento → venda → pagamento → avaliação. É o mesmo padr�
     Meta, de 23/09/2026; ver seção 10). É a mais simples, se se confirmar que funciona com números em
     coexistência e que as mensagens recebidas chegam às duas contas. A confirmação fica para a Fase 1.
   - O código é praticamente o mesmo nas três portas.
-- **Instagram Direct.** API do Instagram com Instagram Login, permissão
-  `instagram_business_manage_messages` (entra no mesmo App Review), janela de 24h e a mesma caixa.
+- **Instagram Direct.** ~~API do Instagram com Instagram Login~~ → **pela Página do Facebook** (decisão do dono,
+  03/11; feature 330): token do portfólio que não vence, roteamento da Meta que deixa o piloto conviver com o Kommo
+  e o anúncio de origem no `referral`. Permissões `instagram_basic`, `instagram_manage_messages`,
+  `pages_manage_metadata`, `pages_messaging` e a marca "Human Agent" (no mesmo App Review); janela de 24 h (7 dias
+  com a marca humana) e a mesma caixa.
 - **API não oficial: descartada.**
 
 ## 7. O que o CRM destrava, em ordem de dinheiro
@@ -216,7 +221,7 @@ Régua: a feature 303 teve 148 tarefas. Cada fase só começa quando o portão d
 |---|---|---|---|
 | **0. Descoberta** (no Chrome, só leitura) | **Kommo:** plano, usuários, valor, renovação e como o WhatsApp e o Instagram estão ligados. **Gerenciador do WhatsApp:** portfólio dono da conta, situação do número (coexistência?), nota de qualidade, limite de envio, **verificação da empresa**, forma de pagamento e gasto de WhatsApp separado do de anúncio. | 1 sessão | Conexão confirmada como oficial e porta A ou B escolhida |
 | **1. Fundação** (Nível 1), no **número de teste grátis da Meta** | App Meta no portfólio da Manto (o dono cria, eu guio). Webhook. Tabelas de conversa, mensagem e mídia. Download imediato da mídia (o link da Meta expira). Envio de texto, mídia, áudio e template. Status de entregue e lido. Tela mínima. Variáveis novas nascem desligadas (em produção, o endpoint responde 404 até ser configurado). A papelada de Tech Provider corre em paralelo. | ~1× a 303 | Conversa de ida e volta com áudio e foto, nenhuma mensagem perdida num deploy, verify verde |
-| **2. Caixa de conversas** (Nível 1) — dividida pelo dono em 03/11: **2a equipe na caixa** (feature 328, feita), 2b Direct, 2c push | WhatsApp e **Direct na mesma caixa**. Três usuários, "quem está atendendo", transferência, notas internas, respostas rápidas, busca e aviso de "sem resposta há X min". Sino e push no celular (PWA). Tela pensada primeiro para o celular, com gravação de áudio. A régua é o WhatsApp Web. | ~1× | Um vendedor atende um dia inteiro pelo número de teste sem sentir falta do Kommo |
+| **2. Caixa de conversas** (Nível 1) — dividida pelo dono em 03/11: **2a equipe na caixa** (feature 328, feita), **2b Direct** (feature 330, feita), 2c push | WhatsApp e **Direct na mesma caixa**. Três usuários, "quem está atendendo", transferência, notas internas, respostas rápidas, busca e aviso de "sem resposta há X min". Sino e push no celular (PWA). Tela pensada primeiro para o celular, com gravação de áudio. A régua é o WhatsApp Web. | ~1× | Um vendedor atende um dia inteiro pelo número de teste sem sentir falta do Kommo |
 | **3. Costura com a Plataforma** (Nível 1) | Conversa ligada ao cliente, linha do tempo na ficha, orçamento enviado na conversa e ligado ao cliente, link do formulário, funil derivado e **canal de campanha pelo anúncio** (alimenta o 6b). | ~1× | Um orçamento de verdade vai da conversa à venda sem copiar e colar |
 | **4. Virada** (operação, à noite) | Desconectar o Kommo no app e conectar ao nosso em coexistência. Chegam cerca de 6 meses de histórico, e **o celular nunca para**. O Instagram passa para o nosso app (antes, testar se os dois apps recebem juntos). O Kommo fica só para consulta até o fim do contrato. Importação dos leads. | Código pequeno, risco operacional | Uma semana sem incidente; Kommo cancelado na renovação |
 | **5. IA copiloto** (Nível 1) | Resumo, sugestão de resposta, transcrição, extração para a calculadora e nota do lead. **Quem envia é o humano.** Chave de liga e desliga. | ~0,5× | Uso e custo mensal medidos |
