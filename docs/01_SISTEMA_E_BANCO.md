@@ -621,6 +621,12 @@ Pontos que valem para quem for ler esses dados:
     uma mensagem usa `"{mid}#{n}"`, e a reação usa `"reacao:{mid}:{ts}:{acao}"`. O eco de outro app tem
     `origem = outro`.
   - O aviso cru do Instagram mora na mesma `whatsapp_avisos` (`"object": "instagram"`).
+- **Avisos no celular** (feature 332, migration `b332d5f7a9c1`, aditiva sobre `a330c4e8f1b2`). Detalhe em
+  `specs/332-crm-avisos-no-celular/data-model.md`.
+  - `push_assinaturas`: um aparelho com os avisos ligados. `user_id` → `users` (CASCADE, indexado), `endpoint`
+    (Text, `uq_push_assinaturas_endpoint`: o mesmo navegador registrado de novo fica com quem registrou por
+    último), as chaves do aparelho `p256dh` (255) e `auth` (64), `navegador` (User-Agent, 255) e os horários
+    `created_at`/`ultimo_aviso_em`. Apagado quando o serviço de avisos responde 404/410.
 
 ### 2.8 EducaManto
 
@@ -1948,6 +1954,9 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 | `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
 | `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
+| `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
+| `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
+| `DELETE` | `/api/push/aparelhos` | (332) `{endpoint}` → 204; só apaga o aparelho da própria pessoa. |
 | `GET` | `/api/conversas/equipe` | (328) Para quem se pode transferir: `{equipe: [{id, nome}]}` — ativos, com acesso e papel COMERCIAL/SUPERADMIN, por nome. |
 | `POST` | `/api/conversas/<id>/responsavel` | (328) `{acao: assumir · transferir · devolver, responsavel_id?}` → 200 `{conversa}`. 409 `ja_assumida` (com o nome; também para quem perde a corrida do "Assumir") e `alterada` (corrida na transferência ou na devolução); 422 `fields.responsavel_id` (destino fora da equipe) e `fields.acao`; 404. Transferir avisa o destino no sino. |
 | `POST` | `/api/conversas/<id>/notas` | (328) `{texto}` → 201 `{nota}`. Vazio ou > 2.000 → 422 `fields.texto`. Nunca fala com a Meta. |
@@ -1982,6 +1991,25 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
     vira "não entregue" com o motivo próprio.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
+
+**Avisos no celular (feature 332, Fase 2c do plano).** Web Push padrão (Chrome, Edge, Firefox e Safari; no iPhone
+só com a Plataforma na Tela de Início, iOS 16.4+), **sem biblioteca de Web Push**: a cifra `aes128gcm` (RFC 8291) e
+o token VAPID ES256 (RFC 8292) moram em `app/push/webpush.py`, sobre o `cryptography` (fixado `==46.0.7` no
+`requirements.txt`, a mesma versão da 329) e o `requests`. O verify confere a cifra contra o vetor oficial do RFC
+8291 (apêndice A), byte a byte, e um serviço de avisos falso confere o token e decifra cada aviso. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/332-crm-avisos-no-celular/contracts/api.md`.
+- **Núcleo**: `app/push/push_ops.py` (registro, remoção, `despachar` numa thread própria e `entregar`) fica
+  embaixo; quem decide o quê e para quem é `conversas/celular_ops.py` (mensagem nova) e `equipe_ops` (alerta de
+  15 min e transferência), sempre **depois do commit**. Os processadores do aviso da Meta juntam num conjunto
+  `chegadas` as conversas com mensagem nova da cliente; depois do commit, perfil → celular → mídia. Uma thread por
+  rodada; os aparelhos são lidos e a conexão volta ao pool **antes** da rede, e o 410 e o `ultimo_aviso_em` entram
+  numa transação curta depois. Um aparelho com problema nunca corta a entrega dos outros.
+- **Registro**: só serviços de aviso conhecidos em https e chave do aparelho na curva P-256. Par VAPID que não
+  confere (pública que não é da privada) = desligado, com aviso na subida.
+- **O aviso**: `{titulo, corpo, link, tag}` cifrado (o corpo é a última mensagem da cliente, não a prévia da lista); `tag` `conversa-{id}` / `espera-{id}` / `transferida-{id}`
+  (avisos da mesma conversa se substituem); TTL de 1 dia; urgência `high` na mensagem; timeout (5, 10) s.
+- **Navegador**: `frontend/apps/internal/public/` (`manifest.webmanifest`, `sw.js`, ícones), servido na raiz pelo
+  `server.js` com `no-cache`. O service worker só mostra e abre o aviso: sem cache de página, de propósito.
 
 **Equipe na caixa (feature 328, Fase 2a do plano).** Fluxo e invariantes em `docs/04` §6; contrato em
 `specs/328-crm-equipe-na-caixa/contracts/api.md`.
@@ -2311,6 +2339,7 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
+| `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
@@ -2786,6 +2815,14 @@ aviso `[whatsapp] Conversas desligado: faltam …` na subida; `docs/05` 178):
 `[instagram] Direct desligado: faltam …` na subida; `docs/05` 186): `INSTAGRAM_ACCESS_TOKEN` (token da Página ou
 de usuário do sistema com a Página atribuída), `INSTAGRAM_PAGE_ID` (envio) e `INSTAGRAM_ACCOUNT_ID` (filtro do
 aviso). Usa também o `WHATSAPP_APP_SECRET` e o `WHATSAPP_VERIFY_TOKEN` (mesmo app) e a mesma trava.
+
+**Avisos no celular (feature 332)** — `WEB_PUSH_VAPID_PUBLICA` e `WEB_PUSH_VAPID_PRIVADA`, `sync: false`, vazias
+por padrão (= desligado, aviso `[push] Avisos no celular desligados: faltam …` na subida; `docs/05` 190). O par sai
+de `flask webpush-chaves`, que imprime só no terminal de quem roda; trocar o par obriga cada aparelho a ativar de
+novo. Com default real: `WEB_PUSH_CONTATO=mailto:contato@mantoproducoes.com.br` (vai no token VAPID). Trava:
+`_suppress_push()` derivada do host do banco (`WEB_PUSH_SUPPRESS=true` trava em qualquer ambiente;
+`WEB_PUSH_ALLOW_LOCAL=true` libera o local). `WEB_PUSH_SINCRONO=true` entrega sem a thread (só o verify). Par que
+não confere: aviso `[push] … a WEB_PUSH_VAPID_PUBLICA não é a da WEB_PUSH_VAPID_PRIVADA` e desligado.
 
 Com default real em `app/config.py`:
 - `WHATSAPP_GRAPH_VERSION=v26.0` (revisão anual) e `WHATSAPP_GRAPH_BASE`;

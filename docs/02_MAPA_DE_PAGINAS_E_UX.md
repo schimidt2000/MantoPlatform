@@ -2034,7 +2034,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
   valor já entrou por PIX — anexe pela página do evento".
 
-#### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328 e 330)*
+#### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328, 330 e 332)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
   módulo configurado (`conversas_ligadas` de `/api/auth/me`); o "Ver como" não abre a caixa. Sem as chaves
   `WHATSAPP_*`, a tela diz "O WhatsApp ainda não foi configurado. Peça ao Superadmin para preencher as chaves no
@@ -2091,6 +2091,24 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     - sem "Enviar modelo";
     - o clipe aceita só foto, vídeo, áudio e PDF, e o texto vai até 1.000 caracteres;
     - arquivo com texto sai em duas mensagens (o arquivo primeiro).
+- **Avisos no celular** (feature 332): o botão do celular ao lado da busca (44 px; ícone `Smartphone`, diferente do
+  sino das notificações, na cor de destaque quando este aparelho está ativado) abre o diálogo "Avisos no celular", com o que toca (mensagem da
+  cliente, espera de 15 min, transferência) e a situação deste aparelho:
+  - "Os avisos estão desativados neste aparelho." + **Ativar avisos** (pede a permissão do navegador);
+  - "Os avisos estão ativados neste aparelho." + **Desativar avisos**;
+  - "O navegador bloqueou os avisos. Libere nas configurações do navegador e tente novamente." (o pedido não
+    reaparece sozinho; é o que o Browser pane mostra);
+  - "No iPhone, adicione a Plataforma à Tela de Início (Compartilhar → Adicionar à Tela de Início) e abra por lá
+    para ativar.";
+  - "Este navegador não recebe avisos." e, sem as chaves no servidor, "Os avisos no celular ainda não foram
+    configurados." (sem botão).
+  Tocar no aviso abre a conversa (`/conversas?c={id}`). Ao abrir a tela com o aparelho já ativado, ele passa a ser
+  de quem está logado (outra pessoa pode ter usado o mesmo navegador), e "ativado" só aparece com o servidor
+  confirmando. **Sair** desativa os avisos deste aparelho (o aviso traz o nome e o trecho da cliente). Falha ao ler
+  o estado: "Não foi possível carregar os avisos. Tente novamente."
+- **App instalável** (feature 332): a SPA interna tem `manifest.webmanifest` ("Plataforma Manto", nome curto
+  "Manto", `standalone`, `start_url: /`, o ícone "M" da casa) e `theme-color` `#544596`. É o que permite
+  "Adicionar à Tela de Início" e, no iPhone, receber os avisos.
 - **Ambiente local**: faixa dourada "O envio pelo WhatsApp está travado neste ambiente…" (com o Instagram ligado,
   "O envio pelo WhatsApp e pelo Instagram está travado…") quando o banco é a cópia
   local; enviar responde com a mesma frase (409 `envio_travado`). Para conferir a tela: `.claude/launch.json` →

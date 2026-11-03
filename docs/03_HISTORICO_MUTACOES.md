@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **332-crm-avisos-no-celular** | *(NÃO PUBLICADO; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
 | **330-crm-instagram-direct** | *(NÃO PUBLICADO; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
 | **328-crm-equipe-na-caixa** | *(NÃO PUBLICADO; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
 | **325-crm-whatsapp-fundacao** | *(NÃO PUBLICADO; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
@@ -360,7 +361,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -394,6 +395,91 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 332 — Avisos das Conversas no celular   (332-crm-avisos-no-celular · 2026-11-03 · migration `b332d5f7a9c1`)
+
+> **NÃO PUBLICADO** — branch `332-crm-avisos-no-celular`, feita **sobre a `330-crm-instagram-direct`** (325 → 328 →
+> 330 → 332; nenhuma está na `main`, por decisão do dono). Mesmo publicado, fica desligado até as duas chaves
+> `WEB_PUSH_VAPID_*` (`docs/05` 190). Nível 1. Detalhe: `specs/332-crm-avisos-no-celular/`.
+
+**O pedido.** O dono disse "começar a 2c" (03/11), a Fase 2c do plano do CRM próprio: o aviso no celular. Sem ele,
+quem não está com a Plataforma aberta só sabe da cliente pelo app do WhatsApp/Instagram, e o Kommo continua
+necessário. Duas decisões do dono antes da spec:
+- toca a **mensagem nova da cliente** (para o responsável; sem responsável, para a equipe), o **alerta de 15 min** e a
+  **transferência**;
+- **a qualquer hora**: cada pessoa silencia no próprio celular. O alerta de 15 min continua só das 9h às 21h.
+
+**O que mudou.**
+- **App instalável**: `manifest.webmanifest`, `sw.js` e os ícones em `frontend/apps/internal/public/` (servidos na raiz
+  pelo `server.js`, com `no-cache`); `index.html` com o manifesto, o `apple-touch-icon` e o `theme-color`. O service
+  worker só mostra o aviso, abre a conversa ao tocar e registra a assinatura renovada: **sem cache de página**, para o
+  deploy nunca prender a versão velha.
+- **Registro do aparelho**: `push_assinaturas` (endpoint único, FK para `users`), `GET /api/push/chave` e
+  `POST`/`DELETE /api/push/aparelhos` com `pode_conversas`. O painel "Avisos no celular" fica no cabeçalho da lista de
+  Conversas, com os estados desligado, sem suporte, iPhone fora da Tela de Início, bloqueado, desativado e ativado.
+- **Envio**: `app/push/webpush.py` (cifra e VAPID), `push_ops.despachar` (thread própria, depois do commit) e
+  `entregar` (filtra quem ainda é da equipe, apaga o aparelho que sumiu, nunca levanta).
+  - Mensagem nova: os processadores do aviso da Meta juntam num conjunto `chegadas` as conversas com mensagem da
+    cliente, e `celular_ops.avisar_mensagens` avisa depois do commit.
+  - Alerta e transferência: `equipe_ops`, depois do commit, para quem recebeu no sino.
+- **Chaves**: `flask webpush-chaves` gera o par e imprime só no terminal; `WEB_PUSH_VAPID_*` vazias = desligado;
+  `_suppress_push()` trava o local.
+
+**Decisões e pegadinhas.**
+- **Sem `pywebpush`.** Instalar a biblioteca baixaria pacote no `.venv` compartilhado e entraria no build do Render. A
+  cifra (RFC 8291) e o token VAPID (RFC 8292) foram escritos sobre o `cryptography` e o `requests`.
+- **O `cryptography` não estava no `requirements.txt`.** Ele só existia no `.venv`, instalado pela sessão da 329 (que
+  o fixa para a NFS-e). O verify passava, e o primeiro deploy derrubaria o boot no `import`. A convergência pegou;
+  agora está fixado `==46.0.7`, a mesma linha da 329. **Lição:** dependência "que já está na casa" se confere no
+  `requirements.txt`, não no `.venv`. Cifra errada não dá
+  erro em lugar nenhum (o aviso só não aparece), então o verify confere o **vetor oficial do RFC 8291 (apêndice A)**
+  byte a byte.
+- **O aviso nunca sai antes do commit** nem atrasa quem chamou: a transferência roda dentro da requisição, e o webhook
+  não pode esperar o Google/Apple. Aviso perdido num deploy não volta; o sino e a lista continuam valendo.
+- **Ordem depois do commit: perfil → celular → mídia.** O título do aviso do Instagram é o nome do perfil, e a mídia
+  pode levar minutos.
+- **`celular_ops`, não `avisos_ops`.** O plano previa `avisos_ops`, a um "s" do `aviso_ops` (o aviso da Meta).
+- **O servidor faz POST no endereço que o navegador mandou.** Só os serviços de aviso conhecidos (Google, Mozilla,
+  Microsoft, Apple), em https: senão o registro viraria um jeito de o servidor chamar um endereço interno (SSRF).
+- **Ícone da casa**: a spec previa gerar um "M"; já existia o `app/static/apple-touch-icon-app.png` do Jinja, que foi
+  redimensionado. `purpose: any` (o "M" encosta nas bordas e perderia as pontas num recorte circular).
+- **`start_url: /`**, não `/conversas`: o manifesto vale para a Plataforma inteira, e o Casting que instalar não pode
+  cair numa tela sem acesso.
+- **O Browser pane não registra service worker** e nega a permissão de avisos. O `sw.js` foi provado por um harness
+  Node com os eventos; falta tocar num celular de verdade (`docs/05` 191).
+
+**Verificação.**
+- `verify_332.py` deu **17/17** contra o `manto_local`, com zero escapes. O dublê fica no `requests.post` do
+  `webpush`: um serviço de avisos falso confere o token VAPID (assinatura, `aud`, `exp`, `sub`) e os cabeçalhos e
+  decifra cada aviso com a chave do aparelho de teste. Uma mutação (token de 25 h) derrubou 7 cenários. Três
+  cenários **devem** falhar: Casting e registro inválido (endereço fora dos serviços de aviso, ponto fora da curva,
+  aparelho do Casting gravado à força), ambiente travado e sem chaves.
+- `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22.
+- `ruff` limpo nos arquivos tocados (o `error_count` de `app/cli.py` é anterior); `npm run typecheck` limpo.
+- Tela pela worktree (backend 5332 com Google dublado e chaves em memória, Vite 5333) em desktop e 375×812:
+  - o botão de 44 px ao lado da busca (depois da convergência, com o ícone de celular);
+  - os estados bloqueado, desativado (com "Ativar avisos") e iPhone fora da Tela de Início;
+  - manifesto, ícones e `sw.js` servidos; sem rolagem horizontal no celular.
+- Harness do `sw.js`: 5/5 (aviso, aviso sem JSON, toque com aba aberta, link de fora barrado, assinatura renovada).
+- Achado de passagem: rolagem horizontal de ~12 px em `/conversas` no desktop, anterior à 332 (`docs/05` 192).
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **17 achados** (1
+crítico, 0 altos, 7 médios e 9 baixos), fechados em T017–T033.
+- O `cryptography` fora do `requirements.txt` (o crítico).
+- Aparelho com chave fora da curva que levantava no meio do laço e desfazia a rodada inteira.
+- Uma thread por aviso, cada uma segurando conexão do pool durante a rede (às 9h vêm as esperas da noite).
+- "Ativado" mostrado com o registro recusado pelo servidor.
+- O verify que trocava a entrega inteira e não passava pelo token nem pelos cabeçalhos; a trava derivada não
+  conferida.
+- "tente de novo" (o glossário pede "Tentar novamente").
+- `despachar` que podia levantar; o rollback que faltava no `celular_ops`; o corpo do aviso que virava "Reagiu com
+  👍"; a falha ao ler o estado que deixava o esqueleto para sempre.
+- O botão com o mesmo sino das notificações (agora o ícone de celular).
+- **Sair desativa os avisos deste aparelho**: o aviso traz o nome e o trecho da cliente, e o navegador pode ficar com
+  outra pessoa (decisão tomada aqui, pelo lado da privacidade; a saída nunca espera mais de 3 s).
+- O par VAPID que não confere passa a desligar, com aviso na subida.
+- Cenários novos: toque em botão (WhatsApp e Instagram), eco e reação do Instagram, alerta sem responsável e a
+  entrega pela thread.
 
 ### 330 — Instagram Direct na caixa de Conversas   (330-crm-instagram-direct · 2026-11-03 · migration `a330c4e8f1b2`)
 
