@@ -364,8 +364,7 @@ def alertar_esperas(agora_sp: datetime | None = None) -> dict[str, int]:
         if aviso:
             no_celular.append(aviso)
     db.session.commit()
-    for destinos, aviso in no_celular:  # feature 332: depois do commit da rodada
-        push_ops.despachar(destinos, aviso)
+    push_ops.despachar_varios(no_celular)  # feature 332: depois do commit, uma entrega por rodada
     return {"alertas": gravados}
 
 

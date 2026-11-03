@@ -21,10 +21,12 @@ import socket
 import sys
 import time
 import traceback
+import types
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from datetime import time as hora
 from pathlib import Path
+from urllib.parse import urlsplit
 
 for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
@@ -65,8 +67,10 @@ os.environ.pop("WEB_PUSH_ALLOW_LOCAL", None)
 if not os.environ.get("DATABASE_URL"):
     os.environ["DATABASE_URL"] = (REPO_ROOT / ".local-db-url").read_text(encoding="utf-8").strip()
 
-from cryptography.hazmat.primitives import serialization  # noqa: E402
+from cryptography.hazmat.primitives import hashes, serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
+from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature  # noqa: E402
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 from sqlalchemy import create_engine, text  # noqa: E402
 
 from app import create_app, db, limiter  # noqa: E402
@@ -89,6 +93,8 @@ ENDPOINT = "https://fcm.googleapis.com/fcm/send/" + PREFIX
 VAPID_PUBLICA, VAPID_PRIVADA = webpush.gerar_chaves()
 
 app = create_app()
+# A trava que o banco local deriva sozinho (FR-008), antes de o verify liberar o envio de mentira.
+SUPRESSAO_DERIVADA = app.config.get("WEB_PUSH_SUPPRESS")
 app.config["TESTING"] = True
 app.config.update(
     WHATSAPP_ACCESS_TOKEN="token-falso-v332",
@@ -109,29 +115,103 @@ limiter.enabled = False
 
 import app.integracoes.instagram_client as _ic  # noqa: E402
 
-_REAIS = {"enviar": webpush.enviar, "perfil": _ic.perfil}
+_REAIS = {"requests": webpush.requests, "perfil": _ic.perfil}
+# O que o navegador guarda de cada aparelho de teste: a chave privada e o segredo de autenticação,
+# para o serviço falso decifrar o aviso como o celular decifraria.
+APARELHOS: dict[str, tuple[ec.EllipticCurvePrivateKey, bytes]] = {}
 
 
-class EntregaFalsa:
-    """Registra cada aviso entregue; um endpoint pode responder 410."""
+def _h(chave: bytes, dados: bytes) -> bytes:
+    return hmac.new(chave, dados, hashlib.sha256).digest()
+
+
+def _decifrar(endpoint: str, dados: bytes) -> dict:
+    """RFC 8291 do lado do aparelho, escrito à parte do ``webpush.cifrar`` (senão um erro se anularia)."""
+    privada, auth = APARELHOS[endpoint]
+    sal, rs, idlen = dados[:16], int.from_bytes(dados[16:20], "big"), dados[20]
+    _garante(rs == 4096 and idlen == 65, f"cabeçalho aes128gcm: rs={rs} idlen={idlen}")
+    chave_do_servidor = dados[21 : 21 + idlen]
+    efemera = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), chave_do_servidor)
+    segredo = privada.exchange(ec.ECDH(), efemera)
+    do_aparelho = privada.public_key().public_bytes(
+        serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
+    )
+    ikm = _h(_h(auth, segredo), b"WebPush: info\x00" + do_aparelho + chave_do_servidor + b"\x01")
+    prk = _h(sal, ikm)
+    cek = _h(prk, b"Content-Encoding: aes128gcm\x00\x01")[:16]
+    nonce = _h(prk, b"Content-Encoding: nonce\x00\x01")[:12]
+    claro = AESGCM(cek).decrypt(nonce, dados[21 + idlen :], None).rstrip(b"\x00")
+    _garante(claro.endswith(b"\x02"), "sem o delimitador do último registro")
+    return json.loads(claro[:-1])
+
+
+def _conferir_vapid(url: str, cabecalho: str) -> None:
+    """O JWT ES256 do RFC 8292: assinatura com a chave pública da Plataforma, aud, exp e sub."""
+    _garante(
+        cabecalho.startswith("vapid t=") and ", k=" in cabecalho, f"Authorization {cabecalho[:40]}"
+    )
+    token, k = cabecalho[len("vapid t=") :].split(", k=")
+    _garante(k == VAPID_PUBLICA, "k não é a chave pública da Plataforma")
+    cab, corpo, assinatura = token.split(".")
+    _garante(
+        json.loads(webpush.b64_decodificar(cab)) == {"typ": "JWT", "alg": "ES256"}, "cabeçalho JWT"
+    )
+    claims = json.loads(webpush.b64_decodificar(corpo))
+    partes = urlsplit(url)
+    _garante(claims["aud"] == f"{partes.scheme}://{partes.netloc}", f"aud {claims['aud']}")
+    _garante(time.time() < claims["exp"] <= time.time() + 24 * 3600, f"exp {claims['exp']}")
+    _garante(claims["sub"] == app.config["WEB_PUSH_CONTATO"], f"sub {claims['sub']}")
+    crua = webpush.b64_decodificar(assinatura)
+    _garante(len(crua) == 64, "assinatura não é r||s")
+    der = encode_dss_signature(int.from_bytes(crua[:32], "big"), int.from_bytes(crua[32:], "big"))
+    publica = ec.EllipticCurvePublicKey.from_encoded_point(
+        ec.SECP256R1(), webpush.b64_decodificar(VAPID_PUBLICA)
+    )
+    publica.verify(der, f"{cab}.{corpo}".encode(), ec.ECDSA(hashes.SHA256()))
+
+
+class ServicoFalso:
+    """O serviço de avisos de mentira (o FCM): confere o VAPID e os cabeçalhos, decifra o corpo com a
+    chave do aparelho e responde 201 — ou o status fabricado para aquele endpoint (410, 500)."""
 
     def __init__(self) -> None:
         self.avisos: list[dict] = []
-        self.sumidos: set[str] = set()
+        self.respostas: dict[str, int] = {}
+        self.problemas: list[str] = []
 
-    def enviar(self, aparelho, corpo, chaves, *, ttl, urgencia):
-        if aparelho["endpoint"] in self.sumidos:
-            raise webpush.AparelhoSumiu("HTTP 410 (dublê)")
-        self.avisos.append(
-            {"endpoint": aparelho["endpoint"], "corpo": corpo, "urgencia": urgencia, "ttl": ttl}
-        )
+    def post(self, url, data=None, headers=None, timeout=None):
+        try:
+            _conferir_vapid(url, headers["Authorization"])
+            _garante(headers["Content-Encoding"] == "aes128gcm", "Content-Encoding")
+            _garante(headers["Content-Type"] == "application/octet-stream", "Content-Type")
+            _garante(headers["TTL"] == str(24 * 3600), f"TTL {headers['TTL']}")
+            _garante(headers["Urgency"] in ("high", "normal"), f"Urgency {headers['Urgency']}")
+            _garante(timeout is not None, "sem timeout")
+            corpo = _decifrar(url, data)
+        except Exception as exc:  # noqa: BLE001 — vira problema do verify, não do código
+            self.problemas.append(f"{url}: {exc}")
+            return types.SimpleNamespace(status_code=400, text=str(exc))
+        status = self.respostas.get(url, 201)
+        if status < 300:
+            self.avisos.append(
+                {
+                    "endpoint": url,
+                    "corpo": corpo,
+                    "urgencia": headers["Urgency"],
+                    "ttl": headers["TTL"],
+                }
+            )
+        return types.SimpleNamespace(status_code=status, text="")
 
     def para(self, endpoint: str) -> list[dict]:
         return [a for a in self.avisos if a["endpoint"] == endpoint]
 
 
-entrega = EntregaFalsa()
-webpush.enviar = entrega.enviar
+entrega = ServicoFalso()
+# Só o `requests` do webpush: a cifra, o JWT e o mapeamento 404/410/500 rodam de verdade.
+webpush.requests = types.SimpleNamespace(
+    post=entrega.post, RequestException=_REAIS["requests"].RequestException
+)
 _ic.perfil = lambda conexao, igsid: {"nome": f"{PREFIX}Perfil IG", "usuario": "v332.perfil"}
 
 resultados: list[tuple[str, bool, str]] = []
@@ -190,12 +270,15 @@ def _erro(r) -> dict:
     return (r.get_json() or {}).get("error") or {}
 
 
-def _chaves_do_aparelho() -> dict:
+def _chaves_do_aparelho(endpoint: str | None = None) -> dict:
     privada = ec.generate_private_key(ec.SECP256R1())
     ponto = privada.public_key().public_bytes(
         serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
     )
-    return {"p256dh": webpush.b64_codificar(ponto), "auth": webpush.b64_codificar(os.urandom(16))}
+    auth = os.urandom(16)
+    if endpoint:
+        APARELHOS[endpoint] = (privada, auth)
+    return {"p256dh": webpush.b64_codificar(ponto), "auth": webpush.b64_codificar(auth)}
 
 
 def _registrar(email: str, sufixo: str):
@@ -203,7 +286,7 @@ def _registrar(email: str, sufixo: str):
         email,
         "post",
         "/api/push/aparelhos",
-        {"endpoint": ENDPOINT + sufixo, "keys": _chaves_do_aparelho()},
+        {"endpoint": ENDPOINT + sufixo, "keys": _chaves_do_aparelho(ENDPOINT + sufixo)},
     )
 
 
@@ -358,6 +441,17 @@ def cen_05() -> None:
     )
     _garante(outro.status_code == 422, f"endpoint fora dos serviços de aviso → {outro.status_code}")
     _garante(_aparelho("x") is None, "gravou o registro sem chaves")
+    fora_da_curva = {
+        "p256dh": webpush.b64_codificar(b"\x04" + bytes(64)),
+        "auth": webpush.b64_codificar(bytes(16)),
+    }
+    curva = _chamar(
+        estado["ana"],
+        "post",
+        "/api/push/aparelhos",
+        {"endpoint": ENDPOINT + "x", "keys": fora_da_curva},
+    )
+    _garante(curva.status_code == 422, f"ponto fora da curva → {curva.status_code}")
     # Filtro no envio: um aparelho do Casting gravado à força (papel trocado depois) não toca.
     chaves = _chaves_do_aparelho()
     _no_banco_escrever(
@@ -418,50 +512,131 @@ def cen_08() -> None:
         extra={"reaction": {"message_id": "x", "emoji": "👍"}},
     )
     _garante(len(entrega.avisos) == antes, f"{len(entrega.avisos) - antes} avisos falsos")
+    _ig(
+        {
+            "sender": {"id": CONTA_IG},
+            "recipient": {"id": IG_A},
+            "message": {"mid": f"{PREFIX}ig-eco", "is_echo": True, "text": "Respondi pelo app"},
+        }
+    )
+    _ig(
+        {
+            "sender": {"id": IG_A},
+            "recipient": {"id": CONTA_IG},
+            "reaction": {"mid": f"{PREFIX}ig-1", "action": "react", "emoji": "❤"},
+        }
+    )
+    _garante(
+        len(entrega.avisos) == antes, f"{len(entrega.avisos) - antes} avisos falsos (Instagram)"
+    )
     # O eco e a reação foram gravados de verdade (senão o cenário passaria sem testar nada).
+    eco_ig = _no_banco("SELECT id FROM conversa_mensagens WHERE externo_id=:w", w=f"{PREFIX}ig-eco")
+    _garante(eco_ig is not None, "o eco do Instagram não foi gravado")
+    reacao_ig = _no_banco(
+        "SELECT id FROM conversa_mensagens WHERE externo_id LIKE :w", w=f"reacao:{PREFIX}ig-1:%"
+    )
+    _garante(reacao_ig is not None, "a reação do Instagram não foi gravada")
     for wamid in (f"wamid.{PREFIX}a-eco", f"wamid.{PREFIX}a-reacao"):
         linha = _no_banco("SELECT id FROM conversa_mensagens WHERE externo_id=:w", w=wamid)
         _garante(linha is not None, f"{wamid} não foi gravada")
 
 
+def _ig(item: dict) -> None:
+    item = {"timestamp": int(time.time() * 1000), **item}
+    _assinado(
+        {"object": "instagram", "entry": [{"id": CONTA_IG, "time": 1, "messaging": [item]}]},
+        "/api/webhooks/instagram",
+    )
+
+
 def cen_09() -> None:
     antes = len(entrega.avisos)
-    corpo = {
-        "object": "instagram",
-        "entry": [
-            {
-                "id": CONTA_IG,
-                "time": 1,
-                "messaging": [
-                    {
-                        "sender": {"id": IG_A},
-                        "recipient": {"id": CONTA_IG},
-                        "timestamp": int(time.time() * 1000),
-                        "message": {"mid": f"{PREFIX}ig-1", "text": "Oi! Vi o reels."},
-                    }
-                ],
-            }
-        ],
-    }
-    _assinado(corpo, "/api/webhooks/instagram")
+    _ig(
+        {
+            "sender": {"id": IG_A},
+            "recipient": {"id": CONTA_IG},
+            "message": {"mid": f"{PREFIX}ig-1", "text": "Oi! Vi o reels."},
+        }
+    )
     novos = entrega.avisos[antes:]
     _garante(
         novos and novos[0]["corpo"]["titulo"] == f"{PREFIX}Perfil IG",
         f"aviso do Instagram {novos[:1]}",
     )
+    # Toque em botão é a cliente puxando assunto: toca (Instagram e WhatsApp).
+    antes = len(entrega.avisos)
+    _ig(
+        {
+            "sender": {"id": IG_A},
+            "recipient": {"id": CONTA_IG},
+            "postback": {"mid": f"{PREFIX}ig-pb", "title": "Ver pacotes", "payload": "pacotes"},
+        }
+    )
+    corpos = [a["corpo"]["corpo"] for a in entrega.avisos[antes:]]
+    _garante(corpos and corpos[0] == 'Tocou em "Ver pacotes".', f"postback {corpos}")
+    antes = len(entrega.avisos)
+    _wa(
+        WA_A,
+        f"wamid.{PREFIX}a-botao",
+        "Ana Souza",
+        tipo="interactive",
+        extra={
+            "interactive": {
+                "type": "button_reply",
+                "button_reply": {"id": "b1", "title": "Quero saber mais"},
+            }
+        },
+    )
+    corpos = [a["corpo"]["corpo"] for a in entrega.avisos[antes:]]
+    _garante(corpos and corpos[0] == "Quero saber mais", f"botão do WhatsApp {corpos}")
+    # O corpo é a última mensagem da cliente, não a prévia: a reação não muda o aviso.
+    _wa(
+        WA_A,
+        f"wamid.{PREFIX}a-reacao2",
+        tipo="reaction",
+        extra={"reaction": {"message_id": f"wamid.{PREFIX}a-botao", "emoji": "🙏"}},
+    )
+    with app.app_context():
+        from app.conversas import celular_ops
+        from app.models import Conversa
+
+        trecho = celular_ops.aviso_da_mensagem(db.session.get(Conversa, estado["a"])).corpo
+    _garante(trecho == "Quero saber mais", f"o corpo virou a reação: {trecho!r}")
 
 
 def cen_10() -> None:
     _garante(_aparelho("a") is not None, "o aparelho a não existia antes do 410")
+    _garante(_registrar(estado["ana"], "quinhentos").status_code == 201, "aparelho do 500")
+    # Aparelho gravado antes da checagem da curva: a cifra levanta só na hora do aviso.
+    _no_banco_escrever(
+        "INSERT INTO push_assinaturas (user_id, endpoint, p256dh, auth, created_at) "
+        "VALUES (:u, :e, :p, :a, now())",
+        u=estado["ana_id"],
+        e=ENDPOINT + "veneno",
+        p=webpush.b64_codificar(b"\x04" + bytes(64)),
+        a=webpush.b64_codificar(bytes(16)),
+    )
     antes = len(entrega.avisos)
-    entrega.sumidos.add(ENDPOINT + "a")
+    entrega.respostas.update({ENDPOINT + "a": 410, ENDPOINT + "quinhentos": 500})
     try:
         _wa(WA_C, f"wamid.{PREFIX}c-1", "Carla")
     finally:
-        entrega.sumidos.discard(ENDPOINT + "a")
-    _garante(_aparelho("a") is None, "o aparelho que sumiu não foi apagado")
+        entrega.respostas.clear()
+    _garante(_aparelho("a") is None, "o aparelho que sumiu (410) não foi apagado")
+    _garante(_aparelho("quinhentos") is not None, "o 500 apagou o aparelho")
+    _garante(_aparelho("veneno") is not None, "o aparelho envenenado foi apagado sem 410")
     destinos = {a["endpoint"] for a in entrega.avisos[antes:]}
-    _garante(ENDPOINT + "ana" in destinos, f"os outros aparelhos não receberam: {destinos}")
+    _garante(destinos == {ENDPOINT + "ana"}, f"os outros aparelhos não receberam: {destinos}")
+    ultimo = _no_banco(
+        "SELECT ultimo_aviso_em FROM push_assinaturas WHERE endpoint=:e", e=ENDPOINT + "ana"
+    )
+    _garante(ultimo is not None and ultimo[0] is not None, "ultimo_aviso_em não foi gravado")
+    _no_banco_escrever(
+        "DELETE FROM push_assinaturas WHERE endpoint IN (:q, :v)",
+        q=ENDPOINT + "quinhentos",
+        v=ENDPOINT + "veneno",
+    )
+    estado["c"] = _conversa(WA_C).id
 
 
 def _utc_de_sp(momento: datetime) -> datetime:
@@ -471,18 +646,28 @@ def _utc_de_sp(momento: datetime) -> datetime:
 def cen_11() -> None:
     from app.conversas import equipe_ops
 
+    _garante(_registrar(estado["bia"], "bia").status_code == 201, "aparelho da Bia")
     as_14 = datetime.combine(now_sp().date(), hora(14, 0))
-    _no_banco_escrever(
-        "UPDATE conversas SET aguardando_desde=:t WHERE id=:i",
-        t=_utc_de_sp(as_14) - timedelta(minutes=20),
-        i=estado["b"],
-    )
+    for conversa_id in (estado["b"], estado["c"]):
+        _no_banco_escrever(
+            "UPDATE conversas SET aguardando_desde=:t WHERE id=:i",
+            t=_utc_de_sp(as_14) - timedelta(minutes=20),
+            i=conversa_id,
+        )
     antes = len(entrega.avisos)
     with app.app_context():
         equipe_ops.alertar_esperas(agora_sp=as_14)
     novos = [a for a in entrega.avisos[antes:] if a["corpo"]["tag"] == f"espera-{estado['b']}"]
     _garante([a["endpoint"] for a in novos] == [ENDPOINT + "ana"], f"alerta {novos}")
     _garante("espera resposta" in novos[0]["corpo"]["titulo"], f"título {novos[0]['corpo']}")
+    da_equipe = {
+        a["endpoint"]
+        for a in entrega.avisos[antes:]
+        if a["corpo"]["tag"] == f"espera-{estado['c']}"
+    }
+    _garante(
+        da_equipe == {ENDPOINT + "ana", ENDPOINT + "bia"}, f"alerta sem responsável {da_equipe}"
+    )
 
 
 def cen_12() -> None:
@@ -511,6 +696,21 @@ def cen_13() -> None:
     _garante(
         registro.status_code == 201, "o registro deveria funcionar travado (para conferir a tela)"
     )
+
+
+def cen_15() -> None:
+    """O caminho de produção: a entrega numa thread própria, sem segurar o webhook."""
+    app.config["WEB_PUSH_SINCRONO"] = False
+    antes = len(entrega.avisos)
+    try:
+        _wa(WA_A, f"wamid.{PREFIX}a-thread", "Ana Souza")
+        limite = time.time() + 10
+        while time.time() < limite and len(entrega.avisos) == antes:
+            time.sleep(0.1)
+    finally:
+        app.config["WEB_PUSH_SINCRONO"] = True
+    tags = {a["corpo"]["tag"] for a in entrega.avisos[antes:]}
+    _garante(f"conversa-{estado['a']}" in tags, f"a thread não entregou: {tags}")
 
 
 def cen_14() -> None:
@@ -579,19 +779,21 @@ CENARIOS = [
     ("5. Casting e registro inválido (DEVE falhar)", cen_05),
     ("6. mensagem nova sem responsável avisa a equipe", cen_06),
     ("7. mensagem numa conversa da Ana avisa só a Ana", cen_07),
-    ("8. reenvio, eco e reação não avisam", cen_08),
-    ("9. mensagem do Instagram avisa com o nome do perfil", cen_09),
-    ("10. aparelho que sumiu (410) é apagado", cen_10),
-    ("11. alerta de 15 min toca no celular", cen_11),
+    ("9. Instagram com o nome do perfil e toque em botão (Instagram e WhatsApp)", cen_09),
+    ("8. reenvio, eco e reação não avisam (WhatsApp e Instagram)", cen_08),
+    ("10. 410 apaga; 500 e aparelho envenenado não cortam os outros", cen_10),
+    ("11. alerta de 15 min: o responsável ou a equipe", cen_11),
     ("12. transferência toca no celular do destino", cen_12),
     ("13. ambiente travado (DEVE falhar)", cen_13),
     ("14. sem chaves (DEVE falhar)", cen_14),
+    ("15. entrega pela thread (caminho de produção)", cen_15),
 ]
 
 
 def main() -> int:
     with app.app_context():
         _garante(app.config.get("MAIL_SUPPRESS_SEND") is True, "MAIL_SUPPRESS_SEND desligado")
+        _garante(SUPRESSAO_DERIVADA is True, "o banco local não travou o aviso no celular sozinho")
         limpar()
         preparar()
     print("Feature 332 — Avisos no celular, contra manto_local")
@@ -600,15 +802,20 @@ def main() -> int:
             cenario(nome, fn)
     finally:
         with app.app_context():
-            cenario("15. limpeza", limpar)
-        webpush.enviar = _REAIS["enviar"]
+            cenario("16. limpeza", limpar)
+        webpush.requests = _REAIS["requests"]
         _ic.perfil = _REAIS["perfil"]
     ok = sum(1 for _, passou, _ in resultados if passou)
-    print(f"\n{ok}/{len(resultados)} OK · escapes de rede: {len(_ESCAPES)}")
+    print(
+        f"\n{ok}/{len(resultados)} OK · escapes de rede: {len(_ESCAPES)}"
+        f" · problemas no serviço falso: {len(entrega.problemas)}"
+    )
+    for problema in entrega.problemas:
+        print(f"  ! {problema}")
     for nome, passou, erro in resultados:
         if not passou:
             print(f"  - {nome}: {erro}")
-    return 0 if ok == len(resultados) and not _ESCAPES else 1
+    return 0 if ok == len(resultados) and not _ESCAPES and not entrega.problemas else 1
 
 
 if __name__ == "__main__":

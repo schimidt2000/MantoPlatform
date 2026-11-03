@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { apiFetch } from "@manto/api-client";
+import { ApiRequestError, apiFetch } from "@manto/api-client";
 
 /**
  * Avisos no celular (feature 332) — Web Push do navegador.
@@ -54,13 +54,28 @@ async function assinaturaAtual(): Promise<PushSubscription | null> {
   return (await registro?.pushManager.getSubscription()) ?? null;
 }
 
-/** A assinatura feita com outro par de chaves (a Plataforma trocou) não recebe mais nada: inativo. */
+/**
+ * O estado deste aparelho. "Ativo" só com o servidor confirmando: a assinatura local é registrada
+ * de novo (passa a ser de quem está logado — outra pessoa pode ter usado o mesmo navegador). A
+ * assinatura feita com outro par de chaves (a Plataforma trocou) ou recusada pelo servidor não
+ * recebe nada: inativo. Falha de rede levanta (a tela oferece "Tentar novamente").
+ */
 export async function estadoDosAvisos(chavePublica: string | null): Promise<EstadoDosAvisos> {
   if (!chavePublica) return "desligado";
   if (!temSuporte()) return eIphone() && !instalado() ? "iphone_fora_da_tela_de_inicio" : "sem_suporte";
   if (Notification.permission === "denied") return "negado";
   const assinatura = await assinaturaAtual();
-  return assinatura && mesmaChave(assinatura, chaveEmBytes(chavePublica)) ? "ativo" : "inativo";
+  if (!assinatura || !mesmaChave(assinatura, chaveEmBytes(chavePublica))) return "inativo";
+  try {
+    await registrarNoServidor(assinatura);
+  } catch (erro) {
+    if (erro instanceof ApiRequestError && erro.status >= 400 && erro.status < 500) {
+      await assinatura.unsubscribe().catch(() => undefined);
+      return "inativo";
+    }
+    throw erro;
+  }
+  return "ativo";
 }
 
 /** A chave VAPID em base64url, como o `pushManager.subscribe` pede (bytes). */
@@ -100,7 +115,13 @@ export async function ativarAvisos(chavePublica: string): Promise<void> {
     assinatura = null;
   }
   assinatura ??= await registro.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: chave });
-  await registrarNoServidor(assinatura);
+  try {
+    await registrarNoServidor(assinatura);
+  } catch (erro) {
+    // Sem o registro no servidor, nada toca: o aparelho não pode parecer ativado depois.
+    await assinatura.unsubscribe().catch(() => undefined);
+    throw erro;
+  }
 }
 
 /** Para de tocar neste aparelho primeiro; o servidor é avisado depois (se falhar, o 410 limpa). */
@@ -113,10 +134,12 @@ export async function desativarAvisos(): Promise<void> {
 }
 
 /**
- * O aparelho já assinado passa a ser de quem está logado agora (outra pessoa pode ter usado o
- * mesmo navegador). Silencioso: a tela só mostra o estado.
+ * "Sair" desliga os avisos deste aparelho: o aviso traz o nome e o trecho da cliente, e o
+ * navegador pode ficar com outra pessoa. Nunca segura a saída: no máximo 3 s, e a falha é ignorada
+ * (o servidor apaga o aparelho quando o serviço responder 410).
  */
-export async function confirmarAparelho(): Promise<void> {
-  const assinatura = await assinaturaAtual();
-  if (assinatura) await registrarNoServidor(assinatura);
+export async function desativarAoSair(): Promise<void> {
+  if (!temSuporte()) return;
+  const limite = new Promise<void>((resolve) => setTimeout(resolve, 3000));
+  await Promise.race([desativarAvisos().catch(() => undefined), limite]);
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, BellRing } from "lucide-react";
+import { Smartphone } from "lucide-react";
 import {
   Button,
   Dialog,
@@ -15,7 +15,6 @@ import {
   AvisosNegados,
   type EstadoDosAvisos,
   ativarAvisos,
-  confirmarAparelho,
   desativarAvisos,
   estadoDosAvisos,
   useChaveDosAvisos,
@@ -31,7 +30,7 @@ const TEXTO_DO_ESTADO: Record<EstadoDosAvisos, string> = {
   sem_suporte: "Este navegador não recebe avisos.",
   iphone_fora_da_tela_de_inicio:
     "No iPhone, adicione a Plataforma à Tela de Início (Compartilhar → Adicionar à Tela de Início) e abra por lá para ativar.",
-  negado: "O navegador bloqueou os avisos. Libere nas configurações do navegador e tente de novo.",
+  negado: "O navegador bloqueou os avisos. Libere nas configurações do navegador e tente novamente.",
   inativo: "Os avisos estão desativados neste aparelho.",
   ativo: "Os avisos estão ativados neste aparelho.",
 };
@@ -40,6 +39,8 @@ export function AvisosNoCelular() {
   const [aberto, setAberto] = useState(false);
   const chave = useChaveDosAvisos(true);
   const [estado, setEstado] = useState<EstadoDosAvisos | null>(null);
+  const [falhouEstado, setFalhouEstado] = useState(false);
+  const [tentativa, setTentativa] = useState(0);
   const [ocupado, setOcupado] = useState<"ativar" | "desativar" | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -47,16 +48,28 @@ export function AvisosNoCelular() {
   useEffect(() => {
     if (!chave.data) return;
     let vivo = true;
-    void estadoDosAvisos(chavePublica).then((novo) => {
-      if (!vivo) return;
-      setEstado(novo);
-      // Quem está logado agora fica com o aparelho já ativado (o navegador pode ser de outra pessoa).
-      if (novo === "ativo") void confirmarAparelho().catch(() => undefined);
-    });
+    setFalhouEstado(false);
+    estadoDosAvisos(chavePublica).then(
+      (novo) => {
+        if (vivo) setEstado(novo);
+      },
+      () => {
+        if (vivo) setFalhouEstado(true);
+      },
+    );
     return () => {
       vivo = false;
     };
-  }, [chave.data, chavePublica]);
+  }, [chave.data, chavePublica, tentativa]);
+
+  /** Relê o estado depois de uma falha; se até a leitura falhar, a tela oferece "Tentar novamente". */
+  const releEstado = async () => {
+    try {
+      setEstado(await estadoDosAvisos(chavePublica));
+    } catch {
+      setFalhouEstado(true);
+    }
+  };
 
   useEffect(() => {
     if (!aberto) setErro(null);
@@ -70,7 +83,7 @@ export function AvisosNoCelular() {
       await ativarAvisos(chavePublica);
       setEstado("ativo");
     } catch (falha) {
-      if (falha instanceof AvisosNegados) setEstado(await estadoDosAvisos(chavePublica));
+      if (falha instanceof AvisosNegados) await releEstado();
       else setErro("Não foi possível ativar os avisos. Tente novamente.");
     } finally {
       setOcupado(null);
@@ -85,14 +98,13 @@ export function AvisosNoCelular() {
       setEstado("inativo");
     } catch {
       setErro("Não foi possível desativar os avisos. Tente novamente.");
-      setEstado(await estadoDosAvisos(chavePublica));
+      await releEstado();
     } finally {
       setOcupado(null);
     }
   };
 
   const ativo = estado === "ativo";
-  const Icone = ativo ? BellRing : Bell;
   return (
     <>
       <Button
@@ -103,7 +115,7 @@ export function AvisosNoCelular() {
         title="Avisos no celular"
         onClick={() => setAberto(true)}
       >
-        <Icone className="h-4 w-4" aria-hidden />
+        <Smartphone className="h-4 w-4" aria-hidden />
       </Button>
       <Dialog open={aberto} onOpenChange={setAberto}>
         <DialogContent open={aberto} className="max-w-md">
@@ -114,12 +126,17 @@ export function AvisosNoCelular() {
               conversa é transferida para você. Cada aparelho é ativado à parte.
             </DialogDescription>
           </DialogHeader>
-          {chave.isError ? (
+          {chave.isError || falhouEstado ? (
             <div className="space-y-2">
               <p role="alert" className="text-sm text-red">
                 Não foi possível carregar os avisos. Tente novamente.
               </p>
-              <Button type="button" variant="outline" loading={chave.isFetching} onClick={() => void chave.refetch()}>
+              <Button
+                type="button"
+                variant="outline"
+                loading={chave.isFetching}
+                onClick={() => (chave.isError ? void chave.refetch() : setTentativa((n) => n + 1))}
+              >
                 Tentar novamente
               </Button>
             </div>

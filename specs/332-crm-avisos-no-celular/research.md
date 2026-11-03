@@ -2,14 +2,18 @@
 
 As decisões de produto vieram do dono (spec, Clarifications); aqui está só o "como".
 
-## R1 — Web Push com VAPID, sem dependência nova
+## R1 — Web Push com VAPID, sem biblioteca de Web Push
 
 - **Decisão**: o protocolo padrão do Web Push, com assinatura VAPID (ES256) e cifra `aes128gcm` (RFC 8291). Ele vale
   para os serviços de aviso do Chrome, Edge, Firefox e Safari, este no iOS 16.4+ com o app instalado.
 - **Implementação**: a cifra (RFC 8291 sobre o RFC 8188) e a assinatura VAPID (RFC 8292) moram em
-  `app/push/webpush.py`, sobre o `cryptography` e o `requests`, que já estão na casa.
-- **Por que não o `pywebpush`**: instalar uma biblioteca nova baixa código no `.venv`, que é compartilhado, e entra
-  no build do Render. O dono não pediu dependência nova.
+  `app/push/webpush.py`, sobre o `cryptography` e o `requests`.
+- **Por que não o `pywebpush`**: ele traz o `py-vapid` e o `http-ece` junto, e instalar baixa código no `.venv`, que
+  é compartilhado, e no build do Render.
+- **`cryptography` fixado no `requirements.txt`** (`==46.0.7`). A convergência pegou: ele estava só no `.venv`
+  (instalado pela sessão da feature 329, que fixa a mesma versão para a NFS-e), e nada do `requirements.txt` o
+  puxava. Sem a linha, o `pip install` do Render não o traria e o `import` do `webpush` derrubaria o boot. No
+  merge com a 329, fica uma linha só.
 - **Prova da cifra**: uma cifra errada não dá erro em lugar nenhum, o aviso só não aparece. Por isso o verify usa o
   **vetor de teste oficial do RFC 8291 (apêndice A)**, e o resultado tem de bater byte a byte. Conferido em
   03/11, antes do núcleo.
@@ -68,6 +72,8 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
   `WEB_PUSH_ALLOW_LOCAL=true`.
 - **No envio**: travado → log `[push] travado` e nada sai. O registro do aparelho funciona mesmo travado, para a tela
   poder ser conferida.
+- **Trava forçada**: `WEB_PUSH_SUPPRESS=true` trava em qualquer ambiente (inclusive produção), para desligar os
+  avisos sem apagar as chaves. Não estava no pedido; ficou registrada na convergência.
 
 ## R6 — Navegador
 

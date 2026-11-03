@@ -764,12 +764,23 @@ def create_app():
         app.logger.warning(
             "[instagram] Direct desligado: faltam %s (painel do Render).", ", ".join(_instagram_faltando)
         )
-    # Feature 332 (XIV): sem o par VAPID, os avisos no celular ficam desligados.
-    _push_ligado = bool(app.config.get("WEB_PUSH_VAPID_PUBLICA") and app.config.get("WEB_PUSH_VAPID_PRIVADA"))
+    # Feature 332 (XIV): sem o par VAPID, ou com um par que não confere, os avisos no celular ficam
+    # desligados (`push_ops.chaves`).
+    from app.push.webpush import par_valido as _par_vapid_valido
+
+    _vapid_publica = (app.config.get("WEB_PUSH_VAPID_PUBLICA") or "").strip()
+    _vapid_privada = (app.config.get("WEB_PUSH_VAPID_PRIVADA") or "").strip()
+    _push_completo = bool(_vapid_publica and _vapid_privada)
+    _push_ligado = _push_completo and _par_vapid_valido(_vapid_publica, _vapid_privada)
     app.logger.info("[push] ligado=%s travado=%s", _push_ligado, app.config.get("WEB_PUSH_SUPPRESS"))
-    if not _push_ligado and not app.config.get("TESTING"):
+    if not _push_completo and not app.config.get("TESTING"):
         app.logger.warning(
             "[push] Avisos no celular desligados: faltam WEB_PUSH_VAPID_PUBLICA e WEB_PUSH_VAPID_PRIVADA."
+        )
+    elif _push_completo and not _push_ligado:
+        app.logger.warning(
+            "[push] Avisos no celular desligados: a WEB_PUSH_VAPID_PUBLICA não é a da WEB_PUSH_VAPID_PRIVADA "
+            "(cole novamente as duas linhas do `flask webpush-chaves`)."
         )
 
     from app.money import format_brl

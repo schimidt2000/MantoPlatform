@@ -1,6 +1,6 @@
-"""Web Push sem dependência nova: cifra RFC 8291 (``aes128gcm``) e assinatura VAPID RFC 8292 (feature 332).
+"""Web Push sem biblioteca de Web Push: cifra RFC 8291 (``aes128gcm``) e assinatura VAPID RFC 8292 (feature 332).
 
-Usa só o ``cryptography`` (já na casa) e o ``requests``. A cifra é provada no verify pelo vetor de teste
+Usa só o ``cryptography`` (fixado no ``requirements.txt``) e o ``requests``. A cifra é provada no verify pelo vetor de teste
 oficial do RFC 8291 (apêndice A): uma cifra errada não dá erro em lugar nenhum — o aviso simplesmente
 não aparece no celular —, então o vetor é a única prova de que ela está certa.
 
@@ -62,6 +62,26 @@ def _ponto(chave: ec.EllipticCurvePublicKey) -> bytes:
     return chave.public_bytes(
         serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint
     )
+
+
+def ponto_valido(p256dh: str) -> bool:
+    """A chave do aparelho é um ponto P-256 de verdade? 65 bytes que não estão na curva quebrariam a
+    cifra só na hora do aviso."""
+    try:
+        ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), b64_decodificar(p256dh))
+    except (ValueError, TypeError):
+        return False
+    return True
+
+
+def par_valido(publica: str, privada: str) -> bool:
+    """A chave pública é a da privada? Par colado errado no painel = todo aviso recusado (401/403)."""
+    try:
+        escalar = int.from_bytes(b64_decodificar(privada), "big")
+        derivada = ec.derive_private_key(escalar, ec.SECP256R1()).public_key()
+    except (ValueError, TypeError):
+        return False
+    return b64_codificar(_ponto(derivada)) == publica
 
 
 def gerar_chaves() -> tuple[str, str]:

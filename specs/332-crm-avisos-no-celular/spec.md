@@ -79,7 +79,7 @@ tocam no celular de quem os recebe.
 
 - **Ambiente local**: nada sai para o serviço de avisos (trava, como no e-mail e no WhatsApp).
 - **Chaves não configuradas**: o painel diz "Os avisos no celular ainda não foram configurados." e o botão não aparece.
-- **Permissão negada**: "O navegador bloqueou os avisos. Libere nas configurações do navegador e tente de novo." — o
+- **Permissão negada**: "O navegador bloqueou os avisos. Libere nas configurações do navegador e tente novamente." — o
   pedido não reaparece sozinho.
 - **Navegador sem suporte**: "Este navegador não recebe avisos." (por exemplo, iPhone com iOS anterior ao 16.4).
 - **Pessoa que perdeu o papel ou foi desativada**: os aparelhos dela não tocam mais (filtro no envio).
@@ -122,7 +122,9 @@ tocam no celular de quem os recebe.
 
 ## Verificação (`verify_332.py`) *(obrigatório — Princípio VIII)*
 
-Contra o `manto_local`, com disjuntor de rede e dublê do envio de aviso. Login pela API e limpeza no `finally`.
+Contra o `manto_local`, com disjuntor de rede e um serviço de avisos falso no lugar do `requests` do `webpush`: ele confere o
+token VAPID (assinatura, `aud`, `exp`, `sub`) e os cabeçalhos e decifra o corpo com a chave do aparelho de teste. Login
+pela API e limpeza no `finally`. A trava derivada do banco local é conferida antes de o verify liberar o envio.
 
 | # | Cenário | O que prova | Deve falhar? |
 |---|---|---|---|
@@ -131,17 +133,18 @@ Contra o `manto_local`, com disjuntor de rede e dublê do envio de aviso. Login 
 | 2 | Ana registra o aparelho | gravado para a Ana | não |
 | 3 | O mesmo aparelho registrado pela Bia | um registro só, agora da Bia | não |
 | 4 | Ana desativa | registro apagado | não |
-| 5 | Casting registra; registro sem chaves | 403; 422 | **sim** |
+| 5 | Casting registra; registro sem chaves, sem https, fora dos serviços de aviso ou com ponto fora da curva; aparelho do Casting gravado à força | 403; 422; não toca | **sim** |
 | 6 | Mensagem nova do WhatsApp sem responsável | aviso para Ana e Bia, título, corpo e link | não |
 | 7 | Mensagem nova numa conversa da Ana | aviso só para a Ana | não |
-| 8 | Eco, reação e reenvio | nenhum aviso | não |
-| 9 | Mensagem do Instagram | aviso com o nome do perfil | não |
-| 10 | Serviço responde 410 | registro apagado | não |
-| 11 | Alerta de 15 min | aviso para quem recebeu no sino | não |
+| 8 | Eco, reação e reenvio (WhatsApp e Instagram) | nenhum aviso; eco e reação gravados | não |
+| 9 | Mensagem do Instagram; toque em botão (Instagram e WhatsApp); reação depois | nome do perfil; o botão toca; o corpo segue a última mensagem da cliente | não |
+| 10 | Serviço responde 410 e 500; aparelho com chave inválida | 410 apaga; 500 e o inválido ficam e não cortam a entrega dos outros; `ultimo_aviso_em` | não |
+| 11 | Alerta de 15 min com e sem responsável | o responsável; sem ele, a equipe | não |
 | 12 | Transferência para a Bia | aviso para a Bia | não |
-| 13 | Ambiente travado | nada sai | **sim** |
+| 13 | Ambiente travado | nada sai; o registro funciona | **sim** |
 | 14 | Sem chaves | `ligado: false`; registro 503 | **sim** |
-| 15 | Limpeza | registros e usuários de teste apagados | — |
+| 15 | Entrega pela thread (caminho de produção) | o aviso chega sem o modo síncrono | não |
+| 16 | Limpeza | registros e usuários de teste apagados | — |
 
 Conferência de tela: o painel "Avisos no celular" em desktop e 375×812 (no Browser pane a permissão pode ser negada:
 conferir o texto), o manifesto e o service worker servidos.

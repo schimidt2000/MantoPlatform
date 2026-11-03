@@ -8,17 +8,17 @@
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_332.py` verde (e 325/328/330), com conexão separada e os cenários que falham
-- [ ] CHK004 Tela aberta de verdade, em desktop e em 375×812
-- [ ] CHK005 Migration manual criada e aplicada no `manto_local`
-- [ ] CHK006 `scripts/validar_startcommand.py` — não se aplica
-- [ ] CHK007 Gate de RBAC em todo endpoint novo e linha em `docs/01` §4.3
-- [ ] CHK008 Docs por fonte única
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo revisado pelo Princípio XV
-- [ ] CHK011 Antes de "em produção": git limpo, `docs/03` batendo, sonda `/api/`
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo (os I001 de `app/__init__.py` e o `error_count` de `app/cli.py` são anteriores)
+- [x] CHK003 `verify_332.py` verde, 17/17 (e 325 22/22, 328 24/24, 330 29/29), com conexão separada, os cenários que falham e uma mutação do token VAPID pega
+- [x] CHK004 Tela aberta de verdade, em desktop e em 375×812 (o Browser pane nega a permissão e não registra service worker: o `sw.js` foi provado por harness)
+- [x] CHK005 Migration manual criada e aplicada no `manto_local` (downgrade ensaiado)
+- [x] CHK006 `scripts/validar_startcommand.py` — não se aplica (sem mudança no `startCommand`)
+- [x] CHK007 Gate de RBAC em todo endpoint novo e linha em `docs/01` §4.3
+- [x] CHK008 Docs por fonte única (`docs/01`, `02`, `03`, `04`, `05`, plano)
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps (17 achados de um revisor independente, fechados em T017–T033)
+- [x] CHK010 Texto novo revisado pelo Princípio XV ("tente novamente", pela convergência)
+- [x] CHK011 Antes de "em produção": git limpo, `docs/03` batendo, sonda `/api/` — **não publicado** (o dono adiou o push; `docs/03` marca NÃO PUBLICADO)
 
 ## Destino e ruído
 

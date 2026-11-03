@@ -17,7 +17,8 @@ O envio usa a cifra própria (RFC 8291) com VAPID, fica travado no ambiente loca
 ## Contexto técnico
 
 - **Linguagem**: Python 3.11 (Flask + SQLAlchemy); TypeScript + React 18 (Vite).
-- **Dependência nova**: nenhuma. A cifra e o VAPID usam o `cryptography` e o `requests` (R1), provados pelo vetor
+- **Dependência nova**: nenhuma biblioteca de Web Push. A cifra e o VAPID usam o `cryptography` (fixado no
+  `requirements.txt`, a mesma versão da 329) e o `requests` (R1), provados pelo vetor
   do RFC 8291.
 - **Armazenamento**: 1 tabela ([data-model.md](data-model.md)).
 - **Verificação**: `verify_332.py` com dublê do `webpush`; os verifies 325, 328 e 330 continuam verdes.
@@ -40,7 +41,7 @@ O envio usa a cifra própria (RFC 8291) com VAPID, fica travado no ambiente loca
 | XIII | `pode_conversas` em todo endpoint novo; linha em `docs/01` §4.3. |
 | XIV | Chaves VAPID vazias = desligado, com aviso na subida. `_suppress_push()` trava o local. O contato tem default real. |
 | XV | Textos internos com o glossário ("Ativar avisos", "Desativar", "Avisos no celular"). |
-| Stack | Migration à mão, aditiva, sobre `a330c4e8f1b2`. Sem dependência nova. |
+| Stack | Migration à mão, aditiva, sobre `a330c4e8f1b2`. `cryptography==46.0.7` fixado (o mesmo da 329). |
 
 **Resultado**: ✅ sem violação.
 

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
+import { desativarAoSair } from "./avisos";
 import type { AuthUser } from "./types";
 
 export const ME_KEY = ["auth", "me"] as const;
@@ -58,7 +59,11 @@ export function useLogin() {
 export function useLogout() {
   const queryClient = useQueryClient();
   return useMutation<void, Error, void>({
-    mutationFn: () => apiFetch<void>("/api/auth/logout", { method: "POST" }),
+    mutationFn: async () => {
+      // Antes do logout: o DELETE do aparelho precisa da sessão (feature 332).
+      await desativarAoSair();
+      return apiFetch<void>("/api/auth/logout", { method: "POST" });
+    },
     onSuccess: () => {
       queryClient.setQueryData(ME_KEY, null);
     },

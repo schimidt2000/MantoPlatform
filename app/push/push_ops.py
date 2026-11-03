@@ -1,11 +1,12 @@
 """Os aparelhos com aviso no celular e a entrega do aviso (feature 332).
 
 Camada de baixo: daqui só se registra o aparelho e se entrega o aviso. Quem decide O QUE avisar e
-PARA QUEM são `conversas.avisos_ops` (mensagem nova) e `conversas.equipe_ops` (alerta e
-transferência), e eles chamam ``despachar`` sempre depois do próprio commit (FR-006).
+PARA QUEM são `conversas.celular_ops` (mensagem nova) e `conversas.equipe_ops` (alerta e
+transferência), e eles chamam ``despachar``/``despachar_varios`` sempre depois do próprio commit
+(FR-006).
 
-A entrega roda numa thread própria: é chamada externa (Google/Apple/Mozilla/Microsoft) e não pode
-atrasar o webhook nem a tela. Aviso que se perde num deploy não volta — o sino e a lista continuam
+A entrega roda numa thread por rodada: é chamada externa (Google/Apple/Mozilla/Microsoft) e não
+pode atrasar o webhook nem a tela, nem segurar conexão do banco enquanto espera a rede. Aviso que se perde num deploy não volta — o sino e a lista continuam
 valendo (spec, casos de borda). ``WEB_PUSH_SINCRONO`` entrega na hora, para o verify.
 """
 
@@ -15,6 +16,7 @@ import logging
 import threading
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -48,12 +50,21 @@ class Aviso:
         return dados
 
 
+@lru_cache(maxsize=4)
+def _par_confere(publica: str, privada: str) -> bool:
+    return webpush.par_valido(publica, privada)
+
+
 def chaves() -> webpush.ChavesVapid | None:
-    """O par VAPID da Plataforma, ou ``None`` = recurso desligado (FR-009, Princípio XIV)."""
+    """O par VAPID da Plataforma, ou ``None`` = recurso desligado (FR-009, Princípio XIV).
+
+    Par que não confere (pública que não é da privada, texto truncado no painel) também desliga:
+    ligado, todo aviso seria recusado pelo serviço e só sobraria um aviso no log.
+    """
     cfg = current_app.config
     publica = (cfg.get("WEB_PUSH_VAPID_PUBLICA") or "").strip()
     privada = (cfg.get("WEB_PUSH_VAPID_PRIVADA") or "").strip()
-    if not publica or not privada:
+    if not publica or not privada or not _par_confere(publica, privada):
         return None
     contato = (cfg.get("WEB_PUSH_CONTATO") or "").strip() or "mailto:contato@mantoproducoes.com.br"
     return webpush.ChavesVapid(publica=publica, privada=privada, contato=contato)
@@ -95,8 +106,9 @@ def _aparelho_valido(dados: Any) -> tuple[str, str, str]:
         isinstance(endpoint, str)
         and len(endpoint) <= K.ENDPOINT_MAXIMO
         and _servico_conhecido(endpoint)
-        # p256dh é um ponto P-256 sem compressão (65 bytes); auth, 16 bytes (RFC 8291 §3).
+        # p256dh é um ponto P-256 sem compressão (65 bytes) e na curva; auth, 16 bytes (RFC 8291 §3).
         and _chave_valida(p256dh, 65, 255)
+        and webpush.ponto_valido(p256dh)
         and _chave_valida(auth, 16, 64)
     )
     if not ok:
@@ -146,83 +158,136 @@ def remover(user_id: int, endpoint: Any) -> None:
 
 # ── Entrega (Histórias 2 e 3) ────────────────────────────────────────────────────────────────────
 
+Lote = tuple[Iterable[int], Aviso]
+
 
 def despachar(user_ids: Iterable[int], aviso: Aviso) -> None:
-    """Entrega o aviso nos aparelhos dessas pessoas, fora do caminho de quem chamou. Nunca levanta.
+    """Um aviso só; ver ``despachar_varios``."""
+    despachar_varios([(user_ids, aviso)])
 
-    Chamar DEPOIS do commit do fato (FR-006): o aviso de algo que deu rollback não pode tocar.
+
+def despachar_varios(lotes: Iterable[Lote]) -> None:
+    """Entrega os avisos de uma rodada numa thread só, fora do caminho de quem chamou. Nunca levanta.
+
+    Chamar DEPOIS do commit do fato (FR-006): o aviso de algo que deu rollback não pode tocar. Uma
+    thread por rodada, não por aviso: às 9h o alerta da espera chega em lote, e cada thread presa num
+    serviço de avisos lento seguraria uma conexão do pool.
     """
-    ids = sorted({int(uid) for uid in user_ids if uid is not None})
-    if not ids:
-        return
-    if _parado():  # travado ou sem chaves: nada sai, nem vale abrir a thread
-        logger.info("[push] travado ou desligado: %s não saiu", aviso.tag)
-        return
-    if current_app.config.get("WEB_PUSH_SINCRONO"):
-        entregar(ids, aviso)
-        return
-    app = current_app._get_current_object()  # noqa: SLF001 — a thread precisa do app real
-    threading.Thread(target=_entregar_em_segundo_plano, args=(app, ids, aviso), daemon=True).start()
+    try:
+        pedidos = [
+            (sorted({int(uid) for uid in ids if uid is not None}), aviso) for ids, aviso in lotes
+        ]
+        pedidos = [(ids, aviso) for ids, aviso in pedidos if ids]
+        if not pedidos:
+            return
+        if _parado():  # travado ou sem chaves: nada sai, nem vale abrir a thread
+            logger.info("[push] travado ou desligado: %s não saiu", [a.tag for _, a in pedidos])
+            return
+        if current_app.config.get("WEB_PUSH_SINCRONO"):
+            entregar_lotes(pedidos)
+            return
+        app = current_app._get_current_object()  # noqa: SLF001 — a thread precisa do app real
+        threading.Thread(
+            target=_entregar_em_segundo_plano, args=(app, pedidos), daemon=True
+        ).start()
+    except Exception:  # noqa: BLE001 — o aviso nunca derruba quem chamou (a transferência já gravou)
+        logger.exception("[push] falha ao despachar")
 
 
 def _parado() -> bool:
     return bool(current_app.config.get("WEB_PUSH_SUPPRESS")) or chaves() is None
 
 
-def _entregar_em_segundo_plano(app: Any, ids: list[int], aviso: Aviso) -> None:
+def _entregar_em_segundo_plano(app: Any, pedidos: list[tuple[list[int], Aviso]]) -> None:
     with app.app_context():
         try:
-            entregar(ids, aviso)
+            entregar_lotes(pedidos)
         finally:
             db.session.remove()
 
 
 def entregar(user_ids: list[int], aviso: Aviso) -> int:
-    """Entrega agora e devolve em quantos aparelhos o serviço aceitou. Nunca levanta (FR-006)."""
+    """Um aviso, agora; ver ``entregar_lotes``."""
+    return entregar_lotes([(user_ids, aviso)])
+
+
+def entregar_lotes(pedidos: list[tuple[list[int], Aviso]]) -> int:
+    """Entrega agora e devolve quantas entregas o serviço aceitou. Nunca levanta (FR-006)."""
     try:
-        return _entregar(user_ids, aviso)
+        return _entregar(pedidos)
     except Exception:  # noqa: BLE001 — o aviso nunca derruba quem chamou
         db.session.rollback()
-        logger.exception("[push] falha ao entregar %s", aviso.tag)
+        logger.exception("[push] falha ao entregar %s", [a.tag for _, a in pedidos])
         return 0
 
 
-def _entregar(user_ids: list[int], aviso: Aviso) -> int:
+def _aparelhos(user_ids: list[int]) -> list[dict[str, Any]]:
+    """Os aparelhos de quem ainda é da equipe, como dados simples (sem objeto preso à sessão).
+
+    Filtro no envio: quem perdeu o papel ou foi desativado não recebe, mesmo com aparelho.
+    """
+    equipe = [u.id for u in User.query.filter(User.id.in_(user_ids)).all() if e_da_equipe(u)]
+    if not equipe:
+        return []
+    return [
+        {
+            "id": a.id,
+            "user_id": a.user_id,
+            "endpoint": a.endpoint,
+            "p256dh": a.p256dh,
+            "auth": a.auth,
+        }
+        for a in PushAssinatura.query.filter(PushAssinatura.user_id.in_(equipe)).all()
+    ]
+
+
+def _entregar(pedidos: list[tuple[list[int], Aviso]]) -> int:
     if current_app.config.get("WEB_PUSH_SUPPRESS"):
-        logger.info("[push] travado: %s não saiu (ambiente local)", aviso.tag)
+        logger.info("[push] travado: %s não saiu (ambiente local)", [a.tag for _, a in pedidos])
         return 0
     par = chaves()
     if par is None:
         return 0
-    # Filtro no envio: quem perdeu o papel ou foi desativado não recebe, mesmo com aparelho.
-    equipe = [u.id for u in User.query.filter(User.id.in_(user_ids)).all() if e_da_equipe(u)]
-    if not equipe:
-        return 0
-    aparelhos = PushAssinatura.query.filter(PushAssinatura.user_id.in_(equipe)).all()
-    corpo = aviso.para_o_aparelho()
-    entregues = 0
-    for aparelho in aparelhos:
-        destino = {"endpoint": aparelho.endpoint, "p256dh": aparelho.p256dh, "auth": aparelho.auth}
+    plano = [(aparelho, aviso) for ids, aviso in pedidos for aparelho in _aparelhos(ids)]
+    # Devolve a conexão ao pool antes da rede: um serviço lento não pode prender o banco.
+    db.session.commit()
+    entregues: set[int] = set()
+    sumidos: set[int] = set()
+    vezes = 0
+    for aparelho, aviso in plano:
+        if aparelho["id"] in sumidos:
+            continue
         try:
-            webpush.enviar(destino, corpo, par, ttl=K.TTL_S, urgencia=aviso.urgencia)
+            webpush.enviar(
+                aparelho, aviso.para_o_aparelho(), par, ttl=K.TTL_S, urgencia=aviso.urgencia
+            )
         except webpush.AparelhoSumiu as exc:
             logger.info(
                 "[push] aparelho %s de user %s sumiu (%s): apagado",
-                aparelho.id,
-                aparelho.user_id,
+                aparelho["id"],
+                aparelho["user_id"],
                 exc,
             )
-            db.session.delete(aparelho)
+            sumidos.add(aparelho["id"])
             continue
-        except webpush.AvisoFalhou as exc:
+        except Exception as exc:  # noqa: BLE001 — um aparelho ruim não corta a entrega dos outros
             logger.warning(
                 "[push] aviso %s não entregue no aparelho %s: %s",
                 aviso.tag,
-                aparelho.id,
+                aparelho["id"],
                 str(exc)[: K.ERRO_MAXIMO],
             )
             continue
-        aparelho.ultimo_aviso_em = agora_utc()
-        entregues += 1
+        entregues.add(aparelho["id"])
+        vezes += 1
+    # Transação curta, depois da rede.
+    if sumidos:
+        PushAssinatura.query.filter(PushAssinatura.id.in_(sumidos)).delete(
+            synchronize_session=False
+        )
+    if entregues - sumidos:
+        PushAssinatura.query.filter(PushAssinatura.id.in_(entregues - sumidos)).update(
+            {"ultimo_aviso_em": agora_utc()}, synchronize_session=False
+        )
     db.session.commit()
-    return entregues
+    return vezes
