@@ -46,7 +46,7 @@ function produtoNovo(): ProdutoDeTabela {
 function rotuloDoCampo(campo: string, faixas: Record<string, FaixaEspecial>): string {
   if (campo === "preco") return "Preço";
   if (campo === "produto") return "Produto";
-  if (campo === "rotulo") return "Rótulo";
+  if (campo === "rotulo") return "Nome";
   if (campo === "descricao") return "Descrição";
   if (campo === "detalhes") return "O que inclui";
   if (campo === "vagas") return "Vagas";
@@ -134,17 +134,16 @@ export function ProdutosConfigCard({
   const classeDe = (invalido: boolean) => `${INPUT_PRECOS}${invalido ? " border-red ring-1 ring-red" : ""}`;
 
   return (
-    <Card ref={raiz} className="xl:col-span-2">
-      <CardHeader>
-        <CardTitle>Produtos de tabela</CardTitle>
+    <Card ref={raiz}>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Pacotes</CardTitle>
         <p className="text-xs text-muted">
-          Pacote fechado vendido pelo preço da tabela (fixo por visita, fora do markup). Os cachês das
-          vagas são os da tabela de preços na data do evento — é o que vira o teto das vagas quando o
-          orçamento vira evento. Produto inativo some da calculadora, mas orçamentos antigos continuam
-          recalculando.
+          O preço é fixo por visita e não passa pelo markup. O cachê de cada vaga sai da tabela de
+          preços na data do evento e vira o teto da vaga quando o orçamento vira evento. Produto
+          inativo some da calculadora, mas orçamentos antigos continuam recalculando.
         </p>
       </CardHeader>
-      <CardContent className="space-y-4 p-3">
+      <CardContent className="space-y-4">
         {avisos.length > 0 && (
           <ul className="rounded-md border border-gold/40 bg-gold-soft p-3 text-xs text-ink" role="status">
             {avisos.map((a) => (
@@ -165,13 +164,14 @@ export function ProdutosConfigCard({
             .filter(([k]) => k === `produtos.${chave}` || k.startsWith(`produtos.${chave}.`))
             .map(([k, msg]) => [k === `produtos.${chave}` ? "produto" : k.replace(`produtos.${chave}.`, ""), msg] as const);
           return (
-            <div key={chave} className="space-y-3 rounded-md border border-line p-3">
+            <div key={chave} className="space-y-4 rounded-md border border-line p-4">
               <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="flex-1">
-                  <label className={LABEL}>
-                    Rótulo <span className="font-normal">(chave: {chave})</span>
+                <div className="min-w-[200px] flex-1">
+                  <label htmlFor={`produto-${chave}-nome`} className={LABEL}>
+                    Nome do produto <span className="font-normal">(chave interna: {chave})</span>
                   </label>
                   <input
+                    id={`produto-${chave}-nome`}
                     className={classeDe(!!erro("rotulo"))}
                     aria-invalid={erro("rotulo") ? true : undefined}
                     maxLength={ROTULO_MAX}
@@ -186,7 +186,7 @@ export function ProdutosConfigCard({
                       checked={produto.ativo}
                       onChange={(e) => setProduto(chave, { ativo: e.target.checked })}
                     />
-                    Ativo
+                    Ativo na calculadora
                   </label>
                   <Button size="sm" variant="ghost" onClick={() => setRemocao({ chave })}>
                     Remover produto
@@ -195,8 +195,11 @@ export function ProdutosConfigCard({
               </div>
 
               <div>
-                <label className={LABEL}>Descrição ao cliente (vai na mensagem e no PDF, até {DESCRICAO_MAX})</label>
+                <label htmlFor={`produto-${chave}-descricao`} className={LABEL}>
+                  Descrição para a cliente (na mensagem e no PDF, até {DESCRICAO_MAX} caracteres)
+                </label>
                 <input
+                  id={`produto-${chave}-descricao`}
                   className={classeDe(!!erro("descricao"))}
                   aria-invalid={erro("descricao") ? true : undefined}
                   maxLength={DESCRICAO_MAX}
@@ -206,10 +209,11 @@ export function ProdutosConfigCard({
               </div>
 
               <div>
-                <label className={LABEL}>
-                  O que inclui (vai em itálico logo abaixo do preço, na mensagem e no PDF, até {DETALHES_MAX})
+                <label htmlFor={`produto-${chave}-detalhes`} className={LABEL}>
+                  O que inclui (em itálico abaixo do preço, na mensagem e no PDF, até {DETALHES_MAX} caracteres)
                 </label>
                 <textarea
+                  id={`produto-${chave}-detalhes`}
                   // `h-auto py-1.5`: o h-9 do INPUT_PRECOS cortaria o texto em uma linha e meia.
                   className={`${classeDe(!!erro("detalhes"))} h-auto py-1.5`}
                   aria-invalid={erro("detalhes") ? true : undefined}
@@ -251,7 +255,9 @@ export function ProdutosConfigCard({
                         }}
                       />
                       {preco <= 0 && (
-                        <p className="mt-1 text-xs text-muted">vazio = estimativa na data (cachês × fator × markup)</p>
+                        <p className="mt-1 text-xs text-muted">
+                          Sem preço: a calculadora estima pelos cachês e marca o orçamento como estimativa.
+                        </p>
                       )}
                     </div>
                   );
@@ -259,7 +265,9 @@ export function ProdutosConfigCard({
               </div>
 
               <div>
-                <label className={LABEL}>Vagas (composição) — o cachê "pela tabela" é resolvido na data do evento</label>
+                <p className={LABEL}>
+                  Vagas do elenco — "cachê pela tabela" usa o valor da tabela de preços na data do evento
+                </p>
                 <div className="space-y-2">
                   {produto.vagas.map((vaga, i) => {
                     const fixo = LABEL_FIXO[vaga.tipo];
@@ -270,7 +278,7 @@ export function ProdutosConfigCard({
                         key={i}
                         className="flex flex-wrap items-center gap-2 rounded-md bg-surface-2 p-2 text-xs"
                       >
-                        <div className="flex gap-1">
+                        <div className="flex flex-wrap gap-1">
                           {TIPOS.map((t) => (
                             <Button
                               key={t.tipo}
@@ -303,7 +311,7 @@ export function ProdutosConfigCard({
                             checked={vaga.cache == null}
                             onChange={(e) => setVaga(chave, i, { cache: e.target.checked ? null : 0 })}
                           />
-                          cachê pela tabela
+                          Cachê pela tabela
                         </label>
                         {vaga.cache != null && (
                           <MoneyInput
@@ -321,7 +329,7 @@ export function ProdutosConfigCard({
                               checked={vaga.needs_makeup}
                               onChange={(e) => setVaga(chave, i, { needs_makeup: e.target.checked })}
                             />
-                            maquiagem
+                            Com maquiagem
                           </label>
                         )}
                         <Button
@@ -330,7 +338,7 @@ export function ProdutosConfigCard({
                           aria-label={`Remover vaga ${i + 1}`}
                           onClick={() => setRemocao({ chave, vaga: i })}
                         >
-                          ×
+                          Remover vaga
                         </Button>
                         {semTabela && (
                           <p className="w-full text-gold-ink">
@@ -352,7 +360,7 @@ export function ProdutosConfigCard({
                     })
                   }
                 >
-                  + Vaga
+                  + Adicionar vaga
                 </Button>
               </div>
 
@@ -362,7 +370,7 @@ export function ProdutosConfigCard({
                   checked={produto.inclui_noturno}
                   onChange={(e) => setProduto(chave, { inclui_noturno: e.target.checked })}
                 />
-                Noturno embutido no preço (não soma R$ 50 por pessoa do produto a partir das 19h)
+                Adicional noturno já incluído no preço (não soma R$ 50 por pessoa do produto a partir das 19h)
               </label>
 
               {errosDoProduto.length > 0 && (
@@ -380,8 +388,11 @@ export function ProdutosConfigCard({
 
         <div className="flex flex-wrap items-end gap-2">
           <div>
-            <label className={LABEL}>Novo produto (chave interna, ex.: visita_magica_duende)</label>
+            <label htmlFor="produto-nova-chave" className={LABEL}>
+              Novo produto — chave interna (Ex.: visita_magica_duende)
+            </label>
             <input
+              id="produto-nova-chave"
               className={`${INPUT_PRECOS} w-64${erroChaveLocal ? " border-red ring-1 ring-red" : ""}`}
               aria-invalid={erroChaveLocal ? true : undefined}
               placeholder="chave_do_produto"
@@ -402,15 +413,15 @@ export function ProdutosConfigCard({
         </div>
 
         <div className="rounded-md border border-line p-3">
-          <p className="mb-2 text-xs font-semibold text-ink">Estimativa (produto sem preço numa data especial)</p>
+          <p className="mb-2 text-sm font-semibold text-ink">Estimativa para produto sem preço numa data especial</p>
           {erros.produtos_estimativa && (
             <p className="mb-2 text-xs text-red" role="alert">
               {erros.produtos_estimativa}
             </p>
           )}
           <p className="mb-2 text-xs text-muted">
-            Preço estimado = Σ cachês das vagas na data × fator × markup. O orçamento sai marcado
-            "estimativa" para a vendedora conferir.
+            Preço estimado = soma dos cachês das vagas × fator × markup. O orçamento sai marcado como
+            estimativa para a vendedora conferir.
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <div>

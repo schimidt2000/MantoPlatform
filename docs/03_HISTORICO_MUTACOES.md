@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **324-config-precos-legivel** | Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
 | **239c-coordenador-pre-escalado-com-orcamento** | Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
@@ -391,6 +392,33 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 324 — Configuração de Preços legível   (324-config-precos-legivel · 2026-10-30 · sem migration)
+
+> Nível 2 (só tela, um domínio). Detalhe: `specs/324-config-precos-legivel/spec.md`.
+
+**O pedido.** O dono (30/10): a página "está toda meio mal formatada e mal escrita" e "difícil de entender o que é
+o quê"; mudar só a visualização. Perguntou se o casting a vê: **não** — menu e API (`_require_superadmin()` em
+`orcamento_read.py`/`orcamento_write.py`) são só do Superadmin.
+
+**O que mudou.** `OrcamentoConfigPrecosPage.tsx` reescrita em oito seções com título e frase explicativa, cartão
+"Como a calculadora monta o preço", atalhos por seção e "Salvar configurações" numa barra fixa. Chaves técnicas
+(`cara_limpa|true|false`, `afsp_divisor`, `ashow_min_km`, variantes `false/true/none/show/cantor`) viram rótulos
+com explicação e exemplo. O caminhão de cenografia (`transporte.caminhao_sp`) aparece na seção EducaManto, onde é
+usado. `PriceTable` ganhou `hint`/`key`/`acao`; "Remover" (especial) e "Tirar" (cachê próprio da data especial) vão
+para a linha com `ConfirmDialog`. `DatasEspeciaisCard` e `ProdutosConfigCard`: textos (Princípio XV), `htmlFor`,
+botões de tipo da vaga com `flex-wrap`.
+
+**Pegadinhas.** (1) O `sr-only` do cabeçalho "Ações" é `position:absolute`; sem `relative` no `th` ele escapa do
+`overflow-x-auto` da tabela e alargou a página para 691px num celular de 375. (2) Em `xl` (1280 − 256 de menu) duas
+colunas de tabela de quatro durações estouram o cartão; a grade de duas colunas ficou para `2xl`.
+
+**Achado fora do escopo.** "Adicionar personagem" grava na hora e troca a tabela da tela pela do servidor,
+descartando alterações não salvas (comportamento de antes). A tela agora avisa; corrigir é outra entrada.
+
+**Verificação.** Sem verify (backend intocado). Browser pane contra o `manto_local`: salvar sem mudar nada deixa
+`GET /api/orcamento/settings` idêntico; dois campos de transporte alterados gravam nas chaves certas e voltam;
+diálogo de remoção cancela sem chamar a API; sem rolagem horizontal a 320/375/1440px. `npm run typecheck` limpo.
 
 ### 239c — O coordenador escolhido na criação vale também com orçamento   (239c-coordenador-pre-escalado-com-orcamento · 2026-10-30 · sem migration)
 
