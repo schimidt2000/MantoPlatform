@@ -4,7 +4,16 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-10-29** · Estado do repositório: pós-**deploy em lote de 29/10/2026 (~03h35)**, a
+> Última atualização: **2026-11-03** · Estado do repositório: pós-**deploy em lote de 03/11/2026 (~20h)**, a
+> pedido do dono, fora do horário, num push só, na ordem dos merges, todos sem migration:
+> **239c-coordenador-pre-escalado-com-orcamento** (o coordenador escolhido na criação vale também com orçamento;
+> `verify_239c.py` 7/7), **324-config-precos-legivel** (Configuração de Preços legível, só tela),
+> **326-novo-evento-cliente-e-orcamento** (Novo evento: nome da cliente fica, telefone com máscara, bloco Orçamento;
+> data de nascimento certa na ficha do talento; `verify_326.py` 6/6), **327-cliente-para-coordenador** (o
+> coordenador vê a cliente no portal depois de aceitar; `verify_327.py` 14/14) e **331-atrasados-na-planilha** (o
+> que ficou em aberto vem para o mês atual da Planilha de Pagamentos; `verify_331.py` 10/10; dívidas 186–188).
+> Ficam fora, a pedido do dono: o CRM próprio (325, 328, 330, 332) e a NFS-e (329) — antes dele pós-**deploy em
+> lote de 29/10/2026 (~03h35)**, a
 > pedido do dono, fora do horário, num push só, na ordem dos merges: **309b-visita-magica-30-minutos** (sem migration;
 > a Visita Mágica no orçamento diz "visita de até 30 minutos" e o que inclui; `verify_309b.py` 10/10),
 > **323-nota-pedida-ao-superadmin** (migration `d323b5a1c0e7`, aditiva, sobre `c322a7e1b9d4`; o chip "Precisa de
@@ -192,11 +201,11 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **331-atrasados-na-planilha** | *(na branch, aguardando o merge a pedido do dono)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
-| **327-cliente-para-coordenador** | O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
-| **326-novo-evento-cliente-e-orcamento** | *(pronta na branch, não publicada)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
-| **324-config-precos-legivel** | Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
-| **239c-coordenador-pre-escalado-com-orcamento** | Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
+| **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
+| **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
+| **326-novo-evento-cliente-e-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
+| **324-config-precos-legivel** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
+| **239c-coordenador-pre-escalado-com-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -398,7 +407,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 331 — O que ficou em aberto vem para o mês atual da Planilha de Pagamentos   (331-atrasados-na-planilha · 2026-11-03 · sem migration)
 
-> Na branch, aguardando o merge a pedido do dono. Nível 2 (Financeiro, sem migration). Detalhe:
+> **EM PRODUÇÃO desde 03/11/2026 ~20h (deploy em lote)**. Nível 2 (Financeiro, sem migration). Detalhe:
 > `specs/331-atrasados-na-planilha/spec.md`.
 
 **O pedido.** O dono (03/11): a planilha é por mês, mas o evento do dia 30 só se paga no mês seguinte, e há
@@ -443,7 +452,7 @@ de abril se paga no repasse de 05/05, que é da planilha de maio.
 
 ### 327 — O coordenador vê o nome da cliente depois de aceitar   (327-cliente-para-coordenador · 2026-11-03 · sem migration)
 
-> Nível 2 (ajuste num domínio, sem migration). Detalhe: `specs/327-cliente-para-coordenador/spec.md`.
+> **EM PRODUÇÃO desde 03/11/2026 ~20h (deploy em lote)**. Nível 2 (ajuste num domínio, sem migration). Detalhe: `specs/327-cliente-para-coordenador/spec.md`.
 
 **O pedido.** O dono (03/11): "Preciso mostrar apenas o nome do contratante para os coordenadores do evento. Após
 aceitarem eles têm essa informação lá." Até aqui o portal não mostrava nada da cliente a ninguém.
@@ -471,7 +480,7 @@ eventos já no mapa de identidade sem SQL a mais por evento (cenário 13 mede); 
 
 ### 326 — Novo evento: o nome da cliente fica, o telefone tem máscara e o orçamento se vincula na tela   (326-novo-evento-cliente-e-orcamento · 2026-10-30 · sem migration)
 
-> **Pronta na branch, não publicada.** Nível 2 (só o app interno; nenhum endpoint novo nem alterado). Detalhe:
+> **EM PRODUÇÃO desde 03/11/2026 ~20h (deploy em lote)**. Nível 2 (só o app interno; nenhum endpoint novo nem alterado). Detalhe:
 > `specs/326-novo-evento-cliente-e-orcamento/spec.md`.
 
 **O pedido.** O dono, criando um evento em 30/10: o nome digitado na busca de cliente sumia ao clicar em "Cadastrar
@@ -518,7 +527,7 @@ digitados preservados, elenco juntado, troca, recusa do ocupado, desvincular e a
 
 ### 324 — Configuração de Preços legível   (324-config-precos-legivel · 2026-10-30 · sem migration)
 
-> Nível 2 (só tela, um domínio). Detalhe: `specs/324-config-precos-legivel/spec.md`.
+> **EM PRODUÇÃO desde 03/11/2026 ~20h (deploy em lote)**. Nível 2 (só tela, um domínio). Detalhe: `specs/324-config-precos-legivel/spec.md`.
 
 **O pedido.** O dono (30/10): a página "está toda meio mal formatada e mal escrita" e "difícil de entender o que é
 o quê"; mudar só a visualização. Perguntou se o casting a vê: **não** — menu e API (`_require_superadmin()` em
@@ -545,7 +554,7 @@ diálogo de remoção cancela sem chamar a API; sem rolagem horizontal a 320/375
 
 ### 239c — O coordenador escolhido na criação vale também com orçamento   (239c-coordenador-pre-escalado-com-orcamento · 2026-10-30 · sem migration)
 
-> Nível 2 (hotfix da 239). Detalhe: `specs/239c-coordenador-pre-escalado-com-orcamento/spec.md`.
+> **EM PRODUÇÃO desde 03/11/2026 ~20h (deploy em lote)**. Nível 2 (hotfix da 239). Detalhe: `specs/239c-coordenador-pre-escalado-com-orcamento/spec.md`.
 
 **O pedido.** O dono (30/10): a Thays vendeu o evento 1432 (`(R&I) MICKEY - TRADICIONAL`, 20/12) com a Miminha
 como coordenadora pré-escalada, e o evento nasceu com a vaga aberta.
