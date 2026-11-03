@@ -21,8 +21,8 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
+from app.conversas import celular_ops, equipe_ops
 from app.conversas import constantes as K
-from app.conversas import equipe_ops
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.relogio import agora_utc
 from app.conversas.telefone import so_digitos, telefone_com_nono, variantes_de_telefone
@@ -125,8 +125,11 @@ def processar_aviso(aviso_id: int, cfg: CfgWhatsapp) -> str:
     except ValueError:
         _fechar(aviso_id, K.AVISO_DESCARTADO, "corpo não é JSON")
         return K.AVISO_DESCARTADO
+    # As conversas que ganharam mensagem da cliente neste aviso: tocam no celular depois do commit
+    # (feature 332). Eco, reação e reenvio não entram.
+    chegadas: set[int] = set()
     try:
-        midias, perfis = _processar_corpo(corpo, cfg)
+        midias, perfis = _processar_corpo(corpo, cfg, chegadas)
         db.session.commit()
     except MensagemAindaNaoGravada as exc:
         db.session.rollback()
@@ -136,13 +139,18 @@ def processar_aviso(aviso_id: int, cfg: CfgWhatsapp) -> str:
         logger.warning("[whatsapp] aviso %s falhou no processamento: %s", aviso_id, exc)
         return _devolver(aviso_id, f"{type(exc).__name__}: {exc}")
     _fechar(aviso_id, K.AVISO_PROCESSADO)
-    _baixar_midias(midias, cfg)
+    # O perfil antes do aviso no celular (o título é o nome); a mídia, que pode levar minutos, por
+    # último (SC-001 da 332: o celular toca em até 10 s).
     if perfis:
         _atualizar_perfis(perfis)
+    celular_ops.avisar_mensagens(chegadas)
+    _baixar_midias(midias, cfg)
     return K.AVISO_PROCESSADO
 
 
-def _processar_corpo(corpo: Any, cfg: CfgWhatsapp) -> tuple[list[int], list[int]]:
+def _processar_corpo(
+    corpo: Any, cfg: CfgWhatsapp, chegadas: set[int]
+) -> tuple[list[int], list[int]]:
     """(mídias a baixar, conversas do Instagram cujo perfil buscar), pelo ``object`` do aviso.
 
     O Instagram (feature 330) entra pela mesma fila, claim e varredura; import tardio porque
@@ -152,10 +160,10 @@ def _processar_corpo(corpo: Any, cfg: CfgWhatsapp) -> tuple[list[int], list[int]
         from app.conversas import instagram_ops
         from app.conversas.configuracao import cfg_instagram
 
-        return instagram_ops.processar_entradas(corpo, cfg_instagram())
+        return instagram_ops.processar_entradas(corpo, cfg_instagram(), chegadas)
     midias: list[int] = []
     for change in _mudancas(corpo):
-        midias.extend(_processar_change(change, cfg))
+        midias.extend(_processar_change(change, cfg, chegadas))
     return midias, []
 
 
@@ -184,8 +192,9 @@ def _mudancas(corpo: Any) -> list[dict[str, Any]]:
     return mudancas
 
 
-def _processar_change(change: dict[str, Any], cfg: CfgWhatsapp) -> list[int]:
-    """Uma mudança do aviso. Devolve os ids das mídias a baixar depois do commit."""
+def _processar_change(change: dict[str, Any], cfg: CfgWhatsapp, chegadas: set[int]) -> list[int]:
+    """Uma mudança do aviso. Devolve os ids das mídias a baixar depois do commit e junta em
+    ``chegadas`` as conversas com mensagem nova da cliente."""
     valor = change.get("value") or {}
     numero = (valor.get("metadata") or {}).get("phone_number_id")
     if numero and numero != cfg.conexao.phone_number_id:
@@ -196,13 +205,13 @@ def _processar_change(change: dict[str, Any], cfg: CfgWhatsapp) -> list[int]:
         logger.warning("[whatsapp] erro de conta no aviso: %s", erro)
     campo = change.get("field")
     if campo == "messages":
-        return _processar_mensagens(valor)
+        return _processar_mensagens(valor, chegadas)
     if campo == "smb_message_echoes":
         return _processar_ecos(valor)
     return []
 
 
-def _processar_mensagens(valor: dict[str, Any]) -> list[int]:
+def _processar_mensagens(valor: dict[str, Any], chegadas: set[int]) -> list[int]:
     contatos = {
         c.get("wa_id"): c
         for c in valor.get("contacts") or []
@@ -217,7 +226,7 @@ def _processar_mensagens(valor: dict[str, Any]) -> list[int]:
             # participante como se ele tivesse escrito para a Manto.
             logger.info("[whatsapp] mensagem de grupo %s ignorada", mensagem.get("group_id"))
             continue
-        midia_id = _gravar_recebida(mensagem, contatos.get(mensagem.get("from")) or {})
+        midia_id = _gravar_recebida(mensagem, contatos.get(mensagem.get("from")) or {}, chegadas)
         if midia_id:
             midias.append(midia_id)
     for status in valor.get("statuses") or []:
@@ -340,7 +349,9 @@ def _criar_midia(mensagem_id: int, mensagem: dict[str, Any]) -> int | None:
     return midia.id
 
 
-def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int | None:
+def _gravar_recebida(
+    mensagem: dict[str, Any], contato: dict[str, Any], chegadas: set[int]
+) -> int | None:
     """Grava a mensagem da cliente (FR-006). Devolve o id da mídia a baixar, se houver."""
     wa_id = mensagem.get("from") or contato.get("wa_id")
     bsuid = mensagem.get("from_user_id") or contato.get("user_id")
@@ -369,8 +380,9 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
-    if tipo != K.TIPO_REACAO:  # o 👍 da cliente não é pergunta esperando resposta
+    if tipo != K.TIPO_REACAO:  # o 👍 da cliente não é pergunta esperando resposta (nem toca)
         equipe_ops.abrir_espera(conversa, momento)
+        chegadas.add(conversa.id)
     atualizar_previa(conversa, tipo, texto, momento)
     return _criar_midia(mensagem_id, mensagem) if tipo in K.TIPOS_COM_MIDIA else None
 

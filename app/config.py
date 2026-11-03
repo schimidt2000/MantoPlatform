@@ -244,6 +244,21 @@ def _suppress_whatsapp() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_push() -> bool:
+    """Decide se este processo está proibido de mandar aviso ao celular (feature 332, XIV).
+
+    O aviso sai para o serviço do Google/Apple/Mozilla e toca no celular de gente de verdade; o
+    `manto_local` tem os aparelhos registrados da equipe. ``WEB_PUSH_SUPPRESS=true`` trava em qualquer
+    ambiente; ``WEB_PUSH_ALLOW_LOCAL=true`` libera o local (teste com o próprio celular).
+    """
+    if os.getenv("WEB_PUSH_SUPPRESS", "").lower() == "true":
+        return True
+    if os.getenv("WEB_PUSH_ALLOW_LOCAL", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -463,6 +478,15 @@ class Config:
     INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
     INSTAGRAM_PAGE_ID = os.getenv("INSTAGRAM_PAGE_ID", "").strip()
     INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "").strip()
+    # Avisos no celular (feature 332, Web Push com VAPID). O par de chaves é da Plataforma, gerado
+    # por `flask webpush-chaves` e colado no painel; vazio = desligado (Princípio XIV). O contato
+    # vai no token VAPID para o serviço de avisos saber a quem reclamar.
+    WEB_PUSH_VAPID_PUBLICA = os.getenv("WEB_PUSH_VAPID_PUBLICA", "").strip()
+    WEB_PUSH_VAPID_PRIVADA = os.getenv("WEB_PUSH_VAPID_PRIVADA", "").strip()
+    WEB_PUSH_CONTATO = os.getenv("WEB_PUSH_CONTATO", "mailto:contato@mantoproducoes.com.br").strip()
+    WEB_PUSH_SUPPRESS = _suppress_push()
+    # Entrega na hora, sem a thread própria (para o verify, como o WHATSAPP_AVISO_SINCRONO).
+    WEB_PUSH_SINCRONO = os.getenv("WEB_PUSH_SINCRONO", "").lower() == "true"
     # Pasta da mídia das conversas — irmã de `UPLOAD_FOLDER` pelo mesmo motivo da 205/261: foto,
     # áudio e comprovante de cliente nunca viram URL de bucket público; só saem pelo endpoint com
     # gate. Default em `create_app` (`instance/conversas_midia`).

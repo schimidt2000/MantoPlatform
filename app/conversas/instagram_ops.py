@@ -44,8 +44,11 @@ def _momento_ms(valor: Any) -> datetime:
 # ── Entrada ──────────────────────────────────────────────────────────────────────────────────────
 
 
-def processar_entradas(corpo: dict[str, Any], cfg: Any) -> tuple[list[int], list[int]]:
-    """Processa o aviso do Instagram. Devolve (mídias a baixar, conversas cujo perfil buscar).
+def processar_entradas(
+    corpo: dict[str, Any], cfg: Any, chegadas: set[int]
+) -> tuple[list[int], list[int]]:
+    """Processa o aviso do Instagram. Devolve (mídias a baixar, conversas cujo perfil buscar) e junta
+    em ``chegadas`` as conversas com mensagem nova da cliente (aviso no celular, feature 332).
 
     Não comita: ``processar_aviso`` comita o aviso inteiro. Conta diferente da Manto é ignorada.
     """
@@ -58,7 +61,7 @@ def processar_entradas(corpo: dict[str, Any], cfg: Any) -> tuple[list[int], list
             logger.info("[instagram] aviso de outra conta (%s) ignorado", entrada.get("id"))
             continue
         for item in _itens(entrada):
-            conversa_id, novas = _processar_item(item, cfg)
+            conversa_id, novas = _processar_item(item, cfg, chegadas)
             midias.extend(novas)
             if conversa_id:
                 conversas.add(conversa_id)
@@ -75,18 +78,20 @@ def _itens(entrada: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _processar_item(item: dict[str, Any], cfg: Any) -> tuple[int | None, list[int]]:
+def _processar_item(
+    item: dict[str, Any], cfg: Any, chegadas: set[int]
+) -> tuple[int | None, list[int]]:
     mensagem = item.get("message")
     if isinstance(mensagem, dict):
         if mensagem.get("is_echo"):
             return _gravar_eco(item, mensagem)
-        return _gravar_recebida(item, mensagem, cfg)
+        return _gravar_recebida(item, mensagem, cfg, chegadas)
     if isinstance(item.get("reaction"), dict):
         return _gravar_reacao(item), []
     if isinstance(item.get("read"), dict):
         _aplicar_visto(item)
     if isinstance(item.get("postback"), dict):
-        return _gravar_postback(item), []
+        return _gravar_postback(item, chegadas), []
     return None, []  # referral sozinho: o dado cru fica no aviso (Fase 3)
 
 
@@ -176,17 +181,19 @@ def _criar_midia(mensagem_id: int) -> int:
 # ── Mensagem recebida, apagada e eco ─────────────────────────────────────────────────────────────
 
 
-def _chegou_da_cliente(conversa: Conversa, item: dict[str, Any]) -> None:
-    """A cliente escreveu (ou tocou num botão): não lida, janela reaberta e espera (328)."""
+def _chegou_da_cliente(conversa: Conversa, item: dict[str, Any], chegadas: set[int]) -> None:
+    """A cliente escreveu (ou tocou num botão): não lida, janela reaberta, espera (328) e o aviso
+    no celular (332)."""
     momento = _momento_ms(item.get("timestamp"))
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
     equipe_ops.abrir_espera(conversa, momento)
+    chegadas.add(conversa.id)
 
 
 def _gravar_recebida(
-    item: dict[str, Any], mensagem: dict[str, Any], cfg: Any
+    item: dict[str, Any], mensagem: dict[str, Any], cfg: Any, chegadas: set[int]
 ) -> tuple[int | None, list[int]]:
     igsid, mid = _contato(item, "sender"), mensagem.get("mid")
     if not igsid or not mid:
@@ -199,11 +206,11 @@ def _gravar_recebida(
         conversa, item, _partes(str(mid), mensagem), K.RECEBIDA, K.ORIGEM_CONTATO
     )
     if novas:
-        _chegou_da_cliente(conversa, item)
+        _chegou_da_cliente(conversa, item, chegadas)
     return conversa.id, midias
 
 
-def _gravar_postback(item: dict[str, Any]) -> int | None:
+def _gravar_postback(item: dict[str, Any], chegadas: set[int]) -> int | None:
     """Toque num botão da conversa (ice breaker): é a cliente puxando assunto (FR-004)."""
     postback = item.get("postback") or {}
     igsid = _contato(item, "sender")
@@ -215,7 +222,7 @@ def _gravar_postback(item: dict[str, Any]) -> int | None:
     parte = (externo, K.TIPO_INTERATIVA, K.TEXTO_POSTBACK.format(titulo=titulo), None)
     novas, _ = _inserir_partes(conversa, item, [parte], K.RECEBIDA, K.ORIGEM_CONTATO)
     if novas:
-        _chegou_da_cliente(conversa, item)
+        _chegou_da_cliente(conversa, item, chegadas)
     return conversa.id
 
 

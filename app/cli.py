@@ -1136,6 +1136,20 @@ def register_commands(app):
             return
         click.echo(f"whatsapp-reprocessar [GRAVADO]: {varredura.ciclo_de_varredura()}")
 
+    @app.cli.command("webpush-chaves")
+    def webpush_chaves() -> None:
+        """Gera um par de chaves VAPID novo para os avisos no celular (feature 332).
+
+        Imprime só neste terminal: copie as duas linhas para o painel do Render
+        (`WEB_PUSH_VAPID_PUBLICA` e `WEB_PUSH_VAPID_PRIVADA`) e nunca mande a privada por chat.
+        Trocar o par depois faz cada aparelho precisar ativar os avisos de novo.
+        """
+        from app.push import webpush
+
+        publica, privada = webpush.gerar_chaves()
+        click.echo(f"WEB_PUSH_VAPID_PUBLICA={publica}")
+        click.echo(f"WEB_PUSH_VAPID_PRIVADA={privada}")
+
     @app.cli.command("clicksign-sincronizar")
     @click.option("--desde", type=click.DateTime(formats=["%Y-%m-%d"]), default=None,
                   help="início (AAAA-MM-DD) do 'modificado desde'; padrão: a data de início (01/06/2026)")

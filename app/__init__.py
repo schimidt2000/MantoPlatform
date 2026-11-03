@@ -764,6 +764,13 @@ def create_app():
         app.logger.warning(
             "[instagram] Direct desligado: faltam %s (painel do Render).", ", ".join(_instagram_faltando)
         )
+    # Feature 332 (XIV): sem o par VAPID, os avisos no celular ficam desligados.
+    _push_ligado = bool(app.config.get("WEB_PUSH_VAPID_PUBLICA") and app.config.get("WEB_PUSH_VAPID_PRIVADA"))
+    app.logger.info("[push] ligado=%s travado=%s", _push_ligado, app.config.get("WEB_PUSH_SUPPRESS"))
+    if not _push_ligado and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[push] Avisos no celular desligados: faltam WEB_PUSH_VAPID_PUBLICA e WEB_PUSH_VAPID_PRIVADA."
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl

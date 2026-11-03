@@ -33,6 +33,8 @@ from app.conversas.recusa import Recusa, campo
 from app.conversas.relogio import agora_utc
 from app.models import Conversa, ConversaMensagem, ConversaNota, Notification, User
 from app.notificacoes import notificacoes_ops
+from app.push import constantes as KP
+from app.push import push_ops
 
 logger = logging.getLogger(__name__)
 
@@ -107,13 +109,16 @@ def definir_responsavel(
     if acao not in K.ACOES_DO_RESPONSAVEL:
         raise campo("acao", K.TEXTO_ACAO_INVALIDA)
     conversa = _conversa_ou_404(conversa_id)
+    no_celular: tuple[int, push_ops.Aviso] | None = None
     if acao == K.ACAO_ASSUMIR:
         _assumir(conversa, quem)
     elif acao == K.ACAO_TRANSFERIR:
-        _transferir(conversa, quem, _destino(responsavel_id))
+        no_celular = _transferir(conversa, quem, _destino(responsavel_id))
     elif conversa.responsavel_id is not None and not _gravar_responsavel(conversa, None, None):
         raise _alterada()
     db.session.commit()
+    if no_celular is not None:  # feature 332: depois do commit, nunca dentro (FR-006)
+        push_ops.despachar([no_celular[0]], no_celular[1])
     return conversa
 
 
@@ -148,27 +153,41 @@ def _destino(responsavel_id: Any) -> User:
     return destino
 
 
-def _transferir(conversa: Conversa, quem: User, destino: User) -> None:
+def _transferir(
+    conversa: Conversa, quem: User, destino: User
+) -> tuple[int, push_ops.Aviso] | None:
+    """Grava a troca e o sino do destino; devolve o aviso no celular a mandar depois do commit."""
     if conversa.responsavel_id == destino.id:
-        return
+        return None
     quando = agora_utc()
     if not _gravar_responsavel(conversa, destino.id, quando):
         raise _alterada()
-    if destino.id != quem.id:
-        _avisar_transferencia(conversa, quem, destino, quando)
+    if destino.id == quem.id:
+        return None
+    titulo = _avisar_transferencia(conversa, quem, destino, quando)
+    aviso = push_ops.Aviso(
+        titulo=titulo,
+        corpo=conversa.ultima_previa or "",
+        link=f"/conversas?c={conversa.id}",
+        tag=KP.tag_da_transferencia(conversa.id),
+    )
+    return destino.id, aviso
 
 
-def _avisar_transferencia(conversa: Conversa, quem: User, destino: User, quando: datetime) -> None:
-    """FR-018: o sino de quem recebe. Na transação da troca (regime A da 272): sem troca, sem aviso."""
+def _avisar_transferencia(conversa: Conversa, quem: User, destino: User, quando: datetime) -> str:
+    """FR-018: o sino de quem recebe. Na transação da troca (regime A da 272): sem troca, sem aviso.
+    Devolve o título, que o aviso no celular repete (332)."""
+    titulo = K.TITULO_TRANSFERIDA.format(quem=quem.name, nome=nome_da_conversa(conversa))
     notificacoes_ops.emitir(
         notificacoes_ops.KIND_CONVERSA_TRANSFERIDA,
-        title=K.TITULO_TRANSFERIDA.format(quem=quem.name, nome=nome_da_conversa(conversa)),
+        title=titulo,
         body=conversa.ultima_previa,
         dedupe_key=f"conversa.transferida:{conversa.id}:{_epoch(quando)}",
         link_path=f"/conversas?c={conversa.id}",
         entidade=("conversa", conversa.id),
         destinatarios=[destino],
     )
+    return titulo
 
 
 # ── Espera ───────────────────────────────────────────────────────────────────────────────────────
@@ -293,12 +312,18 @@ def tempo_de_espera(desde: datetime, agora: datetime) -> str:
     return f"{minutos} min" if minutos < 60 else f"{minutos // 60} h"
 
 
-def _avisar_espera(conversa: Conversa, agora: datetime) -> int:
-    return notificacoes_ops.emitir(
+def _avisar_espera(
+    conversa: Conversa, agora: datetime
+) -> tuple[int, tuple[list[int], push_ops.Aviso] | None]:
+    """O sino da espera (quantas linhas gravou) e, se gravou, o aviso no celular a mandar depois do
+    commit (332)."""
+    titulo = K.TITULO_ESPERANDO.format(
+        nome=nome_da_conversa(conversa), tempo=tempo_de_espera(conversa.aguardando_desde, agora)
+    )
+    com_responsavel = responsavel_ativo(conversa)
+    gravados = notificacoes_ops.emitir(
         notificacoes_ops.KIND_CONVERSA_ESPERANDO,
-        title=K.TITULO_ESPERANDO.format(
-            nome=nome_da_conversa(conversa), tempo=tempo_de_espera(conversa.aguardando_desde, agora)
-        ),
+        title=titulo,
         body=conversa.ultima_previa,
         # Um aviso por espera: a identidade é a conversa + o início da espera (FR-007).
         dedupe_key=f"conversa.esperando:{conversa.id}:{_epoch(conversa.aguardando_desde)}",
@@ -306,8 +331,18 @@ def _avisar_espera(conversa: Conversa, agora: datetime) -> int:
         entidade=("conversa", conversa.id),
         severity="urgent",
         # Com responsável da equipe, só ele; senão, a equipe pelo catálogo.
-        destinatarios=[conversa.responsavel] if responsavel_ativo(conversa) else None,
+        destinatarios=[conversa.responsavel] if com_responsavel else None,
     )
+    if not gravados:
+        return 0, None  # já avisado nesta espera (dedupe do sino): o celular também não
+    destinos = [conversa.responsavel_id] if com_responsavel else [u.id for u in membros_da_equipe()]
+    aviso = push_ops.Aviso(
+        titulo=titulo,
+        corpo=conversa.ultima_previa or "",
+        link=f"/conversas?c={conversa.id}",
+        tag=KP.tag_da_espera(conversa.id),
+    )
+    return gravados, (destinos, aviso)
 
 
 def alertar_esperas(agora_sp: datetime | None = None) -> dict[str, int]:
@@ -321,8 +356,16 @@ def alertar_esperas(agora_sp: datetime | None = None) -> dict[str, int]:
     if not abre <= agora_sp.hour < fecha:
         return {"alertas": 0}
     agora = _utc_de_sp(agora_sp)
-    gravados = sum(_avisar_espera(conversa, agora) for conversa in _esperas_a_avisar(agora))
+    gravados = 0
+    no_celular: list[tuple[list[int], push_ops.Aviso]] = []
+    for conversa in _esperas_a_avisar(agora):
+        linhas, aviso = _avisar_espera(conversa, agora)
+        gravados += linhas
+        if aviso:
+            no_celular.append(aviso)
     db.session.commit()
+    for destinos, aviso in no_celular:  # feature 332: depois do commit da rodada
+        push_ops.despachar(destinos, aviso)
     return {"alertas": gravados}
 
 

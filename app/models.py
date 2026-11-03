@@ -4153,6 +4153,28 @@ class Conversa(db.Model):
     responsavel = db.relationship("User", lazy=True, foreign_keys=[responsavel_id])
 
 
+class PushAssinatura(db.Model):
+    """Um aparelho com os avisos no celular ligados (feature 332, Web Push).
+
+    ``endpoint`` é o endereço do serviço de avisos para aquele navegador e identifica o aparelho
+    (UNIQUE): registrar de novo o mesmo aparelho o passa para a pessoa logada. ``p256dh`` e ``auth``
+    são as chaves do aparelho para cifrar o aviso (RFC 8291). Apagado quando o serviço diz 404/410.
+    """
+
+    __tablename__ = "push_assinaturas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint = db.Column(db.Text, nullable=False, unique=True)
+    p256dh = db.Column(db.String(255), nullable=False)
+    auth = db.Column(db.String(64), nullable=False)
+    navegador = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    ultimo_aviso_em = db.Column(db.DateTime, nullable=True)
+
+
 class ConversaNota(db.Model):
     """Nota interna da equipe numa conversa (feature 328). Nunca sai para a cliente.
 

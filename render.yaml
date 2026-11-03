@@ -115,6 +115,12 @@ services:
         sync: false
       - key: INSTAGRAM_ACCOUNT_ID
         sync: false
+      # Feature 332: avisos no celular (Web Push). O par VAPID sai de `flask webpush-chaves`, rodado pelo
+      # dono; vazio = desligado.
+      - key: WEB_PUSH_VAPID_PUBLICA
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVADA
+        sync: false
       # Feature 310: o MESMO valor no manto-frontend. Prova que a requisição veio do Node — sem
       # ele, o IP do cliente informado pelo Node é aceito sem prova (o boot avisa no log).
       - key: MANTO_PROXY_SECRET

@@ -2,14 +2,17 @@
 
 As decisões de produto vieram do dono (spec, Clarifications); aqui está só o "como".
 
-## R1 — Web Push com VAPID e `pywebpush`
+## R1 — Web Push com VAPID, sem dependência nova
 
 - **Decisão**: o protocolo padrão do Web Push, com assinatura VAPID (ES256) e cifra `aes128gcm` (RFC 8291). Ele vale
   para os serviços de aviso do Chrome, Edge, Firefox e Safari, este no iOS 16.4+ com o app instalado.
-- **Biblioteca**: `pywebpush==2.0.3`, fixa no `requirements.txt`. Traz `py-vapid` e `http-ece`; o `cryptography` já
-  está na casa.
-- **Alternativa**: implementar a cifra à mão sobre o `cryptography`. Foi descartada porque uma cifra errada não dá erro:
-  o aviso simplesmente nunca aparece, e o verify (com dublê) não pegaria.
+- **Implementação**: a cifra (RFC 8291 sobre o RFC 8188) e a assinatura VAPID (RFC 8292) moram em
+  `app/push/webpush.py`, sobre o `cryptography` e o `requests`, que já estão na casa.
+- **Por que não o `pywebpush`**: instalar uma biblioteca nova baixa código no `.venv`, que é compartilhado, e entra
+  no build do Render. O dono não pediu dependência nova.
+- **Prova da cifra**: uma cifra errada não dá erro em lugar nenhum, o aviso só não aparece. Por isso o verify usa o
+  **vetor de teste oficial do RFC 8291 (apêndice A)**, e o resultado tem de bater byte a byte. Conferido em
+  03/11, antes do núcleo.
 - **Chaves**: `WEB_PUSH_VAPID_PUBLICA` e `WEB_PUSH_VAPID_PRIVADA` (env, vazias = desligado; Princípio XIV), mais
   `WEB_PUSH_CONTATO` com default `mailto:contato@mantoproducoes.com.br`.
   - O comando `flask webpush-chaves` gera um par novo e o imprime **só no terminal** de quem roda, para colar no
@@ -18,11 +21,14 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
 ## R2 — Onde nasce o aviso (sempre depois do commit)
 
 - **Mensagem nova**: `aviso_ops.processar_aviso` já tem um "depois do commit" (mídias e perfis). Os processadores
-  passam a devolver também as conversas que **ganharam mensagem nova da cliente**:
+  recebem um conjunto `chegadas` e juntam nele as conversas que **ganharam mensagem nova da cliente** (parâmetro
+  explícito em vez de um terceiro item na tupla de retorno, que já mudava de forma entre WhatsApp e Instagram):
   - WhatsApp: `_gravar_recebida` com `mensagem_id` novo e tipo ≠ reação;
-  - Instagram: `_gravar_recebida`, `_gravar_postback`.
+  - Instagram: `_chegou_da_cliente` (mensagem recebida com parte nova e toque em botão).
 
-  Depois do commit, `avisos_ops.avisar_mensagens(conversa_ids)` manda um aviso por conversa. O reenvio do mesmo aviso
+  Depois do commit, `celular_ops.avisar_mensagens(chegadas)` manda um aviso por conversa (o nome evita a confusão
+  com o `aviso_ops`, que é o aviso da Meta). A ordem depois do commit passa a ser perfil → celular → mídia: o
+  título precisa do nome do perfil, e a mídia pode levar minutos (SC-001). O reenvio do mesmo aviso
   não gera mensagem nova, então não toca (idempotência da 325).
 - **Alerta de 15 min**: `equipe_ops.alertar_esperas` comita a rodada e então avisa quem recebeu cada alerta (o
   responsável, ou a equipe).
@@ -44,7 +50,14 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
   - **Mensagem**: o título é o nome do contato, o corpo é a `ultima_previa` e a `tag` é `conversa-{id}`, para que os
     avisos da mesma conversa se substituam (`renotify`).
   - **Alerta e transferência**: o título do sino, e as `tag` `espera-{id}` e `transferida-{id}`.
-- **Envio**: `ttl` de 1 dia, urgência `high` para a mensagem, timeout de 10 s.
+- **Envio**: `push_ops.despachar(user_ids, aviso)` entrega numa thread própria, para o aviso não atrasar o webhook
+  nem a tela (a transferência roda dentro da requisição). `WEB_PUSH_SINCRONO=true` entrega na hora (verify). Aviso
+  perdido num deploy não volta (spec, casos de borda). `ttl` de 1 dia, urgência `high` para a mensagem, timeout de
+  10 s.
+- **Endereço do aparelho**: o servidor faz POST no `endpoint` que o navegador mandou. Só os serviços de aviso
+  conhecidos são aceitos (`fcm.googleapis.com`, `*.push.services.mozilla.com`, `*.notify.windows.com`,
+  `*.push.apple.com`), em https, senão 422: o registro não pode virar um jeito de o servidor chamar um endereço
+  qualquer (SSRF).
   - 404/410 → apaga o aparelho;
   - outra falha → log e segue.
   - Atualiza `ultimo_aviso_em`.
@@ -59,11 +72,15 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
 ## R6 — Navegador
 
 - **`frontend/apps/internal/public/`**, que o Vite copia para a raiz do `dist` e o `server.js` serve na raiz:
-  - `manifest.webmanifest`: nome "Plataforma Manto", nome curto "Manto", `display: standalone`, `start_url:
-    /conversas`, cores da casa, ícones 192/512 e `purpose: any maskable`;
-  - os ícones `icone-192.png`, `icone-512.png` e `apple-touch-icon.png`;
+  - `manifest.webmanifest`: nome "Plataforma Manto", nome curto "Manto", `display: standalone`, `start_url: /`
+    (o manifesto vale para a Plataforma inteira: o Casting que instalar não pode cair numa tela sem acesso), cores
+    da casa e ícones 192/512 com `purpose: any` (o "M" encosta nas bordas: recortado em círculo, perderia as
+    pontas);
+  - os ícones `icone-192.png`, `icone-512.png` e `apple-touch-icon.png`, tirados do ícone que a casa já usa
+    (`app/static/apple-touch-icon-app.png`, o "M" branco sobre o roxo);
   - `sw.js`: `push` → `showNotification(titulo, {body, tag, renotify, data: {link}, icon})`; `notificationclick` →
-    foca a aba da Plataforma e navega para o link, ou abre uma nova.
+    foca a aba da Plataforma e navega para o link (só caminhos da própria Plataforma), ou abre uma nova;
+    `pushsubscriptionchange` → registra a assinatura nova.
 - **`index.html`**: `<link rel="manifest">`, `apple-touch-icon` e `theme-color`.
 - **Tela**: `AvisosNoCelular` (botão + diálogo) no cabeçalho da lista de Conversas.
   - Mostra o estado: ativo, inativo, negado, sem suporte, iPhone fora da Tela de Início, desligado.

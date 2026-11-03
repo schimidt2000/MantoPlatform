@@ -126,6 +126,7 @@ Contra o `manto_local`, com disjuntor de rede e dublê do envio de aviso. Login 
 
 | # | Cenário | O que prova | Deve falhar? |
 |---|---|---|---|
+| 0 | Cifra contra o vetor oficial do RFC 8291 | o corpo cifrado bate byte a byte | não |
 | 1 | Chave pública | `ligado` e a chave | não |
 | 2 | Ana registra o aparelho | gravado para a Ana | não |
 | 3 | O mesmo aparelho registrado pela Bia | um registro só, agora da Bia | não |
@@ -160,7 +161,7 @@ conferir o texto), o manifesto e o service worker servidos.
 
 ## Docs a atualizar
 
-- `docs/01`: tabela, endpoints, RBAC, variáveis, dependência nova (`pywebpush`).
+- `docs/01`: tabela, endpoints, RBAC, variáveis e a cifra própria (provada pelo vetor do RFC 8291).
 - `docs/02`: o painel na tela Conversas; o app instalável.
 - `docs/03`: entrada no topo.
 - `docs/04`: invariantes do aviso no celular na linha "Conversas".
@@ -171,5 +172,6 @@ conferir o texto), o manifesto e o service worker servidos.
 
 - **Web Push padrão** (o mesmo que Chrome, Edge, Firefox e Safari usam): chaves VAPID da Plataforma, sem conta em
   serviço de terceiros. No iPhone, só com a Plataforma instalada na Tela de Início (iOS 16.4+).
-- **Ícone**: gerado para o manifesto com a letra "M" nas cores da casa (não há logo em arquivo no repositório).
+- **Ícone**: o que a casa já usa no Jinja (`app/static/apple-touch-icon-app.png`, o "M" branco sobre o roxo),
+  redimensionado para o manifesto.
 - **Volume**: dezenas de mensagens por dia; o envio direto, logo depois do processamento do aviso, basta.

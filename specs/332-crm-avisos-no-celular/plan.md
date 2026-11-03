@@ -12,12 +12,13 @@ em cada aparelho, e o registro vai para a tabela `push_assinaturas`. Depois do c
 - o alerta de 15 min;
 - a transferência.
 
-O envio usa `pywebpush` com VAPID, fica travado no ambiente local e nasce desligado sem as chaves.
+O envio usa a cifra própria (RFC 8291) com VAPID, fica travado no ambiente local e nasce desligado sem as chaves.
 
 ## Contexto técnico
 
 - **Linguagem**: Python 3.11 (Flask + SQLAlchemy); TypeScript + React 18 (Vite).
-- **Dependência nova**: `pywebpush==2.0.3` (R1).
+- **Dependência nova**: nenhuma. A cifra e o VAPID usam o `cryptography` e o `requests` (R1), provados pelo vetor
+  do RFC 8291.
 - **Armazenamento**: 1 tabela ([data-model.md](data-model.md)).
 - **Verificação**: `verify_332.py` com dublê do `webpush`; os verifies 325, 328 e 330 continuam verdes.
 - **Restrições**:
@@ -29,31 +30,31 @@ O envio usa `pywebpush` com VAPID, fica travado no ambiente local e nasce deslig
 
 | Princípio | Como o plano cumpre |
 |---|---|
-| I. Reutilizar | Reusa os pontos de "depois do commit" do `processar_aviso`, `responsavel_ativo`, `membros_da_equipe`, `e_da_equipe` e `pode_conversas`. Nova é a biblioteca padrão de Web Push, não uma cifra caseira (R1). |
+| I. Reutilizar | Reusa os pontos de "depois do commit" do `processar_aviso`, `responsavel_ativo`, `membros_da_equipe`, `e_da_equipe`, `pode_conversas` e o `cryptography`/`requests` da casa. A cifra própria é provada pelo vetor oficial (R1). |
 | II. Padrões | Type hints, docstrings, funções curtas e constantes em `app/push/constantes.py`. |
-| III. Camadas | O núcleo puro fica em `app/push/push_ops.py` e o que é de Conversas em `app/conversas/avisos_ops.py`. Os endpoints ficam em `app/api/push.py`, importado em `app/api/__init__.py`. |
-| IV. Não quebrar | Só aditivo. Os processadores passam a devolver uma lista a mais, e os verifies anteriores são regressão. |
+| III. Camadas | O núcleo puro fica em `app/push/push_ops.py` e o que é de Conversas em `app/conversas/celular_ops.py`. Os endpoints ficam em `app/api/push.py`, importado em `app/api/__init__.py`. |
+| IV. Não quebrar | Só aditivo. Os processadores recebem o conjunto `chegadas`, e os verifies anteriores são regressão. |
 | V. Feedback | Estados do painel com texto, botão com `loading` e permissão negada explicada. |
 | VI/VIII | Esteira completa; verify com 3 cenários que devem falhar. |
 | X/XI | Painel conferido em 375×812, com alvos de 44 px e motion do `Dialog` existente. |
 | XIII | `pode_conversas` em todo endpoint novo; linha em `docs/01` §4.3. |
 | XIV | Chaves VAPID vazias = desligado, com aviso na subida. `_suppress_push()` trava o local. O contato tem default real. |
 | XV | Textos internos com o glossário ("Ativar avisos", "Desativar", "Avisos no celular"). |
-| Stack | Migration à mão, aditiva, sobre `a330c4e8f1b2`. A dependência é fixada no `requirements.txt`. |
+| Stack | Migration à mão, aditiva, sobre `a330c4e8f1b2`. Sem dependência nova. |
 
 **Resultado**: ✅ sem violação.
 
 ## Estrutura
 
 ```text
-requirements.txt                                # pywebpush==2.0.3
 app/models.py                                   # PushAssinatura
 migrations/versions/b332d5f7a9c1_push_assinaturas.py
 app/config.py, app/__init__.py, render.yaml     # WEB_PUSH_* (vazios), _suppress_push, log [push]
 app/cli.py                                      # flask webpush-chaves
-app/push/__init__.py, constantes.py, push_ops.py  # registrar, remover, enviar (pywebpush), chave
-app/conversas/avisos_ops.py                     # avisar_mensagens, avisar_espera, avisar_transferencia
-app/conversas/aviso_ops.py, instagram_ops.py    # devolvem as conversas com mensagem nova
+app/push/__init__.py, constantes.py, push_ops.py  # registrar, remover, enviar, chave
+app/push/webpush.py                             # cifra RFC 8291 + VAPID RFC 8292 (sem Flask)
+app/conversas/celular_ops.py                    # avisar_mensagens (destino e corpo do aviso da mensagem)
+app/conversas/aviso_ops.py, instagram_ops.py    # juntam em `chegadas` as conversas com mensagem nova
 app/conversas/equipe_ops.py                     # avisa depois do commit (alerta, transferência)
 app/api/push.py                                 # GET chave, POST/DELETE aparelhos
 frontend/apps/internal/public/{manifest.webmanifest,sw.js,icone-192.png,icone-512.png,apple-touch-icon.png}
