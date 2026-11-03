@@ -651,7 +651,12 @@ def _serialize_pagamento_item(item: dict) -> dict:
         "pix_key_type": item.get("pix_key_type") or "",
         "status": item["status"],
         "is_future": bool(item.get("is_future")),
+        "de_mes_anterior": bool(item.get("de_mes_anterior")),
     }
+    # Correção 331: o item em aberto de um mês anterior, trazido para o mês atual.
+    if item.get("de_mes_anterior"):
+        out["mes_origem"] = item["mes_origem"]
+        out["dias_em_atraso"] = item["dias_em_atraso"]
     if item["type"] == "salary":
         out["gross_amount"] = float(item.get("gross_amount") or 0)
         out["advance_amount"] = float(item.get("advance_amount") or 0)
@@ -685,8 +690,11 @@ def api_financeiro_pagamentos() -> Any:
     """Planilha de pagamentos do mês: leitura (feature 159).
 
     Reaproveita, sem duplicar, os mesmos itens de ``pagamentos()``
-    (`app/financeiro/routes.py:1088`) — só monta a mesma combinação e serializa.
+    (`app/financeiro/routes.py:1088`) — só monta a mesma combinação e serializa. No mês atual,
+    soma o que ficou em aberto nos meses anteriores (correção 331, `atrasados_ops`).
     """
+    from app.constants import PLANILHA_ATRASADOS_DESDE
+    from app.financeiro import atrasados_ops
     from app.financeiro.routes import (
         _STATUS_LABELS,
         _build_bv_items,
@@ -694,11 +702,13 @@ def api_financeiro_pagamentos() -> Any:
         _build_payment_items,
         _build_recurring_items,
         _ensure_salary_payments,
+        _pagamentos_bvs_entre,
+        _pagamentos_gastos_entre,
         _pagamentos_query,
         _resync_pending_commissions,
     )
     from app.gastos.gastos_ops import ensure_recurring_entries
-    from app.models import EventAcrescimo, SalaryPayment, SpecialExpense
+    from app.models import SalaryPayment
 
     if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         return jsonify({"error": {"message": "Sem permissão"}}), 403
@@ -724,31 +734,10 @@ def api_financeiro_pagamentos() -> Any:
 
     m_start = date(year, mon, 1)
     m_end = date(year + 1, 1, 1) if mon == 12 else date(year, mon + 1, 1)
-    expenses = (
-        SpecialExpense.query
-        .filter(
-            SpecialExpense.status == "aprovado",
-            SpecialExpense.disbursement_type.isnot(None),
-            SpecialExpense.paid_at_creation.is_(False),
-            SpecialExpense.expense_date >= m_start,
-            SpecialExpense.expense_date < m_end,
-        )
-        .order_by(SpecialExpense.expense_date.asc())
-        .all()
-    )
+    expenses = _pagamentos_gastos_entre(m_start, m_end).all()
 
     items = _build_payment_items(roles, salary_payments, today, expenses, now_sp)
-
-    bv_rows = (
-        EventAcrescimo.query.join(CalendarEvent)
-        .filter(
-            EventAcrescimo.is_bv.is_(True),
-            CalendarEvent.start_at >= datetime.combine(m_start, datetime.min.time()),
-            CalendarEvent.start_at < datetime.combine(m_end, datetime.min.time()),
-        )
-        .all()
-    )
-    items += _build_bv_items(bv_rows, today, now_sp)
+    items += _build_bv_items(_pagamentos_bvs_entre(m_start, m_end).all(), today, now_sp)
 
     prev_year, prev_month = (year - 1, 12) if mon == 1 else (year, mon - 1)
     prev_start = date(prev_year, prev_month, 1)
@@ -758,6 +747,13 @@ def api_financeiro_pagamentos() -> Any:
 
     ensure_recurring_entries(year, mon)
     items += _build_recurring_items(year, mon, today)
+
+    # Só o mês de hoje recebe os atrasados: o passado continua sendo o retrato dele, e o futuro
+    # ainda não deve nada.
+    anteriores = []
+    if (year, mon) == (today.year, today.month):
+        anteriores = atrasados_ops.itens_em_aberto_anteriores(m_start, today, now_sp)
+    items += anteriores
     items.sort(key=lambda x: x["date"])
 
     def _amt(item: dict) -> Decimal:
@@ -774,10 +770,13 @@ def api_financeiro_pagamentos() -> Any:
         "futuro": float(
             sum(_amt(i) for i in items if i["status"] == "nao_pago" and i["is_future"])
         ),
+        "anteriores": float(sum(_amt(i) for i in anteriores)),
     }
 
     return jsonify({
         "month": month,
+        "mes_atual": today.strftime("%Y-%m"),
+        "atrasados_desde": atrasados_ops.mes_de(PLANILHA_ATRASADOS_DESDE),
         "totals": totals,
         "status_labels": _STATUS_LABELS,
         "items": [_serialize_pagamento_item(i) for i in items],

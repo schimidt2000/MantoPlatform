@@ -17,6 +17,7 @@ import {
   bucketOf,
   formatDate,
   rawAmount,
+  rotuloDoAtraso,
 } from "../../lib/pagamentos";
 
 /**
@@ -64,6 +65,25 @@ function TypeBadge({ item }: { item: PagamentoItem }) {
         </span>
       )}
     </>
+  );
+}
+
+/**
+ * "De outubro · há 14 dias" (correção 331): o item é de um mês anterior e ainda espera pagamento.
+ * A data continua a original; a etiqueta diz de qual planilha ele veio.
+ */
+function AtrasoBadge({ item, className }: { item: PagamentoItem; className?: string }) {
+  const rotulo = rotuloDoAtraso(item);
+  if (!rotulo) return null;
+  return (
+    <span
+      className={cn(
+        "inline-block whitespace-nowrap rounded-md bg-red-soft px-1.5 py-0.5 text-[10px] font-bold text-red",
+        className,
+      )}
+    >
+      {rotulo}
+    </span>
   );
 }
 
@@ -271,7 +291,10 @@ export function PagamentoRow({
       </td>
 
       {/* Vencimento */}
-      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">{formatDate(item.date)}</td>
+      <td className="whitespace-nowrap px-3 py-2 text-xs text-muted">
+        {formatDate(item.date)}
+        <AtrasoBadge item={item} className="mt-1 block w-fit" />
+      </td>
 
       {/* Descrição detalhada: tipo + item */}
       <td className="px-3 py-2">
@@ -381,6 +404,7 @@ export function PagamentoCard({
           <div className="flex flex-wrap items-center gap-1.5">
             <TypeBadge item={item} />
             <span className="text-[11px] font-semibold text-muted">{formatDate(item.date)}</span>
+            <AtrasoBadge item={item} />
             {bucket === "futuro" && (
               <span className="rounded-md bg-gold-soft px-1.5 py-0.5 text-[10px] font-bold text-gold-ink">
                 ⏳ Futuro

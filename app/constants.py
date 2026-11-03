@@ -516,6 +516,11 @@ ALCANCE_SO_ESTE_DIA = "so_este_dia"
 # literais 5 da data do item de comissão da Planilha (`financeiro_read.py` e `financeiro/routes.py`)
 # apontam para cá, sem refatorar.
 DIA_DO_REPASSE = 5
+# Planilha de Pagamentos (correção 331): o mês atual traz o que ficou em aberto nas planilhas de
+# meses anteriores, mas só desde a primeira em que o Financeiro marcou pagamento (maio/2026). Antes
+# dela há salários "não pagos" gerados por quem abriu janeiro e abril, e comissões de ciclos que
+# nunca passaram pela planilha: trazidos, encheriam o mês com R$ 106 mil de atraso que não existe.
+PLANILHA_ATRASADOS_DESDE = date(2026, 5, 1)
 # Prefixo da nota da linha de comissão que o cancelamento, as correções e a exclusão escrevem
 # (FR-033): uma constante por motivo, e o dict leva ao código do motivo que a 1e lê.
 MOTIVO_AJUSTE_RETIDO = "Cancelamento: comissão do retido"

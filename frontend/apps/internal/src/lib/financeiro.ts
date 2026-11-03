@@ -441,6 +441,15 @@ export interface PagamentoItem {
   missing_data?: boolean;
   /** As linhas do item de comissão (feature 306): o ajuste aparece ao lado da comissão que acerta. */
   commission_lines?: CommissionLine[];
+  /**
+   * Correção 331: item em aberto de um mês anterior, trazido para o mês atual. Mantém id, data e
+   * situação do mês dele. Opcional: backend e bundle ficam em versões diferentes durante o deploy.
+   */
+  de_mes_anterior?: boolean;
+  /** `AAAA-MM` da planilha a que o item pertence (só quando `de_mes_anterior`). */
+  mes_origem?: string;
+  /** Dias desde a data do item, contados em São Paulo (só quando `de_mes_anterior`). */
+  dias_em_atraso?: number;
 }
 
 /** Uma linha de `CommissionPayment` dentro do item de comissão da Planilha (feature 306). */
@@ -461,10 +470,16 @@ export interface PagamentoTotals {
   no_banco: number;
   pendente: number;
   futuro: number;
+  /** Soma dos itens de meses anteriores (correção 331); 0 fora do mês atual. */
+  anteriores?: number;
 }
 
 export interface PagamentosResponse {
   month: string;
+  /** `AAAA-MM` de hoje em São Paulo — o único mês que recebe os itens de antes (correção 331). */
+  mes_atual?: string;
+  /** `AAAA-MM` da primeira planilha cujos itens em aberto vêm para o mês atual. */
+  atrasados_desde?: string;
   totals: PagamentoTotals;
   status_labels: Record<PaymentStatus, string>;
   items: PagamentoItem[];

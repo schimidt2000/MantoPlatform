@@ -711,8 +711,6 @@ def _pagamentos_query(month_str: str):
     consumidores da planilha (view Jinja, CSV Jinja, `GET /api/financeiro/pagamentos` e o CSV da
     API), o filtro aqui limpa todos de uma vez.
     """
-    from app.calendar.routes import PRESENCE_CHARACTER
-
     try:
         year, month = int(month_str[:4]), int(month_str[5:7])
     except (ValueError, IndexError):
@@ -725,6 +723,17 @@ def _pagamentos_query(month_str: str):
     else:
         end = datetime(year, month + 1, 1)
 
+    return _pagamentos_roles_entre(start, end).all()
+
+
+def _pagamentos_roles_entre(start: datetime, end: datetime):
+    """Os cachês da planilha com evento em [start, end), ainda como query.
+
+    Correção 331: o mês e os itens em aberto de meses anteriores (`atrasados_ops`) filtram por
+    aqui, para o cachê que vem de outubro ser exatamente o cachê que outubro mostra.
+    """
+    from app.calendar.routes import PRESENCE_CHARACTER
+
     return (
         EventRole.query
         .join(CalendarEvent)
@@ -736,7 +745,40 @@ def _pagamentos_query(month_str: str):
             CalendarEvent.start_at < end,
         )
         .order_by(CalendarEvent.start_at.asc(), CalendarEvent.title.asc())
-        .all()
+    )
+
+
+def _pagamentos_gastos_entre(start: date, end: date):
+    """Os gastos extras da planilha com data em [start, end), ainda como query (correção 331).
+
+    Só o que precisa de desembolso: aprovado, com tipo de desembolso, e nunca o já pago na criação
+    (feature 128).
+    """
+    return (
+        SpecialExpense.query
+        .filter(
+            SpecialExpense.status == "aprovado",
+            SpecialExpense.disbursement_type.isnot(None),
+            SpecialExpense.paid_at_creation.is_(False),
+            SpecialExpense.expense_date >= start,
+            SpecialExpense.expense_date < end,
+        )
+        .order_by(SpecialExpense.expense_date.asc())
+    )
+
+
+def _pagamentos_bvs_entre(start: date, end: date):
+    """Os acréscimos BV com evento em [start, end), ainda como query (correção 331).
+
+    O cancelado entra: quem decide se ele some ou paga o BV do retido é o `_build_bv_items`.
+    """
+    return (
+        EventAcrescimo.query.join(CalendarEvent)
+        .filter(
+            EventAcrescimo.is_bv.is_(True),
+            CalendarEvent.start_at >= datetime.combine(start, datetime.min.time()),
+            CalendarEvent.start_at < datetime.combine(end, datetime.min.time()),
+        )
     )
 
 
