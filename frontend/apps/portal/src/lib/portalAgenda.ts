@@ -57,6 +57,12 @@ export interface PortalRole {
    * a tela se comporta como hoje.
    */
   em_confirmacao?: boolean;
+  /**
+   * Nome da cliente do evento (feature 327). Só vem para quem COORDENA o evento e já aceitou o
+   * convite; para todos os outros, e no convite pendente, é `null`. Só o nome: o contato da
+   * cliente fica com a produção. Opcional pelo mesmo motivo de `role_type`.
+   */
+  cliente?: string | null;
 }
 
 /** Um ensaio marcado para o evento — costuma cair 2 a 4 dias antes dele. */

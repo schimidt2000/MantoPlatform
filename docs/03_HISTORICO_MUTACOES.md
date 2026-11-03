@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **327-cliente-para-coordenador** | O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
 | **326-novo-evento-cliente-e-orcamento** | *(pronta na branch, não publicada)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
 | **324-config-precos-legivel** | Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
 | **239c-coordenador-pre-escalado-com-orcamento** | Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
@@ -393,6 +394,34 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 327 — O coordenador vê o nome da cliente depois de aceitar   (327-cliente-para-coordenador · 2026-11-03 · sem migration)
+
+> Nível 2 (ajuste num domínio, sem migration). Detalhe: `specs/327-cliente-para-coordenador/spec.md`.
+
+**O pedido.** O dono (03/11): "Preciso mostrar apenas o nome do contratante para os coordenadores do evento. Após
+aceitarem eles têm essa informação lá." Até aqui o portal não mostrava nada da cliente a ninguém.
+
+**O que mudou.**
+- Backend: `portal_ops._cliente_para_o_coordenador` (lote) e a chave `cliente` em `_role_summary`; `get_agenda` só
+  passa os próximos eventos. A regra: cargo Coordenador (`_e_cargo_de_coordenador`, o mesmo teste de
+  `is_event_coordinator`) **e** `invite_status == "accepted"`. Nome por `vendas_ops.contratante_name`; sem cliente no
+  dia, o do principal (`group_leader_id`).
+- Frontend: `PortalRole.cliente?` e a linha "Cliente: <nome>" no `RoleCard` da Agenda. Quem decide se a linha existe
+  é o servidor.
+
+**Decisões.** Convite **nunca enviado** não conta como aceite, ao pé da letra do pedido ("após aceitarem"); no espelho
+há 1 cargo futuro de coordenador assim. Histórico, ficha de figurino e e-mail de convite ficam sem a cliente. A
+palavra na tela é "Cliente", do glossário (§XV: "a cliente", a contratante do evento).
+
+**Verificação.** `verify_327.py` 14/14; 9/14 no código antigo. `verify_302.py` 22/22. `npm run typecheck` e `ruff`
+limpos. Tela aberta no portal local em 375 px, antes e depois de "Aceitar".
+
+**Pegadinhas.** A chave do lote é a **escalação**, não o evento: quem coordena (aceito) e tem personagem pendente no
+mesmo evento veria o nome no cartão do convite. O dia agrupado quase nunca tem cliente próprio (1 de 22 no espelho):
+sem cair no principal, o coordenador do segundo dia não veria nada. O `selectinload` das relações reaproveita os
+eventos já no mapa de identidade sem SQL a mais por evento (cenário 13 mede); o verify roda as requisições fora do
+`app_context` justamente para o many-to-one `EventClient.client` não sair do mapa e esconder um N+1.
 
 ### 326 — Novo evento: o nome da cliente fica, o telefone tem máscara e o orçamento se vincula na tela   (326-novo-evento-cliente-e-orcamento · 2026-10-30 · sem migration)
 
