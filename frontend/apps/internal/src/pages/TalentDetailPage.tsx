@@ -37,7 +37,11 @@ function brl(v: number | null | undefined): string {
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("pt-BR");
+  // Pelo texto, nunca por `new Date()`: data-só ("1998-10-01") interpretada como UTC
+  // deslocaria um dia para trás no fuso de São Paulo; start_at é horário de parede naive.
+  const [year, month, day] = iso.slice(0, 10).split("-");
+  if (!year || !month || !day) return "";
+  return `${day}/${month}/${year}`;
 }
 
 function splitValues(raw: string | null | undefined): string[] {
