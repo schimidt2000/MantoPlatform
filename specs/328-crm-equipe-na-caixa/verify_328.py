@@ -102,7 +102,23 @@ WA_SEM_DONO = "5511963280004"
 WA_NOITE = "5511963280005"
 WA_MODELO = "5511963280006"
 WA_FALHA = "5511963280007"
-CONTATOS = [WA_FILA, WA_ECO, WA_ESPERA, WA_SEM_DONO, WA_NOITE, WA_MODELO, WA_FALHA]
+WA_CORRIDA = "5511963280008"
+WA_SEM_ACESSO = "5511963280009"
+WA_FRONTEIRA = "5511963280010"
+WA_ARQUIVO = "5511963280011"
+CONTATOS = [
+    WA_FILA,
+    WA_ECO,
+    WA_ESPERA,
+    WA_SEM_DONO,
+    WA_NOITE,
+    WA_MODELO,
+    WA_FALHA,
+    WA_CORRIDA,
+    WA_SEM_ACESSO,
+    WA_FRONTEIRA,
+    WA_ARQUIVO,
+]
 PASTA_MIDIA = tempfile.mkdtemp(prefix="v328-midia-")
 
 app = create_app()
@@ -266,8 +282,10 @@ def _valor(contatos: list[dict], **campos) -> dict:
     }
 
 
-def _recebida(wa_id: str, nome: str, sufixo: str, corpo_texto: str = "Oi, quero um orçamento"):
-    """A cliente escreve (aviso assinado). Devolve o id da conversa."""
+def _recebida(
+    wa_id: str, nome: str, sufixo: str, corpo_texto: str = "Oi, quero um orçamento", atraso: int = 0
+):
+    """A cliente escreve (aviso assinado), `atraso` segundos no futuro. Devolve o id da conversa."""
     _post_aviso(
         _valor(
             [{"profile": {"name": f"{PREFIX}{nome}"}, "wa_id": wa_id}],
@@ -275,7 +293,7 @@ def _recebida(wa_id: str, nome: str, sufixo: str, corpo_texto: str = "Oi, quero 
                 {
                     "from": wa_id,
                     "id": f"wamid.{PREFIX}in-{sufixo}",
-                    "timestamp": str(int(time.time())),
+                    "timestamp": str(int(time.time()) + atraso),
                     "type": "text",
                     "text": {"body": corpo_texto},
                 }
@@ -381,6 +399,10 @@ def cen_01() -> None:
     _garante(r.status_code == 200, f"lista sem responsável → {r.status_code}")
     item = next((c for c in r.get_json()["conversas"] if c["id"] == estado["fila"]), None)
     _garante(item is not None and item["responsavel"] is None, f"item {item}")
+    inicio = conv.aguardando_desde
+    _garante(inicio is not None, "a recebida não abriu a espera")
+    _recebida(WA_FILA, "Ana Souza", "fila-2", "Alguém aí?", atraso=5)
+    _garante(_conversa(WA_FILA).aguardando_desde == inicio, "a segunda mensagem mudou o início")
 
 
 def cen_02() -> None:
@@ -414,6 +436,70 @@ def cen_04() -> None:
     _garante(_conversa(WA_FILA).responsavel_id == estado["ana_id"], "o 409 mudou o responsável")
 
 
+def cen_02b() -> None:
+    conversa_id = _recebida(WA_ARQUIVO, "Iris Arquivo", "arquivo-1")
+    r = _chamar(
+        estado["bia"],
+        "post",
+        f"/api/conversas/{conversa_id}/mensagens",
+        data={
+            "chave_envio": f"{PREFIX}c02b",
+            "arquivo": (io.BytesIO(b"%PDF-1.4 v328"), "orcamento.pdf", "application/pdf"),
+        },
+        content_type="multipart/form-data",
+    )
+    _garante(r.status_code == 201, f"arquivo → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    conv = _conversa(WA_ARQUIVO)
+    _garante(conv.responsavel_id == estado["bia_id"], "o envio de arquivo não atribuiu")
+    _garante(conv.aguardando_desde is None, "o envio de arquivo não encerrou a espera")
+
+
+def cen_04b() -> None:
+    from app.conversas import equipe_ops
+    from app.conversas.recusa import Recusa
+    from app.models import Conversa
+
+    conversa_id = _recebida(WA_CORRIDA, "Hugo Corrida", "corrida-1")
+    with app.app_context():
+        lida = db.session.get(Conversa, conversa_id)  # a Ana leu: sem responsável
+        _garante(lida.responsavel_id is None, "já tinha responsável")
+        # A Bia grava no meio, por outra conexão: o objeto da Ana fica velho.
+        _no_banco_escrever(
+            "UPDATE conversas SET responsavel_id=:b, assumida_em=now() WHERE id=:i",
+            b=estado["bia_id"],
+            i=conversa_id,
+        )
+        ana = db.session.get(User, estado["ana_id"])
+        try:
+            equipe_ops.definir_responsavel(conversa_id, "assumir", ana)
+        except Recusa as exc:
+            _garante(exc.codigo == "ja_assumida", f"código {exc.codigo}")
+            _garante(f"{PREFIX}Bia" in exc.mensagem, f"sem o nome de quem ganhou: {exc.mensagem}")
+        else:
+            raise AssertionError("a Ana assumiu por cima da Bia")
+    _garante(_conversa(WA_CORRIDA).responsavel_id == estado["bia_id"], "a corrida trocou o dono")
+
+
+def cen_04c() -> None:
+    conversa_id = _recebida(WA_SEM_ACESSO, "Joana Acesso", "acesso-1")
+    assume = _responsavel(estado["dani"], conversa_id, "assumir")
+    _garante(assume.status_code == 200, f"Dani assume → {assume.status_code}")
+    _no_banco_escrever("UPDATE users SET has_access=false WHERE id=:i", i=estado["dani_id"])
+    r = _responsavel(estado["ana"], conversa_id, "assumir")
+    _garante(r.status_code == 200, f"assumir de quem perdeu o acesso → {r.status_code}")
+    _garante(_conversa(WA_SEM_ACESSO).responsavel_id == estado["ana_id"], "não passou para a Ana")
+    # O alerta da conversa de quem perdeu o acesso vai para a equipe.
+    _no_banco_escrever(
+        "UPDATE conversas SET responsavel_id=:d WHERE id=:i", d=estado["dani_id"], i=conversa_id
+    )
+    as_14 = _as(14)
+    _esperando_desde(conversa_id, _utc_de_sp(as_14) - timedelta(minutes=20))
+    _alertar(as_14)
+    destinos = {a.user_id for a in _avisos(conversa_id, "conversa.esperando")}
+    _garante({estado["ana_id"], estado["bia_id"]} <= destinos, f"equipe sem aviso: {destinos}")
+    _garante(estado["dani_id"] not in destinos, "avisou quem perdeu o acesso")
+
+
 def cen_05() -> None:
     r = _responsavel(estado["ana"], estado["fila"], "transferir", estado["bia_id"])
     _garante(r.status_code == 200, f"transferir → {r.status_code} {r.get_data(as_text=True)[:200]}")
@@ -443,6 +529,22 @@ def cen_06() -> None:
     conv = _conversa(WA_ECO)
     _garante(conv.responsavel_id is None, "o eco do celular atribuiu responsável")
     _garante(conv.aguardando_desde is None, "o eco do celular não encerrou a espera")
+    # O 👍 da cliente não é pergunta: não abre espera.
+    _post_aviso(
+        _valor(
+            [{"profile": {"name": f"{PREFIX}Eco"}, "wa_id": WA_ECO}],
+            messages=[
+                {
+                    "from": WA_ECO,
+                    "id": f"wamid.{PREFIX}in-eco-reacao",
+                    "timestamp": str(int(time.time()) + 1),
+                    "type": "reaction",
+                    "reaction": {"message_id": f"wamid.{PREFIX}eco-1", "emoji": "👍"},
+                }
+            ],
+        )
+    )
+    _garante(_conversa(WA_ECO).aguardando_desde is None, "a reação da cliente abriu a espera")
     _recebida(WA_ECO, "Eco", "eco-2", "e agora?")
     _eco(WA_ECO, "2", tipo="revoke")
     _garante(_conversa(WA_ECO).aguardando_desde is not None, "o 'apagada' encerrou a espera")
@@ -497,6 +599,34 @@ def cen_10() -> None:
     _alertar(_as(9, 0, dias=1))
     _garante(_avisos(noite, "conversa.esperando"), "não avisou às 9h do dia seguinte")
     estado["noite"] = noite
+
+
+def _sem_avisos(conversa_id: int) -> None:
+    _no_banco_escrever(
+        "DELETE FROM notifications WHERE entity_type='conversa' AND entity_id=:i", i=conversa_id
+    )
+
+
+def cen_10b() -> None:
+    conversa_id = _recebida(WA_FRONTEIRA, "Lia Fronteira", "fronteira-1")
+    # Completa 15 min às 20h58: avisa.
+    _esperando_desde(conversa_id, _utc_de_sp(_as(20, 43)))
+    _alertar(_as(20, 58))
+    _garante(_avisos(conversa_id, "conversa.esperando"), "não avisou às 20h58")
+    # Completa 15 min às 21h05: só às 9h do dia seguinte.
+    _sem_avisos(conversa_id)
+    _esperando_desde(conversa_id, _utc_de_sp(_as(20, 50)))
+    _alertar(_as(21, 5))
+    _garante(not _avisos(conversa_id, "conversa.esperando"), "avisou às 21h05")
+    _alertar(_as(9, 0, dias=1))
+    avisos = _avisos(conversa_id, "conversa.esperando")
+    _garante(avisos, "não avisou às 9h")
+    _garante("espera resposta há 12 h" in avisos[0].title, f"título {avisos[0].title!r}")
+    # Janela de 24 h fechada: não avisa.
+    _sem_avisos(conversa_id)
+    _esperando_desde(conversa_id, _utc_de_sp(_as(14)) - timedelta(hours=25))
+    _alertar(_as(14))
+    _garante(not _avisos(conversa_id, "conversa.esperando"), "avisou com a janela fechada")
 
 
 def cen_11() -> None:
@@ -610,6 +740,9 @@ def cen_15() -> None:
         ({**base, "titulo": f"{PREFIX}Com espaço", "atalho": "com espaco"}, "atalho"),
         ({**base, "titulo": "  ", "atalho": None}, "titulo"),
         ({**base, "titulo": f"{PREFIX}Sem texto", "atalho": None, "texto": ""}, "texto"),
+        ({**base, "titulo": f"{PREFIX}" + "x" * 80, "atalho": None}, "titulo"),
+        ({**base, "titulo": f"{PREFIX}Atalho longo", "atalho": "a" * 31}, "atalho"),
+        ({**base, "titulo": f"{PREFIX}Texto longo", "atalho": None, "texto": "x" * 4097}, "texto"),
     ]
     for corpo, campo in casos:
         r = _chamar(estado["bia"], "post", URL_RESPOSTAS, corpo)
@@ -619,7 +752,10 @@ def cen_15() -> None:
 
 def cen_16() -> None:
     cris = estado["cris"]
+    alvo = _no_banco("SELECT id FROM respostas_rapidas WHERE titulo=:t", t=f"{PREFIX}Endereço").id
     chamadas = [
+        ("patch", f"{URL_RESPOSTAS}/{alvo}", {"texto": "x"}),
+        ("delete", f"{URL_RESPOSTAS}/{alvo}", None),
         ("get", URL_RESPOSTAS, None),
         ("post", URL_RESPOSTAS, {"titulo": f"{PREFIX}Casting", "texto": "x"}),
         ("get", "/api/conversas/equipe", None),
@@ -639,8 +775,14 @@ def cen_16() -> None:
 
 
 def _webm_de_teste() -> bytes | None:
-    """1 s de Opus em webm, como o Chrome grava. None quando a máquina não tem ffmpeg."""
-    ffmpeg = shutil.which("ffmpeg")
+    """1 s de Opus em webm, como o Chrome grava. None quando a máquina não tem ffmpeg.
+
+    O binário é o mesmo que o app usa (`caminho_do_ffmpeg`, que respeita o `FFMPEG_BIN`).
+    """
+    from app.impressoes3d import video_ops
+
+    with app.app_context():
+        ffmpeg = video_ops.caminho_do_ffmpeg()
     if not ffmpeg:
         return None
     saida = Path(PASTA_MIDIA) / "teste.webm"
@@ -686,9 +828,8 @@ def _enviar_audio(chave: str, dados: bytes):
 
 def cen_17() -> None:
     dados = _webm_de_teste()
-    if dados is None:
-        print("         (pulado: sem ffmpeg nesta máquina)")
-        return
+    # Pulado não é verde (Princípio VIII): sem ffmpeg, o caminho feliz do áudio não foi provado.
+    _garante(dados is not None, "PULADO: sem ffmpeg nesta máquina, o áudio não foi conferido")
     r = _enviar_audio("c17", dados)
     _garante(r.status_code == 201, f"áudio → {r.status_code} {r.get_data(as_text=True)[:200]}")
     subido, mime, nome = meta.chamadas["subir_midia"][-1]
@@ -708,6 +849,8 @@ def cen_17() -> None:
 def cen_18() -> None:
     import app.impressoes3d.video_ops as video_ops
 
+    corrompido = _enviar_audio("c18-corrompido", b"\x1aE\xdf\xa3isto-nao-e-webm")
+    _garante(corrompido.status_code == 422, f"webm corrompido → {corrompido.status_code}")
     original = video_ops.caminho_do_ffmpeg
     video_ops.caminho_do_ffmpeg = lambda: None
     antes = (len(meta.chamadas["enviar"]), len(meta.chamadas["subir_midia"]))
@@ -758,6 +901,7 @@ def preparar() -> None:
     estado["ana"], estado["ana_id"] = _usuario("Ana", RoleName.COMERCIAL)
     estado["bia"], estado["bia_id"] = _usuario("Bia", RoleName.COMERCIAL)
     estado["cris"], estado["cris_id"] = _usuario("Cris", RoleName.CASTING)
+    estado["dani"], estado["dani_id"] = _usuario("Dani", RoleName.COMERCIAL)
 
 
 def limpar() -> None:
@@ -792,19 +936,36 @@ def limpar() -> None:
     db.session.commit()
     sobras = _no_banco("SELECT count(*) FROM conversas WHERE contato_id = ANY(:c)", c=CONTATOS)[0]
     _garante(sobras == 0, f"sobraram {sobras} conversas de teste")
+    if ids:
+        notas = _no_banco("SELECT count(*) FROM conversa_notas WHERE conversa_id = ANY(:i)", i=ids)[
+            0
+        ]
+        avisos = _no_banco(
+            "SELECT count(*) FROM notifications WHERE entity_type='conversa' AND entity_id = ANY(:i)",
+            i=ids,
+        )[0]
+        _garante(notas == 0 and avisos == 0, f"sobraram {notas} notas e {avisos} avisos")
+    respostas = _no_banco(
+        "SELECT count(*) FROM respostas_rapidas WHERE titulo LIKE :p", p=f"{PREFIX}%"
+    )[0]
+    _garante(respostas == 0, f"sobraram {respostas} respostas rápidas")
 
 
 CENARIOS = [
     ("1. conversa nova sem responsável", cen_01),
     ("2. primeira resposta pela Plataforma atribui", cen_02),
+    ("2b. envio de arquivo também atribui", cen_02b),
     ("3. resposta de outra pessoa não rouba", cen_03),
     ("4. assumir conversa já assumida (DEVE falhar)", cen_04),
+    ("4b. corrida do Assumir: quem perde vê o nome (DEVE falhar)", cen_04b),
+    ("4c. responsável sem acesso: qualquer um assume e o alerta vai à equipe", cen_04c),
     ("5. transferir (com aviso), Casting (DEVE falhar) e devolver", cen_05),
     ("6. eco do celular encerra a espera e não atribui", cen_06),
     ("7. espera de 16 min às 14h avisa a responsável", cen_07),
     ("8. espera sem responsável avisa a equipe", cen_08),
     ("9. varredura de novo não repete o aviso", cen_09),
     ("10. às 22h30 não avisa; às 9h sim", cen_10),
+    ("10b. fronteira das 21h e janela de 24 h fechada", cen_10b),
     ("11. resposta e modelo encerram a espera", cen_11),
     ("12. nota interna gravada sem chamar a Meta", cen_12),
     ("13. nota vazia ou longa (DEVE falhar)", cen_13),

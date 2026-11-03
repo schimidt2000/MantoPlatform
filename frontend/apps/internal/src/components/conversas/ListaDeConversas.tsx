@@ -169,9 +169,9 @@ export function ListaDeConversas({
         ) : !conversas?.length ? (
           <p className="p-6 text-center text-sm text-muted">
             {filtro === "minhas"
-              ? "Nenhuma conversa com você."
+              ? "Nenhuma conversa sua encontrada."
               : filtro === "sem_responsavel"
-                ? "Nenhuma conversa sem responsável."
+                ? "Nenhuma conversa sem responsável encontrada."
                 : "Nenhuma conversa encontrada."}
           </p>
         ) : (

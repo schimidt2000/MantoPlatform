@@ -48,7 +48,8 @@ Decisões da Phase 0. As decisões de produto vieram do dono (spec, Clarificatio
 - **Decisão**: `equipe_ops.alertar_esperas(agora_sp)` roda na passada da thread `whatsapp-sweep`
   (`varredura.ciclo_de_varredura`).
   - Fora de `9 <= hora < 21` em São Paulo (`now_sp()`), não faz nada.
-  - Dentro do horário, entram as conversas com `agora_utc − 24 h < aguardando_desde <= agora_utc − 15 min`,
+  - Dentro do horário, entram as conversas com `agora_utc − 24 h < aguardando_desde <= agora_utc − 15 min` e
+    **ainda sem aviso de espera** (convergência: sem isso, a espera que ninguém responde ocupava o lote por 24 h),
     as mais antigas primeiro, até o lote da varredura. Uma espera com a janela fechada não se responde com
     texto e não pode entrar em toda passada para sempre. Para cada uma, chama
     `notificacoes_ops.emitir(KIND_CONVERSA_ESPERANDO, …)`:

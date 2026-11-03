@@ -14,6 +14,7 @@ import { Button } from "@manto/ui";
 
 export const TEXTO_MICROFONE_NEGADO =
   "Não foi possível usar o microfone. Libere o acesso nas configurações do navegador.";
+const TEXTO_GRAVADOR_INDISPONIVEL = "Não foi possível gravar áudio neste navegador. Envie o arquivo pelo clipe.";
 const LIMITE_SEGUNDOS = 5 * 60;
 const FORMATOS = ["audio/ogg;codecs=opus", "audio/webm;codecs=opus", "audio/mp4"];
 const EXTENSAO: Record<string, string> = { "audio/ogg": "ogg", "audio/webm": "webm", "audio/mp4": "m4a" };
@@ -49,6 +50,7 @@ export function useGravador(onErro: (mensagem: string) => void) {
   const aoTerminar = useRef<((arquivo: File | null) => void) | null>(null);
   // O áudio que parou sozinho nos 5 minutos, esperando o "Enviar".
   const ultimoArquivo = useRef<File | null>(null);
+  const iniciando = useRef(false);
 
   const soltarMicrofone = useCallback(() => {
     if (relogio.current) clearInterval(relogio.current);
@@ -63,16 +65,29 @@ export function useGravador(onErro: (mensagem: string) => void) {
   }, []);
 
   const iniciar = useCallback(async () => {
+    // Um pedido de microfone por vez: o segundo toque com a pergunta de permissão aberta abriria
+    // outro fluxo, que ficaria ligado.
+    if (iniciando.current || gravador.current?.state === "recording") return;
+    iniciando.current = true;
     const formato = formatoSuportado();
     let fluxo: MediaStream;
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error("sem microfone");
       fluxo = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch {
+      iniciando.current = false;
       onErro(TEXTO_MICROFONE_NEGADO);
       return;
     }
-    const novo = new MediaRecorder(fluxo, formato ? { mimeType: formato } : undefined);
+    iniciando.current = false;
+    let novo: MediaRecorder;
+    try {
+      novo = new MediaRecorder(fluxo, formato ? { mimeType: formato } : undefined);
+    } catch {
+      fluxo.getTracks().forEach((faixa) => faixa.stop());
+      onErro(TEXTO_GRAVADOR_INDISPONIVEL);
+      return;
+    }
     pedacos.current = [];
     novo.ondataavailable = (e) => e.data.size > 0 && pedacos.current.push(e.data);
     novo.onstop = () => {

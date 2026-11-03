@@ -56,6 +56,7 @@ export function TransferirDialog({
     if (!escolhido) {
       setInvalido(true);
       setErro("Selecione uma pessoa da equipe.");
+      document.getElementById(`transferir-${conversaId}`)?.focus();
       return;
     }
     setErro(null);
@@ -64,7 +65,10 @@ export function TransferirDialog({
       {
         onSuccess: () => onOpenChange(false),
         onError: (falha) => {
-          if (falha instanceof ApiRequestError && falha.fields?.responsavel_id) setInvalido(true);
+          if (falha instanceof ApiRequestError && falha.fields?.responsavel_id) {
+            setInvalido(true);
+            document.getElementById(`transferir-${conversaId}`)?.focus();
+          }
           setErro(mensagemDoErro(falha, "Não foi possível transferir. Tente novamente."));
         },
       },
@@ -107,7 +111,7 @@ export function TransferirDialog({
               }}
               invalid={invalido}
               placeholder="Selecione a pessoa"
-              emptyMessage="Ninguém mais na equipe."
+              emptyMessage="Nenhuma outra pessoa encontrada na equipe."
             />
           </div>
         )}

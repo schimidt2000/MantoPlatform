@@ -81,6 +81,7 @@ def api_respostas_rapidas() -> Any:
 @api_bp.route("/conversas/respostas-rapidas", methods=["POST"])
 @api_login_required
 def api_respostas_rapidas_criar() -> Any:
+    """Nova resposta rápida da equipe (FR-010): 201, ou 422 apontando o campo."""
     negado = _negado()
     if negado:
         return negado
@@ -94,6 +95,7 @@ def api_respostas_rapidas_criar() -> Any:
 @api_bp.route("/conversas/respostas-rapidas/<int:resposta_id>", methods=["PATCH"])
 @api_login_required
 def api_respostas_rapidas_alterar(resposta_id: int) -> Any:
+    """Altera só os campos enviados: 200, 422 por campo ou 404."""
     negado = _negado()
     if negado:
         return negado
@@ -107,6 +109,7 @@ def api_respostas_rapidas_alterar(resposta_id: int) -> Any:
 @api_bp.route("/conversas/respostas-rapidas/<int:resposta_id>", methods=["DELETE"])
 @api_login_required
 def api_respostas_rapidas_excluir(resposta_id: int) -> Any:
+    """Exclui de verdade (a tela confirmou antes): 204 ou 404."""
     negado = _negado()
     if negado:
         return negado

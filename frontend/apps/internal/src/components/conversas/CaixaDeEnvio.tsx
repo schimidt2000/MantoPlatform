@@ -89,6 +89,26 @@ function AlternarModo({ modo, onMudar }: { modo: Modo; onMudar: (modo: Modo) => 
   );
 }
 
+/** O arquivo escolhido, acima do campo, com "Remover". */
+function AnexoEscolhido({ nome, desabilitado, onRemover }: { nome: string; desabilitado: boolean; onRemover: () => void }) {
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
+      <Paperclip className="h-4 w-4 shrink-0" aria-hidden />
+      <span className="min-w-0 flex-1 truncate">{nome}</span>
+      <Button
+        type="button"
+        variant="ghost"
+        className="h-11 w-11 px-0"
+        onClick={onRemover}
+        aria-label="Remover o arquivo"
+        disabled={desabilitado}
+      >
+        <X className="h-4 w-4" aria-hidden />
+      </Button>
+    </div>
+  );
+}
+
 function JanelaFechada({ onEnviarModelo }: { onEnviarModelo: () => void }) {
   return (
     <div className="space-y-2 p-3 pt-2">
@@ -235,27 +255,38 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
   };
 
   const aoTeclar = (evento: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (painel === "barra" && teclaNaLista(evento, controle)) return;
+    if (painel === "barra") {
+      // Com a lista aberta pela "/", o Enter é da lista: nunca manda "/pix" para a cliente, nem
+      // com a lista vazia ou ainda carregando (FR-011).
+      if (teclaNaLista(evento, controle)) return;
+      if (evento.key === "Enter" && !evento.shiftKey) evento.preventDefault();
+      return;
+    }
     if (evento.key !== "Enter" || evento.shiftKey || evento.nativeEvent.isComposing || ehToque()) return;
     evento.preventDefault();
     enviar();
   };
 
-  /** O áudio gravado sai pelo mesmo envio de arquivo; se falhar, fica anexado para tentar de novo. */
+  /**
+   * O áudio gravado sai pelo mesmo envio de arquivo. Se falhar, fica anexado COM a mesma chave:
+   * quando a resposta se perdeu mas o servidor enviou, o "Enviar" de novo não duplica a nota de voz.
+   */
   const enviarGravacao = () =>
     gravador.finalizar((gravado) => {
       if (!gravado) {
-        setAviso("Nada foi gravado. Tente de novo.");
+        setAviso("A gravação ficou vazia. Grave novamente.");
         return;
       }
       setErro(null);
       setAviso(null);
+      const chave_envio = novaChaveDeEnvio();
+      chaveDoRascunho.current = chave_envio;
       enviarArquivo.mutate(
-        { arquivo: gravado, legenda: "", chave_envio: novaChaveDeEnvio() },
+        { arquivo: gravado, legenda: "", chave_envio },
         {
+          onSuccess: aoEnviar,
           onError: (falha) => {
             setArquivo(gravado);
-            mudouORascunho();
             aoErrar(falha);
           },
         },
@@ -268,23 +299,14 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
     <>
       <form onSubmit={enviar} className="space-y-2 p-3 pt-2">
         {arquivo ? (
-          <div className="flex items-center gap-2 rounded-md border border-line bg-surface px-3 py-2 text-sm">
-            <Paperclip className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="min-w-0 flex-1 truncate">{arquivo.name}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-11 w-11 px-0"
-              onClick={() => {
-                setArquivo(null);
-                mudouORascunho();
-              }}
-              aria-label="Remover o arquivo"
-              disabled={enviando}
-            >
-              <X className="h-4 w-4" aria-hidden />
-            </Button>
-          </div>
+          <AnexoEscolhido
+            nome={arquivo.name}
+            desabilitado={enviando}
+            onRemover={() => {
+              setArquivo(null);
+              mudouORascunho();
+            }}
+          />
         ) : null}
         {gravador.estado !== "parado" ? (
           <BarraDeGravacao
@@ -303,6 +325,7 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
                 carregando={lista.respostas.isLoading}
                 falhou={lista.respostas.isError}
                 onTentarDeNovo={() => void lista.respostas.refetch()}
+              tentandoDeNovo={lista.respostas.isFetching}
                 busca={painel === "botao" ? { valor: lista.buscaDoBotao, onMudar: lista.setBuscaDoBotao } : null}
                 controle={controle}
                 onEscolher={escolher}

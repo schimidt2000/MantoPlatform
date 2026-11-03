@@ -51,7 +51,8 @@ espaço.", "Já existe uma resposta com este atalho.", "Informe o texto.", "O te
 
 ## Notificações
 
-- Kind `conversa.esperando`: título "{Nome} espera resposta há {N} min.", corpo = prévia da última mensagem,
+- Kind `conversa.esperando`: título "{Nome} espera resposta há {N} min." (a partir de uma hora, "há {N} h"), corpo =
+  prévia da última mensagem,
   `link_path = /conversas?c={id}`, severidade `urgent`.
 - Kind `conversa.transferida`: título "{Quem} transferiu a conversa com {Nome} para você.", `link_path =
   /conversas?c={id}`, severidade `info`, só para o destino. `dedupe_key =

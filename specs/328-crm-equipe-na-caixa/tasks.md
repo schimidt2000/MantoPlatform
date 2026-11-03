@@ -30,16 +30,16 @@ Ele é escrito na fase Foundational (T008), antes do núcleo, e nasce falhando n
 
 ## Regra de dependência entre módulos (vale para todas as fases)
 
-`equipe_ops` é a camada de baixo: importa `models`, `constantes`, `acesso`, `relogio`, `recusa` e
-`notificacoes_ops`. **Nunca** importa `aviso_ops`, `envio_ops` nem `leitura_ops`, porque são eles que o importam
-(um import de volta fecha um ciclo). O relógio UTC sai de `aviso_ops` para `app/conversas/relogio.py` (T002) por
+`equipe_ops` é a camada de baixo: importa `models`, `constantes`, `acesso`, `relogio`, `recusa`,
+`notificacoes_ops` e `leitura_ops` (que não importa `equipe_ops`). **Nunca** importa `aviso_ops` nem `envio_ops`,
+porque são eles que o importam (um import de volta fecha um ciclo). *Corrigido na convergência (T064).* O relógio UTC sai de `aviso_ops` para `app/conversas/relogio.py` (T002) por
 esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recusa.py` (T003).
 
 ---
 
 ## Phase 1: Setup
 
-- [ ] T001 Constantes da 328 em `app/conversas/constantes.py`:
+- [X] T001 Constantes da 328 em `app/conversas/constantes.py`:
   - tempos e horário: `ESPERA_PARA_ALERTA = timedelta(minutes=15)`, `HORARIO_DE_ALERTA = (9, 21)` (hora de São
     Paulo, intervalo `[9, 21)`);
   - filtros e ações: `FILTROS_DA_LISTA = ("todas", "minhas", "sem_responsavel")`,
@@ -55,15 +55,15 @@ esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recu
     - áudio: `TEXTO_AUDIO_FALHOU` ("Não foi possível preparar o áudio. Envie o arquivo pelo clipe.");
     - avisos: `TITULO_ESPERANDO` ("{nome} espera resposta há {minutos} min."), `TITULO_TRANSFERIDA`
       ("{quem} transferiu a conversa com {nome} para você.").
-- [ ] T002 [P] `app/conversas/relogio.py` com `agora_utc()` (movida de `app/conversas/aviso_ops.py`, que passa a
+- [X] T002 [P] `app/conversas/relogio.py` com `agora_utc()` (movida de `app/conversas/aviso_ops.py`, que passa a
   importá-la de lá). Os importadores da 325 (`envio_ops`, `varredura`, `verify_325`) continuam funcionando por
   `aviso_ops.agora_utc`. Conferir com `Grep "agora_utc"`.
-- [ ] T003 [P] `app/conversas/recusa.py` com `Recusa(codigo, mensagem, status, fields=None)` e o atalho
+- [X] T003 [P] `app/conversas/recusa.py` com `Recusa(codigo, mensagem, status, fields=None)` e o atalho
   `campo(nome, mensagem)` (422 `invalido`). Em `app/conversas/envio_ops.py`, `EnvioRecusado` passa a herdar de
   `Recusa` sem mudar a assinatura, e o `_campo` local usa `campo`.
-- [ ] T004 [P] `app/impressoes3d/video_ops.py`: `caminho_do_ffmpeg() -> str | None` público (embrulha
+- [X] T004 [P] `app/impressoes3d/video_ops.py`: `caminho_do_ffmpeg() -> str | None` público (embrulha
   `_caminho_binario("ffmpeg")`, aditivo, com docstring de que o áudio das Conversas não exige ffprobe).
-- [ ] T005 [P] `app/notificacoes/notificacoes_ops.py`:
+- [X] T005 [P] `app/notificacoes/notificacoes_ops.py`:
   - `KIND_CONVERSA_ESPERANDO = "conversa.esperando"` e `KIND_CONVERSA_TRANSFERIDA = "conversa.transferida"` no
     catálogo, com `DESTINATARIOS_POR_KIND` `(COMERCIAL, SUPERADMIN)` para o primeiro e `()` para o segundo
     (destinatário sempre explícito);
@@ -77,7 +77,7 @@ esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recu
 
 **⚠️ CRITICAL**: nenhuma história começa antes desta fase terminar.
 
-- [ ] T006 Modelos em `app/models.py` conforme `data-model.md`:
+- [X] T006 Modelos em `app/models.py` conforme `data-model.md`:
   - `Conversa` ganha:
     - `responsavel_id` (FK `users.id`, `ondelete="SET NULL"`, index);
     - `assumida_em`;
@@ -87,7 +87,7 @@ esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recu
     `passive_deletes=True`).
   - `RespostaRapida` (`respostas_rapidas`).
   - Docstring com o porquê de cada coluna.
-- [ ] T007 Migration **manual** `migrations/versions/f328b2d4e6a1_conversas_equipe.py`:
+- [X] T007 Migration **manual** `migrations/versions/f328b2d4e6a1_conversas_equipe.py`:
   - `down_revision = "e325a7c1d9f2"`;
   - FKs nomeadas;
   - índice único funcional `uq_respostas_rapidas_titulo` em `lower(titulo)` e único `uq_respostas_rapidas_atalho`;
@@ -95,7 +95,7 @@ esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recu
 
   Aplicar no `manto_local` com `.venv\Scripts\flask.exe db upgrade` (`FLASK_APP=run.py`, `MANTO_SEM_THREADS=1`)
   e conferir `flask db heads` com um head só.
-- [ ] T008 **`specs/328-crm-equipe-na-caixa/verify_328.py`** com os 20 cenários da tabela "Verificação" da spec.
+- [X] T008 **`specs/328-crm-equipe-na-caixa/verify_328.py`** com os 20 cenários da tabela "Verificação" da spec.
   - **Molde:** o `verify_325.py` (disjuntor de rede, dublê da Meta que registra os corpos enviados, avisos
     assinados para recebida e eco).
   - **Usuários descartáveis:** Ana e Bia (COMERCIAL) e Cris (CASTING), com prefixo único; login pela API, um
@@ -122,19 +122,21 @@ por responsável.
 
 **Verificação da história**: cenários 1–6, 16 e 19 do `verify_328.py`; tela aberta.
 
-- [ ] T009 [US1] Primitivas da equipe em `app/conversas/equipe_ops.py` (arquivo novo):
+- [X] T009 [US1] Primitivas da equipe em `app/conversas/equipe_ops.py` (arquivo novo). *Feito:* `e_da_equipe`
+  e `responsavel_ativo` foram para `app/conversas/acesso.py`, e `serializar_pessoa` para `leitura_ops`,
+  porque `leitura_ops` serializa o responsável e não pode importar `equipe_ops` (ciclo):
   - `membros_da_equipe() -> list[User]`: ativos, com acesso e papel COMERCIAL ou SUPERADMIN, por nome. Reusa
     `notificacoes_ops.resolver_destinatarios`.
   - `e_da_equipe(user) -> bool`.
   - `responsavel_ativo(conversa) -> bool`.
   - `serializar_pessoa(user) -> {id, nome} | None`.
-- [ ] T010 [US1] `equipe_ops.resposta_da_equipe(conversa, autor_id, momento)`, chamada quando a Meta **aceita**
+- [X] T010 [US1] `equipe_ops.resposta_da_equipe(conversa, autor_id, momento)`, chamada quando a Meta **aceita**
   um envio da Plataforma (R1). Faz `UPDATE conversas SET responsavel_id = :autor, assumida_em = :momento WHERE
   id = :id AND responsavel_id IS NULL` e sincroniza o objeto da sessão. Não comita: o `_despachar` comita.
-- [ ] T011 [US1] Em `app/conversas/envio_ops.py`, `_despachar` chama `equipe_ops.resposta_da_equipe` só no ramo
+- [X] T011 [US1] Em `app/conversas/envio_ops.py`, `_despachar` chama `equipe_ops.resposta_da_equipe` só no ramo
   de sucesso (`situacao = enviada`) e com `mensagem.autor_id` presente. O ramo `falhou` não toca o responsável
   (cenário 19).
-- [ ] T012 [US1] `equipe_ops.definir_responsavel(conversa_id, acao, quem, responsavel_id=None) -> Conversa`, que
+- [X] T012 [US1] `equipe_ops.definir_responsavel(conversa_id, acao, quem, responsavel_id=None) -> Conversa`, que
   comita (R2):
   - lê o atual, decide e grava com `WHERE responsavel_id IS NOT DISTINCT FROM :atual`;
   - `rowcount == 0` na transferência ou na devolução → `Recusa("alterada", TEXTO_ALTERADA, 409)`;
@@ -147,37 +149,38 @@ por responsável.
   - ação fora de `ACOES_DO_RESPONSAVEL` → 422 `fields.acao`; conversa inexistente → 404 `nao_encontrada`.
 
   Funções de no máximo ~30 linhas: um auxiliar por ação.
-- [ ] T013 [US1] FR-018 em `equipe_ops._avisar_transferencia(conversa, quem, destino)`:
+- [X] T013 [US1] FR-018 em `equipe_ops._avisar_transferencia(conversa, quem, destino)`:
   - `notificacoes_ops.emitir(KIND_CONVERSA_TRANSFERIDA, destinatarios=[destino], …)`, só quando `destino != quem`;
   - `dedupe_key = f"conversa.transferida:{id}:{epoch de assumida_em}"`, `entidade = ("conversa", id)`;
   - `link_path = f"/conversas?c={id}"`, severidade `info`;
   - na mesma transação do `definir_responsavel` (regime A da 272).
-- [ ] T014 [US1] `app/conversas/leitura_ops.py`:
+- [X] T014 [US1] `app/conversas/leitura_ops.py`:
   - `serializar_conversa` ganha `responsavel` e `responsavel_ativo`;
   - `listar_conversas(busca, antes, filtro="todas", usuario_id=None)`: `minhas` filtra `responsavel_id =
     usuario_id`; `sem_responsavel` filtra `responsavel_id IS NULL`;
   - `joinedload(Conversa.responsavel)` para não haver N+1.
-- [ ] T015 [US1] `app/api/conversas_read.py`:
+- [X] T015 [US1] `app/api/conversas_read.py`:
   - `GET /api/conversas` lê `filtro` (fora de `FILTROS_DA_LISTA` → 422 `fields.filtro`) e passa
     `current_user.id`;
   - novo `GET /api/conversas/equipe` → `{"equipe": [...]}`, com o gate `pode_conversas` no início.
-- [ ] T016 [US1] `app/api/conversas_equipe_write.py` (arquivo novo):
+- [X] T016 [US1] `app/api/conversas_equipe_write.py` (arquivo novo):
   - comentário `RBAC:` no topo, `_negado()` e `_recusa(exc: Recusa)` (envelope `json_error` com `codigo` e
     `fields`);
   - `POST /api/conversas/<int:conversa_id>/responsavel` → 200 `{"conversa": serializar_conversa(...)}`.
 
   Registrar em `app/api/__init__.py` (import com `# noqa: E402,F401`, ao lado de `conversas_write`).
-- [ ] T017 [P] [US1] `frontend/apps/internal/src/lib/conversas.ts`:
+- [X] T017 [P] [US1] `frontend/apps/internal/src/lib/conversas.ts`:
   - tipos: `Pessoa`, `FiltroDaLista`, `AcaoDoResponsavel`; campos opcionais novos em `ConversaResumo` (armadilha
     21);
   - hooks: `useConversas(busca, filtro)` com o filtro na `queryKey`, `useEquipe()`, `useDefinirResponsavel(id)`
     (invalida a lista e a conversa) e `codigoDaRecusa` reaproveitado.
-- [ ] T018 [US1] Lista com filtro e responsável:
+- [X] T018 [US1] Lista com filtro e responsável:
   - `frontend/apps/internal/src/components/conversas/FiltroDaLista.tsx` (novo): botões de alternância "Todas",
     "Minhas" e "Sem responsável", com `aria-pressed` e alvo ≥ 44 px no celular;
   - `ListaDeConversas.tsx`: linha "Responsável: Ana" ou "Sem responsável" em cada item;
   - `pages/ConversasPage.tsx`: `?filtro=` no endereço, ao lado de `?c=` e `?busca=`.
-- [ ] T019 [US1] Menu e transferência:
+- [X] T019 [US1] Menu e transferência. *Feito:* botões diretos ("Assumir", "Transferir…", "Devolver à fila") em vez
+  de menu, um toque por ação; no celular, o nome de quem atende ganha linha própria:
   - `components/conversas/ResponsavelDaConversa.tsx` (novo): cabeçalho "Responsável: …" e o menu "Assumir",
     "Transferir…" e "Devolver à fila", com `loading` e toast no 409 (texto do servidor), e motion com
     `useReducedMotion`;
@@ -195,7 +198,7 @@ por responsável.
 
 **Verificação da história**: cenários 6–11 e 19; a lista mostra a espera.
 
-- [ ] T020 [US2] `equipe_ops`: abrir, encerrar e recalcular a espera.
+- [X] T020 [US2] `equipe_ops`: abrir, encerrar e recalcular a espera.
   - `abrir_espera(conversa, momento)`: só se `aguardando_desde` for nulo.
   - `encerrar_espera(conversa)`: zera e chama `notificacoes_ops.apagar_por_entidade("conversa", id,
     kind=KIND_CONVERSA_ESPERANDO)` (FR-008).
@@ -203,13 +206,13 @@ por responsável.
     e eco que não é `revoke`/`edit`), ou nulo. Serve para o status `failed` que chega depois do aceite (caso de
     borda "Resposta que falhou").
   - `resposta_da_equipe` (T010) passa a chamar `encerrar_espera`.
-- [ ] T021 [US2] `app/conversas/aviso_ops.py`:
+- [X] T021 [US2] `app/conversas/aviso_ops.py`:
   - `_gravar_recebida` chama `equipe_ops.abrir_espera(conversa, momento)` só quando a mensagem é nova;
   - `_gravar_eco` chama `equipe_ops.encerrar_espera(conversa)` só para eco novo que não é `revoke`/`edit`, e não
     atribui responsável (cenário 6);
   - `_aplicar_status` chama `equipe_ops.recalcular_espera(mensagem.conversa)` ao marcar `falhou` uma enviada que
     estava `enviada`.
-- [ ] T022 [US2] `equipe_ops.alertar_esperas(agora_sp=None) -> dict[str, int]` (R4):
+- [X] T022 [US2] `equipe_ops.alertar_esperas(agora_sp=None) -> dict[str, int]` (R4):
   - fora de `HORARIO_DE_ALERTA` em São Paulo (`now_sp()`), devolve `{"alertas": 0}`;
   - dentro do horário:
     - seleciona as conversas com `agora_utc - JANELA < aguardando_desde <= agora_utc - ESPERA_PARA_ALERTA`, das
@@ -221,10 +224,10 @@ por responsável.
   - comita a rodada.
 
   O `agora_sp` injetável é o que o verify usa. A conversão SP → UTC usa o fuso de `app.constants` (armadilha 3).
-- [ ] T023 [US2] `app/conversas/varredura.py`: `ciclo_de_varredura` inclui `equipe_ops.alertar_esperas` na tupla
+- [X] T023 [US2] `app/conversas/varredura.py`: `ciclo_de_varredura` inclui `equipe_ops.alertar_esperas` na tupla
   de rotinas (isolada como as outras).
-- [ ] T024 [US2] `leitura_ops.serializar_conversa` ganha `aguardando_desde` (ISO `+00:00`).
-- [ ] T025 [P] [US2] Espera na lista:
+- [X] T024 [US2] `leitura_ops.serializar_conversa` ganha `aguardando_desde` (ISO `+00:00`).
+- [X] T025 [P] [US2] Espera na lista:
   - `ListaDeConversas.tsx`: "Esperando há N min" (e "há N h" acima de 60), em vermelho a partir de 15 min,
     recalculado a cada minuto sem nova requisição;
   - tipo em `lib/conversas.ts`; helper `tempoDeEspera` em `lib/conversas.ts`.
@@ -239,7 +242,7 @@ por responsável.
 
 **Verificação da história**: cenários 12 e 13.
 
-- [ ] T026 [US3] `equipe_ops`: as notas.
+- [X] T026 [US3] `equipe_ops`: as notas.
   - `gravar_nota(conversa_id, texto, autor_id) -> ConversaNota` comita:
     - texto aparado;
     - vazio → 422 `fields.texto`;
@@ -247,12 +250,12 @@ por responsável.
     - conversa inexistente → 404.
   - `notas_da_conversa(conversa_id)`: as `NOTAS_NO_DETALHE` mais recentes, em ordem cronológica, com o autor.
   - `serializar_nota(nota)`.
-- [ ] T027 [US3] Endpoints:
+- [X] T027 [US3] Endpoints:
   - `app/api/conversas_read.py`: o detalhe devolve `notas` no topo do JSON;
   - `app/api/conversas_equipe_write.py`: `POST /api/conversas/<int:conversa_id>/notas` → 201 `{"nota": …}`.
-- [ ] T028 [P] [US3] `lib/conversas.ts`: tipo `Nota`, `notas` no detalhe e o hook `useGravarNota(id)` (invalida
+- [X] T028 [P] [US3] `lib/conversas.ts`: tipo `Nota`, `notas` no detalhe e o hook `useGravarNota(id)` (invalida
   o detalhe).
-- [ ] T029 [US3] Nota na conversa:
+- [X] T029 [US3] Nota na conversa:
   - `components/conversas/NotaInterna.tsx` (novo): balão dourado claro, "Nota interna · Ana · 14:32",
     alinhado ao centro, com a entrada da nota nova por motion com `useReducedMotion`;
   - `ConversaAberta.tsx` intercala notas e mensagens por horário;
@@ -270,7 +273,7 @@ por responsável.
 
 **Verificação da história**: cenários 14–16.
 
-- [ ] T030 [US4] `app/conversas/respostas_ops.py` (novo):
+- [X] T030 [US4] `app/conversas/respostas_ops.py` (novo):
   - funções: `listar()` (por `lower(titulo)`), `criar(dados, autor_id)`, `alterar(id, dados, autor_id)`,
     `excluir(id)` e `serializar(resposta)`;
   - validação por campo:
@@ -279,21 +282,21 @@ por responsável.
     - texto obrigatório, até 4.096 caracteres;
   - recusa → `Recusa` 422 com `fields`; o `IntegrityError` do índice vira a mesma recusa (corrida);
   - inexistente → 404.
-- [ ] T031 [US4] Em `app/api/conversas_equipe_write.py`: `GET` e `POST /api/conversas/respostas-rapidas`,
+- [X] T031 [US4] Em `app/api/conversas_equipe_write.py`: `GET` e `POST /api/conversas/respostas-rapidas`,
   `PATCH` e `DELETE /api/conversas/respostas-rapidas/<int:resposta_id>` (204), com o gate no início de cada view.
-- [ ] T032 [P] [US4] `lib/conversas.ts`:
+- [X] T032 [P] [US4] `lib/conversas.ts`:
   - tipo `RespostaRapida`;
   - hooks `useRespostasRapidas()`, `useCriarResposta()`, `useAlterarResposta()` e `useExcluirResposta()`;
   - `aplicarNome(texto, nome)`: o primeiro nome; sem nome, tira o marcador e a vírgula que sobra ("Olá, {nome}!"
     vira "Olá!").
-- [ ] T033 [US4] Lista e inserção:
+- [X] T033 [US4] Lista e inserção:
   - `components/conversas/RespostasRapidas.tsx` (novo):
     - o botão abre a lista com busca por título ou atalho;
     - "/" no começo do campo abre a mesma lista já filtrada;
     - teclado ↑ ↓ Enter Esc;
     - no celular, abre na largura da tela;
   - escolher **insere** no campo do `CaixaDeEnvio.tsx`, sem enviar (FR-011).
-- [ ] T034 [US4] `components/conversas/GerenciarRespostasDialog.tsx` (novo):
+- [X] T034 [US4] `components/conversas/GerenciarRespostasDialog.tsx` (novo):
   - lista, criar e editar, com o erro do servidor apontado no campo;
   - excluir com `ConfirmDialog` ("Excluir esta resposta?");
   - aberto por "Gerenciar respostas rápidas" no fim da lista.
@@ -308,12 +311,12 @@ por responsável.
 
 **Verificação da história**: cenários 17 e 18; a tela com o microfone (negado no Browser pane).
 
-- [ ] T035 [US5] `app/conversas/midia_ops.py`: `webm_para_ogg(dados: bytes) -> bytes` (R7).
+- [X] T035 [US5] `app/conversas/midia_ops.py`: `webm_para_ogg(dados: bytes) -> bytes` (R7).
   - Usa `video_ops.caminho_do_ffmpeg()`, com arquivos temporários de entrada e saída.
   - Roda `ffmpeg -hide_banner -v error -y -i in.webm -vn -c:a copy -f ogg out.ogg`, com timeout
     `CONVERSAO_DE_AUDIO_SEGUNDOS`, e apaga os temporários no `finally`.
   - Sem ffmpeg, código ≠ 0, saída vazia ou timeout: `AudioIndisponivel`.
-- [ ] T036 [US5] `app/conversas/envio_ops.py`, em `enviar_arquivo`:
+- [X] T036 [US5] `app/conversas/envio_ops.py`, em `enviar_arquivo`:
   - quando o MIME limpo é `audio/webm`:
     - converte depois de `_pre_condicoes` (configuração, trava e janela), para não rodar o ffmpeg num envio que
       vai ser recusado, e antes de `_tipo_do_arquivo`;
@@ -321,7 +324,7 @@ por responsável.
     - com `AudioIndisponivel`, devolve `campo("arquivo", TEXTO_AUDIO_FALHOU)`, e nada é gravado nem enviado;
   - em `_subir_e_despachar`, `bloco["voice"] = True` para áudio `audio/ogg` (FR-014);
   - o `audio/webm` **não** entra em `MIME_DE_ENVIO`: só é aceito pela conversão.
-- [ ] T037 [US5] `components/conversas/GravadorDeAudio.tsx` (novo):
+- [X] T037 [US5] `components/conversas/GravadorDeAudio.tsx` (novo):
   - MediaRecorder com o primeiro MIME suportado: `audio/ogg;codecs=opus`, depois `audio/webm;codecs=opus`, depois
     `audio/mp4`;
   - tempo correndo (`m:ss`), "Cancelar" e "Enviar";
@@ -329,7 +332,7 @@ por responsável.
   - libera as faixas do microfone ao parar;
   - sem permissão ou sem microfone: o texto do FR-012;
   - alvo ≥ 44 px e motion com `useReducedMotion`.
-- [ ] T038 [US5] `CaixaDeEnvio.tsx`:
+- [X] T038 [US5] `CaixaDeEnvio.tsx`:
   - o microfone ("Gravar áudio") aparece no lugar de "Enviar" quando o campo está vazio e a janela está aberta;
   - o áudio sai por `useEnviarArquivo`, com nome `audio-AAAAMMDD-HHMMSS.<ext>` e chave nova.
 
@@ -339,12 +342,12 @@ por responsável.
 
 ## Phase 8: Polimento e portões
 
-- [ ] T039 `ruff check` nos arquivos Python tocados; `ruff format` só nos novos (`equipe_ops.py`,
+- [X] T039 `ruff check` nos arquivos Python tocados; `ruff format` só nos novos (`equipe_ops.py`,
   `respostas_ops.py`, `relogio.py`, `recusa.py`, `conversas_equipe_write.py`, a migration e o verify).
-- [ ] T040 `cd frontend && npm run typecheck` limpo (três SPAs).
-- [ ] T041 Os 20 cenários do `verify_328.py` em PASS, e `verify_325.py` ainda verde (regressão da fundação). Os
+- [X] T040 `cd frontend && npm run typecheck` limpo (três SPAs).
+- [X] T041 Os 20 cenários do `verify_328.py` em PASS, e `verify_325.py` ainda verde (regressão da fundação). Os
   dois com `MANTO_SEM_THREADS=1` e `PYTHONUTF8=1`.
-- [ ] T042 Tela aberta de verdade pela worktree (backend 5328 e Vite 5329 com `run_in_background`, e
+- [X] T042 Tela aberta de verdade pela worktree (backend 5328 e Vite 5329 com `run_in_background`, e
   `preview_start {url}`), em desktop e 375×812:
   - filtros e espera;
   - assumir, transferir e devolver;
@@ -352,7 +355,7 @@ por responsável.
   - respostas rápidas (inserir e gerenciar);
   - microfone (mensagem de negado);
   - sem rolagem lateral de 320 a 430 px (FR-017).
-- [ ] T043 Textos novos revisados pelo Princípio XV na tela aberta, junto dos vizinhos.
+- [X] T043 Textos novos revisados pelo Princípio XV na tela aberta, junto dos vizinhos.
 - [ ] T044 Docs por fonte única:
   - `docs/01`:
     - §2.7: colunas e tabelas;
@@ -396,3 +399,30 @@ por responsável.
 - **Incremental**: US3 → US4 → US5, cada uma com os seus cenários em PASS.
 - **Commits** por grupo lógico (`feat(328): …`), sempre por caminho, mensagem por arquivo (`git commit -F`).
   Sem merge e sem push até o dono pedir (lote 325 → 328).
+
+---
+
+## Phase 9: Convergence
+
+Revisão independente, só de leitura, em 03/11: 21 achados. O F21 (docs e quickstart) já é o T044/T045.
+
+- [X] T046 CRITICAL: no `CaixaDeEnvio.tsx`, o áudio gravado guarda a chave de envio em `chaveDoRascunho` e, quando o envio falha, a reusa no "Enviar" (sem `mudouORascunho`) — a resposta perdida num 502 não pode virar nota de voz duplicada per Constitution V (contradicts)
+- [X] T047 CRITICAL: "Tentar novamente" de `RespostasRapidas.tsx` recebe `isFetching` e mostra `loading` per Constitution V (contradicts)
+- [X] T048 Com a lista aberta pela "/" (`painel === "barra"`), o Enter no campo nunca envia, mesmo com a lista vazia ou carregando (`CaixaDeEnvio.tsx`/`teclaNaLista`) per FR-011 (contradicts)
+- [X] T049 `alertar_esperas` ignora a conversa que já tem aviso `conversa.esperando` (NOT EXISTS pela entidade e o kind): espera sem resposta não ocupa o lote para sempre; corrigir o texto da dívida 185 em `docs/05` per FR-007/SC-002 (partial)
+- [X] T050 Abrir e encerrar a espera respeitando a ordem das mensagens: `abrir_espera` não abre com recebida mais antiga que a última resposta válida, e `encerrar_espera` (envio aceito e eco) só zera se a resposta for mais nova que o início (UPDATE condicional por `momento`) per FR-006/research R3 (partial)
+- [X] T051 Reação (recebida ou eco) não abre nem encerra a espera (`aviso_ops._gravar_recebida`, `_gravar_eco`) per US2 (partial)
+- [X] T052 `recalcular_espera` conta o eco sem texto (áudio, foto, figurinha) como resposta (`texto IS NULL OR …`) per caso de borda "Resposta que falhou" (partial)
+- [X] T053 Cenário no `verify_328.py`: corrida do "Assumir" (objeto lido antes de outra pessoa gravar) → 409 `ja_assumida` com o nome de quem ganhou per US1/AC3 (missing)
+- [X] T054 Cenário no `verify_328.py`: responsável que perdeu o acesso → qualquer um assume, e o alerta da espera vai para a equipe per caso de borda "Responsável sem papel"/FR-007 (missing)
+- [X] T055 `verify_328.py`: ffmpeg por `video_ops.caminho_do_ffmpeg()` dentro do app, e o cenário 17 pulado não conta como OK (o total diz que pulou e o verify sai com erro) per Constitution VIII (partial)
+- [X] T056 Textos pelo XV: "Nada foi gravado. Tente de novo." → sem "nada"/"de novo"; "achar" → "encontrar"; estados vazios no padrão "Nenhum/Nenhuma X …" (`GerenciarRespostasDialog`, `TransferirDialog`, `ListaDeConversas`) per FR-016/Constitution XV (contradicts)
+- [X] T057 O título do aviso de espera passa a horas acima de 60 min ("há 12 h"), como a lista per XV/contrato `TITULO_ESPERANDO` (partial)
+- [X] T058 `aplicarNome` sem nome só limpa a pontuação junto do marcador ("{nome}, tudo bem?" → "Tudo bem?" sem mexer no resto do texto) per caso de borda `{nome}` (partial)
+- [X] T059 `GravadorDeAudio.tsx`: falha do `new MediaRecorder` solta o microfone e avisa; segundo clique durante o pedido de permissão não abre outro fluxo per T037 (partial)
+- [X] T060 Foco no primeiro campo inválido na recusa do `GerenciarRespostasDialog` (com `aria-describedby`) e no `Combobox` do `TransferirDialog` per Constitution V (partial)
+- [X] T061 `voice: true` só para o áudio gravado na Plataforma (o convertido do webm e o ogg do gravador), não para qualquer ogg do clipe per FR-014 (partial)
+- [X] T062 Docstrings em `respostas_ops.serializar` e nas views de respostas rápidas; textos "outra pessoa" e "Conversa não encontrada." em `constantes`; `CaixaDeMensagem` dividida (anexo/linha de envio) per Constitution II (contradicts)
+- [X] T063 Verify barato do que faltou: Casting no PATCH/DELETE de resposta, fronteira das 21h, limite de 24 h, várias recebidas seguidas, webm corrompido com ffmpeg, título/atalho/texto acima do limite, atribuição por arquivo, limpeza conferindo notas/respostas/avisos per tabela "Verificação" (missing)
+- [X] T064 Corrigir a regra de dependência do `tasks.md` (`equipe_ops` importa `leitura_ops`, que não importa `equipe_ops`) per tasks.md "Regra de dependência" (contradicts)
+- [X] T065 `min-w-0` no campo da nota (`NotaInterna.tsx`) per FR-017 (partial)

@@ -31,6 +31,7 @@ def listar() -> list[RespostaRapida]:
 
 
 def serializar(resposta: RespostaRapida) -> dict[str, Any]:
+    """A resposta como a tela usa: ``{id, titulo, atalho, texto}``."""
     return {
         "id": resposta.id,
         "titulo": resposta.titulo,

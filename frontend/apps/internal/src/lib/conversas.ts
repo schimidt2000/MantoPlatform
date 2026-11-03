@@ -419,10 +419,14 @@ export function aplicarNome(texto: string, nomeDoContato: string | null | undefi
   // Telefone não é nome: "+55 11 9…" não vira "Olá, +55!".
   const nome = /\p{L}/u.test(primeiro) ? primeiro : "";
   if (nome) return texto.replace(/\{nome\}/g, nome);
-  return texto
-    .replace(/,?\s*\{nome\}/g, "")
-    .replace(/\s+([!?.,])/g, "$1")
-    .trimStart();
+  // Só a vizinhança do marcador: "Olá, {nome}!" → "Olá!"; "{nome}, tudo bem?" → "Tudo bem?";
+  // "Oi {nome}!" → "Oi!". O resto do texto não muda.
+  const semNome = texto
+    .replace(/\{nome\}\s*,\s*/g, "")
+    .replace(/,\s*\{nome\}/g, "")
+    .replace(/\s*\{nome\}/g, "");
+  const comecavaComNome = /^\s*\{nome\}/.test(texto);
+  return comecavaComNome ? semNome.replace(/^\s*(\p{Ll})/u, (_, letra: string) => letra.toUpperCase()) : semNome;
 }
 
 /** Tela de toque (celular): lá o Enter quebra a linha, porque o teclado não tem Shift. */

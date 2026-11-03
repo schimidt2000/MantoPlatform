@@ -272,11 +272,17 @@ RESPOSTA_TEXTO_MAXIMO = TEXTO_MAXIMO
 MIME_AUDIO_DO_NAVEGADOR = "audio/webm"
 # ogg/opus é o único formato que a Meta entrega como nota de voz (`voice: true`).
 MIME_NOTA_DE_VOZ = "audio/ogg"
+# O cabeçalho do Opus num ogg mora na primeira página (os primeiros bytes do arquivo).
+MARCA_OPUS = b"OpusHead"
+INICIO_DO_OGG = 128
 # Remux webm → ogg de 5 min de áudio leva milissegundos; 60 s só protege de um ffmpeg travado.
 CONVERSAO_DE_AUDIO_SEGUNDOS = 60
 
 # Textos para a equipe (Princípio XV, superfície interna).
+TEXTO_CONVERSA_NAO_ENCONTRADA = "Conversa não encontrada."
 TEXTO_JA_ASSUMIDA = "Esta conversa já foi assumida por {nome}."
+# Quem assumiu e já não existe (usuário apagado no meio da corrida).
+TEXTO_OUTRA_PESSOA = "outra pessoa"
 TEXTO_ALTERADA = "Outra pessoa alterou o responsável agora. Confira e tente novamente."
 TEXTO_DESTINO_INVALIDO = "Selecione uma pessoa da equipe."
 TEXTO_ACAO_INVALIDA = "Ação desconhecida."
@@ -295,5 +301,5 @@ TEXTO_RESPOSTA_NAO_ENCONTRADA = "Resposta rápida não encontrada."
 TEXTO_AUDIO_FALHOU = "Não foi possível preparar o áudio. Envie o arquivo pelo clipe."
 
 # Avisos do sino.
-TITULO_ESPERANDO = "{nome} espera resposta há {minutos} min."
+TITULO_ESPERANDO = "{nome} espera resposta há {tempo}."
 TITULO_TRANSFERIDA = "{quem} transferiu a conversa com {nome} para você."

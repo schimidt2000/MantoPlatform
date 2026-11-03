@@ -78,7 +78,7 @@ def conversa_ou_404(conversa_id: int) -> Conversa:
     """A conversa, ou a recusa 404."""
     conversa = db.session.get(Conversa, conversa_id)
     if conversa is None:
-        raise EnvioRecusado("nao_encontrada", "Conversa não encontrada.", 404)
+        raise EnvioRecusado("nao_encontrada", K.TEXTO_CONVERSA_NAO_ENCONTRADA, 404)
     return conversa
 
 
@@ -275,6 +275,12 @@ def _guardar_copia_local(
     return midia
 
 
+def _e_opus(mime: str | None, dados: bytes) -> bool:
+    """ogg com Opus dentro — o único áudio que a Meta entrega como nota de voz. O ogg/vorbis do
+    clipe vai como áudio comum: o cabeçalho Opus ("OpusHead") está na primeira página do ogg."""
+    return mime == K.MIME_NOTA_DE_VOZ and K.MARCA_OPUS in dados[: K.INICIO_DO_OGG]
+
+
 def _subir_e_despachar(
     mensagem: ConversaMensagem,
     midia: ConversaMidia,
@@ -297,7 +303,7 @@ def _subir_e_despachar(
         bloco["caption"] = legenda
     if tipo == K.TIPO_DOCUMENTO:
         bloco["filename"] = midia.nome_original
-    if tipo == K.TIPO_AUDIO and midia.mime == K.MIME_NOTA_DE_VOZ:
+    if tipo == K.TIPO_AUDIO and _e_opus(midia.mime, dados):
         bloco["voice"] = True  # ogg/opus chega como nota de voz, não como arquivo (FR-014)
     _despachar(mensagem, conversa, {"type": chave_meta, chave_meta: bloco}, cfg)
 

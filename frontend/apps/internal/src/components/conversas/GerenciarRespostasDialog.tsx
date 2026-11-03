@@ -64,13 +64,18 @@ function FormularioDaResposta({
         </label>
         <Input
           id="resposta-titulo"
+          aria-describedby={erros.titulo ? "erro-resposta-titulo" : undefined}
           value={rascunho.titulo}
           maxLength={80}
           aria-invalid={erros.titulo ? true : undefined}
           className={CLASSE_INVALIDO}
           onChange={(e) => onMudar("titulo", e.target.value)}
         />
-        {erros.titulo ? <p className="text-xs text-red">{erros.titulo}</p> : null}
+        {erros.titulo ? (
+          <p id="erro-resposta-titulo" className="text-xs text-red">
+            {erros.titulo}
+          </p>
+        ) : null}
       </div>
       <div className="space-y-1.5">
         <label htmlFor="resposta-atalho" className="text-sm font-medium">
@@ -78,6 +83,7 @@ function FormularioDaResposta({
         </label>
         <Input
           id="resposta-atalho"
+          aria-describedby={erros.atalho ? "erro-resposta-atalho" : undefined}
           value={rascunho.atalho}
           maxLength={31}
           placeholder="pagamento"
@@ -85,8 +91,12 @@ function FormularioDaResposta({
           className={CLASSE_INVALIDO}
           onChange={(e) => onMudar("atalho", e.target.value)}
         />
-        <p className="text-xs text-muted">Digite "/" e o atalho na mensagem para achar esta resposta.</p>
-        {erros.atalho ? <p className="text-xs text-red">{erros.atalho}</p> : null}
+        <p className="text-xs text-muted">Digite "/" e o atalho na mensagem para encontrar esta resposta.</p>
+        {erros.atalho ? (
+          <p id="erro-resposta-atalho" className="text-xs text-red">
+            {erros.atalho}
+          </p>
+        ) : null}
       </div>
       <div className="space-y-1.5">
         <label htmlFor="resposta-texto" className="text-sm font-medium">
@@ -94,6 +104,7 @@ function FormularioDaResposta({
         </label>
         <textarea
           id="resposta-texto"
+          aria-describedby={erros.texto ? "erro-resposta-texto" : undefined}
           value={rascunho.texto}
           maxLength={4096}
           rows={5}
@@ -102,7 +113,11 @@ function FormularioDaResposta({
           className={`w-full rounded-md border border-line-strong bg-panel px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${CLASSE_INVALIDO}`}
         />
         <p className="text-xs text-muted">Use {"{nome}"} para o primeiro nome do contato.</p>
-        {erros.texto ? <p className="text-xs text-red">{erros.texto}</p> : null}
+        {erros.texto ? (
+          <p id="erro-resposta-texto" className="text-xs text-red">
+            {erros.texto}
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -118,7 +133,7 @@ function ListaDasRespostas({
   onExcluir: (resposta: RespostaRapida) => void;
 }) {
   if (respostas.length === 0) {
-    return <p className="py-4 text-center text-sm text-muted">A equipe ainda não tem respostas rápidas.</p>;
+    return <p className="py-4 text-center text-sm text-muted">Nenhuma resposta rápida cadastrada ainda.</p>;
   }
   return (
     <ul className="max-h-[50vh] divide-y divide-line overflow-y-auto rounded-md border border-line">
@@ -198,6 +213,9 @@ export function GerenciarRespostasDialog({ open, onOpenChange }: GerenciarRespos
         onError: (falha) => {
           const doCampo = errosDaRecusa(falha);
           setErros(doCampo);
+          // O foco vai ao primeiro campo apontado (Princípio V).
+          const primeiro = (["titulo", "atalho", "texto"] as const).find((c) => doCampo[c]);
+          if (primeiro) document.getElementById(`resposta-${primeiro}`)?.focus();
           // Com o erro apontado no campo, não repete a mesma frase no rodapé.
           const noCampo = Object.values(doCampo).some(Boolean);
           setErro(noCampo ? null : mensagemDoErro(falha, "Não foi possível gravar a resposta. Tente novamente."));

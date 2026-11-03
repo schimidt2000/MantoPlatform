@@ -21,7 +21,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, text
+from sqlalchemy import and_, exists, func, or_, text
 from sqlalchemy.orm import joinedload
 
 from app import db
@@ -31,7 +31,7 @@ from app.conversas.acesso import PAPEIS_DE_CONVERSAS, e_da_equipe, responsavel_a
 from app.conversas.leitura_ops import nome_da_conversa
 from app.conversas.recusa import Recusa, campo
 from app.conversas.relogio import agora_utc
-from app.models import Conversa, ConversaMensagem, ConversaNota, User
+from app.models import Conversa, ConversaMensagem, ConversaNota, Notification, User
 from app.notificacoes import notificacoes_ops
 
 logger = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def _epoch(momento: datetime) -> int:
 def _conversa_ou_404(conversa_id: int) -> Conversa:
     conversa = db.session.get(Conversa, conversa_id)
     if conversa is None:
-        raise Recusa("nao_encontrada", "Conversa não encontrada.", 404)
+        raise Recusa("nao_encontrada", K.TEXTO_CONVERSA_NAO_ENCONTRADA, 404)
     return conversa
 
 
@@ -92,7 +92,7 @@ def resposta_da_equipe(conversa: Conversa, autor_id: int, momento: datetime) -> 
             {"autor": autor_id, "momento": momento, "id": conversa.id},
         )
         db.session.expire(conversa, ["responsavel_id", "assumida_em", "responsavel"])
-    encerrar_espera(conversa)
+    encerrar_espera(conversa, momento)
 
 
 def definir_responsavel(
@@ -118,7 +118,7 @@ def definir_responsavel(
 
 
 def _ja_assumida(conversa: Conversa) -> Recusa:
-    nome = conversa.responsavel.name if conversa.responsavel else "outra pessoa"
+    nome = conversa.responsavel.name if conversa.responsavel else K.TEXTO_OUTRA_PESSOA
     return Recusa("ja_assumida", K.TEXTO_JA_ASSUMIDA.format(nome=nome), 409)
 
 
@@ -174,42 +174,83 @@ def _avisar_transferencia(conversa: Conversa, quem: User, destino: User, quando:
 # ── Espera ───────────────────────────────────────────────────────────────────────────────────────
 
 
-def abrir_espera(conversa: Conversa, momento: datetime) -> None:
-    """Mensagem nova da cliente: a espera conta da PRIMEIRA sem resposta (não comita)."""
-    if conversa.aguardando_desde is None:
-        conversa.aguardando_desde = momento
-
-
-def encerrar_espera(conversa: Conversa) -> None:
-    """A equipe respondeu: some a espera e o aviso dela; o de transferência fica (FR-008)."""
-    if conversa.aguardando_desde is None:
-        return
-    conversa.aguardando_desde = None
-    notificacoes_ops.apagar_por_entidade(
-        "conversa", conversa.id, kind=notificacoes_ops.KIND_CONVERSA_ESPERANDO
+def _resposta_valida():
+    """Mensagem que conta como resposta da equipe: enviada sem falha, sem reação, e eco que não é
+    "apagada/editada pelo celular" (o eco sem texto — áudio, foto, figurinha — conta)."""
+    falsas = (K.TEXTO_APAGADA_NO_CELULAR, K.TEXTO_EDITADA_NO_CELULAR)
+    return and_(
+        ConversaMensagem.direcao == K.ENVIADA,
+        ConversaMensagem.situacao != K.SITUACAO_FALHOU,
+        ConversaMensagem.tipo != K.TIPO_REACAO,
+        or_(
+            ConversaMensagem.origem != K.ORIGEM_CELULAR,
+            ConversaMensagem.texto.is_(None),
+            ConversaMensagem.texto.notin_(falsas),
+        ),
     )
+
+
+def _ultima_resposta(conversa_id: int) -> datetime | None:
+    return (
+        db.session.query(func.max(ConversaMensagem.momento))
+        .filter(ConversaMensagem.conversa_id == conversa_id, _resposta_valida())
+        .scalar()
+    )
+
+
+def abrir_espera(conversa: Conversa, momento: datetime) -> None:
+    """Mensagem nova da cliente: a espera conta da PRIMEIRA sem resposta (não comita).
+
+    Gravação condicional no banco (outro worker pode ter encerrado a espera agora), e uma recebida
+    mais antiga que a última resposta — a que a varredura reprocessou atrasada — não abre nada.
+    """
+    if conversa.aguardando_desde is not None and conversa.aguardando_desde <= momento:
+        return
+    ultima = _ultima_resposta(conversa.id)
+    # Estritamente mais antiga: no mesmo segundo da resposta, a ordem é ambígua e a cliente espera.
+    if ultima is not None and momento < ultima:
+        return
+    db.session.execute(
+        text(
+            "UPDATE conversas SET aguardando_desde = :momento WHERE id = :id "
+            "AND (aguardando_desde IS NULL OR aguardando_desde > :momento)"
+        ),
+        {"momento": momento, "id": conversa.id},
+    )
+    db.session.expire(conversa, ["aguardando_desde"])
+
+
+def encerrar_espera(conversa: Conversa, resposta_em: datetime) -> None:
+    """A equipe respondeu: some a espera e o aviso dela; o de transferência fica (FR-008).
+
+    Só encerra a espera que começou ANTES da resposta — a cliente que escreveu depois (num aviso
+    que outro worker gravou no meio) continua esperando. Condicional no banco pelo mesmo motivo.
+    """
+    resultado = db.session.execute(
+        text(
+            "UPDATE conversas SET aguardando_desde = NULL "
+            "WHERE id = :id AND aguardando_desde <= :resposta"
+        ),
+        {"id": conversa.id, "resposta": resposta_em},
+    )
+    db.session.expire(conversa, ["aguardando_desde"])
+    if resultado.rowcount:
+        notificacoes_ops.apagar_por_entidade(
+            "conversa", conversa.id, kind=notificacoes_ops.KIND_CONVERSA_ESPERANDO
+        )
 
 
 def recalcular_espera(conversa: Conversa) -> None:
-    """A resposta que a Meta recusou depois do aceite não conta: a espera volta à primeira
-    recebida depois da última resposta que valeu (enviada sem falha ou eco que não é apagar/editar).
-    """
-    falsas = (K.TEXTO_APAGADA_NO_CELULAR, K.TEXTO_EDITADA_NO_CELULAR)
-    ultima_resposta = (
-        db.session.query(func.max(ConversaMensagem.momento))
-        .filter(
-            ConversaMensagem.conversa_id == conversa.id,
-            ConversaMensagem.direcao == K.ENVIADA,
-            ConversaMensagem.situacao != K.SITUACAO_FALHOU,
-            ~((ConversaMensagem.origem == K.ORIGEM_CELULAR) & ConversaMensagem.texto.in_(falsas)),
-        )
-        .scalar()
-    )
+    """A resposta que a Meta recusou depois do aceite não conta: a espera volta à primeira recebida
+    (que não seja reação) depois da última resposta que valeu (não comita)."""
+    ultima = _ultima_resposta(conversa.id)
     primeira = db.session.query(func.min(ConversaMensagem.momento)).filter(
-        ConversaMensagem.conversa_id == conversa.id, ConversaMensagem.direcao == K.RECEBIDA
+        ConversaMensagem.conversa_id == conversa.id,
+        ConversaMensagem.direcao == K.RECEBIDA,
+        ConversaMensagem.tipo != K.TIPO_REACAO,
     )
-    if ultima_resposta is not None:
-        primeira = primeira.filter(ConversaMensagem.momento > ultima_resposta)
+    if ultima is not None:
+        primeira = primeira.filter(ConversaMensagem.momento > ultima)
     conversa.aguardando_desde = primeira.scalar()
 
 
@@ -222,12 +263,23 @@ def _utc_de_sp(momento_sp: datetime) -> datetime:
 
 
 def _esperas_a_avisar(agora: datetime) -> list[Conversa]:
-    """Esperas de mais de 15 min, com a janela de 24 h aberta, das mais antigas, até o lote."""
+    """Esperas de mais de 15 min, com a janela de 24 h aberta e ainda sem aviso, das mais antigas.
+
+    Sem o "ainda sem aviso", a espera que ninguém responde (o "obrigada" final da cliente) ocuparia
+    o lote por 24 h e as mais novas nunca avisariam. A espera encerrada apaga o aviso dela, então o
+    aviso que existe é sempre o da espera atual.
+    """
+    ja_avisada = exists().where(
+        Notification.entity_type == "conversa",
+        Notification.entity_id == Conversa.id,
+        Notification.kind == notificacoes_ops.KIND_CONVERSA_ESPERANDO,
+    )
     return (
         Conversa.query.options(joinedload(Conversa.responsavel), joinedload(Conversa.cliente))
         .filter(
             Conversa.aguardando_desde > agora - K.JANELA,
             Conversa.aguardando_desde <= agora - K.ESPERA_PARA_ALERTA,
+            ~ja_avisada,
         )
         .order_by(Conversa.aguardando_desde)
         .limit(K.VARREDURA_LOTE)
@@ -235,11 +287,18 @@ def _esperas_a_avisar(agora: datetime) -> list[Conversa]:
     )
 
 
+def tempo_de_espera(desde: datetime, agora: datetime) -> str:
+    """ "16 min" ou, a partir de uma hora, "12 h" (como a lista da tela)."""
+    minutos = int((agora - desde).total_seconds() // 60)
+    return f"{minutos} min" if minutos < 60 else f"{minutos // 60} h"
+
+
 def _avisar_espera(conversa: Conversa, agora: datetime) -> int:
-    minutos = int((agora - conversa.aguardando_desde).total_seconds() // 60)
     return notificacoes_ops.emitir(
         notificacoes_ops.KIND_CONVERSA_ESPERANDO,
-        title=K.TITULO_ESPERANDO.format(nome=nome_da_conversa(conversa), minutos=minutos),
+        title=K.TITULO_ESPERANDO.format(
+            nome=nome_da_conversa(conversa), tempo=tempo_de_espera(conversa.aguardando_desde, agora)
+        ),
         body=conversa.ultima_previa,
         # Um aviso por espera: a identidade é a conversa + o início da espera (FR-007).
         dedupe_key=f"conversa.esperando:{conversa.id}:{_epoch(conversa.aguardando_desde)}",

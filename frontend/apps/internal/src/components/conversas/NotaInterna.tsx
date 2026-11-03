@@ -85,7 +85,7 @@ export function CaixaDeNota({ conversaId }: CaixaDeNotaProps) {
           placeholder="Nota interna (só a equipe vê)"
           aria-invalid={erro ? true : undefined}
           aria-describedby={erro ? `erro-nota-${conversaId}` : undefined}
-          className="max-h-40 min-h-11 flex-1 resize-y rounded-md border border-gold bg-gold-50 px-3 py-2.5 text-sm text-ink placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-red aria-[invalid=true]:ring-1 aria-[invalid=true]:ring-red"
+          className="max-h-40 min-h-11 min-w-0 flex-1 resize-y rounded-md border border-gold bg-gold-50 px-3 py-2.5 text-sm text-ink placeholder:text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-[invalid=true]:border-red aria-[invalid=true]:ring-1 aria-[invalid=true]:ring-red"
         />
         <Button type="submit" loading={gravar.isPending} className="h-11 shrink-0">
           {gravar.isPending ? "Gravando…" : "Gravar nota"}

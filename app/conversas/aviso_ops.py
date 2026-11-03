@@ -340,7 +340,8 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
-    equipe_ops.abrir_espera(conversa, momento)
+    if tipo != K.TIPO_REACAO:  # o 👍 da cliente não é pergunta esperando resposta
+        equipe_ops.abrir_espera(conversa, momento)
     atualizar_previa(conversa, tipo, texto, momento)
     return _criar_midia(mensagem_id, mensagem) if tipo in K.TIPOS_COM_MIDIA else None
 
@@ -438,6 +439,6 @@ def _gravar_eco(eco: dict[str, Any]) -> int | None:
     atualizar_previa(conversa, tipo, texto, momento)
     # O eco é resposta da equipe pelo celular (encerra a espera), mas sem autor: não atribui
     # (feature 328). Apagar ou editar pelo celular não é resposta.
-    if (eco.get("type") or "") not in ("revoke", "edit"):
-        equipe_ops.encerrar_espera(conversa)
+    if (eco.get("type") or "") not in ("revoke", "edit") and tipo != K.TIPO_REACAO:
+        equipe_ops.encerrar_espera(conversa, momento)
     return _criar_midia(mensagem_id, eco) if tipo in K.TIPOS_COM_MIDIA else None

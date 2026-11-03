@@ -66,6 +66,7 @@ interface RespostasRapidasProps {
   carregando: boolean;
   falhou: boolean;
   onTentarDeNovo: () => void;
+  tentandoDeNovo: boolean;
   /** Com busca própria (aberta pelo botão); sem ela, a busca é o texto depois da "/". */
   busca: { valor: string; onMudar: (valor: string) => void } | null;
   controle: ControleDaLista;
@@ -79,6 +80,7 @@ export function RespostasRapidas({
   carregando,
   falhou,
   onTentarDeNovo,
+  tentandoDeNovo,
   busca,
   controle,
   onEscolher,
@@ -124,7 +126,7 @@ export function RespostasRapidas({
             <p role="alert" className="text-sm text-red">
               Não foi possível carregar as respostas rápidas. Tente novamente.
             </p>
-            <Button type="button" variant="outline" size="sm" onClick={onTentarDeNovo}>
+            <Button type="button" variant="outline" size="sm" loading={tentandoDeNovo} onClick={onTentarDeNovo}>
               Tentar novamente
             </Button>
           </div>
