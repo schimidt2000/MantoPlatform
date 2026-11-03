@@ -21,7 +21,7 @@ from werkzeug.datastructures import FileStorage
 from app import db
 from app.cadastro.cadastro_ops import DOC_EXTS, DOC_MAX, PHOTO_EXTS, PHOTO_MAX, validate_upload
 from app.constants import DEPARTURE_DEFAULT_LOCATION
-from app.models import CalendarEvent, EventRole, FigurinoSheet, Talent, TalentMedia
+from app.models import CalendarEvent, EventClient, EventRole, FigurinoSheet, Talent, TalentMedia
 from app.notificacoes import notificacoes_ops
 from app.storage import save_file
 
@@ -265,11 +265,76 @@ def _antes_do_evento(roles: list[EventRole]) -> dict[int, dict]:
     return blocos
 
 
+def _e_cargo_de_coordenador(role: EventRole) -> bool:
+    """O cargo é o de coordenador do evento (cargo `extra`, não personagem com esse nome)."""
+    return (
+        role.role_type == "extra"
+        and (role.character_name or "").strip().casefold() == COORDENADOR_ROLE_NAME.casefold()
+    )
+
+
+def _cliente_para_o_coordenador(roles: list[EventRole]) -> dict[int, str]:
+    """Nome da cliente de cada evento que ESTA pessoa coordena e já aceitou (feature 327).
+
+    Pedido do dono (03/11/2026): o coordenador vê **só o nome** de quem contratou, e **só depois de
+    aceitar**. O resto do elenco não vê, o convite pendente não vê (ainda pode ser recusado), e
+    telefone, e-mail e documento da cliente nunca saem para o portal. Convite nunca enviado
+    (`NULL`) também não conta como aceite.
+
+    Dia de venda agrupada quase nunca tem cliente próprio (no espelho de 03/11, 1 de 22 dias; 19 dos
+    principais têm): sem cliente no dia, vale o do principal (`group_leader_id`).
+
+    Os vínculos vêm numa consulta por relação para a lista inteira — ler `event.event_clients` no
+    laço seria um SELECT por evento, o mesmo motivo de `_antes_do_evento`.
+
+    Args:
+        roles: Escalações já carregadas, com o evento (ver `_com_evento`).
+
+    Returns:
+        `{role_id: nome}`, só para as escalações com algo a mostrar. Chave por **escalação**, não por
+        evento: quem coordena e tem um personagem pendente no mesmo evento não pode ver o nome no
+        cartão do convite.
+    """
+    from app.financeiro.vendas_ops import contratante_name
+
+    alvo = [
+        r
+        for r in roles
+        if r.event is not None and r.invite_status == "accepted" and _e_cargo_de_coordenador(r)
+    ]
+    if not alvo:
+        return {}
+
+    ids = {r.event_id for r in alvo} | {
+        r.event.group_leader_id for r in alvo if r.event.group_leader_id
+    }
+    eventos = {
+        e.id: e
+        for e in CalendarEvent.query.filter(CalendarEvent.id.in_(ids))
+        .options(
+            selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
+            selectinload(CalendarEvent.client),
+        )
+        .all()
+    }
+
+    nomes: dict[int, str] = {}
+    for role in alvo:
+        nome = contratante_name(eventos[role.event_id])
+        principal = eventos.get(role.event.group_leader_id)
+        if nome is None and principal is not None:
+            nome = contratante_name(principal)
+        if nome:
+            nomes[role.id] = nome
+    return nomes
+
+
 def _role_summary(
     role: EventRole,
     has_figurino: bool = False,
     before_event: dict | None = None,
     pedido_da_venda: bool = False,
+    cliente: str | None = None,
 ) -> dict:
     """Serializa uma escalação do próprio talento — inclui sempre o cachê dele.
 
@@ -290,6 +355,8 @@ def _role_summary(
             qual `has_figurino` também chega pronto.
         pedido_da_venda: O principal da venda tem pedido de cancelamento de "todos os dias"
             (feature 315). Também de fora, pelo lote `solicitacoes_da_venda`: uma consulta por lista.
+        cliente: Nome da cliente, só para o coordenador que aceitou (feature 327). De fora, pelo
+            lote `_cliente_para_o_coordenador`; `None` para todos os outros.
 
     Returns:
         O dicionário da escalação, tal como o portal o recebe.
@@ -337,6 +404,8 @@ def _role_summary(
         # mostrar" fica no servidor. Sempre `None` no histórico: preparação é para o que ainda vai
         # acontecer.
         "before_event": before_event,
+        # Feature 327: só o nome, só no cargo de coordenador já aceito — a regra está no lote.
+        "cliente": cliente,
     }
 
 
@@ -403,6 +472,9 @@ def get_agenda(talent: Talent) -> dict:
     from app.calendar.solicitacao_ops import solicitacoes_da_venda
 
     da_venda = solicitacoes_da_venda([r.event for r in pending_invites + upcoming + past])
+    # Feature 327: só os próximos. O convite pendente não tem aceite, e o histórico não é desenhado
+    # nesta tela — passar por ele carregaria a cliente de cada evento passado de um coordenador antigo.
+    clientes = _cliente_para_o_coordenador(upcoming)
 
     # `cache_total`/`payment_status` já vêm de `_role_summary` — antes eram anexados só aqui, que
     # era exatamente a razão de o cachê sumir nas outras duas listas.
@@ -412,6 +484,7 @@ def get_agenda(talent: Talent) -> dict:
             has_figurino=role.event_id in com_ficha,
             before_event=antes.get(role.event_id) if preparacao else None,
             pedido_da_venda=role.event_id in da_venda,
+            cliente=clientes.get(role.id),
         )
 
     return {

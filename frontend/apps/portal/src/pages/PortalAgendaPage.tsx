@@ -34,6 +34,9 @@ function RoleCard({ role }: { role: PortalRole }) {
             </p>
             <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
             <RoleLine role={role} />
+            {/* Quem decide se a linha existe é o servidor: só o coordenador que aceitou recebe o
+                nome. Aqui só se desenha o que veio. */}
+            {role.cliente && <p className="text-sm text-muted">Cliente: {role.cliente}</p>}
           </div>
         </div>
 
