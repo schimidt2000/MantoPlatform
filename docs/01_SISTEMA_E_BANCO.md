@@ -2018,6 +2018,12 @@ serializador (`portal_ops._role_summary`) e carrega, desde a feature 302, mais d
   quando o pedido é de "todos os dias" (lote `solicitacoes_da_venda`, uma consulta por lista). Vai o código, nunca o motivo: a tela escreve "Evento em
   confirmação — entre em contato com a produção". Em `pending_invites`, `upcoming` e `history` da
   agenda e em `items` do histórico; opcional no TypeScript, como as duas acima.
+- **`cliente`** (correção 327) — o **nome** da cliente, ou `null`. Só vem preenchido em `upcoming`, na escalação de
+  **cargo Coordenador** (`role_type="extra"`, nome "Coordenador") com **convite aceito**: convite pendente, convite
+  nunca enviado, elenco e outros cargos levam `null`, e `pending_invites`/`history` e o `GET /api/portal/historico`
+  também. Nome por `vendas_ops.contratante_name`; dia de venda agrupada sem cliente usa o do principal. Telefone,
+  e-mail e documento da cliente nunca vão ao portal. Lote `portal_ops._cliente_para_o_coordenador` (chave por
+  escalação, sem N+1); opcional no TypeScript.
 
 > **`history` continua no payload da agenda de propósito**, embora a tela tenha parado de usá-lo na
 > 302. `manto-backend` e `manto-frontend` são serviços separados no `render.yaml` e não trocam de

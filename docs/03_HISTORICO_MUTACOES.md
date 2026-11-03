@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **327-cliente-para-coordenador** | O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -390,6 +391,34 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 327 — O coordenador vê o nome da cliente depois de aceitar   (327-cliente-para-coordenador · 2026-11-03 · sem migration)
+
+> Nível 2 (ajuste num domínio, sem migration). Detalhe: `specs/327-cliente-para-coordenador/spec.md`.
+
+**O pedido.** O dono (03/11): "Preciso mostrar apenas o nome do contratante para os coordenadores do evento. Após
+aceitarem eles têm essa informação lá." Até aqui o portal não mostrava nada da cliente a ninguém.
+
+**O que mudou.**
+- Backend: `portal_ops._cliente_para_o_coordenador` (lote) e a chave `cliente` em `_role_summary`; `get_agenda` só
+  passa os próximos eventos. A regra: cargo Coordenador (`_e_cargo_de_coordenador`, o mesmo teste de
+  `is_event_coordinator`) **e** `invite_status == "accepted"`. Nome por `vendas_ops.contratante_name`; sem cliente no
+  dia, o do principal (`group_leader_id`).
+- Frontend: `PortalRole.cliente?` e a linha "Cliente: <nome>" no `RoleCard` da Agenda. Quem decide se a linha existe
+  é o servidor.
+
+**Decisões.** Convite **nunca enviado** não conta como aceite, ao pé da letra do pedido ("após aceitarem"); no espelho
+há 1 cargo futuro de coordenador assim. Histórico, ficha de figurino e e-mail de convite ficam sem a cliente. A
+palavra na tela é "Cliente", do glossário (§XV: "a cliente", a contratante do evento).
+
+**Verificação.** `verify_327.py` 14/14; 9/14 no código antigo. `verify_302.py` 22/22. `npm run typecheck` e `ruff`
+limpos. Tela aberta no portal local em 375 px, antes e depois de "Aceitar".
+
+**Pegadinhas.** A chave do lote é a **escalação**, não o evento: quem coordena (aceito) e tem personagem pendente no
+mesmo evento veria o nome no cartão do convite. O dia agrupado quase nunca tem cliente próprio (1 de 22 no espelho):
+sem cair no principal, o coordenador do segundo dia não veria nada. O `selectinload` das relações reaproveita os
+eventos já no mapa de identidade sem SQL a mais por evento (cenário 13 mede); o verify roda as requisições fora do
+`app_context` justamente para o many-to-one `EventClient.client` não sair do mapa e esconder um N+1.
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 
