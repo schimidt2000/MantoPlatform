@@ -4132,10 +4132,70 @@ class Conversa(db.Model):
     ultima_previa = db.Column(db.String(200), nullable=True)
     # Contagem da EQUIPE (um número, uma caixa — clarify de 30/10), não de cada pessoa.
     nao_lidas = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    # Feature 328 — fila livre: nulo = ninguém atende ainda; quem responde primeiro pela Plataforma
+    # vira o responsável (UPDATE condicional, para a segunda resposta quase simultânea não "roubar").
+    responsavel_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    # UTC. Marca a vez do responsável atual: é a identidade do aviso de transferência.
+    assumida_em = db.Column(db.DateTime, nullable=True)
+    # UTC. A primeira mensagem da cliente ainda sem resposta; nulo = ninguém esperando. Guardado (e
+    # não recalculado das mensagens) para o alerta de 15 min ser um SELECT indexado.
+    aguardando_desde = db.Column(db.DateTime, nullable=True, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     cliente = db.relationship("Client", lazy=True, backref=db.backref("conversas", lazy=True))
+    responsavel = db.relationship("User", lazy=True, foreign_keys=[responsavel_id])
+
+
+class ConversaNota(db.Model):
+    """Nota interna da equipe numa conversa (feature 328). Nunca sai para a cliente.
+
+    É registro, como a observação do evento: nesta fase não se edita nem se exclui — corrigir é
+    escrever outra nota. Vale com a janela de 24 h fechada (não fala com a Meta).
+    """
+
+    __tablename__ = "conversa_notas"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    texto = db.Column(db.Text, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    conversa = db.relationship(
+        "Conversa", lazy=True,
+        backref=db.backref("notas", lazy="dynamic", cascade="all, delete-orphan", passive_deletes=True),
+    )
+    autor = db.relationship("User", lazy=True, foreign_keys=[autor_id])
+
+
+class RespostaRapida(db.Model):
+    """Texto pronto da equipe para a caixa de envio (feature 328). Uma lista só, de todo o Comercial.
+
+    ``titulo`` é único sem distinguir caixa (índice em ``lower(titulo)``, na migration): "Pagamento"
+    e "pagamento" não convivem. ``atalho`` é opcional, gravado em minúsculas, sem "/" nem espaço, e
+    também único. ``texto`` pode ter ``{nome}``, trocado na tela pelo primeiro nome do contato —
+    aqui fica o texto cru. Excluir apaga de verdade: é configuração, não histórico.
+    """
+
+    __tablename__ = "respostas_rapidas"
+    __table_args__ = (
+        db.Index("uq_respostas_rapidas_titulo", db.text("lower(titulo)"), unique=True),
+        db.Index("uq_respostas_rapidas_atalho", "atalho", unique=True),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(80), nullable=False)
+    atalho = db.Column(db.String(30), nullable=True)
+    texto = db.Column(db.Text, nullable=False)
+    criado_por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    alterado_por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 class ConversaMensagem(db.Model):

@@ -22,10 +22,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.conversas import constantes as K
-from app.conversas import midia_ops
+from app.conversas import equipe_ops, midia_ops
 from app.conversas.aviso_ops import agora_utc, atualizar_previa
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.leitura_ops import janela_aberta
+from app.conversas.recusa import Recusa, campo
 from app.conversas.telefone import so_digitos
 from app.integracoes import whatsapp_client as wc
 from app.models import Conversa, ConversaMensagem, ConversaMidia
@@ -42,17 +43,8 @@ TEXTO_JANELA_FECHADA = (
 )
 
 
-class EnvioRecusado(Exception):
-    """Recusa do núcleo, com o código que a tela compara e o status HTTP."""
-
-    def __init__(
-        self, codigo: str, mensagem: str, status: int, fields: dict[str, str] | None = None
-    ) -> None:
-        super().__init__(mensagem)
-        self.codigo = codigo
-        self.mensagem = mensagem
-        self.status = status
-        self.fields = fields or {}
+class EnvioRecusado(Recusa):
+    """Recusa do envio. Mesmo formato da `Recusa` da equipe (a tela trata as duas igual)."""
 
 
 @dataclass(frozen=True)
@@ -67,7 +59,8 @@ class Envio:
 
 
 def _campo(nome: str, mensagem: str) -> EnvioRecusado:
-    return EnvioRecusado("invalido", mensagem, 422, {nome: mensagem})
+    recusa = campo(nome, mensagem)
+    return EnvioRecusado(recusa.codigo, recusa.mensagem, recusa.status, recusa.fields)
 
 
 def _validar_chave(chave: str | None) -> str:
@@ -149,7 +142,11 @@ def _registrar_falha(mensagem: ConversaMensagem, exc: wc.WhatsappErro) -> None:
 def _despachar(
     mensagem: ConversaMensagem, conversa: Conversa, corpo: dict[str, Any], cfg: CfgWhatsapp
 ) -> None:
-    """Chama a Meta (sem trava de linha) e grava o wamid ou o motivo da falha."""
+    """Chama a Meta (sem trava de linha) e grava o wamid ou o motivo da falha.
+
+    Só o envio ACEITO conta como resposta da equipe (feature 328): atribui a conversa da fila ao
+    autor e encerra a espera. O que falhou não faz nem um nem outro.
+    """
     try:
         resposta = wc.enviar(cfg.conexao, {**_destino(conversa), **corpo})
     except wc.WhatsappErro as exc:
@@ -158,6 +155,8 @@ def _despachar(
         mensagem.externo_id = resposta["id"]
         mensagem.situacao = K.SITUACAO_ENVIADA
     mensagem.momento = agora_utc()
+    if mensagem.situacao == K.SITUACAO_ENVIADA and mensagem.autor_id is not None:
+        equipe_ops.resposta_da_equipe(conversa, mensagem.autor_id, mensagem.momento)
     atualizar_previa(conversa, mensagem.tipo, mensagem.texto, mensagem.momento)
     db.session.commit()
 
@@ -229,15 +228,34 @@ def enviar_arquivo(
     if existente := _ja_enviada(chave):
         return Envio(existente, nova=False)
     mime_limpo = mime_normalizado(mime)
-    tipo = _tipo_do_arquivo(mime_limpo, len(dados))
+    if mime_limpo != K.MIME_AUDIO_DO_NAVEGADOR:
+        _tipo_do_arquivo(mime_limpo, len(dados))  # recusa cedo, antes de olhar a conversa
     conversa = conversa_ou_404(conversa_id)
     _pre_condicoes(cfg, conversa, exige_janela=True)
+    dados, nome, mime_limpo = _audio_do_navegador(dados, nome, mime_limpo)
+    tipo = _tipo_do_arquivo(mime_limpo, len(dados))
     legenda = (legenda or "").strip()[: K.TEXTO_MAXIMO] or None
     envio = _reservar(conversa, chave, tipo, legenda, autor_id)
     if envio.nova:
         midia = _guardar_copia_local(envio.mensagem, dados, nome, mime_limpo, cfg)
         _subir_e_despachar(envio.mensagem, midia, conversa, dados, tipo, legenda, cfg)
     return envio
+
+
+def _audio_do_navegador(dados: bytes, nome: str, mime: str) -> tuple[bytes, str, str]:
+    """O webm do Chrome vira ogg antes de guardar e enviar (feature 328, FR-013); o resto passa.
+
+    Roda depois das pré-condições: não se gasta ffmpeg num envio que a janela ou a trava recusam.
+    """
+    if mime != K.MIME_AUDIO_DO_NAVEGADOR:
+        return dados, nome, mime
+    try:
+        ogg = midia_ops.webm_para_ogg(dados)
+    except midia_ops.AudioIndisponivel as exc:
+        logger.warning("[whatsapp] áudio gravado não convertido: %s", exc)
+        raise _campo("arquivo", K.TEXTO_AUDIO_FALHOU) from exc
+    base = nome.rsplit(".", 1)[0] if "." in nome else nome
+    return ogg, f"{base or 'audio'}.ogg", K.MIME_NOTA_DE_VOZ
 
 
 def _guardar_copia_local(
@@ -279,6 +297,8 @@ def _subir_e_despachar(
         bloco["caption"] = legenda
     if tipo == K.TIPO_DOCUMENTO:
         bloco["filename"] = midia.nome_original
+    if tipo == K.TIPO_AUDIO and midia.mime == K.MIME_NOTA_DE_VOZ:
+        bloco["voice"] = True  # ogg/opus chega como nota de voz, não como arquivo (FR-014)
     _despachar(mensagem, conversa, {"type": chave_meta, chave_meta: bloco}, cfg)
 
 

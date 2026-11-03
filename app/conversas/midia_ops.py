@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
+import tempfile
 import uuid
 from datetime import timedelta
 
@@ -19,6 +21,7 @@ from app import db
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc
 from app.conversas.configuracao import CfgWhatsapp
+from app.impressoes3d import video_ops
 from app.integracoes import whatsapp_client as wc
 from app.models import ConversaMidia
 
@@ -108,3 +111,40 @@ def baixar_e_guardar(midia_id: int, cfg: CfgWhatsapp) -> str:
     midia.erro = None
     db.session.commit()
     return K.MIDIA_GUARDADA
+
+
+# ── Áudio gravado no navegador (feature 328) ─────────────────────────────────────────────────────
+
+
+class AudioIndisponivel(Exception):
+    """Não deu para trocar o recipiente do áudio (sem ffmpeg, arquivo inválido, ffmpeg travado)."""
+
+
+def webm_para_ogg(dados: bytes) -> bytes:
+    """O áudio webm/Opus do Chrome no recipiente ogg que o WhatsApp aceita (research R7).
+
+    Só troca o recipiente (``-c:a copy``): o Opus já está dentro, então não há recodificação e não
+    precisa de encoder — o ffmpeg 5.1 do contêiner do Render serve. Arquivo temporário em vez de
+    pipe (o pipe do ffmpeg no Windows é frágil), apagado ao fim.
+    """
+    ffmpeg = video_ops.caminho_do_ffmpeg()
+    if not ffmpeg:
+        raise AudioIndisponivel("o ffmpeg não está disponível nesta máquina")
+    with tempfile.TemporaryDirectory(prefix="conversa-audio-") as pasta:
+        entrada = os.path.join(pasta, "entrada.webm")
+        saida = os.path.join(pasta, "saida.ogg")
+        with open(entrada, "wb") as arquivo:
+            arquivo.write(dados)
+        comando = [ffmpeg, "-hide_banner", "-v", "error", "-y", "-i", entrada, "-vn",
+                   "-c:a", "copy", "-f", "ogg", saida]
+        try:
+            r = subprocess.run(
+                comando, capture_output=True, timeout=K.CONVERSAO_DE_AUDIO_SEGUNDOS, check=False
+            )
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise AudioIndisponivel(f"o ffmpeg não rodou: {exc}") from exc
+        if r.returncode != 0 or not os.path.isfile(saida) or os.path.getsize(saida) == 0:
+            erro = r.stderr.decode("utf-8", "replace")[-300:]
+            raise AudioIndisponivel(f"o ffmpeg recusou o áudio: {erro}")
+        with open(saida, "rb") as arquivo:
+            return arquivo.read()

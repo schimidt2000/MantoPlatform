@@ -1,7 +1,7 @@
 """Endpoints de LEITURA das Conversas (feature 325 — WhatsApp na Plataforma).
 
 RBAC: COMERCIAL e SUPERADMIN (``conversas.acesso.pode_conversas``, função chamada no início de cada
-view — Princípio XIII). A mídia de quem não tem o papel responde **404**, não 403, para não
+view — Princípio XIII). A equipe (``/conversas/equipe``, feature 328) segue o mesmo gate. A mídia de quem não tem o papel responde **404**, não 403, para não
 confirmar que o arquivo existe. Os endpoints só validam, chamam o núcleo (``app/conversas/``) e
 serializam.
 """
@@ -16,9 +16,10 @@ from flask_login import current_user
 from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.conversas import envio_ops, leitura_ops, midia_ops
+from app.conversas import envio_ops, equipe_ops, leitura_ops, midia_ops
 from app.conversas.acesso import pode_conversas
 from app.conversas.configuracao import cfg_whatsapp
+from app.conversas.constantes import FILTRO_TODAS, FILTROS_DA_LISTA, TEXTO_FILTRO_INVALIDO
 from app.integracoes import whatsapp_client as wc
 from app.models import Conversa, ConversaMidia
 
@@ -32,13 +33,16 @@ def _negado() -> Any:
 @api_bp.route("/conversas")
 @api_login_required
 def api_conversas_lista() -> Any:
-    """Lista de conversas, da última mensagem para trás, com busca e cursor."""
+    """Lista de conversas, da última mensagem para trás, com busca, filtro e cursor."""
     negado = _negado()
     if negado:
         return negado
+    filtro = request.args.get("filtro") or FILTRO_TODAS
+    if filtro not in FILTROS_DA_LISTA:
+        return json_error(TEXTO_FILTRO_INVALIDO, 422, fields={"filtro": TEXTO_FILTRO_INVALIDO})
     cfg = cfg_whatsapp()
     conversas, proximo = leitura_ops.listar_conversas(
-        request.args.get("busca"), request.args.get("antes")
+        request.args.get("busca"), request.args.get("antes"), filtro, current_user.id
     )
     return jsonify(
         {
@@ -68,7 +72,22 @@ def api_conversas_detalhe(conversa_id: int) -> Any:
             "conversa": leitura_ops.serializar_conversa(conversa),
             "mensagens": [leitura_ops.serializar_mensagem(m) for m in mensagens],
             "tem_mais": tem_mais,
+            "notas": [
+                leitura_ops.serializar_nota(n) for n in equipe_ops.notas_da_conversa(conversa.id)
+            ],
         }
+    )
+
+
+@api_bp.route("/conversas/equipe")
+@api_login_required
+def api_conversas_equipe() -> Any:
+    """Para quem se pode transferir uma conversa (feature 328, FR-004)."""
+    negado = _negado()
+    if negado:
+        return negado
+    return jsonify(
+        {"equipe": [leitura_ops.serializar_pessoa(u) for u in equipe_ops.membros_da_equipe()]}
     )
 
 

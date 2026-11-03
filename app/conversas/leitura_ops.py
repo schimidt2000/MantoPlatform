@@ -15,9 +15,10 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.conversas import constantes as K
-from app.conversas.aviso_ops import agora_utc
+from app.conversas.acesso import responsavel_ativo
+from app.conversas.relogio import agora_utc
 from app.conversas.telefone import so_digitos
-from app.models import Client, Conversa, ConversaMensagem
+from app.models import Client, Conversa, ConversaMensagem, ConversaNota
 
 BUSCA_MINIMA = 2
 
@@ -70,8 +71,27 @@ def _cliente(conversa: Conversa) -> dict[str, Any] | None:
     return {"id": conversa.cliente.id, "nome": conversa.cliente.name}
 
 
+def serializar_pessoa(user: Any) -> dict[str, Any] | None:
+    """Quem atende, escreveu a nota ou está na equipe: ``{id, nome}``."""
+    return {"id": user.id, "nome": user.name} if user is not None else None
+
+
+def serializar_nota(nota: ConversaNota) -> dict[str, Any]:
+    """Nota interna (feature 328): nunca sai para a cliente."""
+    return {
+        "id": nota.id,
+        "texto": nota.texto,
+        "autor": serializar_pessoa(nota.autor),
+        "momento": _iso_utc(nota.created_at),
+    }
+
+
 def serializar_conversa(conversa: Conversa) -> dict[str, Any]:
-    """O cartão da conversa (lista e cabeçalho da conversa aberta)."""
+    """O cartão da conversa (lista e cabeçalho da conversa aberta).
+
+    ``responsavel_ativo`` falso = o responsável perdeu o papel ou o acesso: a tela mostra o nome e
+    oferece "Assumir" a qualquer um (feature 328, FR-003).
+    """
     fecha_em = conversa.ultima_recebida_em + K.JANELA if conversa.ultima_recebida_em else None
     return {
         "id": conversa.id,
@@ -86,6 +106,9 @@ def serializar_conversa(conversa: Conversa) -> dict[str, Any]:
         "nao_lidas": conversa.nao_lidas or 0,
         "janela_aberta": janela_aberta(conversa),
         "janela_fecha_em": _iso_utc(fecha_em),
+        "responsavel": serializar_pessoa(conversa.responsavel),
+        "responsavel_ativo": responsavel_ativo(conversa),
+        "aguardando_desde": _iso_utc(conversa.aguardando_desde),
     }
 
 
@@ -135,11 +158,23 @@ def serializar_mensagem(mensagem: ConversaMensagem) -> dict[str, Any]:
     }
 
 
-def listar_conversas(busca: str | None, antes: str | None) -> tuple[list[Conversa], str | None]:
-    """Página da lista, da última mensagem para trás. Devolve as conversas e o próximo cursor."""
-    consulta = Conversa.query.options(joinedload(Conversa.cliente)).outerjoin(
-        Client, Client.id == Conversa.client_id
-    )
+def listar_conversas(
+    busca: str | None,
+    antes: str | None,
+    filtro: str = K.FILTRO_TODAS,
+    usuario_id: int | None = None,
+) -> tuple[list[Conversa], str | None]:
+    """Página da lista, da última mensagem para trás. Devolve as conversas e o próximo cursor.
+
+    ``filtro`` (feature 328): ``minhas`` = responsável é ``usuario_id``; ``sem_responsavel`` = fila.
+    """
+    consulta = Conversa.query.options(
+        joinedload(Conversa.cliente), joinedload(Conversa.responsavel)
+    ).outerjoin(Client, Client.id == Conversa.client_id)
+    if filtro == K.FILTRO_MINHAS:
+        consulta = consulta.filter(Conversa.responsavel_id == usuario_id)
+    elif filtro == K.FILTRO_SEM_RESPONSAVEL:
+        consulta = consulta.filter(Conversa.responsavel_id.is_(None))
     termo = (busca or "").strip()
     if len(termo) >= BUSCA_MINIMA:
         filtros = [Conversa.nome_perfil.ilike(f"%{termo}%"), Client.name.ilike(f"%{termo}%")]

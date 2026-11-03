@@ -22,7 +22,9 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
 from app.conversas import constantes as K
+from app.conversas import equipe_ops
 from app.conversas.configuracao import CfgWhatsapp
+from app.conversas.relogio import agora_utc
 from app.conversas.telefone import so_digitos, telefone_com_nono, variantes_de_telefone
 from app.models import Client, Conversa, ConversaMensagem, ConversaMidia, WhatsappAviso
 
@@ -35,11 +37,6 @@ ENVIO_EM_VOO = 300
 
 class MensagemAindaNaoGravada(Exception):
     """O status chegou antes de o envio gravar o wamid (corrida envio × aviso): refazer depois."""
-
-
-def agora_utc() -> datetime:
-    """Relógio destas tabelas: UTC naive (como ``Client.created_at``)."""
-    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _momento(valor: Any) -> datetime:
@@ -343,6 +340,7 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
+    equipe_ops.abrir_espera(conversa, momento)
     atualizar_previa(conversa, tipo, texto, momento)
     return _criar_midia(mensagem_id, mensagem) if tipo in K.TIPOS_COM_MIDIA else None
 
@@ -383,6 +381,9 @@ def _aplicar_status(status: dict[str, Any]) -> None:
             mensagem.situacao = K.SITUACAO_FALHOU
             mensagem.erro_codigo = codigo
             mensagem.erro_motivo = K.motivo_do_erro(codigo)
+            # A resposta que não chegou não conta: a espera volta (feature 328).
+            db.session.flush()
+            equipe_ops.recalcular_espera(mensagem.conversa)
         return
     nova = K.ORDEM_DA_SITUACAO[situacao]
     if atual is not None and nova > atual:
@@ -435,4 +436,8 @@ def _gravar_eco(eco: dict[str, Any]) -> int | None:
         return None
     # Só a cliente reabre a janela (R9): o eco atualiza a prévia, não `ultima_recebida_em`.
     atualizar_previa(conversa, tipo, texto, momento)
+    # O eco é resposta da equipe pelo celular (encerra a espera), mas sem autor: não atribui
+    # (feature 328). Apagar ou editar pelo celular não é resposta.
+    if (eco.get("type") or "") not in ("revoke", "edit"):
+        equipe_ops.encerrar_espera(conversa)
     return _criar_midia(mensagem_id, eco) if tipo in K.TIPOS_COM_MIDIA else None

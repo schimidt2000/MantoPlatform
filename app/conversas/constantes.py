@@ -244,3 +244,56 @@ def motivo_do_erro(codigo: int | None) -> str:
     if codigo is None:
         return MOTIVO_INDISPONIVEL
     return MOTIVO_DO_ERRO.get(codigo) or MOTIVO_GENERICO.format(codigo=codigo)
+
+
+# ── Equipe na caixa (feature 328) ────────────────────────────────────────────────────────────────
+
+# A cliente que espera mais que isto, dentro do horário, vira aviso no sino (FR-007).
+ESPERA_PARA_ALERTA = timedelta(minutes=15)
+# Hora de São Paulo, intervalo [9, 21): fora dele o alerta não toca, e de manhã sai o que ficou.
+HORARIO_DE_ALERTA = (9, 21)
+
+FILTRO_TODAS = "todas"
+FILTRO_MINHAS = "minhas"
+FILTRO_SEM_RESPONSAVEL = "sem_responsavel"
+FILTROS_DA_LISTA = (FILTRO_TODAS, FILTRO_MINHAS, FILTRO_SEM_RESPONSAVEL)
+
+ACAO_ASSUMIR = "assumir"
+ACAO_TRANSFERIR = "transferir"
+ACAO_DEVOLVER = "devolver"
+ACOES_DO_RESPONSAVEL = (ACAO_ASSUMIR, ACAO_TRANSFERIR, ACAO_DEVOLVER)
+
+NOTA_MAXIMA = 2000
+NOTAS_NO_DETALHE = 200
+RESPOSTA_TITULO_MAXIMO = 80
+RESPOSTA_ATALHO_MAXIMO = 30
+RESPOSTA_TEXTO_MAXIMO = TEXTO_MAXIMO
+# O Chrome e o Edge gravam webm, que o WhatsApp não aceita: só entra pela conversão para ogg (R7).
+MIME_AUDIO_DO_NAVEGADOR = "audio/webm"
+# ogg/opus é o único formato que a Meta entrega como nota de voz (`voice: true`).
+MIME_NOTA_DE_VOZ = "audio/ogg"
+# Remux webm → ogg de 5 min de áudio leva milissegundos; 60 s só protege de um ffmpeg travado.
+CONVERSAO_DE_AUDIO_SEGUNDOS = 60
+
+# Textos para a equipe (Princípio XV, superfície interna).
+TEXTO_JA_ASSUMIDA = "Esta conversa já foi assumida por {nome}."
+TEXTO_ALTERADA = "Outra pessoa alterou o responsável agora. Confira e tente novamente."
+TEXTO_DESTINO_INVALIDO = "Selecione uma pessoa da equipe."
+TEXTO_ACAO_INVALIDA = "Ação desconhecida."
+TEXTO_FILTRO_INVALIDO = "Filtro desconhecido."
+TEXTO_NOTA_VAZIA = "Informe a nota."
+TEXTO_NOTA_LONGA = f"A nota passa de {NOTA_MAXIMA} caracteres."
+TEXTO_TITULO_VAZIO = "Informe o título."
+TEXTO_TITULO_LONGO = f"O título passa de {RESPOSTA_TITULO_MAXIMO} caracteres."
+TEXTO_TITULO_REPETIDO = "Já existe uma resposta com este título."
+TEXTO_ATALHO_COM_ESPACO = "O atalho não pode ter espaço."
+TEXTO_ATALHO_LONGO = f"O atalho passa de {RESPOSTA_ATALHO_MAXIMO} caracteres."
+TEXTO_ATALHO_REPETIDO = "Já existe uma resposta com este atalho."
+TEXTO_RESPOSTA_VAZIA = "Informe o texto."
+TEXTO_RESPOSTA_LONGA = f"O texto passa de {RESPOSTA_TEXTO_MAXIMO} caracteres."
+TEXTO_RESPOSTA_NAO_ENCONTRADA = "Resposta rápida não encontrada."
+TEXTO_AUDIO_FALHOU = "Não foi possível preparar o áudio. Envie o arquivo pelo clipe."
+
+# Avisos do sino.
+TITULO_ESPERANDO = "{nome} espera resposta há {minutos} min."
+TITULO_TRANSFERIDA = "{quem} transferiu a conversa com {nome} para você."

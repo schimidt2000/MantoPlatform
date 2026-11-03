@@ -68,6 +68,9 @@ KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
 KIND_PIX_REPASSE = "pix.repasse_infinitepay"
 KIND_PIX_SEM_COMPROVANTE = "pix.sem_comprovante"
 KIND_VIRTUAL_ATENCAO = "virtual.atencao"
+# Feature 328: a cliente esperando resposta nas Conversas e a conversa transferida para alguém.
+KIND_CONVERSA_ESPERANDO = "conversa.esperando"
+KIND_CONVERSA_TRANSFERIDA = "conversa.transferida"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -99,6 +102,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # a conferir, link recusado, sala faltando perto da chamada) — os mesmos papéis que operam a
     # tela de Devoluções.
     KIND_VIRTUAL_ATENCAO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    # Feature 328: sem responsável com acesso, a espera avisa a equipe das Conversas; com
+    # responsável, o produtor manda só para ele. A transferência vai sempre explícita, para o destino.
+    KIND_CONVERSA_ESPERANDO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    KIND_CONVERSA_TRANSFERIDA: (),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -586,13 +593,16 @@ def marcar_lidas_por_entidades(entity_type: str, entity_ids, kind: str | None = 
     return resultado.rowcount or 0
 
 
-def apagar_por_entidade(entity_type: str, entity_id: int) -> int:
-    """Apaga as notificações de um objeto — para a exclusão do objeto não deixar link morto."""
-    resultado = db.session.execute(
-        delete(Notification).where(
-            Notification.entity_type == entity_type, Notification.entity_id == entity_id
-        )
-    )
+def apagar_por_entidade(entity_type: str, entity_id: int, kind: str | None = None) -> int:
+    """Apaga as notificações de um objeto — para a exclusão do objeto não deixar link morto.
+
+    Com `kind`, só as daquele tipo: a espera encerrada da conversa (328) some do sino, e o aviso de
+    transferência da mesma conversa fica.
+    """
+    condicoes = [Notification.entity_type == entity_type, Notification.entity_id == entity_id]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(delete(Notification).where(*condicoes))
     return resultado.rowcount or 0
 
 

@@ -12,7 +12,7 @@ import logging
 from sqlalchemy import text
 
 from app import db
-from app.conversas import aviso_ops, midia_ops
+from app.conversas import aviso_ops, equipe_ops, midia_ops
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc
 from app.conversas.configuracao import cfg_whatsapp
@@ -87,9 +87,13 @@ def reprocessar_midias(limite: int = K.VARREDURA_LOTE) -> dict[str, int]:
 
 
 def ciclo_de_varredura() -> dict[str, int]:
-    """Uma passada completa; cada rotina isolada (a falha de uma não impede a outra)."""
+    """Uma passada completa; cada rotina isolada (a falha de uma não impede a outra).
+
+    O alerta de cliente esperando (feature 328) vem por último: depois dos avisos refeitos, a
+    resposta que chegou atrasada já encerrou a espera e não vira aviso falso.
+    """
     resumo: dict[str, int] = {}
-    for rotina in (reprocessar_avisos, reprocessar_midias):
+    for rotina in (reprocessar_avisos, reprocessar_midias, equipe_ops.alertar_esperas):
         try:
             resumo.update(rotina())
         except Exception as exc:  # noqa: BLE001 — a próxima passada tenta de novo
