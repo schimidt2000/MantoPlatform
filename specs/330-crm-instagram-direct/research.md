@@ -47,6 +47,11 @@ routing*, *attachment upload*, *send message*). O que ela deixa em aberto está 
 
 O item `entry[].messaging[]` traz `sender.id`, `recipient.id`, `timestamp` (ms) e um entre: `message`, `reaction`,
 `read`, `postback`, `referral`.
+- **`entry[].standby[]`** tem o mesmo formato e chega quando outro app (o Kommo, se for o padrão) tem o controle da
+  conversa. É processado igual ao `messaging[]`: gravar sempre, responder nunca sozinho.
+- **Envio sem o controle**: o roteamento pode recusar o envio da Plataforma. O código **fica a confirmar no teste**; o
+  motivo é "A conversa está com outro app no Instagram (Kommo). Responda por ele até a virada.". Tomar o controle
+  (`take_thread_control`) fica fora: é a virada (Fase 4).
 - **`message`**: `mid` é o `externo_id` (UNIQUE, `ON CONFLICT DO NOTHING` da 325). Texto em `message.text`.
 - **Vários anexos numa mensagem** (até 10 fotos): uma `conversa_mensagens` por anexo, porque a mídia é 1:1 com a
   mensagem na 325. O primeiro usa o `mid`, os seguintes `"{mid}#{n}"`, e o texto fica no primeiro.

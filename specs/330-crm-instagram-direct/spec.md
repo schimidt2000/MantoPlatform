@@ -117,6 +117,11 @@ WhatsApp.
 - **Áudio gravado no Safari** já é mp4 e vai direto; o do Firefox (ogg) e o do Chrome (webm) são convertidos para m4a.
 - **Reação.** A reação da cliente aparece na conversa ("Reagiu com ❤") e não abre espera, como no WhatsApp.
 - **Mensagens de grupo** não existem na API do Instagram: nada a tratar.
+- **A conversa está com outro app** (roteamento da Meta). Se o Kommo for o app padrão da Página, as mensagens chegam
+  para a Plataforma "em espera" (standby): são gravadas igual. O envio da Plataforma pode voltar recusado porque o
+  controle da conversa é do Kommo; a mensagem fica "não entregue" com "A conversa está com outro app no Instagram
+  (Kommo). Responda por ele até a virada.". A Plataforma nunca toma o controle sozinha.
+- **A mesma pessoa no WhatsApp e no Instagram** são duas conversas, uma por canal. Juntar as duas na ficha é da Fase 3.
 
 ## Requisitos *(obrigatório)*
 
@@ -132,7 +137,7 @@ WhatsApp.
   (no máximo uma vez por dia).
 - **FR-004**: As mensagens recebidas (texto, foto, vídeo, áudio, arquivo, story, publicação compartilhada, reels) DEVEM
   ser gravadas sem duplicar pelo id da mensagem; a mídia é baixada pelo link do anexo logo depois de gravar, com as
-  retentativas da 325.
+  retentativas da 325. Mensagem que chega "em espera" (a conversa está com outro app) é gravada do mesmo jeito.
 - **FR-005**: A reação da cliente DEVE aparecer na conversa; a reação removida também. A mensagem apagada pela cliente
   DEVE trocar o texto por "Mensagem apagada pela cliente.".
 - **FR-006**: O aviso de visto DEVE marcar como "lida" a mensagem enviada indicada (e as anteriores ainda não lidas da
