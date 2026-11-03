@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="robots" content="noindex, nofollow" />
     <title>Plataforma Manto</title>
+    <!-- Instalável no celular (feature 332): no iPhone, o aviso só chega com a Plataforma na Tela
+         de Início. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Manto" />
+    <meta name="theme-color" content="#544596" />
     <script>
       // Carimba o tema no <html> ANTES do primeiro paint. Se isso morasse no React, o browser
       // já teria pintado a página clara enquanto o bundle carrega — o "flash branco" que dói

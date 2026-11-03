@@ -10,6 +10,7 @@ import {
   type ConversaResumo,
   type FiltroDaLista as Filtro,
 } from "../../lib/conversas";
+import { AvisosNoCelular } from "./AvisosNoCelular";
 import { FiltroDaLista, FiltroDoCanal } from "./FiltroDaLista";
 import { IconeDoCanal } from "./IconeDoCanal";
 
@@ -157,15 +158,18 @@ export function ListaDeConversas({
         <label htmlFor="busca-conversas" className="sr-only">
           Buscar conversa
         </label>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
-          <Input
-            id="busca-conversas"
-            value={busca}
-            onChange={(e) => onBusca(e.target.value)}
-            placeholder="Buscar por nome ou telefone"
-            className="pl-9"
-          />
+        <div className="flex gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+            <Input
+              id="busca-conversas"
+              value={busca}
+              onChange={(e) => onBusca(e.target.value)}
+              placeholder="Buscar por nome ou telefone"
+              className="pl-9"
+            />
+          </div>
+          <AvisosNoCelular />
         </div>
         <FiltroDaLista valor={filtro} onMudar={onFiltro} />
         {canaisLigados.length > 1 ? <FiltroDoCanal valor={canal} onMudar={onCanal} /> : null}
