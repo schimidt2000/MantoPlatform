@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
   Input,
+  mascaraTelefone,
 } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { useQuickCreateClient, type QuickCreateClientResult } from "../lib/clientes";
@@ -175,7 +176,8 @@ export function NovaClienteDialog({ onCreated }: { onCreated?: (id: number) => v
                 >
                   <Input
                     value={form.phone}
-                    onChange={patch("phone")}
+                    onChange={(e) => setForm((atual) => ({ ...atual, phone: mascaraTelefone(e.target.value) }))}
+                    inputMode="tel"
                     placeholder="(11) 98765-4321"
                     aria-label="Telefone com DDD"
                     aria-invalid={Boolean(erros.phone ?? fieldError(criar.error, "phone"))}

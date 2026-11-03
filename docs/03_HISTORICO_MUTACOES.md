@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **326-novo-evento-cliente-e-orcamento** | *(pronta na branch, não publicada)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
 | **324-config-precos-legivel** | Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
 | **239c-coordenador-pre-escalado-com-orcamento** | Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
@@ -392,6 +393,53 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 326 — Novo evento: o nome da cliente fica, o telefone tem máscara e o orçamento se vincula na tela   (326-novo-evento-cliente-e-orcamento · 2026-10-30 · sem migration)
+
+> **Pronta na branch, não publicada.** Nível 2 (só o app interno; nenhum endpoint novo nem alterado). Detalhe:
+> `specs/326-novo-evento-cliente-e-orcamento/spec.md`.
+
+**O pedido.** O dono, criando um evento em 30/10: o nome digitado na busca de cliente sumia ao clicar em "Cadastrar
+nova cliente"; o telefone não tinha máscara; e, lembrando no meio do cadastro que havia um orçamento, não havia como
+vinculá-lo dali — só entrando pelo "Criar evento" do histórico.
+
+**Por que o nome sumia.** A busca (`ClientPicker`) e o cadastro rápido guardavam o texto em estados separados, e o
+cadastro só nascia preenchido pelo formulário da cliente (298). Agora o botão leva o que está na busca: nome, ou telefone
+quando o texto é número.
+
+**Máscara.** `mascaraTelefone` nasceu em `@manto/ui`, não no app: o público já tem a sua (`maskPhone`, com o DDI num
+seletor à parte), e o interno tem dois cadastros com o mesmo campo cru (cadastro rápido do Novo evento e "Nova cliente"
+de `/clientes`). O "Nova cliente" diz "Com DDI se for de fora do Brasil": por isso a máscara não corta em 11 dígitos —
+com `+` ou acima de 11 dígitos vira número com DDI, que o `normalize_phone` do servidor já aceita (10 a 13 dígitos). De
+brinde, o `phone_display` da ficha passa a nascer formatado (o servidor grava o que veio digitado).
+
+**Decisões do bloco Orçamento.**
+- **O endereço continua sendo o estado** (`?orcamento_id=`, com `replace`): é a mesma porta do histórico, o pré-fill de
+  sempre roda sem remontar a tela, e nada foi duplicado.
+- **O que a pessoa digitou fica.** O pré-fill da 152 escrevia em tudo; vinculando no meio do cadastro ele apagaria o
+  local, a data ou o valor já digitados (Princípio V). Cada campo só é preenchido se não foi alterado à mão
+  (`getFieldState().isDirty`). O que o orçamento anterior preencheu não conta como alterado (`setValue` sem
+  `shouldDirty`) e é trocado pelo novo; o que o formulário da cliente (298) preencheu conta (`shouldDirty: true`) e fica.
+  O RHF 7.82 calcula `dirtyFields` mesmo sem assinatura do `formState`.
+- **Elenco junta por nome, não substitui.** O servidor casa o teto do cachê por POSIÇÃO com os personagens do orçamento
+  (`_create_roles_from_input`), então o do orçamento vem primeiro e na ordem dele; quem já estava na lista com o mesmo
+  nome (sem acento, sem caixa) leva talento, figurino e cachê; o que o orçamento anterior trouxe sai; o digitado que este
+  não tem vai para o fim, como linha acrescentada à mão (sem teto, como sempre). O elenco é calculado do estado do render,
+  nunca num updater do `setCharacters`: o StrictMode chama o updater duas vezes e o ref de "quem veio do orçamento"
+  sairia errado.
+- **Orçamento que já virou evento vivo é recusado no bloco**, com link para o evento: a criação responderia 409 (regra
+  1:1 da 273) só no Salvar, depois de tudo digitado. Trocar ou desvincular limpa quem recebe o BV e o PIX, como na aba
+  Comercial (o BV iria para a pessoa do orçamento anterior). Os verbos são os da aba Comercial: Trocar, Desvincular.
+- Os botões de duração moraram num cartão depois de "Dados do evento"; foram para dentro do bloco, ao lado do orçamento
+  que os define.
+
+**Verificação.** `verify_326.py` 6/6 contra o `manto_local`: Comercial e Superadmin leem histórico, pré-fill e opções;
+Financeiro e Casting levam 403 nos dois endpoints do bloco (o cenário que deve falhar se o gate vazar); orçamento ocupado
+traz `event_id` no histórico e a criação com ele é recusada com 409 sem gravar evento; telefone mascarado (`(11) …`,
+`+55 (21) …`, `+351 …`) grava os dígitos canônicos. Tela aberta no Browser pane (backend com o Google dublado, usuário
+Comercial descartável): nome levado ao cadastro, máscara em celular/fixo/exterior e ao apagar, vínculo com local e valor
+digitados preservados, elenco juntado, troca, recusa do ocupado, desvincular e a entrada antiga pelo histórico.
+`npm run typecheck` limpo nas três SPAs.
 
 ### 324 — Configuração de Preços legível   (324-config-precos-legivel · 2026-10-30 · sem migration)
 

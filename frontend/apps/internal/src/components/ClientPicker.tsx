@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Button } from "@manto/ui";
+import { Button, mascaraTelefone } from "@manto/ui";
 import {
   useClientSearch,
   useQuickCreateClient,
@@ -29,7 +29,7 @@ function QuickCreateClientForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(inicial?.name ?? "");
-  const [phone, setPhone] = useState(inicial?.phone ?? "");
+  const [phone, setPhone] = useState(mascaraTelefone(inicial?.phone ?? ""));
   const [company, setCompany] = useState(inicial?.company ?? "");
   const [email, setEmail] = useState(inicial?.email ?? "");
   const [documento, setDocumento] = useState(inicial?.cnpj ?? inicial?.cpf ?? "");
@@ -76,8 +76,9 @@ function QuickCreateClientForm({
           <input
             className={FIELD}
             placeholder="(11) 98765-4321"
+            inputMode="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
+            onChange={(e) => setPhone(mascaraTelefone(e.target.value))}
             aria-label="Telefone com DDD"
           />
           {fieldErrors.phone && <p className="mt-1 text-xs text-red">{fieldErrors.phone}</p>}
@@ -125,6 +126,15 @@ function QuickCreateClientForm({
   );
 }
 
+/** O que foi digitado na busca vira o começo do cadastro (feature 326): sem isto, "+ Cadastrar nova
+ * cliente" abria o formulário vazio e a pessoa digitava o nome de novo. Só número → telefone. */
+function cadastroDaBusca(query: string): Partial<QuickCreateClientInput> {
+  const texto = query.trim();
+  if (!texto) return {};
+  const ehTelefone = /^[\d\s()+\-.]+$/.test(texto) && texto.replace(/\D/g, "").length >= 8;
+  return ehTelefone ? { phone: texto } : { name: texto };
+}
+
 /**
  * Seleciona um ou mais clientes existentes com o tipo de relação (feature 114/152). Consome
  * `/api/clientes/search` (feature 165) via `useClientSearch` — fonte única de busca de cliente,
@@ -144,9 +154,12 @@ export function ClientPicker({
 }) {
   const [query, setQuery] = useState("");
   const [creating, setCreating] = useState(false);
+  const [inicial, setInicial] = useState<Partial<QuickCreateClientInput> | undefined>(undefined);
   // Os dados chegam depois (a consulta do formulário é assíncrona): abre quando chegam.
   useEffect(() => {
-    if (cadastroRapidoInicial) setCreating(true);
+    if (!cadastroRapidoInicial) return;
+    setInicial(cadastroRapidoInicial);
+    setCreating(true);
   }, [cadastroRapidoInicial]);
   const search = useClientSearch(query);
   const results = search.data ?? [];
@@ -227,7 +240,7 @@ export function ClientPicker({
 
       {creating ? (
         <QuickCreateClientForm
-          inicial={cadastroRapidoInicial}
+          inicial={inicial}
           onCreated={(client) => {
             addClient(client);
             setCreating(false);
@@ -235,7 +248,16 @@ export function ClientPicker({
           onCancel={() => setCreating(false)}
         />
       ) : (
-        <Button type="button" variant="outline" size="sm" onClick={() => setCreating(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            // O que foi digitado na busca vence o formulário da cliente: é o mais recente.
+            setInicial({ ...cadastroRapidoInicial, ...cadastroDaBusca(query) });
+            setCreating(true);
+          }}
+        >
           + Cadastrar nova cliente
         </Button>
       )}

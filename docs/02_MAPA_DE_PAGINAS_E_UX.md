@@ -448,11 +448,25 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
 - **Objetivo**: cadastrar um evento com **100 % de paridade de campos** com a tela antiga, em uma
   única página. É a tela mais crítica do comercial.
 - **Acesso**: `COMERCIAL`, `SUPERADMIN` (`_can_create_event()` → `_CAN_CREATE`).
-- **Estrutura — 7 blocos** (`components/EventFormBlocks/`):
+- **Estrutura — 8 blocos** (`components/EventFormBlocks/`):
+  0. **Orçamento** (`OrcamentoBlock`, correção 326) — o primeiro bloco. Sem orçamento: a busca do
+     histórico (`OrcamentoPicker`, a mesma do vínculo 273 da aba Comercial) e "Vincule o orçamento
+     já feito…". Ao selecionar, o `orcamento_id` vai para o endereço (a entrada do "Criar evento" do
+     histórico) e o pré-fill roda **só nos campos que a pessoa não alterou à mão**; o elenco do
+     orçamento vem primeiro, na ordem dele (o teto do cachê casa por posição), quem tinha o mesmo
+     nome leva talento/figurino/cachê e o personagem digitado que o orçamento não tem vai para o
+     fim. Vinculado: "Orçamento de <cliente> · data · local", os botões de duração (1–4h e "Outra
+     (h)", que antes ficavam num cartão depois de Dados do evento), **Trocar** e **Desvincular**
+     (tira os cachês do orçamento; o que ele preencheu fica). Orçamento que já virou evento vivo é
+     recusado no bloco, com "abra o evento" — a criação responderia 409.
   1. **Cliente e pré-contrato** (`ClienteBlock`) — busca de cliente (`ClientPicker`),
-     **"+ Cadastrar novo cliente"** inline (`POST /api/clientes/quick-create`, reaproveita cliente
+     **"+ Cadastrar nova cliente"** inline (`POST /api/clientes/quick-create`, reaproveita cliente
      existente se o telefone bater), seletor de **relação** por cliente (Contratante, Assessora,
      Mãe/Pai, Familiar, Outros) e vínculo com resposta de formulário (`FormResponsePicker`).
+     **Correção 326**: o que foi digitado na busca abre o cadastro rápido já preenchido (nome, ou
+     telefone quando é número), e o telefone tem máscara (`mascaraTelefone` de `@manto/ui`:
+     `(11) 98765-4321`; com `+` ou mais de 11 dígitos, DDI — `+55 (11) …`, `+351 …`). A mesma máscara
+     vale no "Nova cliente" de `/clientes`.
   2. **Dados do evento** (`DadosEventoBlock`) — tipo, data, horários, local, descrição. Tipo
      `SHOW` exibe o aviso *"Eventos SHOW sempre geram ensaio automaticamente"*.
      **Local/Endereço do evento** é um **`GoogleAddressInput`** (feature 195): sugestões do Google
