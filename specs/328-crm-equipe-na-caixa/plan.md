@@ -46,7 +46,7 @@ ffmpeg do sistema (`video_ops`).
 - 2 tabelas e 3 colunas;
 - 7 endpoints novos (equipe, responsável, notas e 4 de respostas rápidas) e 3 alterados;
 - 2 kinds de notificação (esperando e transferida);
-- na tela, 4 componentes novos e 4 alterados.
+- na tela, 7 componentes novos e 4 alterados.
 
 ## Constitution Check
 

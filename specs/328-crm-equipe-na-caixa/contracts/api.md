@@ -5,7 +5,8 @@ view. Erro no envelope de `json_error`, com `codigo` quando a tela precisa agir.
 
 ## Mudanças no que já existe (325)
 
-- `GET /api/conversas` ganha `filtro=todas|minhas|sem_responsavel` (padrão `todas`). Cada conversa ganha:
+- `GET /api/conversas` ganha `filtro=todas|minhas|sem_responsavel` (padrão `todas`; outro valor → 422
+  `fields.filtro`). Cada conversa ganha:
   - `responsavel`: `{id, nome}` ou `null`;
   - `aguardando_desde`: ISO `+00:00` ou `null`.
 - `GET /api/conversas/<id>` ganha, em `conversa`, `responsavel`, `aguardando_desde` e `responsavel_ativo`

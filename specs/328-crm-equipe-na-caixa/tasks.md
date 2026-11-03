@@ -104,8 +104,8 @@ esse motivo, e a exceção de recusa sai de `envio_ops` para `app/conversas/recu
     linhas de `notifications`.
   - **Relógio:** os cenários de horário (7–10) chamam `equipe_ops.alertar_esperas(agora_sp=...)` com o horário
     injetado (14h e 22h30, e 9h do dia seguinte).
-  - **Áudio:** o cenário 17 gera um webm/opus de 1 s com o ffmpeg local (`-f lavfi -i sine` + `-c:a libopus`) e
-    pula com motivo quando não houver ffmpeg. O 18 troca `video_ops.caminho_do_ffmpeg` por um dublê que devolve
+  - **Áudio:** o cenário 17 gera um webm/opus de 1 s com o ffmpeg local (`-f lavfi -i sine` + `-c:a libopus`;
+    sem `libopus`, o encoder nativo `-c:a opus -strict -2`) e pula com motivo quando não houver ffmpeg. O 18 troca `video_ops.caminho_do_ffmpeg` por um dublê que devolve
     `None`.
   - **Flags:** `--manter` deixa os dados para a conferência da tela.
 
@@ -137,8 +137,10 @@ por responsável.
 - [ ] T012 [US1] `equipe_ops.definir_responsavel(conversa_id, acao, quem, responsavel_id=None) -> Conversa`, que
   comita (R2):
   - lê o atual, decide e grava com `WHERE responsavel_id IS NOT DISTINCT FROM :atual`;
-  - `rowcount == 0` → `Recusa("alterada", TEXTO_ALTERADA, 409)`;
-  - `assumir`: só com responsável nulo ou sem acesso; senão `Recusa("ja_assumida", …, 409)` com o nome;
+  - `rowcount == 0` na transferência ou na devolução → `Recusa("alterada", TEXTO_ALTERADA, 409)`;
+  - `assumir`: só com responsável nulo ou `not responsavel_ativo(conversa)` (T009: ativo, com acesso e papel de
+    conversas); senão `Recusa("ja_assumida", …, 409)` com o nome. Na corrida (`rowcount == 0`), relê a conversa
+    e devolve o mesmo `ja_assumida` com o nome de quem ganhou (US1, aceite 3);
   - `transferir`: destino da equipe, senão 422 `fields.responsavel_id`; transferir para quem já é o responsável
     não muda nada e devolve 200;
   - `devolver`: grava nulo;
@@ -210,7 +212,9 @@ por responsável.
 - [ ] T022 [US2] `equipe_ops.alertar_esperas(agora_sp=None) -> dict[str, int]` (R4):
   - fora de `HORARIO_DE_ALERTA` em São Paulo (`now_sp()`), devolve `{"alertas": 0}`;
   - dentro do horário:
-    - seleciona as conversas com `aguardando_desde <= agora_utc - ESPERA_PARA_ALERTA`;
+    - seleciona as conversas com `agora_utc - JANELA < aguardando_desde <= agora_utc - ESPERA_PARA_ALERTA`, das
+      mais antigas para as mais novas, até `VARREDURA_LOTE`. Uma espera com a janela de 24 h fechada não se
+      responde com texto e não entra em toda passada para sempre;
     - emite `KIND_CONVERSA_ESPERANDO` com `dedupe_key = f"conversa.esperando:{id}:{epoch}"`, `entidade`, link,
       severidade `urgent` e corpo = `ultima_previa`;
     - destinatário: `[responsavel]` quando `responsavel_ativo`; senão `None` (equipe pelo catálogo);
@@ -250,10 +254,11 @@ por responsável.
   o detalhe).
 - [ ] T029 [US3] Nota na conversa:
   - `components/conversas/NotaInterna.tsx` (novo): balão dourado claro, "Nota interna · Ana · 14:32",
-    alinhado ao centro;
+    alinhado ao centro, com a entrada da nota nova por motion com `useReducedMotion`;
   - `ConversaAberta.tsx` intercala notas e mensagens por horário;
   - `CaixaDeEnvio.tsx` ganha a alternância "Mensagem | Nota interna" (alvo ≥ 44 px). Na nota, o campo vale com a
-    janela fechada, sem anexo nem modelo, e o botão diz "Gravar nota".
+    janela fechada, sem anexo nem modelo, e o botão diz "Gravar nota". O 422 `fields.texto` aparece no
+    campo.
 
 **Checkpoint**: cenários 12 e 13 em PASS.
 
@@ -310,7 +315,8 @@ por responsável.
   - Sem ffmpeg, código ≠ 0, saída vazia ou timeout: `AudioIndisponivel`.
 - [ ] T036 [US5] `app/conversas/envio_ops.py`, em `enviar_arquivo`:
   - quando o MIME limpo é `audio/webm`:
-    - converte antes de `_tipo_do_arquivo`;
+    - converte depois de `_pre_condicoes` (configuração, trava e janela), para não rodar o ffmpeg num envio que
+      vai ser recusado, e antes de `_tipo_do_arquivo`;
     - troca o MIME para `audio/ogg` e o nome para `….ogg`;
     - com `AudioIndisponivel`, devolve `campo("arquivo", TEXTO_AUDIO_FALHOU)`, e nada é gravado nem enviado;
   - em `_subir_e_despachar`, `bloco["voice"] = True` para áudio `audio/ogg` (FR-014);

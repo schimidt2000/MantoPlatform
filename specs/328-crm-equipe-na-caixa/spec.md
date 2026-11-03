@@ -224,7 +224,7 @@ de rede, dublê da Meta, conferência por conexão separada, login só por `POST
 | 8 | Espera sem responsável | aviso para toda a equipe | não |
 | 9 | Varredura de novo | nenhum aviso repetido | não |
 | 10 | Espera às 22h30 | nenhum aviso; às 9h sim | não |
-| 11 | Resposta encerra a espera | `aguardando_desde` vazio e os avisos da conversa apagados | não |
+| 11 | Resposta encerra a espera (texto; e, noutra conversa, modelo aprovado) | `aguardando_desde` vazio, os avisos de espera apagados e o de transferência mantido; o modelo também atribui | não |
 | 12 | Nota interna | gravada com autor; a Meta não é chamada | não |
 | 13 | Nota vazia | 422 com `fields.texto` | **sim** |
 | 14 | CRUD de resposta rápida (Bia cria, Ana edita, Ana exclui) | lista da equipe | não |
@@ -232,7 +232,7 @@ de rede, dublê da Meta, conferência por conexão separada, login só por `POST
 | 16 | Casting lista, cria ou assume | 403 | **sim** |
 | 17 | Áudio webm convertido | a Meta recebe `audio/ogg` com `voice: true`; a cópia guardada é ogg | não |
 | 18 | Sem ffmpeg | 422, nada sai | **sim** |
-| 19 | Envio que falhou | não atribui e não encerra a espera | não |
+| 19 | Envio que falhou na hora; e status `failed` que chega depois do aceite | não atribui e não encerra a espera; a falha tardia reabre a espera na primeira recebida sem resposta | não |
 | 20 | Limpeza | conversas, notas, respostas, avisos e usuários de teste apagados | — |
 
 Conferência de tela: lista (filtros, responsável, espera), conversa (assumir, transferir, nota, respostas
@@ -244,7 +244,8 @@ rápidas, gravar áudio), em desktop e em 375×812.
   pela Plataforma têm responsável.
 - **SC-002**: A cliente que espera 15 min entre 9h e 21h gera aviso em até 1 minuto, uma vez só.
 - **SC-003**: Responder com uma resposta rápida leva no máximo 3 toques (abrir a lista, escolher, enviar).
-- **SC-004**: Um áudio gravado no Chrome, no Safari ou no Firefox chega à cliente como nota de voz.
+- **SC-004**: Um áudio gravado no Chrome ou no Firefox chega à cliente como nota de voz; gravado no Safari,
+  chega como áudio comum, que toca do mesmo jeito (Premissas).
 
 ## Fora de escopo
 
