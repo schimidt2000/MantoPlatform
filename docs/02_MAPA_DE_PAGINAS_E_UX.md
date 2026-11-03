@@ -2034,7 +2034,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
   valor já entrou por PIX — anexe pela página do evento".
 
-#### `/conversas` — Conversas (WhatsApp) *(feature 325)*
+#### `/conversas` — Conversas (WhatsApp) *(features 325 e 328)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
   módulo configurado (`conversas_ligadas` de `/api/auth/me`); o "Ver como" não abre a caixa. Sem as chaves
   `WHATSAPP_*`, a tela diz "O WhatsApp ainda não foi configurado. Peça ao Superadmin para preencher as chaves no
@@ -2060,9 +2060,27 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   "Enviar modelo".
 - **Enviar modelo** (diálogo): modelos aprovados pela Meta num `Combobox`, um campo por variável (a primeira vem com o
   primeiro nome do contato) e a prévia do texto final.
+- **Equipe na caixa** (feature 328):
+  - **Lista**: filtro "Todas" · "Minhas" · "Sem responsável" (`?filtro=` no endereço) e, em cada linha, o responsável
+    (ou "Sem responsável") e, com a cliente esperando, "Esperando há N min" (ou "há N h"), em vermelho a partir de 15
+    min, recontado a cada minuto. Vazias: "Nenhuma conversa com você." / "Nenhuma conversa sem responsável.".
+  - **Responsável** (faixa sob o cabeçalho): "Sem responsável", "Você atende esta conversa" ou "Responsável: Ana"
+    ("(sem acesso)" quando a pessoa perdeu o papel); botões "Assumir" (fila ou responsável sem acesso), "Transferir…"
+    (diálogo com `Combobox` da equipe; quem recebe é avisada no sino) e "Devolver à fila". Quem perde a corrida do
+    "Assumir" vê "Esta conversa já foi assumida por …". No celular, o nome ganha linha própria e os botões têm 44 px.
+  - **Nota interna**: a caixa alterna "Mensagem | Nota interna". A nota ("Nota interna (só a equipe vê)", "Gravar
+    nota") vale com a janela fechada e aparece na linha do tempo, centralizada, em dourado: "Nota interna · Ana · 14:32".
+  - **Respostas rápidas**: o botão de raio ou "/" no começo do campo abre a lista (busca por título ou atalho, ↑ ↓
+    Enter Esc); escolher **coloca o texto no campo**, com `{nome}` trocado pelo primeiro nome do contato (sem nome,
+    "Olá, {nome}!" vira "Olá!"). "Gerenciar respostas rápidas" abre o diálogo de criar, editar e excluir ("Excluir
+    esta resposta?"), com a recusa do servidor no campo.
+  - **Gravar áudio**: com o campo vazio, o botão Enviar vira o microfone. Gravando: ponto vermelho, tempo correndo,
+    "Cancelar" e Enviar; para sozinha em 5 minutos. Sem permissão: "Não foi possível usar o microfone. Libere o acesso
+    nas configurações do navegador.". Se o envio falhar, o áudio fica anexado para tentar de novo.
 - **Ambiente local**: faixa dourada "O envio pelo WhatsApp está travado neste ambiente…" quando o banco é a cópia
   local; enviar responde com a mesma frase (409 `envio_travado`). Para conferir a tela: `.claude/launch.json` →
-  `manto-backend-local-conversas-demo` + `verify_325.py --manter`.
+  `manto-backend-local-conversas-demo` + `verify_325.py --manter` (e `verify_328.py --manter` para responsáveis,
+  esperas, notas e respostas rápidas).
 
 ### A.6 Financeiro
 

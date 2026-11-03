@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **328-crm-equipe-na-caixa** | *(NÃO PUBLICADO; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
 | **325-crm-whatsapp-fundacao** | *(NÃO PUBLICADO; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
@@ -358,7 +359,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / CRM próprio | 325 |
+| Conversas / WhatsApp / CRM próprio | 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -392,6 +393,87 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 328 — Conversas em equipe: responsável, alerta de cliente esperando, notas, respostas rápidas e áudio   (328-crm-equipe-na-caixa · 2026-11-03 · migration `f328b2d4e6a1`)
+
+> **NÃO PUBLICADO** — branch `328-crm-equipe-na-caixa`, feita **sobre a `325-crm-whatsapp-fundacao`** (que também não
+> está na `main`). O dono adiou a publicação (03/11: "Dá para continuar a implementação sem fazer o push?? Vou deixar
+> mais pra frente"). No merge, a 325 entra antes da 328. Mesmo publicado, o módulo segue desligado até as variáveis
+> `WHATSAPP_*` (`docs/05` 178). Nível 1. Detalhe: `specs/328-crm-equipe-na-caixa/`.
+
+**O pedido.** "Se tornarmos a nossa usabilidade boa o suficiente, a ideia é que 3 pessoas usem sempre pelo mesmo
+número" (30/10). É a Fase 2 do plano do CRM próprio, que o dono dividiu em 03/11. Esta é a 2a, a equipe na caixa; a 2b
+(Instagram Direct) e a 2c (push no celular) vêm depois. As quatro decisões de equipe foram do dono, todas pela opção
+recomendada:
+- fila livre;
+- alerta de 15 min das 9h às 21h;
+- respostas rápidas de qualquer Comercial;
+- esta parte primeiro.
+
+**O que mudou.**
+- **Responsável** (`conversas.responsavel_id`): a conversa nova chega na fila, e o primeiro envio que a **Meta aceitou**
+  a dá ao autor. "Assumir", "Transferir…" (com aviso `conversa.transferida` no sino de quem recebe) e "Devolver à fila"
+  por `POST /api/conversas/<id>/responsavel`. A lista filtra entre "Todas", "Minhas" e "Sem responsável".
+- **Espera e alerta** (`conversas.aguardando_desde`): a espera conta da primeira mensagem da cliente sem resposta. A
+  rotina `alertar_esperas`, na varredura do WhatsApp, avisa no sino (`conversa.esperando`, urgente) depois de 15 min, só
+  das 9h às 21h de São Paulo: avisa o responsável ou, sem ele, a equipe. A resposta apaga o aviso. A lista mostra
+  "Esperando há N min".
+- **Notas internas** (`conversa_notas`): a caixa alterna "Mensagem | Nota interna"; a nota nunca sai e aparece em dourado
+  na linha do tempo.
+- **Respostas rápidas** (`respostas_rapidas`): lista única da equipe, aberta pelo botão ou por "/" no começo do campo;
+  escolher só preenche o campo, com `{nome}` trocado pelo primeiro nome. A tela tem criar, editar e excluir.
+- **Áudio gravado**: o microfone grava pelo `MediaRecorder` (ogg no Firefox, webm no Chrome, mp4 no Safari). O servidor
+  troca o webm por ogg com o ffmpeg da casa (`-c:a copy`, sem recodificar), e o ogg com Opus sai como nota de voz
+  (`voice: true`).
+
+**Decisões e pegadinhas.**
+- **A primeira resposta fica.** Tanto a atribuição quanto assumir e transferir são UPDATEs condicionais no banco
+  (`WHERE responsavel_id IS NULL` / `IS NOT DISTINCT FROM :lido`): sem trava longa e sem "último ganha". Quem perde a
+  corrida do "Assumir" vê o nome de quem ganhou.
+- **O eco do celular não atribui**: o app não diz quem mandou. Ele encerra a espera, mas apagar ou editar pelo celular
+  não é resposta.
+- **Ciclo de import.** `equipe_ops` é importado por `aviso_ops` e `envio_ops`, então não pode importá-los. Por isso o
+  relógio UTC foi para `app/conversas/relogio.py` e a recusa para `app/conversas/recusa.py`; `EnvioRecusado` herda
+  dela, sem mudar a assinatura.
+- **`apagar_por_entidade` ganhou `kind`.** Sem ele, encerrar a espera apagaria também o aviso de transferência, que
+  aponta para a mesma conversa.
+- **Menu → botões.** O plano falava em menu; ficaram botões diretos, um toque por ação. No celular, o nome de quem
+  atende ganha linha própria, porque em 320 px ele era cortado.
+- **Ruff `--fix` no `app/api/__init__.py`** reordenaria os 70 imports que registram as rotas; o arquivo voltou ao HEAD
+  e só a linha nova entrou. O I001 dele já existia.
+
+**Verificação.**
+- `verify_328.py` deu **24/24** contra o `manto_local`, com zero escapes de rede (dublê da Meta e disjuntor de socket).
+  Oito cenários **devem** falhar: assumir a já assumida, a corrida do Assumir, transferir ao Casting, nota vazia ou
+  longa, resposta rápida inválida, Casting nas rotas novas e áudio sem ffmpeg. Os horários são injetados (14h, 22h30,
+  20h58, 21h05, 9h do dia seguinte).
+- `verify_325.py` continua 22/22. `ruff` limpo; `npm run typecheck` limpo nas três SPAs.
+- Tela aberta da worktree (backend 5328, Vite 5329) em desktop, 375×812 e 320 px:
+  - sem rolagem lateral e alvos de 44 px;
+  - transferir, devolver e assumir;
+  - nota;
+  - "/pag" + Enter preenche sem enviar, e "/xyz" + Enter com a lista vazia não envia;
+  - microfone negado com o texto do FR-012.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **21 achados** (2 da
+constituição, 1 alto, 8 médios e 10 baixos), fechados em T046–T065.
+- Áudio que falhou e era reenviado com chave nova. Uma resposta perdida num 502 viraria nota de voz duplicada.
+- "Tentar novamente" sem estado.
+- "/pix" + Enter com a lista ainda carregando ia para a cliente.
+- Esperas sem resposta ocupando o lote do alerta por 24 h.
+- Abrir e encerrar a espera fora da ordem das mensagens (aviso reprocessado atrasado; resposta e mensagem nova
+  concorrentes).
+- O 👍 da cliente virando alerta.
+- Eco sem texto não contando como resposta (`NULL` no SQL).
+- Verify sem a corrida, sem o responsável que perdeu o acesso e com o áudio pulado contando como OK.
+- Textos fora do Princípio XV, entre outros.
+
+**Commits:**
+- `5ffaa4f3`, `b70a1044` (esteira e analyze);
+- `0d3b220a` (backend);
+- `9835f1bd` (tela);
+- `d247819c` (convergência);
+- o desta entrada (docs).
 
 ### 325 — Conversas: o WhatsApp da Manto dentro da Plataforma (fundação do CRM próprio)   (325-crm-whatsapp-fundacao · 2026-10-30 · migration `e325a7c1d9f2`)
 

@@ -356,7 +356,7 @@ por responsável.
   - microfone (mensagem de negado);
   - sem rolagem lateral de 320 a 430 px (FR-017).
 - [X] T043 Textos novos revisados pelo Princípio XV na tela aberta, junto dos vizinhos.
-- [ ] T044 Docs por fonte única:
+- [X] T044 Docs por fonte única:
   - `docs/01`:
     - §2.7: colunas e tabelas;
     - §3.13.7: endpoints;
@@ -367,7 +367,7 @@ por responsável.
   - `docs/04` §6: invariantes de responsável e espera;
   - `docs/05`: dívida criada ou quitada;
   - `docs/PLANO_CRM_PROPRIO.md`: Fase 2a.
-- [ ] T045 `quickstart.md` executado e gates CHK001–CHK011 de `checklists/equipe-alerta-ux.md` marcados
+- [X] T045 `quickstart.md` executado e gates CHK001–CHK011 de `checklists/equipe-alerta-ux.md` marcados
   (CHK006 e CHK011 como "não se aplica" e "não publicado").
 
 ---

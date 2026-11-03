@@ -603,6 +603,16 @@ Pontos que valem para quem for ler esses dados:
     (`contato`/`plataforma`/`celular`/`outro`), `modelo_nome`, `resposta_a`, `dados` (item cru) e `momento`.
   - `conversa_midias`: `mensagem_id` (CASCADE, UNIQUE), `externo_id` (id da mídia na Meta), `mime`, `tamanho`,
     `nome_original`, `caminho` (relativo a `CONVERSAS_MEDIA_FOLDER`) e `estado` `pendente`/`guardada`/`falhou`.
+- **Conversas em equipe** (feature 328, migration `f328b2d4e6a1`, aditiva sobre `e325a7c1d9f2`; UTC ingênuo). Detalhe
+  em `specs/328-crm-equipe-na-caixa/data-model.md`.
+  - `conversas` ganha `responsavel_id` → `users` (SET NULL, index; nulo = fila livre), `assumida_em` (a vez do
+    responsável atual: é a identidade do aviso de transferência) e `aguardando_desde` (index; a primeira mensagem da
+    cliente ainda sem resposta; nulo = ninguém esperando).
+  - `conversa_notas`: `conversa_id` (CASCADE), `autor_id` → `users` (SET NULL), `texto` (1–2.000) e `created_at`. Só se
+    acrescenta.
+  - `respostas_rapidas`: `titulo` (80; único sem caixa, índice `uq_respostas_rapidas_titulo` em `lower(titulo)`),
+    `atalho` (30, opcional, minúsculas, sem "/" nem espaço; `uq_respostas_rapidas_atalho`), `texto` (≤ 4.096, pode ter
+    `{nome}`), `criado_por_id`/`alterado_por_id` → `users` (SET NULL) e horários.
 
 ### 2.8 EducaManto
 
@@ -1909,7 +1919,7 @@ em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <
 sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
 segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
-### 3.13.7 Conversas (WhatsApp) — `whatsapp_webhook.py` / `conversas_read.py` / `conversas_write.py` (feature 325)
+### 3.13.7 Conversas (WhatsApp) — `whatsapp_webhook.py` / `conversas_read.py` / `conversas_write.py` / `conversas_equipe_write.py` (features 325 e 328)
 
 A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`).
 
@@ -1926,8 +1936,13 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 |---|---|---|
 | `GET` | `/api/webhooks/whatsapp` | **Público.** Desafio da Meta: com `hub.mode=subscribe` e `hub.verify_token` = `WHATSAPP_VERIFY_TOKEN` (`compare_digest`) → 200 `text/plain` com o `hub.challenge`; senão, ou com o módulo desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
-| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. |
-| `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais`. Não zera as não lidas. |
+| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. |
+| `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
+| `GET` | `/api/conversas/equipe` | (328) Para quem se pode transferir: `{equipe: [{id, nome}]}` — ativos, com acesso e papel COMERCIAL/SUPERADMIN, por nome. |
+| `POST` | `/api/conversas/<id>/responsavel` | (328) `{acao: assumir · transferir · devolver, responsavel_id?}` → 200 `{conversa}`. 409 `ja_assumida` (com o nome; também para quem perde a corrida do "Assumir") e `alterada` (corrida na transferência ou na devolução); 422 `fields.responsavel_id` (destino fora da equipe) e `fields.acao`; 404. Transferir avisa o destino no sino. |
+| `POST` | `/api/conversas/<id>/notas` | (328) `{texto}` → 201 `{nota}`. Vazio ou > 2.000 → 422 `fields.texto`. Nunca fala com a Meta. |
+| `GET`/`POST` | `/api/conversas/respostas-rapidas` | (328) Lista por título / cria `{titulo, atalho?, texto}` → 201. 422 por campo (vazio, longo, repetido, atalho com espaço). |
+| `PATCH`/`DELETE` | `/api/conversas/respostas-rapidas/<id>` | (328) Altera só os campos enviados → 200; exclui → 204; 404. |
 | `GET` | `/api/conversas/midia/<id>[/<nome>]` | O arquivo (`send_file`, `conditional`). Sem papel, inexistente ou não `guardada` → **404**. O `<nome>` só serve à extensão do visualizador. |
 | `GET` | `/api/conversas/modelos` | Modelos aprovados e suportados (só variáveis no corpo), com cache de 5 min por processo; falha → 503. |
 | `POST` | `/api/conversas/<id>/mensagens` | JSON `{texto, chave_envio}` ou multipart `arquivo`, `legenda`, `chave_envio`. 201 (nova) ou 200 (mesma chave), com `mensagem`. 409 `janela_fechada` / `envio_travado`; 503 `nao_configurado`; 422 `invalido` + `fields`. Falha da Meta = 201 com `situacao: "falhou"` e motivo. |
@@ -1936,6 +1951,26 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 
 `GET /api/auth/me` ganha `conversas_ligadas` (papel real COMERCIAL/SUPERADMIN **e** módulo ligado), que controla o
 item do menu.
+
+**Equipe na caixa (feature 328, Fase 2a do plano).** Fluxo e invariantes em `docs/04` §6; contrato em
+`specs/328-crm-equipe-na-caixa/contracts/api.md`.
+- **Núcleo**: `equipe_ops` (responsável, espera, alerta, notas) e `respostas_ops`. `equipe_ops` fica embaixo e nunca
+  importa `aviso_ops`/`envio_ops`; por isso `relogio.agora_utc` e `recusa.Recusa` são módulos próprios
+  (`EnvioRecusado` herda de `Recusa`).
+- **Sino**: `conversa.esperando` (severidade `urgent`, `dedupe_key = conversa.esperando:{id}:{epoch do início}`; para o
+  responsável da equipe, senão para COMERCIAL/SUPERADMIN pelo catálogo; apagado quando a espera acaba, por
+  `apagar_por_entidade(..., kind=)`) e `conversa.transferida` (`info`, só para o destino, `dedupe_key` com o epoch de
+  `assumida_em`). Os dois com entidade `("conversa", id)` e link `/conversas?c={id}`.
+- **Alerta**: `equipe_ops.alertar_esperas` na passada da `whatsapp-sweep` (60 s), depois dos avisos refeitos. Só das
+  9h às 21h de São Paulo (`HORARIO_DE_ALERTA`, constante), para esperas de mais de 15 min com a janela de 24 h aberta
+  e ainda sem aviso, das mais antigas, até 50 por passada. O título diz "há 16 min" ou, a partir de uma hora, "há 12 h".
+- **Espera**: aberta e encerrada por UPDATE condicional (`aguardando_desde`), na ordem das mensagens; reação não abre
+  nem encerra; o eco sem texto (áudio, foto) conta como resposta.
+- **Áudio gravado**: `POST /mensagens` aceita `audio/webm` (Chrome/Edge) e o converte para ogg com
+  `midia_ops.webm_para_ogg` (ffmpeg `-c:a copy`, arquivo temporário, 60 s; o binário vem de
+  `video_ops.caminho_do_ffmpeg()`), depois das pré-condições. Sem ffmpeg ou na falha → 422 `fields.arquivo` "Não foi
+  possível preparar o áudio. Envie o arquivo pelo clipe.". Áudio ogg com Opus (`OpusHead` na primeira página) sai com `voice: true` (nota de voz); o ogg/vorbis do clipe vai como
+  áudio comum.
 
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
@@ -2244,6 +2279,7 @@ Gates por módulo (todos em `app/api/`):
 | assinatura / token da Meta (sem papel) (feature 325) | `GET`/`POST /api/webhooks/whatsapp` | público; o GET vale só com `hub.verify_token` correto e o POST só com `X-Hub-Signature-256` correto; desligado → 404 |
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
+| `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |

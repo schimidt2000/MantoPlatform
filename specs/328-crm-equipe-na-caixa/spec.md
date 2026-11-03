@@ -1,7 +1,7 @@
 # Feature 328 — Conversas em equipe: responsável, alerta de cliente esperando, notas, respostas rápidas e áudio
 
 **Branch**: `328-crm-equipe-na-caixa` (da `325-crm-whatsapp-fundacao`, que ainda não está na `main`, por decisão
-do dono: "continuar a implementação sem fazer o push") · **Created**: 2026-11-03 · **Status**: Rascunho ·
+do dono: "continuar a implementação sem fazer o push") · **Created**: 2026-11-03 · **Status**: Implementado, não publicado ·
 **Migration**: sim, aditiva (3 colunas em `conversas`, 2 tabelas novas) · **Nível**: 1 (feature)
 
 **Input**: pedido do dono (03/11): "Dá para continuar a implementação sem fazer o push?? Vou deixar mais pra
