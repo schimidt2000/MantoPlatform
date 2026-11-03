@@ -83,7 +83,11 @@ export function Mensagem({ mensagem, onTentarDeNovo, reenviando = false }: Mensa
   const reduzir = useReducedMotion();
   const daEquipe = mensagem.direcao === "enviada";
   const rodape = [
-    mensagem.origem === "celular" ? "Enviada pelo celular" : mensagem.autor?.nome,
+    mensagem.origem === "celular"
+      ? "Enviada pelo celular"
+      : mensagem.origem === "outro"
+        ? "Enviada por outro app"
+        : mensagem.autor?.nome,
     horaDaMensagem(mensagem.momento),
   ]
     .filter(Boolean)

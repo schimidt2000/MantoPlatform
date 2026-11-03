@@ -1,5 +1,5 @@
 import { cn } from "@manto/ui";
-import type { FiltroDaLista as Filtro } from "../../lib/conversas";
+import type { Canal, FiltroDaLista as Filtro } from "../../lib/conversas";
 
 /**
  * "Todas", "Minhas" e "Sem responsável" (feature 328, FR-005). Botões de alternância, não abas: o
@@ -23,6 +23,34 @@ export function FiltroDaLista({ valor, onMudar }: FiltroDaListaProps) {
       {OPCOES.map((opcao) => (
         <button
           key={opcao.valor}
+          type="button"
+          aria-pressed={valor === opcao.valor}
+          onClick={() => onMudar(opcao.valor)}
+          className={cn(
+            "min-h-11 flex-auto whitespace-nowrap rounded px-2 text-xs font-medium transition-colors md:min-h-8",
+            valor === opcao.valor ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink",
+          )}
+        >
+          {opcao.rotulo}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+const CANAIS: { valor: Canal | null; rotulo: string }[] = [
+  { valor: null, rotulo: "Todos" },
+  { valor: "whatsapp", rotulo: "WhatsApp" },
+  { valor: "instagram", rotulo: "Instagram" },
+];
+
+/** "Todos" · "WhatsApp" · "Instagram" (feature 330) — só aparece com os dois canais ligados. */
+export function FiltroDoCanal({ valor, onMudar }: { valor: Canal | null; onMudar: (valor: Canal | null) => void }) {
+  return (
+    <div role="group" aria-label="Filtrar por canal" className="flex gap-1 rounded-md bg-surface-2 p-1">
+      {CANAIS.map((opcao) => (
+        <button
+          key={opcao.rotulo}
           type="button"
           aria-pressed={valor === opcao.valor}
           onClick={() => onMudar(opcao.valor)}

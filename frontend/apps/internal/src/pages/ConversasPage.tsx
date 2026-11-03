@@ -9,6 +9,7 @@ import {
   intervaloDaLista,
   useConversas,
   useConversasAnteriores,
+  type Canal,
   type ConversaResumo,
   type FiltroDaLista,
 } from "../lib/conversas";
@@ -28,6 +29,10 @@ function filtroDoEndereco(valor: string | null): FiltroDaLista {
   return FILTROS.find((f) => f === valor) ?? "todas";
 }
 
+function canalDoEndereco(valor: string | null): Canal | null {
+  return valor === "whatsapp" || valor === "instagram" ? valor : null;
+}
+
 /** Topo (com polling) + páginas antigas, sem repetir a conversa que subiu para o topo. */
 function juntarPaginas(topo: ConversaResumo[] | undefined, antigas: ConversaResumo[][]): ConversaResumo[] | undefined {
   if (!topo) return undefined;
@@ -43,8 +48,9 @@ export function ConversasPage() {
   const [buscaEfetiva, setBuscaEfetiva] = useState(busca);
   const filtro = filtroDoEndereco(params.get("filtro"));
   const [cursorDaLista, setCursorDaLista] = useState<string | null>(null);
-  const lista = useConversas(buscaEfetiva, filtro);
-  const anteriores = useConversasAnteriores(buscaEfetiva, filtro, cursorDaLista);
+  const canal = canalDoEndereco(params.get("canal"));
+  const lista = useConversas(buscaEfetiva, filtro, canal);
+  const anteriores = useConversasAnteriores(buscaEfetiva, filtro, canal, cursorDaLista);
 
   useEffect(() => {
     const espera = setTimeout(() => {
@@ -82,6 +88,19 @@ export function ConversasPage() {
     );
   };
 
+  const filtrarCanal = (valor: Canal | null) => {
+    setCursorDaLista(null);
+    setParams(
+      (atuais) => {
+        const novos = new URLSearchParams(atuais);
+        if (valor) novos.set("canal", valor);
+        else novos.delete("canal");
+        return novos;
+      },
+      { replace: true },
+    );
+  };
+
   const selecionar = (id: number | null) =>
     setParams(
       (atuais) => {
@@ -110,7 +129,9 @@ export function ConversasPage() {
     <div className="flex h-[calc(100dvh-3.5rem)] min-h-[420px] flex-col md:h-[100dvh]">
       {lista.data?.envio_travado ? (
         <p role="status" className="border-b border-gold bg-gold-50 px-4 py-2 text-xs text-gold-ink">
-          O envio pelo WhatsApp está travado neste ambiente: as mensagens não saem para o celular da cliente.
+          {lista.data.canais_ligados?.includes("instagram")
+            ? "O envio pelo WhatsApp e pelo Instagram está travado neste ambiente: as mensagens não saem para a cliente."
+            : "O envio pelo WhatsApp está travado neste ambiente: as mensagens não saem para o celular da cliente."}
         </p>
       ) : null}
       <div className="grid min-h-0 flex-1 md:grid-cols-[minmax(280px,360px)_1fr] [&>*]:min-w-0">
@@ -123,6 +144,9 @@ export function ConversasPage() {
             onBusca={setBusca}
             filtro={filtro}
             onFiltro={filtrar}
+            canal={canal}
+            onCanal={filtrarCanal}
+            canaisLigados={lista.data?.canais_ligados ?? []}
             conversas={conversas}
             carregando={lista.isLoading}
             falhou={lista.isError}

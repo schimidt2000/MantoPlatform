@@ -56,6 +56,24 @@ const ACEITOS = [
   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 ].join(",");
 
+// Feature 330: o que o Instagram aceita (foto, vídeo, áudio e PDF). O áudio gravado vira m4a no servidor.
+const ACEITOS_NO_INSTAGRAM = [
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "audio/aac",
+  "audio/mp4",
+  "audio/x-m4a",
+  "audio/wav",
+  "application/pdf",
+].join(",");
+const TEXTO_MAXIMO_NO_INSTAGRAM = 1000;
+const AVISO_JANELA_HUMANA =
+  "Fora das 24 horas: a resposta vai como resposta da equipe, até 7 dias depois da última mensagem da cliente.";
+
 type Modo = "mensagem" | "nota";
 /** De onde a lista de respostas rápidas foi aberta: do botão (busca própria) ou da "/" no campo. */
 type Painel = null | "botao" | "barra";
@@ -109,7 +127,15 @@ function AnexoEscolhido({ nome, desabilitado, onRemover }: { nome: string; desab
   );
 }
 
-function JanelaFechada({ onEnviarModelo }: { onEnviarModelo: () => void }) {
+function JanelaFechada({ onEnviarModelo, instagram }: { onEnviarModelo: () => void; instagram: boolean }) {
+  if (instagram) {
+    // O Instagram não tem modelos: depois de 7 dias, só a cliente reabre (feature 330).
+    return (
+      <p className="p-3 pt-2 text-sm text-muted">
+        Passaram 7 dias desde a última mensagem da cliente. Só ela pode retomar a conversa pelo Instagram.
+      </p>
+    );
+  }
   return (
     <div className="space-y-2 p-3 pt-2">
       <p className="text-sm text-muted">
@@ -138,7 +164,7 @@ export function CaixaDeEnvio({ conversa, onEnviarModelo, onJanelaFechou }: Caixa
       ) : conversa.janela_aberta ? (
         <CaixaDeMensagem conversa={conversa} onEnviarModelo={onEnviarModelo} onJanelaFechou={onJanelaFechou} />
       ) : (
-        <JanelaFechada onEnviarModelo={onEnviarModelo} />
+        <JanelaFechada onEnviarModelo={onEnviarModelo} instagram={conversa.canal === "instagram"} />
       )}
     </div>
   );
@@ -185,6 +211,7 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
   const gravador = useGravador(setAviso);
   const enviando = enviarTexto.isPending || enviarArquivo.isPending;
   const { painel, setPainel } = lista;
+  const instagram = conversa.canal === "instagram";
 
   // Clique fora fecha a lista de respostas rápidas.
   useEffect(() => {
@@ -225,6 +252,17 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
     }
     chaveDoRascunho.current ??= novaChaveDeEnvio();
     const chave_envio = chaveDoRascunho.current;
+    if (arquivo && instagram && conteudo) {
+      // O anexo do Instagram não tem legenda: o arquivo vai primeiro e o texto logo depois, em outra mensagem.
+      const depois = () => {
+        setArquivo(null);
+        chaveDoRascunho.current = novaChaveDeEnvio();
+        const chave_do_texto = chaveDoRascunho.current;
+        enviarTexto.mutate({ texto: conteudo, chave_envio: chave_do_texto }, { onSuccess: aoEnviar, onError: aoErrar });
+      };
+      enviarArquivo.mutate({ arquivo, legenda: "", chave_envio }, { onSuccess: depois, onError: aoErrar });
+      return;
+    }
     if (arquivo) {
       enviarArquivo.mutate({ arquivo, legenda: conteudo, chave_envio }, { onSuccess: aoEnviar, onError: aoErrar });
       return;
@@ -298,6 +336,11 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
   return (
     <>
       <form onSubmit={enviar} className="space-y-2 p-3 pt-2">
+        {instagram && conversa.janela === "humana" ? (
+          <p role="status" className="rounded-md bg-gold-50 px-3 py-2 text-xs text-gold-ink">
+            {AVISO_JANELA_HUMANA}
+          </p>
+        ) : null}
         {arquivo ? (
           <AnexoEscolhido
             nome={arquivo.name}
@@ -338,7 +381,7 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
             <input
               ref={entradaDeArquivo}
               type="file"
-              accept={ACEITOS}
+              accept={instagram ? ACEITOS_NO_INSTAGRAM : ACEITOS}
               className="hidden"
               onChange={(e) => {
                 setArquivo(e.target.files?.[0] ?? null);
@@ -384,8 +427,8 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
               }}
               onKeyDown={aoTeclar}
               rows={1}
-              maxLength={4096}
-              placeholder={arquivo ? "Legenda (opcional)" : "Mensagem"}
+              maxLength={instagram ? TEXTO_MAXIMO_NO_INSTAGRAM : 4096}
+              placeholder={arquivo ? (instagram ? "Mensagem (vai depois do arquivo)" : "Legenda (opcional)") : "Mensagem"}
               aria-invalid={erro ? true : undefined}
               aria-describedby={erro ? `erro-caixa-${conversa.id}` : undefined}
               aria-controls={painel === "barra" ? idDaLista : undefined}
@@ -420,9 +463,11 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
           ) : (
             <span />
           )}
-          <Button type="button" variant="ghost" size="sm" onClick={onEnviarModelo}>
-            Enviar modelo
-          </Button>
+          {instagram ? null : (
+            <Button type="button" variant="ghost" size="sm" onClick={onEnviarModelo}>
+              Enviar modelo
+            </Button>
+          )}
         </div>
       </form>
       <GerenciarRespostasDialog open={gerenciando} onOpenChange={setGerenciando} />

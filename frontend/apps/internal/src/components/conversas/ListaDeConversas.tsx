@@ -2,8 +2,16 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Search } from "lucide-react";
 import { Button, Input, Skeleton, cn } from "@manto/ui";
-import { horaNaLista, tempoDeEspera, type ConversaResumo, type FiltroDaLista as Filtro } from "../../lib/conversas";
-import { FiltroDaLista } from "./FiltroDaLista";
+import {
+  contatoLegivel,
+  horaNaLista,
+  tempoDeEspera,
+  type Canal,
+  type ConversaResumo,
+  type FiltroDaLista as Filtro,
+} from "../../lib/conversas";
+import { FiltroDaLista, FiltroDoCanal } from "./FiltroDaLista";
+import { IconeDoCanal } from "./IconeDoCanal";
 
 /**
  * A lista de conversas (feature 325, FR-013): da última mensagem para trás, com a busca por nome
@@ -19,6 +27,10 @@ interface ListaDeConversasProps {
   onBusca: (valor: string) => void;
   filtro: Filtro;
   onFiltro: (valor: Filtro) => void;
+  canal: Canal | null;
+  onCanal: (valor: Canal | null) => void;
+  /** Feature 330: o filtro de canal só aparece com mais de um canal ligado. */
+  canaisLigados: Canal[];
   conversas: ConversaResumo[] | undefined;
   carregando: boolean;
   falhou: boolean;
@@ -79,7 +91,8 @@ function ItemDaLista({
   onSelecionar: (id: number) => void;
   agora: number;
 }) {
-  const mostrarTelefone = conversa.telefone_legivel && conversa.telefone_legivel !== conversa.nome;
+  const contato = contatoLegivel(conversa);
+  const mostrarContato = contato && contato !== conversa.nome;
   return (
     <button
       type="button"
@@ -93,12 +106,15 @@ function ItemDaLista({
       <Inicial nome={conversa.nome} />
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline justify-between gap-2">
-          <span className={cn("truncate text-sm", conversa.nao_lidas > 0 ? "font-semibold" : "font-medium")}>
-            {conversa.nome}
+          <span className="flex min-w-0 items-center gap-1.5">
+            <IconeDoCanal canal={conversa.canal} />
+            <span className={cn("truncate text-sm", conversa.nao_lidas > 0 ? "font-semibold" : "font-medium")}>
+              {conversa.nome}
+            </span>
           </span>
           <span className="shrink-0 text-xs text-muted">{horaNaLista(conversa.ultima_mensagem_em)}</span>
         </span>
-        {mostrarTelefone ? <span className="block truncate text-xs text-muted">{conversa.telefone_legivel}</span> : null}
+        {mostrarContato ? <span className="block truncate text-xs text-muted">{contato}</span> : null}
         <span className="flex items-center justify-between gap-2">
           <span className="truncate text-xs text-muted">{conversa.ultima_previa ?? ""}</span>
           {conversa.nao_lidas > 0 ? (
@@ -119,6 +135,9 @@ export function ListaDeConversas({
   onBusca,
   filtro,
   onFiltro,
+  canal,
+  onCanal,
+  canaisLigados,
   conversas,
   carregando,
   falhou,
@@ -149,6 +168,7 @@ export function ListaDeConversas({
           />
         </div>
         <FiltroDaLista valor={filtro} onMudar={onFiltro} />
+        {canaisLigados.length > 1 ? <FiltroDoCanal valor={canal} onMudar={onCanal} /> : null}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {carregando ? (

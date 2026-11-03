@@ -41,6 +41,9 @@ export interface Pessoa {
 }
 
 export type FiltroDaLista = "todas" | "minhas" | "sem_responsavel";
+/** Feature 330: o canal da conversa e a janela de resposta (no Instagram, até 7 dias com a marca humana). */
+export type Canal = "whatsapp" | "instagram";
+export type Janela = "aberta" | "humana" | "fechada";
 export type AcaoDoResponsavel = "assumir" | "transferir" | "devolver";
 
 export interface ConversaResumo {
@@ -62,6 +65,9 @@ export interface ConversaResumo {
   responsavel_ativo?: boolean;
   /** UTC; a primeira mensagem da cliente ainda sem resposta. */
   aguardando_desde?: string | null;
+  /** Feature 330: o @usuário do Instagram (sem a arroba) e a janela de resposta. */
+  usuario?: string | null;
+  janela?: Janela;
 }
 
 export interface Nota {
@@ -105,6 +111,7 @@ export interface ListaDeConversas {
   configurado: boolean;
   envio_travado: boolean;
   poll_segundos?: number;
+  canais_ligados?: Canal[];
   conversas: ConversaResumo[];
   proximo: string | null;
 }
@@ -133,18 +140,19 @@ export function intervaloDaLista(lista: ListaDeConversas | undefined): number {
   return Math.max(2, lista?.poll_segundos ?? POLL_PADRAO_S) * 1000;
 }
 
-function parametrosDaLista(busca: string, filtro: FiltroDaLista): URLSearchParams {
+function parametrosDaLista(busca: string, filtro: FiltroDaLista, canal: Canal | null): URLSearchParams {
   const params = new URLSearchParams();
   if (busca) params.set("busca", busca);
   if (filtro !== "todas") params.set("filtro", filtro);
+  if (canal) params.set("canal", canal);
   return params;
 }
 
-export function useConversas(busca: string, filtro: FiltroDaLista = "todas") {
+export function useConversas(busca: string, filtro: FiltroDaLista = "todas", canal: Canal | null = null) {
   return useQuery<ListaDeConversas>({
-    queryKey: [...CHAVE, "lista", busca, filtro],
+    queryKey: [...CHAVE, "lista", busca, filtro, canal],
     queryFn: () => {
-      const params = parametrosDaLista(busca, filtro).toString();
+      const params = parametrosDaLista(busca, filtro, canal).toString();
       return apiFetch<ListaDeConversas>(`/api/conversas${params ? `?${params}` : ""}`);
     },
     refetchInterval: (query) => intervaloDaLista(query.state.data),
@@ -184,11 +192,16 @@ export function useMensagensAnteriores(id: number | null, cursorInicial: number 
 }
 
 /** Conversas mais antigas que a primeira página (sem polling: só o topo da lista muda sozinho). */
-export function useConversasAnteriores(busca: string, filtro: FiltroDaLista, cursorInicial: string | null) {
+export function useConversasAnteriores(
+  busca: string,
+  filtro: FiltroDaLista,
+  canal: Canal | null,
+  cursorInicial: string | null,
+) {
   return useInfiniteQuery({
-    queryKey: [...CHAVE, "lista-anteriores", busca, filtro, cursorInicial],
+    queryKey: [...CHAVE, "lista-anteriores", busca, filtro, canal, cursorInicial],
     queryFn: ({ pageParam }) => {
-      const params = parametrosDaLista(busca, filtro);
+      const params = parametrosDaLista(busca, filtro, canal);
       params.set("antes", pageParam);
       return apiFetch<ListaDeConversas>(`/api/conversas?${params.toString()}`);
     },
@@ -427,6 +440,12 @@ export function aplicarNome(texto: string, nomeDoContato: string | null | undefi
     .replace(/\s*\{nome\}/g, "");
   const comecavaComNome = /^\s*\{nome\}/.test(texto);
   return comecavaComNome ? semNome.replace(/^\s*(\p{Ll})/u, (_, letra: string) => letra.toUpperCase()) : semNome;
+}
+
+/** O que aparece no lugar do telefone: o @usuário no Instagram, o telefone no WhatsApp. */
+export function contatoLegivel(conversa: ConversaResumo): string | null {
+  if (conversa.canal === "instagram") return conversa.usuario ? `@${conversa.usuario}` : null;
+  return conversa.telefone_legivel;
 }
 
 /** Tela de toque (celular): lá o Enter quebra a linha, porque o teclado não tem Shift. */

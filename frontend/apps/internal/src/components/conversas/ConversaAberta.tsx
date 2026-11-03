@@ -4,6 +4,7 @@ import { ArrowLeft, UserRound } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Skeleton } from "@manto/ui";
 import {
+  contatoLegivel,
   diaDaMensagem,
   horaNaLista,
   novaChaveDeEnvio,
@@ -18,6 +19,7 @@ import {
 import { useCurrentUser } from "../../lib/useAuth";
 import { CaixaDeEnvio } from "./CaixaDeEnvio";
 import { EnviarModeloDialog } from "./EnviarModeloDialog";
+import { IconeDoCanal } from "./IconeDoCanal";
 import { Mensagem } from "./Mensagem";
 import { NotaInterna } from "./NotaInterna";
 import { ResponsavelDaConversa } from "./ResponsavelDaConversa";
@@ -60,6 +62,15 @@ interface ConversaAbertaProps {
 }
 
 /** Junta as páginas antigas e a atual sem repetir mensagem (a mesma pode estar nas duas). */
+/** O que o cabeçalho diz da janela: no Instagram há a faixa de 24 h a 7 dias (feature 330). */
+function situacaoDaJanela(conversa: { canal: string; janela?: string; janela_aberta: boolean }): string {
+  if (conversa.canal === "instagram") {
+    if (conversa.janela === "humana") return " · fora das 24 h";
+    return conversa.janela === "fechada" ? " · janela de 7 dias fechada" : "";
+  }
+  return conversa.janela_aberta ? "" : " · janela de 24 h fechada";
+}
+
 function semRepetir(listas: MensagemTipo[][]): MensagemTipo[] {
   const vistas = new Set<number>();
   return listas.flat().filter((m) => (vistas.has(m.id) ? false : (vistas.add(m.id), true)));
@@ -151,10 +162,13 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
           <ArrowLeft className="h-5 w-5" aria-hidden />
         </Button>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{conversa.nome}</p>
+          <p className="flex min-w-0 items-center gap-1.5 font-medium">
+            <IconeDoCanal canal={conversa.canal} />
+            <span className="truncate">{conversa.nome}</span>
+          </p>
           <p className="truncate text-xs text-muted">
-            {conversa.telefone_legivel ?? "Sem telefone"}
-            {conversa.janela_aberta ? "" : " · janela de 24 h fechada"}
+            {contatoLegivel(conversa) ?? (conversa.canal === "instagram" ? "Instagram" : "Sem telefone")}
+            {situacaoDaJanela(conversa)}
           </p>
         </div>
         {conversa.cliente ? (
