@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **331-atrasados-na-planilha** | *(na branch, aguardando o merge a pedido do dono)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -390,6 +391,51 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 331 — O que ficou em aberto vem para o mês atual da Planilha de Pagamentos   (331-atrasados-na-planilha · 2026-11-03 · sem migration)
+
+> Na branch, aguardando o merge a pedido do dono. Nível 2 (Financeiro, sem migration). Detalhe:
+> `specs/331-atrasados-na-planilha/spec.md`.
+
+**O pedido.** O dono (03/11): a planilha é por mês, mas o evento do dia 30 só se paga no mês seguinte, e há
+coisas atrasadas de meses para trás ("no mês 8 tem pendente um pagamento para o Roberto Mantovani"). Quer
+que o pendente passe para o mês seguinte, ainda pendente, com aviso e o dia certo, para o Superadmin e o
+Financeiro não voltarem todo mês; e a soma do que está "No banco" não pode ficar espalhada em dois meses.
+Antes de codar pediu a análise de impacto no balanço; aprovou a proposta com os dois padrões dela.
+
+**O que mudou.**
+- `app/financeiro/atrasados_ops.py` (novo): `itens_em_aberto_anteriores` monta, com os `_build_*` da própria
+  planilha, o que está Não pago ou No banco e vencido nas planilhas de `PLANILHA_ATRASADOS_DESDE`
+  (`app/constants.py`, maio/2026) até o mês passado, e marca `de_mes_anterior`, `mes_origem` e `dias_em_atraso`.
+- `routes.py`: os filtros de cachê, gasto e BV da planilha viraram funções (`_pagamentos_roles_entre`,
+  `_pagamentos_gastos_entre`, `_pagamentos_bvs_entre`), usadas pelo mês na API e pelo atraso. O Jinja não muda.
+- `GET /api/financeiro/pagamentos`: só no mês de hoje, soma esses itens aos do mês e aos totais;
+  `totals.anteriores`, `mes_atual` e `atrasados_desde` sempre. CSV do mês atual com os cachês de antes.
+- Tela: etiqueta vermelha "De outubro · há 14 dias", cartão-filtro "De meses anteriores", título "Itens de
+  novembro de 2026 e de meses anteriores", e no mês passado a faixa "N itens em aberto deste mês também
+  aparecem na planilha de novembro de 2026." com "Ver novembro de 2026".
+
+**Decisões.** A tela traz o item; o banco não muda. A DRE soma cada custo pela data de origem (cachê e BV
+pelo evento, salário pelo `month_ref`, gasto pela `expense_date`), e mover a data levaria o custo de um mês
+para outro; o salário não pago é apagado e regerado quando o mês é aberto. Por isso o atraso só lê e
+nunca chama os `ensure_*` dos meses passados. Pertence a um mês o que aparece na planilha dele (a comissão
+pelo mês do repasse). Só o mês de hoje recebe, e de mês anterior só o vencido (`is_future` fica). O corte
+em maio/2026 é a primeira planilha com pagamento marcado: antes dela há salários "não pagos" de janeiro e
+abril (R$ 104.600,00) que alguém gerou ao abrir esses meses, e comissões de ciclos que nunca passaram pela
+planilha (dívida 187). Data de pagamento de cachê, gasto e BV ficou de fora (migration; dívida 186).
+
+**Verificação.** `verify_331.py` 10/10 contra o `manto_local` (espelho de 30/10, relógio de 03/11), e 4/10
+antes do núcleo pelos motivos certos. No espelho, novembro traz 126 itens de antes, R$ 134.390,09: 92
+cachês de setembro e outubro, 29 salários (o do Roberto de 20/08 é R$ 1.856,36, o líquido dos R$ 12.500,00
+depois de R$ 10.643,64 em adiantamentos), 3 comissões da Thays (repasses de maio, junho e outubro) e 2
+contas de outubro. Os 126 são os mesmos itens dos meses deles; nada antes de maio entra; abrir novembro
+não grava nada nos meses anteriores e a DRE de outubro sai igual; pagar um cachê de outubro por novembro
+grava e o tira de novembro. Typecheck das três SPAs e `ruff` limpos. Tela aberta no worktree (Flask 5331,
+Vite 5731) em 1440 px e 375 px, sem rolagem lateral; filtro, faixa de outubro e atalho conferidos.
+
+**Pegadinhas.** O verify lê os meses passados ANTES do atual: abrir um mês regera os salários não pagos
+dele com id novo (dívida 188). O item de comissão de maio diz "Comissões 04/2026" e leva "De maio": o ciclo
+de abril se paga no repasse de 05/05, que é da planilha de maio.
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 

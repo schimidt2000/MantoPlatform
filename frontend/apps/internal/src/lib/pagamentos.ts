@@ -63,8 +63,12 @@ export const STATUS_OPTIONS_BY_TYPE: Record<PagamentoItemType, PaymentStatus[]> 
  */
 export type PagamentoBucket = "pago" | "no_banco" | "pendente" | "futuro";
 
-/** Filtro ativo dos cards de KPI; `null` = "Total no período" (nenhum filtro). */
-export type PagamentoFilter = PagamentoBucket | null;
+/**
+ * Filtro ativo dos cards de KPI; `null` = "Total no período" (nenhum filtro). `"anteriores"`
+ * (correção 331) não é faixa: recorta o que veio de meses anteriores, que continua em Pendentes ou
+ * No banco — por isso o cartão dele soma itens que os outros dois também somam.
+ */
+export type PagamentoFilter = PagamentoBucket | "anteriores" | null;
 
 export interface BucketTone {
   /** Nuance de fundo da linha da tabela (e do cartão no celular) — "bate o olho e entende". */
@@ -127,6 +131,43 @@ export const BUCKET_LABELS: Record<PagamentoBucket, string> = {
 
 /** Ordem dos cards de filtro, depois do card neutro "Total no período". */
 export const BUCKET_ORDER: PagamentoBucket[] = ["pago", "no_banco", "pendente", "futuro"];
+
+export const ANTERIORES_LABEL = "De meses anteriores";
+
+/** Nome do filtro ativo — o botão "Limpar filtro" e o estado vazio leem daqui. */
+export function filterLabel(filter: Exclude<PagamentoFilter, null>): string {
+  return filter === "anteriores" ? ANTERIORES_LABEL : BUCKET_LABELS[filter];
+}
+
+export function matchesFilter(item: PagamentoItem, filter: PagamentoFilter): boolean {
+  if (filter === null) return true;
+  if (filter === "anteriores") return Boolean(item.de_mes_anterior);
+  return bucketOf(item) === filter;
+}
+
+/** "outubro" — o mês de origem por extenso, sem o ano quando é o mesmo de hoje. */
+function nomeDoMes(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  if (!year || !monthNumber) return month;
+  const data = new Date(year, monthNumber - 1, 1);
+  return year === new Date().getFullYear()
+    ? data.toLocaleDateString("pt-BR", { month: "long" })
+    : data.toLocaleDateString("pt-BR", { month: "long", year: "numeric" });
+}
+
+/**
+ * Etiqueta do item que veio de um mês anterior (correção 331): "De outubro · há 14 dias". A data
+ * do item continua na coluna Vencimento; a etiqueta diz de qual planilha ele veio e há quanto
+ * tempo espera. `null` para o item do próprio mês.
+ */
+export function rotuloDoAtraso(item: PagamentoItem): string | null {
+  if (!item.de_mes_anterior || !item.mes_origem) return null;
+  const mes = nomeDoMes(item.mes_origem);
+  const dias = item.dias_em_atraso ?? 0;
+  const origem = `De ${mes}`;
+  if (dias <= 0) return origem;
+  return `${origem} · há ${dias} ${dias === 1 ? "dia" : "dias"}`;
+}
 
 /** Rótulo do botão de cada ação em lote — a barra flutuante lê daqui. */
 export const BULK_ACTION_LABELS: Record<Exclude<BulkPaymentAction, "delete">, string> = {
@@ -245,6 +286,7 @@ export function searchIndexOf(
       item.pix_key_type,
       statusLabels[item.status] ?? item.status,
       item.is_future ? "futuro" : "",
+      rotuloDoAtraso(item) ? `${rotuloDoAtraso(item)} atrasado` : "",
     ].join(" "),
   );
 }

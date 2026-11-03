@@ -2156,6 +2156,16 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   badge "⏳ Futuro" usam a mesma paleta, então a cor do card clicado é a cor das linhas reveladas.
 - **Situação**: seletor por linha com as opções que o backend suporta — **Não pago · No banco ·
   Pago** — as 3 valem para todos os tipos, inclusive comissão e conta recorrente (feature 199).
+- **De meses anteriores** *(correção 331)*: o mês atual traz também o que ficou Não pago ou No banco
+  nas planilhas de maio/2026 em diante, sem mudar data nem mês do item. Cada um leva a etiqueta
+  vermelha **"De outubro · há 14 dias"** (na coluna Vencimento; no cartão, ao lado da data) e entra
+  nos cartões Pendentes e No banco, então "No banco" é tudo que está no banco hoje. Um sexto
+  cartão-filtro, **"De meses anteriores"** (valor e contagem, tom de Pendentes), só aparece no mês
+  atual com atraso; no celular ocupa a linha inteira, e no `xl` a grade vira de 6 colunas. O título
+  vira "Itens de novembro de 2026 e de meses anteriores (N)". Marcar pago ali grava no item de
+  origem e o tira do mês atual. Num mês passado com item em aberto (desde maio/2026), uma faixa
+  avisa "N itens em aberto deste mês também aparecem na planilha de novembro de 2026." com o botão
+  "Ver novembro de 2026".
 - **Ações em lote** *(barra no topo da tabela, feature 194)*: aparece com 1+ itens marcados
   (animação `AnimatePresence`, respeitando `useReducedMotion`) e some ao voltar a 0. Mostra
   **`"X selecionados • R$ Y.YYY,YY"`** — a soma dos itens marcados, calculada no estado do React
@@ -2178,7 +2188,8 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   tentativa.
 - **API**: `GET /api/financeiro/pagamentos` · `POST .../set-status`, `.../bulk-action`,
   `.../salary/<id>/advance`, `.../salary/advance/<id>/delete` · `GET .../export`. Nem a 194 nem a
-  226 criaram ou alteraram endpoint — as duas são de apresentação sobre o payload existente.
+  226 criaram ou alteraram endpoint — as duas são de apresentação sobre o payload existente. A 331
+  acrescentou campos à leitura e ao CSV (`docs/01` §3).
 
 #### `/gastos` — Gastos Extras *(refeita na feature 314)*
 - **Acesso**: staff para lançar; aprovar/rejeitar em `_require_financeiro()`.

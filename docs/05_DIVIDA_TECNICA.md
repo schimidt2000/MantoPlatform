@@ -803,3 +803,13 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 |---|---|---|---|---|
 | 176 | **P5** | `app/calendar/routes.py` (`_handle_update_comercial` → `comercial_ops.sincronizar_notas`, Jinja) | o editor Jinja da venda, inalcançável em produção mas registrado, ainda **apaga a nota emitida** ao desligar o chip e não carimba "pedida por" nem avisa; as portas da API seguem a 323 (desligar exclui só as a emitir) | sai junto com o Jinja (`docs/PARADA_REMOCAO_JINJA.md`); não corrigir de passagem |
 | 177 | **P4** | notas `a_emitir` antigas (antes da 323) | a Home do Superadmin passa a listar como urgentes as notas a emitir que já existiam — no espelho de 28/10 eram 6, de eventos de setembro, várias sem CNPJ; podem ter sido emitidas fora do sistema sem o PDF inserido | o Superadmin insere o PDF (vira emitida); nota que não será emitida não tem botão de excluir no React (o `useDeleteNotaFiscal` de `lib/eventOps.ts` existe sem tela) — pôr "Excluir" no card de notas fiscais resolve; sem script |
+
+## Baixa da correção 331-atrasados-na-planilha (2026-11-03)
+
+**Quitada.** Nenhuma. **Criadas.** (186–188; as branches 325, 328 e 330 já usam até a 185.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 186 | **P4** | `event_roles`, `special_expenses`, `event_acrescimos` | o item de outubro pago em novembro sai da planilha de novembro e volta a contar só em outubro, como pago: o cartão "Pagos" do mês não diz o que saiu do caixa no mês. Cachê, gasto e BV não guardam a data do pagamento (salário, comissão e conta recorrente guardam `paid_at`) | `paid_at` nas três tabelas (migration) e o mês atual também lista o que foi pago nele, se o dono pedir o fluxo de caixa do mês |
+| 187 | **P4** | planilhas de antes de maio/2026 | ficam fora do atraso e continuam "não pagos" no mês deles: no espelho de 30/10, 10 salários de janeiro (R$ 63.800,00) e 12 de abril (R$ 40.800,00), meses sem nenhum salário marcado como pago, e 12 linhas de comissão da Thays dos ciclos de dez/2025 a mar/2026 (R$ 1.758,71) | o dono confere uma vez: marca pago o que saiu e exclui pelo lote o salário que nunca existiu. Sem script |
+| 188 | **P4** | `_ensure_salary_payments` (`app/financeiro/routes.py`) | abrir um mês passado apaga e recria os salários não pagos dele (id novo, valor do salário de hoje). Com a 331, o mês atual mostra esses salários; quem estava com ele aberto e marca o salário depois que outra pessoa abriu o mês dele recebe "Item não encontrado" (400) até recarregar. Anterior à 331 | regerar só o mês atual e os futuros, nunca o passado |

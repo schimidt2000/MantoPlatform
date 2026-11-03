@@ -594,6 +594,28 @@ agregadas por vendedor e contas recorrentes. Duas sutilezas: gastos com `paid_at
 **nunca** entram (`:1139`); lançamento recorrente com status `registrado` (débito automático /
 assinatura) nunca vira pendência (`:1075-1081`).
 
+**O mês de cada item e o que ficou para trás (correção 331).** Cada item pertence a um mês da
+planilha: cachê e BV pelo mês do evento, salário e conta recorrente pelo `month_ref`, gasto pela
+`expense_date`, comissão pelo mês do **repasse** (o ciclo de outubro é o item de 05/11). Na API, o
+mês **atual** (hoje em São Paulo) soma o que está Não pago ou No banco, já vencido, nas planilhas de
+`PLANILHA_ATRASADOS_DESDE` (maio/2026) até o mês passado — `atrasados_ops.itens_em_aberto_anteriores`.
+Invariantes:
+- **A tela traz o item; o banco não muda.** A DRE soma cada custo pela data de origem (cachê e BV
+  pelo evento, salário pelo `month_ref` em `_salary_cost`, gasto pela `expense_date`): mover a data
+  levaria o custo de um mês para outro. Por isso o atraso nunca chama `_ensure_salary_payments` nem
+  `ensure_recurring_entries` dos meses passados — só lê o que existe.
+- **É o mesmo item**: sai dos mesmos `_build_*`, com o mesmo id; cachê, gasto e BV filtram pelas
+  mesmas funções que o mês (`_pagamentos_roles_entre`, `_pagamentos_gastos_entre`,
+  `_pagamentos_bvs_entre`). Marcar pago no mês atual grava no item de origem; a comissão leva o
+  ciclo no id.
+- **O corte existe por causa de dado velho**: antes de maio/2026 há salários "não pagos" gerados
+  por quem abriu janeiro e abril (R$ 104 mil) e comissões de ciclos que nunca passaram pela
+  planilha. Mudar o corte é mudar a constante em `app/constants.py`.
+- ⚠️ Abrir um mês passado **regera** os salários não pagos dele com id novo (`_ensure_salary_payments`
+  apaga e recria os que não têm adiantamento). Quem estava com o mês atual aberto e marca um desses
+  salários recebe "Item não encontrado" até recarregar. É anterior à 331; ela só torna o caso mais
+  provável (dívida 188 do `docs/05`).
+
 ### Armadilhas
 
 - ✅ **Hotfix 267c — comissão paga não volta pelo lote.** `liquidar_periodo` mexe só nas linhas

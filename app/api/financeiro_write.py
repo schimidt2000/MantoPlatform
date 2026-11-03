@@ -518,17 +518,22 @@ def api_export_pagamentos() -> Any:
     """Exporta CSV dos cachês do mês (feature 160).
 
     Reaproveita a mesma consulta/colunas de `export_pagamentos`
-    (`app/financeiro/routes.py:1501`). Única rota desta fatia fora do envelope JSON padrão.
+    (`app/financeiro/routes.py:1501`). Única rota desta fatia fora do envelope JSON padrão. No
+    mês atual, os cachês em aberto de meses anteriores vêm antes, com a data deles (correção 331).
     """
     denied = _require_financeiro()
     if denied:
         return denied
 
+    from app.constants import now_sp
+    from app.financeiro.atrasados_ops import caches_em_aberto_anteriores
     from app.financeiro.routes import _STATUS_LABELS, _pagamentos_query
 
-    today = date.today()
+    today = now_sp().date()
     month = request.args.get("month", today.strftime("%Y-%m"))
     roles = _pagamentos_query(month)
+    if month == today.strftime("%Y-%m"):
+        roles = caches_em_aberto_anteriores(today.replace(day=1)) + roles
 
     output = io.StringIO()
     writer = csv.writer(output)

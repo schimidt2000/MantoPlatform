@@ -22,6 +22,7 @@ import {
   type BulkPaymentAction,
 } from "../lib/financeiro";
 import {
+  ANTERIORES_LABEL,
   BULK_ACTION_LABELS,
   BULK_ACTION_SHORT_LABELS,
   BUCKET_LABELS,
@@ -30,8 +31,10 @@ import {
   brl,
   bucketOf,
   currentMonth,
+  filterLabel,
   isSelectable,
   itemKey,
+  matchesFilter,
   matchesSearch,
   monthLabel,
   searchIndexOf,
@@ -207,18 +210,34 @@ export function PagamentosPage() {
 
   /** Quantos itens há em cada faixa — alimenta o subtítulo dos cards de filtro. */
   const counts = useMemo(() => {
-    const acc: Record<PagamentoBucket, number> = { pago: 0, no_banco: 0, pendente: 0, futuro: 0 };
+    const acc: Record<PagamentoBucket | "anteriores", number> = {
+      pago: 0,
+      no_banco: 0,
+      pendente: 0,
+      futuro: 0,
+      anteriores: 0,
+    };
     items.forEach((item) => {
       acc[bucketOf(item)] += 1;
+      if (item.de_mes_anterior) acc.anteriores += 1;
     });
     return acc;
   }, [items]);
+
+  // Correção 331: o que este mês (passado) ainda tem em aberto também está na planilha do mês
+  // atual. A regra é a do backend: Não pago ou No banco, já vencido, e só desde `atrasados_desde`.
+  const mesAtual = data?.mes_atual;
+  const emAbertoNoMesAtual =
+    mesAtual && data?.atrasados_desde && month < mesAtual && month >= data.atrasados_desde
+      ? items.filter((i) => (i.status === "nao_pago" || i.status === "no_banco") && !i.is_future)
+          .length
+      : 0;
 
   // Faixa (card de KPI) e busca se somam: o card recorta a situação, a busca recorta o texto.
   const visibleItems = useMemo(
     () =>
       items.filter((item) => {
-        if (filter && bucketOf(item) !== filter) return false;
+        if (!matchesFilter(item, filter)) return false;
         if (terms.length === 0) return true;
         return matchesSearch(searchIndex.get(itemKey(item)) ?? "", terms);
       }),
@@ -404,8 +423,14 @@ export function PagamentosPage() {
       {data && (
         <>
           {/* "Total no período" ocupa a linha inteira no celular; as 4 faixas ficam num 2×2
-              embaixo dele, em vez de um card órfão no fim da grade. */}
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 xl:grid-cols-5">
+              embaixo dele, em vez de um card órfão no fim da grade. "De meses anteriores" (331)
+              só existe no mês atual com atraso, e também ocupa a linha inteira no celular. */}
+          <div
+            className={cn(
+              "grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3",
+              counts.anteriores > 0 ? "xl:grid-cols-6" : "xl:grid-cols-5",
+            )}
+          >
             <CartaoFiltro
               label="Total no período"
               value={data.totals.total}
@@ -417,6 +442,19 @@ export function PagamentosPage() {
               className="col-span-2 sm:col-span-1"
               onClick={() => handleFilterClick(null)}
             />
+            {counts.anteriores > 0 && (
+              <CartaoFiltro
+                label={ANTERIORES_LABEL}
+                value={data.totals.anteriores ?? 0}
+                count={counts.anteriores}
+                tone={BUCKET_TONE.pendente}
+                unidade={UNIDADE_ITEM}
+                active={filter === "anteriores"}
+                dimmed={filter !== null && filter !== "anteriores"}
+                className="col-span-2 sm:col-span-1"
+                onClick={() => handleFilterClick("anteriores")}
+              />
+            )}
             {BUCKET_ORDER.map((bucket) => (
               <CartaoFiltro
                 key={bucket}
@@ -431,6 +469,21 @@ export function PagamentosPage() {
               />
             ))}
           </div>
+
+          {mesAtual && emAbertoNoMesAtual > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-md border border-line bg-surface-2 px-3 py-2 text-xs text-muted">
+              <span>
+                {emAbertoNoMesAtual}{" "}
+                {emAbertoNoMesAtual === 1
+                  ? "item em aberto deste mês também aparece"
+                  : "itens em aberto deste mês também aparecem"}{" "}
+                na planilha de {monthLabel(mesAtual)}.
+              </span>
+              <Button variant="outline" size="sm" onClick={() => handleMonthChange(mesAtual)}>
+                Ver {monthLabel(mesAtual)}
+              </Button>
+            </div>
+          )}
 
           {/* Busca por qualquer dado da linha — a mesma da planilha antiga, agora varrendo o
               dado (e não o DOM), então ela vale igual para a tabela e para os cartões. */}
@@ -477,12 +530,13 @@ export function PagamentosPage() {
           <Card>
             <CardHeader className="flex-row flex-wrap items-center justify-between gap-2 pb-2">
               <CardTitle className="text-base">
-                Itens de {monthLabel(month)} ({visibleItems.length}
+                Itens de {monthLabel(month)}
+                {counts.anteriores > 0 ? " e de meses anteriores" : ""} ({visibleItems.length}
                 {visibleItems.length !== items.length ? ` de ${items.length}` : ""})
               </CardTitle>
               {filter && (
                 <Button variant="ghost" size="sm" onClick={() => setFilter(null)}>
-                  Limpar filtro · {BUCKET_LABELS[filter]} ✕
+                  Limpar filtro · {filterLabel(filter)} ✕
                 </Button>
               )}
             </CardHeader>
@@ -528,7 +582,7 @@ export function PagamentosPage() {
                       <p>
                         Nenhum item
                         {terms.length > 0 ? " para esta busca" : ""}
-                        {filter ? ` na faixa “${BUCKET_LABELS[filter]}”` : ""}.
+                        {filter ? ` na faixa “${filterLabel(filter)}”` : ""}.
                       </p>
                       <div className="flex flex-wrap justify-center gap-2">
                         {terms.length > 0 && (
