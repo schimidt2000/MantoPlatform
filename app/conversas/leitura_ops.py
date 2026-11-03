@@ -74,10 +74,11 @@ def janela_aberta(conversa: Conversa) -> bool:
 
 
 def _janela_fecha_em(conversa: Conversa, estado: str) -> datetime | None:
-    if conversa.ultima_recebida_em is None or estado == K.JANELA_ESTADO_FECHADA:
-        return conversa.ultima_recebida_em + K.JANELA if conversa.ultima_recebida_em else None
-    prazo = K.JANELA_HUMANA if estado == K.JANELA_ESTADO_HUMANA else K.JANELA
-    return conversa.ultima_recebida_em + prazo
+    if conversa.ultima_recebida_em is None:
+        return None
+    instagram = conversa.canal == K.CANAL_INSTAGRAM
+    longa = estado == K.JANELA_ESTADO_HUMANA or (instagram and estado == K.JANELA_ESTADO_FECHADA)
+    return conversa.ultima_recebida_em + (K.JANELA_HUMANA if longa else K.JANELA)
 
 
 def nome_da_conversa(conversa: Conversa) -> str:
@@ -183,7 +184,26 @@ def serializar_mensagem(mensagem: ConversaMensagem) -> dict[str, Any]:
         "modelo_nome": mensagem.modelo_nome,
         "erro": erro,
         "midia": _midia(mensagem),
+        "link": _link_do_instagram(mensagem),
     }
+
+
+def _link_do_instagram(mensagem: ConversaMensagem) -> str | None:
+    """O link de story, publicação ou reels que a cliente mandou (feature 330). Só https."""
+    item = mensagem.dados_dict
+    corpo = item.get("message") if isinstance(item.get("message"), dict) else None
+    if corpo is None:
+        return None  # WhatsApp: o `dados` é a própria mensagem, sem `message`
+    externo = mensagem.externo_id or ""
+    indice = int(externo.rsplit("#", 1)[1]) if "#" in externo else 0
+    anexos = [a for a in corpo.get("attachments") or [] if isinstance(a, dict)]
+    anexo = anexos[indice] if indice < len(anexos) else {}
+    url = None
+    if anexo.get("type") in K.ANEXOS_COM_LINK_IG:
+        url = (anexo.get("payload") or {}).get("url")
+    elif indice == 0:
+        url = ((corpo.get("reply_to") or {}).get("story") or {}).get("url")
+    return url if isinstance(url, str) and url.startswith("https://") else None
 
 
 def listar_conversas(

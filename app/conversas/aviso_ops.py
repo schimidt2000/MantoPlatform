@@ -378,7 +378,7 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
 # ── Status da enviada ────────────────────────────────────────────────────────────────────────────
 
 
-def envio_em_voo() -> bool:
+def envio_em_voo(conversa_id: int | None = None) -> bool:
     """Há envio gravado `pendente`, sem wamid, há pouco tempo? Então o status pode ser dele."""
     return bool(
         ConversaMensagem.query.filter(
@@ -386,6 +386,8 @@ def envio_em_voo() -> bool:
             ConversaMensagem.situacao == K.SITUACAO_PENDENTE,
             ConversaMensagem.externo_id.is_(None),
             ConversaMensagem.created_at >= agora_utc() - timedelta(seconds=ENVIO_EM_VOO),
+            # O eco do Instagram (330) olha só a conversa dele; o status do WhatsApp, todas.
+            *([ConversaMensagem.conversa_id == conversa_id] if conversa_id else []),
         ).first()
     )
 

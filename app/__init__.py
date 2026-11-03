@@ -398,11 +398,12 @@ def _start_virtual_sweep(app):
 
 def _passada_whatsapp(app: Flask) -> None:
     """Uma passada da varredura do WhatsApp (feature 325), só com o módulo ligado."""
-    from app.conversas.configuracao import cfg_whatsapp
+    from app.conversas.configuracao import canais_ligados
     from app.conversas.varredura import ciclo_de_varredura
 
     with app.app_context():
-        if not cfg_whatsapp().ligado:
+        # Feature 330: o Instagram sozinho também precisa da varredura (avisos, mídia, alerta).
+        if not canais_ligados():
             return
         resumo = ciclo_de_varredura()
         if any(resumo.values()):

@@ -21,9 +21,9 @@ from flask import Response, current_app, jsonify, request
 from app import limiter
 from app.api import api_bp
 from app.api.whatsapp_webhook import (
-    _nao_encontrado,
-    _processar_em_segundo_plano,
     assinatura_valida,
+    nao_encontrado,
+    processar_em_segundo_plano,
 )
 from app.conversas import aviso_ops
 from app.conversas.configuracao import cfg_instagram, cfg_whatsapp
@@ -41,7 +41,7 @@ def api_webhook_instagram_verificar() -> Any:
         or request.args.get("hub.mode") != "subscribe"
         or not hmac.compare_digest(token, cfg.verify_token)
     ):
-        return _nao_encontrado()
+        return nao_encontrado()
     return Response(request.args.get("hub.challenge") or "", status=200, mimetype="text/plain")
 
 
@@ -51,7 +51,7 @@ def api_webhook_instagram() -> Any:
     """Recebe o aviso, confere a assinatura, grava cru e responde 200 (processa fora)."""
     cfg = cfg_instagram()
     if not cfg.ligado:
-        return _nao_encontrado()
+        return nao_encontrado()
     grande = (request.content_length or 0) > AVISO_CORPO_MAXIMO
     corpo = b"" if grande else request.stream.read(AVISO_CORPO_MAXIMO + 1)
     if grande or len(corpo) > AVISO_CORPO_MAXIMO:
@@ -60,13 +60,13 @@ def api_webhook_instagram() -> Any:
         )
         return jsonify({"error": {"message": "Corpo grande demais"}}), 413
     if not assinatura_valida(corpo, request.headers.get("X-Hub-Signature-256"), cfg.app_secret):
-        return _nao_encontrado()
+        return nao_encontrado()
     aviso_id = aviso_ops.gravar_aviso(corpo)
     if current_app.config.get("WHATSAPP_AVISO_SINCRONO"):
         aviso_ops.processar_aviso(aviso_id, cfg_whatsapp())
     else:
         app = current_app._get_current_object()  # noqa: SLF001 — a thread precisa do app real
         threading.Thread(
-            target=_processar_em_segundo_plano, args=(app, aviso_id), daemon=True
+            target=processar_em_segundo_plano, args=(app, aviso_id), daemon=True
         ).start()
     return jsonify({"ok": True})

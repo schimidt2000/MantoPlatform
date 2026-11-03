@@ -2,11 +2,14 @@ import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent 
 import { Mic, Paperclip, Send, X, Zap } from "lucide-react";
 import { Button, cn } from "@manto/ui";
 import {
+  TEXTO_LONGO_NO_INSTAGRAM,
   aplicarNome,
   codigoDaRecusa,
   ehToque,
   mensagemDoErro,
+  nomeParaResposta,
   novaChaveDeEnvio,
+  passaDoLimiteDoInstagram,
   useEnviarArquivo,
   useEnviarTexto,
   useRespostasRapidas,
@@ -127,7 +130,22 @@ function AnexoEscolhido({ nome, desabilitado, onRemover }: { nome: string; desab
   );
 }
 
-function JanelaFechada({ onEnviarModelo, instagram }: { onEnviarModelo: () => void; instagram: boolean }) {
+function JanelaFechada({
+  onEnviarModelo,
+  instagram,
+  semMensagemDaCliente,
+}: {
+  onEnviarModelo: () => void;
+  instagram: boolean;
+  semMensagemDaCliente: boolean;
+}) {
+  if (instagram && semMensagemDaCliente) {
+    return (
+      <p className="p-3 pt-2 text-sm text-muted">
+        A cliente ainda não escreveu por aqui. A conversa abre quando ela mandar mensagem no Instagram.
+      </p>
+    );
+  }
   if (instagram) {
     // O Instagram não tem modelos: depois de 7 dias, só a cliente reabre (feature 330).
     return (
@@ -164,7 +182,11 @@ export function CaixaDeEnvio({ conversa, onEnviarModelo, onJanelaFechou }: Caixa
       ) : conversa.janela_aberta ? (
         <CaixaDeMensagem conversa={conversa} onEnviarModelo={onEnviarModelo} onJanelaFechou={onJanelaFechou} />
       ) : (
-        <JanelaFechada onEnviarModelo={onEnviarModelo} instagram={conversa.canal === "instagram"} />
+        <JanelaFechada
+          onEnviarModelo={onEnviarModelo}
+          instagram={conversa.canal === "instagram"}
+          semMensagemDaCliente={!conversa.janela_fecha_em}
+        />
       )}
     </div>
   );
@@ -250,6 +272,12 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
       campo.current?.focus();
       return;
     }
+    if (instagram && passaDoLimiteDoInstagram(conteudo)) {
+      // Antes de qualquer envio: no fluxo arquivo + texto, o arquivo não pode sair sozinho.
+      setErro(TEXTO_LONGO_NO_INSTAGRAM);
+      campo.current?.focus();
+      return;
+    }
     chaveDoRascunho.current ??= novaChaveDeEnvio();
     const chave_envio = chaveDoRascunho.current;
     if (arquivo && instagram && conteudo) {
@@ -271,7 +299,7 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
   };
 
   const escolher = (resposta: RespostaRapida) => {
-    const inserido = aplicarNome(resposta.texto, conversa.nome);
+    const inserido = aplicarNome(resposta.texto, nomeParaResposta(conversa));
     setTexto((atual) => {
       if (painel === "barra" || !atual.trim()) return inserido;
       return `${atual}${/\s$/.test(atual) ? "" : " "}${inserido}`;

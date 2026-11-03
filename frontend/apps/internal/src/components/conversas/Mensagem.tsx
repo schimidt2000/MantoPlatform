@@ -1,5 +1,5 @@
 import { motion, useReducedMotion } from "framer-motion";
-import { AlertCircle, Check, CheckCheck, Clock, FileText, Smartphone } from "lucide-react";
+import { AlertCircle, Check, CheckCheck, Clock, ExternalLink, FileText, Smartphone } from "lucide-react";
 import { assetUrl } from "@manto/api-client";
 import { Button, Foto, cn } from "@manto/ui";
 import { LinkDeArquivo } from "../ArquivoViewer";
@@ -32,14 +32,15 @@ function IconeDaSituacao({ situacao }: { situacao: Situacao }) {
   return null;
 }
 
-function MidiaDaMensagem({ mensagem }: { mensagem: MensagemTipo }) {
+function MidiaDaMensagem({ mensagem, ondeAbrir }: { mensagem: MensagemTipo; ondeAbrir: string }) {
   const midia = mensagem.midia;
+  const indisponivel = `Arquivo indisponível. Abra no ${ondeAbrir}.`;
   if (!midia) return null;
   if (midia.estado === "pendente") {
     return <p className="text-xs italic text-muted">Arquivo sendo carregado…</p>;
   }
   if (midia.estado === "falhou" || !midia.url) {
-    return <p className="text-xs italic text-muted">Arquivo indisponível. Abra no celular.</p>;
+    return <p className="text-xs italic text-muted">{indisponivel}</p>;
   }
   const url = assetUrl(midia.url) ?? midia.url;
   if (mensagem.tipo === "imagem" || mensagem.tipo === "figurinha") {
@@ -49,7 +50,7 @@ function MidiaDaMensagem({ mensagem }: { mensagem: MensagemTipo }) {
           src={url}
           alt={mensagem.texto ?? "Foto enviada na conversa"}
           className="max-h-64 w-auto max-w-full rounded-md object-contain"
-          fallback={<span className="text-xs italic text-muted">Arquivo indisponível. Abra no celular.</span>}
+          fallback={<span className="text-xs italic text-muted">{indisponivel}</span>}
         />
       </LinkDeArquivo>
     );
@@ -77,9 +78,11 @@ interface MensagemProps {
   /** Reenvia o texto que falhou (com chave nova). Só para texto enviado pela Plataforma. */
   onTentarDeNovo?: (mensagem: MensagemTipo) => void;
   reenviando?: boolean;
+  /** Feature 330: no Instagram, o arquivo indisponível se abre "no Instagram", não "no celular". */
+  canal?: string;
 }
 
-export function Mensagem({ mensagem, onTentarDeNovo, reenviando = false }: MensagemProps) {
+export function Mensagem({ mensagem, onTentarDeNovo, reenviando = false, canal }: MensagemProps) {
   const reduzir = useReducedMotion();
   const daEquipe = mensagem.direcao === "enviada";
   const rodape = [
@@ -109,8 +112,19 @@ export function Mensagem({ mensagem, onTentarDeNovo, reenviando = false }: Mensa
         {mensagem.tipo === "modelo" && mensagem.modelo_nome ? (
           <p className="text-xs font-medium text-muted">Modelo: {mensagem.modelo_nome}</p>
         ) : null}
-        <MidiaDaMensagem mensagem={mensagem} />
+        <MidiaDaMensagem mensagem={mensagem} ondeAbrir={canal === "instagram" ? "Instagram" : "celular"} />
         {mensagem.texto ? <p className="whitespace-pre-wrap break-words">{mensagem.texto}</p> : null}
+        {mensagem.link ? (
+          <a
+            href={mensagem.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center gap-1 text-xs font-medium text-accent underline md:min-h-0"
+          >
+            <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+            Abrir no Instagram
+          </a>
+        ) : null}
         <p className="flex items-center justify-end gap-1 text-xs text-muted">
           {mensagem.origem === "celular" ? <Smartphone className="h-3.5 w-3.5" aria-hidden /> : null}
           <span>{rodape}</span>

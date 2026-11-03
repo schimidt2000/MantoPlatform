@@ -15,6 +15,7 @@ import tempfile
 import uuid
 from dataclasses import replace
 from datetime import timedelta
+from typing import Any
 
 from sqlalchemy import text
 
@@ -81,6 +82,16 @@ def caminho_absoluto(midia: ConversaMidia, cfg: CfgWhatsapp) -> str | None:
     return destino
 
 
+def apagar_arquivo(midia: ConversaMidia, cfg: Any) -> None:
+    """Apaga do disco a cópia guardada (a cliente apagou a mensagem, feature 330). Nunca levanta."""
+    caminho = caminho_absoluto(midia, cfg)
+    if caminho and os.path.isfile(caminho):
+        try:
+            os.remove(caminho)
+        except OSError as exc:
+            logger.info("[conversas] não apagou a mídia %s: %s", midia.id, exc)
+
+
 def _falhar(midia: ConversaMidia, erro: str, definitivo: bool) -> str:
     velha = midia.created_at < agora_utc() - IDADE_MAXIMA
     midia.erro = erro[: K.ERRO_MAXIMO]
@@ -107,8 +118,9 @@ def _baixar(midia: ConversaMidia, cfg: CfgWhatsapp) -> tuple[bytes, str | None]:
     pelo link assinado do anexo, sem token (a trava do ambiente vale igual)."""
     if midia.mensagem.conversa.canal == K.CANAL_INSTAGRAM:
         sem_token = replace(cfg.conexao, token="")
-        dados = wc.baixar_midia(sem_token, _link_do_anexo(midia), K.MIDIA_TETO_BYTES)
-        return dados, midia.mime or _mime_dos_bytes(dados)
+        dados, tipo = wc.baixar_arquivo(sem_token, _link_do_anexo(midia), K.MIDIA_TETO_BYTES)
+        util = tipo if tipo and tipo != "application/octet-stream" else None
+        return dados, util or midia.mime or _mime_dos_bytes(dados)
     info = wc.consultar_midia(cfg.conexao, midia.externo_id)
     dados = wc.baixar_midia(cfg.conexao, info["url"], K.MIDIA_TETO_BYTES)
     return dados, info.get("mime_type") or midia.mime

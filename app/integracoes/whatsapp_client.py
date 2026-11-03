@@ -221,6 +221,11 @@ def consultar_midia(conexao: ConexaoMeta, media_id: str) -> dict[str, Any]:
 
 
 def baixar_midia(conexao: ConexaoMeta, url: str, limite_bytes: int) -> bytes:
+    """Baixa o arquivo da url da Meta, com o token e um teto. Só os bytes (ver ``baixar_arquivo``)."""
+    return baixar_arquivo(conexao, url, limite_bytes)[0]
+
+
+def baixar_arquivo(conexao: ConexaoMeta, url: str, limite_bytes: int) -> tuple[bytes, str | None]:
     """Baixa o arquivo da url da Meta, com o token e um teto (molde ``clicksign_client.baixar``).
 
     Raises:
@@ -231,9 +236,9 @@ def baixar_midia(conexao: ConexaoMeta, url: str, limite_bytes: int) -> bytes:
     if conexao.travada:
         raise WhatsappTravado("Download da Meta travado neste processo.")
     try:
-        response = requests.get(
-            url, headers=_cabecalhos(conexao.token), timeout=TIMEOUT_DOWNLOAD, stream=True
-        )
+        # Sem token (o link assinado do anexo do Instagram, feature 330), sem cabeçalho de autorização.
+        cabecalhos = _cabecalhos(conexao.token) if conexao.token else {}
+        response = requests.get(url, headers=cabecalhos, timeout=TIMEOUT_DOWNLOAD, stream=True)
     except requests.RequestException as exc:
         raise WhatsappIndisponivel("Falha ao baixar a mídia da Meta.") from exc
     if response.status_code != 200:
@@ -245,7 +250,8 @@ def baixar_midia(conexao: ConexaoMeta, url: str, limite_bytes: int) -> bytes:
         if total > limite_bytes:
             raise WhatsappArquivoGrande("Mídia acima do teto da Plataforma.")
         partes.append(parte)
-    return b"".join(partes)
+    tipo = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower() or None
+    return b"".join(partes), tipo
 
 
 def listar_modelos(conexao: ConexaoMeta) -> list[dict[str, Any]]:

@@ -1122,10 +1122,10 @@ def register_commands(app):
 
         from app import db
         from app.conversas import varredura
-        from app.conversas.configuracao import cfg_whatsapp
+        from app.conversas.configuracao import canais_ligados
 
-        if not cfg_whatsapp().ligado:
-            click.echo("whatsapp-reprocessar: módulo desligado (faltam as variáveis WHATSAPP_*).")
+        if not canais_ligados():
+            click.echo("whatsapp-reprocessar: Conversas desligado (faltam as variáveis WHATSAPP_*/INSTAGRAM_*).")
             return
         if not aplicar:
             avisos = len(varredura.avisos_a_refazer(limite=10_000))

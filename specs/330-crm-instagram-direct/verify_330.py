@@ -118,7 +118,9 @@ import app.integracoes.instagram_client as _ic  # noqa: E402
 import app.integracoes.whatsapp_client as _wc  # noqa: E402
 
 _REAIS_IG = {nome: getattr(_ic, nome) for nome in ("enviar", "enviar_arquivo", "perfil")}
-_REAIS_WA = {nome: getattr(_wc, nome) for nome in ("enviar", "marcar_lida", "baixar_midia")}
+_REAIS_WA = {
+    nome: getattr(_wc, nome) for nome in ("enviar", "marcar_lida", "baixar_midia", "baixar_arquivo")
+}
 
 
 class MetaFalsa:
@@ -176,6 +178,11 @@ class MetaFalsa:
         self.chamadas["baixar"].append(url)
         return BYTES_DA_FOTO
 
+    def baixar_arquivo(self, conexao, url, limite_bytes):
+        self.chamadas["baixar"].append(url)
+        self.chamadas.setdefault("token_do_download", []).append(conexao.token)
+        return BYTES_DA_FOTO, "image/png"
+
     def wa_enviar(self, conexao, corpo):
         self.chamadas["wa_enviar"].append(corpo)
         return {"id": f"wamid.{PREFIX}{len(self.chamadas['wa_enviar'])}", "wa_id": corpo.get("to")}
@@ -191,6 +198,7 @@ _wc.enviar, _wc.marcar_lida, _wc.baixar_midia = (
     meta.wa_marcar_lida,
     meta.baixar_midia,
 )
+_wc.baixar_arquivo = meta.baixar_arquivo
 
 resultados: list[tuple[str, bool, str]] = []
 estado: dict = {}
@@ -421,6 +429,17 @@ def cen_05() -> None:
     )
     r = _chamar(estado["ana"], "get", f"/api/conversas/midia/{linha.id}")
     _garante(r.status_code == 200, f"mídia servida → {r.status_code}")
+    _garante(meta.chamadas["token_do_download"][-1] == "", "o download do Instagram levou o token")
+    url2 = "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=v330-2"
+    duas = [{"type": "image", "payload": {"url": url}}, {"type": "image", "payload": {"url": url2}}]
+    _post_ig([_item(IG_A, {"mid": f"{PREFIX}a-duas", "attachments": duas})])
+    segunda = _no_banco(
+        "SELECT d.estado FROM conversa_mensagens m JOIN conversa_midias d ON d.mensagem_id=m.id "
+        "WHERE m.externo_id=:m",
+        m=f"{PREFIX}a-duas#1",
+    )
+    _garante(segunda is not None and segunda.estado == "guardada", f"segundo anexo {segunda}")
+    _garante(meta.chamadas["baixar"][-1] == url2, "o segundo anexo baixou o link errado")
 
 
 def cen_06() -> None:
@@ -454,6 +473,26 @@ def cen_06() -> None:
     _garante(
         (textos.get(f"{PREFIX}a-story") or "").startswith("Respondeu ao seu story."), f"{textos}"
     )
+    link_story = "https://instagram.com/stories/v330"
+    _post_ig(
+        [
+            _item(
+                IG_A,
+                {
+                    "mid": f"{PREFIX}a-mencao",
+                    "attachments": [{"type": "story_mention", "payload": {"url": link_story}}],
+                },
+            )
+        ]
+    )
+    detalhe = _chamar(estado["ana"], "get", f"/api/conversas/{estado['a']}").get_json()["mensagens"]
+    mencao = next((m for m in detalhe if m["texto"] == "Mencionou a Manto no story."), None)
+    _garante(mencao is not None and mencao.get("link") == link_story, f"menção {mencao}")
+    publicacao = next((m for m in detalhe if m["texto"] == "Compartilhou uma publicação."), None)
+    _garante(
+        publicacao and publicacao.get("link") == "https://instagram.com/p/v330",
+        "sem o link da publicação",
+    )
 
 
 def cen_07() -> None:
@@ -463,6 +502,31 @@ def cen_07() -> None:
         "SELECT texto FROM conversa_mensagens WHERE externo_id=:m", m=f"{PREFIX}a-apagar"
     )
     _garante(linha.texto == "Mensagem apagada pela cliente.", f"texto {linha.texto!r}")
+    foto = "https://lookaside.fbsbx.com/ig_messaging_cdn/?asset_id=v330-apagar"
+    _post_ig(
+        [
+            _item(
+                IG_A,
+                {
+                    "mid": f"{PREFIX}a-foto-apagar",
+                    "attachments": [{"type": "image", "payload": {"url": foto}}],
+                },
+            )
+        ]
+    )
+    _post_ig([_item(IG_A, {"mid": f"{PREFIX}a-foto-apagar", "is_deleted": True})])
+    apagada = _no_banco(
+        "SELECT m.tipo, m.texto, d.id AS midia FROM conversa_mensagens m "
+        "LEFT JOIN conversa_midias d ON d.mensagem_id=m.id WHERE m.externo_id=:m",
+        m=f"{PREFIX}a-foto-apagar",
+    )
+    _garante(
+        apagada.midia is None and apagada.texto == "Mensagem apagada pela cliente.", f"{apagada}"
+    )
+    previa = _no_banco(
+        "SELECT ultima_previa FROM conversas WHERE id=:i", i=estado["a"]
+    ).ultima_previa
+    _garante(previa == "Mensagem apagada pela cliente.", f"prévia {previa!r}")
 
 
 def cen_09() -> None:
@@ -638,7 +702,9 @@ def cen_15() -> None:
 
 
 def cen_16() -> None:
-    _post_ig([_item(IG_A, read={"mid": estado["mid_c10"]})])
+    visto = _item(IG_A, read={"mid": estado["mid_c10"]})
+    visto["timestamp"] = _agora_ms() - 3_600_000  # horário antigo: só o `mid` decide
+    _post_ig([visto])
     linha = _no_banco(
         "SELECT situacao FROM conversa_mensagens WHERE externo_id=:m", m=estado["mid_c10"]
     )
@@ -813,6 +879,84 @@ def cen_22() -> None:
     _garante(invalido.status_code == 422, f"canal inválido → {invalido.status_code}")
 
 
+def cen_06b() -> None:
+    _post_ig(
+        [
+            _item(
+                IG_C,
+                postback={"mid": f"{PREFIX}c-botao", "title": "Quero orçamento", "payload": "X"},
+            )
+        ]
+    )
+    conv = _conversa(IG_C)
+    textos = [m.texto for m in _mensagens(conv.id)]
+    _garante('Tocou em "Quero orçamento".' in textos, f"textos {textos}")
+    _garante(conv.aguardando_desde is not None, "o toque no botão não abriu a espera")
+
+
+def cen_19b() -> None:
+    _no_banco_escrever(
+        "INSERT INTO conversa_mensagens (conversa_id, direcao, tipo, texto, chave_envio, situacao, origem, "
+        "momento, created_at) VALUES (:c, 'enviada', 'texto', 'em voo', :k, 'pendente', 'plataforma', "
+        "now() at time zone 'utc', now() at time zone 'utc')",
+        c=estado["d"],
+        k=f"{PREFIX}em-voo",
+    )
+    try:
+        _post_ig([_item(IG_D, {"mid": f"{PREFIX}d-eco-cedo", "text": "chegou antes"}, eco=True)])
+        n = _no_banco(
+            "SELECT count(*) FROM conversa_mensagens WHERE externo_id=:m", m=f"{PREFIX}d-eco-cedo"
+        )[0]
+        estado_aviso = _no_banco(
+            "SELECT estado FROM whatsapp_avisos WHERE corpo LIKE :p ORDER BY id DESC",
+            p=f"%{PREFIX}d-eco-cedo%",
+        ).estado
+    finally:
+        _no_banco_escrever(
+            "DELETE FROM conversa_mensagens WHERE chave_envio=:k", k=f"{PREFIX}em-voo"
+        )
+    _garante(
+        n == 0 and estado_aviso == "pendente",
+        f"eco antes do mid: {n} gravadas, aviso {estado_aviso}",
+    )
+
+
+def cen_20b() -> None:
+    app.config["WHATSAPP_SUPPRESS_SEND"] = True
+    try:
+        r = _texto(estado["ana"], estado["a"], "c20b")
+    finally:
+        app.config["WHATSAPP_SUPPRESS_SEND"] = False
+    _garante(
+        r.status_code == 409 and _erro(r).get("codigo") == "envio_travado",
+        f"travado → {r.status_code}",
+    )
+    _garante("Instagram" in (_erro(r).get("message") or ""), f"{_erro(r)}")
+
+
+def cen_20c() -> None:
+    import app as pacote
+    import app.conversas.varredura as varredura
+
+    passadas = []
+    original = varredura.ciclo_de_varredura
+    app.config["WHATSAPP_ACCESS_TOKEN"] = ""
+    varredura.ciclo_de_varredura = lambda: passadas.append(True) or {}
+    try:
+        me = _chamar(estado["ana"], "get", "/api/auth/me").get_json()
+        lista = _chamar(estado["ana"], "get", "/api/conversas").get_json()
+        pacote._passada_whatsapp(app)
+    finally:
+        varredura.ciclo_de_varredura = original
+        app.config["WHATSAPP_ACCESS_TOKEN"] = "token-falso-v330"
+    _garante(me.get("conversas_ligadas") is True, "só o Instagram ligado não abre o menu")
+    _garante(
+        lista.get("configurado") is True and lista.get("canais_ligados") == ["instagram"],
+        f"{lista.get('canais_ligados')}",
+    )
+    _garante(passadas, "a varredura não roda com só o Instagram ligado")
+
+
 # ── Preparo e limpeza ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -863,7 +1007,7 @@ CENARIOS = [
     ("3. mesmo aviso reenviado não duplica", cen_03),
     ("4. assinatura errada ou ausente (DEVE falhar)", cen_04),
     ("5. foto recebida baixada pelo link e servida", cen_05),
-    ("6. publicação, reels, efêmera, não suportada e story", cen_06),
+    ("6. publicação, reels, efêmera, não suportada, story e menção", cen_06),
     ("7. cliente apaga a mensagem", cen_07),
     ("9. perfil indisponível e nova busca depois de um dia", cen_09),
     ("10. Ana responde na janela: corpo, responsável, espera", cen_10),
@@ -876,10 +1020,14 @@ CENARIOS = [
     ("17. Meta recusa a marca humana", cen_17),
     ("17b. Meta recusa porque a conversa está com outro app", cen_17b),
     ("8. reação e reação removida não abrem espera", cen_08),
+    ("6b. toque em botão abre a conversa e a espera", cen_06b),
     ("18. eco de outro app", cen_18),
     ("18b. mensagem em espera (standby)", cen_18b),
     ("19. eco da própria mensagem não duplica", cen_19),
+    ("19b. eco antes do mid do envio volta à fila", cen_19b),
     ("20. canal desligado (DEVE falhar)", cen_20),
+    ("20b. envio travado no Instagram (DEVE falhar)", cen_20b),
+    ("20c. só o Instagram ligado: menu e varredura", cen_20c),
     ("21. Casting no Instagram (DEVE falhar)", cen_21),
     ("22. filtro por canal", cen_22),
 ]

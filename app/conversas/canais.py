@@ -22,6 +22,7 @@ MARCA_HUMANA = {"messaging_type": "MESSAGE_TAG", "tag": "HUMAN_AGENT"}
 
 
 def e_instagram(conversa: Conversa) -> bool:
+    """A conversa é do Instagram Direct (e o envio segue as regras daqui)?"""
     return conversa.canal == K.CANAL_INSTAGRAM
 
 
@@ -96,4 +97,8 @@ def motivo(exc: wc.WhatsappErro, extras: dict[str, str]) -> str:
         return K.MOTIVO_IG_ROTEAMENTO
     if extras.get("tag") and exc.code in K.CODIGOS_DE_PERMISSAO:
         return K.MOTIVO_IG_MARCA_HUMANA
-    return K.motivo_do_erro(exc.code)
+    if exc.subcode in K.MOTIVO_DO_SUBCODIGO_IG:
+        return K.MOTIVO_DO_SUBCODIGO_IG[exc.subcode]
+    if exc.code in K.MOTIVO_DO_ERRO_IG:
+        return K.MOTIVO_DO_ERRO_IG[exc.code]
+    return K.MOTIVO_GENERICO.format(codigo=exc.code) if exc.code else K.MOTIVO_INDISPONIVEL

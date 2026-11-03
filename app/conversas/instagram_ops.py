@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app import db
-from app.conversas import aviso_ops, equipe_ops
+from app.conversas import aviso_ops, equipe_ops, midia_ops
 from app.conversas import constantes as K
 from app.conversas.relogio import agora_utc
 from app.integracoes import instagram_client as ic
@@ -58,7 +58,7 @@ def processar_entradas(corpo: dict[str, Any], cfg: Any) -> tuple[list[int], list
             logger.info("[instagram] aviso de outra conta (%s) ignorado", entrada.get("id"))
             continue
         for item in _itens(entrada):
-            conversa_id, novas = _processar_item(item)
+            conversa_id, novas = _processar_item(item, cfg)
             midias.extend(novas)
             if conversa_id:
                 conversas.add(conversa_id)
@@ -75,17 +75,19 @@ def _itens(entrada: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
-def _processar_item(item: dict[str, Any]) -> tuple[int | None, list[int]]:
+def _processar_item(item: dict[str, Any], cfg: Any) -> tuple[int | None, list[int]]:
     mensagem = item.get("message")
     if isinstance(mensagem, dict):
         if mensagem.get("is_echo"):
             return _gravar_eco(item, mensagem)
-        return _gravar_recebida(item, mensagem)
+        return _gravar_recebida(item, mensagem, cfg)
     if isinstance(item.get("reaction"), dict):
         return _gravar_reacao(item), []
     if isinstance(item.get("read"), dict):
         _aplicar_visto(item)
-    return None, []  # postback e referral: o dado cru fica no aviso (Fase 3)
+    if isinstance(item.get("postback"), dict):
+        return _gravar_postback(item), []
+    return None, []  # referral sozinho: o dado cru fica no aviso (Fase 3)
 
 
 def _contato(item: dict[str, Any], chave: str) -> str:
@@ -174,37 +176,75 @@ def _criar_midia(mensagem_id: int) -> int:
 # ── Mensagem recebida, apagada e eco ─────────────────────────────────────────────────────────────
 
 
+def _chegou_da_cliente(conversa: Conversa, item: dict[str, Any]) -> None:
+    """A cliente escreveu (ou tocou num botão): não lida, janela reaberta e espera (328)."""
+    momento = _momento_ms(item.get("timestamp"))
+    conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
+    if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
+        conversa.ultima_recebida_em = momento
+    equipe_ops.abrir_espera(conversa, momento)
+
+
 def _gravar_recebida(
-    item: dict[str, Any], mensagem: dict[str, Any]
+    item: dict[str, Any], mensagem: dict[str, Any], cfg: Any
 ) -> tuple[int | None, list[int]]:
     igsid, mid = _contato(item, "sender"), mensagem.get("mid")
     if not igsid or not mid:
         return None, []
     conversa = _conversa(igsid)
     if mensagem.get("is_deleted"):
-        _apagar(conversa, str(mid), item)
+        _apagar(conversa, str(mid), item, cfg)
         return conversa.id, []
     novas, midias = _inserir_partes(
         conversa, item, _partes(str(mid), mensagem), K.RECEBIDA, K.ORIGEM_CONTATO
     )
     if novas:
-        momento = _momento_ms(item.get("timestamp"))
-        conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
-        if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
-            conversa.ultima_recebida_em = momento
-        equipe_ops.abrir_espera(conversa, momento)
+        _chegou_da_cliente(conversa, item)
     return conversa.id, midias
 
 
-def _apagar(conversa: Conversa, mid: str, item: dict[str, Any]) -> None:
-    """A cliente apagou: o texto vira o aviso (todas as partes da mensagem); sem ela, nasce assim."""
-    alteradas = ConversaMensagem.query.filter(
+def _gravar_postback(item: dict[str, Any]) -> int | None:
+    """Toque num botão da conversa (ice breaker): é a cliente puxando assunto (FR-004)."""
+    postback = item.get("postback") or {}
+    igsid = _contato(item, "sender")
+    if not igsid:
+        return None
+    conversa = _conversa(igsid)
+    titulo = (postback.get("title") or "").strip() or "botão"
+    externo = str(postback.get("mid") or f"postback:{igsid}:{item.get('timestamp')}")
+    parte = (externo, K.TIPO_INTERATIVA, K.TEXTO_POSTBACK.format(titulo=titulo), None)
+    novas, _ = _inserir_partes(conversa, item, [parte], K.RECEBIDA, K.ORIGEM_CONTATO)
+    if novas:
+        _chegou_da_cliente(conversa, item)
+    return conversa.id
+
+
+def _partes_da_mensagem(conversa: Conversa, mid: str) -> list[ConversaMensagem]:
+    return ConversaMensagem.query.filter(
         ConversaMensagem.conversa_id == conversa.id,
         or_(ConversaMensagem.externo_id == mid, ConversaMensagem.externo_id.like(f"{mid}#%")),
-    ).update({"texto": K.TEXTO_APAGADA_PELA_CLIENTE}, synchronize_session=False)
-    if not alteradas:
+    ).all()
+
+
+def _apagar(conversa: Conversa, mid: str, item: dict[str, Any], cfg: Any) -> None:
+    """A cliente apagou: some o que ela mandou (texto e mídia, inclusive o arquivo guardado) e fica o
+    aviso no lugar; a prévia da lista também. Sem a mensagem gravada, ela nasce já apagada."""
+    partes = _partes_da_mensagem(conversa, mid)
+    if not partes:
         parte = (mid, K.TIPO_TEXTO, K.TEXTO_APAGADA_PELA_CLIENTE, None)
         _inserir_partes(conversa, item, [parte], K.RECEBIDA, K.ORIGEM_CONTATO)
+        return
+    for mensagem in partes:
+        if mensagem.midia is not None:
+            midia_ops.apagar_arquivo(mensagem.midia, cfg)
+            db.session.delete(mensagem.midia)
+        mensagem.tipo = K.TIPO_TEXTO
+        mensagem.texto = K.TEXTO_APAGADA_PELA_CLIENTE
+    if (
+        conversa.ultima_mensagem_em
+        and max(m.momento for m in partes) >= conversa.ultima_mensagem_em
+    ):
+        conversa.ultima_previa = K.TEXTO_APAGADA_PELA_CLIENTE
 
 
 def _gravar_eco(item: dict[str, Any], mensagem: dict[str, Any]) -> tuple[int | None, list[int]]:
@@ -217,7 +257,7 @@ def _gravar_eco(item: dict[str, Any], mensagem: dict[str, Any]) -> tuple[int | N
     conversa = _conversa(igsid)
     if ConversaMensagem.query.filter_by(externo_id=str(mid)[:255]).first() is not None:
         return conversa.id, []
-    if aviso_ops.envio_em_voo():
+    if aviso_ops.envio_em_voo(conversa.id):
         raise aviso_ops.MensagemAindaNaoGravada("eco antes do mid do envio")
     novas, midias = _inserir_partes(
         conversa, item, _partes(str(mid), mensagem), K.ENVIADA, K.ORIGEM_OUTRO
@@ -249,16 +289,23 @@ def _gravar_reacao(item: dict[str, Any]) -> int | None:
 
 
 def _aplicar_visto(item: dict[str, Any]) -> None:
-    """A cliente viu: as enviadas até aquele momento ficam ``lida`` (sem regredir nada)."""
+    """A cliente viu até a mensagem ``read.mid``: ela e as enviadas anteriores ficam ``lida`` (sem
+    regredir). Sem a mensagem indicada (eco que não foi gravado), vale o horário do aviso."""
     igsid = _contato(item, "sender")
     conversa = Conversa.query.filter_by(canal=K.CANAL_INSTAGRAM, contato_id=igsid).first()
     if conversa is None:
         return
+    mid = str((item.get("read") or {}).get("mid") or "")
+    alvo = ConversaMensagem.query.filter_by(externo_id=mid[:255]).first() if mid else None
+    if alvo is not None and alvo.conversa_id == conversa.id:
+        ate = or_(ConversaMensagem.momento <= alvo.momento, ConversaMensagem.id == alvo.id)
+    else:
+        ate = ConversaMensagem.momento <= _momento_ms(item.get("timestamp"))
     ConversaMensagem.query.filter(
         ConversaMensagem.conversa_id == conversa.id,
         ConversaMensagem.direcao == K.ENVIADA,
         ConversaMensagem.situacao.in_((K.SITUACAO_ENVIADA, K.SITUACAO_ENTREGUE)),
-        ConversaMensagem.momento <= _momento_ms(item.get("timestamp")),
+        ate,
     ).update({"situacao": K.SITUACAO_LIDA}, synchronize_session=False)
 
 

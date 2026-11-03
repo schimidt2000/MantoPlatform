@@ -94,3 +94,8 @@ def api_webhook_whatsapp() -> Any:
             target=_processar_em_segundo_plano, args=(app, aviso_id), daemon=True
         ).start()
     return jsonify({"ok": True})
+
+
+# Públicos para o webhook do Instagram (feature 330), que segue o mesmo contrato.
+nao_encontrado = _nao_encontrado
+processar_em_segundo_plano = _processar_em_segundo_plano

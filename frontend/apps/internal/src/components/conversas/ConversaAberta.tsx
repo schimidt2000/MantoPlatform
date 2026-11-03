@@ -61,16 +61,23 @@ interface ConversaAbertaProps {
   onVoltar: () => void;
 }
 
-/** Junta as páginas antigas e a atual sem repetir mensagem (a mesma pode estar nas duas). */
 /** O que o cabeçalho diz da janela: no Instagram há a faixa de 24 h a 7 dias (feature 330). */
-function situacaoDaJanela(conversa: { canal: string; janela?: string; janela_aberta: boolean }): string {
+function situacaoDaJanela(conversa: {
+  canal: string;
+  janela?: string;
+  janela_aberta: boolean;
+  janela_fecha_em: string | null;
+}): string {
   if (conversa.canal === "instagram") {
     if (conversa.janela === "humana") return " · fora das 24 h";
+    // Sem mensagem da cliente (só ecos de outro app), não houve janela para fechar.
+    if (conversa.janela === "fechada" && !conversa.janela_fecha_em) return " · aguardando a cliente";
     return conversa.janela === "fechada" ? " · janela de 7 dias fechada" : "";
   }
   return conversa.janela_aberta ? "" : " · janela de 24 h fechada";
 }
 
+/** Junta as páginas antigas e a atual sem repetir mensagem (a mesma pode estar nas duas). */
 function semRepetir(listas: MensagemTipo[][]): MensagemTipo[] {
   const vistas = new Set<number>();
   return listas.flat().filter((m) => (vistas.has(m.id) ? false : (vistas.add(m.id), true)));
@@ -217,6 +224,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
                       mensagem={item.mensagem}
                       onTentarDeNovo={conversa.janela_aberta ? tentarDeNovo : undefined}
                       reenviando={reenviandoId === item.mensagem.id}
+                      canal={conversa.canal}
                     />
                   )}
                 </Fragment>

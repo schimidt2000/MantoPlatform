@@ -105,6 +105,8 @@ export interface Mensagem {
   modelo_nome: string | null;
   erro: { codigo: number | null; motivo: string } | null;
   midia: MidiaDaMensagem | null;
+  /** Feature 330: o link de story, publicação ou reels que a cliente mandou pelo Instagram. */
+  link?: string | null;
 }
 
 export interface ListaDeConversas {
@@ -440,6 +442,22 @@ export function aplicarNome(texto: string, nomeDoContato: string | null | undefi
     .replace(/\s*\{nome\}/g, "");
   const comecavaComNome = /^\s*\{nome\}/.test(texto);
   return comecavaComNome ? semNome.replace(/^\s*(\p{Ll})/u, (_, letra: string) => letra.toUpperCase()) : semNome;
+}
+
+/** O limite do texto no Instagram é de 1.000 BYTES em UTF-8 (acentos e emojis contam mais). */
+export const TEXTO_MAXIMO_NO_INSTAGRAM_BYTES = 1000;
+export const TEXTO_LONGO_NO_INSTAGRAM =
+  "A mensagem passa do limite do Instagram. Encurte o texto (acentos e emojis contam mais).";
+
+export function passaDoLimiteDoInstagram(texto: string): boolean {
+  return new TextEncoder().encode(texto).length > TEXTO_MAXIMO_NO_INSTAGRAM_BYTES;
+}
+
+/** O nome que entra no `{nome}` das respostas rápidas: no Instagram, só o nome de verdade do perfil
+ * ou da ficha — nunca o "Contato do Instagram" nem o @usuário (feature 330). */
+export function nomeParaResposta(conversa: ConversaResumo): string | null {
+  if (conversa.canal === "instagram") return conversa.cliente?.nome ?? conversa.nome_perfil ?? null;
+  return conversa.nome;
 }
 
 /** O que aparece no lugar do telefone: o @usuário no Instagram, o telefone no WhatsApp. */

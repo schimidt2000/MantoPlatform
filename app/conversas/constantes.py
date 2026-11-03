@@ -394,7 +394,23 @@ TEXTO_IG_SEM_MODELOS = (
     "O Instagram não tem modelos. Responda dentro de 7 dias da última mensagem da cliente."
 )
 TEXTO_IG_TIPO_NAO_ACEITO = "Tipo de arquivo não aceito pelo Instagram. Envie foto, vídeo, áudio ou PDF."
-TEXTO_IG_TEXTO_LONGO = "A mensagem do Instagram passa de 1.000 caracteres."
+TEXTO_IG_TEXTO_LONGO = "A mensagem passa do limite do Instagram. Encurte o texto (acentos e emojis contam mais)."
+TEXTO_POSTBACK = 'Tocou em "{titulo}".'
+# Anexos que trazem um link para abrir no Instagram (o efêmero não traz).
+ANEXOS_COM_LINK_IG = ("share", "ig_reel", "reel", "story_mention")
+# Motivos da recusa no Instagram (feature 330): pelo subcódigo, depois pelo código da Graph API.
+MOTIVO_DO_SUBCODIGO_IG = {
+    2018278: "A janela do Instagram fechou. Só a cliente pode retomar a conversa.",
+    2018001: "Esta pessoa não foi encontrada no Instagram.",
+}
+MOTIVO_DO_ERRO_IG = {
+    190: "O token do Instagram venceu. Avise o Superadmin.",
+    200: "O token do Instagram não tem permissão. Avise o Superadmin.",
+    10: "O token do Instagram não tem permissão. Avise o Superadmin.",
+    551: "Esta pessoa não pode receber mensagens agora.",
+    4: "Limite de chamadas da Meta atingido. Aguarde e tente novamente.",
+    613: "Limite de chamadas da Meta atingido. Aguarde e tente novamente.",
+}
 MOTIVO_IG_MARCA_HUMANA = "A Meta ainda não liberou a resposta depois de 24 horas no Instagram."
 MOTIVO_IG_ROTEAMENTO = (
     "A conversa está com outro app no Instagram (Kommo). Responda por ele até a virada."

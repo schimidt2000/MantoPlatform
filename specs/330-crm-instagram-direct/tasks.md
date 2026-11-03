@@ -213,14 +213,14 @@ push.
 - [X] T025 `verify_330`, `verify_328` e `verify_325` verdes, com zero escapes.
 - [X] T026 Tela pela worktree (backend e Vite em portas próprias), em desktop e 375×812 (quickstart §2).
 - [X] T027 Textos novos pelo Princípio XV, na tela.
-- [ ] T028 Docs por fonte única:
+- [X] T028 Docs por fonte única:
   - `docs/01`: coluna, webhook, envio, variáveis, RBAC §4.3 e §5 (envs);
   - `docs/02`;
   - `docs/03`: entrada no topo, **NÃO PUBLICADO**, e índice;
   - `docs/04`: invariantes do Instagram;
   - `docs/05`: o canal desligado e os pontos a confirmar no teste;
   - `docs/PLANO_CRM_PROPRIO.md`: a 2b feita e a ligação pela Página no lugar do "Instagram Login".
-- [ ] T029 Gates CHK001–CHK011 do `checklists/instagram-roteamento-janela.md` e o quickstart §1–2 executados.
+- [X] T029 Gates CHK001–CHK011 do `checklists/instagram-roteamento-janela.md` e o quickstart §1–2 executados.
 
 ---
 
@@ -235,3 +235,27 @@ push.
 
 - **MVP**: Setup + Foundational + US1 + US2 (as duas P1), que bastam para atender o Direct pela Plataforma.
 - **Commits** por grupo lógico (`feat(330): …`), por caminho, com `git commit -F`. Sem merge e sem push.
+
+---
+
+## Phase 7: Convergence
+
+Revisão independente, só de leitura, em 03/11: 16 achados (0 críticos, 1 alto, 4 médios e 11 baixos). O F16 (docs e
+portões) já é T028/T029.
+
+- [X] T030 A varredura (`_passada_whatsapp` em `app/__init__.py`) e o `flask whatsapp-reprocessar` (`app/cli.py`) passam a valer com **qualquer** canal ligado (`canais_ligados()`); só o Instagram ligado não pode deixar aviso e mídia parados nem o alerta de 15 min mudo per FR-002/FR-012 (partial)
+- [X] T031 Mensagem apagada pela cliente: as mídias das partes deixam de ser servidas (estado `falhou` com o motivo) e a prévia da lista é refeita quando a apagada era a última per FR-005 (partial)
+- [X] T032 O link de story, menção, publicação e reels sai no payload da mensagem (`link`) e aparece como link na bolha per casos de borda/R4 (missing)
+- [X] T033 Motivos de recusa próprios do Instagram (token, permissão, fora da janela, contato indisponível) no lugar dos do WhatsApp; a mídia do Instagram que falhou diz "Abra no Instagram" per R10/XV (partial)
+- [X] T034 Resposta rápida no Instagram usa só o nome de perfil real para o `{nome}` (nunca "Contato do Instagram" nem o @usuário) per FR-012 (contradicts)
+- [X] T035 Limite do texto do Instagram conferido em bytes também na tela (antes de mandar o arquivo no fluxo arquivo + texto) e o texto da recusa alinhado ("passa do limite do Instagram") per FR-008/V (partial)
+- [X] T036 Visto pelo `read.mid`: a mensagem indicada e as enviadas anteriores (pelo `momento` dela) ficam lidas; o cenário 16 prova com um `mid` de verdade per FR-006 (partial)
+- [X] T037 A checagem de envio em voo do eco olha só a conversa do eco per R5/T021 (partial)
+- [X] T038 Download do Instagram sem cabeçalho de autorização e com o MIME do `Content-Type` da resposta (a assinatura dos bytes fica de reserva) per R6 (partial)
+- [X] T039 *Aceito, não mudado:* o tipo aceito é do canal, então a conversa vem antes; só a conversa inexistente
+  responde 404 em vez de 422 (comentário corrigido no `envio_ops`; `verify_325`/`verify_328` verdes). Pedido: no WhatsApp, a checagem cedo do tipo de arquivo volta para antes de buscar a conversa (comportamento da 328) per Constitution IV (contradicts)
+- [X] T040 Conversa do Instagram sem mensagem da cliente (só ecos) não diz "Passaram 7 dias": estado próprio no cabeçalho e na caixa per FR-014 (contradicts)
+- [X] T041 `janela_fecha_em` da conversa fechada do Instagram = recebida + 7 dias per contracts/api.md (contradicts)
+- [X] T042 Docstring em `canais.e_instagram`; o comentário de `semRepetir` volta para cima da função certa; o webhook do Instagram importa os auxiliares públicos do webhook do WhatsApp per Constitution II (partial)
+- [X] T043 Toque em botão de conversa (`postback`, ice breaker) vira mensagem recebida com o título, abrindo conversa e espera per FR-004 (missing)
+- [X] T044 Verify: menção em story; mídia do segundo anexo (`#1`); trava do Instagram (`envio_travado`); eco antes do `mid` (volta à fila); só o Instagram ligado (menu e varredura); apagada sem mídia; postback per Constitution VIII (partial)

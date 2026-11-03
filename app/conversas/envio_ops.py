@@ -260,7 +260,9 @@ def enviar_arquivo(
     mime_limpo = mime_normalizado(mime)
     conversa = conversa_ou_404(conversa_id)
     if not _e_audio_gravado(conversa, mime_limpo):
-        _tipo_do_canal(conversa, mime_limpo, len(dados))  # recusa cedo, antes da trava e da janela
+        # Recusa cedo, antes da trava e da janela. A conversa vem antes porque o tipo aceito é do
+        # canal dela (330); só muda o caso da conversa inexistente (404 em vez de 422).
+        _tipo_do_canal(conversa, mime_limpo, len(dados))
     extras = _pre_condicoes(cfg, conversa, exige_janela=True)
     dados, nome, mime_limpo = _audio_do_navegador(dados, nome, mime_limpo, conversa)
     tipo = _tipo_do_canal(conversa, mime_limpo, len(dados))
