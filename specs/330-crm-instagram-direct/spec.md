@@ -205,7 +205,9 @@ limpeza no `finally`.
 | 15 | Planilha ou foto acima de 8 MB | 422 no arquivo | **sim** |
 | 16 | Visto da cliente | a enviada fica lida | não |
 | 17 | Meta recusa a marca de resposta humana | "não entregue" com o motivo legível | não |
+| 17b | Meta recusa porque a conversa está com outro app | "não entregue" com o motivo do roteamento | não |
 | 18 | Eco de outro app | enviada por outro app, espera encerrada, sem responsável | não |
+| 18b | Mensagem "em espera" (standby) | gravada como a recebida comum | não |
 | 19 | Eco da própria mensagem | não duplica | não |
 | 20 | Canal desligado | webhook 404; envio recusado; filtro ausente | **sim** |
 | 21 | Casting na lista e no envio do Instagram | 403 | **sim** |

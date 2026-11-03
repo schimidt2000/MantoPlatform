@@ -125,7 +125,8 @@ push.
   - `listar_conversas` ganha o filtro `canal`.
 
   Também:
-  - `app/api/conversas_read.py`: `canal` com 422 se inválido, e `canais_ligados` na lista;
+  - `app/api/conversas_read.py`: `canal` com 422 se inválido, e `canais_ligados` na lista; o `configurado` passa a
+    valer com qualquer canal ligado (só o Instagram ligado não pode mostrar "O WhatsApp ainda não foi configurado.");
   - `app/api/auth.py`: `conversas_ligadas` com qualquer canal ligado.
 - [ ] T015 [P] [US1] Tela (`frontend/apps/internal/src/`):
   - `lib/conversas.ts`: tipos `Canal`, `Janela`, campos opcionais e `useConversas(busca, filtro, canal)`;
@@ -159,7 +160,8 @@ push.
   - os tipos e tetos são os do Instagram;
   - `marcar_lida` não chama a Meta.
 
-  `canal_da_conversa(conversa, cfg_whatsapp)` escolhe o canal.
+  `canal_da_conversa(conversa, cfg_whatsapp)` escolhe o canal. O `CanalWhatsapp` chama `wc.enviar`/`wc.subir_midia`
+  pelo **módulo** (`wc.<função>`), nunca por import direto da função, para o dublê do `verify_325` seguir valendo.
 - [ ] T017 [US2] `app/conversas/envio_ops.py`: `enviar_texto` e `enviar_arquivo` orquestram pelo canal (chave, reserva,
   cópia local, despacho, `resposta_da_equipe`, falha com motivo). Áudio webm ou ogg numa conversa do Instagram passa
   por `midia_ops.audio_para_m4a`. `enviar_modelo` no Instagram → 409 `sem_modelos`. `marcar_lida` vai pelo canal.
