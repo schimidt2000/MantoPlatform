@@ -1,7 +1,7 @@
 # Feature 330 — Instagram Direct na caixa de Conversas
 
 **Branch**: `330-crm-instagram-direct` (da `328-crm-equipe-na-caixa`, que ainda não está na `main`: o dono adiou a
-publicação em 03/11) · **Created**: 2026-11-03 · **Status**: Rascunho · **Migration**: sim, aditiva (uma coluna em
+publicação em 03/11) · **Created**: 2026-11-03 · **Status**: Implementado, não publicado · **Migration**: sim, aditiva (uma coluna em
 `conversas`) · **Nível**: 1 (feature)
 
 **Input**: pedido do dono (03/11): "Começar a 2b" — a Fase 2b do `docs/PLANO_CRM_PROPRIO.md`, o Instagram Direct na

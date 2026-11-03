@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **330-crm-instagram-direct** | *(NÃO PUBLICADO; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
 | **328-crm-equipe-na-caixa** | *(NÃO PUBLICADO; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
 | **325-crm-whatsapp-fundacao** | *(NÃO PUBLICADO; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
@@ -359,7 +360,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / CRM próprio | 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -393,6 +394,97 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 330 — Instagram Direct na caixa de Conversas   (330-crm-instagram-direct · 2026-11-03 · migration `a330c4e8f1b2`)
+
+> **NÃO PUBLICADO** — branch `330-crm-instagram-direct`, feita **sobre a `328-crm-equipe-na-caixa`** (que fica sobre a
+> 325; nenhuma está na `main`, por decisão do dono). No merge, a ordem é 325 → 328 → 330. Mesmo publicado, o canal
+> segue desligado até as três variáveis `INSTAGRAM_*` (`docs/05` 186). Nível 1. Detalhe: `specs/330-crm-instagram-direct/`.
+
+**O pedido.** O dono disse "começar a 2b" (03/11), a Fase 2b do plano do CRM próprio: o Direct na mesma caixa do
+WhatsApp. O Kommo hoje recebe os dois, e só pode ser cancelado quando o Direct também funcionar aqui. Duas decisões
+do dono antes da spec:
+- ligar **pela Página do Facebook**: o token é do portfólio e não vence, o roteamento da Meta deixa o piloto conviver
+  com o Kommo, e o anúncio de origem vem no `referral`;
+- trazer **só o Direct**, sem os comentários.
+
+**O que mudou.**
+- **Webhook** `GET|POST /api/webhooks/instagram`, assinado com o segredo do **mesmo** app Meta. O aviso entra na
+  mesma fila crua, no mesmo claim e na mesma varredura da 325; `processar_aviso` despacha pelo `object`.
+- **`instagram_ops`**:
+  - grava o que chega em `messaging[]` e em `standby[]` (outro app no controle);
+  - cada anexo vira uma mensagem (`mid`, `mid#n`);
+  - story, menção, publicação e reels viram texto pronto com o link;
+  - trata efêmera, não suportada, apagada pela cliente (some a mídia), eco de outro app (`origem=outro`, sem duplicar
+    o próprio `mid`), reação, visto pelo `read.mid` e toque em botão;
+  - busca o perfil depois do commit, no máximo uma vez por dia sem nome.
+- **Envio pela Página** (`canais.py` + `envio_ops`):
+  - janela de 24 h normal; até 7 dias com `HUMAN_AGENT`; depois, 409;
+  - texto até 1.000 bytes;
+  - foto até 8 MB, vídeo, áudio e PDF até 25 MB, com upload direto;
+  - o áudio gravado vira m4a;
+  - sem modelos (409 `sem_modelos`);
+  - motivos próprios na recusa: marca humana não liberada, conversa com outro app, token.
+  - O WhatsApp não mudou: `verify_325` e `verify_328` seguem verdes.
+- **Tela**:
+  - lista: ícone do canal, "@usuário" e o filtro "Todos · WhatsApp · Instagram" (com os dois ligados);
+  - conversa: "fora das 24 h" no cabeçalho, sem "Enviar modelo", e "Enviada por outro app";
+  - links "Abrir no Instagram".
+
+**Decisões e pegadinhas.**
+- **O IGSID é só dígitos.** A 325 derivava telefone e ficha de todo contato numérico: uma cliente do Instagram cairia na
+  ficha de um telefone qualquer. Telefone e vínculo agora são só do WhatsApp.
+- **O `mid` do Instagram passa de 128 caracteres**: `externo_id` e `resposta_a` foram para 255. Alargar varchar não
+  reescreve a tabela.
+- **Um transporte só**: o cliente do Instagram usa o `requisitar` do `whatsapp_client`, agora público, e o
+  `WhatsappRecusou` ganhou `subcode`.
+- **Adaptador mais leve que o planejado**: em vez de mover o WhatsApp para um objeto de canal, o `canais.py` traz só o
+  que é do Instagram, e o `envio_ops` desvia pelo canal num `_concluir` comum. Menos risco para a 325/328.
+- **Só o Instagram ligado** também liga o menu, a lista e a **varredura**. A convergência pegou: a passada exigia o
+  WhatsApp.
+- **A confirmar na conta de teste** (`docs/05` 187): a codificação do upload, os campos do perfil e os códigos de
+  recusa da marca humana e do roteamento.
+
+**Verificação.**
+- `verify_330.py` deu **29/29** contra o `manto_local`, com zero escapes (dublê do cliente do Instagram e do download).
+  Sete cenários **devem** falhar:
+  - token de verificação errado;
+  - assinatura errada;
+  - depois de 7 dias e modelo;
+  - planilha, foto grande e texto longo;
+  - canal desligado;
+  - envio travado;
+  - Casting.
+- `verify_328` deu 24/24 e `verify_325` 22/22.
+- `ruff` limpo; `npm run typecheck` limpo nas três SPAs.
+- Tela pela worktree (backend 5330, Vite 5331) em desktop e 375×812:
+  - filtro, ícones e @usuário;
+  - janela humana e janela fechada;
+  - links e textos da convergência.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **16 achados** (0
+críticos, 1 alto, 4 médios e 11 baixos), fechados em T030–T044.
+- A varredura parada com só o Instagram ligado.
+- A apagada que deixava a foto e a prévia.
+- Os links de story e publicação que não apareciam.
+- Os motivos do WhatsApp em conversa do Instagram.
+- O `{nome}` virando "Contato" ou "@usuário".
+- O limite em bytes só no servidor.
+- O visto que ignorava o `mid`.
+- O eco em voo olhando todas as conversas.
+- O download com cabeçalho de autorização vazio e o MIME só pelos bytes.
+- O "Passaram 7 dias" numa conversa só com ecos.
+- O toque em botão descartado.
+- Cenários de verify que não exercitavam o caminho: menção, segundo anexo, trava, eco antes do `mid` e só o Instagram.
+
+O T039 (ordem da checagem do tipo no WhatsApp) foi aceito com o motivo registrado.
+
+**Commits:**
+- `36e1f99f`, `990a89fc`, `6ed8c645` (esteira);
+- `f1b10592` (backend);
+- `8e79d9ce` (tela);
+- `e13c4429` (docs vivos);
+- os da convergência e desta entrada.
 
 ### 328 — Conversas em equipe: responsável, alerta de cliente esperando, notas, respostas rápidas e áudio   (328-crm-equipe-na-caixa · 2026-11-03 · migration `f328b2d4e6a1`)
 
