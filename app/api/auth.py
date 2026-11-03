@@ -54,9 +54,10 @@ def serialize_user(user: User) -> dict[str, Any]:
 
 def _conversas_ligadas(user: User) -> bool:
     from app.conversas.acesso import pode_conversas
-    from app.conversas.configuracao import cfg_whatsapp
+    from app.conversas.configuracao import canais_ligados
 
-    return pode_conversas(user) and cfg_whatsapp().ligado
+    # Feature 330: o WhatsApp ou o Instagram ligado já abre a caixa.
+    return pode_conversas(user) and bool(canais_ligados())
 
 
 @api_bp.route("/auth/login", methods=["POST"])

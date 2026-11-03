@@ -52,16 +52,41 @@ def telefone_legivel(digitos: str | None) -> str | None:
     return digitos
 
 
-def janela_aberta(conversa: Conversa) -> bool:
-    """A janela de 24 h está aberta? Só a mensagem da cliente a reabre (research R9)."""
+def estado_da_janela(conversa: Conversa) -> str:
+    """``aberta`` (24 h), ``humana`` (Instagram: até 7 dias, com a marca HUMAN_AGENT) ou ``fechada``.
+
+    Só a mensagem da cliente reabre (research R9 da 325; R10 da 330).
+    """
     recebida = conversa.ultima_recebida_em
-    return recebida is not None and agora_utc() - recebida < K.JANELA
+    if recebida is None:
+        return K.JANELA_ESTADO_FECHADA
+    passou = agora_utc() - recebida
+    if passou < K.JANELA:
+        return K.JANELA_ESTADO_ABERTA
+    if conversa.canal == K.CANAL_INSTAGRAM and passou < K.JANELA_HUMANA:
+        return K.JANELA_ESTADO_HUMANA
+    return K.JANELA_ESTADO_FECHADA
+
+
+def janela_aberta(conversa: Conversa) -> bool:
+    """Dá para responder? No WhatsApp, 24 h; no Instagram, também a janela humana de 7 dias."""
+    return estado_da_janela(conversa) != K.JANELA_ESTADO_FECHADA
+
+
+def _janela_fecha_em(conversa: Conversa, estado: str) -> datetime | None:
+    if conversa.ultima_recebida_em is None or estado == K.JANELA_ESTADO_FECHADA:
+        return conversa.ultima_recebida_em + K.JANELA if conversa.ultima_recebida_em else None
+    prazo = K.JANELA_HUMANA if estado == K.JANELA_ESTADO_HUMANA else K.JANELA
+    return conversa.ultima_recebida_em + prazo
 
 
 def nome_da_conversa(conversa: Conversa) -> str:
-    """Nome da ficha › nome de perfil do WhatsApp › telefone formatado."""
+    """Nome da ficha › nome de perfil › telefone formatado (ou, no Instagram, @usuário)."""
     if conversa.cliente is not None:
         return conversa.cliente.name
+    if conversa.canal == K.CANAL_INSTAGRAM:
+        reserva = f"@{conversa.usuario}" if conversa.usuario else K.TEXTO_CONTATO_DO_INSTAGRAM
+        return conversa.nome_perfil or reserva
     return conversa.nome_perfil or telefone_legivel(conversa.telefone) or conversa.contato_id
 
 
@@ -92,7 +117,8 @@ def serializar_conversa(conversa: Conversa) -> dict[str, Any]:
     ``responsavel_ativo`` falso = o responsável perdeu o papel ou o acesso: a tela mostra o nome e
     oferece "Assumir" a qualquer um (feature 328, FR-003).
     """
-    fecha_em = conversa.ultima_recebida_em + K.JANELA if conversa.ultima_recebida_em else None
+    janela = estado_da_janela(conversa)
+    fecha_em = _janela_fecha_em(conversa, janela)
     return {
         "id": conversa.id,
         "canal": conversa.canal,
@@ -104,7 +130,9 @@ def serializar_conversa(conversa: Conversa) -> dict[str, Any]:
         "ultima_previa": conversa.ultima_previa,
         "ultima_mensagem_em": _iso_utc(conversa.ultima_mensagem_em),
         "nao_lidas": conversa.nao_lidas or 0,
-        "janela_aberta": janela_aberta(conversa),
+        "janela_aberta": janela != K.JANELA_ESTADO_FECHADA,
+        "janela": janela,
+        "usuario": conversa.usuario,
         "janela_fecha_em": _iso_utc(fecha_em),
         "responsavel": serializar_pessoa(conversa.responsavel),
         "responsavel_ativo": responsavel_ativo(conversa),
@@ -163,6 +191,7 @@ def listar_conversas(
     antes: str | None,
     filtro: str = K.FILTRO_TODAS,
     usuario_id: int | None = None,
+    canal: str | None = None,
 ) -> tuple[list[Conversa], str | None]:
     """Página da lista, da última mensagem para trás. Devolve as conversas e o próximo cursor.
 
@@ -175,6 +204,8 @@ def listar_conversas(
         consulta = consulta.filter(Conversa.responsavel_id == usuario_id)
     elif filtro == K.FILTRO_SEM_RESPONSAVEL:
         consulta = consulta.filter(Conversa.responsavel_id.is_(None))
+    if canal:
+        consulta = consulta.filter(Conversa.canal == canal)
     termo = (busca or "").strip()
     if len(termo) >= BUSCA_MINIMA:
         filtros = [Conversa.nome_perfil.ilike(f"%{termo}%"), Client.name.ilike(f"%{termo}%")]

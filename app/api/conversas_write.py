@@ -22,6 +22,7 @@ from app.conversas import envio_ops, leitura_ops
 from app.conversas.acesso import pode_conversas
 from app.conversas.configuracao import cfg_whatsapp
 from app.conversas.constantes import MIDIA_TETO_BYTES
+from app.conversas.recusa import Recusa
 
 
 def _negado() -> Any:
@@ -30,7 +31,7 @@ def _negado() -> Any:
     return None
 
 
-def _recusa(exc: envio_ops.EnvioRecusado) -> Any:
+def _recusa(exc: Recusa) -> Any:
     return json_error(exc.mensagem, exc.status, fields=exc.fields or None, codigo=exc.codigo)
 
 
@@ -78,7 +79,7 @@ def api_conversas_enviar(conversa_id: int) -> Any:
                 current_user.id,
                 cfg_whatsapp(),
             )
-    except envio_ops.EnvioRecusado as exc:
+    except Recusa as exc:
         return _recusa(exc)
     return _resposta(envio)
 
@@ -102,7 +103,7 @@ def api_conversas_enviar_modelo(conversa_id: int) -> Any:
             current_user.id,
             cfg_whatsapp(),
         )
-    except envio_ops.EnvioRecusado as exc:
+    except Recusa as exc:
         return _recusa(exc)
     return _resposta(envio)
 
@@ -116,6 +117,6 @@ def api_conversas_lida(conversa_id: int) -> Any:
         return negado
     try:
         envio_ops.marcar_lida(conversa_id, cfg_whatsapp())
-    except envio_ops.EnvioRecusado as exc:
+    except Recusa as exc:
         return _recusa(exc)
     return "", 204

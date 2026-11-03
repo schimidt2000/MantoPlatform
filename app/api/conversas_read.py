@@ -18,8 +18,14 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.conversas import envio_ops, equipe_ops, leitura_ops, midia_ops
 from app.conversas.acesso import pode_conversas
-from app.conversas.configuracao import cfg_whatsapp
-from app.conversas.constantes import FILTRO_TODAS, FILTROS_DA_LISTA, TEXTO_FILTRO_INVALIDO
+from app.conversas.configuracao import canais_ligados, cfg_whatsapp
+from app.conversas.constantes import (
+    CANAIS,
+    FILTRO_TODAS,
+    FILTROS_DA_LISTA,
+    TEXTO_CANAL_INVALIDO,
+    TEXTO_FILTRO_INVALIDO,
+)
 from app.integracoes import whatsapp_client as wc
 from app.models import Conversa, ConversaMidia
 
@@ -40,13 +46,19 @@ def api_conversas_lista() -> Any:
     filtro = request.args.get("filtro") or FILTRO_TODAS
     if filtro not in FILTROS_DA_LISTA:
         return json_error(TEXTO_FILTRO_INVALIDO, 422, fields={"filtro": TEXTO_FILTRO_INVALIDO})
+    canal = request.args.get("canal") or None
+    if canal is not None and canal not in CANAIS:
+        return json_error(TEXTO_CANAL_INVALIDO, 422, fields={"canal": TEXTO_CANAL_INVALIDO})
     cfg = cfg_whatsapp()
+    ligados = canais_ligados()
     conversas, proximo = leitura_ops.listar_conversas(
-        request.args.get("busca"), request.args.get("antes"), filtro, current_user.id
+        request.args.get("busca"), request.args.get("antes"), filtro, current_user.id, canal
     )
     return jsonify(
         {
-            "configurado": cfg.ligado,
+            # Feature 330: qualquer canal ligado basta para a caixa existir.
+            "configurado": bool(ligados),
+            "canais_ligados": ligados,
             "envio_travado": cfg.travado,
             "poll_segundos": cfg.poll_segundos,
             "conversas": [leitura_ops.serializar_conversa(c) for c in conversas],

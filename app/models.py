@@ -4142,6 +4142,10 @@ class Conversa(db.Model):
     # UTC. A primeira mensagem da cliente ainda sem resposta; nulo = ninguém esperando. Guardado (e
     # não recalculado das mensagens) para o alerta de 15 min ser um SELECT indexado.
     aguardando_desde = db.Column(db.DateTime, nullable=True, index=True)
+    # Feature 330 — Instagram: o @usuário (sem a arroba; vazio no WhatsApp) e a última busca do
+    # perfil (UTC). Sem nome e com o carimbo de mais de 24 h, o perfil é buscado de novo.
+    usuario = db.Column(db.String(64), nullable=True)
+    perfil_em = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -4218,7 +4222,8 @@ class ConversaMensagem(db.Model):
     direcao = db.Column(db.String(10), nullable=False)
     tipo = db.Column(db.String(20), nullable=False)
     texto = db.Column(db.Text, nullable=True)
-    externo_id = db.Column(db.String(128), nullable=True, unique=True)
+    # 255: o `mid` do Instagram (feature 330) passa de 128 caracteres.
+    externo_id = db.Column(db.String(255), nullable=True, unique=True)
     chave_envio = db.Column(db.String(64), nullable=True, unique=True)
     situacao = db.Column(db.String(12), nullable=False)
     erro_codigo = db.Column(db.Integer, nullable=True)
@@ -4226,7 +4231,7 @@ class ConversaMensagem(db.Model):
     autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     origem = db.Column(db.String(12), nullable=False)
     modelo_nome = db.Column(db.String(255), nullable=True)
-    resposta_a = db.Column(db.String(128), nullable=True)
+    resposta_a = db.Column(db.String(255), nullable=True)
     # Item cru do aviso (JSON em texto): ler por `dados_dict`, nunca `json.loads` direto.
     dados = db.Column(db.Text, nullable=True)
     momento = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)

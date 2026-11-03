@@ -107,6 +107,14 @@ services:
         sync: false
       - key: WHATSAPP_WABA_ID
         sync: false
+      # Feature 330 (Conversas): Instagram Direct pela Página do Facebook, no MESMO app Meta (o aviso
+      # usa o App Secret e o Verify token acima). Vazios = canal desligado. O dono cola no painel.
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_PAGE_ID
+        sync: false
+      - key: INSTAGRAM_ACCOUNT_ID
+        sync: false
       # Feature 310: o MESMO valor no manto-frontend. Prova que a requisição veio do Node — sem
       # ele, o IP do cliente informado pelo Node é aceito sem prova (o boot avisa no log).
       - key: MANTO_PROXY_SECRET

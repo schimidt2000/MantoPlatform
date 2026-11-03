@@ -15,14 +15,15 @@ from __future__ import annotations
 
 import logging
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 from sqlalchemy.exc import IntegrityError
 
 from app import db
+from app.conversas import canais, equipe_ops, midia_ops
 from app.conversas import constantes as K
-from app.conversas import equipe_ops, midia_ops
 from app.conversas.aviso_ops import agora_utc, atualizar_previa
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.leitura_ops import janela_aberta
@@ -82,13 +83,19 @@ def conversa_ou_404(conversa_id: int) -> Conversa:
     return conversa
 
 
-def _pre_condicoes(cfg: CfgWhatsapp, conversa: Conversa, *, exige_janela: bool) -> None:
+def _pre_condicoes(
+    cfg: CfgWhatsapp, conversa: Conversa, *, exige_janela: bool
+) -> dict[str, str]:
+    """Canal ligado, trava e janela. Devolve os campos extras do envio (Instagram: a marca humana)."""
+    if canais.e_instagram(conversa):
+        return canais.pre_condicoes(conversa, exige_janela=exige_janela)
     if not cfg.ligado:
         raise EnvioRecusado("nao_configurado", TEXTO_NAO_CONFIGURADO, 503)
     if cfg.travado:
         raise EnvioRecusado("envio_travado", TEXTO_TRAVADO, 409)
     if exige_janela and not janela_aberta(conversa):
         raise EnvioRecusado("janela_fechada", TEXTO_JANELA_FECHADA, 409)
+    return {}
 
 
 # ── Reservar, despachar ──────────────────────────────────────────────────────────────────────────
@@ -131,28 +138,48 @@ def _destino(conversa: Conversa) -> dict[str, str]:
     return {"recipient": conversa.contato_bsuid or conversa.contato_id}
 
 
-def _registrar_falha(mensagem: ConversaMensagem, exc: wc.WhatsappErro) -> None:
+def _registrar_falha(
+    mensagem: ConversaMensagem,
+    exc: wc.WhatsappErro,
+    conversa: Conversa | None = None,
+    extras: dict[str, str] | None = None,
+) -> None:
     codigo = exc.code if isinstance(exc, wc.WhatsappRecusou) else None
     mensagem.situacao = K.SITUACAO_FALHOU
     mensagem.erro_codigo = codigo
-    mensagem.erro_motivo = K.motivo_do_erro(codigo)
+    if conversa is not None and canais.e_instagram(conversa):
+        mensagem.erro_motivo = canais.motivo(exc, extras or {})
+    else:
+        mensagem.erro_motivo = K.motivo_do_erro(codigo)
     logger.info("[whatsapp] envio %s falhou: %s", mensagem.id, exc)
 
 
 def _despachar(
     mensagem: ConversaMensagem, conversa: Conversa, corpo: dict[str, Any], cfg: CfgWhatsapp
 ) -> None:
-    """Chama a Meta (sem trava de linha) e grava o wamid ou o motivo da falha.
+    """WhatsApp: manda o corpo pronto à Meta e conclui."""
+    _concluir(
+        mensagem, conversa, lambda: wc.enviar(cfg.conexao, {**_destino(conversa), **corpo})["id"]
+    )
+
+
+def _concluir(
+    mensagem: ConversaMensagem,
+    conversa: Conversa,
+    chamar: Callable[[], str],
+    extras: dict[str, str] | None = None,
+) -> None:
+    """Chama a Meta (sem trava de linha) e grava o id dela ou o motivo da falha.
 
     Só o envio ACEITO conta como resposta da equipe (feature 328): atribui a conversa da fila ao
-    autor e encerra a espera. O que falhou não faz nem um nem outro.
+    autor e encerra a espera. O que falhou não faz nem um nem outro. Vale para os dois canais.
     """
     try:
-        resposta = wc.enviar(cfg.conexao, {**_destino(conversa), **corpo})
+        externo_id = chamar()
     except wc.WhatsappErro as exc:
-        _registrar_falha(mensagem, exc)
+        _registrar_falha(mensagem, exc, conversa, extras)
     else:
-        mensagem.externo_id = resposta["id"]
+        mensagem.externo_id = externo_id
         mensagem.situacao = K.SITUACAO_ENVIADA
     mensagem.momento = agora_utc()
     if mensagem.situacao == K.SITUACAO_ENVIADA and mensagem.autor_id is not None:
@@ -167,7 +194,7 @@ def _despachar(
 def enviar_texto(
     conversa_id: int, texto: str | None, chave: str | None, autor_id: int | None, cfg: CfgWhatsapp
 ) -> Envio:
-    """Texto livre, dentro da janela de 24 h (FR-010)."""
+    """Texto livre, dentro da janela (FR-010; no Instagram, a janela é a da 330)."""
     chave = _validar_chave(chave)
     if existente := _ja_enviada(chave):
         return Envio(existente, nova=False)
@@ -177,15 +204,18 @@ def enviar_texto(
     if len(texto) > K.TEXTO_MAXIMO:
         raise _campo("texto", f"A mensagem passa de {K.TEXTO_MAXIMO} caracteres.")
     conversa = conversa_ou_404(conversa_id)
-    _pre_condicoes(cfg, conversa, exige_janela=True)
+    extras = _pre_condicoes(cfg, conversa, exige_janela=True)
+    if canais.e_instagram(conversa):
+        canais.validar_texto(texto)
     envio = _reservar(conversa, chave, K.TIPO_TEXTO, texto, autor_id)
-    if envio.nova:
-        _despachar(
-            envio.mensagem,
-            conversa,
-            {"type": "text", "text": {"body": texto, "preview_url": True}},
-            cfg,
-        )
+    if not envio.nova:
+        return envio
+    if canais.e_instagram(conversa):
+        chamar = lambda: canais.enviar_texto(conversa, texto, extras)  # noqa: E731
+        _concluir(envio.mensagem, conversa, chamar, extras)
+    else:
+        corpo = {"type": "text", "text": {"body": texto, "preview_url": True}}
+        _despachar(envio.mensagem, conversa, corpo, cfg)
     return envio
 
 
@@ -228,34 +258,61 @@ def enviar_arquivo(
     if existente := _ja_enviada(chave):
         return Envio(existente, nova=False)
     mime_limpo = mime_normalizado(mime)
-    if mime_limpo != K.MIME_AUDIO_DO_NAVEGADOR:
-        _tipo_do_arquivo(mime_limpo, len(dados))  # recusa cedo, antes de olhar a conversa
     conversa = conversa_ou_404(conversa_id)
-    _pre_condicoes(cfg, conversa, exige_janela=True)
-    dados, nome, mime_limpo = _audio_do_navegador(dados, nome, mime_limpo)
-    tipo = _tipo_do_arquivo(mime_limpo, len(dados))
-    legenda = (legenda or "").strip()[: K.TEXTO_MAXIMO] or None
+    if not _e_audio_gravado(conversa, mime_limpo):
+        _tipo_do_canal(conversa, mime_limpo, len(dados))  # recusa cedo, antes da trava e da janela
+    extras = _pre_condicoes(cfg, conversa, exige_janela=True)
+    dados, nome, mime_limpo = _audio_do_navegador(dados, nome, mime_limpo, conversa)
+    tipo = _tipo_do_canal(conversa, mime_limpo, len(dados))
+    # O anexo do Instagram não tem legenda: a tela manda o texto à parte (feature 330).
+    sem_legenda = canais.e_instagram(conversa)
+    legenda = None if sem_legenda else (legenda or "").strip()[: K.TEXTO_MAXIMO] or None
     envio = _reservar(conversa, chave, tipo, legenda, autor_id)
     if envio.nova:
         midia = _guardar_copia_local(envio.mensagem, dados, nome, mime_limpo, cfg)
-        _subir_e_despachar(envio.mensagem, midia, conversa, dados, tipo, legenda, cfg)
+        if canais.e_instagram(conversa):
+            chamar = lambda: canais.enviar_arquivo(conversa, midia, dados, tipo, extras)  # noqa: E731
+            _concluir(envio.mensagem, conversa, chamar, extras)
+        else:
+            _subir_e_despachar(envio.mensagem, midia, conversa, dados, tipo, legenda, cfg)
     return envio
 
 
-def _audio_do_navegador(dados: bytes, nome: str, mime: str) -> tuple[bytes, str, str]:
-    """O webm do Chrome vira ogg antes de guardar e enviar (feature 328, FR-013); o resto passa.
+def _tipo_do_canal(conversa: Conversa, mime: str, tamanho: int) -> str:
+    if canais.e_instagram(conversa):
+        return canais.tipo_do_arquivo(mime, tamanho)
+    return _tipo_do_arquivo(mime, tamanho)
 
+
+def _e_audio_gravado(conversa: Conversa, mime: str) -> bool:
+    """Áudio que o navegador gravou e o servidor converte antes de conferir o tipo."""
+    if canais.e_instagram(conversa):
+        return mime in K.AUDIO_GRAVADO_PARA_O_INSTAGRAM
+    return mime == K.MIME_AUDIO_DO_NAVEGADOR
+
+
+def _audio_do_navegador(
+    dados: bytes, nome: str, mime: str, conversa: Conversa
+) -> tuple[bytes, str, str]:
+    """O áudio gravado no formato do canal (FR-013 da 328; FR-009 da 330); o resto passa.
+
+    WhatsApp: o webm do Chrome vira ogg (só troca o recipiente, sai como nota de voz).
+    Instagram: webm e ogg viram m4a (o Instagram não aceita os dois em áudio; recodifica).
     Roda depois das pré-condições: não se gasta ffmpeg num envio que a janela ou a trava recusam.
     """
-    if mime != K.MIME_AUDIO_DO_NAVEGADOR:
+    if not _e_audio_gravado(conversa, mime):
         return dados, nome, mime
+    instagram = canais.e_instagram(conversa)
+    converter = midia_ops.audio_para_m4a if instagram else midia_ops.webm_para_ogg
     try:
-        ogg = midia_ops.webm_para_ogg(dados)
+        convertido = converter(dados)
     except midia_ops.AudioIndisponivel as exc:
-        logger.warning("[whatsapp] áudio gravado não convertido: %s", exc)
+        logger.warning("[conversas] áudio gravado não convertido: %s", exc)
         raise _campo("arquivo", K.TEXTO_AUDIO_FALHOU) from exc
-    base = nome.rsplit(".", 1)[0] if "." in nome else nome
-    return ogg, f"{base or 'audio'}.ogg", K.MIME_NOTA_DE_VOZ
+    base = (nome.rsplit(".", 1)[0] if "." in nome else nome) or "audio"
+    if instagram:
+        return convertido, f"{base}.m4a", K.MIME_AUDIO_DO_INSTAGRAM
+    return convertido, f"{base}.ogg", K.MIME_NOTA_DE_VOZ
 
 
 def _guardar_copia_local(
@@ -431,6 +488,8 @@ def enviar_modelo(
     if existente := _ja_enviada(chave):
         return Envio(existente, nova=False)
     conversa = conversa_ou_404(conversa_id)
+    if canais.e_instagram(conversa):
+        raise EnvioRecusado("sem_modelos", K.TEXTO_IG_SEM_MODELOS, 409)
     _pre_condicoes(cfg, conversa, exige_janela=False)
     modelo = _modelo_escolhido(cfg, nome, idioma)
     valores = _valores_do_modelo(modelo, variaveis)
@@ -450,7 +509,8 @@ def marcar_lida(conversa_id: int, cfg: CfgWhatsapp) -> None:
     conversa = conversa_ou_404(conversa_id)
     conversa.nao_lidas = 0
     db.session.commit()
-    if not cfg.ligado or cfg.travado:
+    # Instagram (330): sem "marcar como visto" nesta fase — só a contagem da equipe.
+    if canais.e_instagram(conversa) or not cfg.ligado or cfg.travado:
         return
     ultima = (
         ConversaMensagem.query.filter(

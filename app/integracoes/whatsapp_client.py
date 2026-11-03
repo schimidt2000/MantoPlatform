@@ -69,10 +69,19 @@ class WhatsappArquivoGrande(WhatsappErro):
 class WhatsappRecusou(WhatsappErro):
     """A Meta recusou a requisição (4xx com ``error.code``)."""
 
-    def __init__(self, message: str, *, status: int | None = None, code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status: int | None = None,
+        code: int | None = None,
+        subcode: int | None = None,
+    ) -> None:
         super().__init__(message)
         self.status = status
         self.code = code
+        # `error_subcode` da Graph API: no Instagram é ele que separa janela, permissão e roteamento.
+        self.subcode = subcode
 
 
 def _cabecalhos(token: str) -> dict[str, str]:
@@ -89,13 +98,17 @@ def _erro_da_meta(response: requests.Response) -> WhatsappRecusou:
     erro = corpo.get("error") if isinstance(corpo, dict) else None
     erro = erro if isinstance(erro, dict) else {}
     codigo = erro.get("code")
+    subcodigo = erro.get("error_subcode")
     mensagem = erro.get("message") or f"HTTP {response.status_code}"
     return WhatsappRecusou(
-        str(mensagem), status=response.status_code, code=codigo if isinstance(codigo, int) else None
+        str(mensagem),
+        status=response.status_code,
+        code=codigo if isinstance(codigo, int) else None,
+        subcode=subcodigo if isinstance(subcodigo, int) else None,
     )
 
 
-def _requisitar(
+def requisitar(
     conexao: ConexaoMeta,
     metodo: str,
     url: str,
@@ -109,7 +122,7 @@ def _requisitar(
     if conexao.travada:
         raise WhatsappTravado("Chamada à Meta travada neste processo.")
     if not conexao.token:
-        raise WhatsappRecusou("Token do WhatsApp não configurado.", code=200)
+        raise WhatsappRecusou("Token da Meta não configurado.", code=200)
     try:
         response = requests.request(
             metodo,
@@ -128,6 +141,10 @@ def _requisitar(
         logger.warning("[whatsapp] erro de rede em %s %s: %s", metodo, url, exc)
         raise WhatsappIndisponivel("Falha de rede ao falar com a Meta.") from exc
     return _corpo_da_resposta(response, metodo, url)
+
+
+# O transporte é da Graph API, não do WhatsApp: o cliente do Instagram (330) usa o mesmo.
+_requisitar = requisitar
 
 
 def _corpo_da_resposta(response: requests.Response, metodo: str, url: str) -> dict[str, Any]:

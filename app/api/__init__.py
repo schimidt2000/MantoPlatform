@@ -75,3 +75,4 @@ from app.api import whatsapp_webhook as _whatsapp_webhook  # noqa: E402,F401
 from app.api import conversas_read as _conversas_read  # noqa: E402,F401
 from app.api import conversas_write as _conversas_write  # noqa: E402,F401
 from app.api import conversas_equipe_write as _conversas_equipe_write  # noqa: E402,F401
+from app.api import instagram_webhook as _instagram_webhook  # noqa: E402,F401

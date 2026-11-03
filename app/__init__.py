@@ -752,6 +752,17 @@ def create_app():
         app.logger.warning(
             "[whatsapp] Conversas desligado: faltam %s (painel do Render).", ", ".join(_whatsapp_faltando)
         )
+    # Feature 330 (XIV): o Instagram Direct usa o segredo e a verificação do app do WhatsApp.
+    _instagram_minimo = ("INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_PAGE_ID", "INSTAGRAM_ACCOUNT_ID",
+                         "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN")
+    _instagram_faltando = [k for k in _instagram_minimo if not app.config.get(k)]
+    app.logger.info(
+        "[instagram] ligado=%s travado=%s", not _instagram_faltando, app.config.get("WHATSAPP_SUPPRESS_SEND")
+    )
+    if _instagram_faltando and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[instagram] Direct desligado: faltam %s (painel do Render).", ", ".join(_instagram_faltando)
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl

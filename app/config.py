@@ -456,6 +456,13 @@ class Config:
     WHATSAPP_AVISO_SINCRONO = os.getenv("WHATSAPP_AVISO_SINCRONO", "").lower() == "true"
     # Intervalo da consulta periódica da tela (s): devolvido no payload, a tela obedece.
     WHATSAPP_POLL_SEGUNDOS = int(os.getenv("WHATSAPP_POLL_SEGUNDOS", "5"))
+    # Instagram Direct pela Página do Facebook (feature 330). O app da Meta é o MESMO do WhatsApp:
+    # o aviso usa o WHATSAPP_APP_SECRET e o WHATSAPP_VERIFY_TOKEN. Aqui só o token da Página (ou de
+    # um usuário do sistema do portfólio com a Página atribuída) e os ids da Página e da conta.
+    # Vazios = canal desligado (webhook 404, envio recusado, filtro oculto) — Princípio XIV.
+    INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+    INSTAGRAM_PAGE_ID = os.getenv("INSTAGRAM_PAGE_ID", "").strip()
+    INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "").strip()
     # Pasta da mídia das conversas — irmã de `UPLOAD_FOLDER` pelo mesmo motivo da 205/261: foto,
     # áudio e comprovante de cliente nunca viram URL de bucket público; só saem pelo endpoint com
     # gate. Default em `create_app` (`instance/conversas_midia`).

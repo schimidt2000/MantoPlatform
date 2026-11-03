@@ -303,3 +303,104 @@ TEXTO_AUDIO_FALHOU = "Não foi possível preparar o áudio. Envie o arquivo pelo
 # Avisos do sino.
 TITULO_ESPERANDO = "{nome} espera resposta há {tempo}."
 TITULO_TRANSFERIDA = "{quem} transferiu a conversa com {nome} para você."
+
+
+# O ``object`` do aviso cru do Instagram (o do WhatsApp é "whatsapp_business_account").
+OBJETO_INSTAGRAM = "instagram"
+CANAIS = (CANAL_WHATSAPP, CANAL_INSTAGRAM)
+# Assinatura dos bytes → MIME, para a mídia do Instagram (o aviso não diz o tipo exato).
+ASSINATURAS_DE_ARQUIVO = (
+    (b"\x89PNG", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF8", "image/gif"),
+    (b"%PDF", "application/pdf"),
+    (b"OggS", "audio/ogg"),
+    (b"ftypM4A", "audio/mp4"),
+    (b"ftyp", "video/mp4"),
+)
+TEXTO_CANAL_INVALIDO = "Canal desconhecido."
+
+# ── Instagram Direct (feature 330) ───────────────────────────────────────────────────────────────
+
+# Anexo do Instagram → tipo da casa. Os demais viram texto pronto (`TEXTO_DO_ANEXO_IG`).
+TIPO_DO_ANEXO_IG = {
+    "image": TIPO_IMAGEM,
+    "video": TIPO_VIDEO,
+    "audio": TIPO_AUDIO,
+    "file": TIPO_DOCUMENTO,
+}
+TEXTO_DO_ANEXO_IG = {
+    "share": "Compartilhou uma publicação.",
+    "ig_reel": "Compartilhou um reels.",
+    "reel": "Compartilhou um reels.",
+    "story_mention": "Mencionou a Manto no story.",
+    "ephemeral": "Mídia temporária. Abra no Instagram para ver.",
+}
+TEXTO_RESPOSTA_AO_STORY = "Respondeu ao seu story."
+TEXTO_APAGADA_PELA_CLIENTE = "Mensagem apagada pela cliente."
+TEXTO_NAO_SUPORTADA_IG = (
+    "Mensagem de um tipo que a Plataforma ainda não exibe. Abra no Instagram para ver."
+)
+TEXTO_CONTATO_DO_INSTAGRAM = "Contato do Instagram"
+
+# Envio (doc. da Meta, 03/11/2026): tipo da casa → chave do anexo e tetos.
+MIME_DE_ENVIO_IG = {
+    "image/png": TIPO_IMAGEM,
+    "image/jpeg": TIPO_IMAGEM,
+    "image/gif": TIPO_IMAGEM,
+    "video/mp4": TIPO_VIDEO,
+    "video/ogg": TIPO_VIDEO,
+    "video/x-msvideo": TIPO_VIDEO,
+    "video/quicktime": TIPO_VIDEO,
+    "video/webm": TIPO_VIDEO,
+    "audio/aac": TIPO_AUDIO,
+    "audio/mp4": TIPO_AUDIO,
+    "audio/wav": TIPO_AUDIO,
+    "audio/x-wav": TIPO_AUDIO,
+    "application/pdf": TIPO_DOCUMENTO,
+}
+CHAVE_DO_ANEXO_IG = {
+    TIPO_IMAGEM: "image",
+    TIPO_VIDEO: "video",
+    TIPO_AUDIO: "audio",
+    TIPO_DOCUMENTO: "file",
+}
+TETO_DE_ENVIO_IG = {
+    TIPO_IMAGEM: 8 * 1024 * 1024,
+    TIPO_VIDEO: 25 * 1024 * 1024,
+    TIPO_AUDIO: 25 * 1024 * 1024,
+    TIPO_DOCUMENTO: 25 * 1024 * 1024,
+}
+# O limite do Instagram é em BYTES de UTF-8, não em caracteres.
+TEXTO_MAXIMO_IG_BYTES = 1000
+# Até 7 dias depois da última mensagem da cliente, a resposta humana sai com a marca HUMAN_AGENT.
+JANELA_HUMANA = timedelta(days=7)
+# O perfil sem nome é buscado de novo, no máximo, uma vez por dia.
+PERFIL_INTERVALO = timedelta(hours=24)
+MIME_AUDIO_DO_INSTAGRAM = "audio/mp4"
+# O que o navegador grava e o Instagram não aceita em áudio: vira m4a no servidor.
+AUDIO_GRAVADO_PARA_O_INSTAGRAM = ("audio/webm", "audio/ogg")
+TEXTO_IG_TRAVADO = "O envio pelo Instagram está travado neste ambiente."
+
+JANELA_ESTADO_ABERTA = "aberta"
+JANELA_ESTADO_HUMANA = "humana"
+JANELA_ESTADO_FECHADA = "fechada"
+
+TEXTO_IG_NAO_CONFIGURADO = "O Instagram ainda não foi configurado."
+TEXTO_IG_JANELA_FECHADA = (
+    "Passaram 7 dias desde a última mensagem da cliente. Só ela pode retomar a conversa pelo Instagram."
+)
+TEXTO_IG_SEM_MODELOS = (
+    "O Instagram não tem modelos. Responda dentro de 7 dias da última mensagem da cliente."
+)
+TEXTO_IG_TIPO_NAO_ACEITO = "Tipo de arquivo não aceito pelo Instagram. Envie foto, vídeo, áudio ou PDF."
+TEXTO_IG_TEXTO_LONGO = "A mensagem do Instagram passa de 1.000 caracteres."
+MOTIVO_IG_MARCA_HUMANA = "A Meta ainda não liberou a resposta depois de 24 horas no Instagram."
+MOTIVO_IG_ROTEAMENTO = (
+    "A conversa está com outro app no Instagram (Kommo). Responda por ele até a virada."
+)
+# Recusas de permissão da Graph API: com a marca HUMAN_AGENT enviada, querem dizer "marca não liberada".
+CODIGOS_DE_PERMISSAO = (10, 200)
+# Subcódigos de "o app não tem o controle da conversa" (roteamento). A confirmar na conta de teste
+# (quickstart §3); o motivo genérico com o código cobre o que não estiver aqui.
+SUBCODIGOS_DE_ROTEAMENTO = (2018300, 2534037)

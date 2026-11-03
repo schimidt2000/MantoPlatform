@@ -125,10 +125,8 @@ def processar_aviso(aviso_id: int, cfg: CfgWhatsapp) -> str:
     except ValueError:
         _fechar(aviso_id, K.AVISO_DESCARTADO, "corpo não é JSON")
         return K.AVISO_DESCARTADO
-    midias: list[int] = []
     try:
-        for change in _mudancas(corpo):
-            midias.extend(_processar_change(change, cfg))
+        midias, perfis = _processar_corpo(corpo, cfg)
         db.session.commit()
     except MensagemAindaNaoGravada as exc:
         db.session.rollback()
@@ -139,7 +137,33 @@ def processar_aviso(aviso_id: int, cfg: CfgWhatsapp) -> str:
         return _devolver(aviso_id, f"{type(exc).__name__}: {exc}")
     _fechar(aviso_id, K.AVISO_PROCESSADO)
     _baixar_midias(midias, cfg)
+    if perfis:
+        _atualizar_perfis(perfis)
     return K.AVISO_PROCESSADO
+
+
+def _processar_corpo(corpo: Any, cfg: CfgWhatsapp) -> tuple[list[int], list[int]]:
+    """(mídias a baixar, conversas do Instagram cujo perfil buscar), pelo ``object`` do aviso.
+
+    O Instagram (feature 330) entra pela mesma fila, claim e varredura; import tardio porque
+    ``instagram_ops`` importa este módulo.
+    """
+    if isinstance(corpo, dict) and corpo.get("object") == K.OBJETO_INSTAGRAM:
+        from app.conversas import instagram_ops
+        from app.conversas.configuracao import cfg_instagram
+
+        return instagram_ops.processar_entradas(corpo, cfg_instagram())
+    midias: list[int] = []
+    for change in _mudancas(corpo):
+        midias.extend(_processar_change(change, cfg))
+    return midias, []
+
+
+def _atualizar_perfis(conversa_ids: list[int]) -> None:
+    from app.conversas import instagram_ops
+    from app.conversas.configuracao import cfg_instagram
+
+    instagram_ops.atualizar_perfis(conversa_ids, cfg_instagram())
 
 
 def _baixar_midias(midias: list[int], cfg: CfgWhatsapp) -> None:
@@ -212,8 +236,13 @@ def conversa_do_contato(
     nome: str | None = None,
     canal: str = K.CANAL_WHATSAPP,
 ) -> Conversa:
-    """A conversa do contato, criada se preciso — sem duplicar entre dois avisos simultâneos."""
-    telefone = telefone_com_nono(contato_id) if so_digitos(contato_id) == contato_id else None
+    """A conversa do contato, criada se preciso — sem duplicar entre dois avisos simultâneos.
+
+    Telefone e vínculo com a ficha só no WhatsApp: o IGSID do Instagram (feature 330) também é só
+    dígitos e cairia na ficha de um telefone qualquer.
+    """
+    numerico = canal == K.CANAL_WHATSAPP and so_digitos(contato_id) == contato_id
+    telefone = telefone_com_nono(contato_id) if numerico else None
     agora = agora_utc()
     db.session.execute(
         pg_insert(Conversa.__table__)
@@ -284,7 +313,7 @@ def _texto_recebido(mensagem: dict[str, Any], tipo: str) -> str | None:
     return K.TEXTO_DO_TIPO.get(tipo) or K.TEXTO_DO_TIPO[K.TIPO_OUTRO]
 
 
-def _inserir_mensagem(**valores: Any) -> int | None:
+def inserir_mensagem(**valores: Any) -> int | None:
     """INSERT idempotente pelo wamid: ``None`` quando a mensagem já existia (reenvio)."""
     linha = db.session.execute(
         pg_insert(ConversaMensagem.__table__)
@@ -323,7 +352,7 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
     tipo = K.TIPO_DA_META.get(mensagem.get("type") or "", K.TIPO_OUTRO)
     texto = _texto_recebido(mensagem, tipo)
     momento = _momento(mensagem.get("timestamp"))
-    mensagem_id = _inserir_mensagem(
+    mensagem_id = inserir_mensagem(
         conversa_id=conversa.id,
         direcao=K.RECEBIDA,
         tipo=tipo,
@@ -349,7 +378,7 @@ def _gravar_recebida(mensagem: dict[str, Any], contato: dict[str, Any]) -> int |
 # ── Status da enviada ────────────────────────────────────────────────────────────────────────────
 
 
-def _envio_em_voo() -> bool:
+def envio_em_voo() -> bool:
     """Há envio gravado `pendente`, sem wamid, há pouco tempo? Então o status pode ser dele."""
     return bool(
         ConversaMensagem.query.filter(
@@ -369,7 +398,7 @@ def _aplicar_status(status: dict[str, Any]) -> None:
         return
     mensagem = ConversaMensagem.query.filter_by(externo_id=str(wamid)).with_for_update().first()
     if mensagem is None:
-        if _envio_em_voo():
+        if envio_em_voo():
             raise MensagemAindaNaoGravada("mensagem ainda não gravada")
         return  # status de mensagem que não saiu da Plataforma
     if mensagem.direcao != K.ENVIADA:
@@ -422,7 +451,7 @@ def _gravar_eco(eco: dict[str, Any]) -> int | None:
     )
     tipo, texto = _texto_do_eco(eco, eco.get("type") or "")
     momento = _momento(eco.get("timestamp"))
-    mensagem_id = _inserir_mensagem(
+    mensagem_id = inserir_mensagem(
         conversa_id=conversa.id,
         direcao=K.ENVIADA,
         tipo=tipo,
