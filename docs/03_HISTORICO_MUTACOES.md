@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **333-crm-orcamento-na-conversa** | *(NÃO PUBLICADO; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
 | **332-crm-avisos-no-celular** | *(NÃO PUBLICADO; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
 | **330-crm-instagram-direct** | *(NÃO PUBLICADO; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
 | **328-crm-equipe-na-caixa** | *(NÃO PUBLICADO; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
@@ -361,7 +362,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 332, 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -395,6 +396,84 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 333 — Orçamento e formulário pela conversa   (333-crm-orcamento-na-conversa · 2026-11-03 · migration `c333e1a5b7d9`)
+
+> **NÃO PUBLICADO** — branch `333-crm-orcamento-na-conversa`, feita **sobre a `332-crm-avisos-no-celular`** (325 → 328
+> → 330 → 332 → 333; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/333-crm-orcamento-na-conversa/`.
+
+**O pedido.** O dono disse "começar a Fase 3" (03/11). O portão da fase é "um orçamento de verdade vai da conversa à
+venda sem copiar e colar". Hoje o vendedor copia a mensagem do orçamento, cola no WhatsApp, baixa o PDF, anexa e, quando
+a cliente fecha, cria o evento procurando a ficha de novo. Decisões do dono antes da spec:
+- a Fase 3 em três fatias: **3a** orçamento e formulário (esta), **3b** origem do anúncio, **3c** linha do tempo da
+  ficha e funil;
+- a cliente recebe **a mensagem pronta e o PDF** logo depois;
+- o vendedor manda **dos dois lugares**: na tela do orçamento ("Enviar na conversa") e dentro da conversa ("Enviar
+  orçamento", entre os recentes);
+- conversa sem ficha **cria a ficha na hora** (WhatsApp: telefone e nome; Instagram: escolher ou informar o telefone).
+
+**O que mudou.**
+- **Envio do orçamento** (`costura_ops.enviar_orcamento`): pré-condições antes de tudo, a ficha, o registro em
+  `orcamento_envios`, cada parte da mensagem pelo `envio_ops.enviar_texto` e o PDF pelo `enviar_arquivo`, com as chaves
+  `{chave}:n` e `{chave}:pdf`. Nada fala com a Meta fora do envio da conversa (trava, janela e "não entregue" de
+  sempre).
+- **Ficha** (`ficha_ops`): ligar, trocar e remover à mão, com `conversas.ficha_manual`. A regra "ficha pelo telefone"
+  da 325 virou fonte única (`ficha_pelo_telefone`), também da ligação automática, que agora respeita a escolha manual.
+- **Formulário**: `GET /api/conversas/<id>/formularios`, com o link curto e o texto pronto; a tela o insere no campo.
+- **Orçamento**: `client_id`; `enviado_em` no histórico (o selo); `cliente` e `envios` no detalhe; `cliente` no
+  pré-preenchimento do evento.
+- **Tela**: "Ligar à ficha"/"Trocar ficha" no cabeçalho da conversa; "Enviar orçamento" e "Enviar formulário" na caixa;
+  "Enviar na conversa" e "Envios na conversa" na tela do orçamento; o selo no histórico; a cliente no "Criar evento";
+  "Conversa" no gráfico de clientes novos.
+
+**Decisões e pegadinhas.**
+- **Pré-condições antes de criar qualquer coisa.** Com a janela fechada, uma ficha nascida no envio recusado seria lixo
+  na base. O `envio_ops` ganhou o `conferir_envio` público.
+- **Uma chave por pedido**, com sufixo por parte: repetir refaz só o que faltou (queda no meio), e o PDF só é gerado se
+  a parte dele ainda não saiu.
+- **O nome da ficha nova** é o do orçamento **só se o orçamento ainda não é de ninguém**. Achado na conferência de
+  tela: o orçamento da Ana reenviado para a conversa da Bruna criaria a ficha "Ana" com o telefone da Bruna.
+- **Remover vínculo também é escolha manual.** Sem a `ficha_manual`, a próxima mensagem religaria a ficha errada pelo
+  telefone.
+- **O orçamento fica com a ficha do primeiro envio**; reenviar a outra conversa só registra o envio.
+- **Sem endpoint novo para listar**: os recentes usam o `GET /api/orcamento/historico` (com `date_from`) e a escolha
+  da conversa usa o `GET /api/conversas?busca=`.
+- **`quote_ops.nome_do_pdf`**: o nome do PDF era montado dentro do endpoint de download; agora download e conversa usam
+  o mesmo.
+
+**Verificação.**
+- `verify_333.py` deu **15/15** contra o `manto_local`, com zero escapes. A Meta é dublê e confere o que saiu: o texto
+  igual à mensagem pronta, o `%PDF`, a ordem, as partes de até 1.000 bytes no Instagram, a queda no meio (só o PDF
+  sai de novo) e "só o PDF". Três cenários **devem** falhar: janela fechada e trava (sem ficha nem registro),
+  Casting e orçamento sem mensagem/telefone inválido.
+- `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22 (a ligação automática mudou).
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5334, Vite 5335) em desktop e 375×812:
+  - os dois envios, a ficha exigida no Instagram e a trava com o texto de cada canal;
+  - o formulário no campo; ligar, remover e religar a ficha;
+  - os envios na tela do orçamento, o selo e o evento com a cliente como Contratante;
+  - sem rolagem horizontal no celular.
+- Achado de passagem: a hora de criação no histórico de orçamentos sai em UTC como se fosse a de São Paulo, anterior à
+  333 (`docs/05` 193).
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **18 achados** (0
+críticos, 0 altos, 4 médios e 14 baixos), fechados em T020–T036.
+- O texto do formulário saudava "Oi, (11)!" quando a ficha nascia sem nome (o telefone batizava a ficha).
+- O PDF recusado pela Meta não tinha como sair de novo sem repetir a mensagem: nasceu **"Enviar só o PDF"**
+  (`somente_pdf`). E a tela dizia "enviado" com o PDF recusado.
+- A conferência dizia "fica ligado à ficha da conversa" para um orçamento que já era de outra ficha, e sugeria o
+  nome desse orçamento no "Criar ficha". O histórico passou a trazer a `cliente` de cada linha.
+- Erro da ficha que sumia quando a tela não pedia a escolha; o campo certo (`nome`/`telefone`) marcado; o texto do
+  formulário velho por 5 min depois de trocar a ficha.
+- A ficha nova sem `phone_display`; o número estrangeiro do WhatsApp ganhava "55"; a ficha do orçamento gravada
+  sem condição (dois primeiros envios ao mesmo tempo); o id da primeira parte só no fim.
+- O verify ganhou a queda no meio, o último envio no selo, a ficha batizada pelo telefone, o número estrangeiro e o
+  `phone_display`.
+- O botão "Trocar ficha" abre o diálogo com "Remover vínculo" (sem componente de menu na casa): a spec registra.
+- **Fora do plano, mantido e registrado aqui**: `ficha_pelo_telefone` mudou de `aviso_ops` para `ficha_ops` (fonte
+  única); `quote_ops.nome_do_pdf` (o download passou a usá-lo); 422 `chave_envio` quando a mesma chave chega para outra
+  conversa ou outro orçamento; o corpo da ficha aceita `{"id"}` além de `{"client_id"}`.
 
 ### 332 — Avisos das Conversas no celular   (332-crm-avisos-no-celular · 2026-11-03 · migration `b332d5f7a9c1`)
 

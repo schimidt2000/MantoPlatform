@@ -534,12 +534,13 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) | 1:N `events` |
+| `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) \| `conversa` (feature 333: a ficha criada
+pela conversa; balde próprio em `client_metrics`) | 1:N `events` |
 | `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193. **Feature 298**: encerramento em `closed_reason` (`desistiu` \| `repetido` \| `preenchido_errado` \| `teste` \| `outro`), `closed_note` (≤ 300, obrigatória em `outro`), `closed_by_id`, `closed_at` (UTC ingênuo, como `created_at`); índice parcial `ix_form_responses_sem_destino` (`created_at` onde `event_id IS NULL AND closed_at IS NULL`). Invariante: `closed_at IS NOT NULL ⇒ event_id IS NULL` | `client_id`, `event_id` (ambos indexados e nullable); `closed_by_id` (`users`, `SET NULL`); `client_link_source` (feature 266: `auto_phone` \| `manual` \| `NULL`, espelha `event_link_source`; 298: `evento` quando a cliente veio do evento ligado) |
 | `form_response_dismissed_events` | `FormResponseDismissedEvent` | **Feature 298**: sugestão "parece ser este evento" descartada — o par nunca volta (definitivo, decisão do dono). `UNIQUE(form_response_id, event_id)`; **sem backref** de propósito (as exclusões de evento e de formulário contam com o `ON DELETE CASCADE`) | `form_response_id` e `event_id` (`CASCADE`), `dismissed_by_id` (`SET NULL`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
-| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id` |
+| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte) |
 
 #### Estado do banco de leads (pós-feature 193)
 
@@ -627,6 +628,15 @@ Pontos que valem para quem for ler esses dados:
     (Text, `uq_push_assinaturas_endpoint`: o mesmo navegador registrado de novo fica com quem registrou por
     último), as chaves do aparelho `p256dh` (255) e `auth` (64), `navegador` (User-Agent, 255) e os horários
     `created_at`/`ultimo_aviso_em`. Apagado quando o serviço de avisos responde 404/410.
+- **Orçamento pela conversa** (feature 333, migration `c333e1a5b7d9`, aditiva sobre `b332d5f7a9c1`). Detalhe em
+  `specs/333-crm-orcamento-na-conversa/data-model.md`.
+  - `orcamento_envios`: cada orçamento mandado pela conversa. `orcamento_id` e `conversa_id` (CASCADE, indexados),
+    `autor_id` (SET NULL), `chave_envio` (64, `uq_orcamento_envios_chave`: a chave do pedido; as partes usam
+    `{chave}:n` e `{chave}:pdf` em `conversa_mensagens`), `texto_mensagem_id` e `pdf_mensagem_id` (SET NULL) e
+    `created_at` (UTC).
+  - `conversas.ficha_manual` (Boolean, `server_default false`): a ficha (ou a falta dela, depois de "Remover
+    vínculo") foi escolhida à mão; a ligação automática pelo telefone não age.
+  - `orcamento_history.client_id` (SET NULL, indexado).
 
 ### 2.8 EducaManto
 
@@ -1954,6 +1964,9 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 | `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
 | `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
+| `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
+| `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
+| `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
 | `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
 | `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
 | `DELETE` | `/api/push/aparelhos` | (332) `{endpoint}` → 204; só apaga o aparelho da própria pessoa. |
@@ -1991,6 +2004,27 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
     vira "não entregue" com o motivo próprio.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
+
+**Orçamento e formulário pela conversa (feature 333, Fase 3a do plano).** O portão da Fase 3 é "um orçamento de
+verdade vai da conversa à venda sem copiar e colar". Fluxo e invariantes em `docs/04` §6; contrato em
+`specs/333-crm-orcamento-na-conversa/contracts/api.md`.
+- **Núcleo**: `costura_ops.enviar_orcamento` não fala com a Meta. Ordem:
+  - `envio_ops.conferir_envio` (canal, trava, janela) antes de tudo;
+  - a ficha (`ficha_ops.ficha_para_envio`) e o registro em `orcamento_envios`;
+  - cada parte da mensagem pronta por `envio_ops.enviar_texto` (`{chave}:n`; no Instagram, até 1.000 bytes,
+    quebradas entre parágrafos) e o PDF por `enviar_arquivo` (`{chave}:pdf`, gerado só se ainda não saiu, com o
+    nome de `quote_ops.nome_do_pdf`, o mesmo do download).
+  - A mesma chave refaz só o que faltou.
+- **Ficha**: `ficha_ops.ficha_pelo_telefone` é a regra da 325 (com e sem o nono dígito; com duas, a exata), agora
+  fonte única também da `_vincular_cliente`, que respeita a `ficha_manual`. No envio, sem ficha:
+  - no WhatsApp, a do telefone ou uma nova com origem `conversa`. O nome é o do orçamento só se ele ainda não tem
+    ficha; senão, o do perfil.
+  - no Instagram (ou com a ficha removida à mão), 422 `fields.cliente` até o vendedor escolher.
+- **Ficha nova**: com `phone_display` legível; a do WhatsApp guarda o wa_id como veio (E.164, sem o "55" do
+  `normalize_phone` em número estrangeiro); a do orçamento é gravada por `UPDATE … WHERE client_id IS NULL`.
+- **Orçamento**: `GET /api/orcamento/historico` ganha `enviado_em` e `cliente` por linha (um SELECT agrupado e o
+  `joinedload`); o detalhe ganha
+  `cliente` e `envios`; `GET /api/events/new/prefill` ganha `cliente` com o orçamento ligado.
 
 **Avisos no celular (feature 332, Fase 2c do plano).** Web Push padrão (Chrome, Edge, Firefox e Safari; no iPhone
 só com a Plataforma na Tela de Início, iOS 16.4+), **sem biblioteca de Web Push**: a cifra `aes128gcm` (RFC 8291) e
@@ -2339,6 +2373,7 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
+| `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
 | `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
