@@ -14,6 +14,7 @@ from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.clientes import client_ops
 from app.constants import RoleName
+from app.conversas import anuncio_ops
 
 
 def _has_role(*names: str) -> bool:
@@ -90,6 +91,8 @@ def api_clientes_detail(client_id: int) -> Any:
             # Feature 312: a lista e a contagem são só dos vivos; o cancelado vê-se na página de
             # Cancelamentos, e aqui só explica o total (que soma o retido, feature 306).
             "event_count": len(events),
+            # Feature 334: de onde a cliente veio (o primeiro e o mais recente anúncio da Meta).
+            "origem": anuncio_ops.origem_da_ficha(client),
             "total_sales": float(total_sales),
             "cancelamentos": {
                 "quantidade": cancelamentos["quantidade"],

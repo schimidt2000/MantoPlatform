@@ -22,14 +22,18 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import ColumnElement, case, func, or_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
-from app.constants import MARKETING_AD_PLATFORMS, MARKETING_IMPORT_KINDS
+from app.constants import MARKETING_AD_PLATFORMS, MARKETING_IMPORT_KINDS, TZ_SP
+from app.conversas.constantes import CONTATO_ANUNCIO, UTM_SOURCE_DO_ANUNCIO
 from app.models import (
+    AnuncioMeta,
     CalendarEvent,
     Client,
+    Conversa,
+    ConversaAnuncio,
     EventClient,
     MarketingAccountMetric,
     MarketingAdSpendBatch,
@@ -52,6 +56,10 @@ CATEGORIA_MARKETING = "Marketing"
 # entrar no contexto para o vínculo.
 JANELA_POSTS_DIAS = 90
 _POST_METRIC_COLS = ("reach", "impressions", "likes", "comments", "saves", "shares", "views")
+# A origem das fichas que o importador do Kommo cria (`app/clientes/importer.py`), cujo `kommo_created_at` é o
+# "Criado em" do Kommo, no horário de São Paulo.
+FONTE_KOMMO = "kommo_import"
+FUSO_SP = "America/Sao_Paulo"
 _CAMPAIGN_INT_COLS = ("impressions", "reach", "clicks", "results", "conversions")
 
 
@@ -240,36 +248,100 @@ def _goals_context() -> list[dict[str, Any]]:
     ]
 
 
+def _sp_no_banco(coluna: Any) -> ColumnElement[Any]:
+    """A coluna gravada em UTC (sem fuso) no horário de São Paulo, o da janela da tela e do `kommo_created_at`."""
+    return func.timezone(FUSO_SP, func.timezone("UTC", coluna))
+
+
+def _sp(momento: datetime) -> datetime:
+    return momento.replace(tzinfo=UTC).astimezone(TZ_SP).replace(tzinfo=None)
+
+
+def _entrada_na_base() -> ColumnElement[Any]:
+    """A data em que a ficha entrou na base (feature 334), no horário de São Paulo: a do Kommo e, para a criada aqui
+    (pela conversa, à mão), a de criação. A do Kommo sem data fica de fora: a criação dela é o dia da importação."""
+    criada_aqui = or_(Client.source.is_(None), Client.source != FONTE_KOMMO)
+    return func.coalesce(Client.kommo_created_at, case((criada_aqui, _sp_no_banco(Client.created_at))))
+
+
+def _entrada(cliente: Client) -> datetime | None:
+    if cliente.kommo_created_at is not None:
+        return cliente.kommo_created_at
+    return _sp(cliente.created_at) if cliente.source != FONTE_KOMMO else None
+
+
+def _eventos_do_cliente(client_id: int, *filtros: Any) -> list[CalendarEvent]:
+    return (
+        db.session.query(CalendarEvent)
+        .join(EventClient, EventClient.event_id == CalendarEvent.id)
+        .filter(EventClient.client_id == client_id, CalendarEvent.cancelled_at.is_(None), *filtros)
+        .all()
+    )
+
+
+def _serialize_events(eventos: list[CalendarEvent]) -> list[dict[str, Any]]:
+    return [
+        {"event_id": ev.id, "start_at": ev.start_at.isoformat() if ev.start_at else None,
+         "sale_value": str(ev.sale_value) if ev.sale_value is not None else None}
+        for ev in eventos
+    ]
+
+
 def attributed_clients(window_start: datetime, window_end: datetime) -> list[dict[str, Any]]:
     """Clientes que entraram na janela com `utm_campaign` e os eventos que fecharam depois."""
+    entrada = _entrada_na_base()
     clientes = (
         Client.query.filter(Client.utm_campaign.isnot(None), Client.utm_campaign != "",
-                            Client.kommo_created_at >= window_start,
-                            Client.kommo_created_at < window_end)
-        .order_by(Client.kommo_created_at.asc()).all()
+                            entrada >= window_start, entrada < window_end)
+        .order_by(entrada.asc()).all()
     )
     saida = []
     for cliente in clientes:
-        eventos = (
-            db.session.query(CalendarEvent)
-            .join(EventClient, EventClient.event_id == CalendarEvent.id)
-            .filter(EventClient.client_id == cliente.id,
-                    CalendarEvent.cancelled_at.is_(None),
-                    CalendarEvent.start_at >= cliente.kommo_created_at)
-            .all()
-        )
+        inicio = _entrada(cliente)
+        eventos = _eventos_do_cliente(cliente.id, CalendarEvent.start_at >= inicio)
         saida.append({
             "client_id": cliente.id,
-            "created_at": cliente.kommo_created_at.date().isoformat(),
+            "created_at": inicio.date().isoformat(),
             "lead_origin": cliente.lead_origin,
             "utm_source": cliente.utm_source,
             "utm_medium": cliente.utm_medium,
             "utm_campaign": cliente.utm_campaign,
-            "events": [
-                {"event_id": ev.id, "start_at": ev.start_at.isoformat() if ev.start_at else None,
-                 "sale_value": str(ev.sale_value) if ev.sale_value is not None else None}
-                for ev in eventos
-            ],
+            "events": _serialize_events(eventos),
+        })
+    return saida
+
+
+def retornos_por_campanha(window_start: datetime, window_end: datetime) -> list[dict[str, Any]]:
+    """Fichas que já estavam na base e voltaram por anúncio no período (feature 334, FR-010).
+
+    Uma por (ficha, campanha), no primeiro contato da janela, com os eventos criados depois dele. A ficha que entrou
+    no mesmo dia do contato é lead, não retorno; a do Kommo sem data é antiga. A janela e os dias são de São Paulo; o
+    `momento` (UTC) só compara com o `created_at` do evento, também UTC.
+    """
+    momento_sp = _sp_no_banco(ConversaAnuncio.momento)
+    linhas = (
+        db.session.query(Conversa.client_id, AnuncioMeta.campanha_nome, func.min(ConversaAnuncio.momento))
+        .join(Conversa, Conversa.id == ConversaAnuncio.conversa_id)
+        .join(AnuncioMeta, AnuncioMeta.anuncio_id == ConversaAnuncio.anuncio_id)
+        .filter(ConversaAnuncio.tipo == CONTATO_ANUNCIO, Conversa.client_id.isnot(None),
+                AnuncioMeta.campanha_nome.isnot(None),
+                momento_sp >= window_start, momento_sp < window_end)
+        .group_by(Conversa.client_id, AnuncioMeta.campanha_nome)
+        .all()
+    )
+    saida = []
+    for client_id, campanha, momento in linhas:
+        cliente = db.session.get(Client, client_id)
+        entrada = _entrada(cliente) if cliente is not None else None
+        dia = _sp(momento).date()
+        if cliente is None or (entrada is not None and entrada.date() >= dia):
+            continue
+        saida.append({
+            "client_id": client_id,
+            "returned_at": dia.isoformat(),
+            "utm_source": UTM_SOURCE_DO_ANUNCIO,
+            "utm_campaign": campanha,
+            "events": _serialize_events(_eventos_do_cliente(client_id, CalendarEvent.created_at >= momento)),
         })
     return saida
 
@@ -823,12 +895,13 @@ def _weekly_series(inicio: date, fim: date, fotos, campanhas, conta, clientes) -
     return [{**s, "spend": _q2(s["spend"])} for s in semanas.values()]
 
 
-def _campaign_table(campanhas, clientes) -> list[dict[str, Any]]:
+def _campaign_table(campanhas, clientes, retornos=()) -> list[dict[str, Any]]:
     grupos: dict[tuple[str, str], dict[str, Any]] = {}
     for ln in campanhas:
         g = grupos.setdefault((ln.platform, ln.campaign_name), {
             "platform": ln.platform, "campaign_name": ln.campaign_name, "spend": Decimal(0),
-            "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "currency": ln.currency})
+            "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "returns": 0, "return_events": 0,
+            "currency": ln.currency})
         g["spend"] += ln.spend
         g["impressions"] += ln.impressions or 0
         g["clicks"] += ln.clicks or 0
@@ -840,6 +913,12 @@ def _campaign_table(campanhas, clientes) -> list[dict[str, Any]]:
         if g is not None:
             g["leads"] += 1
             g["events"] += len(cl["events"])
+    # Feature 334: a repescagem. O retorno não entra no custo por lead: a ficha já estava na base.
+    for rt in retornos:
+        g = pick_campaign_group(por_slug.get(normalize_campaign_name(rt["utm_campaign"]), []), rt.get("utm_source"))
+        if g is not None:
+            g["returns"] += 1
+            g["return_events"] += len(rt["events"])
     saida = []
     for g in sorted(grupos.values(), key=lambda x: -x["spend"]):
         saida.append({
@@ -875,13 +954,14 @@ def _runs_table(limite: int = 20) -> list[dict[str, Any]]:
 
 def desempenho_summary(inicio: date, fim: date, *, weeks: int | None = None) -> dict[str, Any]:
     """Tudo que a tela "Marketing → Desempenho" mostra (contracts/desempenho-api.md)."""
-    clientes = attributed_clients(datetime.combine(inicio, datetime.min.time()),
-                                  datetime.combine(fim + timedelta(days=1), datetime.min.time()))
+    janela = (datetime.combine(inicio, datetime.min.time()),
+              datetime.combine(fim + timedelta(days=1), datetime.min.time()))
+    clientes = attributed_clients(*janela)
     campanhas = _effective_campaign_rows(inicio, fim)
     fotos = _latest_snapshots(inicio, fim)
     conta = MarketingAccountMetric.query.filter(MarketingAccountMetric.metric_date >= inicio,
                                                 MarketingAccountMetric.metric_date <= fim).all()
-    tabela = _campaign_table(campanhas, clientes)
+    tabela = _campaign_table(campanhas, clientes, retornos_por_campanha(*janela))
     gasto = sum((Decimal(c["spend"]) for c in tabela), Decimal(0))
     if clientes:
         headline = {"kind": "leads", "value": len(clientes),

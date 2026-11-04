@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app import db
-from app.conversas import aviso_ops, equipe_ops, midia_ops
+from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops
 from app.conversas import constantes as K
 from app.conversas.relogio import agora_utc
 from app.integracoes import instagram_client as ic
@@ -92,7 +92,25 @@ def _processar_item(
         _aplicar_visto(item)
     if isinstance(item.get("postback"), dict):
         return _gravar_postback(item, chegadas), []
-    return None, []  # referral sozinho: o dado cru fica no aviso (Fase 3)
+    if isinstance(item.get("referral"), dict):
+        return _gravar_abertura(item), []
+    return None, []
+
+
+def _gravar_abertura(item: dict[str, Any]) -> int | None:
+    """A cliente abriu a conversa pelo anúncio e ainda não escreveu (``OPEN_THREAD``, feature 334):
+    a conversa nasce, o contato fica registrado e o perfil vem depois do commit."""
+    igsid = _contato(item, "sender")
+    if not igsid:
+        return None
+    conversa = _conversa(igsid)
+    anuncio_ops.contato_do_instagram(
+        conversa,
+        f"ref:{igsid}:{item.get('timestamp')}",
+        item["referral"],
+        _momento_ms(item.get("timestamp")),
+    )
+    return conversa.id
 
 
 def _contato(item: dict[str, Any], chave: str) -> str:
@@ -207,6 +225,9 @@ def _gravar_recebida(
     )
     if novas:
         _chegou_da_cliente(conversa, item, chegadas)
+    if isinstance(mensagem.get("referral"), dict):
+        momento = _momento_ms(item.get("timestamp"))
+        anuncio_ops.contato_do_instagram(conversa, str(mid), mensagem["referral"], momento)
     return conversa.id, midias
 
 
@@ -223,6 +244,9 @@ def _gravar_postback(item: dict[str, Any], chegadas: set[int]) -> int | None:
     novas, _ = _inserir_partes(conversa, item, [parte], K.RECEBIDA, K.ORIGEM_CONTATO)
     if novas:
         _chegou_da_cliente(conversa, item, chegadas)
+    if isinstance(postback.get("referral"), dict):
+        momento = _momento_ms(item.get("timestamp"))
+        anuncio_ops.contato_do_instagram(conversa, externo, postback["referral"], momento)
     return conversa.id
 
 

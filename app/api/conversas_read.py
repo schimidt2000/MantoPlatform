@@ -16,7 +16,7 @@ from flask_login import current_user
 from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.conversas import envio_ops, equipe_ops, leitura_ops, midia_ops
+from app.conversas import anuncio_ops, envio_ops, equipe_ops, leitura_ops, midia_ops
 from app.conversas.acesso import pode_conversas
 from app.conversas.configuracao import canais_ligados, cfg_whatsapp
 from app.conversas.constantes import (
@@ -87,6 +87,8 @@ def api_conversas_detalhe(conversa_id: int) -> Any:
             "notas": [
                 leitura_ops.serializar_nota(n) for n in equipe_ops.notas_da_conversa(conversa.id)
             ],
+            # Feature 334: o anúncio de onde a cliente veio, para o cabeçalho (só no detalhe).
+            "anuncio": anuncio_ops.anuncio_da_conversa(conversa.id),
         }
     )
 

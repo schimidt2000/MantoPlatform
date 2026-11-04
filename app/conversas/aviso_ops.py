@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
-from app.conversas import celular_ops, equipe_ops
+from app.conversas import anuncio_ops, celular_ops, equipe_ops
 from app.conversas import constantes as K
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.ficha_ops import ficha_pelo_telefone
@@ -140,12 +140,14 @@ def processar_aviso(aviso_id: int, cfg: CfgWhatsapp) -> str:
         logger.warning("[whatsapp] aviso %s falhou no processamento: %s", aviso_id, exc)
         return _devolver(aviso_id, f"{type(exc).__name__}: {exc}")
     _fechar(aviso_id, K.AVISO_PROCESSADO)
-    # O perfil antes do aviso no celular (o título é o nome); a mídia, que pode levar minutos, por
-    # último (SC-001 da 332: o celular toca em até 10 s).
+    # O perfil antes do aviso no celular (o título é o nome); a mídia, que pode levar minutos, depois
+    # (SC-001 da 332: o celular toca em até 10 s); a campanha do anúncio (334), que ninguém espera
+    # na tela, por último.
     if perfis:
         _atualizar_perfis(perfis)
     celular_ops.avisar_mensagens(chegadas)
     _baixar_midias(midias, cfg)
+    anuncio_ops.consultar_pendentes()
     return K.AVISO_PROCESSADO
 
 
@@ -284,6 +286,8 @@ def _vincular_cliente(conversa: Conversa) -> None:
     escolhida = ficha_pelo_telefone(conversa.telefone)
     if escolhida is not None:
         conversa.client_id = escolhida.id
+        # A conversa que já veio de anúncio e só agora acha a ficha (feature 334, FR-007).
+        anuncio_ops.aplicar_na_ficha(conversa, escolhida)
 
 
 def atualizar_previa(conversa: Conversa, tipo: str, texto: str | None, momento: datetime) -> None:
@@ -370,6 +374,9 @@ def _gravar_recebida(
     )
     if mensagem_id is None:
         return None  # reenvio: nada conta de novo
+    if isinstance(mensagem.get("referral"), dict):
+        # A cliente veio de um anúncio "clique para o WhatsApp" (feature 334).
+        anuncio_ops.contato_do_whatsapp(conversa, str(mensagem["id"]), mensagem["referral"], momento)
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento

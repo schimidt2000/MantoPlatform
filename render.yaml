@@ -115,6 +115,9 @@ services:
         sync: false
       - key: INSTAGRAM_ACCOUNT_ID
         sync: false
+      # Feature 334: token com `ads_read` para a campanha do anúncio; vazio usa o WHATSAPP_ACCESS_TOKEN.
+      - key: META_ANUNCIOS_TOKEN
+        sync: false
       # Feature 332: avisos no celular (Web Push). O par VAPID sai de `flask webpush-chaves`, rodado pelo
       # dono; vazio = desligado.
       - key: WEB_PUSH_VAPID_PUBLICA

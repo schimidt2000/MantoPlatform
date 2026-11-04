@@ -478,6 +478,10 @@ class Config:
     INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
     INSTAGRAM_PAGE_ID = os.getenv("INSTAGRAM_PAGE_ID", "").strip()
     INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "").strip()
+    # Feature 334: a consulta da campanha do anúncio (Graph `/{ad_id}?fields=campaign`). Vazio usa o
+    # WHATSAPP_ACCESS_TOKEN (o usuário do sistema do portfólio, que precisa de `ads_read`); sem os dois,
+    # a consulta fica desligada e só o anúncio é registrado.
+    META_ANUNCIOS_TOKEN = os.getenv("META_ANUNCIOS_TOKEN", "").strip()
     # Avisos no celular (feature 332, Web Push com VAPID). O par de chaves é da Plataforma, gerado
     # por `flask webpush-chaves` e colado no painel; vazio = desligado (Princípio XIV). O contato
     # vai no token VAPID para o serviço de avisos saber a quem reclamar.

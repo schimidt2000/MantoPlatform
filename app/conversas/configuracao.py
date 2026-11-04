@@ -103,6 +103,25 @@ def cfg_instagram() -> CfgInstagram:
     )
 
 
+def conexao_dos_anuncios() -> ConexaoMeta | None:
+    """A conexão da consulta da campanha do anúncio (feature 334), ou ``None`` quando ela está desligada.
+
+    Desligada sem token e com a trava do "envio pela Meta" (a cópia local, o verify): o anúncio fica
+    esperando e sai na primeira consulta liberada (FR-011). O token próprio vence o do WhatsApp.
+    """
+    config = current_app.config
+    token = config.get("META_ANUNCIOS_TOKEN") or config.get("WHATSAPP_ACCESS_TOKEN") or ""
+    if bool(config.get("WHATSAPP_SUPPRESS_SEND", True)) or not token:
+        return None
+    return ConexaoMeta(
+        base=config.get("WHATSAPP_GRAPH_BASE") or "https://graph.facebook.com",
+        versao=config.get("WHATSAPP_GRAPH_VERSION") or "v26.0",
+        token=token,
+        phone_number_id="",
+        travada=False,
+    )
+
+
 def canais_ligados() -> list[str]:
     """Os canais configurados, na ordem da lista (feature 330): é o que liga o menu e o filtro."""
     ligados = []

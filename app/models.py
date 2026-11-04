@@ -2068,6 +2068,12 @@ class Client(db.Model):
     utm_source = db.Column(db.String(200), nullable=True)
     utm_medium = db.Column(db.String(200), nullable=True)
     utm_campaign = db.Column(db.String(200), nullable=True)
+    # Feature 334: o anúncio da Meta que trouxe a cliente (o primeiro, nunca sobrescrito) e o mais
+    # recente (a repescagem). UTC. A campanha de cada um está em `anuncios_meta`.
+    anuncio_origem_id = db.Column(db.String(64), nullable=True)
+    anuncio_origem_em = db.Column(db.DateTime, nullable=True)
+    anuncio_recente_id = db.Column(db.String(64), nullable=True)
+    anuncio_recente_em = db.Column(db.DateTime, nullable=True)
     notes = db.Column(db.Text, nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
@@ -4183,6 +4189,48 @@ class PushAssinatura(db.Model):
     navegador = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ultimo_aviso_em = db.Column(db.DateTime, nullable=True)
+
+
+class ConversaAnuncio(db.Model):
+    """Um contato da cliente pelo anúncio (ou publicação) da Meta, na conversa (feature 334).
+
+    Vem do `referral` do aviso: no WhatsApp, junto da mensagem; no Instagram, também ao abrir a
+    conversa. ``chave`` (UNIQUE) é o wamid/mid ou ``ref:{igsid}:{timestamp}``: o reenvio não duplica.
+    Só ``tipo = anuncio`` é consultado na Meta e vira origem da ficha.
+    """
+
+    __tablename__ = "conversa_anuncios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    canal = db.Column(db.String(20), nullable=False)
+    chave = db.Column(db.String(255), nullable=False, unique=True)
+    tipo = db.Column(db.String(20), nullable=False)
+    anuncio_id = db.Column(db.String(64), nullable=True, index=True)
+    titulo = db.Column(db.String(255), nullable=True)
+    link = db.Column(db.Text, nullable=True)
+    momento = db.Column(db.DateTime, nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False)
+
+
+class AnuncioMeta(db.Model):
+    """O que a Meta disse de um anúncio (feature 334): o nome e a campanha. Um por anúncio.
+
+    ``consultado_em`` vazio = nunca consultado. ``definitivo`` = a Meta disse que não existe: não
+    tenta de novo. Falha de permissão ou de rede fica em ``erro`` e volta depois de 24 h.
+    """
+
+    __tablename__ = "anuncios_meta"
+
+    anuncio_id = db.Column(db.String(64), primary_key=True)
+    nome = db.Column(db.String(255), nullable=True)
+    campanha_id = db.Column(db.String(64), nullable=True)
+    campanha_nome = db.Column(db.String(255), nullable=True)
+    consultado_em = db.Column(db.DateTime, nullable=True)
+    erro = db.Column(db.String(255), nullable=True)
+    definitivo = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
 
 class OrcamentoEnvio(db.Model):

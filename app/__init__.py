@@ -764,6 +764,12 @@ def create_app():
         app.logger.warning(
             "[instagram] Direct desligado: faltam %s (painel do Render).", ", ".join(_instagram_faltando)
         )
+    # Feature 334 (XIV): a campanha do anúncio vem da Meta com o token próprio ou o do WhatsApp.
+    app.logger.info(
+        "[anuncios] consulta da campanha ligada=%s (token %s)",
+        bool(app.config.get("META_ANUNCIOS_TOKEN") or app.config.get("WHATSAPP_ACCESS_TOKEN")),
+        "próprio" if app.config.get("META_ANUNCIOS_TOKEN") else "do WhatsApp",
+    )
     # Feature 332 (XIV): sem o par VAPID, ou com um par que não confere, os avisos no celular ficam
     # desligados (`push_ops.chaves`).
     from app.push.webpush import par_valido as _par_vapid_valido

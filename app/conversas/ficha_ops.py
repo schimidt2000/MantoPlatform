@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from app import db
 from app.clientes import client_ops
 from app.clientes.importer import normalize_phone
+from app.conversas import anuncio_ops
 from app.conversas import constantes as K
 from app.conversas.leitura_ops import telefone_legivel
 from app.conversas.recusa import Recusa, campo
@@ -97,12 +98,16 @@ def _nova_ou_existente(nome: Any, telefone: Any, *, e164: bool = False) -> tuple
     return ficha, reaproveitada
 
 
-def _ficha_dos_dados(dados: dict[str, Any]) -> tuple[Client, bool]:
-    """``{"client_id"}`` (ou ``{"id"}``) liga a uma ficha existente; ``{"nome", "telefone"}`` cria."""
+def _ficha_dos_dados(dados: dict[str, Any]) -> tuple[Client, bool, bool]:
+    """``{"client_id"}`` (ou ``{"id"}``) liga a uma ficha existente; ``{"nome", "telefone"}`` cria.
+
+    Devolve (ficha, reaproveitada, nova): ``nova`` só para a ficha criada agora (feature 334).
+    """
     if "client_id" in dados or "id" in dados:
-        return _ficha_existente(dados.get("client_id", dados.get("id"))), False
+        return _ficha_existente(dados.get("client_id", dados.get("id"))), False, False
     if "nome" in dados or "telefone" in dados:
-        return _nova_ou_existente(dados.get("nome"), dados.get("telefone"))
+        ficha, reaproveitada = _nova_ou_existente(dados.get("nome"), dados.get("telefone"))
+        return ficha, reaproveitada, not reaproveitada
     raise campo("cliente", K.TEXTO_ESCOLHA_A_FICHA)
 
 
@@ -113,9 +118,10 @@ def ligar(conversa_id: int, dados: Any) -> Ligacao:
         Recusa: 404 (conversa); 422 em ``cliente``, ``nome`` ou ``telefone``.
     """
     conversa = _conversa_ou_404(conversa_id)
-    ficha, reaproveitada = _ficha_dos_dados(dados if isinstance(dados, dict) else {})
+    ficha, reaproveitada, nova = _ficha_dos_dados(dados if isinstance(dados, dict) else {})
     conversa.client_id = ficha.id
     conversa.ficha_manual = True
+    anuncio_ops.ao_ganhar_ficha(conversa, ficha, nova=nova)
     db.session.commit()
     return Ligacao(conversa, reaproveitada)
 
@@ -143,8 +149,9 @@ def ficha_para_envio(conversa: Conversa, cliente: Any, nome_do_orcamento: str | 
     """
     if conversa.cliente is not None:
         return conversa.cliente
+    nova = False
     if isinstance(cliente, dict) and cliente:
-        ficha, _ = _ficha_dos_dados(cliente)
+        ficha, _, nova = _ficha_dos_dados(cliente)
         conversa.ficha_manual = True
     elif conversa.canal == K.CANAL_WHATSAPP and conversa.telefone and not conversa.ficha_manual:
         ficha = ficha_pelo_telefone(conversa.telefone)
@@ -155,9 +162,11 @@ def ficha_para_envio(conversa: Conversa, cliente: Any, nome_do_orcamento: str | 
                 or telefone_legivel(conversa.telefone)
                 or conversa.telefone
             )
-            ficha, _ = _nova_ou_existente(nome, conversa.telefone, e164=True)
+            ficha, reaproveitada = _nova_ou_existente(nome, conversa.telefone, e164=True)
+            nova = not reaproveitada
     else:
         raise campo("cliente", K.TEXTO_ESCOLHA_A_FICHA)
     conversa.client_id = ficha.id
+    anuncio_ops.ao_ganhar_ficha(conversa, ficha, nova=nova)
     db.session.commit()
     return ficha

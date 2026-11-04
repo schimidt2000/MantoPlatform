@@ -442,3 +442,19 @@ FORMULARIOS_PUBLICOS = (
 )
 TEXTO_DO_FORMULARIO = "Oi, {nome}! Para reservarmos a data, preencha o formulário: {link}"
 TEXTO_DO_FORMULARIO_SEM_NOME = "Oi! Para reservarmos a data, preencha o formulário: {link}"
+
+# ── De qual anúncio veio cada cliente (feature 334) ─────────────────────────────────────────────
+# O tipo do contato: só `anuncio` é consultado na Meta e vira origem; `publicacao` (clique numa
+# publicação do Facebook/Instagram, WhatsApp) e `outro` (demais origens do Instagram) ficam registrados.
+CONTATO_ANUNCIO = "anuncio"
+CONTATO_PUBLICACAO = "publicacao"
+CONTATO_OUTRO = "outro"
+# A origem na ficha (`Client.lead_origin`) e a atribuição que o Desempenho (feature 256) já lê:
+# `utm_source=meta` vira "Meta Ads"; `utm_campaign` é o nome da campanha do primeiro anúncio.
+ORIGEM_DO_ANUNCIO = {CANAL_WHATSAPP: "Anúncio do WhatsApp", CANAL_INSTAGRAM: "Anúncio do Instagram"}
+ORIGEM_ORGANICA = {CANAL_WHATSAPP: "WhatsApp", CANAL_INSTAGRAM: "Instagram"}
+UTM_SOURCE_DO_ANUNCIO = "meta"
+UTM_MEDIUM_DO_ANUNCIO = "anuncio"
+# A consulta da campanha: até 10 por vez; a falha (permissão, rede) volta depois de 24 h.
+ANUNCIOS_POR_VEZ = 10
+RECONSULTA_DO_ANUNCIO = timedelta(hours=24)

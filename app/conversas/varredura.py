@@ -12,7 +12,7 @@ import logging
 from sqlalchemy import text
 
 from app import db
-from app.conversas import aviso_ops, equipe_ops, midia_ops
+from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc
 from app.conversas.configuracao import cfg_whatsapp
@@ -90,10 +90,12 @@ def ciclo_de_varredura() -> dict[str, int]:
     """Uma passada completa; cada rotina isolada (a falha de uma não impede a outra).
 
     O alerta de cliente esperando (feature 328) vem por último: depois dos avisos refeitos, a
-    resposta que chegou atrasada já encerrou a espera e não vira aviso falso.
+    resposta que chegou atrasada já encerrou a espera e não vira aviso falso. A campanha do anúncio
+    que a Meta recusou volta aqui, uma vez por dia (feature 334).
     """
     resumo: dict[str, int] = {}
-    for rotina in (reprocessar_avisos, reprocessar_midias, equipe_ops.alertar_esperas):
+    rotinas = (reprocessar_avisos, reprocessar_midias, anuncio_ops.reconsultar, equipe_ops.alertar_esperas)
+    for rotina in rotinas:
         try:
             resumo.update(rotina())
         except Exception as exc:  # noqa: BLE001 — a próxima passada tenta de novo
