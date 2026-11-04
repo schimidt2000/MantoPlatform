@@ -630,6 +630,9 @@ def cen_10b() -> None:
 
 
 def cen_11() -> None:
+    # Os cenários 7 a 10 deixam a espera às 13h44 de HOJE: rodando antes das 14 h, a resposta de agora
+    # seria "anterior" à espera e não a encerraria (o verify só passava à tarde). Espera de 16 min atrás.
+    _esperando_desde(estado["espera"], datetime.now(UTC).replace(tzinfo=None) - timedelta(minutes=16))
     r = _texto(estado["ana"], estado["espera"], "c11", "Oi, Carla! Desculpe a demora.")
     _garante(r.status_code == 201, f"resposta → {r.status_code}")
     _garante(_conversa(WA_ESPERA).aguardando_desde is None, "a resposta não encerrou a espera")
