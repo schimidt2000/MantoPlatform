@@ -120,11 +120,23 @@ export interface ListaDeConversas {
   proximo: string | null;
 }
 
+/** Feature 334: o anúncio (ou a publicação) de onde a cliente veio, o mais recente da conversa. */
+export interface AnuncioDaConversa {
+  tipo: "anuncio" | "publicacao";
+  titulo: string | null;
+  /** A campanha, quando a Meta já respondeu (só no anúncio). */
+  campanha: string | null;
+  link: string | null;
+  quando: string | null;
+}
+
 export interface ConversaAbertaResposta {
   conversa: ConversaResumo;
   mensagens: Mensagem[];
   tem_mais: boolean;
   notas?: Nota[];
+  /** Feature 334. Ausente em backend velho. */
+  anuncio?: AnuncioDaConversa | null;
 }
 
 export interface ModeloAprovado {

@@ -57,6 +57,24 @@ export interface ClientDetail extends ClientSummary {
    */
   cancelamentos?: { quantidade: number; retido: number };
   form_history: ClientFormHistoryItem[];
+  /** Feature 334: de onde a cliente veio. Ausente em backend velho. */
+  origem?: ClientOrigem;
+}
+
+/** Um anúncio da Meta na ficha (feature 334): o título que a cliente viu e a campanha. */
+export interface ClientAnuncio {
+  anuncio_id: string;
+  titulo: string | null;
+  campanha: string | null;
+  quando: string | null;
+}
+
+export interface ClientOrigem {
+  lead_origin: string | null;
+  /** O `utm_campaign` da ficha (a campanha do primeiro anúncio, quando foi ele que a trouxe). */
+  campanha: string | null;
+  primeiro: ClientAnuncio | null;
+  recente: ClientAnuncio | null;
 }
 
 /** Um mês do gráfico de novos clientes (origem agregada no servidor). */

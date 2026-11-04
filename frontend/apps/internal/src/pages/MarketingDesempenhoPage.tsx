@@ -85,7 +85,7 @@ function TabelaCampanhas({ campanhas }: { campanhas: DesempenhoCampaign[] }) {
   if (campanhas.length === 0) return <p className="text-sm text-muted">Nenhuma campanha com gasto no período.</p>;
   return (
     <div className="-mx-4 overflow-x-auto px-4">
-      <Table className="min-w-[760px]">
+      <Table className="min-w-[840px]">
         <thead>
           <TableRow head>
             <TableCell as="th">Plataforma</TableCell>
@@ -97,6 +97,7 @@ function TabelaCampanhas({ campanhas }: { campanhas: DesempenhoCampaign[] }) {
             <TableCell as="th" align="right">Custo/lead</TableCell>
             <TableCell as="th" align="right">Eventos</TableCell>
             <TableCell as="th" align="right">Custo/evento</TableCell>
+            <TableCell as="th" align="right">Retornos</TableCell>
           </TableRow>
         </thead>
         <tbody>
@@ -111,6 +112,15 @@ function TabelaCampanhas({ campanhas }: { campanhas: DesempenhoCampaign[] }) {
               <TableCell align="right" className="tabular-nums">{brl(c.cost_per_lead)}</TableCell>
               <TableCell align="right" className="tabular-nums">{num(c.events)}</TableCell>
               <TableCell align="right" className="tabular-nums">{brl(c.cost_per_event)}</TableCell>
+              {/* Feature 334: a repescagem — ficha antiga que voltou por anúncio; fora do custo por lead. */}
+              <TableCell align="right" className="tabular-nums">
+                {num(c.returns ?? 0)}
+                {c.return_events ? (
+                  <span className="block text-[11px] text-muted">
+                    {num(c.return_events)} {c.return_events === 1 ? "evento" : "eventos"}
+                  </span>
+                ) : null}
+              </TableCell>
             </TableRow>
           ))}
         </tbody>
@@ -302,7 +312,10 @@ function Conteudo({ data }: { data: DesempenhoResponse }) {
         </div>
       </details>
 
-      <Bloco title="Campanhas" hint="leads e eventos vêm do utm_campaign dos leads importados do CRM">
+      <Bloco
+        title="Campanhas"
+        hint="leads: fichas que entraram no período pela campanha (do Kommo ou da conversa) · retornos: fichas que já estavam na base e voltaram por um anúncio da campanha"
+      >
         <TabelaCampanhas campanhas={data.campaigns} />
       </Bloco>
 

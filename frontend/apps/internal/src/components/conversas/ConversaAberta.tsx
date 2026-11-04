@@ -23,6 +23,7 @@ import { FichaDaConversaDialog } from "./FichaDaConversaDialog";
 import { IconeDoCanal } from "./IconeDoCanal";
 import { Mensagem } from "./Mensagem";
 import { NotaInterna } from "./NotaInterna";
+import { OrigemDaConversa } from "./OrigemDaConversa";
 import { ResponsavelDaConversa } from "./ResponsavelDaConversa";
 
 /**
@@ -208,6 +209,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
         )}
       </header>
       <FichaDaConversaDialog conversa={conversa} open={fichaAberta} onOpenChange={setFichaAberta} />
+      {dados.data.anuncio ? <OrigemDaConversa anuncio={dados.data.anuncio} /> : null}
       <ResponsavelDaConversa conversa={conversa} usuarioId={usuario.data?.id ?? null} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-3 py-3">
