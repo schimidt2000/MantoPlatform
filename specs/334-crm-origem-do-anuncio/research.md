@@ -50,8 +50,11 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
 - **Resultado**:
   - sucesso: grava o nome e a campanha em `anuncios_meta` e propaga a campanha para as fichas cujo primeiro anúncio é
     esse e que ainda não têm `utm_campaign`;
-  - 404 ou código 100 da Graph (não existe): erro definitivo, sem nova tentativa;
-  - permissão (10, 200, 190) e falha de rede: o motivo fica, e a varredura tenta de novo no dia seguinte.
+  - HTTP 404 ou código 803 da Graph (não existe): erro definitivo, sem nova tentativa;
+  - permissão (10, 200, 190), o código 100/33 e falha de rede: o motivo fica, e a varredura tenta de novo no dia
+    seguinte. **Revisto na implementação**: o 100/33 ("does not exist, cannot be loaded due to missing permissions")
+    é a mesma resposta para o anúncio apagado e para o token sem acesso à conta de anúncios; tratado como definitivo,
+    todo anúncio capturado antes de a permissão chegar ficaria sem campanha para sempre (`docs/05` 195).
 - **Nunca levanta**: o aviso da Meta já foi gravado e fechado.
 
 ## R5 — O Desempenho

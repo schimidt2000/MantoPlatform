@@ -4,8 +4,9 @@ Nenhum endpoint novo. Campos novos, opcionais no front (o backend antigo não os
 
 ## `GET /api/conversas/<id>` (gate `pode_conversas`)
 
-- Ganha `anuncio`: `{"tipo": "anuncio" | "publicacao" | "outro", "titulo": str | null, "campanha": str | null, "quando":
-  ISO UTC}` — o contato mais recente da conversa — ou `null`.
+- Ganha `anuncio`: `{"tipo": "anuncio" | "publicacao", "titulo": str | null, "campanha": str | null, "link": str | null,
+  "quando": ISO UTC}` — o contato mais recente da conversa por anúncio ou publicação (o `outro` do Instagram não
+  aparece) — ou `null`. `campanha` só no anúncio, depois que a Meta respondeu.
 
 ## `GET /api/clientes/<id>` (gate `_require_vendas` da base de clientes)
 

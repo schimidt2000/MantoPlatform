@@ -1534,6 +1534,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   data" / "sem card"); metas atrasadas com atalho; lista de rodadas com arquivos rejeitados e
   motivo. Estado vazio explica onde salvar os exports e quando a rotina roda. Mobile: tabelas
   rolam dentro do bloco, página sem rolagem horizontal (375 px conferido).
+- **Feature 334**: os leads contam também a ficha criada pela conversa (pela data em que entrou na base), e a tabela
+  de campanhas ganha **Retornos** (fichas que já estavam na base e voltaram por anúncio da campanha; os eventos
+  depois do retorno numa sublinha), fora do custo por lead. O texto de ajuda do bloco diz de onde vêm os dois.
 - **API**: `GET /api/marketing/desempenho`.
 - **Rotina que alimenta**: `scripts/marketing/` (collect → publish → checks → report), scheduled
   task `auditoria-marketing-semanal` (segunda 06:30, catch-up), skill local `marketing-auditor`.
@@ -1811,6 +1814,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Métricas no topo da lista (feature 220)**: KPIs **Novos este mês**, **Com evento** e
   **Recorrentes (2+ eventos)** + barras de **novos clientes por mês** (12 meses; tooltip com a
   quebra formulário/Kommo/manual). `GET /api/clientes/metricas`.
+- **Origem (feature 334)**: no card **Contato**, as linhas **Origem** (o `lead_origin`; sem anúncio, com a
+  campanha do Kommo), **Primeiro anúncio** (“título” · campanha · dia) e **Anúncio mais recente** (só quando é outro
+  contato: a repescagem). O dia sai no fuso de São Paulo.
 - **Ficha (`/clientes/:id`, feature 220)**: no card **Eventos**, o cancelado não aparece (feature 312; vê-se na
   página de Cancelamentos); o cabeçalho diz "N evento(s) · total vendido", e o total, que soma o retido (306),
   ganha a sublinha "inclui R$ X retidos de N cancelamento(s)". No histórico de formulários, o evento de um
@@ -2109,6 +2115,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   de quem está logado (outra pessoa pode ter usado o mesmo navegador), e "ativado" só aparece com o servidor
   confirmando. **Sair** desativa os avisos deste aparelho (o aviso traz o nome e o trecho da cliente). Falha ao ler
   o estado: "Não foi possível carregar os avisos. Tente novamente."
+- **De onde a cliente veio** (feature 334): sob o cabeçalho, a linha "Veio do anúncio “{título}” · {campanha}"
+  (ou "Veio da publicação …"), com o anúncio mais recente da conversa. A campanha aparece depois que a Meta
+  responde; o título abre o anúncio quando a Meta mandou o link. No celular a linha corta (o texto inteiro fica no
+  `title`). Sem anúncio, nada aparece.
 - **Orçamento, formulário e ficha pela conversa** (feature 333):
   - **Cabeçalho**: sem ficha, **Ligar à ficha**; com ficha, **Ver ficha** e o botão **Trocar ficha** (ícone),
     que abre o mesmo diálogo com **Remover vínculo**. O diálogo busca a ficha pelo nome ou telefone ou cria uma

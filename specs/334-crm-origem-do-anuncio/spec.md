@@ -105,7 +105,9 @@ no período (a repescagem), com os eventos fechados depois.
   cliente nem ao processamento da mensagem.
 - **Ambiente local**: a consulta à Meta fica travada como o envio (a mesma trava); o resto funciona.
 - **Mesmo anúncio em várias conversas**: uma consulta só à Meta.
-- **Anúncio apagado na Meta** (404): fica registrado como "sem campanha", sem nova tentativa.
+- **Anúncio apagado na Meta** (404): fica registrado como "sem campanha", sem nova tentativa. Quando a Meta responde
+  com a mensagem que também serve para "sem acesso à conta de anúncios" (código 100/33), a tentativa continua, uma
+  vez por dia (research R4).
 - **A campanha muda de nome na Meta**: vale o nome da consulta; não há reconsulta automática.
 - **Ficha já com origem** (de um formulário com UTM, ou de outro anúncio): o primeiro anúncio e a origem não mudam; o
   mais recente, sim.
@@ -167,10 +169,11 @@ conferência por conexão separada e limpeza no `finally`.
 | 5 | Ficha nascida sem anúncio (envio do orçamento, WhatsApp e Instagram); ficha antiga ligada | "WhatsApp" / "Instagram"; a antiga continua sem origem | não |
 | 6 | A Meta recusa a consulta (sem permissão); a varredura no dia seguinte | sem campanha e com o motivo; depois a campanha entra no anúncio e na ficha | **sim** |
 | 7 | Ambiente travado; sem token | nenhuma consulta sai; o contato fica registrado | **sim** |
-| 8 | Desempenho | o lead da conversa conta na campanha; o retorno da ficha antiga conta em "Retornos" | não |
+| 8 | Desempenho | o lead da conversa conta na campanha; o retorno da ficha antiga conta em "Retornos", com o evento depois dele; a ficha das 22 h de ontem (São Paulo) e a do Kommo sem data ficam fora dos leads de hoje | não |
 | 9 | Conversa e ficha na API | o anúncio no cabeçalho; a origem, o primeiro e o mais recente na ficha | não |
-| 10 | Clique em publicação | registrado como publicação, sem consulta e sem origem de anúncio | não |
-| 11 | Limpeza | registros e usuários de teste apagados | — |
+| 10 | Clique em publicação | registrado como publicação, sem consulta e sem origem de anúncio; os anúncios que esperaram a trava saem | não |
+| 11 | Ficha do Kommo com origem chega por anúncio; ficha existente ligada à mão; ficha que nasce depois; consulta que quebra; campanha que ficou para trás (convergência) | a origem do Kommo fica e o primeiro anúncio é registrado, com o token próprio; as outras ganham a origem do anúncio; o aviso fecha processado; a varredura repõe a campanha | não |
+| 12 | Limpeza | registros e usuários de teste apagados | — |
 
 Conferência de tela: o cabeçalho da conversa com o anúncio; a ficha da cliente com a origem; a tabela de campanhas do
 Desempenho com "Retornos". Em desktop e 375×812.

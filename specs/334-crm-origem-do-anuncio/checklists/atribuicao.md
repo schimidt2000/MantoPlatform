@@ -10,17 +10,17 @@
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_334.py` verde (e 325/328/330/332/333), com conexão separada e os cenários que falham
-- [ ] CHK004 Tela aberta de verdade, em desktop e em 375×812
-- [ ] CHK005 Migration manual criada e aplicada no `manto_local`; downgrade ensaiado
-- [ ] CHK006 `scripts/validar_startcommand.py` — não se aplica (sem mudança no `startCommand`)
-- [ ] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
-- [ ] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03`; `04`, `05` e o plano
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo revisado pelo Princípio XV, lido na tela aberta
-- [ ] CHK011 Antes de "em produção": git limpo, `docs/03` batendo, sonda `/api/`
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
+- [x] CHK003 `verify_334.py` verde (e 325/328/330/332/333), com conexão separada e os cenários que falham
+- [x] CHK004 Tela aberta de verdade, em desktop e em 375×812
+- [x] CHK005 Migration manual criada e aplicada no `manto_local`; downgrade ensaiado
+- [x] CHK006 `scripts/validar_startcommand.py` — não se aplica (sem mudança no `startCommand`)
+- [x] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
+- [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03`; `04`, `05` e o plano
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps
+- [x] CHK010 Texto novo revisado pelo Princípio XV, lido na tela aberta
+- [x] CHK011 Antes de "em produção": git limpo, `docs/03` batendo, sonda `/api/` — **não publicado** (o dono adiou o push; `docs/03` marca NÃO PUBLICADO)
 
 ## Captura
 

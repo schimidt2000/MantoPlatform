@@ -637,6 +637,17 @@ Pontos que valem para quem for ler esses dados:
   - `conversas.ficha_manual` (Boolean, `server_default false`): a ficha (ou a falta dela, depois de "Remover
     vínculo") foi escolhida à mão; a ligação automática pelo telefone não age.
   - `orcamento_history.client_id` (SET NULL, indexado).
+- **Origem do anúncio** (feature 334, migration `d334b2c4e6f8`, aditiva sobre `c333e1a5b7d9`). Detalhe em
+  `specs/334-crm-origem-do-anuncio/data-model.md`.
+  - `conversa_anuncios`: cada contato pelo anúncio (ou publicação) da Meta, do `referral` do aviso. `conversa_id`
+    (CASCADE, indexado), `canal`, `chave` (255, `uq_conversa_anuncios_chave`: o wamid/mid ou
+    `ref:{igsid}:{timestamp}` na abertura do Instagram sem mensagem), `tipo` (`anuncio` \| `publicacao` \|
+    `outro`), `anuncio_id` (64, indexado), `titulo`, `link`, `momento` e `created_at` (UTC).
+  - `anuncios_meta`: um por anúncio (`anuncio_id` PK), o que a Graph respondeu (`nome`, `campanha_id`,
+    `campanha_nome`), `consultado_em` (vazio = na fila), `erro` e `definitivo` (a Meta disse que não existe: 404
+    ou código 803).
+  - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
+    `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
 
 ### 2.8 EducaManto
 
@@ -1196,7 +1207,12 @@ Schema (migration `c4d1e7b2a9f3`): `marketing_agent_runs`, `marketing_import_fil
 (única por plataforma+campanha+`period_start`+`period_end`), `marketing_account_metrics`
 (plataforma+dia), `marketing_ad_spend_batches` (plataforma+`month_ref`, 1:1 com
 `special_expenses`), `marketing_ad_spend_lines`; `marketing_posts.permalink`;
-`clients.lead_origin/utm_source/utm_medium/utm_campaign` (preenchidos pelo importador do Kommo).
+`clients.lead_origin/utm_source/utm_medium/utm_campaign` (preenchidos pelo importador do Kommo e, desde a feature
+334, pela conversa que veio de anúncio: `utm_source=meta`, `utm_medium=anuncio`, `utm_campaign` = campanha do
+primeiro anúncio). O lead do período conta pela data em que a ficha entrou na base, no horário de São Paulo:
+`kommo_created_at` (já de São Paulo) ou, na ficha criada na Plataforma, `created_at` convertido de UTC (a do Kommo
+sem data fica de fora). Cada campanha ganha `returns` e
+`return_events`: fichas que já estavam na base e voltaram por anúncio dela no período (334).
 
 Leitura para a tela: `GET /api/marketing/desempenho?weeks=4|12|26` ou `?start&end` (gate
 MARKETING/SUPERADMIN, `marketing_read.py`). `GET /api/gastos` passa a devolver `marketing_batch`
@@ -2005,6 +2021,24 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
 
+**Origem do anúncio (feature 334, Fase 3b do plano).** Nenhum endpoint novo. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/334-crm-origem-do-anuncio/contracts/api.md`.
+- **Captura** (`anuncio_ops`, dentro da transação do aviso, sem chamada externa): `messages[].referral` do WhatsApp
+  (`source_type` `ad` = anúncio, `post` = publicação) em `aviso_ops._gravar_recebida`; no Instagram, o
+  `referral` do item (a abertura `OPEN_THREAD`, que cria a conversa), da mensagem ou do botão, em
+  `instagram_ops`. Só `anuncio` entra na fila da consulta e vira origem.
+- **Campanha**: `anuncio_ops.consultar_pendentes()` depois do commit de cada aviso (por último, depois do celular e
+  das mídias) e `reconsultar()` na varredura, que refaz a falha depois de 24 h. `GET /{ad_id}?fields=name,campaign`
+  pelo `whatsapp_client.requisitar` (`meta_anuncios_client`); claim por linha (`FOR UPDATE SKIP LOCKED`), até 10
+  por vez. A resposta propaga o `utm_campaign` para as fichas que esse anúncio trouxe. Nunca levanta.
+- **Ficha**: `anuncio_ops.aplicar_na_ficha` na captura e sempre que a conversa ganha ficha (`ficha_ops.ligar`,
+  `ficha_para_envio`, `aviso_ops._vincular_cliente`); `ao_ganhar_ficha` dá o canal ("WhatsApp"/"Instagram") à
+  ficha criada agora sem anúncio.
+- **Leitura**: `GET /api/conversas/<id>` ganha `anuncio` (o contato mais recente por anúncio ou publicação: `tipo`,
+  `titulo`, `campanha`, `link`, `quando`; só no detalhe, a lista não muda); `GET /api/clientes/<id>` ganha `origem`
+  (`lead_origin`, `campanha`, `primeiro`, `recente`); `GET /api/marketing/desempenho` ganha `returns` e
+  `return_events` por campanha.
+
 **Orçamento e formulário pela conversa (feature 333, Fase 3a do plano).** O portão da Fase 3 é "um orçamento de
 verdade vai da conversa à venda sem copiar e colar". Fluxo e invariantes em `docs/04` §6; contrato em
 `specs/333-crm-orcamento-na-conversa/contracts/api.md`.
@@ -2373,6 +2407,7 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
+| `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
 | `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
 | `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
@@ -2850,6 +2885,11 @@ aviso `[whatsapp] Conversas desligado: faltam …` na subida; `docs/05` 178):
 `[instagram] Direct desligado: faltam …` na subida; `docs/05` 186): `INSTAGRAM_ACCESS_TOKEN` (token da Página ou
 de usuário do sistema com a Página atribuída), `INSTAGRAM_PAGE_ID` (envio) e `INSTAGRAM_ACCOUNT_ID` (filtro do
 aviso). Usa também o `WHATSAPP_APP_SECRET` e o `WHATSAPP_VERIFY_TOKEN` (mesmo app) e a mesma trava.
+
+**Origem do anúncio (feature 334)** — `META_ANUNCIOS_TOKEN`, `sync: false`, vazio por padrão: a consulta da
+campanha usa então o `WHATSAPP_ACCESS_TOKEN`, que precisa de `ads_read` sobre a conta de anúncios da Manto
+(`docs/05` 194). Sem os dois, ou com a trava `WHATSAPP_SUPPRESS_SEND`, a consulta fica desligada e o anúncio
+espera na fila; o contato é registrado do mesmo jeito. Log na subida: `[anuncios] consulta da campanha ligada=…`.
 
 **Avisos no celular (feature 332)** — `WEB_PUSH_VAPID_PUBLICA` e `WEB_PUSH_VAPID_PRIVADA`, `sync: false`, vazias
 por padrão (= desligado, aviso `[push] Avisos no celular desligados: faltam …` na subida; `docs/05` 190). O par sai

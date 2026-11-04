@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **334-crm-origem-do-anuncio** | *(NÃO PUBLICADO; sobre a 333)* De qual anúncio veio cada cliente, Fase 3b do `docs/PLANO_CRM_PROPRIO.md`: o `referral` de quem clica no anúncio (WhatsApp e Instagram) vira contato na conversa; a campanha vem da Meta depois do commit (falta `ads_read`); a ficha guarda o primeiro e o mais recente anúncio e o orgânico ganha o canal; o Desempenho conta o lead da conversa e os retornos | 2026-11-04 | `d334b2c4e6f8` | (aqui) | — |
 | **333-crm-orcamento-na-conversa** | *(NÃO PUBLICADO; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
 | **332-crm-avisos-no-celular** | *(NÃO PUBLICADO; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
 | **330-crm-instagram-direct** | *(NÃO PUBLICADO; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
@@ -362,7 +363,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 333, 332, 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 334, 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -396,6 +397,66 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 334 — De qual anúncio veio cada cliente   (334-crm-origem-do-anuncio · 2026-11-04 · migration `d334b2c4e6f8`)
+
+> **NÃO PUBLICADO** — branch `334-crm-origem-do-anuncio`, feita **sobre a `333-crm-orcamento-na-conversa`** (325 → 328
+> → 330 → 332 → 333 → 334; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/334-crm-origem-do-anuncio/`.
+
+**O pedido.** O dono disse "começar a 3b" (04/11): ver de qual campanha cada cliente veio, o motivo número um do CRM
+próprio. Quem clica num anúncio "clique para o WhatsApp" (ou abre o Direct pelo anúncio) chega com o `referral` no
+aviso da Meta, mas só com o id e o título do anúncio. Decisões do dono:
+- a campanha **é perguntada à Meta** pelo id do anúncio; até a permissão `ads_read` existir, fica só o anúncio, e a
+  campanha chega sozinha depois;
+- a ficha guarda **o anúncio mais antigo e o mais recente** ("para campanhas de repescagem, por exemplo");
+- quem chega sem anúncio ganha **o canal** como origem ("WhatsApp"/"Instagram").
+
+**O que mudou.**
+- **Captura** (`anuncio_ops`, dentro da transação do aviso): `conversa_anuncios`, um por contato, com a chave do
+  wamid/mid (ou `ref:{igsid}:{timestamp}` na abertura do Instagram sem mensagem, que agora cria a conversa).
+- **Campanha**: `anuncios_meta`, um por anúncio. `consultar_pendentes` depois do commit de cada aviso; `reconsultar`
+  na varredura, depois de 24 h, mais a propagação da campanha que ficou para trás. `meta_anuncios_client` usa o
+  transporte e a trava do WhatsApp; `META_ANUNCIOS_TOKEN` (vazio usa o do WhatsApp).
+- **Ficha**: `anuncio_origem_*` e `anuncio_recente_*`; a origem ("Anúncio do WhatsApp"/"do Instagram", `utm_source=meta`,
+  `utm_medium=anuncio`, a campanha) só na ficha sem origem; o canal só na ficha criada agora pela conversa.
+- **Desempenho**: o lead conta pela data em que a ficha entrou na base (o Kommo ou a criação), no horário de São Paulo;
+  a coluna **Retornos** (com os eventos depois) por campanha.
+- **Tela**: "Veio do anúncio “…” · campanha" sob o cabeçalho da conversa; Origem, Primeiro anúncio e Anúncio mais
+  recente na ficha; Retornos no Desempenho.
+
+**Decisões e pegadinhas.**
+- **O "não existe" da Graph não é um só.** O anúncio apagado costuma voltar com o código 100/33, a mesma resposta do
+  token sem acesso à conta de anúncios. Tratado como definitivo, todo anúncio capturado antes de a permissão chegar
+  ficaria sem campanha para sempre; só o 404 e o 803 são definitivos (`docs/05` 195).
+- **A consulta nunca entra na transação do aviso**: a Meta lenta não segura o aviso nem a linha travada, e a falha não
+  devolve o aviso à fila. Claim por linha (`FOR UPDATE SKIP LOCKED`) com a marca `consultando`: o processo que morre no
+  meio deixa a linha para a varredura.
+- **A campanha que chega depois vai só às fichas que a 334 atribuiu** (`meta`/`anuncio`): a ficha do Kommo com
+  campanha própria não muda.
+- **Ficha "sem origem"** é sem `lead_origin`, sem `utm_source` e sem `utm_campaign`: o formulário e o Kommo ganham.
+- **Fuso do Desempenho** (convergência): a janela e o `kommo_created_at` são de São Paulo, e o `created_at` e o momento
+  do contato são UTC. Sem converter, o lead das 21 h às 24 h caía no dia seguinte.
+- **A abertura do Instagram sem mensagem** cria uma conversa sem horário: aparece no fim da primeira página da lista,
+  não nas seguintes, até a cliente escrever (`docs/05` 196).
+- **De passagem**: o `verify_328` cenário 11 só passava depois das 14 h (a espera ficava às 13h44 de hoje); agora é
+  independente da hora.
+
+**Verificação.**
+- `verify_334.py` deu **12/12** contra o `manto_local`, com zero escapes. A consulta é dublê, conta as chamadas e confere
+  o token. Dois cenários **devem** falhar: a recusa (100/33, a varredura no dia seguinte e o 404 definitivo) e a trava e
+  a falta de token (o anúncio espera e sai na primeira consulta liberada).
+- `verify_333` 15/15, `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24, `verify_325` 22/22 e `verify_256`
+  12/12 (a data do lead mudou).
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5336, Vite 5337) em desktop e 375×812: a linha do anúncio na conversa (WhatsApp e
+  Instagram), a origem na ficha e os Retornos no Desempenho, sem rolagem horizontal no celular.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **9 achados** (0
+críticos, 0 altos, 2 médios e 7 baixos), fechados ou aceitos em T016–T023.
+
+**Para publicar.** Merge na ordem 325 → 328 → 330 → 332 → 333 → 334. Depois, dar `ads_read` ao usuário do sistema (ou
+um token próprio no `META_ANUNCIOS_TOKEN`) e conferir o log `[anuncios]` e a campanha numa ficha nova (`docs/05` 194).
 
 ### 333 — Orçamento e formulário pela conversa   (333-crm-orcamento-na-conversa · 2026-11-03 · migration `c333e1a5b7d9`)
 
