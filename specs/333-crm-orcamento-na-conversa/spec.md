@@ -103,8 +103,9 @@ cada envio aparece com a conversa, quem enviou e quando.
 
 ### História 4 — Ligar, trocar ou criar a ficha da conversa (Prioridade: P2)
 
-No cabeçalho da conversa, sem ficha, aparece "Ligar à ficha". Com ficha, além de "Ver ficha", o menu oferece "Trocar
-ficha" e "Remover vínculo". O diálogo busca a ficha pelo nome ou telefone, ou cria uma nova (nome e telefone, com o
+No cabeçalho da conversa, sem ficha, aparece "Ligar à ficha". Com ficha, além de "Ver ficha", o botão "Trocar
+ficha" abre o diálogo da ficha, que também tem "Remover vínculo" (a casa não tem componente de menu; decisão da
+convergência). O diálogo busca a ficha pelo nome ou telefone, ou cria uma nova (nome e telefone, com o
 telefone da conversa já preenchido no WhatsApp). Se o telefone informado já é de uma ficha, a conversa liga a ela e a
 tela avisa "Esta ficha já existia e foi ligada à conversa.".
 
@@ -146,8 +147,11 @@ valores e do elenco, como hoje.
 
 ### Casos de borda
 
-- **Falha da Meta numa parte**: a parte que falhou fica "não entregue" com "Tentar novamente", como qualquer mensagem.
-  A outra parte não é desfeita, e o envio continua registrado.
+- **Falha da Meta numa parte**: a parte que falhou fica "não entregue". A outra parte não é desfeita, e o envio
+  continua registrado. A tela não diz "enviado": avisa o que não foi entregue.
+  - O texto que falhou tem o "Tentar novamente" da conversa, como qualquer mensagem.
+  - O PDF que falhou sai de novo por **"Enviar só o PDF"** na conferência do orçamento, sem mandar a mensagem de
+    novo para a cliente.
 - **Queda no meio do envio** (rede, servidor reiniciado): repetir o mesmo pedido manda só as partes que faltaram.
 - **A janela fecha no meio do envio** (raro): as partes seguintes não saem e a tela explica; as já enviadas ficam.
 - **Instagram**: o texto do orçamento passa de 1.000 bytes. Ele sai em partes, quebradas entre parágrafos, na ordem, e o
@@ -236,9 +240,10 @@ Login pela API, conferência por conexão separada e limpeza no `finally`.
 | 9 | Formulários da conversa | Pré-contrato e Corporativo com o link público e o texto | não |
 | 10 | Histórico e detalhe do orçamento | selo com a data do último envio; envios no detalhe | não |
 | 11 | Pré-preenchimento do evento | a cliente do orçamento vem junto | não |
-| 12 | A Meta recusa o PDF | o texto sai, o PDF fica "não entregue", o envio continua registrado | não |
+| 12 | A Meta recusa o PDF; "Enviar só o PDF" | o texto sai, o PDF fica "não entregue", o envio continua registrado; depois só o PDF sai | não |
 | 13 | Orçamento sem a mensagem pronta; telefone inválido ao criar a ficha | 422 com o texto da spec | **sim** |
-| 14 | Limpeza | registros e usuários de teste apagados | — |
+| 14 | Queda no meio (o texto saiu, o PDF não) | a mesma chave manda só o PDF | não |
+| 15 | Limpeza | registros e usuários de teste apagados | — |
 
 Conferência de tela: "Enviar orçamento" e "Enviar formulário" na conversa; "Ligar à ficha" e o menu da ficha no
 cabeçalho; "Enviar na conversa" e os envios na tela do orçamento; o selo no histórico; o evento pré-preenchido. Em

@@ -552,6 +552,8 @@ export interface EnvioDoOrcamentoInput {
   chave_envio: string;
   /** Só quando a conversa não tem ficha e a ligação automática não serve (Instagram, ficha removida). */
   cliente?: EscolhaDaFicha;
+  /** Só o PDF (o reenvio do PDF que a Meta recusou, sem mandar a mensagem de novo). */
+  somente_pdf?: boolean;
 }
 
 export interface EnvioDoOrcamentoResposta {
@@ -573,6 +575,8 @@ function useAtualizarAposCostura() {
     void queryClient.invalidateQueries({ queryKey: [...CHAVE, "lista"] });
     void queryClient.invalidateQueries({ queryKey: ["orcamento-historico"] });
     void queryClient.invalidateQueries({ queryKey: ["orcamento-historico-detalhe"] });
+    // O texto do formulário leva o nome da ficha: trocou a ficha, troca o texto.
+    void queryClient.invalidateQueries({ queryKey: [...CHAVE, "formularios", conversaId] });
   };
 }
 

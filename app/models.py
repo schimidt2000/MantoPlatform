@@ -2047,7 +2047,8 @@ class Client(db.Model):
     address = db.Column(db.Text, nullable=True)
 
     # Valores em circulação: 'kommo_import' (importador), 'whatsform_import' (carga histórica),
-    # 'formulario' (criado a partir de uma resposta, feature 266) e 'manual' (digitado na tela).
+    # 'formulario' (criado a partir de uma resposta, feature 266), 'conversa' (criado pela conversa,
+    # feature 333) e 'manual' (digitado na tela).
     # Chave nova aqui exige entrada no mapa de `client_ops.client_metrics` — lá o `get` tem
     # fallback silencioso para "manual" e a origem nova sumiria do gráfico.
     source = db.Column(db.String(20), nullable=False, default="manual",

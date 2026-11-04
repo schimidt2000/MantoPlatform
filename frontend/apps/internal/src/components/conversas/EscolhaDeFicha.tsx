@@ -17,7 +17,13 @@ interface EscolhaDeFichaProps {
   /** No WhatsApp, o telefone da conversa já entra no "Criar ficha". */
   telefoneInicial?: string | null;
   nomeInicial?: string | null;
-  erro?: string | null;
+  erro?: ErroDaFicha | null;
+}
+
+/** O erro da ficha e o campo que ele aponta (`cliente` = a busca; `nome`; `telefone`). */
+export interface ErroDaFicha {
+  campo: "cliente" | "nome" | "telefone";
+  mensagem: string;
 }
 
 export function EscolhaDeFicha({ id, valor, onMudar, telefoneInicial, nomeInicial, erro }: EscolhaDeFichaProps) {
@@ -60,8 +66,8 @@ export function EscolhaDeFicha({ id, valor, onMudar, telefoneInicial, nomeInicia
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar pelo nome ou telefone"
-              className={cn("pl-9", erro && "border-red ring-1 ring-red")}
-              aria-invalid={erro ? true : undefined}
+              className={cn("pl-9", erro?.campo === "cliente" && "border-red ring-1 ring-red")}
+              aria-invalid={erro?.campo === "cliente" ? true : undefined}
               aria-describedby={erro ? `${id}-erro` : undefined}
             />
           </div>
@@ -110,7 +116,14 @@ export function EscolhaDeFicha({ id, valor, onMudar, telefoneInicial, nomeInicia
               <label htmlFor={`${id}-nome`} className="text-sm font-medium">
                 Nome da cliente
               </label>
-              <Input id={`${id}-nome`} value={nome} onChange={(e) => criar(e.target.value, telefone)} />
+              <Input
+                id={`${id}-nome`}
+                value={nome}
+                onChange={(e) => criar(e.target.value, telefone)}
+                aria-invalid={erro?.campo === "nome" ? true : undefined}
+                aria-describedby={erro?.campo === "nome" ? `${id}-erro` : undefined}
+                className={cn(erro?.campo === "nome" && "border-red ring-1 ring-red")}
+              />
             </div>
             <div className="space-y-1">
               <label htmlFor={`${id}-telefone`} className="text-sm font-medium">
@@ -122,6 +135,9 @@ export function EscolhaDeFicha({ id, valor, onMudar, telefoneInicial, nomeInicia
                 inputMode="tel"
                 placeholder="Ex.: (11) 91234-5678"
                 onChange={(e) => criar(nome, e.target.value)}
+                aria-invalid={erro?.campo === "telefone" ? true : undefined}
+                aria-describedby={erro?.campo === "telefone" ? `${id}-erro` : undefined}
+                className={cn(erro?.campo === "telefone" && "border-red ring-1 ring-red")}
               />
             </div>
           </div>
@@ -140,15 +156,18 @@ export function EscolhaDeFicha({ id, valor, onMudar, telefoneInicial, nomeInicia
       )}
       {erro ? (
         <p id={`${id}-erro`} role="alert" className="text-sm text-red">
-          {erro}
+          {erro.mensagem}
         </p>
       ) : null}
     </div>
   );
 }
 
-/** O erro do servidor que é da ficha (`cliente`, `nome`, `telefone`), para mostrar junto da escolha. */
-export function erroDaFicha(fields: Record<string, string> | undefined): string | null {
+/** O erro do servidor que é da ficha (`cliente`, `nome`, `telefone`), para mostrar no campo certo. */
+export function erroDaFicha(fields: Record<string, string> | undefined): ErroDaFicha | null {
   if (!fields) return null;
-  return fields.cliente ?? fields.nome ?? fields.telefone ?? null;
+  for (const campo of ["cliente", "nome", "telefone"] as const) {
+    if (fields[campo]) return { campo, mensagem: fields[campo] };
+  }
+  return null;
 }

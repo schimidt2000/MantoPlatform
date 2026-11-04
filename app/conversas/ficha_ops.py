@@ -21,7 +21,7 @@ from app.clientes.importer import normalize_phone
 from app.conversas import constantes as K
 from app.conversas.leitura_ops import telefone_legivel
 from app.conversas.recusa import Recusa, campo
-from app.conversas.telefone import variantes_de_telefone
+from app.conversas.telefone import so_digitos, variantes_de_telefone
 from app.models import Client, Conversa
 
 # Os campos do `ClientValidationError` da base de clientes, com os nomes desta API.
@@ -66,25 +66,31 @@ def _ficha_existente(client_id: Any) -> Client:
     return ficha
 
 
-def _nova_ou_existente(nome: Any, telefone: Any) -> tuple[Client, bool]:
-    """A ficha do telefone, se já existe; senão, uma nova com origem ``conversa``."""
-    existente = ficha_pelo_telefone(
-        normalize_phone(telefone if isinstance(telefone, str) else None)
-    )
+def _nova_ou_existente(nome: Any, telefone: Any, *, e164: bool = False) -> tuple[Client, bool]:
+    """A ficha do telefone, se já existe; senão, uma nova com origem ``conversa``.
+
+    ``e164``: o telefone é o wa_id do WhatsApp, já com o país — vai como veio. O digitado passa pela
+    normalização da base de clientes (DDD sem país vira Brasil).
+    """
+    texto = telefone if isinstance(telefone, str) else ""
+    digitos = so_digitos(texto) if e164 else normalize_phone(texto)
+    existente = ficha_pelo_telefone(digitos)
     if existente is not None:
         return existente, True
     try:
         ficha, reaproveitada = client_ops.quick_create_client(
             nome if isinstance(nome, str) else "",
-            telefone if isinstance(telefone, str) else "",
+            texto,
+            phone_display=telefone_legivel(digitos) if digitos else None,
             source=K.ORIGEM_DA_FICHA,
+            phone_digits=digitos if e164 else None,
         )
     except client_ops.ClientValidationError as exc:
         raise campo(_CAMPO_DA_BASE.get(exc.field, exc.field), exc.message) from exc
     except IntegrityError:
         # Dois envios ao mesmo tempo criando a mesma ficha: quem perdeu usa a do vencedor.
         db.session.rollback()
-        ficha = ficha_pelo_telefone(normalize_phone(telefone))
+        ficha = ficha_pelo_telefone(digitos)
         if ficha is None:
             raise
         return ficha, True
@@ -149,7 +155,7 @@ def ficha_para_envio(conversa: Conversa, cliente: Any, nome_do_orcamento: str | 
                 or telefone_legivel(conversa.telefone)
                 or conversa.telefone
             )
-            ficha, _ = _nova_ou_existente(nome, conversa.telefone)
+            ficha, _ = _nova_ou_existente(nome, conversa.telefone, e164=True)
     else:
         raise campo("cliente", K.TEXTO_ESCOLHA_A_FICHA)
     conversa.client_id = ficha.id

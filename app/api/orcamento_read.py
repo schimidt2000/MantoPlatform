@@ -152,6 +152,7 @@ def _entry_summary(
         "desconto_pct": _desconto_do_snapshot(e.form_snapshot),
         # Feature 333: o último envio pela conversa (o selo "Enviado na conversa"), ou `None`.
         "enviado_em": enviado_em,
+        "cliente": {"id": e.cliente.id, "nome": e.cliente.name} if e.cliente else None,
     }
 
 
@@ -222,7 +223,15 @@ def api_orcamento_historico_list() -> Any:
     if show_f in ("1", "0"):
         query = query.filter(OrcamentoHistory.has_show == (show_f == "1"))
 
-    entries = query.order_by(OrcamentoHistory.created_at.desc()).limit(300).all()
+    # Feature 333: a ficha de cada linha vem junto (o envio pela conversa diz de quem o orçamento já é).
+    from sqlalchemy.orm import joinedload
+
+    entries = (
+        query.options(joinedload(OrcamentoHistory.cliente))
+        .order_by(OrcamentoHistory.created_at.desc())
+        .limit(300)
+        .all()
+    )
 
     # Alimenta o seletor de vendedor, agora visível para todo o comercial (FR-005).
     users = [

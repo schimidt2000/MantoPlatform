@@ -5,7 +5,8 @@ no envelope de `json_error` com `codigo` e `fields`.
 
 ## `POST /api/conversas/<id>/orcamento`
 
-- **Corpo**: `{"orcamento_id": int, "chave_envio": str, "cliente"?: {"id": int} | {"nome": str, "telefone": str}}`.
+- **Corpo**: `{"orcamento_id": int, "chave_envio": str, "cliente"?: {"id": int} | {"nome": str, "telefone": str},
+  "somente_pdf"?: bool}`. `somente_pdf`: só o PDF, com chave nova (o reenvio do PDF que a Meta recusou).
 - **201** (pedido novo) ou **200** (a mesma chave): `{"envio": {...}, "mensagens": [mensagem…], "conversa": {...}}`.
   - `mensagens`: as partes do texto e o PDF, no formato da conversa.
   - `conversa`: com a ficha ligada.
@@ -13,7 +14,7 @@ no envelope de `json_error` com `codigo` e `fields`.
   - 404 `nao_encontrada`: conversa ou orçamento inexistente;
   - 422 `invalido`: `fields.chave_envio`, `fields.orcamento` ("Este orçamento não tem a mensagem pronta. Use
     Recalcular e envie o novo orçamento.") ou `fields.cliente` ("Selecione a ficha da cliente ou informe nome e
-    telefone.", ficha inexistente, telefone inválido);
+    telefone.", ficha inexistente) e `fields.nome` / `fields.telefone` (a ficha nova informada);
   - 409 `janela_fechada` / `envio_travado` e 503 `nao_configurado`: as do envio comum. Nessas, nada é criado.
 
 ## `POST /api/conversas/<id>/ficha`
@@ -33,7 +34,8 @@ no envelope de `json_error` com `codigo` e `fields`.
 
 ## Alterados
 
-- `GET /api/orcamento/historico`: cada linha ganha `enviado_em` (ISO UTC do último envio, ou `null`).
+- `GET /api/orcamento/historico`: cada linha ganha `enviado_em` (ISO UTC do último envio, ou `null`) e `cliente`
+  (`{"id", "nome"}` ou `null`).
 - `GET /api/orcamento/historico/<id>`:
   - ganha `cliente` (`{"id", "nome"}` ou `null`);
   - ganha `envios`: `[{"id", "conversa_id", "conversa_nome", "canal", "autor", "quando"}]`, do mais novo ao mais antigo.

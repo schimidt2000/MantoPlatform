@@ -57,6 +57,7 @@ def api_conversas_enviar_orcamento(conversa_id: int) -> Any:
             current_user.id,
             cfg_whatsapp(),
             corpo.get("cliente"),
+            somente_pdf=corpo.get("somente_pdf") is True,
         )
     except Recusa as exc:
         return _recusa(exc)

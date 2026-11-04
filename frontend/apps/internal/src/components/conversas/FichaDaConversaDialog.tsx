@@ -16,7 +16,7 @@ import {
   type ConversaResumo,
   type EscolhaDaFicha,
 } from "../../lib/conversas";
-import { EscolhaDeFicha, erroDaFicha } from "./EscolhaDeFicha";
+import { EscolhaDeFicha, erroDaFicha, type ErroDaFicha } from "./EscolhaDeFicha";
 
 /**
  * "Ligar à ficha" / "Trocar ficha" (feature 333, FR-009): a ficha da cliente desta conversa. A escolha feita
@@ -35,7 +35,7 @@ export function FichaDaConversaDialog({ conversa, open, onOpenChange }: FichaDaC
   const remover = useRemoverFicha(conversa.id);
   const [escolha, setEscolha] = useState<EscolhaDaFicha | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [erroDoCampo, setErroDoCampo] = useState<string | null>(null);
+  const [erroDoCampo, setErroDoCampo] = useState<ErroDaFicha | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,7 +52,7 @@ export function FichaDaConversaDialog({ conversa, open, onOpenChange }: FichaDaC
 
   const salvar = () => {
     if (!escolha) {
-      setErroDoCampo("Selecione a ficha da cliente ou informe nome e telefone.");
+      setErroDoCampo({ campo: "cliente", mensagem: "Selecione a ficha da cliente ou informe nome e telefone." });
       return;
     }
     setErro(null);

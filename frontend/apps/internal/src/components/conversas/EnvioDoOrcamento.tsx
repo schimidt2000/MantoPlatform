@@ -21,10 +21,11 @@ import {
   useConversas,
   useEnviarOrcamento,
   type ConversaResumo,
+  type EnvioDoOrcamentoResposta,
   type EscolhaDaFicha,
 } from "../../lib/conversas";
 import { useOrcamentoHistorico, type OrcamentoHistoricoEntry } from "../../lib/orcamento";
-import { EscolhaDeFicha, erroDaFicha } from "./EscolhaDeFicha";
+import { EscolhaDeFicha, erroDaFicha, type ErroDaFicha } from "./EscolhaDeFicha";
 import { IconeDoCanal } from "./IconeDoCanal";
 
 /**
@@ -47,6 +48,8 @@ export interface OrcamentoParaEnvio {
   data: string;
   local: string;
   totais: { rotulo: string; valor: number }[];
+  /** A ficha a que o orçamento já foi ligado (num envio anterior), ou `null`. */
+  ficha: { id: number; nome: string } | null;
 }
 
 function dataDaTela(iso: string): string {
@@ -66,6 +69,7 @@ export function orcamentoDoHistorico(e: OrcamentoHistoricoEntry): OrcamentoParaE
       { rotulo: "3 h", valor: e.total_3h },
       { rotulo: "4 h", valor: e.total_4h },
     ].filter((t) => t.valor > 0),
+    ficha: e.cliente ?? null,
   };
 }
 
@@ -100,36 +104,67 @@ interface EnvioDoOrcamentoProps {
 export function EnvioDoOrcamento({ conversa, orcamento, onEnviado, onVoltar }: EnvioDoOrcamentoProps) {
   const enviar = useEnviarOrcamento();
   const [chave] = useState(novaChaveDeEnvio);
+  const [chaveDoPdf, setChaveDoPdf] = useState(novaChaveDeEnvio);
   const [escolha, setEscolha] = useState<EscolhaDaFicha | null>(null);
   const [erro, setErro] = useState<string | null>(null);
-  const [erroFicha, setErroFicha] = useState<string | null>(null);
+  const [erroFicha, setErroFicha] = useState<ErroDaFicha | null>(null);
+  const [naoEntregue, setNaoEntregue] = useState<string | null>(null);
   const escolherFicha = precisaEscolherFicha(conversa);
+  // O orçamento que já é de outra ficha continua com ela (FR-006) e não batiza a ficha desta conversa.
+  const deOutraFicha = Boolean(orcamento.ficha && orcamento.ficha.id !== conversa.cliente?.id);
 
-  const mandar = () => {
+  /** A confirmação só diz "enviado" se tudo saiu (XV); a parte recusada pela Meta vira aviso. */
+  const conferirResposta = (resposta: EnvioDoOrcamentoResposta) => {
+    const recusadas = resposta.mensagens.filter((m) => m.situacao === "falhou");
+    if (recusadas.length === 0) {
+      onEnviado();
+      return;
+    }
+    const pdf = recusadas.find((m) => m.tipo === "documento");
+    setNaoEntregue(
+      pdf
+        ? `O PDF não foi entregue${pdf.erro?.motivo ? ` (${pdf.erro.motivo.replace(/\.$/, "")})` : ""}. Use "Enviar só o PDF" para tentar novamente.`
+        : "Parte da mensagem não foi entregue. Use \"Tentar novamente\" na conversa.",
+    );
+  };
+
+  /**
+   * O envio inteiro, ou só o PDF (o reenvio do que a Meta recusou). Os dois levam a ficha escolhida: sem
+   * ela, o servidor recusa na conversa que não tem ficha. "Só o PDF" é um pedido novo a cada tentativa.
+   */
+  const pedir = (somentePdf: boolean) => {
     if (escolherFicha && !escolha) {
-      setErroFicha("Selecione a ficha da cliente ou informe nome e telefone.");
+      setErroFicha({ campo: "cliente", mensagem: "Selecione a ficha da cliente ou informe nome e telefone." });
       return;
     }
     setErro(null);
     setErroFicha(null);
+    setNaoEntregue(null);
     enviar.mutate(
       {
         conversaId: conversa.id,
         orcamento_id: orcamento.id,
-        chave_envio: chave,
+        chave_envio: somentePdf ? chaveDoPdf : chave,
         cliente: escolherFicha && escolha ? escolha : undefined,
+        somente_pdf: somentePdf || undefined,
       },
       {
-        onSuccess: onEnviado,
-        onError: (falha) => {
-          const fields = falha instanceof ApiRequestError ? falha.fields : undefined;
-          const daFicha = erroDaFicha(fields);
-          if (daFicha) setErroFicha(daFicha);
-          else setErro(fields?.orcamento ?? mensagemDoErro(falha, "Não foi possível enviar o orçamento. Tente novamente."));
+        onSuccess: conferirResposta,
+        onError: mostrarErro,
+        onSettled: () => {
+          if (somentePdf) setChaveDoPdf(novaChaveDeEnvio());
         },
       },
     );
   };
+
+  function mostrarErro(falha: unknown) {
+    const fields = falha instanceof ApiRequestError ? falha.fields : undefined;
+    const daFicha = erroDaFicha(fields);
+    // Sem a escolha na tela (a conversa mudou nesse meio-tempo), o erro da ficha vai para o aviso geral.
+    if (daFicha && escolherFicha) setErroFicha(daFicha);
+    else setErro(daFicha?.mensagem ?? fields?.orcamento ?? mensagemDoErro(falha, "Não foi possível enviar o orçamento. Tente novamente."));
+  }
 
   return (
     <div className="space-y-3">
@@ -141,11 +176,17 @@ export function EnvioDoOrcamento({ conversa, orcamento, onEnviado, onVoltar }: E
       </p>
       <ResumoDoOrcamento orcamento={orcamento} />
       <p className="text-sm text-muted">Saem a mensagem pronta do orçamento e, em seguida, o PDF.</p>
-      {conversa.cliente ? (
+      {deOutraFicha && orcamento.ficha ? (
+        <p className="text-sm">
+          Este orçamento já é da ficha de <strong>{orcamento.ficha.nome}</strong>: o envio fica registrado e ele
+          continua com essa ficha.
+        </p>
+      ) : conversa.cliente ? (
         <p className="text-sm">
           O orçamento fica ligado à ficha de <strong>{conversa.cliente.nome}</strong>.
         </p>
-      ) : escolherFicha ? (
+      ) : null}
+      {conversa.cliente ? null : escolherFicha ? (
         <EscolhaDeFicha
           id={`envio-ficha-${conversa.id}`}
           valor={escolha}
@@ -154,12 +195,19 @@ export function EnvioDoOrcamento({ conversa, orcamento, onEnviado, onVoltar }: E
             setErroFicha(null);
           }}
           telefoneInicial={conversa.canal === "instagram" ? null : (conversa.telefone_legivel ?? conversa.telefone)}
-          nomeInicial={orcamento.cliente || conversa.nome_perfil}
+          nomeInicial={orcamento.ficha ? conversa.nome_perfil : orcamento.cliente || conversa.nome_perfil}
           erro={erroFicha}
         />
       ) : (
-        <p className="text-sm text-muted">A ficha da cliente nasce com o telefone desta conversa.</p>
+        <p className="text-sm text-muted">
+          Esta conversa ainda não tem ficha: ela é ligada à ficha deste telefone ou ganha uma nova.
+        </p>
       )}
+      {naoEntregue ? (
+        <p role="alert" className="rounded-md bg-gold-50 px-3 py-2 text-sm text-gold-ink">
+          {naoEntregue}
+        </p>
+      ) : null}
       {erro ? (
         <p role="alert" className="text-sm text-red">
           {erro}
@@ -171,7 +219,10 @@ export function EnvioDoOrcamento({ conversa, orcamento, onEnviado, onVoltar }: E
             Voltar
           </Button>
         ) : null}
-        <Button type="button" onClick={mandar} loading={enviar.isPending}>
+        <Button type="button" variant="outline" onClick={() => pedir(true)} disabled={enviar.isPending}>
+          Enviar só o PDF
+        </Button>
+        <Button type="button" onClick={() => pedir(false)} loading={enviar.isPending}>
           {enviar.isPending ? "Enviando…" : "Enviar orçamento"}
         </Button>
       </DialogFooter>

@@ -164,7 +164,11 @@ const QUANDO_DO_ENVIO = new Intl.DateTimeFormat("pt-BR", {
 });
 
 /** O orçamento desta tela no formato do envio pela conversa (feature 333). */
-function paraEnvio(entryId: number, quote: Quote): OrcamentoParaEnvio {
+function paraEnvio(
+  entryId: number,
+  quote: Quote,
+  ficha: { id: number; nome: string } | null,
+): OrcamentoParaEnvio {
   return {
     id: entryId,
     cliente: quote.client_name,
@@ -176,6 +180,7 @@ function paraEnvio(entryId: number, quote: Quote): OrcamentoParaEnvio {
       { rotulo: "3 h", valor: quote.total_3h },
       { rotulo: "4 h", valor: quote.total_4h },
     ].filter((t) => t.valor > 0),
+    ficha,
   };
 }
 
@@ -406,7 +411,7 @@ export function OrcamentoResultadoPage() {
       {detalhe.data.envios?.length ? <EnviosNaConversa envios={detalhe.data.envios} /> : null}
       <EnvioPorEmail entryId={entryId} />
       <EnviarNaConversaDialog
-        orcamento={paraEnvio(entryId, quote)}
+        orcamento={paraEnvio(entryId, quote, detalhe.data.cliente ?? null)}
         open={naConversaAberto}
         onOpenChange={setNaConversaAberto}
       />

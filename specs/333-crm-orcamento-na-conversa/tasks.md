@@ -73,7 +73,7 @@ antes do núcleo. `verify_325`, `verify_328`, `verify_330` e `verify_332` são r
 - [X] T016 `pages/ClientsListPage.tsx` e `lib/clientes.ts`: "Conversa" no gráfico de clientes novos.
 - [X] T017 `ruff`, `npm run typecheck`; verifies 333, 332, 330, 328 e 325 verdes.
 - [X] T018 Tela pela worktree em desktop e 375×812 (quickstart §2).
-- [ ] T019 Docs: `docs/01` (tabela, colunas, endpoints, RBAC, origem), `docs/02`, `docs/03` (**NÃO PUBLICADO**),
+- [X] T019 Docs: `docs/01` (tabela, colunas, endpoints, RBAC, origem), `docs/02`, `docs/03` (**NÃO PUBLICADO**),
   `docs/04` e o plano. Gates CHK001–CHK011.
 
 ## Dependências
@@ -86,3 +86,26 @@ sair em qualquer ordem depois da Phase 3.
 
 MVP = Phase 3: o orçamento sai pela conversa, das duas portas, e fica ligado à ficha. É o portão da Fase 3. US4–US6
 completam o fluxo até o evento.
+
+## Phase 8: Convergence
+
+Revisão independente (só leitura) de 03/11 sobre o diff `332-crm-avisos-no-celular..HEAD`: 18 achados (0 críticos, 0
+altos, 4 médios, 14 baixos).
+
+- [X] T020 `costura_ops._primeiro_nome`: nome que não começa por letra (o telefone que batizou a ficha) vale como sem nome, "Oi! …" per R7, FR-010 (bug)
+- [X] T021 PDF que a Meta recusou: "Enviar só o PDF" (`somente_pdf`, chave nova) na conferência, e o aviso de parte não entregue no lugar da confirmação per Casos de borda, Constituição XV (partial)
+- [X] T022 `EnvioDoOrcamento`: a confirmação olha a `situacao` das mensagens antes de dizer "enviado" per Constituição XV (bug)
+- [X] T023 Docs (T019) e portões CHK001–CHK011 per T019, Constituição XIII (missing)
+- [X] T024 A ficha do orçamento no resumo (histórico com `cliente`, detalhe): os textos "fica ligado" e "nasce" dizem a verdade, e o "Criar ficha" não sugere o nome de um orçamento que já é de outra ficha per FR-006, FR-007 (bug)
+- [X] T025 Erro da ficha visível mesmo quando a tela não pedia a escolha (conversa desatualizada) per defeito (bug)
+- [X] T026 `useAtualizarAposCostura` invalida os formulários (o nome do texto) per FR-010 (bug)
+- [X] T027 Ficha nova com `phone_display` (o telefone legível) per defeito (bug)
+- [X] T028 Ficha automática do WhatsApp com o wa_id como veio (E.164), sem o "55" do `normalize_phone` em número estrangeiro per defeito (bug)
+- [X] T029 `OrcamentoHistory.client_id` gravado por `UPDATE … WHERE client_id IS NULL` per FR-006 (bug)
+- [X] T030 História 4: o botão "Trocar ficha" abre o diálogo com "Remover vínculo" (sem componente de menu na casa) — registrar na spec per História 4 (partial)
+- [X] T031 `EscolhaDeFicha`: o erro de `nome`/`telefone` marca o campo certo per Casos de borda (partial)
+- [X] T032 Contrato: `fields.nome`/`fields.telefone` também no POST do orçamento per contracts (contradicts)
+- [X] T033 `texto_mensagem_id` gravado assim que a primeira parte sai per FR-005 (partial)
+- [X] T034 `verify_333`: queda no meio (só o que faltou sai), `enviado_em` é o último envio, primeiro nome com ficha batizada pelo telefone, número estrangeiro, `phone_display` e "só o PDF" per Princípio VIII (partial)
+- [X] T035 Registrar no `docs/03` as quatro mudanças fora do plano (`ficha_pelo_telefone` em `ficha_ops`, `nome_do_pdf`, 422 da chave de outro pedido, `{"id"}` aceito) per CLAUDE.md §8 (unrequested)
+- [X] T036 Comentários: `nome_do_pdf` (o e-mail usa outro nome) e `Client.source` (falta `conversa`) per defeito (bug)

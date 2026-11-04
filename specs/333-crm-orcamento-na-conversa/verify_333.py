@@ -89,10 +89,23 @@ WA_D = "5511963330004"  # janela fechada, sem nome
 WA_E = "5511963330005"  # ficha trocada à mão
 WA_E_OUTRA = "5511963330055"
 WA_F = "5511963330006"  # sem ficha; recebe orçamento que já é de outra ficha
+WA_US = "14155550333"  # número dos EUA: 11 dígitos, sem o "55"
 IG_A = "3333330000000001"
 TELEFONE_IG = "5511963330009"
-CONTATOS = [WA_A, WA_B, WA_C, WA_D, WA_E, WA_F, IG_A]
-TELEFONES = [WA_A, WA_B, WA_C, WA_C_SEM_NOVE, WA_D, WA_E, WA_E_OUTRA, WA_F, TELEFONE_IG]
+CONTATOS = [WA_A, WA_B, WA_C, WA_D, WA_E, WA_F, WA_US, IG_A]
+TELEFONES = [
+    WA_A,
+    WA_B,
+    WA_C,
+    WA_C_SEM_NOVE,
+    WA_D,
+    WA_E,
+    WA_E_OUTRA,
+    WA_F,
+    WA_US,
+    "55" + WA_US,
+    TELEFONE_IG,
+]
 PASTA_MIDIA = tempfile.mkdtemp(prefix="v333-midia-")
 
 # Mensagem pronta com parágrafos, acentos e emoji: passa de 1.000 bytes (Instagram divide).
@@ -387,6 +400,18 @@ def cen_03() -> None:
     orc = _no_banco("SELECT client_id FROM orcamento_history WHERE id=:i", i=estado["orc_2"])
     _garante(orc.client_id == ficha.id, "o orçamento não ligou à ficha nova")
     estado["ficha_b"] = ficha.id
+    legivel = _no_banco("SELECT phone_display FROM clients WHERE id=:i", i=ficha.id).phone_display
+    _garante(legivel == "(11) 96333-0002", f"phone_display {legivel!r}")
+    # Número estrangeiro (EUA, 11 dígitos): a ficha guarda o wa_id como veio, sem o "55".
+    r = _enviar(estado["ana"], estado["conv_us"], estado["orc_7"])
+    _garante(r.status_code == 201, f"envio US → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(
+        _no_banco("SELECT id FROM clients WHERE phone=:p", p=WA_US) is not None, "ficha estrangeira"
+    )
+    _garante(
+        _no_banco("SELECT id FROM clients WHERE phone=:p", p="55" + WA_US) is None,
+        "pôs 55 no número",
+    )
     # Ficha antiga sem o nono dígito, gravada depois de a conversa existir: o envio a reaproveita.
     with app.app_context():
         estado["ficha_c"] = _ficha(f"{PREFIX}Carla Antiga", WA_C_SEM_NOVE)
@@ -547,6 +572,18 @@ def cen_09() -> None:
     ).get_json()
     texto = sem_nome["formularios"][0]["texto"]
     _garante(texto.startswith("Oi! Para reservarmos a data"), f"sem nome {texto!r}")
+    # A ficha batizada pelo telefone (nasceu sem nome) também não vira "Oi, (11)!".
+    with app.app_context():
+        ficha_d = _ficha("(11) 96333-0004", WA_D)
+    _no_banco_escrever(
+        "UPDATE conversas SET client_id=:f WHERE id=:i", f=ficha_d, i=estado["conv_d"]
+    )
+    pelo_telefone = _chamar(
+        estado["ana"], "get", f"/api/conversas/{estado['conv_d']}/formularios"
+    ).get_json()["formularios"][0]["texto"]
+    _garante(
+        pelo_telefone.startswith("Oi! Para reservarmos"), f"ficha com telefone {pelo_telefone!r}"
+    )
 
 
 def cen_10() -> None:
@@ -555,6 +592,11 @@ def cen_10() -> None:
     ]
     por_id = {e["id"]: e for e in lista}
     _garante(por_id[estado["orc_1"]]["enviado_em"], "sem o selo do enviado")
+    ultimo = _no_banco(
+        "SELECT max(created_at) AS q FROM orcamento_envios WHERE orcamento_id=:o", o=estado["orc_1"]
+    ).q
+    selo = datetime.fromisoformat(por_id[estado["orc_1"]]["enviado_em"]).replace(tzinfo=None)
+    _garante(selo == ultimo, f"o selo não é o último envio: {selo} × {ultimo}")
     _garante(por_id[estado["orc_5"]]["enviado_em"] is None, "selo no não enviado")
     detalhe = _chamar(
         estado["ana"], "get", f"/api/orcamento/historico/{estado['orc_1']}"
@@ -600,6 +642,51 @@ def cen_12() -> None:
         == [("texto", "enviada"), ("documento", "falhou")],
         f"situações {situacoes}",
     )
+    # "Enviar só o PDF": sai só o PDF, num pedido novo; a mensagem não vai de novo para a cliente.
+    antes = len(meta.saidas)
+    r = _enviar(estado["ana"], estado["conv_a"], estado["orc_6"], somente_pdf=True)
+    _garante(r.status_code == 201, f"só o PDF → {r.status_code}")
+    tipos = [s["tipo"] for s in meta.saidas[antes:]]
+    _garante(tipos == ["upload", "document"], f"só o PDF mandou {tipos}")
+    envios = _envios(estado["orc_6"])
+    _garante(
+        len(envios) == 2 and envios[-1].texto_mensagem_id is None, f"registro do só o PDF {envios}"
+    )
+
+
+def cen_14() -> None:
+    """Queda no meio: o texto saiu e o servidor caiu antes do PDF. A mesma chave manda só o PDF."""
+    from app.conversas import costura_ops
+
+    real = costura_ops._pdf
+    chave = str(uuid.uuid4())
+
+    def _queda(*_a, **_k):
+        raise RuntimeError("queda simulada (verify 333)")
+
+    costura_ops._pdf = _queda
+    try:
+        try:
+            _enviar(estado["ana"], estado["conv_a"], estado["orc_8"], chave)
+        except RuntimeError:
+            pass
+    finally:
+        costura_ops._pdf = real
+    registro = _envios(estado["orc_8"])
+    _garante(
+        len(registro) == 1 and registro[0].texto_mensagem_id and not registro[0].pdf_mensagem_id,
+        f"registro depois da queda {registro}",
+    )
+    antes = len(meta.saidas)
+    r = _enviar(estado["ana"], estado["conv_a"], estado["orc_8"], chave)
+    _garante(r.status_code == 200, f"repetido depois da queda → {r.status_code}")
+    tipos = [s["tipo"] for s in meta.saidas[antes:]]
+    _garante(tipos == ["upload", "document"], f"depois da queda saiu {tipos} (só o PDF)")
+    partes = _no_banco_todas(
+        "SELECT chave_envio FROM conversa_mensagens WHERE chave_envio LIKE :c ORDER BY id",
+        c=chave + ":%",
+    )
+    _garante([p.chave_envio for p in partes] == [f"{chave}:1", f"{chave}:pdf"], f"partes {partes}")
 
 
 def cen_13() -> None:
@@ -637,6 +724,7 @@ def preparar() -> None:
     estado["conv_d"] = _wa(WA_D, "d-1", "Dora")
     estado["conv_e"] = _wa(WA_E, "e-1", "Elisa")
     estado["conv_f"] = _wa(WA_F, "f-1", "Fabi")
+    estado["conv_us"] = _wa(WA_US, "us-1", "Kim")
     estado["conv_ig"] = _ig(IG_A, "ig-1")
     estado["orc_1"] = _orcamento("1", f"{PREFIX}Ana Souza")
     estado["orc_2"] = _orcamento("2", f"{PREFIX}Bruna Lima")
@@ -644,6 +732,8 @@ def preparar() -> None:
     estado["orc_4"] = _orcamento("4", f"{PREFIX}Iara")
     estado["orc_5"] = _orcamento("5", f"{PREFIX}Dora")
     estado["orc_6"] = _orcamento("6", f"{PREFIX}Ana Souza")
+    estado["orc_7"] = _orcamento("7", f"{PREFIX}Kim")
+    estado["orc_8"] = _orcamento("8", f"{PREFIX}Ana Souza")
     estado["orc_legado"] = _orcamento("L", f"{PREFIX}Legado", com_mensagem=False)
 
 
@@ -696,7 +786,10 @@ def limpar() -> None:
 CENARIOS = [
     ("1. orçamento pela conversa do WhatsApp com ficha", cen_01),
     ("2. a mesma chave não manda de novo", cen_02),
-    ("3. sem ficha: nasce a ficha; ficha antiga sem o nono dígito reaproveitada", cen_03),
+    (
+        "3. sem ficha: nasce a ficha (legível, estrangeira); a sem o nono dígito reaproveitada",
+        cen_03,
+    ),
     ("4. Instagram: pede a ficha; depois o texto em partes e o PDF", cen_04),
     ("5. janela fechada e ambiente travado (DEVE falhar)", cen_05),
     ("6. Casting (DEVE falhar)", cen_06),
@@ -705,8 +798,9 @@ CENARIOS = [
     ("9. formulários da conversa", cen_09),
     ("10. histórico e detalhe do orçamento", cen_10),
     ("11. Criar evento traz a cliente", cen_11),
-    ("12. a Meta recusa o PDF: o texto fica e o envio também", cen_12),
+    ("12. a Meta recusa o PDF: o texto fica; Enviar só o PDF", cen_12),
     ("13. orçamento sem mensagem e telefone inválido (DEVE falhar)", cen_13),
+    ("14. queda no meio: a mesma chave manda só o que faltou", cen_14),
 ]
 
 
@@ -721,7 +815,7 @@ def main() -> int:
             cenario(nome, fn)
     finally:
         with app.app_context():
-            cenario("14. limpeza", limpar)
+            cenario("15. limpeza", limpar)
         for nome, real in _REAIS["ic"].items():
             setattr(_ic, nome, real)
         for nome, real in _REAIS["wc"].items():

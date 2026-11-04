@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
@@ -177,8 +177,12 @@ def enviar_orcamento(
     autor_id: int | None,
     cfg: CfgWhatsapp,
     cliente: Any = None,
+    somente_pdf: bool = False,
 ) -> EnvioDoOrcamento:
     """A mensagem pronta (em partes, no Instagram) e o PDF, pela conversa (FR-003 a FR-008).
+
+    ``somente_pdf``: só o PDF, com chave nova — o reenvio do PDF que a Meta recusou, sem mandar a
+    mensagem de novo para a cliente.
 
     Raises:
         Recusa: 404 (conversa, orçamento); 422 (chave, orçamento sem mensagem, ficha); as do envio
@@ -201,17 +205,29 @@ def enviar_orcamento(
         # reenviado para a conversa da Bruna criaria a ficha "Ana" com o telefone da Bruna.
         nome = entry.client_name if entry.client_id is None else None
         ficha = ficha_ops.ficha_para_envio(conversa, cliente, nome)
-        if entry.client_id is None:
-            entry.client_id = ficha.id  # a ficha do primeiro envio fica (FR-006)
-            db.session.commit()
+        # A ficha do primeiro envio fica (FR-006). UPDATE condicional: dois primeiros envios ao mesmo
+        # tempo não se sobrescrevem.
+        db.session.execute(
+            update(OrcamentoHistory)
+            .where(OrcamentoHistory.id == entry.id, OrcamentoHistory.client_id.is_(None))
+            .values(client_id=ficha.id)
+        )
+        db.session.commit()
         registro = _registro(chave, entry, conversa, autor_id)
-    mensagens = [
-        envio_ops.enviar_texto(conversa.id, parte, f"{chave}:{indice}", autor_id, cfg).mensagem
-        for indice, parte in enumerate(_partes_do_texto(conversa, mensagem), start=1)
-    ]
-    mensagens.append(_pdf(conversa, quote, f"{chave}{K.SUFIXO_DO_PDF}", autor_id, cfg))
-    registro.texto_mensagem_id = mensagens[0].id
-    registro.pdf_mensagem_id = mensagens[-1].id
+    mensagens: list[ConversaMensagem] = []
+    if not somente_pdf:
+        for indice, parte in enumerate(_partes_do_texto(conversa, mensagem), start=1):
+            enviada = envio_ops.enviar_texto(
+                conversa.id, parte, f"{chave}:{indice}", autor_id, cfg
+            ).mensagem
+            mensagens.append(enviada)
+            if registro.texto_mensagem_id is None:
+                # Já a primeira parte: se a janela fechar no meio, o registro não fica sem mensagem.
+                registro.texto_mensagem_id = enviada.id
+                db.session.commit()
+    pdf = _pdf(conversa, quote, f"{chave}{K.SUFIXO_DO_PDF}", autor_id, cfg)
+    mensagens.append(pdf)
+    registro.pdf_mensagem_id = pdf.id
     db.session.commit()
     return EnvioDoOrcamento(registro, mensagens, conversa, novo)
 
@@ -267,7 +283,8 @@ def _primeiro_nome(conversa: Conversa) -> str | None:
     """O primeiro nome da ficha e, sem ela, o do perfil. Telefone e "Contato do Instagram" não são nome."""
     nome = (conversa.cliente.name if conversa.cliente is not None else conversa.nome_perfil) or ""
     partes = nome.strip().split()
-    return partes[0] if partes else None
+    # A ficha nascida sem nome leva o telefone ("(11) 96333-0002"): "Oi, (11)!" não é saudação.
+    return partes[0] if partes and partes[0][0].isalpha() else None
 
 
 def formularios_da_conversa(conversa_id: int) -> list[dict[str, str]]:

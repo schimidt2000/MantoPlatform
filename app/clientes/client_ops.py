@@ -72,13 +72,16 @@ def quick_create_client(
     cnpj: str | None = None,
     address: str | None = None,
     source: str = "manual",
+    phone_digits: str | None = None,
 ) -> tuple[Client, bool]:
     """Cria um cliente (nome + telefone) ou reaproveita o existente por telefone.
 
     `cpf`/`cnpj`/`address` são opcionais e só valem na CRIAÇÃO (feature 258): quando o telefone
     já pertence a alguém, o cliente existente volta **intocado** — sobrescrever documento de
     quem já está na base a partir de um cadastro rápido seria perda silenciosa de dado.
-    `source` (feature 333): `"conversa"` para a ficha criada pela conversa.
+    `source` (feature 333): `"conversa"` para a ficha criada pela conversa. `phone_digits` (333): o
+    telefone já em E.164 (o wa_id do WhatsApp), gravado como veio — o `normalize_phone` poria "55" na
+    frente de um número estrangeiro de 11 dígitos.
 
     Returns:
         Tupla (cliente, reused) — `reused=True` quando o telefone já pertencia a outro cliente.
@@ -86,7 +89,7 @@ def quick_create_client(
     clean_name = (name or "").strip()
     if not clean_name:
         raise ClientValidationError("name", "Informe o nome da cliente.")
-    phone = normalize_phone(phone_raw)
+    phone = phone_digits or normalize_phone(phone_raw)
     if not phone:
         raise ClientValidationError("phone", "Telefone inválido. Inclua DDD (e DDI se houver).")
 

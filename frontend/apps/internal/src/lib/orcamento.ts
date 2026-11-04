@@ -459,6 +459,8 @@ export interface OrcamentoHistoricoEntry {
   desconto_pct?: number | null;
   /** Feature 333 — UTC do último envio pela conversa (o selo "Enviado na conversa"); `null` sem envio. */
   enviado_em?: string | null;
+  /** Feature 333 — a ficha a que o orçamento foi ligado no primeiro envio pela conversa. */
+  cliente?: { id: number; nome: string } | null;
 }
 
 /** Feature 333 — um envio do orçamento pela conversa (a tela do orçamento lista). */
