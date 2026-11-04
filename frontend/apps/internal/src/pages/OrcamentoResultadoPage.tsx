@@ -13,14 +13,18 @@ import {
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { MemoriaDeCalculo } from "../components/MemoriaDeCalculo";
+import { EnviarNaConversaDialog, type OrcamentoParaEnvio } from "../components/conversas/EnvioDoOrcamento";
+import { IconeDoCanal } from "../components/conversas/IconeDoCanal";
 import { ProdutoLinha } from "../components/orcamento/ProdutoLinha";
 import { brutoDe, linhasDoBv, pixDe, temBv, temDesconto, type ColunaDoQuote } from "../lib/desconto";
 import {
   useEnviarEmailOrcamento,
   useOrcamentoDetalhe,
   useOrcamentoPdf,
+  type EnvioNaConversa,
   type Quote,
 } from "../lib/orcamento";
+import { useCurrentUser } from "../lib/useAuth";
 
 /**
  * Orçamento gerado — sucessora React de `app/templates/orcamento/resultado.html`.
@@ -151,11 +155,69 @@ function EnvioPorEmail({ entryId }: { entryId: number }) {
   );
 }
 
+const QUANDO_DO_ENVIO = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+});
+
+/** O orçamento desta tela no formato do envio pela conversa (feature 333). */
+function paraEnvio(entryId: number, quote: Quote): OrcamentoParaEnvio {
+  return {
+    id: entryId,
+    cliente: quote.client_name,
+    data: quote.fmt_date,
+    local: quote.event_location,
+    totais: [
+      { rotulo: "1 h", valor: quote.total_1h },
+      { rotulo: "2 h", valor: quote.total_2h },
+      { rotulo: "3 h", valor: quote.total_3h },
+      { rotulo: "4 h", valor: quote.total_4h },
+    ].filter((t) => t.valor > 0),
+  };
+}
+
+/** Feature 333: cada envio pela conversa, do mais novo ao mais antigo, com o caminho até a conversa. */
+function EnviosNaConversa({ envios }: { envios: EnvioNaConversa[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Envios na conversa</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <ul className="divide-y divide-line">
+          {envios.map((e) => (
+            <li key={e.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
+              <span className="flex min-w-0 items-center gap-1.5">
+                {e.canal ? <IconeDoCanal canal={e.canal} /> : null}
+                <span className="truncate">
+                  {e.conversa_nome ?? "Conversa"}
+                  <span className="text-muted">
+                    {e.quando ? ` · ${QUANDO_DO_ENVIO.format(new Date(e.quando))}` : ""}
+                    {e.autor ? ` · por ${e.autor}` : ""}
+                  </span>
+                </span>
+              </span>
+              <Button variant="ghost" size="sm" asChild>
+                <Link to={`/conversas?c=${e.conversa_id}`}>Abrir conversa</Link>
+              </Button>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function OrcamentoResultadoPage() {
   const { id } = useParams<{ id: string }>();
   const entryId = Number(id);
   const detalhe = useOrcamentoDetalhe(Number.isFinite(entryId) ? entryId : null);
   const pdf = useOrcamentoPdf();
+  const usuario = useCurrentUser();
+  const [naConversaAberto, setNaConversaAberto] = useState(false);
 
   if (detalhe.isLoading) {
     return (
@@ -203,6 +265,11 @@ export function OrcamentoResultadoPage() {
             >
               Baixar PDF
             </Button>
+            {usuario.data?.conversas_ligadas ? (
+              <Button variant="outline" size="sm" onClick={() => setNaConversaAberto(true)}>
+                Enviar na conversa
+              </Button>
+            ) : null}
             {/* Esta é a tela onde o "sim" da cliente chega (WhatsApp, PDF, e-mail saem daqui),
                 então o próximo passo mora aqui — e não só no histórico, que obrigava a voltar e
                 reencontrar a linha. Variante sólida: é a única ação de avanço da barra. */}
@@ -336,7 +403,13 @@ export function OrcamentoResultadoPage() {
         </CardContent>
       </Card>
 
+      {detalhe.data.envios?.length ? <EnviosNaConversa envios={detalhe.data.envios} /> : null}
       <EnvioPorEmail entryId={entryId} />
+      <EnviarNaConversaDialog
+        orcamento={paraEnvio(entryId, quote)}
+        open={naConversaAberto}
+        onOpenChange={setNaConversaAberto}
+      />
     </div>
   );
 }

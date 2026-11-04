@@ -16,6 +16,8 @@ import {
   type ConversaResumo,
   type RespostaRapida,
 } from "../../lib/conversas";
+import { EnviarFormularioDialog } from "./EnviarFormularioDialog";
+import { EnviarOrcamentoDialog } from "./EnvioDoOrcamento";
 import { GerenciarRespostasDialog } from "./GerenciarRespostasDialog";
 import { BarraDeGravacao, useGravador } from "./GravadorDeAudio";
 import { CaixaDeNota } from "./NotaInterna";
@@ -298,6 +300,16 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
     enviarTexto.mutate({ texto: conteudo, chave_envio }, { onSuccess: aoEnviar, onError: aoErrar });
   };
 
+  // Feature 333: o orçamento sai pelo diálogo; o formulário entra no campo, para conferir e enviar.
+  const [orcamentoAberto, setOrcamentoAberto] = useState(false);
+  const [formularioAberto, setFormularioAberto] = useState(false);
+  const inserirFormulario = (textoDoFormulario: string) => {
+    setTexto((atual) => (atual.trim() ? `${atual.trimEnd()}\n\n${textoDoFormulario}` : textoDoFormulario));
+    mudouORascunho();
+    setFormularioAberto(false);
+    campo.current?.focus();
+  };
+
   const escolher = (resposta: RespostaRapida) => {
     const inserido = aplicarNome(resposta.texto, nomeParaResposta(conversa));
     setTexto((atual) => {
@@ -491,14 +503,29 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
           ) : (
             <span />
           )}
-          {instagram ? null : (
-            <Button type="button" variant="ghost" size="sm" onClick={onEnviarModelo}>
-              Enviar modelo
+          <div className="flex flex-wrap justify-end gap-1">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOrcamentoAberto(true)}>
+              Enviar orçamento
             </Button>
-          )}
+            <Button type="button" variant="ghost" size="sm" onClick={() => setFormularioAberto(true)}>
+              Enviar formulário
+            </Button>
+            {instagram ? null : (
+              <Button type="button" variant="ghost" size="sm" onClick={onEnviarModelo}>
+                Enviar modelo
+              </Button>
+            )}
+          </div>
         </div>
       </form>
       <GerenciarRespostasDialog open={gerenciando} onOpenChange={setGerenciando} />
+      <EnviarOrcamentoDialog conversa={conversa} open={orcamentoAberto} onOpenChange={setOrcamentoAberto} />
+      <EnviarFormularioDialog
+        conversaId={conversa.id}
+        open={formularioAberto}
+        onOpenChange={setFormularioAberto}
+        onEscolher={inserirFormulario}
+      />
     </>
   );
 }

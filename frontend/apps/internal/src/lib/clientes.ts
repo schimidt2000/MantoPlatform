@@ -65,6 +65,8 @@ export interface ClientsMonthMetric {
   total: number;
   formulario: number;
   kommo: number;
+  /** Feature 333: a ficha criada pela conversa (opcional: o backend antigo não manda). */
+  conversa?: number;
   manual: number;
 }
 

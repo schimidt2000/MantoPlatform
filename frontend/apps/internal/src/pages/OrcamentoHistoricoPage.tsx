@@ -27,6 +27,12 @@ import {
 } from "../lib/orcamento";
 import { textoDoPercentual } from "../lib/desconto";
 
+const DIA_DO_ENVIO = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+});
+
 function brl(v: number): string {
   return `R$ ${formatBRL(v)}`;
 }
@@ -270,6 +276,12 @@ export function OrcamentoHistoricoPage() {
                       Ver evento
                     </Link>
                   )}
+                  {e.enviado_em ? (
+                    // Feature 333: o orçamento já foi mandado pela conversa (o último envio).
+                    <Badge tone="neutral" className="ml-2">
+                      Enviado na conversa · {DIA_DO_ENVIO.format(new Date(e.enviado_em))}
+                    </Badge>
+                  ) : null}
                 </TableCell>
                 <TableCell className="text-ink">{e.event_location || "—"}</TableCell>
                 <TableCell>

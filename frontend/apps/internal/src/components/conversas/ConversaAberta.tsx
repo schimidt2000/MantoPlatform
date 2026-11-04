@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, UserRound } from "lucide-react";
+import { ArrowLeft, UserPen, UserRound } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, Skeleton } from "@manto/ui";
 import {
@@ -19,6 +19,7 @@ import {
 import { useCurrentUser } from "../../lib/useAuth";
 import { CaixaDeEnvio } from "./CaixaDeEnvio";
 import { EnviarModeloDialog } from "./EnviarModeloDialog";
+import { FichaDaConversaDialog } from "./FichaDaConversaDialog";
 import { IconeDoCanal } from "./IconeDoCanal";
 import { Mensagem } from "./Mensagem";
 import { NotaInterna } from "./NotaInterna";
@@ -90,6 +91,7 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
   const reenviar = useEnviarTexto(conversaId);
   const queryClient = useQueryClient();
   const [modeloAberto, setModeloAberto] = useState(false);
+  const [fichaAberta, setFichaAberta] = useState(false); // feature 333
   const [cursorDasAnteriores, setCursorDasAnteriores] = useState<number | null>(null);
   const [reenviandoId, setReenviandoId] = useState<number | null>(null);
   const fim = useRef<HTMLDivElement>(null);
@@ -179,14 +181,33 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
           </p>
         </div>
         {conversa.cliente ? (
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/clientes/${conversa.cliente.id}`}>
-              <UserRound className="h-4 w-4" aria-hidden />
-              Ver ficha
-            </Link>
+          <div className="flex shrink-0 gap-1">
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/clientes/${conversa.cliente.id}`}>
+                <UserRound className="h-4 w-4" aria-hidden />
+                Ver ficha
+              </Link>
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-9 px-0"
+              aria-label="Trocar ficha"
+              title="Trocar ficha"
+              onClick={() => setFichaAberta(true)}
+            >
+              <UserPen className="h-4 w-4" aria-hidden />
+            </Button>
+          </div>
+        ) : (
+          <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setFichaAberta(true)}>
+            <UserRound className="h-4 w-4" aria-hidden />
+            Ligar à ficha
           </Button>
-        ) : null}
+        )}
       </header>
+      <FichaDaConversaDialog conversa={conversa} open={fichaAberta} onOpenChange={setFichaAberta} />
       <ResponsavelDaConversa conversa={conversa} usuarioId={usuario.data?.id ?? null} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-3 py-3">

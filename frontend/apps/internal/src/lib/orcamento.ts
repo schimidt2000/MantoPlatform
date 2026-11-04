@@ -457,6 +457,19 @@ export interface OrcamentoHistoricoEntry {
   event_title: string | null;
   /** Feature 313 — o % de desconto aplicado (o selo "−N%"); ausente/`null` sem desconto ou backend velho. */
   desconto_pct?: number | null;
+  /** Feature 333 — UTC do último envio pela conversa (o selo "Enviado na conversa"); `null` sem envio. */
+  enviado_em?: string | null;
+}
+
+/** Feature 333 — um envio do orçamento pela conversa (a tela do orçamento lista). */
+export interface EnvioNaConversa {
+  id: number;
+  orcamento_id: number;
+  conversa_id: number;
+  conversa_nome: string | null;
+  canal: string | null;
+  autor: string | null;
+  quando: string | null;
 }
 
 export interface OrcamentoHistoricoResponse {
@@ -534,14 +547,19 @@ export interface OrcamentoFormSnapshot {
   desconto_duracao?: DuracaoDoDesconto | null;
 }
 
+/** O detalhe congelado; `cliente` e `envios` (333) são opcionais: o backend antigo não os manda. */
+export interface OrcamentoDetalhe {
+  quote: Quote;
+  form_snapshot: OrcamentoFormSnapshot;
+  cliente?: { id: number; nome: string } | null;
+  envios?: EnvioNaConversa[];
+}
+
 /** Detalhe congelado de um orçamento salvo, incluindo o estado bruto para "Recalcular". */
 export function useOrcamentoDetalhe(id: number | null) {
-  return useQuery<{ quote: Quote; form_snapshot: OrcamentoFormSnapshot }>({
+  return useQuery<OrcamentoDetalhe>({
     queryKey: ["orcamento-historico-detalhe", id],
-    queryFn: () =>
-      apiFetch<{ quote: Quote; form_snapshot: OrcamentoFormSnapshot }>(
-        `/api/orcamento/historico/${id}`,
-      ),
+    queryFn: () => apiFetch<OrcamentoDetalhe>(`/api/orcamento/historico/${id}`),
     enabled: id != null,
   });
 }

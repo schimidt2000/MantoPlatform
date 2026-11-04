@@ -68,6 +68,8 @@ export interface ConversaResumo {
   /** Feature 330: o @usuário do Instagram (sem a arroba) e a janela de resposta. */
   usuario?: string | null;
   janela?: Janela;
+  /** Feature 333: a ficha (ou a falta dela) foi escolhida à mão; a ligação automática não age. */
+  ficha_manual?: boolean;
 }
 
 export interface Nota {
@@ -537,4 +539,102 @@ export function rotuloDoDia(iso: string | null): string {
   if (dia === hoje) return "Hoje";
   if (dia === ontem) return "Ontem";
   return FORMATO_DATA_LONGA.format(new Date(iso));
+}
+
+// ── Feature 333: orçamento, ficha e formulário pela conversa ────────────────────────────────────
+
+/** A ficha escolhida para a conversa: uma existente ou uma nova (nome e telefone). */
+export type EscolhaDaFicha = { client_id: number; nome: string } | { nome: string; telefone: string };
+
+export interface EnvioDoOrcamentoInput {
+  conversaId: number;
+  orcamento_id: number;
+  chave_envio: string;
+  /** Só quando a conversa não tem ficha e a ligação automática não serve (Instagram, ficha removida). */
+  cliente?: EscolhaDaFicha;
+}
+
+export interface EnvioDoOrcamentoResposta {
+  envio: { id: number; orcamento_id: number; conversa_id: number; quando: string | null };
+  mensagens: Mensagem[];
+  conversa: ConversaResumo;
+}
+
+function corpoDaFicha(escolha: EscolhaDaFicha): Record<string, unknown> {
+  return "client_id" in escolha
+    ? { client_id: escolha.client_id }
+    : { nome: escolha.nome, telefone: escolha.telefone };
+}
+
+function useAtualizarAposCostura() {
+  const queryClient = useQueryClient();
+  return (conversaId: number) => {
+    void queryClient.invalidateQueries({ queryKey: [...CHAVE, "aberta", conversaId] });
+    void queryClient.invalidateQueries({ queryKey: [...CHAVE, "lista"] });
+    void queryClient.invalidateQueries({ queryKey: ["orcamento-historico"] });
+    void queryClient.invalidateQueries({ queryKey: ["orcamento-historico-detalhe"] });
+  };
+}
+
+/** A mensagem pronta e o PDF do orçamento pela conversa (FR-003). A chave é da tentativa, não do clique. */
+export function useEnviarOrcamento() {
+  const atualizar = useAtualizarAposCostura();
+  return useMutation({
+    mutationFn: ({ conversaId, cliente, ...corpo }: EnvioDoOrcamentoInput) =>
+      apiFetch<EnvioDoOrcamentoResposta>(`/api/conversas/${conversaId}/orcamento`, {
+        method: "POST",
+        body: JSON.stringify(cliente ? { ...corpo, cliente: corpoDaFicha(cliente) } : corpo),
+      }),
+    onSettled: (_resposta, _erro, variaveis) => atualizar(variaveis.conversaId),
+  });
+}
+
+/** Ligar, trocar ou criar a ficha da conversa à mão (FR-009). */
+export function useLigarFicha(conversaId: number) {
+  const atualizar = useAtualizarAposCostura();
+  return useMutation({
+    mutationFn: (escolha: EscolhaDaFicha) =>
+      apiFetch<{ conversa: ConversaResumo; reaproveitada: boolean }>(`/api/conversas/${conversaId}/ficha`, {
+        method: "POST",
+        body: JSON.stringify(corpoDaFicha(escolha)),
+      }),
+    onSettled: () => atualizar(conversaId),
+  });
+}
+
+/** "Remover vínculo": a ficha continua na base; a conversa fica sem ela. */
+export function useRemoverFicha(conversaId: number) {
+  const atualizar = useAtualizarAposCostura();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<{ conversa: ConversaResumo }>(`/api/conversas/${conversaId}/ficha`, { method: "DELETE" }),
+    onSettled: () => atualizar(conversaId),
+  });
+}
+
+export interface FormularioDaConversa {
+  tipo: string;
+  titulo: string;
+  link: string;
+  texto: string;
+}
+
+/** Os formulários públicos com o texto pronto para esta conversa (FR-010). */
+export function useFormulariosDaConversa(conversaId: number, ativo: boolean) {
+  return useQuery({
+    queryKey: [...CHAVE, "formularios", conversaId],
+    queryFn: () =>
+      apiFetch<{ formularios: FormularioDaConversa[] }>(`/api/conversas/${conversaId}/formularios`),
+    enabled: ativo,
+    staleTime: 5 * 60_000,
+  });
+}
+
+/**
+ * A conversa que precisa da ficha escolhida pelo vendedor no envio do orçamento: sem ficha e sem o
+ * telefone para a ligação automática (Instagram), ou com a ficha removida à mão (research R3).
+ */
+export function precisaEscolherFicha(conversa: ConversaResumo): boolean {
+  if (conversa.cliente) return false;
+  return conversa.canal === "instagram" || Boolean(conversa.ficha_manual) || !conversa.telefone;
 }

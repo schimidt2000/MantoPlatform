@@ -52,7 +52,7 @@ function NewClientsChart({ months }: { months: ClientsMonthMetric[] }) {
             </div>
             <span
               className="w-10 shrink-0 text-right tabular-nums text-ink"
-              title={`Formulário: ${m.formulario} · Kommo: ${m.kommo} · Manual: ${m.manual}`}
+              title={`Formulário: ${m.formulario} · Kommo: ${m.kommo} · Conversa: ${m.conversa ?? 0} · Manual: ${m.manual}`}
             >
               {m.total}
             </span>

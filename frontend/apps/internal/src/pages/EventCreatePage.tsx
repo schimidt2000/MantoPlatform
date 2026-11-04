@@ -221,6 +221,16 @@ export function EventCreatePage() {
     setValue("acrescimo_value", p.acrescimo_value ?? 0);
     setValue("with_invoice", Boolean(p.with_invoice));
     setOrcCaches(p.caches ?? []);
+    // Feature 333: o orçamento mandado pela conversa já sabe de quem é — a cliente entra como
+    // Contratante, sem repetir a ficha que já estiver na lista.
+    const cliente = p.cliente;
+    if (cliente) {
+      setClients((atuais) =>
+        atuais.some((c) => c.client_id === cliente.id)
+          ? atuais
+          : [...atuais, { client_id: cliente.id, name: cliente.nome, relation: "Contratante" }],
+      );
+    }
     setCharacters(
       (p.caches ?? [])
         .filter((c) => c.role_type === "character")
