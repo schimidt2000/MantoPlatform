@@ -84,11 +84,10 @@ def api_orcamento_historico_pdf(entry_id: int) -> Any:
 
     quote = quote_ops.quote_for_entry(entry)
     pdf_bytes = gerar_orcamento_pdf(quote)
-    client = (quote.get("client_name") or "orcamento").replace(" ", "_")
     return Response(
         pdf_bytes,
         mimetype="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="Orcamento_Manto_{client}.pdf"'},
+        headers={"Content-Disposition": f'attachment; filename="{quote_ops.nome_do_pdf(quote)}"'},
     )
 
 

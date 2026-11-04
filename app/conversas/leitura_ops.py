@@ -128,6 +128,8 @@ def serializar_conversa(conversa: Conversa) -> dict[str, Any]:
         "telefone": conversa.telefone,
         "telefone_legivel": telefone_legivel(conversa.telefone),
         "cliente": _cliente(conversa),
+        # Feature 333: a ficha (ou a falta dela) foi escolhida à mão; a ligação automática não age.
+        "ficha_manual": bool(conversa.ficha_manual),
         "ultima_previa": conversa.ultima_previa,
         "ultima_mensagem_em": _iso_utc(conversa.ultima_mensagem_em),
         "nao_lidas": conversa.nao_lidas or 0,

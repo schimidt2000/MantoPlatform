@@ -33,7 +33,9 @@ As decisões de produto vieram do dono (spec, Clarifications); aqui está só o 
 - **Sem ficha, com `cliente` no pedido** (`{"id"}` ou `{"nome", "telefone"}`): liga ou cria (R4) e usa.
 - **Sem ficha, WhatsApp, sem `cliente`**: procura a ficha pelo telefone com e sem o nono dígito
   (`variantes_de_telefone`, a regra da 325); achou uma, usa. Senão, cria.
-  - Nome: o `client_name` do orçamento; sem ele, o nome do perfil; sem os dois, o telefone legível.
+  - Nome: o `client_name` do orçamento, se ele ainda não tem ficha; senão (ou sem nome), o nome do perfil; sem os
+    dois, o telefone legível. Achado na conferência de tela: o orçamento da Ana reenviado para a conversa da Bruna
+    criaria a ficha "Ana" com o telefone da Bruna.
   - Origem: `conversa`.
 - **Sem ficha, Instagram, sem `cliente`**: 422 `fields.cliente` "Selecione a ficha da cliente ou informe nome e
   telefone." (o IGSID não é telefone).

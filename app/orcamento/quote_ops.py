@@ -1157,6 +1157,12 @@ def legacy_quote(entry: OrcamentoHistory) -> dict:
     }
 
 
+def nome_do_pdf(quote: dict) -> str:
+    """O nome do arquivo do orçamento: o mesmo no download, no e-mail e na conversa (feature 333)."""
+    cliente = (quote.get("client_name") or "orcamento").replace(" ", "_")
+    return f"Orcamento_Manto_{cliente}.pdf"
+
+
 def quote_for_entry(entry: OrcamentoHistory) -> dict:
     """Devolve o quote (congelado) de um registro do histórico, com fallback legado."""
     if entry.result_snapshot:

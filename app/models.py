@@ -1664,8 +1664,14 @@ class OrcamentoHistory(db.Model):
     # Snapshot do RESULTADO (totais, multiplicadores, mensagem) — congela o orçamento:
     # "Ver" mostra exatamente o que foi cotado, imune a mudanças de preço posteriores.
     result_snapshot = db.Column(db.Text, nullable=True)  # JSON do quote gerado
+    # Feature 333: a ficha da cliente, gravada no primeiro envio pela conversa e nunca trocada por
+    # envio seguinte. Apagada a ficha, fica vazio.
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     user = db.relationship("User", lazy=True)
+    cliente = db.relationship("Client", foreign_keys=[client_id], lazy=True)
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -4127,6 +4133,9 @@ class Conversa(db.Model):
     client_id = db.Column(
         db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Feature 333: a ficha (ou a falta dela, depois de "Remover vínculo") foi escolhida à mão — a
+    # ligação automática pelo telefone não age, senão a próxima mensagem religaria a ficha errada.
+    ficha_manual = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
     ultima_recebida_em = db.Column(db.DateTime, nullable=True)
     ultima_mensagem_em = db.Column(db.DateTime, nullable=True)
     ultima_previa = db.Column(db.String(200), nullable=True)
@@ -4173,6 +4182,38 @@ class PushAssinatura(db.Model):
     navegador = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     ultimo_aviso_em = db.Column(db.DateTime, nullable=True)
+
+
+class OrcamentoEnvio(db.Model):
+    """Um orçamento mandado pela conversa (feature 333): mensagem pronta em partes e o PDF.
+
+    ``chave_envio`` é a chave do pedido (UNIQUE): as partes usam ``{chave}:n`` e ``{chave}:pdf`` em
+    ``conversa_mensagens``, e repetir o pedido não cria outro registro. Guarda a primeira parte do
+    texto e o PDF; o resto se acha pela chave.
+    """
+
+    __tablename__ = "orcamento_envios"
+
+    id = db.Column(db.Integer, primary_key=True)
+    orcamento_id = db.Column(
+        db.Integer, db.ForeignKey("orcamento_history.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    chave_envio = db.Column(db.String(64), nullable=False, unique=True)
+    texto_mensagem_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_mensagens.id", ondelete="SET NULL"), nullable=True
+    )
+    pdf_mensagem_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_mensagens.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, nullable=False)
+
+    orcamento = db.relationship("OrcamentoHistory", lazy=True)
+    conversa = db.relationship("Conversa", lazy=True)
+    autor = db.relationship("User", lazy=True)
 
 
 class ConversaNota(db.Model):

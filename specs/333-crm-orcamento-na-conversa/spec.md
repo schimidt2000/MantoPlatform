@@ -179,7 +179,8 @@ valores e do elenco, como hoje.
 - **FR-006**: O orçamento DEVE ficar ligado à ficha da conversa no primeiro envio. Envios seguintes para outra ficha
   não trocam a ligação.
 - **FR-007**: Conversa do WhatsApp sem ficha DEVE ganhar a ficha na hora.
-  - Nome: o do orçamento; sem ele, o nome do perfil; sem os dois, o telefone.
+  - Nome: o do orçamento, se ele ainda não tem ficha; senão (ou sem nome), o do perfil; sem os dois, o
+    telefone. O orçamento da Ana reenviado para outra conversa não batiza a ficha nova de "Ana".
   - Telefone: o da conversa. Origem: "Conversa".
   - Ficha existente com o mesmo telefone (com ou sem o nono dígito) é reaproveitada; com as duas, vale a do
     telefone exato da conversa (a regra da 325).

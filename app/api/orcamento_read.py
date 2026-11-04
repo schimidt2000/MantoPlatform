@@ -122,7 +122,9 @@ def api_orcamento_settings_get() -> Any:
 # ══════════════════════════════════════════════════════════════════
 
 
-def _entry_summary(e: OrcamentoHistory, evento: Any = None, *, is_sa: bool = False) -> dict:
+def _entry_summary(
+    e: OrcamentoHistory, evento: Any = None, *, is_sa: bool = False, enviado_em: str | None = None
+) -> dict:
     """Linha do histórico. `evento` (feature 273) é o evento não cancelado que aponta para o
     orçamento — o selo de convertido mais barato possível.
 
@@ -148,6 +150,8 @@ def _entry_summary(e: OrcamentoHistory, evento: Any = None, *, is_sa: bool = Fal
         "pode_excluir": bool(is_sa or e.user_id == current_user.id),
         # Feature 313: o selo "−N%" — o desconto aplicado, lido do snapshot (um `json.loads` por linha, até 300).
         "desconto_pct": _desconto_do_snapshot(e.form_snapshot),
+        # Feature 333: o último envio pela conversa (o selo "Enviado na conversa"), ou `None`.
+        "enviado_em": enviado_em,
     }
 
 
@@ -242,12 +246,18 @@ def api_orcamento_historico_list() -> Any:
         ).all():
             eventos_por_orc.setdefault(ev.orcamento_history_id, ev)
 
+    # Feature 333: o selo de enviado, num SELECT agrupado para as linhas da página.
+    from app.conversas.costura_ops import enviados_em
+
+    enviados = enviados_em(ids)
+
     # `is_superadmin` saiu do payload de propósito (feature 301): servia só para três `if` de tela
     # que agora são incondicionais, e deixá-la viva é deixar no lugar a alavanca que espalhou a
     # regressão — o próximo a mexer na tela a encontra e conclui que há algo a esconder.
     return jsonify({
         "entries": [
-            _entry_summary(e, eventos_por_orc.get(e.id), is_sa=is_sa) for e in entries
+            _entry_summary(e, eventos_por_orc.get(e.id), is_sa=is_sa, enviado_em=enviados.get(e.id))
+            for e in entries
         ],
         "users": users,
     })
@@ -294,7 +304,12 @@ def api_orcamento_historico_detail(entry_id: int) -> Any:
         form_snapshot = json.loads(entry.form_snapshot or "{}")
     except (TypeError, ValueError):
         form_snapshot = {}
+    from app.conversas.costura_ops import envios_do_orcamento
+
     return jsonify({
         "quote": quote_ops.quote_for_entry(entry),
         "form_snapshot": form_snapshot,
+        # Feature 333: a ficha do orçamento e os envios pela conversa (do mais novo ao mais antigo).
+        "cliente": {"id": entry.cliente.id, "nome": entry.cliente.name} if entry.cliente else None,
+        "envios": envios_do_orcamento(entry.id),
     })

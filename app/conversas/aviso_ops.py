@@ -24,9 +24,10 @@ from app import db
 from app.conversas import celular_ops, equipe_ops
 from app.conversas import constantes as K
 from app.conversas.configuracao import CfgWhatsapp
+from app.conversas.ficha_ops import ficha_pelo_telefone
 from app.conversas.relogio import agora_utc
-from app.conversas.telefone import so_digitos, telefone_com_nono, variantes_de_telefone
-from app.models import Client, Conversa, ConversaMensagem, ConversaMidia, WhatsappAviso
+from app.conversas.telefone import so_digitos, telefone_com_nono
+from app.models import Conversa, ConversaMensagem, ConversaMidia, WhatsappAviso
 
 logger = logging.getLogger(__name__)
 
@@ -277,20 +278,12 @@ def conversa_do_contato(
 
 
 def _vincular_cliente(conversa: Conversa) -> None:
-    """Liga à ficha pelo telefone, com e sem o nono dígito (FR-005).
-
-    Com duas fichas (uma gravada com o 9 e outra sem), vale a do telefone exato da conversa; sem
-    ela, não liga — escolher "a primeira" ligaria a conversa à cliente errada.
-    """
-    if conversa.client_id is not None or not conversa.telefone:
-        return
-    candidatos = Client.query.filter(
-        Client.phone.in_(variantes_de_telefone(conversa.telefone))
-    ).all()
-    exatos = [c for c in candidatos if c.phone == conversa.telefone]
-    escolhido = candidatos[0] if len(candidatos) == 1 else (exatos[0] if len(exatos) == 1 else None)
-    if escolhido is not None:
-        conversa.client_id = escolhido.id
+    """Liga à ficha pelo telefone, com e sem o nono dígito (FR-005; regra em `ficha_ops`)."""
+    if conversa.client_id is not None or conversa.ficha_manual or not conversa.telefone:
+        return  # ficha escolhida (ou removida) à mão: a automática não mexe (feature 333)
+    escolhida = ficha_pelo_telefone(conversa.telefone)
+    if escolhida is not None:
+        conversa.client_id = escolhida.id
 
 
 def atualizar_previa(conversa: Conversa, tipo: str, texto: str | None, momento: datetime) -> None:

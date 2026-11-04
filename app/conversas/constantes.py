@@ -420,3 +420,25 @@ CODIGOS_DE_PERMISSAO = (10, 200)
 # Subcódigos de "o app não tem o controle da conversa" (roteamento). A confirmar na conta de teste
 # (quickstart §3); o motivo genérico com o código cobre o que não estiver aqui.
 SUBCODIGOS_DE_ROTEAMENTO = (2018300, 2534037)
+
+# ── Orçamento e formulário pela conversa (feature 333) ──────────────────────────────────────────
+# A ficha criada pela conversa (`Client.source`); `client_ops.client_metrics` tem o balde dela.
+ORIGEM_DA_FICHA = "conversa"
+TEXTO_ORCAMENTO_NAO_ENCONTRADO = "Orçamento não encontrado."
+TEXTO_ORCAMENTO_SEM_MENSAGEM = (
+    "Este orçamento não tem a mensagem pronta. Use Recalcular e envie o novo orçamento."
+)
+TEXTO_ESCOLHA_A_FICHA = "Selecione a ficha da cliente ou informe nome e telefone."
+TEXTO_FICHA_NAO_ENCONTRADA = "Ficha não encontrada. Selecione outra ou informe nome e telefone."
+TEXTO_FICHA_JA_EXISTIA = "Esta ficha já existia e foi ligada à conversa."
+MIME_PDF = "application/pdf"
+# As partes do envio usam a chave do pedido com um sufixo (`:1`, `:2`, …, `:pdf`), dentro do teto.
+SUFIXO_DO_PDF = ":pdf"
+CHAVE_BASE_MAXIMA = CHAVE_ENVIO_MAXIMA - 8
+# Os formulários públicos: o link curto `/f/<slug>` é o canônico (`frontend/server.js`).
+FORMULARIOS_PUBLICOS = (
+    ("comum", "Pré-contrato", "pre-contrato"),
+    ("corporativo", "Corporativo", "corporativo"),
+)
+TEXTO_DO_FORMULARIO = "Oi, {nome}! Para reservarmos a data, preencha o formulário: {link}"
+TEXTO_DO_FORMULARIO_SEM_NOME = "Oi! Para reservarmos a data, preencha o formulário: {link}"

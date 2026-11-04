@@ -77,3 +77,4 @@ from app.api import conversas_write as _conversas_write  # noqa: E402,F401
 from app.api import conversas_equipe_write as _conversas_equipe_write  # noqa: E402,F401
 from app.api import instagram_webhook as _instagram_webhook  # noqa: E402,F401
 from app.api import push as _push  # noqa: E402,F401
+from app.api import conversas_costura as _conversas_costura  # noqa: E402,F401

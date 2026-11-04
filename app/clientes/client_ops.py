@@ -71,12 +71,14 @@ def quick_create_client(
     cpf: str | None = None,
     cnpj: str | None = None,
     address: str | None = None,
+    source: str = "manual",
 ) -> tuple[Client, bool]:
     """Cria um cliente (nome + telefone) ou reaproveita o existente por telefone.
 
     `cpf`/`cnpj`/`address` são opcionais e só valem na CRIAÇÃO (feature 258): quando o telefone
     já pertence a alguém, o cliente existente volta **intocado** — sobrescrever documento de
     quem já está na base a partir de um cadastro rápido seria perda silenciosa de dado.
+    `source` (feature 333): `"conversa"` para a ficha criada pela conversa.
 
     Returns:
         Tupla (cliente, reused) — `reused=True` quando o telefone já pertencia a outro cliente.
@@ -95,7 +97,7 @@ def quick_create_client(
     client = Client(
         name=clean_name[:200],
         phone=phone,
-        source="manual",
+        source=source,
         phone_display=(phone_display or "").strip()[:30] or None,
         email=(email or "").strip()[:200] or None,
         company=(company or "").strip()[:200] or None,
@@ -224,10 +226,11 @@ def client_metrics() -> dict:
         "whatsform_import": "formulario",
         "formulario": "formulario",
         "kommo_import": "kommo",
+        "conversa": "conversa",  # feature 333: a ficha criada pela conversa
     }
     for month, source, count in rows:
         entry = by_month.setdefault(
-            month, {"month": month, "total": 0, "formulario": 0, "kommo": 0, "manual": 0}
+            month, {"month": month, "total": 0, "formulario": 0, "kommo": 0, "conversa": 0, "manual": 0}
         )
         entry["total"] += count
         entry[source_keys.get(source, "manual")] += count

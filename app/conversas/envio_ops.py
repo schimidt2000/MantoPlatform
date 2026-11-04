@@ -98,6 +98,18 @@ def _pre_condicoes(
     return {}
 
 
+def conferir_envio(cfg: CfgWhatsapp, conversa: Conversa) -> None:
+    """As pré-condições do envio comum (canal, trava e janela), sem enviar nada.
+
+    Para o envio composto da feature 333 (orçamento: texto em partes e PDF): recusar antes de criar
+    a ficha e o registro, e não no meio, com metade já enviada.
+
+    Raises:
+        EnvioRecusado: 503 ``nao_configurado``, 409 ``envio_travado`` / ``janela_fechada``.
+    """
+    _pre_condicoes(cfg, conversa, exige_janela=True)
+
+
 # ── Reservar, despachar ──────────────────────────────────────────────────────────────────────────
 
 
