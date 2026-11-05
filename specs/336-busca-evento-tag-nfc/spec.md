@@ -1,7 +1,7 @@
 # 336 — Buscar o evento por data no vínculo da tag NFC
 
-**Branch**: `336-busca-evento-tag-nfc` · **Created**: 2026-11-05 · **Status**: Entregue na branch
-(`verify_336.py` 7/7, tela conferida), aguardando o merge a pedido do dono · **Migration**: nenhuma
+**Branch**: `336-busca-evento-tag-nfc` · **Created**: 2026-11-05 · **Status**: Em produção desde 05/11/2026 ~10h30
+(`verify_336.py` 7/7, tela conferida) · **Migration**: nenhuma
 
 ## O pedido
 
