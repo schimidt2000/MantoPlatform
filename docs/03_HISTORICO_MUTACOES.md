@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
 | **326-novo-evento-cliente-e-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
@@ -404,6 +405,24 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
+
+> **EM PRODUÇÃO desde 05/11/2026 ~10h30 (deploy avulso, a pedido do dono, em horário de expediente)**. Nível 2 (Agenda + tela de tags, sem migration). Detalhe:
+> `specs/336-busca-evento-tag-nfc/spec.md`.
+
+**O pedido.** O dono (05/11): vincular evento à tag NFC é difícil; a busca mostra a cliente mas não a data,
+e a "mini foto" aparece bugada. Quer buscar por data, cliente ou título e ver nome e data do evento.
+
+**O que mudou.** `search_events` (`app/calendar/event_ops.py`) lê o termo como data (`_search_date`:
+`dd/mm`, `dd/mm/aa`, `dd/mm/aaaa`, `aaaa-mm-dd`) e, se for, filtra só pelo dia do evento (sem ano: dia/mês
+em qualquer ano). `AssociarDialog`: título na 1ª linha, "dia da semana, data · hora · cliente" na 2ª,
+calendarinho dia/mês como miniatura.
+
+**Pegadinha.** A data já estava no rótulo (`título — data`), mas o título longo a empurrava para fora do
+`truncate`; a miniatura "estranha" era o `AvatarThumb` tirando iniciais de "(R&I) …" e de emoji. Sem desviar a
+busca por data, "07/11" viraria dígitos "0711" e casaria telefone. A busca por data vale também na agenda, no
+vínculo de ensaio e no Pix (mesma rota); o desenho das opções lá não mudou.
 
 ### 331 — O que ficou em aberto vem para o mês atual da Planilha de Pagamentos   (331-atrasados-na-planilha · 2026-11-03 · sem migration)
 

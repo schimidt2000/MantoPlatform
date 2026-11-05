@@ -16,6 +16,36 @@ import { useClientSearch } from "../../lib/clientes";
 import { useAtualizarNfcTag, type NfcTag } from "../../lib/nfc";
 import { fieldError } from "./helpers";
 
+const SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+
+/** ISO naïve do backend lido como hora local (mesma regra do `@manto/ui/date`). */
+function lerData(iso: string | null): Date | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** "sáb, 07/11/2026 · 15h30" — dia da semana ajuda a reconhecer a festa. */
+function dataDoEvento(iso: string | null): string {
+  const d = lerData(iso);
+  if (!d) return "Sem data";
+  const hora = d.getMinutes() ? `${d.getHours()}h${String(d.getMinutes()).padStart(2, "0")}` : `${d.getHours()}h`;
+  return `${SEMANA[d.getDay()]}, ${formatShortDate(iso)} · ${hora}`;
+}
+
+/** Calendarinho da miniatura: dia grande e mês abreviado. */
+function DiaDoEvento({ iso }: { iso: string | null }) {
+  const d = lerData(iso);
+  if (!d) return <span>?</span>;
+  return (
+    <span className="flex flex-col items-center leading-none">
+      <span className="text-sm font-bold text-ink">{String(d.getDate()).padStart(2, "0")}</span>
+      <span className="text-[9px] font-semibold">{MESES[d.getMonth()]}</span>
+    </span>
+  );
+}
+
 export interface AssociarDialogProps {
   tag: NfcTag | null;
   onClose: () => void;
@@ -35,12 +65,18 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
   const clientSearch = useClientSearch(clientQuery);
   const update = useAtualizarNfcTag();
 
+  // Feature 336: o título tem cinco personagens e cortava a data do fim; as "iniciais" da
+  // miniatura saíam "(R" ou meio emoji. Agora a miniatura é um calendarinho com o dia e a data
+  // vai na linha de baixo, antes da cliente — o que a gente lembra de uma festa é o dia.
   const eventOptions = useMemo(
     () =>
       (eventSearch.data?.items ?? []).map((ev) => ({
         value: String(ev.id),
-        label: ev.start_at ? `${ev.title} — ${formatShortDate(ev.start_at)}` : ev.title,
-        description: ev.client_name ?? undefined,
+        label: ev.title,
+        description:
+          [dataDoEvento(ev.start_at), ev.client_name].filter(Boolean).join(" · ") || undefined,
+        imageShape: "square" as const,
+        fallbackIcon: <DiaDoEvento iso={ev.start_at} />,
       })),
     [eventSearch.data],
   );
@@ -82,14 +118,23 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
         <div className="space-y-4">
           <label className="block">
             <span className="mb-1 block text-sm text-muted">
-              Evento do show{tag?.event ? ` — atual: ${tag.event.title}` : ""}
+              Evento do show
+              {tag?.event
+                ? ` — atual: ${tag.event.title}${tag.event.start_at ? ` (${formatShortDate(tag.event.start_at)})` : ""}`
+                : ""}
             </span>
             <Combobox
               options={eventOptions}
               value={null}
               onChange={(value) => value !== null && save({ event_id: Number(value) })}
               onQueryChange={setEventQuery}
-              placeholder="Buscar evento por título, cliente ou telefone…"
+              placeholder="Data (07/11), personagem, cliente ou telefone…"
+              hintMessage={
+                eventQuery.trim().length < 2
+                  ? "Digite a data da festa, um personagem ou o nome da cliente."
+                  : undefined
+              }
+              emptyMessage="Nenhum evento encontrado. Tente a data no formato 07/11."
               aria-label="Buscar evento"
             />
             {fieldError(update.error, "event_id") && (

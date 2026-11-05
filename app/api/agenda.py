@@ -51,7 +51,7 @@ def api_agenda() -> Any:
 @api_bp.route("/agenda/search")
 @api_login_required
 def api_agenda_search() -> Any:
-    """Busca textual de eventos (`?q=`) por título, nome ou telefone da cliente.
+    """Busca de eventos (`?q=`) por título, nome ou telefone da cliente, ou data (feature 336).
 
     Rota separada do `GET /api/agenda` de propósito — o contrato `ym`/`by_day` das três
     visões fica intocado (Princípio IV). Nome/telefone da cliente só saem no JSON para
