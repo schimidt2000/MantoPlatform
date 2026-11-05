@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **337-figurino-sem-foto** | Filtro "Sem foto" no Banco de Figurinos: botão com o número de fichas sem imagem, filtro no endereço (`/figurinos?sem_foto=1`) para virar lista de pendências; ficha do Drive com miniatura não conta. Só tela | 2026-11-05 | — | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
@@ -405,6 +406,21 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 337 — Filtro "Sem foto" no Banco de Figurinos   (337-figurino-sem-foto · 2026-11-05 · sem migration)
+
+> **Pronto na branch, sem deploy.** Nível 2 (Figurino, só tela). Detalhe: `specs/337-figurino-sem-foto/spec.md`.
+
+**O pedido.** O dono (05/11): as fichas que a Lucimara pede pelo WhatsApp sobem com a foto tirada do
+catálogo; quando o personagem não está lá, sobem sem foto, e isso tem de ser uma pendência filtrável.
+
+**O que mudou.** `FigurinoListPage`: botão "Sem foto" com contador, filtro em `?sem_foto=1` (`replace`).
+"Sem foto" é `photo_url` nulo no `GET /api/figurino`, que já cai no `thumbnail_url` do Drive — nenhum
+contrato muda.
+
+**Pegadinha.** As fotos do "Elenco individual" do catálogo público (`CatalogCharacter.photo_url`) davam 404
+em produção no dia (Bob Esponja, Fadas, Presente Natalino): o "print do catálogo" do personagem teve de
+sair das fotos da galeria do item, recortadas. Não é desta feature; fica registrado para quem for atrás.
 
 ### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
 

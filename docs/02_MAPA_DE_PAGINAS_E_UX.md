@@ -1050,6 +1050,9 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
 - **Acesso**: staff; **edição** só `FIGURINO`/`SUPERADMIN`.
 - **UX**:
   - Busca por nome + filtro por **tags** (chips).
+  - Botão **"Sem foto"** com o número de fichas sem imagem (selo dourado): é a lista de pendências de
+    foto, e mora no endereço (`/figurinos?sem_foto=1`). Conta `photo_url` nulo — a ficha do Drive com
+    `thumbnail_url` não é pendente. Some quando não há pendência (feature 337).
   - Alerta **"personagem sem ficha"**: cargos de evento cujo `character_name` não casa com
     nenhuma ficha. Ações: **dispensar** (`POST /api/figurino/faltantes/dispensar`, grava os
     `event_role_ids` cobertos — um cargo novo faz o alerta voltar) ou **associar**
