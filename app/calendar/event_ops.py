@@ -1687,9 +1687,39 @@ def delete_ensaio_material(material: Any) -> None:
 SEARCH_MIN_CHARS = 2
 SEARCH_LIMIT = 30
 
+# Feature 336: "07/11", "7/11/26", "07-11-2026" ou "2026-11-07". Quem vincula uma tag NFC ou um
+# Pix lembra do dia da festa, não do título com cinco personagens.
+_SEARCH_DATE_BR = re.compile(r"^(\d{1,2})[/.\-](\d{1,2})(?:[/.\-](\d{2}|\d{4}))?$")
+_SEARCH_DATE_ISO = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
+
+
+def _search_date(q: str) -> tuple[int, int, int | None] | None:
+    """Lê o termo como data (dia, mês, ano opcional); `None` quando não é uma data válida."""
+    iso = _SEARCH_DATE_ISO.match(q)
+    if iso:
+        year, month, day = (int(g) for g in iso.groups())
+    else:
+        br = _SEARCH_DATE_BR.match(q)
+        if not br:
+            return None
+        day, month = int(br.group(1)), int(br.group(2))
+        year = int(br.group(3)) if br.group(3) else None
+        if year is not None and year < 100:
+            year += 2000
+    try:
+        # Ano bissexto como coringa: 29/02 sem ano é um dia que existe.
+        date(year or 2024, month, day)
+    except ValueError:
+        return None
+    return day, month, year
+
 
 def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
-    """Busca eventos por título, nome da cliente ou telefone (fonte única da agenda).
+    """Busca eventos por título, nome da cliente, telefone ou data (fonte única da agenda).
+
+    Termo que é uma data (`_search_date`) busca SÓ pelo dia do evento: sem ano, o dia/mês em
+    qualquer ano (o mais recente primeiro). Sem isso "07/11" viraria os dígitos "0711" e casaria
+    telefone por acaso.
 
     Estratégia de match (paridade com `client_ops._name_search_conditions`):
     - título e nome da cliente sem acento, via `unaccent_lower_sql` (app/utils.py);
@@ -1709,7 +1739,7 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
         Eventos ordenados por `start_at` decrescente, com `event_clients→client` e `client`
         pré-carregados (a serialização do resultado não faz N+1).
     """
-    from sqlalchemy import nullslast, or_
+    from sqlalchemy import extract, nullslast, or_
     from sqlalchemy.orm import selectinload
 
     from app.models import CalendarEvent, Client
@@ -1718,6 +1748,28 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
     q = (q or "").strip()
     if len(q) < SEARCH_MIN_CHARS:
         return []
+
+    loading = (
+        selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
+        selectinload(CalendarEvent.client),
+    )
+
+    as_date = _search_date(q)
+    if as_date:
+        day, month, year = as_date
+        date_conditions = [
+            extract("day", CalendarEvent.start_at) == day,
+            extract("month", CalendarEvent.start_at) == month,
+        ]
+        if year is not None:
+            date_conditions.append(extract("year", CalendarEvent.start_at) == year)
+        return (
+            CalendarEvent.query.filter(*date_conditions, CalendarEvent.cancelled_at.is_(None))
+            .options(*loading)
+            .order_by(nullslast(CalendarEvent.start_at.desc()))
+            .limit(limit)
+            .all()
+        )
 
     # Curingas do LIKE escapados: sem isto, digitar "%%" ou "__" casa TODOS os eventos.
     term = (
@@ -1742,10 +1794,7 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
             # ela, do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
             CalendarEvent.cancelled_at.is_(None),
         )
-        .options(
-            selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
-            selectinload(CalendarEvent.client),
-        )
+        .options(*loading)
         .order_by(nullslast(CalendarEvent.start_at.desc()))
         .limit(limit)
         .all()
