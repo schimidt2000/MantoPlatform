@@ -458,3 +458,52 @@ UTM_MEDIUM_DO_ANUNCIO = "anuncio"
 # A consulta da campanha: até 10 por vez; a falha (permissão, rede) volta depois de 24 h.
 ANUNCIOS_POR_VEZ = 10
 RECONSULTA_DO_ANUNCIO = timedelta(hours=24)
+
+# ── Funil das conversas (feature 335) ───────────────────────────────────────────────────────────
+# As etapas em ordem: cada conversa fica na mais avançada que alcançou, e cada etapa conta quem
+# chegou nela ou além (o funil nunca cresce). As chaves vão na API; os rótulos, na tela.
+ETAPAS_DO_FUNIL = ("chegou", "orcamento", "formulario", "evento", "pagou", "avaliou")
+ROTULO_DA_ETAPA = {
+    "chegou": "Chegou",
+    "orcamento": "Orçamento enviado",
+    "formulario": "Formulário",
+    "evento": "Evento fechado",
+    "pagou": "Pagou",
+    "avaliou": "Avaliou",
+}
+DIVISOES_DO_FUNIL = ("vendedor", "campanha", "canal")
+ROTULO_DO_CANAL = {CANAL_WHATSAPP: "WhatsApp", CANAL_INSTAGRAM: "Instagram"}
+# Valores especiais do filtro e da divisão por campanha (o nome da campanha nunca começa com "__").
+SEM_ANUNCIO = "__sem_anuncio__"
+CAMPANHA_DESCONHECIDA = "__desconhecida__"
+TEXTO_SEM_ANUNCIO = "Sem anúncio"
+TEXTO_CAMPANHA_DESCONHECIDA = "Campanha desconhecida"
+TEXTO_SEM_RESPONSAVEL = "Sem responsável"
+PERIODO_MAXIMO_DO_FUNIL = 366  # dias
+PARADOS_POR_VEZ = 200
+TEXTO_PERIODO_INVALIDO = "Informe a data no formato AAAA-MM-DD."
+TEXTO_PERIODO_INVERTIDO = "Escolha uma data inicial anterior à final."
+TEXTO_PERIODO_LONGO = "Escolha um período de até um ano."
+TEXTO_DIVISAO_INVALIDA = "Escolha dividir por vendedor, campanha ou canal."
+TEXTO_ETAPA_INVALIDA = "Escolha uma das etapas do funil."
+
+# ── Linha do tempo da ficha (feature 335) ───────────────────────────────────────────────────────
+# Os títulos dos marcos (o do primeiro contato leva o canal) e a origem da ficha no marco de entrada.
+MARCOS_POR_VEZ = 300
+TITULO_DO_MARCO = {
+    "entrada": "Entrou na base",
+    "contato": "Primeiro contato pelo {canal}",
+    "anuncio": "Veio do anúncio",
+    "publicacao": "Veio da publicação",
+    "orcamento": "Orçamento enviado",
+    "formulario": "Formulário preenchido",
+    "evento": "Evento fechado",
+    "pagamento": "Pagamento registrado",
+    "avaliacao": "Avaliação da cliente",
+}
+ORIGEM_DA_FICHA_LEGIVEL = {
+    "kommo_import": "Veio do Kommo",
+    "conversa": "Criada pela conversa",
+    "manual": "Cadastrada à mão",
+    "whatsform_import": "Veio do formulário",
+}
