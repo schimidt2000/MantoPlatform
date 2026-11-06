@@ -21,6 +21,7 @@ import {
   type ClientOrigem,
 } from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
+import { LinhaDoTempoDaFicha } from "../components/LinhaDoTempoDaFicha";
 import { SeloSituacao } from "../components/SeloSituacao";
 
 function formatDate(iso: string | null): string {
@@ -222,6 +223,9 @@ export function ClientDetailPage() {
           </div>
 
           <div className="space-y-4">
+          {/* Feature 335: a história da cliente num cartão só, antes das listas por tipo. */}
+          <LinhaDoTempoDaFicha clientId={id} />
+
           <Card>
             <CardHeader>
               <CardTitle>Eventos</CardTitle>

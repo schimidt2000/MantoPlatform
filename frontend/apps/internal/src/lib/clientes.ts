@@ -128,6 +128,32 @@ export function useClientDetail(id: number) {
   });
 }
 
+/** Um marco da linha do tempo da ficha (feature 335). `quando` vem em ISO com o fuso. */
+export interface MarcoDaFicha {
+  tipo:
+    | "entrada"
+    | "contato"
+    | "anuncio"
+    | "orcamento"
+    | "formulario"
+    | "evento"
+    | "pagamento"
+    | "avaliacao";
+  quando: string;
+  titulo: string;
+  detalhe: string | null;
+  /** Só quando a pessoa abre a tela de destino (conversa e orçamento: Comercial e Superadmin). */
+  link: { tipo: "conversa" | "orcamento" | "evento"; id: number } | null;
+}
+
+export function useLinhaDoTempo(id: number) {
+  return useQuery<{ marcos: MarcoDaFicha[] }>({
+    queryKey: ["clientes-linha-do-tempo", id],
+    queryFn: () => apiFetch<{ marcos: MarcoDaFicha[] }>(`/api/clientes/${id}/linha-do-tempo`),
+    enabled: Number.isFinite(id),
+  });
+}
+
 export interface QuickCreateClientInput {
   name: string;
   phone: string;

@@ -10,6 +10,7 @@ import {
   ClipboardCheck,
   DollarSign,
   FileSpreadsheet,
+  Filter,
   FileText,
   GraduationCap,
   History,
@@ -319,6 +320,15 @@ const SECTIONS: NavSectionConfig[] = [
         href: "/conversas",
         icon: <MessageCircle />,
         isActive: (path) => path.startsWith("/conversas"),
+        isVisible: (user) => notRevendedor(user) && user.conversas_ligadas === true,
+      },
+      {
+        // Feature 335: até onde chegou cada conversa nova do período. O mesmo acesso das Conversas.
+        key: "funil",
+        label: "Funil",
+        href: "/funil",
+        icon: <Filter />,
+        isActive: (path) => path.startsWith("/funil"),
         isVisible: (user) => notRevendedor(user) && user.conversas_ligadas === true,
       },
       {
