@@ -520,8 +520,24 @@ Nunca esteve escrita em lugar nenhum. São 9 ramos, em ordem:
    (`_commission_beneficiary`, `:107`).
 4. Beneficiário com `receives_commission = False` → **0**.
 5. **Base EducaManto**: 5% (`EDUCAMANTO_COMMISSION_RATE`, `:30`) sobre o **LUCRO** = venda − BV −
-   cachês. **Base comum**: 2,5% (`DEFAULT_COMMISSION`, `:27`) ou override do evento, sobre
-   venda − BV. **BV sempre sai da base** porque é repasse a terceiro, não receita.
+   cachês − **gastos extras aprovados** dos dias vivos (fora a devolução, que no cancelado já sai do
+   retido) − **comissão do vendedor** (quando há quem a receba) − **imposto da nota** (venda ×
+   `SiteSetting.tax_rate`, padrão 16%, só com nota) — feature 338, decisões do dono de 06/11/2026; o
+   custo (sem o imposto) é `comissoes_ops.custo_da_base_educamanto`. **Base comum**: 2,5%
+   (`DEFAULT_COMMISSION`, `:27`) ou override do evento, sobre venda − BV. **BV sempre sai da base**
+   porque é repasse a terceiro, não receita.
+
+   **Comissão do vendedor EducaManto (feature 338).** O valor que quem vende insere na calculadora do
+   EducaManto (o "Comissão do vendedor" do orçamento) é posto no card Comercial do evento
+   (`calendar_events.educamanto_seller_commission`) e vai **inteiro** ao vendedor do evento, numa
+   segunda linha de comissão (`commission_payments.source = 'vendedor_educamanto'`), com liberação
+   no dia do evento (o ciclo do mês do evento, como a do responsável). Só no EducaManto com
+   responsável, com venda, sem cortesia e com vendedor que comissiona — senão o valor fica como lucro
+   e não sai da base. As duas linhas são **trilhas** separadas: a sincronização
+   (`_sync_commission_payment` = `_sync_comissao_do_evento` + `_sync_comissao_do_vendedor_edu`) e a
+   reconciliação da 306 (`fonte=`) cuidam de uma por vez. A DRE e a comissão prevista do Comercial
+   somam as duas. O orçamento da calculadora (`educamanto_quotes`) **não** tem vínculo com o evento:
+   o valor é digitado no card.
 6. Base negativa vira 0; arredondamento `ROUND_HALF_UP` em 2 casas.
 7. **Ciclo de pagamento**: comissão comum entra pelo mês da **venda** (`sale_date`); comissão
    EducaManto entra pelo mês da **realização** (`payable_from = event.start_at.date()`, `:184`).
@@ -708,7 +724,11 @@ Invariantes:
    Gastos Extras: valor, data, categoria, vínculo e exclusão só mudam pelo "Alterar devolução" (409
    `devolucao_travada`, `gastos_ops.GastoLockedError`); nome, PIX e descrição são livres, e o estado de
    pagamento é da Planilha.
-8. **Comissão do cancelado = cheia × retido ÷ venda, com teto na cheia**
+8. **Comissão do cancelado = cheia × retido ÷ venda, com teto na cheia** — e, no EducaManto, a
+   **comissão do vendedor** = valor congelado × retido ÷ venda, com teto no valor (feature 338: o ato
+   congela `educamanto_seller_id`/`educamanto_seller_commission`; a trilha do vendedor se reconcilia
+   numa chamada própria, no ato, em `reaplicar_cancelado` e na troca de vendedor; o valor no
+   cancelado não muda pelo card — 409 `cancelado` para todos)
    (`comissoes_ops.comissao_do_retido`, pela mesma conta de proporção do BV, `quote_ops.bv_que_acompanha`:
    retido a um centavo da venda vale a cheia). A cheia tem uma definição só, `comissao_cheia_do_evento`:
    o portão do beneficiário (Loja Virtual, sem beneficiário, `receives_commission` falso ou

@@ -767,6 +767,15 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     preenchido fica travado para quem não é Financeiro nem Superadmin ("Só o Financeiro ou o
     Superadmin troca o vendedor."); vazio, a Comercial escolhe. Na edição completa o vendedor
     travado aparece como texto, no lugar do seletor.
+  - **Feature 338 na aba Comercial (EducaManto com responsável)**: o formulário da venda ganha
+    "Comissão do vendedor" (R$, `MoneyInput`, com a ajuda "O valor inserido na calculadora do
+    EducaManto. Vai inteiro para o vendedor e sai do lucro do responsável."); a leitura mostra a
+    linha "Comissão do vendedor" quando há valor. Some na cortesia. No cancelado, o campo fica
+    travado ("No evento cancelado, a comissão do vendedor é a do ato."). O erro do servidor sai no
+    campo, com o foco nele. O quadro "Resultado" ganha o card **"Comissão do vendedor"** (valor e
+    nome) ao lado de "Comissão" — que passa a mostrar só a comissão do evento, com o nome de **quem
+    a recebe** (no EducaManto, o responsável) em vez do vendedor do evento. Só no card Comercial: a
+    edição completa, a criação e o Jinja não têm o campo.
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o
@@ -1894,6 +1903,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     ficava de fora e a tela não fechava com a Planilha); a contagem de vendas do resumo não conta
     ajuste; as datas saem da própria string (o `new Date` mostrava o dia anterior no fuso de
     Brasília). O "ver em comissões" do evento cancelado chega com `?mes=&vendedor=&evento=`.
+  - **Feature 338**: a linha da comissão do vendedor EducaManto aparece no Tipo como **"Comissão do
+    vendedor (EducaManto)"** (o ajuste dela, "Ajuste — vendedor (EducaManto)"), nesta tela e no "Ver
+    linhas" do item de comissão da Planilha de Pagamentos; a contagem de vendas do resumo conta
+    eventos distintos (o EducaManto em que a pessoa é responsável e vendedora conta uma vez).
   - **Estornos** — desde a 306, só o **órfão**: o que a exclusão de um evento já pago (ou no banco)
     deixa, negativo, sem evento e ligado à paga, nascido no primeiro repasse aberto do vendedor.
     Aparece no mês do ciclo dele e, até ser resolvido, também no **mês corrente**, e é liquidado

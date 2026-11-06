@@ -1608,16 +1608,32 @@ def api_update_event_comercial(event_id: int) -> Any:
     except ValueError:
         return json_error("Data inválida (use AAAA-MM-DD)", 400)
 
-    from app.calendar.event_ops import erros_do_valor_na_aba_comercial, update_event_comercial
+    from app.calendar.event_ops import (
+        CAMPO_COMISSAO_DO_VENDEDOR,
+        erros_da_comissao_do_vendedor,
+        erros_do_valor_na_aba_comercial,
+        update_event_comercial,
+    )
     from app.financeiro.routes import _sync_commission_payment
+
+    # Feature 338: a comissão do vendedor EducaManto só entra quando o corpo a traz — o bundle
+    # antigo (sem o campo) salva o card sem apagar o valor.
+    if CAMPO_COMISSAO_DO_VENDEDOR in body:
+        data[CAMPO_COMISSAO_DO_VENDEDOR] = body.get(CAMPO_COMISSAO_DO_VENDEDOR)
 
     # Hotfix 215b: taxa só o Superadmin; vendedor já gravado só Financeiro/Superadmin trocam.
     negado = _erro_de_taxa_ou_vendedor(event, data)
     if negado is not None:
         return negado
 
+    from app.models import SiteSetting
+
     dados_nota, erros_nota = _dados_da_nota(body)
-    erros = {**erros_do_valor_na_aba_comercial(data, event), **erros_nota}
+    erros = {
+        **erros_do_valor_na_aba_comercial(data, event),
+        **erros_da_comissao_do_vendedor(data, event, SiteSetting.query.get(1)),
+        **erros_nota,
+    }
     if erros:
         return json_error("Corrija os campos destacados", 400, fields=erros)
 

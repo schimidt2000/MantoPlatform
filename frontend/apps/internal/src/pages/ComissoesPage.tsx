@@ -52,7 +52,7 @@ function formatDate(iso: string | null): string {
 function TipoDaLinha({ entry }: { entry: CommissionEntry }) {
   return (
     <span className="text-xs text-muted" title={entry.motivo ?? undefined}>
-      {rotuloDoTipoDaLinha(entry.tipo)}
+      {rotuloDoTipoDaLinha(entry.tipo, entry.origem)}
     </span>
   );
 }

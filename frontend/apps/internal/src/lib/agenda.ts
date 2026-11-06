@@ -633,6 +633,12 @@ export interface EventoDetalhe {
     pode_mudar_taxa?: boolean;
     /** Hotfix 215b: Financeiro e Superadmin trocam o vendedor; a Comercial só preenche o vazio. */
     pode_trocar_vendedor?: boolean;
+    /**
+     * Feature 338 — opcionais (servidor antigo não manda): a comissão do vendedor que entrou no
+     * preço pela calculadora EducaManto, e se o card mostra o campo (EducaManto com responsável).
+     */
+    educamanto_seller_commission?: number | null;
+    mostra_comissao_do_vendedor?: boolean;
     payment_method: string | null;
     payment_installments: number | null;
     payment_due_date: string | null;
@@ -720,6 +726,14 @@ export interface EventoDetalhe {
      * ele não é derivável de um percentual único (EducaManto incide sobre o lucro).
      */
     commission_source: "linha" | "estimativa";
+    /**
+     * Feature 338 — opcionais: a comissão do vendedor EducaManto, à parte de `commission` (que é
+     * só a do evento, a do responsável no EducaManto), e quem a recebe.
+     */
+    seller_commission?: number | null;
+    seller_commission_name?: string | null;
+    /** Feature 338 — opcional: quem recebe `commission` (o responsável, no EducaManto). */
+    commission_beneficiary?: string | null;
     group_size: number;
     seller: string | null;
   };

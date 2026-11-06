@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **338-comissao-vendedor-educamanto** | *(branch, sem merge)* Comissão do vendedor e lucro real no EducaManto: a base do responsável desconta gastos extras aprovados, imposto da nota e a comissão do vendedor (Jundiaí Shopping → R$ 771,82; Santo Américo → R$ 61,01); o valor que o vendedor põe na calculadora entra no card Comercial e vira a linha de comissão dele (`source = vendedor_educamanto`), no ciclo do mês do evento e proporcional ao retido no cancelado | 2026-11-06 | `d338c5a9e2b1` (aditiva) | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
@@ -405,6 +406,56 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 338 — Comissão do vendedor e lucro real no EducaManto   (338-comissao-vendedor-educamanto · 2026-11-06 · migration `d338c5a9e2b1`)
+
+> **Na branch `338-comissao-vendedor-educamanto` (worktree `C:\tmp\mp338`), sem merge.** Nível 1 (Financeiro +
+> Agenda + migration aditiva, quatro colunas anuláveis sobre `d323b5a1c0e7`). Detalhe:
+> `specs/338-comissao-vendedor-educamanto/` (spec, plano, research, verify).
+
+**O pedido.** A conferência das comissões do Gabriel no repasse de 05/11 (06/11): R$ 1.012,50 do Jundiaí Shopping
+e R$ 190,00 do Colégio Santo Américo, 5% de (venda − cachês). A Thaís tinha posto R$ 1.500 no campo "Comissão do
+vendedor" da calculadora (orçamento nº 34, 14/08 — fecha em exatamente R$ 44.800, a venda), mas o valor ficou só no
+orçamento: não virou comissão dela e entrou como lucro na base do Gabriel. O dono: "esses 1.500 vão direto para a
+pessoa… é como se fosse um BV, só que interno… não entra como lucro… é uma comissão de uma fonte diferente", e a
+regra calculada no sistema, com conferência pelo chat antes do repasse.
+
+**Decisões do dono.** A comissão do vendedor entra no ciclo do **mês do evento**; o **imposto da nota sai** da base do
+responsável; no **cancelado**, a do vendedor fica **proporcional ao retido**. Quem recebe é o vendedor do evento.
+
+**O que mudou.** Base do responsável = venda − BV − cachês − gastos extras aprovados (dias vivos, fora a devolução) −
+comissão do vendedor − imposto (`custo_da_base_educamanto` + `_imposto_da_base`; alíquota da DRE, que mudou de
+`routes.py` para `comissoes_ops.py`). `calendar_events.educamanto_seller_commission` (card Comercial, campo de
+venda do principal) gera a linha `commission_payments.source = 'vendedor_educamanto'`: duas **trilhas** no mesmo
+evento, cada uma com sua sincronização (`_sync_commission_payment` virou a casca das duas) e sua reconciliação
+(`reconciliar_comissao_do_cancelado(…, fonte=)`). O cancelamento congela o vendedor e o valor
+(`event_cancellations.educamanto_seller_*`); DRE, comissão prevista, totais e painel de cancelados somam as duas.
+Detalhe: KPI "Comissão" só da trilha do evento, com o nome de quem recebe; card "Comissão do vendedor" ao lado.
+Comissões e Planilha rotulam a linha.
+
+**Pegadinhas.** (1) Sem a coluna `source`, `_comissao_existente` pegaria a linha do vendedor como "a linha do
+evento" e a sincronização — que roda a cada abertura de Comissões e da Planilha — a sobrescreveria; e a
+reconciliação da 306 dá alvo 0 a quem não está nos alvos, então o ato zeraria o vendedor. (2) `comissao_exibida_do_evento`
+somava toda linha viva: o detalhe mostraria responsável + vendedor num número só. (3) O imposto depende da venda,
+que a correção do cancelado muda: o `commission_cost` congela cachês + gastos + vendedor, e o imposto é refeito pela
+venda congelada — só no ato da regra nova (`educamanto_seller_commission` gravado, 0,00 sem vendedor; o antigo
+fica `NULL` e não ganha imposto retroativo). (4) O `manto_local` estava na migration do CRM (`d334b2c4e6f8`, sem
+push) e parado em 20/10: o verify rodou num espelho próprio, `manto_338` (dump de produção de 06/11 02:00).
+
+**Verificação.** `verify_338.py` 12/12 contra o `manto_338` (inclui o 403 do Casting que deve sair, a comissão comum
+inalterada em 200 eventos, o cancelamento com 50% retido e a troca de vendedor no cancelado); `npm run typecheck`
+limpo; `ruff check` limpo nos arquivos novos (os avisos de `routes.py`/`models.py` já estavam na `main`). Tela aberta
+(backend e Vite da worktree, Google dublado): no Jundiaí Shopping do espelho, vendedor Thaís + R$ 1.500 no card →
+"Comissão R$ 771,82 · Gabriel Lara" e "Comissão do vendedor R$ 1.500,00 · Thays"; Comissões de setembro rotula a
+linha; Planilha de 05/11: Gabriel R$ 832,83, Thaís + R$ 1.500. Achados da tela: com seis cards numa linha os valores
+estouravam o card (75 px) — com a comissão do vendedor o "Resultado" vai a três por linha. O `verify_306.py` contra
+o espelho: as únicas diferenças "main × branch" são os dois EducaManto (as pretendidas); as mutações 14b e 20 já
+falham com o código da `main` (a mutação compara com o de antes da 306); a soma de um zero `0,00` mudava o expoente
+da DRE dos meses sem comissão do vendedor (corrigido: o zero da 338 não tem casas e só soma quando há valor).
+**Pegadinha do verify**: abrir Comissões pela API (`_resync_pending_commissions`) com o responsável de Configurações
+trocado pelo descartável passou as comissões EducaManto reais do espelho a ele, e a limpeza as apagou — o cenário lê
+as entradas pela função e a limpeza confere que as linhas reais do responsável ficaram intactas. Depois do deploy,
+correção do dado pela tela: no Jundiaí Shopping, vendedor Thaís e R$ 1.500.
 
 ### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
 

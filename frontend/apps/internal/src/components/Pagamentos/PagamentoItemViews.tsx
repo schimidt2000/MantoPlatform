@@ -201,7 +201,7 @@ function CommissionLines({ item, toque = false }: { item: PagamentoItem; toque?:
       <ul className="mt-1 space-y-1">
         {linhas.map((l) => (
           <li key={l.id} className="flex flex-wrap items-baseline gap-x-1.5 border-t border-line/60 pt-1">
-            <span className="font-semibold text-muted">{rotuloDoTipoDaLinha(l.tipo)}</span>
+            <span className="font-semibold text-muted">{rotuloDoTipoDaLinha(l.tipo, l.origem)}</span>
             {l.event_id ? (
               <Link to={`/events/${l.event_id}`} className="min-w-0 break-words text-ink hover:underline">
                 {l.event_title}

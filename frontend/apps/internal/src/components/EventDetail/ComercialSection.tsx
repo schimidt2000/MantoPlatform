@@ -107,12 +107,19 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
   const linkPagamentos = data.event.start_at
     ? `/financeiro/pagamentos?mes=${data.event.start_at.slice(0, 7)}&busca=${encodeURIComponent(data.event.title)}`
     : undefined;
+  // Feature 338: no EducaManto, `commission` é a do responsável; a do vendedor vem à parte.
+  const comissaoDoVendedor = kpi.seller_commission ?? null;
+  const quemRecebe = kpi.commission_beneficiary ?? kpi.seller;
 
   return (
     <Panel
       title={`Resultado${kpi.group_size > 1 ? ` — grupo de ${kpi.group_size} eventos` : ""}`}
     >
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-5">
+      {/* Seis cards não cabem numa linha da coluna da aba (o valor estoura o card): com a comissão
+          do vendedor, três por linha. */}
+      <div
+        className={`grid grid-cols-2 gap-2 ${comissaoDoVendedor != null ? "lg:grid-cols-3" : "lg:grid-cols-5"}`}
+      >
         <KpiCard label="Venda" value={brl(kpi.sale_value)} tone="neutral" />
         <KpiCard
           label="Custo (cachês)"
@@ -134,13 +141,21 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
           value={brl(kpi.commission)}
           hint={
             kpi.commission_source === "linha"
-              ? (kpi.seller ?? undefined)
-              : [kpi.seller, "estimativa — ainda sem lançamento"].filter(Boolean).join(" · ")
+              ? (quemRecebe ?? undefined)
+              : [quemRecebe, "estimativa — ainda sem lançamento"].filter(Boolean).join(" · ")
           }
           tone="neutral"
           to={linkComissoes}
           linkText="Ver em comissões"
         />
+        {comissaoDoVendedor != null && (
+          <KpiCard
+            label="Comissão do vendedor"
+            value={brl(comissaoDoVendedor)}
+            hint={kpi.seller_commission_name ?? undefined}
+            tone="neutral"
+          />
+        )}
         <KpiCard
           label="Lucro líquido"
           value={brl(lucro)}
@@ -193,6 +208,11 @@ function VendaForm({
     payment_method: venda.payment_method,
     payment_installments: venda.payment_installments,
     payment_due_date: venda.payment_due_date ? venda.payment_due_date.slice(0, 10) : null,
+    // Feature 338: a chave só vai no corpo do EducaManto com responsável — fora dele (ou com o
+    // servidor antigo) ela fica ausente e o servidor não mexe no valor.
+    ...(venda.mostra_comissao_do_vendedor
+      ? { educamanto_seller_commission: venda.educamanto_seller_commission ?? null }
+      : {}),
   }));
 
   // Feature 323: os dados da nota ficam fora de `form` — só vão no corpo com o chip ligado, e o
@@ -226,10 +246,13 @@ function VendaForm({
   const erroBruto = camposDoErro?.sale_value_gross;
   const erroFinal = camposDoErro?.sale_value;
   const erroDoValor = erroBruto ?? erroFinal;
+  const erroDoVendedor = camposDoErro?.educamanto_seller_commission;
   const refBruto = useRef<HTMLInputElement>(null);
+  const refComissaoVendedor = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (camposDoErro?.sale_value_gross) refBruto.current?.focus();
     else if (camposDoErro?.sale_value) refValor.current?.focus();
+    else if (camposDoErro?.educamanto_seller_commission) refComissaoVendedor.current?.focus();
     else if (camposDoErro?.nota_tomador_doc) refDoc.current?.focus();
     else if (camposDoErro?.nota_municipio) refMunicipio.current?.focus();
   }, [camposDoErro]);
@@ -280,6 +303,36 @@ function VendaForm({
         <p role="alert" className="text-sm text-red">
           {erroDoValor}
         </p>
+      )}
+
+      {/* Feature 338: o valor que o vendedor inseriu na calculadora do EducaManto vira a comissão
+          dele (linha própria) e sai do lucro do responsável. No cancelado, é o valor do ato. */}
+      {venda.mostra_comissao_do_vendedor && !form.is_cortesia_permuta && (
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-comissao-vendedor">
+            Comissão do vendedor
+          </label>
+          <MoneyInput
+            id="venda-comissao-vendedor"
+            ref={refComissaoVendedor}
+            className={`${MONEY_CLASS} ${erroDoVendedor ? "border-red" : ""}`}
+            value={form.educamanto_seller_commission ?? 0}
+            onValueChange={(v) => set("educamanto_seller_commission", v)}
+            disabled={cancelado}
+            aria-label="Comissão do vendedor"
+          />
+          {erroDoVendedor ? (
+            <p role="alert" className="mt-1 text-xs text-red">
+              {erroDoVendedor}
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted">
+              {cancelado
+                ? "No evento cancelado, a comissão do vendedor é a do ato."
+                : "O valor inserido na calculadora do EducaManto. Vai inteiro para o vendedor e sai do lucro do responsável."}
+            </p>
+          )}
+        </div>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -1143,6 +1196,9 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         {venda.commission_rate != null && (
           <DataRow label="Taxa de comissão">{venda.commission_rate}%</DataRow>
         )}
+        {venda.mostra_comissao_do_vendedor && venda.educamanto_seller_commission ? (
+          <DataRow label="Comissão do vendedor">{brl(venda.educamanto_seller_commission)}</DataRow>
+        ) : null}
         {venda.is_cortesia_permuta && (
           <DataRow label="Cortesia / permuta">
             <Badge tone="gold">Sim</Badge>

@@ -65,6 +65,8 @@ class CommissionEntry:
     evento_cancelado: bool = False
     ciclo: str | None = None
     motivo: str | None = None
+    # Feature 338: a fonte da linha (`ORIGEM_VENDEDOR_EDUCAMANTO` ou `None`, a comissão do evento).
+    origem: str | None = None
 
     def to_dict(self) -> dict:
         """Serializa para o payload JSON da API."""
@@ -84,6 +86,7 @@ class CommissionEntry:
             "evento_cancelado": self.evento_cancelado,
             "ciclo": self.ciclo,
             "motivo": self.motivo,
+            "origem": self.origem,
         }
 
 
@@ -520,16 +523,48 @@ def comissao_exibida_do_evento(event, settings) -> tuple[Decimal, str]:
     from app.constants import NOTA_COMISSAO_PROPRIA_DO_DIA
 
     # Feature 306 (P-51): a comissão própria do novo 1º dia, marcada na passagem, fica fora da venda.
+    # Feature 338: só a trilha da comissão do evento — a do vendedor EducaManto é outra pessoa e sai
+    # à parte (`comissao_do_vendedor_exibida`); somar as duas dava um número que ninguém recebe.
     linhas = [
         c
         for c in event.commission_payments
-        if c.status in _STATUS_VIVOS and NOTA_COMISSAO_PROPRIA_DO_DIA not in (c.notes or "")
+        if c.status in _STATUS_VIVOS
+        and c.source is None
+        and NOTA_COMISSAO_PROPRIA_DO_DIA not in (c.notes or "")
     ]
     if linhas:
         total = sum((Decimal(c.amount) for c in linhas), Decimal("0"))
         return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), "linha"
 
     return _event_commission(event, settings), "estimativa"
+
+
+def comissao_do_vendedor_exibida(event, settings) -> tuple[Decimal | None, str | None]:
+    """A comissão do vendedor EducaManto a exibir no detalhe, e de quem (feature 338).
+
+    A mesma régua de `comissao_exibida_do_evento`, na trilha do vendedor: cancelado → nada (a do
+    retido mora no resumo do cancelado); linha real, quando existe (o que vai ser pago, ou o que
+    já foi); senão a estimativa pelo card. `(None, None)` quando não há comissão do vendedor.
+    """
+    from app.constants import ORIGEM_VENDEDOR_EDUCAMANTO
+
+    if getattr(event, "is_cancelled", False):
+        return None, None
+    linhas = sorted(
+        (
+            c
+            for c in event.commission_payments
+            if c.status in _STATUS_VIVOS and c.source == ORIGEM_VENDEDOR_EDUCAMANTO
+        ),
+        key=lambda c: c.id,
+    )
+    if linhas:
+        total = sum((Decimal(c.amount) for c in linhas), Decimal("0"))
+        return total.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), linhas[-1].seller.name
+    valor, vendedor = comissao_do_vendedor_edu(event, settings)
+    if vendedor is None:
+        return None, None
+    return valor, vendedor.name
 
 
 def _month_scoped_query(start: date, end: date, seller_id: int | None = None):
@@ -604,6 +639,7 @@ def _to_entry(cp: CommissionPayment, cancelados: set[int] | frozenset[int] = fro
         evento_cancelado=cp.event_id in cancelados,
         ciclo=ciclo.strftime("%Y-%m") if ciclo else None,
         motivo=motivo,
+        origem=cp.source,
     )
 
 
@@ -734,7 +770,13 @@ def get_month_summary_by_seller(
             CommissionMonthSummaryRow(
                 seller_id=sid,
                 seller_name=entries[0].seller_name,
-                sale_count=sum(1 for e in entries if e.original_id is None),
+                # Feature 338: eventos distintos — o EducaManto em que a pessoa é responsável e
+                # vendedora tem duas linhas e é uma venda só.
+                sale_count=len({
+                    e.event_id if e.event_id is not None else f"linha-{e.id}"
+                    for e in entries
+                    if e.original_id is None
+                }),
                 total_amount=total_amount,
                 pending_amount=pending_amount,
                 month_status="pendente" if tem_a_pagar else "pago",
@@ -863,6 +905,16 @@ DEFAULT_COMMISSION = Decimal("2.5")
 # Este é só o piso de fábrica: a taxa vigente é `SiteSetting.educamanto_commission_rate`,
 # editável em Configurações — mudar o acordo com o responsável não deve exigir deploy.
 EDUCAMANTO_COMMISSION_RATE = Decimal("5")
+# % de provisionamento de imposto sobre venda com nota (a DRE e, desde a 338, a base da comissão
+# EducaManto). Mora aqui porque a comissão o usa; `routes.py` o reexporta para a DRE e o Jinja.
+DEFAULT_TAX_RATE = Decimal("16")
+
+
+def _get_tax_rate(settings) -> Decimal:
+    """Alíquota de imposto vigente: a de Configurações, senão os 16% de fábrica."""
+    if settings and settings.tax_rate is not None:
+        return Decimal(str(settings.tax_rate))
+    return DEFAULT_TAX_RATE
 
 
 def _educamanto_commission_rate(settings) -> Decimal:
@@ -929,6 +981,90 @@ def _educamanto_responsavel(settings) -> User | None:
     return None
 
 
+def _edu_com_responsavel(event, settings) -> bool:
+    """Evento EducaManto com responsável configurado — o ramo da comissão sobre o lucro."""
+    return bool(event.is_educamanto) and _educamanto_responsavel(settings) is not None
+
+
+def comissao_do_vendedor_edu(event, settings) -> tuple[Decimal, User | None]:
+    """A comissão do vendedor EducaManto do evento e quem a recebe (feature 338).
+
+    É o valor que o vendedor pôs no preço pela calculadora (`educamanto_seller_commission`): vai
+    inteiro para ele, numa linha de comissão própria, e por isso sai da base do responsável. Sem
+    quem receba — evento fora do EducaManto com responsável, venda vazia, cortesia, Loja Virtual,
+    sem vendedor ou vendedor que não comissiona — vale 0 e o valor fica como lucro da Manto.
+    O vendedor é lido pelo id (não pela relação), para a troca ainda não gravada contar.
+
+    Returns:
+        `(valor, vendedor)`: o valor com teto na venda e duas casas, ou `(0, None)`.
+    """
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    # `Decimal("0")` sem casas de propósito: somado à DRE de um mês sem comissão do vendedor, o
+    # zero não pode mudar o expoente do total (a DRE desse mês tem de sair idêntica à de antes).
+    nada = (Decimal("0"), None)
+    valor = Decimal(str(event.educamanto_seller_commission or 0))
+    if valor <= 0 or not event.sale_value or event.is_cortesia_permuta:
+        return nada
+    if not _edu_com_responsavel(event, settings) or is_loja_virtual(event):
+        return nada
+    vendedor = db.session.get(User, event.seller_id) if event.seller_id else None
+    if vendedor is None or not vendedor.receives_commission:
+        return nada
+    teto = min(valor, Decimal(str(event.sale_value)))
+    return teto.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP), vendedor
+
+
+def _gastos_da_base(event_ids: list[int]) -> Decimal:
+    """Os gastos extras aprovados dos dias, de qualquer data, fora a devolução à cliente (338).
+
+    A devolução fica de fora porque no cancelado ela já sai do retido — contar também aqui a
+    descontaria duas vezes. Pendente e rejeitado não são gasto.
+    """
+    from app.calendar.cancel_ops import filtro_devolucao
+    from app.models import SpecialExpense
+
+    if not event_ids:
+        return Decimal("0")
+    total = (
+        db.session.query(db.func.coalesce(db.func.sum(SpecialExpense.amount), 0))
+        .filter(
+            SpecialExpense.event_id.in_(event_ids),
+            SpecialExpense.status == "aprovado",
+            ~filtro_devolucao(),
+        )
+        .scalar()
+    )
+    return Decimal(str(total or 0))
+
+
+def custo_da_base_educamanto(event, settings, *, sem_o_dia=None) -> Decimal:
+    """O custo que sai da venda na base do responsável EducaManto (features 109, 306 e 338).
+
+    Cachês (`_event_cost`, a régua da 239) e gastos extras aprovados dos dias vivos do grupo — o dia
+    cancelado e o `sem_o_dia` (o corte que ainda não gravou `cancelled_at`) ficam fora — mais a
+    comissão do vendedor, quando há quem a receba. O imposto não entra aqui: ele depende da venda,
+    que a correção do cancelado pode mudar, e sai em `_base_da_comissao`. É o que o cancelamento
+    congela em `commission_cost`.
+    """
+    from app.calendar.group_ops import dias_vivos
+
+    dias = dias_vivos(event) if (event.is_group_leader or event.is_satellite) else [event]
+    if sem_o_dia is not None:
+        dias = [d for d in dias if d.id != sem_o_dia.id]
+    cache = sum((Decimal(str(_event_cost(d) or 0)) for d in dias), Decimal("0"))
+    gastos = _gastos_da_base([d.id for d in dias if d.id is not None])
+    vendedor, _quem = comissao_do_vendedor_edu(event, settings)
+    return cache + gastos + vendedor
+
+
+def _imposto_da_base(venda: Decimal, com_nota: bool, settings) -> Decimal:
+    """O imposto que sai da base EducaManto: venda × alíquota da DRE, só com nota (338)."""
+    if not com_nota or venda <= 0:
+        return Decimal("0")
+    return venda * _get_tax_rate(settings) / Decimal("100")
+
+
 def _commission_beneficiary(event, settings) -> User | None:
     """Beneficiário da comissão do evento (feature 109).
 
@@ -960,6 +1096,7 @@ def _base_da_comissao(
     taxa: Decimal | None = None,
     bv_total: Decimal | None = None,
     custo: Decimal | None = None,
+    com_nota: bool | None = None,
 ) -> Decimal:
     """Camada 1 da comissão cheia (feature 306, P1): o corpo de sempre de `_event_commission`.
 
@@ -974,7 +1111,10 @@ def _base_da_comissao(
         venda: a venda a usar no lugar de `event.sale_value`.
         taxa: a taxa (%) no lugar da do evento ou da padrão.
         bv_total: o BV no lugar de `_event_bv_total(event)`.
-        custo: no EducaManto com responsável, o custo de cachês no lugar do lido ao vivo.
+        custo: no EducaManto com responsável, o custo no lugar do lido ao vivo
+            (`custo_da_base_educamanto`: cachês, gastos extras e a comissão do vendedor).
+        com_nota: no EducaManto, se a venda tem nota (o congelado do cancelado); `None` = a do
+            evento. Com nota, o imposto sai da base (feature 338, decisão do dono).
 
     Returns:
         A comissão em `Decimal`, com duas casas (ROUND_HALF_UP), nunca negativa.
@@ -994,11 +1134,15 @@ def _base_da_comissao(
         return Decimal("0")
     bv = _event_bv_total(event) if bv_total is None else Decimal(str(bv_total))
     rate = Decimal(str(taxa)) if taxa is not None else _taxa_da_comissao(event, settings)
-    if event.is_educamanto and _educamanto_responsavel(settings) is not None:
-        # Comissão EducaManto (feature 109): 5% sobre o LUCRO (venda − BV − cachês).
+    if _edu_com_responsavel(event, settings):
+        # Comissão EducaManto (features 109 e 338): % sobre o LUCRO — venda − BV − cachês −
+        # gastos extras aprovados − comissão do vendedor − imposto da nota. Antes saíam só os
+        # cachês, e o responsável ganhava 5% sobre gasto, imposto e a comissão de outra pessoa.
         if custo is None:
-            custo = _group_cost(event) if event.is_group_leader else _event_cost(event)
-        base = Decimal(sale_value) - bv - Decimal(custo)
+            custo = custo_da_base_educamanto(event, settings)
+        nota = bool(event.with_invoice) if com_nota is None else bool(com_nota)
+        imposto = _imposto_da_base(Decimal(sale_value), nota, settings)
+        base = Decimal(sale_value) - bv - Decimal(str(custo)) - imposto
     else:
         # BV sai da base de comissão (repasse, não é receita comissionável) — feature 099.
         base = Decimal(sale_value) - bv
@@ -1041,12 +1185,13 @@ def comissao_cheia_do_evento(
     taxa: Decimal | None = None,
     bv_total: Decimal | None = None,
     custo: Decimal | None = None,
+    com_nota: bool | None = None,
 ) -> tuple[Decimal, int | None, Decimal]:
     """Camada 2 da comissão cheia (feature 306, FR-027): o portão do beneficiário e a base.
 
     É o que o cancelamento congela em `commission_full`: 0,00 quando ninguém comissiona
     (cortesia com valor, evento sem vendedor, beneficiário sem comissão, Loja Virtual — cenário
-    16b), senão a `_base_da_comissao` com as sobreposições do ato.
+    16b), senão a `_base_da_comissao` com as sobreposições do ato (a nota inclusive, 338).
 
     Returns:
         `(cheia, beneficiario_id, taxa_usada)`: a cheia ao centavo, o id de quem recebe (ou
@@ -1057,18 +1202,21 @@ def comissao_cheia_do_evento(
     if beneficiario is None:
         return Decimal("0.00"), None, taxa_usada
     cheia = _base_da_comissao(
-        event, settings, venda=venda, taxa=taxa_usada, bv_total=bv_total, custo=custo
-    )
+        event, settings, venda=venda, taxa=taxa_usada, bv_total=bv_total, custo=custo,
+        com_nota=com_nota,
+    )  # fmt: skip
     return cheia, beneficiario.id, taxa_usada
 
 
-def cheia_do_congelado(event, *, venda, taxa, bv_total, custo) -> Decimal:
+def cheia_do_congelado(event, *, venda, taxa, bv_total, custo, com_nota: bool = False) -> Decimal:
     """A cheia do cancelado pelos insumos congelados, sem reler o portão vivo (feature 306, FR-049).
 
     É a `_base_da_comissao` com tudo congelado: a venda, a taxa, o BV das linhas e o custo do ato.
     A fórmula EducaManto (sobre o lucro) vale quando o ato congelou o custo (`custo` não nulo, o
     EducaManto com responsável no ato) — nunca pelo responsável de hoje — e o `receives_commission`
     de hoje não é relido: quem recebe é o beneficiário congelado. A cortesia fica com quem chama.
+    Feature 338: na fórmula EducaManto, com a nota congelada (`com_nota`), o imposto da venda
+    congelada também sai — refeito pela venda, para a correção da venda do cancelado acompanhar.
     """
     venda_d = Decimal(str(venda or 0))
     if venda_d <= 0:
@@ -1076,6 +1224,7 @@ def cheia_do_congelado(event, *, venda, taxa, bv_total, custo) -> Decimal:
     base = venda_d - Decimal(str(bv_total or 0))
     if custo is not None:
         base -= Decimal(str(custo))
+        base -= _imposto_da_base(venda_d, com_nota, SiteSetting.query.get(1))
     if base < 0:
         base = Decimal("0")
     return (base * Decimal(str(taxa or 0)) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
@@ -1184,7 +1333,21 @@ def _ciclo_da_comissao_comum(
     return hoje if nasce_agora and _valor_chegou_depois(event, hoje) else None
 
 
-def _comissao_existente(event_id: int, *, ignorar_zero_pago: bool) -> CommissionPayment | None:
+def _da_trilha(fonte: str | None):
+    """O filtro da trilha de comissão (feature 338): `None` = a comissão do evento, a de sempre.
+
+    O evento EducaManto pode ter duas linhas vivas — a do responsável e a do vendedor — e cada uma
+    se sincroniza e se reconcilia sozinha. Sem o corte, a sincronização de uma pegaria a outra como
+    "a linha do evento" e a reconciliação da 306 daria alvo 0 a quem não está nos alvos dela.
+    """
+    if fonte is None:
+        return CommissionPayment.source.is_(None)
+    return CommissionPayment.source == fonte
+
+
+def _comissao_existente(
+    event_id: int, *, ignorar_zero_pago: bool, fonte: str | None = None
+) -> CommissionPayment | None:
     """A linha de comissão viva do evento: a mais recente, fora as canceladas.
 
     Feature 299 (R42): havendo comissão de verdade a pagar agora, a linha de R$ 0,00 JÁ PAGA de
@@ -1201,6 +1364,7 @@ def _comissao_existente(event_id: int, *, ignorar_zero_pago: bool) -> Commission
     Args:
         event_id: O evento.
         ignorar_zero_pago: A comissão calculada agora é maior que zero.
+        fonte: A trilha (feature 338); `None` = a comissão do evento.
 
     Returns:
         A linha, ou ``None`` quando a comissão ainda não existe.
@@ -1209,6 +1373,7 @@ def _comissao_existente(event_id: int, *, ignorar_zero_pago: bool) -> Commission
         CommissionPayment.status != "cancelado",
         CommissionPayment.original_id.is_(None),
         _sem_marca_propria(),
+        _da_trilha(fonte),
     )
     if ignorar_zero_pago:
         zero_ja_pago = CommissionPayment.status.in_(("pago", "no_banco")) & (
@@ -1323,11 +1488,11 @@ def _sem_marca_propria():
     )
 
 
-def _beneficiarios_com_linha_viva(event_ids: list[int]) -> set[int]:
-    """Todo beneficiário com linha viva (a pagar, no banco ou paga) dos eventos.
+def _beneficiarios_com_linha_viva(event_ids: list[int], fonte: str | None = None) -> set[int]:
+    """Todo beneficiário com linha viva (a pagar, no banco ou paga) dos eventos, na trilha `fonte`.
 
     Gancho das provas por mutação (data-model §6.4): a reconciliação o chama pelo módulo, e é ele
-    que dá alvo 0 a quem não está em `alvos` (FR-030).
+    que dá alvo 0 a quem não está em `alvos` (FR-030). Feature 338: uma trilha por vez.
     """
     if not event_ids:
         return set()
@@ -1338,6 +1503,7 @@ def _beneficiarios_com_linha_viva(event_ids: list[int]) -> set[int]:
             CommissionPayment.event_id.in_(event_ids),
             CommissionPayment.status.in_(_STATUS_VIVOS),
             _sem_marca_propria(),
+            _da_trilha(fonte),
         )
         .distinct()
         .all()
@@ -1371,8 +1537,13 @@ def reconciliar_comissao_do_cancelado(
     motivos: dict[int, str] | None = None,
     hoje: date | None = None,
     simular: bool = False,
+    fonte: str | None = None,
 ) -> list[dict]:
     """Leva as linhas do evento ao alvo de cada beneficiário: Σ(a pagar + no banco + pago) = alvo.
+
+    Feature 338: numa trilha só (`fonte`; `None` = a comissão do evento, a de todos os chamadores da
+    306). A da comissão do vendedor EducaManto (`ORIGEM_VENDEDOR_EDUCAMANTO`) se reconcilia numa
+    chamada própria, com os alvos dela; a linha nova nasce com a mesma fonte.
 
     `alvos` é o congelado → comissão do retido; todo outro beneficiário com linha viva do evento
     recebe alvo 0 (FR-030). Por beneficiário, `falta = alvo − liquidadas` (pago + no banco):
@@ -1391,7 +1562,7 @@ def reconciliar_comissao_do_cancelado(
     Raises:
         ValueError: um motivo fora de `MOTIVOS_AJUSTE_COMISSAO`.
     """
-    from app.constants import MOTIVOS_AJUSTE_COMISSAO, now_sp
+    from app.constants import MOTIVOS_AJUSTE_COMISSAO, ORIGEM_VENDEDOR_EDUCAMANTO, now_sp
     from app.utils import audit
 
     motivos = dict(motivos or {})
@@ -1402,13 +1573,15 @@ def reconciliar_comissao_do_cancelado(
     settings = SiteSetting.query.get(1)
     edu_responsavel = _educamanto_responsavel(settings) if event.is_educamanto else None
     beneficiarios = sorted(
-        {int(b) for b in alvos if b is not None} | _beneficiarios_com_linha_viva([event.id])
+        {int(b) for b in alvos if b is not None}
+        | _beneficiarios_com_linha_viva([event.id], fonte=fonte)
     )
     linhas = (
         CommissionPayment.query.filter(
             CommissionPayment.event_id == event.id,
             CommissionPayment.status.in_(_STATUS_VIVOS),
             _sem_marca_propria(),
+            _da_trilha(fonte),
         )
         .order_by(CommissionPayment.id)
         .all()
@@ -1444,9 +1617,13 @@ def reconciliar_comissao_do_cancelado(
                 plano.append(entrada(alvo_cp, valor=falta, nota=_nota_com_motivo(alvo_cp.notes, motivo_b, detalhe)))
         elif falta != 0:
             original = max(liquidadas, key=lambda cp: cp.id) if liquidadas else None
+            # A comissão do vendedor EducaManto também só libera no dia do evento (338, ciclo do mês
+            # do evento, decisão do dono), como a do responsável.
+            libera_no_evento = fonte == ORIGEM_VENDEDOR_EDUCAMANTO or (
+                edu_responsavel is not None and sid == edu_responsavel.id
+            )
             if (
-                edu_responsavel is not None
-                and sid == edu_responsavel.id
+                libera_no_evento
                 and falta > 0
                 and event.start_at is not None
                 and event.start_at.date() >= hoje
@@ -1485,6 +1662,7 @@ def reconciliar_comissao_do_cancelado(
                 status="a_pagar",
                 original_id=p["original_id"],
                 notes=p["nota"],
+                source=fonte,
             )
             db.session.add(cp)
             db.session.flush()
@@ -1526,6 +1704,7 @@ def _reconciliar_ajuste_vivo(event: CalendarEvent, beneficiario: User, cheia: De
             CommissionPayment.original_id.isnot(None),
             CommissionPayment.status.in_(_STATUS_VIVOS),
             _sem_marca_propria(),
+            _da_trilha(None),
         )
         .order_by(CommissionPayment.id)
         .first()
@@ -1539,7 +1718,79 @@ def _reconciliar_ajuste_vivo(event: CalendarEvent, beneficiario: User, cheia: De
 
 
 def _sync_commission_payment(event: CalendarEvent) -> None:
-    """Cria ou atualiza o CommissionPayment de um evento. Não faz commit."""
+    """Cria ou atualiza as linhas de comissão de um evento. Não faz commit.
+
+    Feature 338: a casca das duas trilhas — a comissão do evento (o corpo de sempre) e, depois, a
+    do vendedor EducaManto. Os oito chamadores (edição em bloco, card Comercial, orçamento,
+    acréscimos, agrupar, as duas telas Jinja e a criação) passam a cuidar das duas sem mudar.
+    """
+    _sync_comissao_do_evento(event)
+    _sync_comissao_do_vendedor_edu(event)
+
+
+def _linha_do_vendedor_edu(event_id: int) -> CommissionPayment | None:
+    """A linha viva da comissão do vendedor EducaManto do evento, fora ajustes (338)."""
+    from app.constants import ORIGEM_VENDEDOR_EDUCAMANTO
+
+    return (
+        CommissionPayment.query.filter_by(event_id=event_id)
+        .filter(
+            CommissionPayment.status != "cancelado",
+            CommissionPayment.original_id.is_(None),
+            _sem_marca_propria(),
+            _da_trilha(ORIGEM_VENDEDOR_EDUCAMANTO),
+        )
+        .order_by(CommissionPayment.id.desc())
+        .first()
+    )
+
+
+def _sync_comissao_do_vendedor_edu(event: CalendarEvent) -> None:
+    """Cria, acompanha ou cancela a linha da comissão do vendedor EducaManto (feature 338).
+
+    Valor = o que o vendedor pôs no preço (`comissao_do_vendedor_edu`); data da venda = a do
+    evento; liberação = o dia do evento (o ciclo do mês do evento, decisão do dono, como o do
+    responsável). A pagar acompanha valor, vendedor, datas e título; paga ou no banco é histórico.
+    Sem quem receba, a pagar vira cancelada. O cancelado é só da reconciliação (306).
+    """
+    from app.constants import NOTA_SEM_COMISSAO_DO_VENDEDOR, ORIGEM_VENDEDOR_EDUCAMANTO
+    from app.financeiro.vendas_ops import is_loja_virtual
+
+    if is_loja_virtual(event) or event.id is None:
+        return
+    _reler_cancelamento(event)
+    if event.is_cancelled:
+        return
+    valor, vendedor = comissao_do_vendedor_edu(event, SiteSetting.query.get(1))
+    existing = _linha_do_vendedor_edu(event.id)
+    if vendedor is None or valor <= 0:
+        if existing is not None and existing.status == "a_pagar":
+            existing.status = "cancelado"
+            existing.notes = f"{existing.notes} | {NOTA_SEM_COMISSAO_DO_VENDEDOR}" if existing.notes else NOTA_SEM_COMISSAO_DO_VENDEDOR
+        return
+    liberacao = event.start_at.date() if event.start_at is not None else None
+    if existing is not None:
+        if existing.status == "a_pagar":
+            existing.amount = valor
+            existing.seller_id = vendedor.id
+            existing.sale_date = event.sale_date
+            existing.payable_from = liberacao
+            existing.event_title = event.title
+        return
+    db.session.add(CommissionPayment(
+        event_id=event.id,
+        event_title=event.title,
+        seller_id=vendedor.id,
+        sale_date=event.sale_date,
+        payable_from=liberacao,
+        amount=valor,
+        status="a_pagar",
+        source=ORIGEM_VENDEDOR_EDUCAMANTO,
+    ))
+
+
+def _sync_comissao_do_evento(event: CalendarEvent) -> None:
+    """Cria ou atualiza o CommissionPayment da comissão do evento (a trilha de sempre). Sem commit."""
     # Loja Virtual não gera linha de comissão (feature 205, FR-054). O corte é aqui, na origem:
     # se a linha nunca nasce, nenhum relatório precisa lembrar de escondê-la depois.
     from app.financeiro.vendas_ops import is_loja_virtual

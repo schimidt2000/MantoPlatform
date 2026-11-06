@@ -14,7 +14,7 @@ um grupo é, portanto, apenas zerar o `group_leader_id` de cada satélite.
 
 ## O que agrupar destrói
 
-Agrupar **apaga os 14 campos comerciais** do satélite (venda, vendedor, comissão, nota fiscal,
+Agrupar **apaga os 15 campos comerciais** do satélite (venda, vendedor, comissão, nota fiscal,
 parcelas, vínculo com o orçamento): a partir dali o dinheiro do contrato mora no principal.
 Desagrupar **não devolve** esses valores. Por isso duas travas que o Jinja não tinha:
 
@@ -76,12 +76,14 @@ SATELLITE_FIELDS_CLEARED = (
     "is_cortesia_permuta", "seller_id", "commission_rate",
     "payment_method", "payment_installments", "payment_due_date",
     "transport_value", "acrescimo_value", "invoice_file", "orcamento_history_id",
+    # Feature 338: a comissão do vendedor EducaManto é da venda — mora no principal e passa com ela.
+    "educamanto_seller_commission",
 )
 
 _BOOLEANOS = ("with_invoice", "is_cortesia_permuta")
 
 #: Feature 306 (FR-059; data-model §6.3): os campos que a passagem da venda leva do antigo 1º dia ao
-#: novo — os 14 do satélite, o vencimento da nota e o nome do grupo.
+#: novo — os 15 do satélite, o vencimento da nota e o nome do grupo.
 CAMPOS_DA_PASSAGEM = (*SATELLITE_FIELDS_CLEARED, "invoice_due_date", "group_name")
 
 #: As tabelas cujas linhas a passagem MOVE (só o `event_id` muda; nunca apagar e recriar). Além
@@ -186,7 +188,7 @@ def _json_safe(valor: Any) -> Any:
 
 
 def snapshot_comercial(event: CalendarEvent) -> dict[str, Any]:
-    """Os 14 campos comerciais do evento, prontos para JSON.
+    """Os 15 campos comerciais do evento, prontos para JSON.
 
     `Decimal` vira string em vez de float de propósito: `float(Decimal("1234.56"))` introduz erro
     de representação, e este snapshot existe justamente para alguém redigitar um valor de venda.
