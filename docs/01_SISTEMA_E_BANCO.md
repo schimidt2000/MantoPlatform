@@ -1983,6 +1983,9 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 | `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
 | `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
 | `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
+| `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). |
+| `GET` | `/api/clientes/<id>/linha-do-tempo` | (335) `{marcos[{tipo, quando, titulo, detalhe, link}]}`, do mais novo para o mais antigo, até 300; `quando` em ISO com o fuso. |
 | `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
 | `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
 | `DELETE` | `/api/push/aparelhos` | (332) `{endpoint}` → 204; só apaga o aparelho da própria pessoa. |
@@ -2020,6 +2023,19 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
     vira "não entregue" com o motivo próprio.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
+
+**Linha do tempo e funil (feature 335, Fase 3c do plano).** Só leitura, sem tabela nova. Fluxo e invariantes em
+`docs/04` §6; contrato em `specs/335-crm-linha-do-tempo/contracts/api.md`.
+- **Funil** (`app/conversas/funil_ops.py`): a coorte são as conversas cujo primeiro contato — a menor data entre as
+  mensagens recebidas e os contatos por anúncio, numa agregação só (`UNION ALL` + `GROUP BY` + `HAVING`) — caiu no
+  período (datas de São Paulo convertidas para UTC). Cada conversa fica na etapa mais avançada que alcançou depois
+  do primeiro contato: orçamento (envio pela conversa ou orçamento ligado à ficha), formulário (`client_id`),
+  evento vivo (`EventClient`), pagamento (`event_payments` ou parcela recebida, no evento ou no principal do grupo)
+  e avaliação. Uma consulta por fato, em lote (`= ANY(:ids)`), com o máximo do momento por chave comparado ao
+  primeiro contato.
+- **Linha do tempo** (`app/clientes/linha_do_tempo_ops.py`): entrada, primeiro contato de cada conversa da ficha,
+  anúncios, orçamentos (um por orçamento, no primeiro envio), formulários, eventos vivos, pagamentos (a hora do PIX
+  quando há) e avaliações; os links de conversa e de orçamento só para quem abre essas telas.
 
 **Origem do anúncio (feature 334, Fase 3b do plano).** Nenhum endpoint novo. Fluxo e invariantes em `docs/04` §6;
 contrato em `specs/334-crm-origem-do-anuncio/contracts/api.md`.
@@ -2407,6 +2423,8 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
+| `pode_conversas()` (feature 335) | `conversas_funil` (`GET /api/conversas/funil`, `GET /api/conversas/funil/parados`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `_require_vendas()` (feature 335) | `clientes_read` (`GET /api/clientes/<id>/linha-do-tempo`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; os links de conversa e de orçamento só para `COMERCIAL`/`SUPERADMIN` (papel real) |
 | `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
 | `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
 | `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |

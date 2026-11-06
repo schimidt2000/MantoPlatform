@@ -192,6 +192,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **335-crm-linha-do-tempo** | *(NÃO PUBLICADO; sobre a 334)* Linha do tempo da ficha e funil das conversas, Fase 3c do `docs/PLANO_CRM_PROPRIO.md`: a ficha ganha os marcos da cliente (entrada, contatos, anúncios, orçamentos, formulários, eventos, pagamentos, avaliações) e o Comercial ganha o Funil (quem chegou no período e até onde chegou, por vendedor, campanha e canal, com quem parou em cada etapa); só leitura, sem migration | 2026-11-06 | — | (aqui) | — |
 | **334-crm-origem-do-anuncio** | *(NÃO PUBLICADO; sobre a 333)* De qual anúncio veio cada cliente, Fase 3b do `docs/PLANO_CRM_PROPRIO.md`: o `referral` de quem clica no anúncio (WhatsApp e Instagram) vira contato na conversa; a campanha vem da Meta depois do commit (falta `ads_read`); a ficha guarda o primeiro e o mais recente anúncio e o orgânico ganha o canal; o Desempenho conta o lead da conversa e os retornos | 2026-11-04 | `d334b2c4e6f8` | (aqui) | — |
 | **333-crm-orcamento-na-conversa** | *(NÃO PUBLICADO; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
 | **332-crm-avisos-no-celular** | *(NÃO PUBLICADO; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
@@ -363,7 +364,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 334, 333, 332, 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 335, 334, 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -397,6 +398,67 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 335 — Linha do tempo da ficha e funil das conversas   (335-crm-linha-do-tempo · 2026-11-06 · sem migration)
+
+> **NÃO PUBLICADO** — branch `335-crm-linha-do-tempo`, feita **sobre a `334-crm-origem-do-anuncio`** (325 → 328 → 330
+> → 332 → 333 → 334 → 335; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/335-crm-linha-do-tempo/`.
+
+**O pedido.** O dono disse "começar a 3c" (04/11) e "bora seguir" (06/11): a ficha única com a história da cliente e o
+funil derivado dos fatos, sem cartão para arrastar (a lição da 021). Decisões do dono (06/11, todas pela recomendada):
+- o funil é uma **tela nova no Comercial**, com o acesso das Conversas;
+- conta **quem chegou no período** e até onde chegou (a taxa de conversão de verdade);
+- divide **por vendedor**, e todos veem todos;
+- a ficha mostra **só os marcos**, cada um com o link; a conversa continua nas Conversas.
+
+**O que mudou.**
+- **Funil** (`funil_ops`, `GET /api/conversas/funil` e `/funil/parados`): a coorte é a das conversas cujo primeiro
+  contato (a primeira mensagem dela ou o primeiro contato pelo anúncio) caiu no período, em datas de São Paulo. Cada
+  uma fica na etapa mais avançada que alcançou depois desse contato: Chegou → Orçamento enviado → Formulário → Evento
+  fechado → Pagou → Avaliou. Filtros de canal e campanha, divisão por vendedor, campanha ou canal, e a lista de quem
+  parou em cada etapa (até 200), com "Abrir conversa".
+- **Linha do tempo** (`linha_do_tempo_ops`, `GET /api/clientes/<id>/linha-do-tempo`): entrada, primeiro contato de cada
+  conversa, anúncios, orçamentos (um por orçamento, no primeiro envio), formulários, eventos vivos, pagamentos (a hora
+  do PIX quando há) e avaliações; os links de conversa e de orçamento só para Comercial e Superadmin.
+- **Tela**: `/funil` ("Funil" no menu Comercial, só com as Conversas ligadas) e o cartão "Linha do tempo" na ficha.
+
+**Decisões e pegadinhas.**
+- **A etapa mais avançada puxa as anteriores.** Com etapas independentes, o funil cresceria de "Orçamento" para
+  "Evento" sempre que o orçamento fosse pelo celular (coexistência). "Parou em" é ter a etapa mais avançada ali.
+- **Primeiro contato não é o `created_at` da conversa**: na virada (Fase 4) o histórico de seis meses chega de uma vez,
+  e todas as conversas nasceriam no mesmo dia.
+- **Só o fato depois do primeiro contato faz andar**: a cliente antiga que volta por uma conversa nova não chega
+  "fechada".
+- **O principal do grupo só vale vivo** (convergência): o pagamento do principal cancelado não leva o satélite a
+  "Pagou".
+- **O orçamento conta pelo envio**, no funil e na linha do tempo (convergência): a hora do cálculo não é a hora em que
+  a cliente recebeu.
+- **O filtro de campanha volta para "Todas"** quando o período ou o canal muda (convergência): a campanha escolhida
+  podia sumir da lista e zerar o funil com o seletor mostrando "Todas".
+- **No celular a barra ocupa a linha inteira** (achado na tela): com a coluna do número automática, o trilho de cada
+  etapa tinha uma largura e a comparação mentia; depois, com colunas fixas, ficou com 38 px.
+- Sem dinheiro no funil: o valor fica no Dashboard Comercial, com o acesso dele.
+
+**Verificação.**
+- `verify_335.py` deu **9/9** contra o `manto_local`, com zero escapes. As contagens do funil são conferidas pela
+  diferença para a leitura de antes de semear (o `manto_local` pode ter outras conversas) e as porcentagens no recorte
+  da campanha de teste. Cobre a virada do dia em São Paulo (23 h da véspera fora, 00h30 do 1º dia dentro), a ficha do
+  Kommo, a hora do PIX, o grupo, o cancelado com pagamento e avaliação e o período padrão. Dois cenários **devem**
+  falhar: o acesso (Financeiro sem os links; Casting 403; Financeiro e Casting fora do funil) e o período e os filtros
+  inválidos (422 com o campo).
+- `verify_334` 12/12, `verify_333` 15/15, `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22.
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5338, Vite 5339) em desktop e 375×812: o funil com as contagens, "Pararam em", a tabela
+  por vendedor e a linha do tempo da ficha, sem rolagem horizontal no celular. Os ajustes da convergência na tela (o
+  filtro que volta para "Todas", o funil apagado enquanto atualiza e os textos de erro) passaram pelo `typecheck`, sem
+  nova volta na tela.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **9 achados** (0
+críticos, 0 altos, 1 médio e 8 baixos), fechados ou aceitos em T013–T021.
+
+**Para publicar.** Merge na ordem 325 → 328 → 330 → 332 → 333 → 334 → 335. Nada a configurar: o Funil aparece com as
+Conversas ligadas.
 
 ### 334 — De qual anúncio veio cada cliente   (334-crm-origem-do-anuncio · 2026-11-04 · migration `d334b2c4e6f8`)
 

@@ -193,11 +193,11 @@ Molde do `verify_334`: conexão separada, Meta dublê e disjuntor de rede; tudo 
 | # | Cenário | O que prova | Deve falhar? |
 |---|---|---|---|
 | 1 | Ficha com conversa, anúncio, orçamento enviado, formulário, evento, pagamento e avaliação | cada marco uma vez, data certa, do mais novo para o mais antigo | não |
-| 2 | Evento cancelado da mesma ficha | some da linha do tempo, com o pagamento e a avaliação dele | não |
+| 2 | Evento cancelado da mesma ficha; o grupo, o PIX e a ficha do Kommo | some da linha do tempo, com o pagamento e a avaliação dele; o pagamento do principal na hora do PIX; a entrada pelo "Criado em" do Kommo | não |
 | 3 | Financeiro e Casting na ficha | Financeiro vê os marcos sem os links de conversa e orçamento; Casting recebe 403 | **sim** |
 | 4 | Funil com conversas em etapas diferentes | as contagens e as porcentagens de cada etapa | não |
-| 5 | Conversa de fora do período; evento antigo da mesma ficha | não contam; o fato anterior ao primeiro contato não faz andar | não |
-| 6 | Filtros de canal e campanha; tabela por vendedor, campanha e canal | só o filtrado conta; a soma das linhas é o total | não |
+| 5 | Conversa de fora do período; evento antigo da mesma ficha; a virada do dia em São Paulo | não contam; o fato anterior ao primeiro contato não faz andar; 23 h da véspera fora, 00h30 do 1º dia dentro | não |
+| 6 | Filtros de canal e campanha (com "Sem anúncio"); tabela por vendedor, campanha e canal; período padrão | só o filtrado conta; a soma das linhas é o total; "Sem responsável"; o mês corrente | não |
 | 7 | Quem parou em cada etapa | a lista de "Orçamento enviado" sem quem formulou ou fechou | não |
 | 8 | Financeiro e Casting no funil; período inválido | 403 para os dois; 422 com o campo | **sim** |
 | 9 | Limpeza | registros e usuários de teste apagados | — |

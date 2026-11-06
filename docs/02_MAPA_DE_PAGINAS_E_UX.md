@@ -1814,6 +1814,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Métricas no topo da lista (feature 220)**: KPIs **Novos este mês**, **Com evento** e
   **Recorrentes (2+ eventos)** + barras de **novos clientes por mês** (12 meses; tooltip com a
   quebra formulário/Kommo/manual). `GET /api/clientes/metricas`.
+- **Linha do tempo (feature 335)**: o primeiro cartão da coluna da direita (no celular, depois do cadastro). Os
+  marcos do mais novo para o mais antigo, com ícone, título, data e hora (São Paulo), uma linha de detalhe e o link
+  ("Abrir conversa", "Ver orçamento", "Ver evento") quando a pessoa abre a tela; os 10 primeiros e "Mostrar
+  todos (N)". O Financeiro vê os marcos sem os links de conversa e de orçamento. `GET
+  /api/clientes/<id>/linha-do-tempo`.
 - **Origem (feature 334)**: no card **Contato**, as linhas **Origem** (o `lead_origin`; sem anúncio, com a
   campanha do Kommo), **Primeiro anúncio** (“título” · campanha · dia) e **Anúncio mais recente** (só quando é outro
   contato: a repescagem). O dia sai no fuso de São Paulo.
@@ -2042,6 +2047,19 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   recebeu"; comprovante do mesmo valor de um PIX que já entrou abre "Esse comprovante é do PIX que já entrou?"
   (Cancelar / Não, é outro pagamento / Sim, anexar). Na edição do evento, o anexo pendente nesse caso mostra "Esse
   valor já entrou por PIX — anexe pela página do evento".
+
+#### `/funil` — Funil *(feature 335)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (papel real); o item "Funil" fica no menu Comercial, depois das Conversas,
+  e só aparece com as Conversas ligadas.
+- **Objetivo**: até onde chegou cada conversa nova do período — Chegou, Orçamento enviado, Formulário, Evento
+  fechado, Pagou, Avaliou —, derivado dos fatos (sem cartão para arrastar).
+- **UX**: período (Mês atual, Mês passado, Últimos 30 dias, Últimos 90 dias, Personalizado), canal e campanha (com
+  a contagem de cada uma). As etapas são barras tocáveis com o número, a porcentagem sobre "Chegou" e a passagem
+  da anterior; tocar abre **Pararam em: …** (nome, canal, vendedor, quando chegou, campanha e **Abrir conversa**;
+  até 200). A tabela **Por vendedor / campanha / canal** repete as etapas, com a conversão até o evento. Sem
+  conversa no período: "Nenhuma conversa nova neste período…". No celular a barra ocupa uma linha inteira (o
+  trilho é igual em todas as etapas) e a tabela rola dentro do bloco.
+- **API**: `GET /api/conversas/funil` e `GET /api/conversas/funil/parados`.
 
 #### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328, 330 e 332)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
