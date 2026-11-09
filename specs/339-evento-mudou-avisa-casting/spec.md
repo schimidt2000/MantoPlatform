@@ -257,6 +257,15 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **A própria reescrita do título pelo sistema (História 6)** não pode disparar a regra da História 4
   sobre a vaga que acabou de sair — o título novo já bate com as vagas.
 - **Ensaio já realizado** (data passada) não tem o título trocado: é registro do que aconteceu.
+- **Superadmin salva valor em vaga sem teto de orçamento**: não há limite a ultrapassar, então nada é
+  autorizado nem gravado como teto.
+- **Cachê já salvo acima do teto rebaixado** (o evento deixou de ser SHOW): o cachê fica (FR-010) e o
+  card mostra a nota que já existe para valor acima do limite ("Cachê autorizado acima do limite deste
+  evento."); o Casting consegue manter esse valor para a mesma pessoa (piso do FR-002), não para outra.
+- **Evento cancelado com aviso pendente**: os avisos desta feature deixam de ser pendentes para todos
+  (a tela do cancelado só se consulta — feature 312).
+- **Evento marcado "Sumiu do Google Agenda"** (303): o ajuste do título fica só no sistema, sem aviso de
+  falha — vai ao Google quando o Superadmin devolver o evento (mesma regra da troca de tipo).
 - **Mudança de tipo sem SHOW** (CORP → R&I): sem recálculo e sem aviso, como hoje.
 
 ## Requisitos *(obrigatório)*
@@ -268,8 +277,11 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-001**: Quando o Superadmin salva numa vaga um cachê acima do teto efetivo dela, o sistema DEVE
   gravar esse valor como teto autorizado **da vaga**, com quem autorizou e quando.
 - **FR-002**: O teto efetivo de uma vaga DEVE ser o maior entre (teto do orçamento/tabela + parcela do
-  carrinho) e o teto autorizado — e NÃO DEVE depender do cachê da pessoa escalada.
-- **FR-003**: Tirar ou trocar a pessoa de uma vaga NÃO DEVE alterar o teto autorizado.
+  carrinho), o teto autorizado e o cachê já salvo da pessoa atual (este último é a regra da 238: quem
+  reabre o card não vê o cachê de hoje rebaixado). O teto autorizado NÃO DEVE depender do cachê da
+  pessoa — é ele que sobrevive quando o cachê se perde.
+- **FR-003**: Tirar ou trocar a pessoa de uma vaga NÃO DEVE alterar o teto autorizado; salvar a vaga sem
+  pessoa ou com cachê vazio também não.
 - **FR-004**: Quando o Superadmin salva um valor menor que o teto autorizado vigente, o teto autorizado
   DEVE passar a ser esse valor (ou deixar de existir, se o valor não passar do teto do orçamento).
 - **FR-005**: Vagas que hoje já têm cachê salvo acima do teto (regra da 238) DEVEM ter esse valor como
@@ -282,7 +294,9 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 
 - **FR-007**: Ao trocar o tipo de um evento para SHOW, o sistema DEVE recalcular o teto de cada vaga
   que veio do orçamento ligado pela mesma conta da criação, com show em todos os personagens (mesmo
-  perfil, mesma duração do evento, mesmos adicionais).
+  perfil, mesma duração do evento, mesmos adicionais). A vaga de Técnico de Som criada pela troca
+  recebe o teto da tabela de som, como na criação de um SHOW a partir de orçamento; a de presença nunca
+  tem teto.
 - **FR-008**: Ao trocar o tipo de SHOW para outro, o sistema DEVE recalcular os tetos pela conta sem
   show.
 - **FR-009**: Nenhum recálculo DEVE baixar o teto efetivo abaixo do teto autorizado pelo Superadmin
@@ -291,8 +305,9 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-011**: Toda troca de tipo que entra ou sai de SHOW DEVE registrar no histórico do evento os tetos
   antigos e novos de cada vaga recalculada.
 - **FR-012**: Toda troca de tipo que entra ou sai de SHOW DEVE avisar cada usuário de Casting, de Ensaio
-  e Superadmin (sino + faixa), com: o que mudou, quem trocou, a lista de escalados (personagem,
-  artista, cachê atual) e o pedido de conferir cachê e disponibilidade para o ensaio.
+  e Superadmin (sino + faixa), com: o que mudou, quem trocou, a lista de escalados (personagem e
+  artista; o cachê atual só para quem já vê cachê no elenco — o Ensaio não vê) e o pedido de conferir
+  cachê e disponibilidade para o ensaio.
 - **FR-013**: A resposta da troca para SHOW DEVE dizer à Comercial que os tetos foram recalculados pela
   tabela de show e que o orçamento do show, se existir, deve ser vinculado na aba Comercial.
 
@@ -316,9 +331,9 @@ título: os dois lados ficam divergentes até alguém editar à mão.
   título não dispara nada.
 - **FR-019**: Havendo vaga a mais e vaga vazia daquele personagem, o sistema DEVE remover a vaga vazia
   (a dispensada primeiro, depois a mais recente) e registrar no histórico o motivo.
-- **FR-020**: Havendo vaga a mais e todas ocupadas, o sistema NÃO DEVE remover nenhuma vaga nem mandar
-  e-mail de remoção; DEVE marcar as vagas daquele personagem no evento e avisar cada usuário de
-  Casting e Superadmin (sino + faixa).
+- **FR-020**: Se, depois de removidas as vagas vazias (FR-019), ainda sobrar vaga daquele personagem —
+  todas ocupadas —, o sistema NÃO DEVE remover nenhuma delas nem mandar e-mail de remoção; DEVE marcar
+  as vagas ocupadas daquele personagem e avisar cada usuário de Casting e Superadmin (sino + faixa).
 - **FR-021**: Quando o Casting tira alguém da escala de um personagem marcado como sobrando, a vaga que
   ficou vazia DEVE sair sozinha, com histórico.
 - **FR-022**: O sync que roda de novo sobre a mesma situação NÃO DEVE criar aviso repetido.
@@ -348,13 +363,37 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-029**: Vaga cujo nome não está no título não altera o título; o histórico DEVE dizer que o nome
   não foi encontrado.
 - **FR-030**: Sempre que o título de um evento muda (FR-027, FR-028, edição do evento ou sync), os
-  ensaios dele ainda não realizados DEVEM passar a ter "🟧 ENSAIO — <título novo>", no sistema e no
-  Google Agenda.
+  ensaios dele ainda não realizados (não cancelados e com início depois de agora, hora de São Paulo)
+  DEVEM passar a ter "🟧 ENSAIO — <título novo>", no sistema e no Google Agenda.
 - **FR-031**: Falha do Google ao atualizar o título NÃO DEVE desfazer a remoção ou a inclusão da vaga;
   DEVE voltar como aviso na tela ("Não foi possível atualizar o título no Google Agenda. Corrija o
   título por lá.") e ficar no histórico.
 - **FR-032**: A reescrita do título feita pelo próprio sistema NÃO DEVE disparar a regra de vaga a mais
   (FR-018) nem e-mail ao elenco.
+
+**E-mail ao Ensaio**
+
+- **FR-034**: Ao virar SHOW pela plataforma, a equipe de Ensaio DEVE receber o mesmo e-mail que já recebe
+  quando o sync encontra um SHOW novo no Google (hoje a troca pela plataforma liga "precisa ensaio" sem
+  esse e-mail). Sair de SHOW não manda e-mail.
+
+### Textos (Princípio XV — superfície interna)
+
+| Onde | Texto |
+|---|---|
+| Sino, entrou em SHOW | Título "Evento virou SHOW: <título>" · corpo "<dd/mm HH:MM> · Confira a disponibilidade do elenco para o ensaio e revise os cachês." |
+| Sino, saiu de SHOW | Título "Evento deixou de ser SHOW: <título>" · corpo "<dd/mm HH:MM> · Os ensaios foram cancelados. Revise os cachês do elenco." |
+| Faixa, entrou em SHOW | "Este evento virou SHOW em <dd/mm>, por <nome>. Confira com cada artista a disponibilidade para o ensaio e revise os cachês: o limite subiu para o valor de show." + lista + botão "Ciente" |
+| Faixa, saiu de SHOW | "Este evento deixou de ser SHOW em <dd/mm>, por <nome>. Os ensaios foram cancelados e o limite de cachê voltou ao valor sem show. Revise os cachês do elenco." + lista + "Ciente" |
+| Sino, vaga a mais | Título "Vaga a mais: <título>" · corpo "<PERSONAGEM>: o título pede <n>, há <m> vagas ocupadas. Remova alguém da escala." |
+| Faixa, vaga a mais | "<PERSONAGEM>: o título do evento pede <n>, há <m> vagas ocupadas. Remova alguém da escala; a vaga que ficar vazia sai sozinha." + "Ciente" |
+| Card da vaga marcada | "O título pede <n> — remova alguém da escala." |
+| Linha do teto (só Superadmin) | "… · autorizado por <nome> em <dd/mm>" ou "… · autorizado antes da 339" |
+| Aviso da resposta (troca para SHOW com orçamento) | "Os limites de cachê foram recalculados pela tabela de show. Se houver orçamento do show, vincule-o na aba Comercial." |
+| Aviso da resposta (falha do Google no título) | "Não foi possível atualizar o título no Google Agenda. Corrija o título por lá." |
+| Erro do "Ciente" | "Não foi possível registrar. Tente novamente." |
+
+O Casting nunca lê "teto" nem o número (decisão da 215): para ele é "limite".
 
 ### Entidades
 
@@ -396,9 +435,9 @@ sync é exercitado chamando a reconciliação com um título montado, sem Google
 | 2 | Casting tira o artista e escala outro com R$ 400 | salva R$ 400 | não |
 | 3 | Casting tenta R$ 450 | volta para R$ 400 | não |
 | 4 | Superadmin corrige para valor menor | teto autorizado acompanha o último valor | não |
-| 5 | R&I → SHOW com orçamento sem show | tetos de show por perfil; cachês intactos; histórico com antigo/novo | não |
+| 5 | R&I → SHOW com orçamento sem show | tetos de show por perfil (Técnico de Som com teto de som); cachês intactos; histórico com antigo/novo; aviso do FR-013 na resposta | não |
 | 6 | R&I → SHOW com vaga autorizada acima do teto de show | teto efetivo segue o autorizado | não |
-| 7 | R&I → SHOW feita pela Comercial | 1 notificação por usuário de Casting, de Ensaio e Superadmin, com a lista de escalados | não |
+| 7 | R&I → SHOW feita pela Comercial | 1 notificação por usuário de Casting, de Ensaio e Superadmin; faixa no detalhe de cada um; e-mail ao Ensaio enviado (falso) | não |
 | 8 | Usuário só de Comercial e o autor da troca | não recebem o aviso | não |
 | 9 | SHOW → R&I | tetos de receptivo (piso no autorizado) e aviso | não |
 | 10 | Casting A dá "Ciente" | faixa some para A, fica para B | não |
