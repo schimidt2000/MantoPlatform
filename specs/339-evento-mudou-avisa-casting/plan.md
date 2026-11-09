@@ -151,4 +151,7 @@ consumidos por portas diferentes (assign × add/delete/sync) e o verify testa ca
 
 ## Rastreamento de complexidade
 
-Sem violação a justificar.
+| Violação | Por que aconteceu | Como foi compensada |
+|---|---|---|
+| Princípio VIII — o `verify_339.py` foi escrito **depois** do núcleo (o `tasks.md` o punha na Foundational) | Ordem de execução no implement: o backend das seis histórias saiu antes do verify | Rodada de mutação: com o teto autorizado tirado do `teto_efetivo` e a regra de contagem do FR-027 desligada, os cenários 2, 3 e 27b falharam pelos motivos certos; desfeitas, 30/30 de novo |
+| Verificação fora do `manto_local` | O `manto_local` está em `d334b2c4e6f8` (CRM 334, sem push) e a branch sai da `main` | Banco próprio `manto_339`, restaurado do dump de 09/11 02h (memória "espelho próprio por feature"); URL em `C:\tmp\mp339\.local-db-url` (ignorado) |

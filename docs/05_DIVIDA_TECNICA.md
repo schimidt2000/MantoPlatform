@@ -813,3 +813,13 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 186 | **P4** | `event_roles`, `special_expenses`, `event_acrescimos` | o item de outubro pago em novembro sai da planilha de novembro e volta a contar só em outubro, como pago: o cartão "Pagos" do mês não diz o que saiu do caixa no mês. Cachê, gasto e BV não guardam a data do pagamento (salário, comissão e conta recorrente guardam `paid_at`) | `paid_at` nas três tabelas (migration) e o mês atual também lista o que foi pago nele, se o dono pedir o fluxo de caixa do mês |
 | 187 | **P4** | planilhas de antes de maio/2026 | ficam fora do atraso e continuam "não pagos" no mês deles: no espelho de 30/10, 10 salários de janeiro (R$ 63.800,00) e 12 de abril (R$ 40.800,00), meses sem nenhum salário marcado como pago, e 12 linhas de comissão da Thays dos ciclos de dez/2025 a mar/2026 (R$ 1.758,71) | o dono confere uma vez: marca pago o que saiu e exclui pelo lote o salário que nunca existiu. Sem script |
 | 188 | **P4** | `_ensure_salary_payments` (`app/financeiro/routes.py`) | abrir um mês passado apaga e recria os salários não pagos dele (id novo, valor do salário de hoje). Com a 331, o mês atual mostra esses salários; quem estava com ele aberto e marca o salário depois que outra pessoa abriu o mês dele recebe "Item não encontrado" (400) até recarregar. Anterior à 331 | regerar só o mês atual e os futuros, nunca o passado |
+
+## Baixa da feature 339-evento-mudou-avisa-casting (2026-11-09)
+
+**Quitada.** Nenhuma. **Criadas.** (199–201; as branches 325–335 já usam até a 198.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 199 | **P4** | `app/calendar/titulo_ops.py`, `sync_events` | o título que passa a pedir um personagem **mais** vezes do que há vagas não cria vaga nem avisa (fora de escopo da 339): em evento da plataforma a vaga nasce só pelo "Editar"; em evento do Google o sync cria só a 1ª ocorrência de um nome | se virar dor: a mesma régua "o que entrou no título" cria a vaga vazia e avisa o Casting |
+| 200 | **P5** | `app/calendar/event_ops.py` (`update_event_core`) | o "Editar" completo empurra o título do formulário ao Google; um formulário aberto antes de alguém mudar o título no Google devolve o título velho (suspeita no caso do evento 1423, sem prova) | conferir no salvar se `event.title` mudou desde que o formulário abriu e devolver 409, como o `estado_mudou` da 306 |
+| 201 | **P5** | eventos e ensaios anteriores à 339 | título com mais ocorrências do que vagas fica como está (a 339 não corrige o passado): o evento 1423 e o ensaio 1496 têm dois STORMTROOPERS para uma vaga | corrigir uma vez no Google Agenda; sem script |

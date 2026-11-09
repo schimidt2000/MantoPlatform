@@ -190,7 +190,7 @@ do Ensaio.
 - [X] T037 Tela aberta (skill `manto-conferir-tela`): faixa como Casting A/B, Ensaio e Superadmin;
       "Ciente" por pessoa; sino; card com marca e linha do teto; desktop e 375×812
 - [X] T038 Texto revisado pelo Princípio XV na tela aberta, junto dos vizinhos
-- [ ] T039 `docs/01` (colunas, `POST /api/notificacoes/<id>/ciente` e portas alteradas em §4.3),
+- [X] T039 `docs/01` (colunas, `POST /api/notificacoes/<id>/ciente` e portas alteradas em §4.3),
       `docs/02` (detalhe do evento, sino), `docs/04` §Agenda (troca de tipo, título × vagas × ensaio,
       teto efetivo), `docs/05` (personagem que entra no título), `docs/03` (entrada no topo + índice)
 - [ ] T040 `/speckit-converge` sem gaps
