@@ -54,6 +54,17 @@ plano) · **Nível**: 1 (feature) — mais de um domínio (agenda/sync, casting,
 | D4 | Como o aviso aparece | **Sino + faixa no evento até "Ciente"**, e o "Ciente" é **por pessoa**: o Matheus clicar não some para o Diogo, e vice-versa. Quando vira SHOW, o Ensaio também recebe |
 | D5 | Valor que o Superadmin salva acima do teto | Vira o **teto da vaga** e não se perde quando a pessoa da vaga muda |
 
+## Clarifications
+
+### Session 2026-11-09
+
+- Q: Num evento vindo do Google, quando um personagem some por inteiro do título e a vaga dele tem
+  artista escalado, o que o sync faz com a vaga? → A: Marca e avisa — a vaga fica, ninguém recebe
+  e-mail, e o Casting tira a pessoa da escala (mesma regra da vaga a mais; FR-023).
+- Q: Os Superadmins também recebem os avisos (sino + faixa, com "Ciente" próprio)? → A: Sim — Casting,
+  Ensaio (troca de tipo com SHOW) e Superadmin; quem fez a mudança não recebe o próprio aviso (FR-012,
+  FR-020, FR-033).
+
 ## Cenários e Verificação *(obrigatório)*
 
 ### História 1 — Valor autorizado pelo Superadmin vira o teto da vaga (Prioridade: P1)
@@ -82,8 +93,8 @@ peça que as outras histórias usam ("nunca abaixo do autorizado").
 ### História 2 — Virar SHOW sobe os tetos e avisa Casting e Ensaio (Prioridade: P1)
 
 A Comercial troca o tipo de um evento para SHOW. Além do que já acontece (vagas de som, "precisa
-ensaio"), o teto de cada vaga é recalculado pelo preço de show do mesmo perfil, e cada pessoa do Casting
-e do Ensaio recebe um aviso no sino e vê, no evento, uma faixa dizendo o que mudou, quem está escalado
+ensaio"), o teto de cada vaga é recalculado pelo preço de show do mesmo perfil, e cada pessoa do Casting,
+do Ensaio e Superadmin recebe um aviso no sino e vê, no evento, uma faixa dizendo o que mudou, quem está escalado
 com cachê a rever e que é preciso confirmar a disponibilidade para o ensaio.
 
 **Por que esta prioridade**: é o problema central do pedido — o evento mudou e ninguém que escala ficou
@@ -101,8 +112,9 @@ sabendo, e o teto impedia pagar o cachê de show.
    o evento vira SHOW, **Então** o teto efetivo dela continua o autorizado.
 3. **Dado** artistas escalados com cachê de receptivo, **Quando** o evento vira SHOW, **Então** nenhum
    cachê muda, e o aviso lista cada escalado (personagem, artista, cachê atual).
-4. **Dado** dois usuários de Casting e um de Ensaio, **Quando** o evento vira SHOW, **Então** cada um
-   recebe uma notificação no sino e vê a faixa no evento; um usuário só de Comercial não recebe.
+4. **Dado** dois usuários de Casting, um de Ensaio e um Superadmin, **Quando** a Comercial troca o
+   evento para SHOW, **Então** cada um recebe uma notificação no sino e vê a faixa no evento; um usuário
+   só de Comercial não recebe, e quem fez a troca também não.
 5. **Dado** o evento de volta de SHOW para R&I, **Quando** a troca é salva, **Então** os tetos voltam à
    conta de receptivo (nunca abaixo do autorizado pelo Superadmin) e Casting e Ensaio também são
    avisados.
@@ -149,8 +161,8 @@ estrago maior era o teto e o silêncio.
    STORMTROOPERS só, **Então** a vaga vazia sai e o histórico diz por quê ("STORMTROOPERS: o título
    pede 1, havia 2").
 2. **Dado** as 2 vagas ocupadas, **Quando** o título passa a ter um só, **Então** nenhuma vaga sai,
-   nenhum e-mail de remoção é enviado, as duas vagas aparecem marcadas no evento e o Casting recebe o
-   aviso.
+   nenhum e-mail de remoção é enviado, as duas vagas aparecem marcadas no evento e o Casting e o
+   Superadmin recebem o aviso.
 3. **Dado** essa situação, **Quando** o Casting tira um dos dois artistas da escala, **Então** a vaga que
    ficou vazia sai sozinha, a marca some e o aviso deixa de ser pendente para todos.
 4. **Dado** um evento vindo do Google com um personagem que sumiu por inteiro do título e a vaga dele
@@ -275,9 +287,9 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-010**: A troca de tipo NÃO DEVE alterar o cachê de ninguém.
 - **FR-011**: Toda troca de tipo que entra ou sai de SHOW DEVE registrar no histórico do evento os tetos
   antigos e novos de cada vaga recalculada.
-- **FR-012**: Toda troca de tipo que entra ou sai de SHOW DEVE avisar cada usuário de Casting e de Ensaio
-  (sino + faixa), com: o que mudou, quem trocou, a lista de escalados (personagem, artista, cachê
-  atual) e o pedido de conferir cachê e disponibilidade para o ensaio.
+- **FR-012**: Toda troca de tipo que entra ou sai de SHOW DEVE avisar cada usuário de Casting, de Ensaio
+  e Superadmin (sino + faixa), com: o que mudou, quem trocou, a lista de escalados (personagem,
+  artista, cachê atual) e o pedido de conferir cachê e disponibilidade para o ensaio.
 - **FR-013**: A resposta da troca para SHOW DEVE dizer à Comercial que os tetos foram recalculados pela
   tabela de show e que o orçamento do show, se existir, deve ser vinculado na aba Comercial.
 
@@ -289,6 +301,8 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-016**: "Ciente" em aviso de outra pessoa DEVE responder 404, sem alterar nada.
 - **FR-017**: Um aviso de vaga a mais DEVE deixar de ser pendente para todos quando a situação se
   resolve (o número de vagas volta a bater com o título), sem precisar de "Ciente".
+- **FR-033**: Quem fez a mudança (a troca de tipo ou a edição do título pela plataforma) NÃO DEVE
+  receber o próprio aviso. Mudança vinda do Google (sync) avisa todos os destinatários.
 
 **Vaga a mais (História 4)**
 
@@ -300,12 +314,14 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 - **FR-019**: Havendo vaga a mais e vaga vazia daquele personagem, o sistema DEVE remover a vaga vazia
   (a dispensada primeiro, depois a mais recente) e registrar no histórico o motivo.
 - **FR-020**: Havendo vaga a mais e todas ocupadas, o sistema NÃO DEVE remover nenhuma vaga nem mandar
-  e-mail de remoção; DEVE marcar as vagas daquele personagem no evento e avisar o Casting (sino + faixa).
+  e-mail de remoção; DEVE marcar as vagas daquele personagem no evento e avisar cada usuário de
+  Casting e Superadmin (sino + faixa).
 - **FR-021**: Quando o Casting tira alguém da escala de um personagem marcado como sobrando, a vaga que
   ficou vazia DEVE sair sozinha, com histórico.
 - **FR-022**: O sync que roda de novo sobre a mesma situação NÃO DEVE criar aviso repetido.
 - **FR-023**: O sync do Google NÃO DEVE mais apagar vaga ocupada de personagem que sumiu do título
-  (comportamento de hoje, com e-mail ao artista): passa pela mesma regra do FR-020.
+  (comportamento de hoje, com e-mail ao artista): passa pela mesma regra do FR-020 (confirmado pelo
+  dono no clarify de 09/11). Vaga vazia desse personagem segue saindo sozinha (FR-019).
 - **FR-024**: Nomes reservados de equipe e o evento de ENSAIO mantêm a regra de hoje.
 
 **Orçamento novo (História 5)**
@@ -375,8 +391,8 @@ sync é exercitado chamando a reconciliação com um título montado, sem Google
 | 4 | Superadmin corrige para valor menor | teto autorizado acompanha o último valor | não |
 | 5 | R&I → SHOW com orçamento sem show | tetos de show por perfil; cachês intactos; histórico com antigo/novo | não |
 | 6 | R&I → SHOW com vaga autorizada acima do teto de show | teto efetivo segue o autorizado | não |
-| 7 | R&I → SHOW | 1 notificação por usuário de Casting e de Ensaio, com a lista de escalados | não |
-| 8 | Usuário só de Comercial | não recebe o aviso | não |
+| 7 | R&I → SHOW feita pela Comercial | 1 notificação por usuário de Casting, de Ensaio e Superadmin, com a lista de escalados | não |
+| 8 | Usuário só de Comercial e o autor da troca | não recebem o aviso | não |
 | 9 | SHOW → R&I | tetos de receptivo (piso no autorizado) e aviso | não |
 | 10 | Casting A dá "Ciente" | faixa some para A, fica para B | não |
 | 11 | A abre a notificação pelo sino sem "Ciente" | faixa continua | não |
@@ -404,8 +420,8 @@ marcada como sobrando, card de casting depois da troca de pessoa), como Ensaio (
 
 ## Critérios de sucesso *(obrigatório)*
 
-- **SC-001**: Quando um evento vira SHOW (ou deixa de ser), 100% das pessoas de Casting e de Ensaio
-  recebem o aviso, sem ninguém precisar contar a elas.
+- **SC-001**: Quando um evento vira SHOW (ou deixa de ser), 100% das pessoas de Casting, de Ensaio e
+  Superadmin (menos quem fez a troca) recebem o aviso, sem ninguém precisar contar a elas.
 - **SC-002**: Depois que o Superadmin autoriza um valor numa vaga, o Casting consegue salvar esse valor
   para qualquer artista daquela vaga, sem pedir de novo — zero casos de "artista entrou com R$ 0" por
   troca de pessoa.
@@ -445,9 +461,9 @@ dívida.
 
 ## Premissas
 
-- **Destinatários**: Casting em todos os avisos; Ensaio também na troca de tipo com SHOW. O Superadmin
-  não recebe no sino (é quem autoriza e costuma ser quem mudou), mas vê o evento como hoje. Ajustável
-  no `/speckit-clarify`.
+- **Destinatários** (clarify de 09/11): Casting e Superadmin em todos os avisos; Ensaio também na troca
+  de tipo com SHOW; o autor da mudança fica de fora (FR-033). O "Ver como" não troca a caixa (regra da
+  272: a caixa é da pessoa).
 - **"Mesmo perfil" para o recálculo** = o personagem do orçamento ligado, com a flag de show ligada:
   boneco → boneco com show, cara-limpa → cara-limpa com show, cantor e especiais pela sua tabela; o
   coordenador vai para a coluna de show. Quem canta só a tabela não sabe — por isso o orçamento novo
