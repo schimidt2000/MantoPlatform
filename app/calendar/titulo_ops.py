@@ -197,10 +197,11 @@ def reconciliar_vagas_pelo_titulo(
         for role in ocupadas:
             role.sobrando_desde = role.sobrando_desde or agora
         resultado.marcadas[nome] = (pedido, len(ocupadas))
+        from app.notificacoes.notificacoes_ops import frase_da_sobra
+
         _log(
             event,
-            f"{nome.upper()}: o título pede {pedido}, há {len(ocupadas)} vagas ocupadas — nenhuma "
-            "removida; Casting avisado.",
+            f"{frase_da_sobra(nome, pedido, len(ocupadas))} Nenhuma vaga removida; Casting avisado.",
             autor_nome=autor_nome,
             autor_papel=autor_papel,
             agora=agora,

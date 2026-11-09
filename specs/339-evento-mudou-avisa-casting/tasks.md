@@ -66,9 +66,9 @@ motivos certos.
       talento, cachê > 0); nota "acima do cap" por `teto_da_nota`; `EventLog` ao autorizar/limpar
 - [X] T008 [US1] `app/api/agenda_read.py::_serialize_role`: `cache_cap_efetivo` por `teto_efetivo`;
       `teto_autorizado`, `teto_autorizado_por` (nome), `teto_autorizado_em` só para Superadmin
-- [ ] T009 [P] [US1] `frontend/apps/internal/src/lib/agenda.ts`: campos opcionais em `RoleItem`
+- [X] T009 [P] [US1] `frontend/apps/internal/src/lib/agenda.ts`: campos opcionais em `RoleItem`
       (`teto_autorizado?`, `teto_autorizado_por?`, `teto_autorizado_em?`, `sobrando?`)
-- [ ] T010 [US1] `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx`: linha do teto
+- [X] T010 [US1] `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx`: linha do teto
       do Superadmin com "autorizado por … em …" / "autorizado antes da 339"; `tetoEfetivo` só do servidor
 
 **Checkpoint**: Casting troca a pessoa e salva os R$ 400 autorizados.
@@ -90,15 +90,15 @@ motivos certos.
       por dono, 404 alheio ou sem Ciente), docstring de RBAC
 - [X] T013 [US3] `app/api/agenda_read.py::serialize_event_detail`: chave `avisos` (do usuário que pede,
       com `dados` derivado da `dedupe_key`) antes do retorno antecipado do ENSAIO
-- [ ] T014 [P] [US3] `frontend/apps/internal/src/lib/notificacoes.ts`: `useMarcarCiente` (invalida
+- [X] T014 [P] [US3] `frontend/apps/internal/src/lib/notificacoes.ts`: `useMarcarCiente` (invalida
       `["event", id]` e `["notificacoes"]`); tipo `AvisoDoEvento` e `avisos?` em `EventoDetalhe`
       (`lib/agenda.ts`)
-- [ ] T015 [US3] `frontend/apps/internal/src/components/EventDetail/AvisosDoEvento.tsx` (novo): faixa
+- [X] T015 [US3] `frontend/apps/internal/src/components/EventDetail/AvisosDoEvento.tsx` (novo): faixa
       no molde do `QuadroDoPedido`, textos da spec, lista de escalados do `elenco` (cachê só se veio no
       payload), botão "Ciente" com loading e erro inline
-- [ ] T016 [US3] `frontend/apps/internal/src/components/EventDetail/EventHeader.tsx`: renderizar a
+- [X] T016 [US3] `frontend/apps/internal/src/components/EventDetail/EventHeader.tsx`: renderizar a
       faixa e manter a mutação do "Ciente" aqui
-- [ ] T017 [P] [US3] `frontend/apps/internal/src/components/notificacoes/NotificacaoItem.tsx`: ícones
+- [X] T017 [P] [US3] `frontend/apps/internal/src/components/notificacoes/NotificacaoItem.tsx`: ícones
       dos dois `kind` novos
 
 ---
@@ -141,7 +141,7 @@ do Ensaio.
       empurram ao Google depois do commit e devolvem `warnings`
 - [X] T025 [US6] `app/calendar/event_ops.py`: `update_event_core`/`update_event_basics` propagam o
       título aos ensaios quando ele mudou (sem ajuste automático: o título do formulário vale)
-- [ ] T026 [P] [US6] `frontend/apps/internal/src/lib/casting.ts`: `useAddRole`/`useDeleteRole`/
+- [X] T026 [P] [US6] `frontend/apps/internal/src/lib/casting.ts`: `useAddRole`/`useDeleteRole`/
       `useAssignRole` mostram `warnings` da resposta
 
 ---
@@ -167,7 +167,7 @@ do Ensaio.
       — no implement: a remoção pela sobra não muda o título, então não há o que empurrar ao Google; o endpoint segue sem `warnings` (analyze U1 resolvido assim)
 - [X] T032 [US4] `app/api/agenda_read.py::_serialize_role`: `sobrando: {pedido, vagas}` para quem vê o
       elenco
-- [ ] T033 [US4] `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx`: marca "O título
+- [X] T033 [US4] `frontend/apps/internal/src/components/EventDetail/CastingSection.tsx`: marca "O título
       pede N — remova alguém da escala." no card
 
 ---
@@ -185,11 +185,11 @@ do Ensaio.
 ## Phase 9: Polimento e transversais
 
 - [X] T035 `verify_339.py` inteiro em PASS no banco de verificação
-- [ ] T036 `cd frontend && npm run typecheck` limpo; `ruff check` nos arquivos Python tocados; `ruff
+- [X] T036 `cd frontend && npm run typecheck` limpo; `ruff check` nos arquivos Python tocados; `ruff
       format` em `teto_ops.py`, `titulo_ops.py`, migration e verify
-- [ ] T037 Tela aberta (skill `manto-conferir-tela`): faixa como Casting A/B, Ensaio e Superadmin;
+- [X] T037 Tela aberta (skill `manto-conferir-tela`): faixa como Casting A/B, Ensaio e Superadmin;
       "Ciente" por pessoa; sino; card com marca e linha do teto; desktop e 375×812
-- [ ] T038 Texto revisado pelo Princípio XV na tela aberta, junto dos vizinhos
+- [X] T038 Texto revisado pelo Princípio XV na tela aberta, junto dos vizinhos
 - [ ] T039 `docs/01` (colunas, `POST /api/notificacoes/<id>/ciente` e portas alteradas em §4.3),
       `docs/02` (detalhe do evento, sino), `docs/04` §Agenda (troca de tipo, título × vagas × ensaio,
       teto efetivo), `docs/05` (personagem que entra no título), `docs/03` (entrada no topo + índice)

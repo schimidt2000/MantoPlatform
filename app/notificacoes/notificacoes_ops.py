@@ -398,6 +398,14 @@ def notificar_troca_de_tipo_show(event: CalendarEvent, *, entrou: bool, autor_id
     )
 
 
+def frase_da_sobra(nome: str, pedido: int, vagas: int) -> str:
+    """A frase da vaga a mais, com a contagem concordando (Princípio XV): sino e histórico."""
+    ocupadas = "1 vaga ocupada" if vagas == 1 else f"{vagas} vagas ocupadas"
+    if pedido == 0:
+        return f"{nome.upper()} saiu do título; há {ocupadas}. Remova da escala quem não vai mais."
+    return f"{nome.upper()}: o título pede {pedido}, há {ocupadas}. Remova alguém da escala."
+
+
 def notificar_vaga_sobrando(
     event: CalendarEvent, nome: str, *, chave: str, pedido: int, vagas: int, autor_id: int | None
 ) -> int:
@@ -410,7 +418,7 @@ def notificar_vaga_sobrando(
     return emitir(
         KIND_EVENTO_VAGA_SOBRANDO,
         title=f"Vaga a mais: {event.title}",
-        body=f"{nome.upper()}: o título pede {pedido}, há {vagas} vagas ocupadas. Remova alguém da escala.",
+        body=frase_da_sobra(nome, pedido, vagas),
         link_path=f"/events/{event.id}",
         entidade=("calendar_event", event.id),
         dedupe_key=f"{KIND_EVENTO_VAGA_SOBRANDO}:{event.id}:{chave}:{pedido}:{vagas}",

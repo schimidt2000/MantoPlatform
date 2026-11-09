@@ -75,8 +75,14 @@ interface AddRoleInput {
   role_type?: string;
 }
 
-/** Adiciona um cargo ao evento. */
-export function useAddRole(eventId: number) {
+/**
+ * Adiciona um cargo ao evento.
+ *
+ * Feature 339: a vaga nova pode pôr o nome no título do evento (e no Google Agenda); se o Google
+ * recusar, o servidor devolve `warnings` e `onAvisos` os entrega à seção — o callback mora no
+ * `useMutation` (e não no `mutate`) porque esse roda mesmo depois de o formulário fechar.
+ */
+export function useAddRole(eventId: number, onAvisos?: (avisos: string[]) => void) {
   const queryClient = useQueryClient();
   return useMutation<EventoDetalhe, Error, AddRoleInput>({
     mutationFn: (body) =>
@@ -86,18 +92,23 @@ export function useAddRole(eventId: number) {
       }),
     onSuccess: (updated) => {
       queryClient.setQueryData(["event", eventId], updated);
+      if (updated.warnings?.length) onAvisos?.(updated.warnings);
     },
   });
 }
 
-/** Remove um cargo do evento. */
-export function useDeleteRole(eventId: number) {
+/**
+ * Remove um cargo do evento. Feature 339: o título pode perder uma ocorrência do nome; a falha do
+ * Google volta em `onAvisos` (o card que pediu a remoção já não existe quando a resposta chega).
+ */
+export function useDeleteRole(eventId: number, onAvisos?: (avisos: string[]) => void) {
   const queryClient = useQueryClient();
   return useMutation<EventoDetalhe, Error, number>({
     mutationFn: (roleId) =>
       apiFetch<EventoDetalhe>(`/api/roles/${roleId}`, { method: "DELETE" }),
     onSuccess: (updated) => {
       queryClient.setQueryData(["event", eventId], updated);
+      if (updated.warnings?.length) onAvisos?.(updated.warnings);
     },
   });
 }

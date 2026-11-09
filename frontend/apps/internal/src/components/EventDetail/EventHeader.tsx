@@ -29,7 +29,9 @@ import {
   useSyncEvent,
   useToggleConfirm,
 } from "../../lib/eventOps";
+import { useMarcarCiente } from "../../lib/notificacoes";
 import { KebabMenu, type KebabMenuItem } from "../KebabMenu";
+import { AvisosDoEvento } from "./AvisosDoEvento";
 import { EditarMotivoDialog } from "./EditarMotivoDialog";
 import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
 import { PedirCancelamentoDialog } from "./PedirCancelamentoDialog";
@@ -219,6 +221,8 @@ export function EventHeader({ data }: EventHeaderProps) {
   // A devolução mora aqui, não no banner: o banner some no sucesso, e callback de `mutate` não
   // dispara em componente desmontado (TanStack Query 5).
   const devolver = useDevolverAoGoogle(event.id);
+  // Feature 339: o "Ciente" da faixa mora aqui pelo mesmo motivo — a faixa some no sucesso.
+  const ciente = useMarcarCiente(event.id);
   const [exportOpen, setExportOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [solicitarOpen, setSolicitarOpen] = useState(false);
@@ -488,6 +492,14 @@ export function EventHeader({ data }: EventHeaderProps) {
           )}
         </div>
       )}
+
+      <AvisosDoEvento
+        avisos={data.avisos ?? []}
+        elenco={data.elenco ?? []}
+        onCiente={(id) => ciente.mutate(id)}
+        enviando={ciente.isPending ? (ciente.variables ?? null) : null}
+        falhou={ciente.isError ? (ciente.variables ?? null) : null}
+      />
 
       {/* Antes do pedido de cancelamento: quando os dois existem, o sumiço é o que explica o resto. */}
       <SumiuDoGoogleBanner

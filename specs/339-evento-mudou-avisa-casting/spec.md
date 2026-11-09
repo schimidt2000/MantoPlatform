@@ -385,9 +385,9 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 | Sino, saiu de SHOW | Título "Evento deixou de ser SHOW: <título>" · corpo "<dd/mm HH:MM> · Os ensaios foram cancelados. Revise os cachês do elenco." |
 | Faixa, entrou em SHOW | "Este evento virou SHOW em <dd/mm>, por <nome>. Confira com cada artista a disponibilidade para o ensaio e revise os cachês: o limite subiu para o valor de show." + lista + botão "Ciente" |
 | Faixa, saiu de SHOW | "Este evento deixou de ser SHOW em <dd/mm>, por <nome>. Os ensaios foram cancelados e o limite de cachê voltou ao valor sem show. Revise os cachês do elenco." + lista + "Ciente" |
-| Sino, vaga a mais | Título "Vaga a mais: <título>" · corpo "<PERSONAGEM>: o título pede <n>, há <m> vagas ocupadas. Remova alguém da escala." |
-| Faixa, vaga a mais | "<PERSONAGEM>: o título do evento pede <n>, há <m> vagas ocupadas. Remova alguém da escala; a vaga que ficar vazia sai sozinha." + "Ciente" |
-| Card da vaga marcada | "O título pede <n> — remova alguém da escala." |
+| Sino, vaga a mais | Título "Vaga a mais: <título>" · corpo "<PERSONAGEM>: o título pede <n>, há <m> vagas ocupadas. Remova alguém da escala." — com o nome saindo inteiro do título: "<PERSONAGEM> saiu do título; há <m> vagas ocupadas. Remova da escala quem não vai mais." ("1 vaga ocupada" no singular) |
+| Faixa, vaga a mais | "<PERSONAGEM>: o título do evento pede <n>, há <m> vagas ocupadas. Remova alguém da escala; a vaga que ficar vazia sai sozinha." — saindo inteiro: "<PERSONAGEM> saiu do título do evento, e há <m> vagas ocupadas. Remova da escala quem não vai mais; a vaga que ficar vazia sai sozinha." + "Ciente" |
+| Card da vaga marcada | "O título pede <n> — remova alguém da escala." — saindo inteiro: "Saiu do título — remova o artista da escala." |
 | Linha do teto (só Superadmin) | "… · autorizado por <nome> em <dd/mm>" ou "… · autorizado antes da 339" |
 | Aviso da resposta (troca para SHOW com orçamento) | "Os limites de cachê foram recalculados pela tabela de show. Se houver orçamento do show, vincule-o na aba Comercial." |
 | Aviso da resposta (falha do Google no título) | "Não foi possível atualizar o título no Google Agenda. Corrija o título por lá." |

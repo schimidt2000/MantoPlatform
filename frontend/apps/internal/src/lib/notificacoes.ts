@@ -30,6 +30,8 @@ export interface Notificacao {
   /** ISO naive São Paulo, como `start_at` dos eventos — recorte a string, não passe por `Date`. */
   created_at: string;
   read_at: string | null;
+  /** Feature 339 — "Ciente" na faixa do evento; só os avisos com faixa usam. Opcional no deploy. */
+  ciente_em?: string | null;
 }
 
 export interface PaginaNotificacoes {
@@ -122,6 +124,29 @@ export function useMarcarLida() {
     },
     onError: () => {
       void queryClient.invalidateQueries({ queryKey: NAO_LIDAS_KEY });
+    },
+  });
+}
+
+interface RespostaCiente {
+  notificacao: Notificacao;
+  unread_count: number;
+}
+
+/**
+ * "Ciente" na faixa do evento (feature 339) — por pessoa: o de um usuário do Casting não some com a
+ * faixa do outro. Recarrega o evento (a faixa sai do payload) e o sino (o "Ciente" também lê).
+ * Mora no `EventHeader`, não na faixa: a faixa desmonta no sucesso.
+ */
+export function useMarcarCiente(eventId: number) {
+  const queryClient = useQueryClient();
+  return useMutation<RespostaCiente, Error, number>({
+    mutationFn: (id) =>
+      apiFetch<RespostaCiente>(`/api/notificacoes/${id}/ciente`, { method: "POST" }),
+    onSuccess: (resposta) => {
+      queryClient.setQueryData<NaoLidas>(NAO_LIDAS_KEY, { unread_count: resposta.unread_count });
+      void queryClient.invalidateQueries({ queryKey: ["event", eventId] });
+      void queryClient.invalidateQueries({ queryKey: LISTA_KEY });
     },
   });
 }

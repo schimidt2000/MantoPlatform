@@ -200,6 +200,38 @@ export interface RoleItem {
   criada_pelo_sistema?: boolean;
   /** Feature 322 — o talento atual entrou pelo formulário do evento (a comercial). */
   escalado_pelo_comercial?: boolean;
+  /**
+   * Feature 339 — o título passou a pedir este personagem menos vezes e as vagas dele estão todas
+   * ocupadas: `pedido` é o que o título pede, `vagas` o que há. `null` = nada sobrando.
+   */
+  sobrando?: { pedido: number; vagas: number } | null;
+  /** Feature 339 — teto que o Superadmin autorizou PARA A VAGA (só chega para Superadmin). */
+  teto_autorizado?: number | null;
+  /** Feature 339 — quem autorizou; `null` com valor = autorização anterior à 339. */
+  teto_autorizado_por?: string | null;
+  /** Feature 339 — quando (ISO de parede de São Paulo). */
+  teto_autorizado_em?: string | null;
+}
+
+/**
+ * Faixa do evento com "Ciente" por pessoa (feature 339): o evento virou (ou deixou de ser) SHOW,
+ * ou o título deixou de pedir uma vaga ocupada. Só chegam as da pessoa logada, ainda não
+ * confirmadas.
+ */
+export interface AvisoDoEvento {
+  id: number;
+  kind: "evento.tipo_show" | "evento.vaga_sobrando" | string;
+  title: string;
+  body: string | null;
+  severity: "info" | "urgent";
+  created_at: string | null;
+  dados: {
+    entrou?: boolean;
+    autor?: string | null;
+    personagem?: string;
+    pedido?: number;
+    vagas?: number;
+  };
 }
 
 /** O que o orçamento vinculado vendeu (feature 273) — chips da aba Comercial e base do "Aplicar". */
@@ -557,6 +589,10 @@ export interface EventoDetalhe {
    * impersonação); ausente para os demais papéis, mesmo padrão de `kpi?`/`venda?`.
    */
   logs?: { ts: string; actor_name: string; actor_role: string; message: string }[];
+  /** Feature 339 — faixas "Ciente" desta pessoa neste evento. Opcional: servidor antigo no deploy. */
+  avisos?: AvisoDoEvento[];
+  /** Feature 339 — avisos não bloqueantes que algumas escritas devolvem (falha do Google no título). */
+  warnings?: string[];
   elenco?: RoleItem[];
   /**
    * Resumo de maquiador para o badge do Casting (feature 239, decisão 17). `precisa` = algum
