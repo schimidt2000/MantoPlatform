@@ -22,6 +22,10 @@ plano) · **Nível**: 1 (feature) — mais de um domínio (agenda/sync, casting,
 > Eu precisei clicar manualmente para remover a vaga. […] Se sumir algum nome da agenda, o que a gente
 > tem que fazer é alertar o casting: precisa dispensar alguém nesse evento, essa vaga não existe mais."
 
+> (depois da primeira versão da spec) "O Stormtrooper já foi retirado da agenda, e eu já retirei ele da
+> produção ali no cachê. Por que que no título ainda tem dois Stormtroopers? Isso também precisa ser
+> resolvido."
+
 **O que aconteceu no evento 1423** (sexta 13/11, 15h–19h, "STORMTROOPERS + STORMTROOPERS + DARTH VADER
 + ANAKIN + LUKE + YODA + PRINCESA LEIA", criado pela plataforma, ligado ao orçamento #2757 de R&I):
 
@@ -36,6 +40,9 @@ plano) · **Nível**: 1 (feature) — mais de um domínio (agenda/sync, casting,
 3. O cliente passou de dois Stormtroopers para um. Em evento criado pela plataforma o sync do Google não
    olha as vagas; e mesmo em evento vindo do Google ele só confere se o nome aparece no título, não
    quantas vezes. A vaga a mais ficou até o Superadmin removê-la à mão.
+4. Removida a vaga, o título continuou com dois STORMTROOPERS — no sistema, no Google Agenda (o sync
+   das 19h43 de 09/11 leu os dois) e no ensaio marcado logo depois, que copia o título do evento.
+   Remover vaga nunca alterou o título.
 
 ## Decisões do dono (09/11/2026)
 
@@ -179,6 +186,39 @@ novo afina o que a tabela não sabe (quem canta).
    **Então** o aviso da resposta diz que os tetos foram recalculados pela tabela de show e que o
    orçamento do show, se houver, deve ser vinculado na aba Comercial.
 
+---
+
+### História 6 — O título acompanha as vagas, e o ensaio acompanha o título (Prioridade: P1)
+
+Quem remove uma vaga de personagem no sistema (à mão ou pela regra da História 4) vê o título do evento
+perder uma ocorrência daquele nome — no sistema e no Google Agenda. Quem acrescenta uma vaga de
+personagem vê o nome entrar no título. E o ensaio ainda não realizado do evento passa a ter o título
+novo, para quem ensaia não trabalhar com o elenco antigo.
+
+**Por que esta prioridade**: foi o que o dono viu no dia seguinte ao caso — o Superadmin removeu a vaga
+de Stormtrooper, mas o título no sistema e no Google continuou com dois, e o ensaio marcado depois
+copiou os dois. O sistema copia o título do Google a cada rodada do sync, e remover vaga nunca tocou no
+título: os dois lados ficam divergentes até alguém editar à mão.
+
+**Verificação**: cenários 23–27 do `verify_339.py`.
+
+**Cenários de aceite**:
+
+1. **Dado** um evento com título "STORMTROOPERS + STORMTROOPERS + DARTH VADER" e duas vagas de
+   Stormtroopers, **Quando** alguém remove uma das vagas, **Então** o título passa a ser
+   "STORMTROOPERS + DARTH VADER" (com o prefixo do tipo), no sistema e no Google Agenda, e o histórico
+   registra a mudança.
+2. **Dado** esse evento, **Quando** o Casting acrescenta uma vaga de personagem "YODA", **Então** "YODA"
+   entra no fim do título, no sistema e no Google Agenda.
+3. **Dado** um ensaio ainda não realizado ligado ao evento, **Quando** o título do evento muda (por
+   qualquer uma das portas acima, pela edição do evento ou pelo sync), **Então** o título do ensaio
+   passa a ser "🟧 ENSAIO — <título novo>", no sistema e no Google Agenda.
+4. **Dado** uma vaga cujo nome não aparece no título (nome diferente do que foi digitado no título),
+   **Quando** ela é removida, **Então** o título não muda e o histórico diz que o nome não foi
+   encontrado no título.
+5. **Dado** o Google recusando a atualização, **Quando** a vaga é removida, **Então** a vaga sai mesmo
+   assim e a tela avisa que o título no Google Agenda precisa ser corrigido à mão.
+
 ### Casos de borda
 
 - **Evento sem orçamento e sem teto**: virar SHOW não cria teto; o aviso ao Casting e ao Ensaio sai
@@ -196,6 +236,12 @@ novo afina o que a tabela não sabe (quem canta).
 - **Duas vagas vazias e o título pede uma a menos**: sai uma só (a vaga dispensada primeiro, depois a
   mais recente).
 - **Título pede MAIS vezes um personagem do que há vagas**: fora de escopo (ver abaixo).
+- **Vaga criada à mão com nome diferente do título** (ex.: vaga "Vader", título "DARTH VADER"): como a
+  regra da História 4 olha só o que **saiu** do título (antigo × novo), essa vaga nunca é tomada por
+  "vaga a mais" por causa da grafia.
+- **A própria reescrita do título pelo sistema (História 6)** não pode disparar a regra da História 4
+  sobre a vaga que acabou de sair — o título novo já bate com as vagas.
+- **Ensaio já realizado** (data passada) não tem o título trocado: é registro do que aconteceu.
 - **Mudança de tipo sem SHOW** (CORP → R&I): sem recálculo e sem aviso, como hoje.
 
 ## Requisitos *(obrigatório)*
@@ -247,8 +293,10 @@ novo afina o que a tabela não sabe (quem canta).
 **Vaga a mais (História 4)**
 
 - **FR-018**: Sempre que o título do evento muda (sync do Google ou edição pela plataforma), o sistema
-  DEVE comparar, por personagem, quantas vezes o título o pede com quantas vagas de personagem existem —
-  em evento criado pela plataforma e em evento vindo do Google.
+  DEVE comparar o título antigo com o novo e, para cada personagem que perdeu ocorrências, conferir se
+  há mais vagas daquele personagem do que o título novo pede — em evento criado pela plataforma e em
+  evento vindo do Google. Só o que **saiu** do título conta: diferença antiga de grafia entre vaga e
+  título não dispara nada.
 - **FR-019**: Havendo vaga a mais e vaga vazia daquele personagem, o sistema DEVE remover a vaga vazia
   (a dispensada primeiro, depois a mais recente) e registrar no histórico o motivo.
 - **FR-020**: Havendo vaga a mais e todas ocupadas, o sistema NÃO DEVE remover nenhuma vaga nem mandar
@@ -265,6 +313,25 @@ novo afina o que a tabela não sabe (quem canta).
 - **FR-025**: Ao vincular ou trocar o orçamento de um evento, o teto das vagas que casam com ele DEVE
   passar a ser o do orçamento (hoje só entra "onde não havia teto"), respeitando o FR-009.
 - **FR-026**: A troca de vínculo DEVE registrar no histórico os tetos antigos e novos.
+
+**Título acompanha as vagas (História 6)**
+
+- **FR-027**: Ao remover uma vaga de personagem (à mão ou pela regra do FR-019/FR-021), o sistema DEVE
+  tirar do título uma ocorrência daquele nome (a última), manter o prefixo do tipo, gravar no sistema e
+  enviar ao Google Agenda.
+- **FR-028**: Ao acrescentar uma vaga de personagem pelo sistema, o sistema DEVE acrescentar o nome ao
+  fim do título, no sistema e no Google Agenda. Vaga de equipe de apoio (nomes reservados) nunca entra
+  no título (regra da 239).
+- **FR-029**: Vaga cujo nome não está no título não altera o título; o histórico DEVE dizer que o nome
+  não foi encontrado.
+- **FR-030**: Sempre que o título de um evento muda (FR-027, FR-028, edição do evento ou sync), os
+  ensaios dele ainda não realizados DEVEM passar a ter "🟧 ENSAIO — <título novo>", no sistema e no
+  Google Agenda.
+- **FR-031**: Falha do Google ao atualizar o título NÃO DEVE desfazer a remoção ou a inclusão da vaga;
+  DEVE voltar como aviso na tela ("Não foi possível atualizar o título no Google Agenda. Corrija o
+  título por lá.") e ficar no histórico.
+- **FR-032**: A reescrita do título feita pelo próprio sistema NÃO DEVE disparar a regra de vaga a mais
+  (FR-018) nem e-mail ao elenco.
 
 ### Entidades
 
@@ -284,6 +351,8 @@ novo afina o que a tabela não sabe (quem canta).
 - `PATCH /api/events/<id>` e `PATCH /api/events/<id>/basico` — papéis de hoje (troca de tipo:
   Comercial e Superadmin); passam a recalcular tetos e emitir avisos.
 - `PATCH /api/events/<id>/orcamento` — papéis de hoje; passa a reescrever tetos (FR-025).
+- Remover e acrescentar vaga (`DELETE` da vaga e `POST` de vaga nova em `app/api/agenda_write.py`) —
+  papéis de hoje; passam a reescrever o título e o dos ensaios (FR-027, FR-028, FR-030).
 - **Novo** endpoint de "Ciente" — sem gate de papel, escopo por dono (`current_user`), 404 para aviso
   alheio (padrão do §4 do `docs/00` para notificações). Linha na tabela de `docs/01` §4.3.
 - Serialização do detail do evento: a faixa só traz os avisos pendentes **da pessoa que pediu**; o teto
@@ -321,7 +390,13 @@ sync é exercitado chamando a reconciliação com um título montado, sem Google
 | 19 | Vincular orçamento novo com cantor | teto de cantor com show | não |
 | 20 | Vincular orçamento novo com autorizado acima | teto efetivo segue o autorizado | não |
 | 21 | Casting tenta gravar teto autorizado | valor rebaixado, nenhum teto autorizado gravado | **sim** |
-| 22 | limpeza | evento, vagas, avisos e usuários descartáveis apagados (`roles.clear()` antes do usuário) | — |
+| 22 | Vaga criada à mão com grafia diferente do título + título muda em outro personagem | a vaga de grafia diferente não é tocada | não |
+| 23 | Remove uma de duas vagas de STORMTROOPERS | título perde uma ocorrência (prefixo mantido); push ao Google chamado com o título novo | não |
+| 24 | Acrescenta vaga de personagem YODA | YODA no fim do título; vaga de Coordenador não entra | não |
+| 25 | Título do evento muda com ensaio futuro e ensaio passado | só o futuro recebe "🟧 ENSAIO — <título novo>" | não |
+| 26 | Remove vaga cujo nome não está no título | título igual, histórico diz "não encontrado" | não |
+| 27 | Google recusa o título novo | vaga removida mesmo assim, aviso na resposta, nada de regra de vaga a mais | não |
+| 28 | limpeza | evento, vagas, avisos e usuários descartáveis apagados (`roles.clear()` antes do usuário) | — |
 
 Conferência de tela (skill `manto-conferir-tela`): detalhe do evento como Casting (faixa, "Ciente", vaga
 marcada como sobrando, card de casting depois da troca de pessoa), como Ensaio (faixa) e como Superadmin
@@ -340,6 +415,9 @@ marcada como sobrando, card de casting depois da troca de pessoa), como Ensaio (
   aviso ao Casting (se ocupada) — nenhuma passa em silêncio, e nenhum artista recebe e-mail de remoção
   sem alguém do Casting ter tirado ele da escala.
 - **SC-005**: O "Ciente" de uma pessoa nunca esconde o aviso de outra.
+- **SC-006**: Depois de remover ou acrescentar uma vaga de personagem, o título no sistema, no Google
+  Agenda e no ensaio futuro bate com as vagas na próxima vez que alguém abre a agenda — sem edição à
+  mão.
 
 ## Fora de escopo
 
@@ -350,7 +428,11 @@ marcada como sobrando, card de casting depois da troca de pessoa), como Ensaio (
 - **Avisar o artista** de que o evento virou SHOW ou de que precisa ensaiar: o aviso desta feature é
   interno (equipe). O e-mail de "evento mudou" de hoje (data, hora, local, cachê) segue como está.
 - **Aviso no celular (Web Push, 332)** e WhatsApp automático para a equipe.
-- **Reescrever o título a partir das vagas** quando uma vaga é removida pela plataforma.
+- **Remontar o título inteiro a partir das vagas**: a História 6 tira ou acrescenta **uma ocorrência**
+  por vaga, sem reescrever o resto (a ordem e a grafia que a Comercial digitou ficam).
+- **Proteger o "Editar" de formulário desatualizado** (aberto antes de uma mudança no Google e salvo
+  depois, devolvendo o título velho): suspeita no caso 1423, sem prova. Se acontecer de novo, é outra
+  feature.
 - **Mostrar o número do teto ao Casting** (decisão da 215 continua).
 
 ## Docs a atualizar
@@ -358,7 +440,8 @@ marcada como sobrando, card de casting depois da troca de pessoa), como Ensaio (
 `docs/01` §2 (`event_roles`, aviso/"Ciente") e §4.3 (endpoint de "Ciente" e as portas alteradas);
 `docs/02` (detalhe do evento: faixa, vaga a mais, linha do teto autorizado; sino); `docs/03` (entrada
 no topo, com o caso do evento 1423); `docs/04` §Agenda (troca de tipo, reconciliação título × vagas,
-teto efetivo); `docs/05` se o "personagem que entra no título" ficar como dívida.
+teto efetivo, título ↔ vagas ↔ ensaio); `docs/05` se o "personagem que entra no título" ficar como
+dívida.
 
 ## Premissas
 
@@ -374,7 +457,12 @@ teto efetivo); `docs/05` se o "personagem que entra no título" ficar como dívi
 - **Comparação título × vagas** usa o mesmo nome normalizado do sync (sem prefixo de tipo, sem nomes de
   equipe) e conta repetições.
 - **O caso do evento 1423** já foi resolvido à mão (vaga removida, R$ 400 salvos); a migração do FR-005
-  transforma os R$ 400 dele em teto autorizado. O título dele ainda tem dois STORMTROOPERS no sistema
-  (e o ensaio criado em 09/11 copiou os dois): título pedindo mais do que há vagas está fora de escopo,
-  então nada é marcado — mas o título deve ser corrigido no Google para não confundir a equipe.
+  transforma os R$ 400 dele em teto autorizado. O título dele continuou com dois STORMTROOPERS porque
+  remover a vaga não toca no título (a História 6 resolve daqui para frente): a rodada do sync de
+  09/11 às 19h43 (Brasília), sem erro, leu no Google o título com os dois, e o ensaio 1496, criado
+  depois da remoção da vaga, copiou os dois. A 339 não corrige o passado: o título do 1423 e o do
+  ensaio 1496 se corrigem à mão, uma vez.
+- **Rótulo de vaga ↔ título**: o nome da vaga casa com o segmento do título pela normalização do sync
+  (sem caixa, sem acento, sem espaços nas pontas). A ocorrência retirada é a última; a acrescentada vai
+  no fim, em maiúsculas, como os títulos gerados pela plataforma.
 - Horário do aviso e do histórico em hora de São Paulo (`now_sp()`), como as notificações da 272.
