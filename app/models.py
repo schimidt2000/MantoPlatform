@@ -642,9 +642,27 @@ class EventRole(db.Model):
     dismissed_at = db.Column(db.DateTime, nullable=True)
     dismissed_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
 
+    # Feature 339 — teto autorizado pelo Superadmin, DA VAGA. Antes (238) o valor acima do cap só
+    # valia enquanto estava gravado no `cache_value` da pessoa: tirar e pôr outro artista zerava o
+    # cachê e o Casting não conseguia salvar de novo o que o dono tinha autorizado (evento 1423).
+    # Fica fora do `cache_cap` porque o recálculo da troca de tipo e o vínculo de orçamento
+    # reescrevem o cap — e não podem apagar uma autorização. Por NULL com valor = anterior à 339.
+    teto_autorizado = db.Column(db.Numeric(10, 2), nullable=True)
+    teto_autorizado_por = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    teto_autorizado_em = db.Column(db.DateTime, nullable=True)  # hora de parede de SP (now_sp)
+    # Feature 339 — o título passou a pedir este personagem menos vezes e as vagas dele estavam todas
+    # ocupadas: nenhuma sai sozinha, o Casting tira alguém da escala. Limpa quando título e vagas
+    # voltam a bater (`titulo_ops.resolver_sobra`). Persistido porque a régua é "o que SAIU do
+    # título", que só se vê no momento da troca.
+    sobrando_desde = db.Column(db.DateTime, nullable=True)  # hora de parede de SP
+
     talent = db.relationship("Talent", lazy=True)
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
     dismisser = db.relationship("User", lazy=True, foreign_keys=[dismissed_by])
+    # Dois FKs para `users` na mesma tabela: sem `foreign_keys` o mapper quebra no boot.
+    autorizador = db.relationship("User", lazy=True, foreign_keys=[teto_autorizado_por])
 
 
 class EventLog(db.Model):
@@ -722,7 +740,11 @@ class Notification(db.Model):
     entity_id   = db.Column(db.Integer, nullable=True)
     dedupe_key  = db.Column(db.String(120), nullable=False)
     created_at  = db.Column(db.DateTime, default=now_sp, nullable=False)
-    read_at     = db.Column(db.DateTime, nullable=True)      # NULL = não lida; é o ÚNICO estado
+    read_at     = db.Column(db.DateTime, nullable=True)      # NULL = não lida (o estado do SINO)
+    # Feature 339 — "Ciente" na faixa do evento, por pessoa e separado do `read_at`: abrir o item no
+    # sino grava `read_at` (`NotificacoesPanel.abrir`), e a faixa não pode sumir só por isso. Só os
+    # `kind` de `notificacoes_ops.KINDS_COM_CIENTE` usam; hora de parede de SP, como `created_at`.
+    ciente_em   = db.Column(db.DateTime, nullable=True)
 
 
 class EventContract(db.Model):

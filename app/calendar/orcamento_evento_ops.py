@@ -840,13 +840,21 @@ def _cap_e_nota(item: dict, chave: str) -> tuple[Any, Any]:
     return cap, nota
 
 
-def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
+def aplicar_equipe_do_orcamento(
+    event: Any, entry: OrcamentoHistory, *, reescrever_tetos: bool = False
+) -> dict:
     """Cria o que o orçamento vendeu e o evento não tem; marca o que o evento tem e não sabia.
 
     Personagens (por nome normalizado): `needs_makeup`/`is_singer` viram True quando o orçamento
     diz; `cache_cap`/`cache_cap_note` entram só onde não havia teto. Apoio: coordenadores até a
     quantidade vendida, "Técnico de Som" quando o orçamento tem show, "Maquiador" quando alguém
-    vai maquiado — cada um com o teto da duração real do evento. Nada é removido ou rebaixado.
+    vai maquiado — cada um com o teto da duração real do evento. Nada é removido.
+
+    Feature 339 (FR-025): com `reescrever_tetos` (o vínculo é NOVO — troca de orçamento), o teto das
+    vagas casadas passa a ser o do orçamento, inclusive para baixo: um orçamento novo é a nova verdade
+    do que foi vendido (o caso do show do evento 1423, que ficou com o teto do orçamento de R&I). O
+    teto autorizado pelo Superadmin não é tocado — fica por cima no `teto_efetivo`. Reaplicar o mesmo
+    orçamento segue idempotente ("só onde não havia").
 
     Returns:
         Relatório para a tela e para o log: contagens e a lista de personagens do orçamento que
@@ -865,7 +873,20 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
         "personagens_casados": 0, "nao_casados": [], "maquiagem_marcada": 0,
         "cantor_marcado": 0, "tetos_aplicados": 0, "coordenadores_criados": 0,
         "tecnico_criado": False, "maquiador_criado": False, "duracao": duracao,
+        "tetos_reescritos": 0, "mudancas_de_teto": [],
     }
+
+    def _teto(role: Any, cap: Any, nota: Any) -> None:
+        """Só onde não havia teto; no vínculo novo, reescreve (FR-025)."""
+        if cap is None:
+            return
+        if role.cache_cap is None:
+            role.cache_cap, role.cache_cap_note = cap, nota
+            relatorio["tetos_aplicados"] += 1
+        elif reescrever_tetos and Decimal(str(role.cache_cap)) != Decimal(str(cap)):
+            relatorio["mudancas_de_teto"].append((role.character_name, role.cache_cap, Decimal(str(cap))))
+            role.cache_cap, role.cache_cap_note = cap, nota
+            relatorio["tetos_reescritos"] += 1
 
     # Personagens: cada item do orçamento casa com no máximo um papel ainda livre.
     livres = [r for r in papeis if r.role_type != "extra"]
@@ -887,11 +908,7 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
         # Feature 322: o tipo vendido entra só onde não havia — a mesma regra do teto.
         if item.get("perfil") and not alvo.perfil_vendido:
             alvo.perfil_vendido = str(item["perfil"])[:200]
-        cap, nota = _cap_e_nota(item, chave)
-        if cap is not None and alvo.cache_cap is None:
-            alvo.cache_cap = cap
-            alvo.cache_cap_note = nota
-            relatorio["tetos_aplicados"] += 1
+        _teto(alvo, *_cap_e_nota(item, chave))
 
     extras = [i for i in itens if (i.get("role_type") or "character") == "extra"]
     apoio = [r for r in papeis if r.role_type == "extra"]
@@ -903,10 +920,7 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
     # vagas novas. Desde a 309 eles podem diferir (o do produto é 250 flat; o da fórmula segue show e
     # régua) — criar e aplicar a partir do mesmo prefixo gravava o do produto duas vezes.
     for item, role in zip(coord_itens, coord_existentes, strict=False):
-        cap, nota = _cap_e_nota(item, chave)
-        if cap is not None and role.cache_cap is None:
-            role.cache_cap, role.cache_cap_note = cap, nota
-            relatorio["tetos_aplicados"] += 1
+        _teto(role, *_cap_e_nota(item, chave))
     for item in coord_itens[len(coord_existentes):]:
         cap, nota = _cap_e_nota(item, chave)
         db.session.add(EventRole(
@@ -934,9 +948,8 @@ def aplicar_equipe_do_orcamento(event: Any, entry: OrcamentoHistory) -> dict:
                 cache_cap=cap, cache_cap_note=nota, criada_pelo_sistema=True,
             ))
             relatorio[chave_relatorio] = True
-        elif cap is not None and existente.cache_cap is None:
-            existente.cache_cap, existente.cache_cap_note = cap, nota
-            relatorio["tetos_aplicados"] += 1
+        else:
+            _teto(existente, cap, nota)
     return relatorio
 
 
@@ -1192,7 +1205,20 @@ def set_event_orcamento(
 
     if aplicar_equipe:
         relatorio["fora_sp"] = aplicar_fora_sp_do_orcamento(event, entry)
-        relatorio.update(aplicar_equipe_do_orcamento(event, entry))
+        # Feature 339: vínculo NOVO reescreve o teto das vagas casadas (FR-025/026).
+        relatorio.update(aplicar_equipe_do_orcamento(event, entry, reescrever_tetos=novo_vinculo))
+        mudancas = relatorio.pop("mudancas_de_teto", [])
+        if mudancas:
+            from app.money import format_brl
+
+            frase = "; ".join(
+                f"{nome} R$ {format_brl(antes)} → R$ {format_brl(depois)}" for nome, antes, depois in mudancas
+            )
+            db.session.add(EventLog(
+                event_id=event.id, actor_name=actor_name, actor_role="Comercial",
+                message=f"Limites de cachê do orçamento #{entry.id}: {frase}",
+                created_at=datetime.now(tz=tz),
+            ))
     # Feature 322: o vínculo pode ter acendido a maquiagem de um personagem cujo orçamento não traz
     # o maquiador (ou o evento já tinha a marca à mão) — a vaga nasce aqui, uma só.
     from app.calendar.casting_ops import garantir_vaga_de_maquiador

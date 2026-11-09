@@ -26,15 +26,15 @@ Chave nova no topo, para **qualquer** usuário que abre o evento (sem gate extra
     "body": "13/11 15:00 · Confira a disponibilidade do elenco para o ensaio e revise os cachês.",
     "severity": "urgent",
     "created_at": "2026-11-09T16:26:52",
-    "dados": {"entrou": true}
+    "dados": {"entrou": true, "autor": "Thays"}
   }
 ]
 ```
 
-`dados` por `kind`: `evento.tipo_show` → `{entrou: bool}`; `evento.vaga_sobrando` →
-`{personagem: str, pedido: int, vagas: int}`. Derivado no serializer da `dedupe_key`, que carrega esses
-valores (`evento.tipo_show:{id}:{entrou|saiu}:{carimbo}`, `evento.vaga_sobrando:{id}:{nome}:{pedido}:
-{vagas}`) — nenhuma coluna JSON nova. Quem trocou e quando já estão no `title`/`body` e no `EventLog`.
+`dados` por `kind`: `evento.tipo_show` → `{entrou: bool, autor: str | null}`; `evento.vaga_sobrando`
+→ `{personagem: str, pedido: int, vagas: int}`. Derivado no serializer da `dedupe_key`, que carrega
+esses valores (`evento.tipo_show:{id}:{entrou|saiu}:{autor_id|0}:{carimbo}`,
+`evento.vaga_sobrando:{id}:{nome}:{pedido}:{vagas}`) — nenhuma coluna JSON nova.
 
 Em cada item de `elenco` (`_serialize_role`):
 
@@ -50,7 +50,8 @@ Em cada item de `elenco` (`_serialize_role`):
 
 Gate de hoje (`_can_edit_event()`; no cancelado, `_can_casting()`). Efeitos novos: teto autorizado
 (Superadmin); resolução da sobra (talento tirado de vaga marcada → vaga vazia sai se ainda sobrar).
-Resposta: detalhe do evento + `warnings: string[]` (pode vir vazio).
+Resposta: o detalhe do evento, como hoje — sem `warnings`: a remoção pela sobra não muda o título,
+então não há Google a avisar.
 
 ## Alterado — `POST /api/events/<id>/roles` e `DELETE /api/roles/<id>`
 

@@ -197,10 +197,17 @@ def _can_create_event() -> bool:
     return any(r.name.upper() in _CAN_CREATE for r in current_user.roles)
 
 
-def _event_detail_json(event: Any) -> Any:
-    """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas)."""
+def _event_detail_json(event: Any, warnings: list[str] | None = None) -> Any:
+    """Serializa o evento atualizado com o RBAC do usuário atual (resposta padrão das escritas).
+
+    Feature 339: `warnings` (avisos não bloqueantes, como a falha do Google ao gravar o título) vai
+    junto, no mesmo formato do `PATCH` do evento — chave sempre presente nas portas que a usam.
+    """
     impersonate = session.get("impersonate_role")
-    return jsonify(serialize_event_detail(event, current_user, impersonate))
+    result = serialize_event_detail(event, current_user, impersonate)
+    if warnings is not None:
+        result["warnings"] = warnings
+    return jsonify(result)
 
 
 def _decimal_from_form(raw: str | None) -> Decimal | None:
@@ -269,6 +276,7 @@ def api_assign_role(role_id: int) -> Any:
             actor_name=current_user.name,
             is_superadmin=is_superadmin,
             tz=_TZ_SP,
+            autor_id=current_user.id,
         )
     except CancelValidationError as exc:
         db.session.rollback()
@@ -295,6 +303,8 @@ def api_add_role(event_id: int) -> Any:
 
     from app.calendar.casting_ops import add_role
 
+    # Feature 339: a vaga nova pode pôr o nome no título (e no Google); falha do Google volta aqui.
+    avisos: list[str] = []
     add_role(
         event,
         character_name=character_name,
@@ -303,8 +313,9 @@ def api_add_role(event_id: int) -> Any:
         role_type=data.get("role_type", "character"),
         actor_name=current_user.name,
         tz=_TZ_SP,
+        avisos=avisos,
     )
-    return _event_detail_json(event)
+    return _event_detail_json(event, avisos)
 
 
 @api_bp.route("/roles/<int:role_id>", methods=["DELETE"])
@@ -324,12 +335,14 @@ def api_delete_role(role_id: int) -> Any:
         return negado
     from app.calendar.casting_ops import delete_role
 
+    avisos: list[str] = []
     removed = delete_role(
-        event, role, is_superadmin=is_superadmin, actor_name=current_user.name, tz=_TZ_SP
+        event, role, is_superadmin=is_superadmin, actor_name=current_user.name, tz=_TZ_SP,
+        avisos=avisos,
     )
     if not removed:
         return json_error("Cargo com convite aceito só pode ser removido pelo Superadmin", 403)
-    return _event_detail_json(event)
+    return _event_detail_json(event, avisos)
 
 
 @api_bp.route("/roles/<int:role_id>/invite", methods=["POST"])
@@ -1477,6 +1490,8 @@ def api_update_event(event_id: int) -> Any:
             sincronizar_comissao=_sync_commission_payment,
             dados_nota=dados_nota,
             pedida_por_id=current_user.id,
+            # Feature 339: quem trocou fica fora do próprio aviso (FR-033).
+            autor_id=current_user.id,
         )
     except EventCoreUpdateBlocked as exc:
         return json_error(exc.message, 409)
@@ -1550,7 +1565,9 @@ def api_update_event_basics(event_id: int) -> Any:
     from app.calendar.event_ops import EventTypeChangeBlocked, update_event_basics
 
     try:
-        warnings = update_event_basics(event, data, actor_name=current_user.name, tz=_TZ_SP)
+        warnings = update_event_basics(
+            event, data, actor_name=current_user.name, tz=_TZ_SP, autor_id=current_user.id
+        )
     # Mesma trava do PATCH em bloco: sem o título novo no Google, a troca de tipo é desfeita e
     # devolvida como erro em vez de rodar a parte irreversível às cegas (feature 239).
     except EventTypeChangeBlocked as exc:
