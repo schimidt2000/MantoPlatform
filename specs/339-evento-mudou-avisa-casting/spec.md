@@ -228,7 +228,10 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 4. **Dado** uma vaga cujo nome não aparece no título (nome diferente do que foi digitado no título),
    **Quando** ela é removida, **Então** o título não muda e o histórico diz que o nome não foi
    encontrado no título.
-5. **Dado** o Google recusando a atualização, **Quando** a vaga é removida, **Então** a vaga sai mesmo
+5. **Dado** o título já com um STORMTROOPERS e duas vagas (uma marcada como sobrando), **Quando** o
+   Casting remove a vaga sobrando, **Então** o título continua com um STORMTROOPERS (não perde o
+   segundo).
+6. **Dado** o Google recusando a atualização, **Quando** a vaga é removida, **Então** a vaga sai mesmo
    assim e a tela avisa que o título no Google Agenda precisa ser corrigido à mão.
 
 ### Casos de borda
@@ -332,12 +335,16 @@ título: os dois lados ficam divergentes até alguém editar à mão.
 
 **Título acompanha as vagas (História 6)**
 
-- **FR-027**: Ao remover uma vaga de personagem (à mão ou pela regra do FR-019/FR-021), o sistema DEVE
-  tirar do título uma ocorrência daquele nome (a última), manter o prefixo do tipo, gravar no sistema e
-  enviar ao Google Agenda.
-- **FR-028**: Ao acrescentar uma vaga de personagem pelo sistema, o sistema DEVE acrescentar o nome ao
-  fim do título, no sistema e no Google Agenda. Vaga de equipe de apoio (nomes reservados) nunca entra
-  no título (regra da 239).
+- **FR-027**: Ao remover uma vaga de personagem pelo sistema, se depois da remoção o título pedir aquele
+  nome mais vezes do que há vagas dele, o sistema DEVE tirar do título uma ocorrência (a última), manter
+  o prefixo do tipo, gravar no sistema e enviar ao Google Agenda. Remoção causada pelo próprio título
+  (FR-019, FR-021) ou de vaga marcada como sobrando já deixa título e vagas iguais, e por isso não
+  reescreve nada — o nome nunca sai duas vezes.
+- **FR-028**: Ao acrescentar uma vaga de personagem pelo sistema, se depois da inclusão houver mais vagas
+  daquele nome do que o título pede, o sistema DEVE acrescentar o nome ao fim do título, no sistema e no
+  Google Agenda. Vaga de equipe de apoio (nomes reservados) nunca entra no título (regra da 239). A
+  edição completa do evento ("Editar", que traz título e elenco juntos) não passa por esta regra: o
+  título do formulário vale.
 - **FR-029**: Vaga cujo nome não está no título não altera o título; o histórico DEVE dizer que o nome
   não foi encontrado.
 - **FR-030**: Sempre que o título de um evento muda (FR-027, FR-028, edição do evento ou sync), os
@@ -412,6 +419,7 @@ sync é exercitado chamando a reconciliação com um título montado, sem Google
 | 25 | Título do evento muda com ensaio futuro e ensaio passado | só o futuro recebe "🟧 ENSAIO — <título novo>" | não |
 | 26 | Remove vaga cujo nome não está no título | título igual, histórico diz "não encontrado" | não |
 | 27 | Google recusa o título novo | vaga removida mesmo assim, aviso na resposta, nada de regra de vaga a mais | não |
+| 27b | Remove a vaga marcada como sobrando (título já com um) | título não perde a segunda ocorrência | não |
 | 28 | limpeza | evento, vagas, avisos e usuários descartáveis apagados (`roles.clear()` antes do usuário) | — |
 
 Conferência de tela (skill `manto-conferir-tela`): detalhe do evento como Casting (faixa, "Ciente", vaga
