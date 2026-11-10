@@ -1,9 +1,13 @@
-"""Escrita na caixa de notificações do usuário (feature 272): marcar lida / marcar todas.
+"""Escrita na caixa de notificações do usuário (feature 272): marcar lida / marcar todas / "Ciente".
 
 RBAC: só `@api_login_required`; escopo por dono (`user_id == current_user.id`) no servidor.
 Notificação de outro usuário ou inexistente → **404, não 403**, para não confirmar existência
 (convenção do RBAC de arquivo, docs/00 §4). Sem `DELETE` e sem "marcar como não lida" na v1: a
 notificação é registro do fato; "sumir da lista" é lida, e a retenção limpa o resto.
+
+Feature 339: `POST /notificacoes/<id>/ciente` confirma a faixa do evento — por pessoa (o "Ciente" do
+Matheus não some com a do Diogo) e separado do "lida" do sino. Mesmo gate e mesmo 404; aviso de `kind`
+sem faixa também é 404.
 """
 
 from typing import Any
@@ -28,6 +32,20 @@ def api_notificacao_marcar_lida(notification_id: int) -> Any:
     return jsonify({
         "id": n.id,
         "read_at": n.read_at.isoformat(timespec="seconds") if n.read_at else None,
+        "unread_count": notificacoes_ops.contar_nao_lidas(current_user.id),
+    })
+
+
+@api_bp.route("/notificacoes/<int:notification_id>/ciente", methods=["POST"])
+@api_login_required
+def api_notificacao_ciente(notification_id: int) -> Any:
+    """"Ciente" na faixa do evento (idempotente). Devolve a notificação e o `unread_count`."""
+    n = notificacoes_ops.marcar_ciente(current_user.id, notification_id)
+    if n is None:
+        return json_error("Aviso não encontrado.", 404)
+    db.session.commit()
+    return jsonify({
+        "notificacao": notificacoes_ops.serializar(n),
         "unread_count": notificacoes_ops.contar_nao_lidas(current_user.id),
     })
 

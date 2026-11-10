@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.constants import now_sp
 from app.email_service import (
     send_async,
     send_event_changed_email,
@@ -125,6 +126,7 @@ def assign_role(
     actor_name: str,
     is_superadmin: bool,
     tz: ZoneInfo,
+    autor_id: int | None = None,
 ) -> str:
     """Escala/atualiza/desescala o talento de um cargo. Núcleo extraído de `_handle_assign_casting`.
 
@@ -143,6 +145,7 @@ def assign_role(
         actor_name: Nome de quem executa (para o log).
         is_superadmin: Se pode ultrapassar o teto de cachê.
         tz: Fuso para timestamps (São Paulo).
+        autor_id: `User.id` de quem salva — vira o autor do teto autorizado (feature 339).
 
     Returns:
         Mensagem de sucesso descrevendo o efeito.
@@ -178,22 +181,33 @@ def assign_role(
     parcela_transporte = (
         valor_transporte_papel(event) if role.does_transport else Decimal("0")
     )
-    if new_cache is not None and role.cache_cap is not None:
-        # A parcela entra DENTRO do `max`, nunca somada por cima dele: como o valor rebaixado é
-        # gravado em `cache_value`, ele vira o `old_cache_value` da chamada seguinte — somar a
-        # parcela depois do `max` faria cada "Salvar" render mais um degrau do tamanho da parcela
-        # (catraca), e um casting comum subiria o cachê sem limite, sem superadmin e sem aviso.
-        # Assim o teto vira ponto fixo: salvo `cap + parcela`, o próximo `max` devolve o mesmo
-        # número — e o invariante da 238 continua valendo (valor autorizado por superadmin acima
-        # de `cap + parcela` segue sendo o piso, sem rebaixamento).
-        teto_efetivo = max(role.cache_cap + parcela_transporte, old_cache_value or 0)
-        if new_cache > teto_efetivo and not is_superadmin:
-            new_cache = teto_efetivo
+    # Feature 339: o limite sai de `teto_ops` — a MESMA função que a tela usa. Calculado ANTES de
+    # gravar o cachê novo: o `cache_value` que entra no `max` é o da pessoa atual (piso da 238).
+    # A parcela do carrinho entra DENTRO do `max`, nunca somada por cima (catraca da 239). O que
+    # muda na 339 é o terceiro termo: o teto autorizado pelo Superadmin é da VAGA, e por isso o
+    # Casting que tira e põe outro artista consegue salvar de novo o valor autorizado.
+    from app.calendar import teto_ops
+
+    limite = teto_ops.teto_efetivo(
+        role, parcela_transporte, mesma_pessoa=role.talent_id == old_talent_id
+    )
+    limite_da_nota = teto_ops.teto_da_nota(role, parcela_transporte)
+    if new_cache is not None and limite is not None and new_cache > limite and not is_superadmin:
+        new_cache = limite
 
     if presenca:
         new_cache = None
 
     role.cache_value = new_cache
+    if is_superadmin and not presenca:
+        frase_teto = teto_ops.gravar_teto_autorizado(
+            role, cache=new_cache, parcela=parcela_transporte, autor_id=autor_id, agora=now_sp()
+        )
+        if frase_teto:
+            db.session.add(EventLog(
+                event_id=event.id, actor_name=actor_name, actor_role="Superadmin",
+                message=frase_teto, created_at=datetime.now(tz=tz),
+            ))
     # Sem a guarda do `_UNSET` este trecho apagava o adicional de transporte a cada "Salvar"
     # do casting em React (que nunca manda a chave) — e ainda avisava o talento confirmado de
     # que o transporte tinha virado "não definido".
@@ -232,7 +246,28 @@ def assign_role(
         from app.calendar.cancel_ops import fechar_pedido_ao_casting_se_vazio
 
         fechar_pedido_ao_casting_se_vazio(event)
+    # Feature 339 (FR-021): a pessoa saiu de uma vaga marcada como sobrando — a vaga que ficou vazia
+    # sai sozinha se ainda sobrar, e a marca/aviso se encerram quando título e vagas batem. O título
+    # não muda: ele já pede o número certo.
+    removidas_pela_sobra: list[str] = []
+    nome_da_vaga = role.character_name
+    # No cancelado a vaga fica, vazia, como registro do elenco (312, Q10): nada de remoção pela sobra.
+    if (
+        old_talent_id
+        and not role.talent_id
+        and role.sobrando_desde is not None
+        and not getattr(event, "is_cancelled", False)
+    ):
+        from app.calendar.titulo_ops import resolver_sobra
+
+        removidas_pela_sobra = resolver_sobra(
+            event, nome_da_vaga, autor_nome=actor_name, autor_papel="Casting", agora=now_sp()
+        )
     db.session.commit()
+    if removidas_pela_sobra:
+        # A vaga deste card pode ter sido a removida: depois do commit ela está desanexada, e ler
+        # um atributo dela estouraria `DetachedInstanceError`.
+        return f"{nome_da_vaga}: a vaga que sobrava foi removida."
 
     # Feature 239 (decisões 9/11): a presença sai daqui sem convite, sem e-mail e sem valor —
     # a designação é tarefa do painel de Ensaio e não convida ninguém para nada.
@@ -265,9 +300,10 @@ def assign_role(
     # comparar com o cap cru marcaria TODO papel com carrinho como "autorizado pelo admin" —
     # inclusive quando quem salvou foi um casting comum, dentro do limite legítimo. A parcela já
     # é anunciada à parte por `transporte_nota`.
-    teto_da_nota = (
-        role.cache_cap + parcela_transporte if role.cache_cap is not None else None
-    )
+    # Feature 339: o limite da nota vem de antes da gravação (`limite_da_nota`) e já conta o teto
+    # autorizado da vaga — o Casting salvando os R$ 400 que o Superadmin autorizou não é "acima do
+    # cap"; a primeira autorização do Superadmin é.
+    teto_da_nota = limite_da_nota
 
     if role.talent_id and role.talent_id != old_talent_id:
         role.invite_status = "pending"
@@ -493,11 +529,16 @@ def add_role(
     role_type: str,
     actor_name: str,
     tz: ZoneInfo,
+    avisos: list[str] | None = None,
 ) -> Any:
     """Adiciona um cargo ao evento (com ou sem talento). Núcleo de `_handle_add_role`.
 
     Cachê via `parse_brl` (Princípio VII — harmoniza com `assign_role`; o handler antigo usava
     `int()`, agora aceita decimais pt-BR). Se tem talento: `invite_status=pending` + convite.
+
+    Feature 339 (FR-028/030): vaga de personagem que o título não pede põe o nome no fim do título,
+    e os ensaios futuros acompanham — no sistema e, depois do commit, no Google Agenda. A falha do
+    Google entra em `avisos` (quando a lista é passada) e nunca desfaz a vaga.
 
     Returns:
         O `EventRole` criado.
@@ -540,32 +581,84 @@ def add_role(
         message=mensagem,
         created_at=datetime.now(tz=tz),
     ))
+    para_o_google: list[Any] = []
+    if role.role_type != "extra" and not presenca:
+        from app.calendar import titulo_ops
+
+        # A vaga nasceu por `event_id`, fora da coleção já carregada: sem isto a contagem
+        # vagas × título não a enxergaria.
+        if role not in event.roles:
+            event.roles.append(role)
+        agora = now_sp()
+        if titulo_ops.ajustar_titulo_apos_inclusao(
+            event, role.character_name, autor_nome=actor_name, autor_papel="Casting", agora=agora
+        ):
+            para_o_google = [event, *titulo_ops.propagar_titulo_aos_ensaios(event, agora=agora)]
     db.session.commit()
+    if para_o_google:
+        _empurrar_titulos(para_o_google, actor_name=actor_name, avisos=avisos)
     if role.talent_id and not presenca:
         send_async(send_invite_email, role)
     return role
 
 
+def _empurrar_titulos(eventos: list[Any], *, actor_name: str, avisos: list[str] | None) -> None:
+    """Google depois do commit (`docs/00` §6 item 25); a falha só vira aviso (FR-031)."""
+    from app.calendar.titulo_ops import empurrar_titulos_ao_google
+
+    falhas = empurrar_titulos_ao_google(eventos, autor_nome=actor_name, agora=now_sp())
+    if avisos is not None:
+        avisos.extend(falhas)
+
+
 def delete_role(
-    event: Any, role: Any, *, is_superadmin: bool, actor_name: str, tz: ZoneInfo
+    event: Any,
+    role: Any,
+    *,
+    is_superadmin: bool,
+    actor_name: str,
+    tz: ZoneInfo,
+    avisos: list[str] | None = None,
 ) -> bool:
     """Remove um cargo. Núcleo de `_handle_delete_role`. Cargo com convite aceito só sai por
     superadmin (retorna False sem remover, nesse caso).
+
+    Feature 339: se o título ficou pedindo o personagem mais vezes do que há vagas, sai UMA
+    ocorrência dele (FR-027) e os ensaios futuros acompanham (FR-030); se a vaga estava marcada como
+    sobrando, a marca e o aviso se encerram quando título e vagas batem (FR-017). Google depois do
+    commit; a falha entra em `avisos`.
 
     Returns:
         True se removeu; False se bloqueado (convite aceito e não-superadmin).
     """
     if role.invite_status == "accepted" and not is_superadmin:
         return False
+    nome = role.character_name
+    era_personagem = role.role_type != "extra" and not e_vaga_de_presenca(role)
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=actor_name,
         actor_role="Casting",
-        message=f"Removeu vaga: {role.character_name}",
+        message=f"Removeu vaga: {nome}",
         created_at=datetime.now(tz=tz),
     ))
+    # Fora da coleção já carregada antes de contar vagas × título (o `delete` só sai no flush).
+    if role in event.roles:
+        event.roles.remove(role)
     db.session.delete(role)
+    para_o_google: list[Any] = []
+    if era_personagem and not getattr(event, "is_cancelled", False):
+        from app.calendar import titulo_ops
+
+        agora = now_sp()
+        if titulo_ops.ajustar_titulo_apos_remocao(
+            event, nome, autor_nome=actor_name, autor_papel="Casting", agora=agora
+        ):
+            para_o_google = [event, *titulo_ops.propagar_titulo_aos_ensaios(event, agora=agora)]
+        titulo_ops.resolver_sobra(event, nome, autor_nome=actor_name, autor_papel="Casting", agora=agora)
     db.session.commit()
+    if para_o_google:
+        _empurrar_titulos(para_o_google, actor_name=actor_name, avisos=avisos)
     return True
 
 

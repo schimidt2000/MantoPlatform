@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **339-evento-mudou-avisa-casting** | *(na branch, sem merge)* Mudança no evento avisa o Casting e o teto do cachê acompanha: valor do Superadmin acima do teto vira teto DA VAGA (sobrevive à troca de artista); virar/deixar de ser SHOW recalcula o teto pela conta da criação e avisa Casting, Ensaio e Superadmin (sino + faixa com "Ciente" por pessoa); o que sai do título remove vaga vazia ou marca a ocupada (sync nunca mais apaga vaga com artista); remover/acrescentar vaga ajusta uma ocorrência do título, e o ensaio futuro acompanha; vínculo de orçamento novo reescreve os tetos | 2026-11-09 | `e339a7c1b2d4` | (aqui) | ver Registro |
 | **338-comissao-vendedor-educamanto** | *(branch, sem merge)* Comissão do vendedor e lucro real no EducaManto: a base do responsável desconta gastos extras aprovados, imposto da nota e a comissão do vendedor (Jundiaí Shopping → R$ 771,82; Santo Américo → R$ 61,01); o valor que o vendedor põe na calculadora entra no card Comercial e vira a linha de comissão dele (`source = vendedor_educamanto`), no ciclo do mês do evento e proporcional ao retido no cancelado | 2026-11-06 | `d338c5a9e2b1` (aditiva) | (aqui) | ver Registro |
 | **337-figurino-sem-foto** | Filtro "Sem foto" no Banco de Figurinos: botão com o número de fichas sem imagem, filtro no endereço (`/figurinos?sem_foto=1`) para virar lista de pendências; ficha do Drive com miniatura não conta. Só tela | 2026-11-05 | — | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
@@ -407,6 +408,57 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 339 — Mudança no evento avisa o Casting, e o teto do cachê acompanha   (339-evento-mudou-avisa-casting · 2026-11-09 · migration `e339a7c1b2d4`)
+
+> **Na branch `339-evento-mudou-avisa-casting` (worktree `C:\tmp\mp339`), sem merge.** Nível 1. Migration
+> `e339a7c1b2d4`, aditiva, sobre `d323b5a1c0e7` — 328/329/330/332–335/338 partem do mesmo head: quem entrar na
+> `main` depois troca o `down_revision`. Detalhe: `specs/339-evento-mudou-avisa-casting/` (spec com as decisões
+> D1–D5 e o clarify, plano, pesquisa R1–R9, `verify_339.py` 37/37 no `manto_339` depois do converge).
+
+**O pedido.** O dono (09/11), com o evento 1423 (13/11, Star Wars) na mão: a Comercial trocou R&I → SHOW e (1) o
+teto ficou o do orçamento de R&I (R$ 325) e ninguém do Casting nem do Ensaio soube; (2) o Superadmin salvou R$ 400
+nas vagas, o Casting trocou o artista do Darth Vader e não conseguiu pôr os R$ 400 de novo; (3) o cliente tirou um
+Stormtrooper, a vaga a mais ficou até o Superadmin removê-la à mão — e o título continuou com dois STORMTROOPERS no
+sistema, no Google e no ensaio marcado em seguida.
+
+**O que mudou.** Dois módulos puros novos. `app/calendar/teto_ops.py`: `teto_efetivo` (fonte única da trava de
+`assign_role` e do `cache_cap_efetivo` da tela — antes eram dois `max` escritos à mão), o teto autorizado
+(`event_roles.teto_autorizado*`, gravado só pelo Superadmin, só com artista e cachê > 0; o último valor dele manda)
+e `recalcular_tetos_pelo_tipo` (a conta da criação com o show trocado). `app/calendar/titulo_ops.py`: contagem de
+personagens com repetição, reconciliação título antigo × novo (vazia sai; ocupada ganha `sobrando_desde` e aviso),
+`resolver_sobra`, ajuste de UMA ocorrência do título ao remover/acrescentar vaga, propagação aos ensaios futuros e
+push ao Google depois do commit. Avisos: dois `kind` da 272 com `notifications.ciente_em` (faixa por pessoa,
+separada do `read_at` do sino) e `POST /api/notificacoes/<id>/ciente`. A troca para SHOW pela plataforma passou a
+mandar o e-mail do Ensaio que o sync já mandava.
+
+**Decisões.** O teto autorizado fica fora do `cache_cap` porque o recálculo e o vínculo reescrevem o cap. O cachê
+atual da pessoa segue como piso do teto efetivo (regra da 238) — é o autorizado que sobrevive à troca. A régua da
+vaga a mais é "o que SAIU do título", não a comparação absoluta: vaga com grafia diferente do título nunca vira
+"a mais". O sync deixou de apagar vaga com artista escalado (clarify de 09/11: marca e avisa). O Superadmin recebe
+os avisos; o autor da mudança, não.
+
+**Pegadinhas.** (1) Escrito como "a vaga sai → tira o nome do título", o FR-027 tiraria o nome duas vezes quando a
+vaga sai *porque* o título já o perdeu — virou regra de contagem (só mexe se título e vagas ficaram desiguais na
+direção certa); cenário 27b. (2) Vaga criada por `event_id` fica fora da coleção já carregada: recálculo e contagem
+fazem `flush` + `expire(event, ["roles"])`. (3) No sync, falha na reconciliação usa SAVEPOINT: um `rollback()`
+levaria junto o que outros eventos da rodada ainda não comitaram. (4) `assign_role` que remove a vaga pela sobra
+devolve antes de ler a vaga (desanexada depois do commit). (5) Ordem: o verify foi escrito depois do núcleo (desvio
+do Princípio VIII); compensado com mutação de duas regras, que derrubou os cenários 2, 3 e 27b. (6) O `manto_local`
+estava preso na migration da 334: verificação no `manto_339`, restaurado do dump de 09/11 02h.
+
+**Dados.** No `manto_339` (cópia de 09/11), o preenchimento da migration deu teto autorizado a 100 vagas (as com
+cachê acima do cap, sem carrinho; 19 com carrinho ficaram de fora). O título do evento 1423 e do ensaio 1496 continuam com dois STORMTROOPERS: a 339
+não corrige o passado — corrigir uma vez no Google Agenda. Dívidas 199–201 no `docs/05`.
+
+**Converge (10/11, leitura independente).** Dez lacunas, nenhuma alta; seis corrigidas: a sobra que volta
+depois de resolvida avisa de novo (o carimbo da marca entra na chave); troca de tipo feita direto no
+Google recalcula o teto e avisa pelo sync, sem a parte destrutiva; o piso do cachê salvo vale só para a
+mesma pessoa (antes, na troca direta A→B, o B herdava o valor acima do limite de A); no cancelado a vaga
+marcada não sai e o cancelamento limpa a marca; o "Editar" que tira a vaga marcada fecha a sobra; a faixa
+mostra a grafia da vaga e as ocupadas de agora. Mais duas vistas antes (sobra resolvida quando o título
+volta a pedir; autor no handler Jinja). Quatro aceitas com motivo no `tasks.md` (T049–T052). Verify
+37/37; mutação de duas regras derrubou os cenários 33 e 36.
 
 ### 338 — Comissão do vendedor e lucro real no EducaManto   (338-comissao-vendedor-educamanto · 2026-11-06 · migration `d338c5a9e2b1`)
 

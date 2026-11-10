@@ -36,7 +36,6 @@ from app.constants import (
 from app.orcamento.settings import acrescimo_tipos_list
 from app.money import format_brl, parse_brl, parse_brl_int
 from app.models import CalendarEvent, EventRole, EventLog, Talent, EventContract, EventPayment, EventInvoice, SiteSetting, User, Role, FigurinoSheet, EnsaioMaterial, EventObservation, OrcamentoHistory, EventRating, AuditLog, SpecialExpense, ClientFeedback, EventReimbursement
-from app.email_service import send_removal_email
 from app.storage import (
     ALLOWED_DOCUMENT_EXTENSIONS,
     ALLOWED_IMAGE_EXTENSIONS,
@@ -598,6 +597,8 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         actor_name=current_user.name,
         is_superadmin=any(r.name == RoleName.SUPERADMIN for r in current_user.roles),
         tz=tz_sp,
+        # Feature 339: o teto autorizado guarda quem autorizou, também por esta porta legada.
+        autor_id=current_user.id,
     )
     if message:
         flash(message, "success")
@@ -2482,6 +2483,7 @@ def sync_events(items: list[dict]) -> None:
             # sync — junto com "precisa ensaio" e a vaga de som — porque a Agenda ainda não
             # tinha recebido o título novo (ou a escrita no Google falhou).
             titulo_mudou = (title or "").strip() != (old_title or "").strip()
+            old_event_type = event.event_type
             if titulo_mudou:
                 event.event_type = event_type
             tipo_efetivo = event.event_type
@@ -2530,6 +2532,12 @@ def sync_events(items: list[dict]) -> None:
             if tipo_efetivo == "SHOW":
                 _ensure_sound_technician(event.id)
 
+            # Feature 339 (FR-018/030): o que SAIU do título mexe nas vagas — também em evento
+            # criado pela plataforma, que até aqui nunca tinha as vagas reconciliadas (caso 1423) —
+            # e os ensaios futuros recebem o título novo. Roda ANTES do `continue` da plataforma.
+            if titulo_mudou and not title.startswith("🟧 ENSAIO"):
+                _reconciliar_titulo_no_sync(event, old_title, title, old_event_type)
+
         # Eventos criados pela plataforma: atualiza metadados mas preserva roles
         if event.source == "platform":
             db.session.commit()
@@ -2570,8 +2578,12 @@ def sync_events(items: list[dict]) -> None:
                     details=f"{role.character_name}: character → extra (nome de equipe)",
                 )
                 continue
-            if role.talent_id and role.talent:
-                send_removal_email(role.talent, event, role.character_name)
+            # Feature 339 (FR-023, confirmado pelo dono no clarify de 09/11): vaga com artista
+            # escalado NUNCA sai pelo sync — antes saía, com e-mail de remoção, sem ninguém do
+            # Casting decidir. Quem a marca e avisa é `_reconciliar_titulo_no_sync` (acima); aqui
+            # só sai a vaga vazia.
+            if role.talent_id:
+                continue
             db.session.delete(role)
 
         # Cria novos ou renomeia roles com prefixo antigo
@@ -2588,6 +2600,43 @@ def sync_events(items: list[dict]) -> None:
 
     db.session.commit()
     _mark_talents_worked()
+
+
+def _reconciliar_titulo_no_sync(
+    event: CalendarEvent, old_title: str | None, title: str, old_event_type: str | None = None
+) -> None:
+    """Feature 339: título mudou no Google → vagas (o que saiu) e ensaios futuros (o título novo).
+
+    E, se o prefixo trocou o tipo entrando ou saindo de SHOW (converge, T044), o teto é recalculado e
+    Casting, Ensaio e Superadmin são avisados — a troca feita direto no Google Agenda era o mesmo
+    silêncio do pedido. A parte destrutiva da saída de SHOW (cancelar ensaios, tirar as vagas de som)
+    continua só na troca pela plataforma, como antes.
+
+    Comita e só então empurra o título dos ensaios ao Google (`docs/00` §6 item 25). Uma falha aqui
+    não pode derrubar a rodada: o SAVEPOINT desfaz só esta parte — um `rollback()` levaria junto o
+    que os eventos vindos do Google já gravaram nesta rodada e ainda não foi comitado.
+    """
+    from app.calendar import titulo_ops
+    from app.calendar.event_ops import avisar_troca_de_tipo_do_google
+    from app.constants import now_sp
+
+    agora = now_sp()
+    try:
+        with db.session.begin_nested():
+            titulo_ops.reconciliar_vagas_pelo_titulo(
+                event, old_title, title,
+                autor_id=None, autor_nome="Sistema", autor_papel="Sistema", agora=agora,
+            )
+            avisar_troca_de_tipo_do_google(event, old_event_type, event.event_type)
+            ensaios = titulo_ops.propagar_titulo_aos_ensaios(event, agora=agora)
+    except Exception as exc:  # noqa: BLE001 — um evento não pode parar o sync dos demais
+        current_app.logger.warning(
+            "339: reconciliação do título do evento %s falhou no sync: %s", event.id, exc
+        )
+        return
+    db.session.commit()
+    if ensaios:
+        titulo_ops.empurrar_titulos_ao_google(ensaios, autor_nome="Sistema", agora=agora)
 
 
 def ids_de_quem_trabalhou():

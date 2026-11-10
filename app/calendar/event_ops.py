@@ -434,12 +434,90 @@ def _descrever_vaga_de_som(role: Any) -> str:
     )
 
 
-def _entrar_em_show(event: Any, tipo_antigo: str, *, actor_name: str, tz: ZoneInfo) -> list[str]:
-    """Aplica o que a criação de um SHOW aplica: vagas de som e "precisa ensaio" ligado."""
+#: Aviso à Comercial na troca para SHOW com orçamento ligado (FR-013, spec "Textos").
+AVISO_VINCULE_ORCAMENTO_DO_SHOW = (
+    "Os limites de cachê foram recalculados pela tabela de show. Se houver orçamento do show, "
+    "vincule-o na aba Comercial."
+)
+
+
+def _recalcular_e_avisar(
+    event: Any, *, entrou: bool, autor_id: int | None
+) -> tuple[str, list[str]]:
+    """Feature 339: refaz os tetos pelo tipo novo e avisa Casting/Ensaio/Superadmin. Não comita.
+
+    Returns:
+        `(trecho_do_log, avisos_da_resposta)`.
+    """
+    from app.calendar import teto_ops
+    from app.notificacoes.notificacoes_ops import notificar_troca_de_tipo_show
+
+    # As vagas de som nascem por `event_id`, fora da coleção já carregada — e as que saíram ainda
+    # estariam nela até o flush. Sem recarregar, o recálculo veria a lista velha.
+    db.session.flush()
+    db.session.expire(event, ["roles"])
+    mudancas, nao_recalculadas = teto_ops.recalcular_tetos_pelo_tipo(event, show=entrou)
+    notificar_troca_de_tipo_show(event, entrou=entrou, autor_id=autor_id)
+    trecho = (
+        f" Limites de cachê recalculados: {teto_ops.frase_das_mudancas(mudancas)}."
+        if mudancas else ""
+    )
+    avisos: list[str] = []
+    if entrou and event.orcamento_history_id:
+        avisos.append(AVISO_VINCULE_ORCAMENTO_DO_SHOW)
+    if nao_recalculadas:
+        trecho += f" Limite não recalculado (não vem do orçamento): {', '.join(nao_recalculadas)}."
+        avisos.append(
+            "O limite de cachê destas vagas não foi recalculado, porque não vem do orçamento: "
+            + ", ".join(nao_recalculadas) + "."
+        )
+    return trecho, avisos
+
+
+def avisar_troca_de_tipo_do_google(event: Any, tipo_antigo: str | None, tipo_novo: str | None) -> bool:
+    """Feature 339 (converge, T044): troca de tipo com SHOW feita direto no Google Agenda.
+
+    O sync aplica o tipo lido do prefixo do título; aqui entram só o recálculo do teto e o aviso a
+    Casting, Ensaio e Superadmin (FR-007/008/012) — sem a parte destrutiva de `_sair_de_show`
+    (ensaio cancelado no Google, vagas de som removidas), que segue exclusiva da troca pela
+    plataforma. O e-mail do Ensaio na entrada em SHOW o sync já manda quando liga "precisa ensaio".
+    Não comita.
+
+    Returns:
+        `True` quando a troca envolvia SHOW e o aviso saiu.
+    """
+    antigo = (tipo_antigo or "").strip().upper()
+    novo = (tipo_novo or "").strip().upper()
+    if antigo == novo or EVENT_TYPE_SHOW not in (antigo, novo) or novo == "ENSAIO":
+        return False
+    trecho, _avisos = _recalcular_e_avisar(event, entrou=novo == EVENT_TYPE_SHOW, autor_id=None)
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name="Sistema",
+        actor_role="Sistema",
+        message=(
+            f"Tipo do evento mudou no Google Agenda: {antigo or '—'} → {novo or '—'}."
+            f"{trecho} Casting, Ensaio e Superadmin avisados."
+        ),
+        created_at=now_sp(),
+    ))
+    return True
+
+
+def _entrar_em_show(
+    event: Any, tipo_antigo: str, *, actor_name: str, tz: ZoneInfo, autor_id: int | None = None
+) -> list[str]:
+    """Aplica o que a criação de um SHOW aplica: vagas de som e "precisa ensaio" ligado.
+
+    Feature 339: e também o que a troca precisa a mais — teto de show nas vagas (FR-007), aviso a
+    Casting, Ensaio e Superadmin (FR-012) e o e-mail que o Ensaio já recebia quando o sync via um SHOW
+    novo (FR-034; a troca pela plataforma era a única porta que não mandava).
+    """
     from app.calendar.routes import _ensure_sound_technician
 
     _ensure_sound_technician(event.id)
     event.needs_rehearsal = True
+    trecho, avisos = _recalcular_e_avisar(event, entrou=True, autor_id=autor_id)
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=actor_name,
@@ -447,16 +525,21 @@ def _entrar_em_show(event: Any, tipo_antigo: str, *, actor_name: str, tz: ZoneIn
         message=(
             f"Tipo do evento: {tipo_antigo or '—'} → {EVENT_TYPE_SHOW}. "
             "Vagas de Técnico de Som criadas e 'precisa ensaio' ligado (regra do SHOW)."
+            f"{trecho} Casting, Ensaio e Superadmin avisados."
         ),
         created_at=datetime.now(tz=tz),
     ))
     db.session.commit()
+    notify_ensaio_team(event)
     return [
         "O evento virou SHOW: vagas de Técnico de Som criadas e ensaio marcado como necessário.",
+        *avisos,
     ]
 
 
-def _sair_de_show(event: Any, tipo_novo: str, *, actor_name: str, tz: ZoneInfo) -> list[str]:
+def _sair_de_show(
+    event: Any, tipo_novo: str, *, actor_name: str, tz: ZoneInfo, autor_id: int | None = None
+) -> list[str]:
     """Desmonta TUDO que só existia por causa do SHOW (decisão 7 da rodada 239).
 
     Remoção automática e incondicional: ensaios já agendados são cancelados (no Google Agenda
@@ -502,6 +585,9 @@ def _sair_de_show(event: Any, tipo_novo: str, *, actor_name: str, tz: ZoneInfo) 
         removidos.append("'precisa ensaio' desligado")
         event.needs_rehearsal = False
 
+    # Feature 339 (FR-008/012): teto de volta à conta sem show (o autorizado fica por cima) e aviso.
+    trecho, avisos_do_teto = _recalcular_e_avisar(event, entrou=False, autor_id=autor_id)
+    avisos += avisos_do_teto
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=actor_name,
@@ -509,6 +595,7 @@ def _sair_de_show(event: Any, tipo_novo: str, *, actor_name: str, tz: ZoneInfo) 
         message=(
             f"Tipo do evento: {EVENT_TYPE_SHOW} → {tipo_novo or '—'}. Removido automaticamente: "
             + ("; ".join(removidos) if removidos else "nada (não havia ensaio nem vaga de som)")
+            + f".{trecho} Casting, Ensaio e Superadmin avisados."
         ),
         created_at=datetime.now(tz=tz),
     ))
@@ -523,6 +610,7 @@ def aplicar_troca_de_tipo(
     *,
     actor_name: str,
     tz: ZoneInfo,
+    autor_id: int | None = None,
 ) -> list[str]:
     """Reage à mudança de tipo de um evento já existente — fonte única (feature 239).
 
@@ -546,9 +634,9 @@ def aplicar_troca_de_tipo(
     if antigo == novo:
         return []
     if novo == EVENT_TYPE_SHOW:
-        return _entrar_em_show(event, antigo, actor_name=actor_name, tz=tz)
+        return _entrar_em_show(event, antigo, actor_name=actor_name, tz=tz, autor_id=autor_id)
     if antigo == EVENT_TYPE_SHOW:
-        return _sair_de_show(event, novo, actor_name=actor_name, tz=tz)
+        return _sair_de_show(event, novo, actor_name=actor_name, tz=tz, autor_id=autor_id)
     return []
 
 
@@ -618,6 +706,7 @@ def _sincronizar_e_trocar_tipo(
     changed_core: bool,
     actor_name: str,
     tz: ZoneInfo,
+    autor_id: int | None = None,
 ) -> list[str]:
     """Empurra o cabeçalho ao Google e SÓ ENTÃO aplica a automação da troca de tipo (239).
 
@@ -679,10 +768,19 @@ def _sincronizar_e_trocar_tipo(
         )
 
     avisos = aplicar_troca_de_tipo(
-        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz
+        event, old_event_type, event.event_type, actor_name=actor_name, tz=tz, autor_id=autor_id
     )
     if not google_ok:
         avisos.append("Não foi possível sincronizar a mudança com o Google Agenda.")
+    # Feature 339 (FR-030): só agora o título é definitivo (a troca de tipo desfeita acima teria
+    # devolvido o prefixo antigo) — os ensaios futuros recebem o título novo e vão ao Google.
+    if event.title != old_title:
+        from app.calendar import titulo_ops
+
+        ensaios = titulo_ops.propagar_titulo_aos_ensaios(event, agora=now_sp())
+        if ensaios:
+            db.session.commit()
+            avisos += titulo_ops.empurrar_titulos_ao_google(ensaios, autor_nome=actor_name, agora=now_sp())
     return avisos
 
 
@@ -1008,6 +1106,7 @@ def update_event_core(
     sincronizar_comissao: Any = None,
     dados_nota: Any = None,
     pedida_por_id: int | None = None,
+    autor_id: int | None = None,
 ) -> list[str]:
     """Atualiza em bloco os campos centrais de um evento existente (feature 184) — título, tipo,
     data/horário, local, descrição, ensaio, valores, pagamento, vendedor, elenco (reconciliado),
@@ -1110,6 +1209,7 @@ def update_event_core(
             "Comercial, com quem recebe e o PIX, e confira se o valor de venda é o total com o BV."
         )
 
+    _reconciliar_pelo_titulo(event, old_title, autor_id=autor_id, actor_name=actor_name)
     db.session.add(EventLog(
         event_id=event.id,
         actor_name=actor_name,
@@ -1144,9 +1244,33 @@ def update_event_core(
         changed_core=changed_core,
         actor_name=actor_name,
         tz=tz,
+        autor_id=autor_id,
     )
 
     return warnings
+
+
+def _reconciliar_pelo_titulo(
+    event: Any, old_title: str | None, *, autor_id: int | None, actor_name: str
+) -> None:
+    """Feature 339 (FR-018): o que saiu do título na edição pela plataforma mexe nas vagas.
+
+    Roda depois de gravar título e elenco do formulário e antes do commit. O flush + expire faz a
+    coleção `event.roles` enxergar o que `_reconcile_characters` acabou de remover — senão a vaga
+    que a Comercial tirou junto com o nome contaria como "a mais". Mesmo sem o título mudar, a
+    vaga marcada como sobrando que o formulário tirou fecha a sobra (converge, T047).
+    """
+    from app.calendar import titulo_ops
+
+    db.session.flush()
+    db.session.expire(event, ["roles"])
+    if (event.title or "") != (old_title or ""):
+        titulo_ops.reconciliar_vagas_pelo_titulo(
+            event, old_title, event.title,
+            autor_id=autor_id, autor_nome=actor_name, autor_papel="Comercial", agora=now_sp(),
+        )
+    else:
+        titulo_ops.revisar_sobras(event, autor_nome=actor_name, autor_papel="Comercial", agora=now_sp())
 
 
 # ── Edição pontual na própria tela de detalhe — feature 215 ──────────────────
@@ -1161,6 +1285,7 @@ def update_event_basics(
     *,
     actor_name: str,
     tz: ZoneInfo,
+    autor_id: int | None = None,
 ) -> list[str]:
     """Grava título, tipo, data/horário, local e descrição de um evento existente (feature 215).
 
@@ -1210,6 +1335,7 @@ def update_event_basics(
     from app.calendar.casting_ops import garantir_vaga_de_maquiador
 
     garantir_vaga_de_maquiador(event, tz=tz)
+    _reconciliar_pelo_titulo(event, old_title, autor_id=autor_id, actor_name=actor_name)
 
     db.session.add(EventLog(
         event_id=event.id,
@@ -1236,6 +1362,7 @@ def update_event_basics(
         changed_core=changed_core,
         actor_name=actor_name,
         tz=tz,
+        autor_id=autor_id,
     )
 
 

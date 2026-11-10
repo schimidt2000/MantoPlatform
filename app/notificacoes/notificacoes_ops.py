@@ -36,7 +36,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, delete, not_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 
 from app import db
@@ -68,6 +68,13 @@ KIND_PIX_PARA_CONFERIR = "pix.para_conferir"
 KIND_PIX_REPASSE = "pix.repasse_infinitepay"
 KIND_PIX_SEM_COMPROVANTE = "pix.sem_comprovante"
 KIND_VIRTUAL_ATENCAO = "virtual.atencao"
+# Feature 339: o evento mudou e quem escala precisa agir — com "Ciente" por pessoa na faixa do evento.
+KIND_EVENTO_TIPO_SHOW = "evento.tipo_show"
+KIND_EVENTO_VAGA_SOBRANDO = "evento.vaga_sobrando"
+
+#: `kind` que aparecem como faixa no detalhe do evento até a pessoa clicar "Ciente" (339). O "lida"
+#: do sino (`read_at`) não apaga a faixa: abrir o item no sino é ler, não confirmar.
+KINDS_COM_CIENTE: frozenset[str] = frozenset({KIND_EVENTO_TIPO_SHOW, KIND_EVENTO_VAGA_SOBRANDO})
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -99,6 +106,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # a conferir, link recusado, sala faltando perto da chamada) — os mesmos papéis que operam a
     # tela de Devoluções.
     KIND_VIRTUAL_ATENCAO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    # Feature 339 (clarify de 09/11): quem escala, quem ensaia (só na troca de tipo) e quem autoriza
+    # cachê acima do limite. O autor da mudança fica de fora — vai explícito pelo produtor.
+    KIND_EVENTO_TIPO_SHOW: (RoleName.CASTING, RoleName.ENSAIO, RoleName.SUPERADMIN),
+    KIND_EVENTO_VAGA_SOBRANDO: (RoleName.CASTING, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -345,6 +356,166 @@ def notificar_cancelamento_na_escala(dia: CalendarEvent, escalados: int, *, dedu
         dedupe_key=dedupe_key,
         severity="urgent" if urgente else "info",
     )
+
+
+def _sem_o_autor(kind: str, autor_id: int | None) -> list[User]:
+    """Destinatários do catálogo menos quem fez a mudança (FR-033): ele já sabe."""
+    return [u for u in resolver_destinatarios(DESTINATARIOS_POR_KIND[kind]) if u.id != autor_id]
+
+
+def _urgente(event: CalendarEvent) -> bool:
+    agora = now_sp()
+    return bool(event.start_at and event.start_at - agora <= timedelta(days=ANTECEDENCIA_URGENTE_DIAS))
+
+
+def notificar_troca_de_tipo_show(event: CalendarEvent, *, entrou: bool, autor_id: int | None) -> int:
+    """Feature 339 (FR-012): o evento virou SHOW (ou deixou de ser) → Casting, Ensaio e Superadmin.
+
+    Cada troca é um fato (a chave leva o carimbo); `urgent` em até 7 dias, como a recusa de convite.
+    O texto diz o fato; a lista viva de escalados fica na faixa do evento, que lê o elenco com o corte
+    de cachê de cada papel. Não comita.
+    """
+    _garante_id(event)
+    quando = f"{event.start_at:%d/%m %H:%M} · " if event.start_at else ""
+    if entrou:
+        titulo = f"Evento virou SHOW: {event.title}"
+        corpo = f"{quando}Confira a disponibilidade do elenco para o ensaio e revise os cachês."
+    else:
+        titulo = f"Evento deixou de ser SHOW: {event.title}"
+        corpo = f"{quando}Os ensaios foram cancelados. Revise os cachês do elenco."
+    marcador = "entrou" if entrou else "saiu"
+    return emitir(
+        KIND_EVENTO_TIPO_SHOW,
+        title=titulo,
+        body=corpo,
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=(
+            f"{KIND_EVENTO_TIPO_SHOW}:{event.id}:{marcador}:{autor_id or 0}:{now_sp():%Y%m%d%H%M%S%f}"
+        ),
+        severity="urgent" if _urgente(event) else "info",
+        destinatarios=_sem_o_autor(KIND_EVENTO_TIPO_SHOW, autor_id),
+    )
+
+
+def frase_da_sobra(nome: str, pedido: int, vagas: int) -> str:
+    """A frase da vaga a mais, com a contagem concordando (Princípio XV): sino e histórico."""
+    ocupadas = "1 vaga ocupada" if vagas == 1 else f"{vagas} vagas ocupadas"
+    if pedido == 0:
+        return f"{nome.upper()} saiu do título; há {ocupadas}. Remova da escala quem não vai mais."
+    return f"{nome.upper()}: o título pede {pedido}, há {ocupadas}. Remova alguém da escala."
+
+
+def notificar_vaga_sobrando(
+    event: CalendarEvent,
+    nome: str,
+    *,
+    chave: str,
+    pedido: int,
+    vagas: int,
+    autor_id: int | None,
+    marca: datetime,
+) -> int:
+    """Feature 339 (FR-020): o título pede um personagem menos vezes e as vagas dele estão ocupadas.
+
+    A chave carrega personagem, pedido, vagas e o carimbo da marca (`sobrando_desde`): a mesma
+    situação nunca vira dois avisos com o sync passando de novo (FR-022) — a marca não muda enquanto
+    a sobra não se resolve —, mas a sobra que volta depois de resolvida é outra ocorrência e avisa
+    de novo (converge, T043). Não comita.
+    """
+    _garante_id(event)
+    return emitir(
+        KIND_EVENTO_VAGA_SOBRANDO,
+        title=f"Vaga a mais: {event.title}",
+        body=frase_da_sobra(nome, pedido, vagas),
+        link_path=f"/events/{event.id}",
+        entidade=("calendar_event", event.id),
+        dedupe_key=f"{KIND_EVENTO_VAGA_SOBRANDO}:{event.id}:{chave}:{pedido}:{vagas}:{marca:%Y%m%d%H%M%S%f}",
+        severity="urgent" if _urgente(event) else "info",
+        destinatarios=_sem_o_autor(KIND_EVENTO_VAGA_SOBRANDO, autor_id),
+    )
+
+
+def _encerrar(*condicoes) -> int:
+    agora = now_sp()
+    feitas = 0
+    for n in Notification.query.filter(Notification.ciente_em.is_(None), *condicoes).all():
+        n.ciente_em = agora
+        n.read_at = n.read_at or agora
+        feitas += 1
+    return feitas
+
+
+def encerrar_vaga_sobrando(event_id: int, chave: str) -> int:
+    """A sobra se resolveu: o aviso deixa de ser pendente para todo mundo (FR-017). Não comita."""
+    return _encerrar(
+        Notification.kind == KIND_EVENTO_VAGA_SOBRANDO,
+        Notification.entity_type == "calendar_event",
+        Notification.entity_id == event_id,
+        Notification.dedupe_key.like(f"{KIND_EVENTO_VAGA_SOBRANDO}:{event_id}:{chave}:%"),
+    )
+
+
+def encerrar_avisos_do_evento(event_id: int) -> int:
+    """Evento cancelado: os avisos da 339 deixam de ser pendentes para todos (tela só consulta, 312)."""
+    return _encerrar(
+        Notification.kind.in_(list(KINDS_COM_CIENTE)),
+        Notification.entity_type == "calendar_event",
+        Notification.entity_id == event_id,
+    )
+
+
+def marcar_ciente(user_id: int, notification_id: int) -> Notification | None:
+    """"Ciente" na faixa do evento — só da pessoa, só nos `KINDS_COM_CIENTE` (FR-014..016).
+
+    Idempotente. Grava também `read_at` se vazio: quem confirmou na faixa leu. `None` quando a linha
+    não é da pessoa ou não é de um aviso com "Ciente" — o endpoint responde 404 nos dois casos.
+    """
+    n = Notification.query.filter_by(id=notification_id, user_id=user_id).first()
+    if n is None or n.kind not in KINDS_COM_CIENTE:
+        return None
+    agora = now_sp()
+    if n.ciente_em is None:
+        n.ciente_em = agora
+    if n.read_at is None:
+        n.read_at = agora
+    return n
+
+
+def avisos_pendentes_do_evento(user_id: int, event_id: int) -> list[Notification]:
+    """As faixas que esta pessoa ainda não confirmou neste evento, da mais antiga para a mais nova."""
+    return (
+        Notification.query.filter(
+            Notification.user_id == user_id,
+            Notification.kind.in_(list(KINDS_COM_CIENTE)),
+            Notification.entity_type == "calendar_event",
+            Notification.entity_id == event_id,
+            Notification.ciente_em.is_(None),
+        )
+        .order_by(Notification.id)
+        .all()
+    )
+
+
+def dados_do_aviso(n: Notification) -> dict:
+    """O que a faixa precisa além do texto, lido da `dedupe_key` (nenhuma coluna JSON nova)."""
+    partes = (n.dedupe_key or "").split(":")
+    if n.kind == KIND_EVENTO_TIPO_SHOW and len(partes) >= 5:
+        autor = User.query.get(int(partes[3])) if partes[3].isdigit() and partes[3] != "0" else None
+        return {"entrou": partes[2] == "entrou", "autor": autor.name if autor else None}
+    if n.kind == KIND_EVENTO_VAGA_SOBRANDO and len(partes) >= 6:
+        # O nome pode ter ":"; pedido, vagas e o carimbo são sempre os três últimos campos. O nome
+        # aqui é o normalizado (sem acento) e as contagens são as do dia do aviso: a faixa troca os
+        # dois pelos vivos (`agenda_read`), e estes ficam para quem não tem o evento à mão.
+        try:
+            return {
+                "personagem": ":".join(partes[2:-3]),
+                "pedido": int(partes[-3]),
+                "vagas": int(partes[-2]),
+            }
+        except ValueError:
+            return {}
+    return {}
 
 
 def notificar_recado_nfc(recado) -> int:
@@ -599,9 +770,21 @@ def apagar_por_entidade(entity_type: str, entity_id: int) -> int:
 def _condicao_antigas(agora: datetime):
     corte_lida = agora - timedelta(days=RETENCAO_LIDA_DIAS)
     corte_nao_lida = agora - timedelta(days=RETENCAO_NAO_LIDA_DIAS)
+    # Feature 339: aviso com "Ciente" ainda não confirmado conta como não lido — senão a faixa do
+    # evento sumiria 30 dias depois de a pessoa só ter aberto o item no sino.
+    pendente_de_ciente = and_(
+        Notification.kind.in_(list(KINDS_COM_CIENTE)), Notification.ciente_em.is_(None)
+    )
     return or_(
-        and_(Notification.read_at.isnot(None), Notification.read_at < corte_lida),
-        and_(Notification.read_at.is_(None), Notification.created_at < corte_nao_lida),
+        and_(
+            Notification.read_at.isnot(None),
+            Notification.read_at < corte_lida,
+            not_(pendente_de_ciente),
+        ),
+        and_(
+            or_(Notification.read_at.is_(None), pendente_de_ciente),
+            Notification.created_at < corte_nao_lida,
+        ),
     )
 
 
@@ -650,6 +833,7 @@ def serializar(n: Notification) -> dict:
         "entity_id": n.entity_id,
         "created_at": n.created_at.isoformat(timespec="seconds") if n.created_at else None,
         "read_at": n.read_at.isoformat(timespec="seconds") if n.read_at else None,
+        "ciente_em": n.ciente_em.isoformat(timespec="seconds") if n.ciente_em else None,
     }
 
 

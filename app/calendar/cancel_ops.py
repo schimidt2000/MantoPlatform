@@ -1662,10 +1662,19 @@ def ao_cancelar(event: CalendarEvent, *, alcance: str, novo_principal: CalendarE
     esta função: a assinatura não muda).
 
     Feature 315: fecha o pedido de cancelamento do dia, se havia, e responde a quem pediu.
+
+    Feature 339: os avisos do evento com "Ciente" (virou SHOW, vaga a mais) deixam de ser pendentes
+    para todos — a tela do cancelado só se consulta (312), não há o que conferir.
     """
     from app.calendar import solicitacao_ops  # tardio: solicitacao_ops importa este módulo
+    from app.notificacoes.notificacoes_ops import encerrar_avisos_do_evento
 
     solicitacao_ops.fechar_no_cancelamento(event, alcance=alcance, novo_principal=novo_principal)
+    encerrar_avisos_do_evento(event.id)
+    # E a marca de vaga sobrando sai: o card do cancelado é só consulta, não pede mais "remova
+    # alguém da escala" (converge, T046).
+    for role in event.roles:
+        role.sobrando_desde = None
 
 
 def _recusas_de_estado(event: CalendarEvent) -> None:

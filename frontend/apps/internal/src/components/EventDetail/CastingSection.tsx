@@ -170,6 +170,16 @@ interface RoleCardProps {
   canEdit: boolean;
   /** Feature 312 (Q10): no cancelado, Casting e Superadmin só tiram o artista da escala. */
   podeTirar?: boolean;
+  /** Feature 339: avisos da remoção da vaga (falha do Google no título) sobem para a seção. */
+  onAvisos?: (avisos: string[]) => void;
+}
+
+/** "autorizado por Fulano em 09/11" — a autorização da 339 na linha do teto do Superadmin. */
+function textoDaAutorizacao(role: RoleItem): string {
+  if (role.teto_autorizado == null) return "";
+  if (!role.teto_autorizado_por) return " · autorizado antes da 339";
+  const [, mes, dia] = (role.teto_autorizado_em ?? "").slice(0, 10).split("-");
+  return ` · autorizado por ${role.teto_autorizado_por}${dia && mes ? ` em ${dia}/${mes}` : ""}`;
 }
 
 /**
@@ -181,10 +191,10 @@ interface RoleCardProps {
  * talento ocupa a largura toda e o cachê fica ao lado do botão Salvar — nada de campo de
  * 40px espremido entre botões.
  */
-function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
+function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos }: RoleCardProps) {
   const eventId = data.event.id;
   const assign = useAssignRole(eventId);
-  const remove = useDeleteRole(eventId);
+  const remove = useDeleteRole(eventId, onAvisos);
   const invite = useSendInvite(eventId);
   const dismiss = useDismissRole(eventId);
   const restore = useRestoreRole(eventId);
@@ -241,8 +251,11 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
   // soma normal, não uma autorização excepcional. O aviso só faz sentido quando o cachê salvo
   // ultrapassa o teto JÁ SOMADO ao carrinho (cache_cap + parcela), não o cap bruto do orçamento.
   const capComCarrinho = (role.cache_cap ?? 0) + (fazTransporte ? role.transporte_valor || 0 : 0);
+  // Feature 339: a autorização é da vaga (`teto_autorizado`) e diz quem e quando; a frase antiga
+  // da 238 fica só para o cachê acima do teto sem autorização registrada (carrinho, payload velho).
+  const autorizacao = textoDaAutorizacao(role);
   const tetoElevado =
-    role.cache_cap != null && (role.cache_value ?? 0) > capComCarrinho
+    !autorizacao && role.cache_cap != null && (role.cache_value ?? 0) > capComCarrinho
       ? " (teto elevado pelo cachê já autorizado)"
       : "";
 
@@ -307,6 +320,14 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
           </div>
           {/* Feature 322: o que foi vendido — quem procurar antes de olhar o nome de alguém. */}
           {role.perfil && <div className="text-xs font-medium text-ink">{role.perfil}</div>}
+          {/* Feature 339: o título deixou de pedir esta vaga e todas estão ocupadas. */}
+          {role.sobrando && (
+            <div className="text-xs font-semibold text-gold-ink" role="note">
+              {role.sobrando.pedido === 0
+                ? "Saiu do título — remova o artista da escala."
+                : `O título pede ${role.sobrando.pedido} — remova alguém da escala.`}
+            </div>
+          )}
           <div className="text-sm text-muted">
             {role.talent ? (
               <>
@@ -335,6 +356,7 @@ function RoleCard({ role, data, canEdit, podeTirar = false }: RoleCardProps) {
               <span className="tabular-nums">Teto: {brl(tetoEfetivo)}</span>
               <span> — {explicacaoTeto}</span>
               {parcelaCarrinho}
+              {autorizacao}
               {tetoElevado}
             </div>
           )}
@@ -605,12 +627,15 @@ function AddRoleForm({
   eventId,
   roleType,
   label,
+  onAvisos,
 }: {
   eventId: number;
   roleType: "character" | "extra";
   label: string;
+  /** Feature 339: avisos da inclusão (falha do Google no título) sobem para a seção. */
+  onAvisos?: (avisos: string[]) => void;
 }) {
-  const add = useAddRole(eventId);
+  const add = useAddRole(eventId, onAvisos);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [talentId, setTalentId] = useState<number | null>(null);
@@ -717,6 +742,9 @@ export function CastingSection({ data }: CastingSectionProps) {
   // Feature 239 (decisão 17): resumo de maquiador calculado pelo servidor — o mesmo critério do
   // `has_makeup_role` legado, agora exigindo talento atribuído para considerar "fechado".
   const maquiagem = data.maquiagem;
+  // Feature 339: remover/acrescentar vaga ajusta o título no Google; se o Google recusar, a vaga já
+  // foi gravada e o aviso fica aqui até a pessoa fechar (o card que pediu pode nem existir mais).
+  const [avisosDoTitulo, setAvisosDoTitulo] = useState<string[]>([]);
 
   const renderList = (items: RoleItem[]) =>
     items.length === 0 ? (
@@ -734,6 +762,7 @@ export function CastingSection({ data }: CastingSectionProps) {
               data={data}
               canEdit={canEdit}
               podeTirar={podeTirar}
+              onAvisos={setAvisosDoTitulo}
             />
           ),
         )}
@@ -769,12 +798,32 @@ export function CastingSection({ data }: CastingSectionProps) {
             Evento cancelado: remova os escalados da escala e avise cada um pelo WhatsApp.
           </p>
         )}
+        {avisosDoTitulo.length > 0 && (
+          <div
+            className="mb-2 flex items-start gap-3 rounded-md border border-gold/40 bg-gold-soft px-3 py-2 text-sm text-ink"
+            role="status"
+          >
+            <div className="flex-1 space-y-1">
+              {avisosDoTitulo.map((aviso, i) => (
+                <p key={i}>{aviso}</p>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="text-xs text-muted hover:text-ink"
+              onClick={() => setAvisosDoTitulo([])}
+            >
+              Fechar
+            </button>
+          </div>
+        )}
         {renderList(personagens)}
         {canEdit && (
           <AddRoleForm
             eventId={data.event.id}
             roleType="character"
             label="Adicionar personagem"
+            onAvisos={setAvisosDoTitulo}
           />
         )}
       </Panel>
@@ -782,7 +831,12 @@ export function CastingSection({ data }: CastingSectionProps) {
       <Panel title="Equipe de apoio">
         {renderList(apoio)}
         {canEdit && (
-          <AddRoleForm eventId={data.event.id} roleType="extra" label="Adicionar pessoa" />
+          <AddRoleForm
+            eventId={data.event.id}
+            roleType="extra"
+            label="Adicionar pessoa"
+            onAvisos={setAvisosDoTitulo}
+          />
         )}
       </Panel>
     </>

@@ -479,6 +479,9 @@ def _serialize_role(
         "perfil": _perfil_da_vaga(role),
         "criada_pelo_sistema": bool(role.criada_pelo_sistema),
         "escalado_pelo_comercial": bool(role.escalado_pelo_comercial),
+        # Feature 339: o título passou a pedir este personagem menos vezes, e as vagas dele estão
+        # todas ocupadas — vai a todo leitor do elenco (não carrega dinheiro).
+        "sobrando": _sobra_da_vaga(role),
     }
     # Nenhum dado de dinheiro sai para a vaga de presença: sem valor no payload, nenhuma tela
     # futura consegue reintroduzir o campo por descuido.
@@ -491,21 +494,63 @@ def _serialize_role(
         if is_superadmin:
             data["cache_cap"] = _money(role.cache_cap)
             data["cache_cap_note"] = role.cache_cap_note
+            # Feature 339: quem autorizou acima do limite, e quando — mesmo corte do `cache_cap`.
+            data["teto_autorizado"] = _money(role.teto_autorizado)
+            data["teto_autorizado_por"] = role.autorizador.name if role.autorizador else None
+            data["teto_autorizado_em"] = (
+                role.teto_autorizado_em.isoformat() if role.teto_autorizado_em else None
+            )
         # Feature 239 — carrinho de transporte fora de SP. `cache_cap_efetivo` já vem pronto para
-        # a tela não reimplementar a regra do servidor: a conta do teto mora em um lugar só.
-        # Espelho EXATO do enforcement de `assign_role`: `max(cap + parcela quando marcado, valor
-        # já salvo)`. A parcela entra DENTRO do `max` — somá-la por cima do `max` (que já inclui o
-        # `cache_value` gravado na rodada anterior) inflaria o teto exibido a cada gravação, e a
-        # tela acompanharia a catraca sem nunca mostrar o aviso de "acima do limite".
+        # a tela não reimplementar a regra do servidor: a conta do teto mora em um lugar só —
+        # desde a 339, `teto_ops.teto_efetivo`, a MESMA função que a trava de `assign_role` usa
+        # (antes eram dois `max` escritos à mão, um em cada ponta).
+        from app.calendar.teto_ops import teto_efetivo
+
         parcela = transporte_valor or Decimal("0")
         data["does_transport"] = bool(role.does_transport)
         data["transporte_valor"] = _money(parcela)
-        cap_efetivo = None
-        if role.cache_cap is not None:
-            base = role.cache_cap + (parcela if role.does_transport else Decimal("0"))
-            cap_efetivo = max(base, role.cache_value or Decimal("0"))
-        data["cache_cap_efetivo"] = _money(cap_efetivo)
+        data["cache_cap_efetivo"] = _money(
+            teto_efetivo(role, parcela if role.does_transport else Decimal("0"))
+        )
     return data
+
+
+def _dados_vivos_do_aviso(n: Any, event: CalendarEvent) -> dict[str, Any]:
+    """`dados` da faixa (339) com o que vale AGORA na vaga a mais (converge, T048).
+
+    A chave do aviso guarda o nome normalizado (sem acento: "MÔNICA" viraria "MONICA") e as
+    contagens do dia em que ele nasceu; a faixa mostra a grafia da vaga e quantas estão ocupadas
+    hoje. Sem vaga do personagem (já resolvida), fica o que a chave diz.
+    """
+    from app.calendar.titulo_ops import chave_do_nome, contar_personagens
+    from app.notificacoes import notificacoes_ops
+
+    dados = notificacoes_ops.dados_do_aviso(n)
+    if n.kind != notificacoes_ops.KIND_EVENTO_VAGA_SOBRANDO or not dados.get("personagem"):
+        return dados
+    chave = dados["personagem"]
+    vagas = [
+        r for r in event.roles if r.role_type != "extra" and chave_do_nome(r.character_name) == chave
+    ]
+    if vagas:
+        dados["personagem"] = vagas[0].character_name
+        dados["pedido"] = contar_personagens(event.title).get(chave, 0)
+        dados["vagas"] = sum(1 for r in vagas if r.talent_id)
+    return dados
+
+
+def _sobra_da_vaga(role: Any) -> dict[str, int] | None:
+    """`{pedido, vagas}` da vaga marcada como sobrando (339), ou `None`."""
+    if role.sobrando_desde is None or role.role_type == "extra":
+        return None
+    from app.calendar.titulo_ops import chave_do_nome, contar_personagens
+
+    evento = role.event
+    chave = chave_do_nome(role.character_name)
+    vagas = sum(
+        1 for r in evento.roles if r.role_type != "extra" and chave_do_nome(r.character_name) == chave
+    )
+    return {"pedido": contar_personagens(evento.title).get(chave, 0), "vagas": vagas}
 
 
 def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
@@ -1021,6 +1066,23 @@ def serialize_event_detail(
     # superadmin perderia os logs de ensaios.
     if flags["is_superadmin"]:
         data["logs"] = _serialize_logs(event.id)
+
+    # Feature 339: as faixas que ESTA pessoa ainda não confirmou ("Ciente" é por pessoa). Sem gate
+    # de papel: só saem linhas do próprio usuário — a caixa é da pessoa, o "Ver como" não a troca.
+    from app.notificacoes import notificacoes_ops
+
+    data["avisos"] = [
+        {
+            "id": n.id,
+            "kind": n.kind,
+            "title": n.title,
+            "body": n.body,
+            "severity": n.severity,
+            "created_at": n.created_at.isoformat(timespec="seconds") if n.created_at else None,
+            "dados": _dados_vivos_do_aviso(n, event),
+        }
+        for n in notificacoes_ops.avisos_pendentes_do_evento(user.id, event.id)
+    ] if getattr(user, "id", None) else []
 
     # ENSAIO: painel simplificado (sem seções de show) + vínculo com o show pai — o painel
     # de ensaio do React usa `ensaio_pai` para mostrar/gerenciar órfãos (feature 057/063).

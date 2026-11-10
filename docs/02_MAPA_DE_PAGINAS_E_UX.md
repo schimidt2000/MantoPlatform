@@ -265,6 +265,9 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `evento.sumiu_google` usa o ícone `CalendarX` (o do selo da agenda), e todo aviso `urgent` deixa
   de ser cortado numa linha — título em até duas, corpo em até três (`line-clamp`), com o texto
   inteiro no `title`; os `info` seguem numa linha.
+  **Feature 339**: `evento.tipo_show` (ícone `Music`, Casting + Ensaio + Superadmin, menos quem
+  trocou) e `evento.vaga_sobrando` (ícone `UserMinus`, Casting + Superadmin); os dois abrem o
+  evento, onde a faixa espera o "Ciente" da pessoa, e são `urgent` com o evento em até 7 dias.
   **Feature 306**: `evento.cancelado` (ícone `CalendarX`) avisa a equipe de Ensaio, um por pessoa
   por ato que derrubou ensaio ("Evento cancelado: <título>", com os ensaios no corpo), e
   `evento.cancelado_escala` (ícone `UserX`) avisa o Casting, um por dia cancelado com escalados
@@ -569,6 +572,14 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `xl`; abaixo disso, coluna única. **Motivação**: para o `SUPERADMIN`, que recebe todos os
   blocos, a tela da 190 empilhava 16 painéis sem hierarquia (~4000px no desktop, o dobro no
   mobile), e o mesmo personagem aparecia duas vezes (em *Casting* e em *Figurino*).
+  - **Faixas de aviso (feature 339)**, logo abaixo do menu e antes da faixa "Sumiu do Google
+    Agenda": uma por aviso pendente **da pessoa logada** — "O evento virou SHOW" / "O evento deixou
+    de ser SHOW" (quando e por quem, o que conferir, e a lista viva dos escalados: personagem —
+    artista, com o cachê só para quem já o vê no elenco; o Ensaio lê só os nomes) e "Vaga a mais".
+    Cada uma tem **"Ciente"** (loading no botão, erro inline "Não foi possível registrar. Tente
+    novamente."), que some com a faixa **só para quem clicou** — o Matheus e o Diogo confirmam cada
+    um por si. Abrir o aviso pelo sino não apaga a faixa. A mutação mora no `EventHeader` (a faixa
+    desmonta no sucesso). Componente `components/EventDetail/AvisosDoEvento.tsx`.
   - **Cabeçalho** (fora das abas): título, badge de tipo, faixa horária, badge de confirmação e
     o menu **"⋯ Ferramentas"** (`KebabMenu` com `triggerLabel`) — Sincronizar · Exportar elenco
     (modal com seleção de campos e cópia: Personagem, Nome completo, Data de nascimento, CPF, RG,
@@ -933,6 +944,17 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   orçamento vinculado" quando o papel não veio de orçamento); quem autoriza acima do teto precisa
   saber de onde ele saiu. O servidor faz o mesmo corte de RBAC — `cache_cap`/`cache_cap_note` nem
   chegam no payload de quem não é superadmin.
+  **Feature 339 — teto autorizado da vaga**: o valor que o Superadmin salva acima do teto vira o
+  limite **da vaga** (não do artista): o Casting que tira e põe outra pessoa salva o mesmo valor sem
+  aviso vermelho. Na linha do teto, só para o Superadmin, "· autorizado por <nome> em dd/mm" (ou "·
+  autorizado antes da 339" para o que veio do preenchimento da migration); a frase antiga "(teto
+  elevado pelo cachê já autorizado)" fica só para cachê acima do teto sem autorização registrada.
+- **Vaga a mais (feature 339)**: quando o título deixa de pedir um personagem e todas as vagas dele
+  estão ocupadas, cada card do personagem ganha a marca dourada "O título pede N — remova alguém da
+  escala." ("Saiu do título — remova o artista da escala." quando o nome saiu inteiro). Tirar a
+  pessoa de uma dessas vagas faz a vaga vazia sair sozinha, e a marca some. Se remover ou
+  acrescentar vaga ajusta o título e o Google recusa, a seção mostra no topo "Não foi possível
+  atualizar o título no Google Agenda. Corrija o título por lá." com "Fechar".
 - **Carrinho de transporte fora de SP (feature 239)**: em evento com `is_outside_sp` — ou com a
   classificação **desconhecida**, hotfix 239b: 55 dos 104 eventos futuros estavam `NULL` e o botão
   sumia; marcar num desconhecido classifica o evento como fora de SP no servidor —, cada card

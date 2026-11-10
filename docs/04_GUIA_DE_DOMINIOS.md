@@ -92,10 +92,16 @@ Para cada item, quatro caminhos:
    + estimativa de rota;
 3. **existe** → detecta mudança de data/hora/local, sobrescreve campos, notifica talentos
    confirmados, re-garante o técnico de som;
-4. depois: `source == 'platform'` → commit e **early-return preservando o elenco**; título começando
+4. **Feature 339**: se o título mudou (e não é ENSAIO), `_reconciliar_titulo_no_sync` aplica às
+   vagas o que **saiu** do título (`titulo_ops.reconciliar_vagas_pelo_titulo`: vaga vazia do
+   personagem sai; sobrando só gente escalada, as vagas ganham `sobrando_desde` e o Casting e o
+   Superadmin são avisados) e dá o título novo aos ensaios futuros (push ao Google depois do
+   commit) — **também em evento da plataforma**, num SAVEPOINT para uma falha não derrubar a rodada;
+5. depois: `source == 'platform'` → commit e **early-return preservando o elenco**; título começando
    com `🟧 ENSAIO` → **apaga todos os roles**; senão → reconcilia os personagens do título contra os
-   `EventRole` existentes, renomeando com prefixo antigo para preservar casting/figurino e disparando
-   `send_removal_email` para quem sumiu do título.
+   `EventRole` existentes, renomeando com prefixo antigo para preservar casting/figurino; o
+   personagem que sumiu do título só tem a vaga apagada se ela estiver **vazia** — desde a 339 o
+   sync nunca apaga vaga com artista nem manda e-mail de remoção (quem tira da escala é o Casting).
 
 Ao final, `_mark_talents_worked()`. Em seguida vem a **limpeza** (`_cleanup_stale_events`, hoje uma
 delegação de uma linha para `sumico_ops.limpar_mes` — feature 303), que só roda quando a lista do
@@ -284,8 +290,10 @@ ato (306), não da vaga de hoje.
    isolada: `SiteSetting.calendar_sync_cache` usa `utcnow` (`routes.py:88`, `:101`).
 4. Evento com fim < início cruza a meia-noite → fim vai para o dia seguinte (`_build_start_end`,
    `routes.py:63`).
-5. `source == 'platform'` protege o elenco do sync; roles com `role_type == 'extra'` (Coordenador,
-   Maquiador, Técnico) nunca são tocados; `parent_event_id` nunca é sobrescrito pelo Google.
+5. `source == 'platform'` protege o elenco do sync — **exceto** o que sai do título, que desde a
+   339 vale também para ele (vaga vazia sai, ocupada é marcada; nunca criação de vaga); roles com
+   `role_type == 'extra'` (Coordenador, Maquiador, Técnico) nunca são tocados; `parent_event_id`
+   nunca é sobrescrito pelo Google.
 6. Evento de venda virtual é **intocável** pelo sync — nem atualizado, nem apagado; só gera log
    `virtual_divergente`.
 7. `group_leader_id` (grupo comercial) ≠ `parent_event_id` (show ↔ ensaio). Satélite tem os campos
@@ -295,14 +303,36 @@ ato (306), não da vaga de hoje.
    delete estoura violação de FK.
 9. Falha do Google **nunca** bloqueia escrita local (`event_ops.py:404`, `routes.py:238`, `:2629`) —
    vira aviso.
-10. `cache_cap` em `EventRole` é **teto** vindo do orçamento: `casting_ops.py:68` trunca para
-    não-superadmin e gera nota de auditoria quando ultrapassado.
+10. `cache_cap` em `EventRole` é **teto** vindo do orçamento: `casting_ops.assign_role` trunca para
+    não-superadmin e gera nota de auditoria quando ultrapassado. **Feature 339**: o limite aplicado é
+    `teto_ops.teto_efetivo` = `max(cache_cap + parcela do carrinho, teto_autorizado, cachê atual)` —
+    a mesma função serve a trava e a tela; o cachê atual só conta para a **mesma pessoa** (no
+    "Salvar" que troca o artista ele não vira limite de quem entra). O `teto_autorizado` é **da vaga**: só o Superadmin o grava
+    (salvando acima do limite, com artista e cachê > 0; salvar dentro do limite o limpa), tirar a
+    pessoa não o mexe, e recálculo de tipo e vínculo de orçamento (que reescrevem o `cache_cap`)
+    nunca o tocam. Trocar o tipo entrando ou saindo de SHOW refaz o `cache_cap` pela conta da criação
+    com o show trocado (`teto_ops.recalcular_tetos_pelo_tipo`) e avisa Casting, Ensaio e Superadmin
+    (menos o autor) com faixa de "Ciente" por pessoa (`notifications.ciente_em`). A troca feita
+    direto no Google (prefixo do título) também recalcula e avisa pelo sync
+    (`event_ops.avisar_troca_de_tipo_do_google`), sem a parte destrutiva da saída de SHOW, que segue
+    só na troca pela plataforma. O cachê de quem já está escalado nunca muda sozinho.
+10b. **Título ↔ vagas ↔ ensaio (feature 339, `app/calendar/titulo_ops.py`).** O título conta
+    personagens com repetição (`parse_characters` + `orcamento_evento_ops._chave`). O que **sai** do
+    título (antigo × novo, por sync ou edição) mexe nas vagas; diferença antiga de grafia nunca.
+    Remover/acrescentar vaga pelo sistema ajusta **uma** ocorrência do título só se título e vagas
+    ficaram desiguais na direção certa — a vaga que sai *porque* o título perdeu o nome não o tira
+    de novo. Toda mudança de título dá "🟧 ENSAIO — <título>" aos ensaios futuros não cancelados.
+    Google depois do commit; falha vira aviso, nunca desfaz. A "Editar" completa manda no título do
+    formulário (sem ajuste automático).
 11. **O que o orçamento diz sobre o evento entra por um lugar só** (feature 273):
     `app/calendar/orcamento_evento_ops.py` — fora de SP + quilometragem, equipe vendida com teto
     (coordenadores × quantidade, Técnico de Som, Maquiador, maquiagem/cantor por personagem casado
     pelo nome) e, em evento sem venda, os valores. Usado na criação, no vínculo posterior
     (`PATCH /events/<id>/orcamento`) e em `reclassificar_fora_de_sp`. **Nunca apaga nem rebaixa**
-    o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova.
+    o que o casting fez à mão; o que não casa vai ao relatório, não vira vaga nova. **Exceção da
+    339**: o vínculo de um orçamento **novo** (troca) reescreve o `cache_cap` das vagas casadas,
+    inclusive para baixo — o teto autorizado pelo Superadmin fica por cima; reaplicar o mesmo
+    orçamento segue "só onde não havia teto".
     **Feature 322 — personagem com maquiagem traz o maquiador**: depois de criar, editar ou ligar
     orçamento (as três edições: completa, cabeçalho e comercial), `casting_ops.garantir_vaga_de_maquiador`
     cria a vaga `Maquiador` (extra, sem talento, sem teto, `criada_pelo_sistema`) se algum personagem tem

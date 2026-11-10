@@ -1,4 +1,15 @@
-import { Bell, CalendarCheck, CalendarX, FileText, FileX, Star, UserX, type LucideIcon } from "lucide-react";
+import {
+  Bell,
+  CalendarCheck,
+  CalendarX,
+  FileText,
+  FileX,
+  Music,
+  Star,
+  UserMinus,
+  UserX,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@manto/ui";
 import { horaDeIsoLocal } from "../../lib/horaLocal";
 import type { Notificacao } from "../../lib/notificacoes";
@@ -16,6 +27,9 @@ const ICONE_POR_KIND: Record<string, LucideIcon> = {
   // Feature 315 — o pedido de cancelamento (o ícone do selo) e a resposta a quem pediu.
   "evento.pedido_cancelamento": FileX,
   "evento.pedido_decidido": CalendarCheck,
+  // Feature 339 — o evento virou (ou deixou de ser) SHOW, e a vaga que o título deixou de pedir.
+  "evento.tipo_show": Music,
+  "evento.vaga_sobrando": UserMinus,
 };
 
 interface NotificacaoItemProps {
