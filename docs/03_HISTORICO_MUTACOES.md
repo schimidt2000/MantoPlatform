@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **340-caixa-de-avisos** | *(branch, aguardando o dono)* O pagamento da loja não se perde num push: o aviso da InfinitePay entra pelo serviço novo `manto-avisos` (sem disco, healthcheck, deploy só pela própria pasta), que só guarda em `virtual_payment_inbox`; o backend drena a cada 10 s e antes da expiração, pela regra da 310 sem mudança. O retorno do checkout repete em 5xx; o frontend ganha healthcheck e o backend ignora push só de docs/specs/tela. Cai a R-20 (sem deploy 9h–23h na campanha); constituição 3.2.0 | 2026-11-10 | `e340c1a2b3d4` | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
@@ -373,7 +374,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Assunto | Features |
 |---|---|
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
-| Loja de Interações Virtuais | 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
+| Loja de Interações Virtuais | 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
@@ -386,7 +387,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Documentação e economia de token | 217 |
 | Formulários e pré-contrato | 210b, 188, 193 |
 | Avaliações e dashboards | 232, 197, 196 |
-| Infra, deploy, proxy e cache de bundle | 210d, 206, 206b, 212 |
+| Infra, deploy, proxy e cache de bundle | 340, 210d, 206, 206b, 212 |
 | Segurança / RBAC / endurecimento | 216, 214, 206b |
 
 **Runbooks reexecutáveis embutidos no histórico** (procedimento, não registro): carga histórica do
@@ -405,6 +406,83 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 340 — O pagamento da loja não se perde num push: o aviso espera numa caixa fora do deploy   (340-caixa-de-avisos · 2026-11-10 · migration `e340c1a2b3d4`)
+
+> **Branch, aguardando o dono** (worktree `C:\tmp\mp340`). Nível 1. Spec, plano, pesquisa, contrato e
+> roteiro em `specs/340-caixa-de-avisos/`. Migration aditiva `e340c1a2b3d4` sobre `d323b5a1c0e7`;
+> quem mergear por último reencadeia o `down_revision` (o CRM 325–335, a 329 e a 338/339 também
+> partem dessa cabeça).
+
+**O pedido.** O dono, em 09–10/11: "eu aparentemente não vou poder fazer pushes durante o período do
+dia, porque pode ser fechado algum evento e ter um pagamento no meio do caminho que pode rolar algum
+bug. Tem alguma forma da gente se prevenir contra isso?" → "Não seria uma saída também um outro
+serviço no render rodando (24/7), onde não é afetado pelos pushes?" → tirar o disco do backend fica
+"para janeiro" → "Pode implementar" (workspace do Render é Pro).
+
+**A causa.** A R-20 da 310 proibia deploy 9h–23h de 1º/11 a 25/12. Todo push trocava os dois serviços
+web: o frontend não tinha healthcheck, e o backend tem disco — pela documentação do Render, "Adding
+a disk to a service prevents zero-downtime deploys". O aviso da InfinitePay passava pelos dois
+(`app.…/api/webhooks/infinitepay/<token>`) e a operadora só reenvia com 400: o 502 perdia o aviso. O
+retorno do checkout era enviado uma vez e o erro, engolido.
+
+**O que mudou.**
+- **`manto-avisos`** (`servicos/avisos/app.py`): WSGI puro que **não importa `app/`** e não decide
+  nada. Confere o segredo como `token_do_aviso_valido`, grava o corpo em `virtual_payment_inbox` e
+  responde 200; segredo errado 404 (resumo de 2 KB até 120/h); > 64 KB 413 (inclusive chunked); 60/min
+  por IP (último item do XFF) 429; banco fora **400** (aqui reenviar conserta); log sem a URL;
+  `/health` (processo) e `/health/banco`. Driver psycopg 3, porque é o do `.venv` e o verify tem de
+  exercitar o de produção.
+- **Backend**: `drenar_caixa_de_avisos` reivindica por `FOR UPDATE SKIP LOCKED` + arrendamento de 5 min
+  (as funções da 310 fazem commit, então trava de linha não segura) e chama `registrar_aviso` /
+  `registrar_aviso_invalido` → marca drenada → `processar_aviso`, sem mudar nenhuma delas. Thread
+  `caixa-de-avisos` a cada 10 s e **primeira rotina** de `ciclo_de_varredura`, antes de
+  `expirar_reservas`. Linha parada há 1 h → sino. `webhook_url` dos links novos =
+  `INFINITEPAY_AVISO_BASE_URL` (default `AVISOS_BASE_URL`); a rota antiga do backend continua.
+- **Família**: `useRetornoCheckout` repete em rede/5xx (5 s, 20 s, 60 s) pelo `retry` do TanStack.
+- **`render.yaml`** (três commits sozinhos): serviço `manto-avisos` (starter, `rootDir`, sem disco,
+  healthcheck); `healthCheckPath: /` no frontend (quita a dívida 22); `buildFilter.ignoredPaths` no
+  backend (docs, specs, frontend, servicos, .claude, .specify).
+- **Regra**: a R-20 caiu (`DEVELOPMENT.md`, skill `manto-deploy`, `CLAUDE.md` §2); constituição
+  **3.2.0** (Operação e Deploy, itens 1 e 1a).
+
+**Banco.** `virtual_payment_inbox` (`id`, `received_at`, `body`, `secret_ok`, `claimed_at`,
+`attempts`, `error`, `drained_at`, `notification_id` FK `SET NULL`, `alerted_at`), índice parcial nas
+não drenadas. Detalhe em `docs/01` §2.10.2.
+
+**RBAC.** Nenhum papel novo. A rota do receptor é pública com segredo no caminho (mesma regra da 310);
+`/health*` públicas sem dado (`docs/01` §4.3).
+
+**Verificação.** `verify_340.py` **63/63** contra o `manto_340` (dump de 10/11; o `manto_local` está na
+migration do CRM 334): receptor como WSGI (segredo atual/anterior/vencido, 413 com e sem tamanho,
+429 com XFF forjado, teto de recusas, banco fora 400, log sem segredo, saúde), dreno pela regra da 310
+(venda com evento e e-mail, duplicado, dois drenos concorrentes, caixa antes da expiração, retorno
+forjado), sino de linha parada, thread conferida **no código** (sem subir `create_app()` sem a trava),
+`render.yaml` e o `startCommand` do receptor pelo parser real do gunicorn. Contra `dc78c788` (antes do
+núcleo): 16 BLOQUEADO, 8 FALHA. Regressão contra o mesmo banco: `verify_310` 652/652 (a primeira rodada
+deu 23 falhas pelo usuário "outro" sorteado — ver Pegadinhas; repetida, verde), `verify_205` 137/138 e
+`verify_304` 23/27 com as **mesmas** falhas da `main` pura no mesmo banco (dado do espelho: campanha de
+produção pausada e com preço novo). `ruff` limpo nos arquivos novos e sem aviso novo nos tocados;
+`npm run typecheck` limpo; `validar_startcommand.py` verde. Tela: `/v/pedido/<token>` em 375×812 com o
+backend parado — o `POST …/retorno` falhou duas vezes, passou na terceira com o backend de volta e a
+página saiu de "Pedido não encontrado" para "Confirmando o pagamento…" sozinha.
+
+**Pegadinhas.**
+- **O alocador do spec-kit propôs 337**: `create-new-feature.sh` lê `git branch -a` e descarta as
+  linhas com `+` (branch em outro worktree); 337, 338 e 339 estavam em worktrees. A branch foi
+  renomeada à mão para 340. Conferir o número contra `git branch -a` antes de seguir.
+- **`verify_310` instável**: o usuário "outro" sai de `.first()` sem ordem; sendo Revendedor
+  EducaManto, o guard da 078 devolve 403 em `/api/` pública e o cenário 32 em diante cai (dívida 206).
+- **Primeiro deploy**: o Blueprint cria o `manto-avisos` no push. Confirmar no painel que a URL é
+  `https://manto-avisos.onrender.com` **antes de ligar a loja**; se vier outra, trocar
+  `AVISOS_BASE_URL`. Receptor no ar antes da migration do backend responde 400 (a operadora reenvia).
+- **O backend ainda cai ~1 min** em push que mexe nele (equipe e reserva nova); só o dinheiro saiu do
+  caminho. Tirar o disco é a dívida 202 (janeiro); "Pedido não encontrado" durante a troca é a 205; a
+  conta de threads do validador é a 204.
+- Saída sem deploy de código: `INFINITEPAY_AVISO_BASE_URL=https://app.mantoproducoes.com.br` no backend.
+
+**Fora de escopo.** Tirar o disco (janeiro), preview environments, avisos da ClickSign e do Inter
+(têm reconsulta própria), mudar qualquer regra da 310, limpeza periódica da caixa.
 
 ### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
 

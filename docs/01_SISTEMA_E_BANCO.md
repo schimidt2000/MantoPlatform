@@ -7,7 +7,11 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-10-28** · **322-o-que-o-casting-fecha** (migration **`c322a7e1b9d4`**,
+> Última atualização: **2026-11-10** · **340-caixa-de-avisos** (migration **`e340c1a2b3d4`**, aditiva
+> — head: tabela `virtual_payment_inbox`, §2.10.2; o serviço novo `manto-avisos` e a rota dele,
+> §3.13.4 "Feature 340" e §4.3; o `webhook_url` dos links novos aponta para ele; `render.yaml` com
+> quatro recursos, healthcheck no frontend e filtro de caminhos no backend, §5.3).
+> Antes: **2026-10-28** · **322-o-que-o-casting-fecha** (migration **`c322a7e1b9d4`**,
 > aditiva — head: `event_roles.perfil_vendido`, `criada_pelo_sistema` e `escalado_pelo_comercial`, §2;
 > `perfil`/`criada_pelo_sistema`/`escalado_pelo_comercial` em cada item de `elenco`, §3 "Feature 322";
 > a maquiagem só muda por superadmin em `PATCH /api/events/<id>`, §4.3).
@@ -711,6 +715,29 @@ ou aceitam nulo, e o código anterior lê e grava no banco migrado.
 
 - **Backfill** na própria migration: aviso antigo com `outcome` vira `state='decidido'`, para a
   varredura não reprocessar o histórico da 205.
+
+### 2.10.2 Caixa de avisos de pagamento (feature 340)
+
+Migration **`e340c1a2b3d4`** (`down_revision = d323b5a1c0e7`), aditiva. Tabela nova
+`virtual_payment_inbox` (`VirtualPaymentInbox`): o aviso da InfinitePay como chegou ao serviço
+`manto-avisos`, antes de qualquer decisão. Quem escreve é o receptor; quem drena é o backend
+(`virtuais_ops.drenar_caixa_de_avisos`). Relógio de São Paulo, como as demais `virtual_*`.
+
+| Coluna | Tipo | Para quê |
+|---|---|---|
+| `id` | serial | ordem de chegada |
+| `received_at` | timestamp not null | idade da linha (sino de 1 h) |
+| `body` | text not null | corpo como veio (≤ 64 KB; ≤ 2000 caracteres quando o segredo não confere) |
+| `secret_ok` | bool not null default false | resultado da conferência do segredo **na chegada**; o segredo nunca é gravado |
+| `claimed_at` | timestamp | arrendamento do dreno (5 min): linha de processo morto volta a ser elegível |
+| `attempts` | int not null default 0 | voltas que tentaram drenar |
+| `error` | text | última falha ao registrar (≤ 500) |
+| `drained_at` | timestamp | registrada na fila da 310 (`virtual_payment_notifications`) |
+| `notification_id` | int FK → `virtual_payment_notifications.id` `ON DELETE SET NULL` | o registro que nasceu; nulo quando o aviso já estava decidido |
+| `alerted_at` | timestamp | sino de linha parada já tocado |
+
+Índice parcial `ix_virtual_payment_inbox_pendentes (id) WHERE drained_at IS NULL`. Sem limpeza
+periódica (o volume é o de `virtual_payment_notifications`).
 - `transaction_nsu` continua `UNIQUE`, e o aviso com **segredo errado** grava `transaction_nsu = NULL`
   (outcome `token_invalido`): gravar o NSU deixava um aviso legítimo posterior cair como "duplicado".
 - Desfechos do aviso em `constants.VIRTUAL_AVISO_*`: finais `efetivado`, `devolucao_aberta`,
@@ -1724,6 +1751,24 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
   trata `incluir_loja_virtual` e `resumo_loja_virtual` tanto no pipeline de vendas quanto na DRE
   (`:155`, `:172`, `:276`, `:282`, `:332`, `:521`). Ver §3.6.
 
+**Feature 340 — o aviso entra pelo `manto-avisos`.** Desde a 340 o `webhook_url` de todo link novo
+é `{INFINITEPAY_AVISO_BASE_URL}/api/webhooks/infinitepay/<token>` (`app/config.py`: default
+`AVISOS_BASE_URL = https://manto-avisos.onrender.com`, por `_url_para_fora`). O serviço
+`servicos/avisos/app.py` (WSGI puro, sem importar `app/`; contrato em
+`specs/340-caixa-de-avisos/contracts/manto-avisos.md`) responde a **mesma rota**:
+
+| Método | Rota (no `manto-avisos`) | O que faz |
+|---|---|---|
+| `POST` | `/api/webhooks/infinitepay/<token>` | **Público, segredo no path, 60/min por IP** (último item do `X-Forwarded-For`) → **429**. Corpo > 64 KB, com ou sem `Content-Length` → **413**. Segredo conferido contra `site_settings` com o critério de `token_do_aviso_valido` (atual, ou anterior até `…_anterior_ate` em São Paulo; `hmac.compare_digest`). Certo → grava o corpo em `virtual_payment_inbox` e responde **200** `{"success": true, "message": null}` — **não decide nada**. Errado → **404** e resumo de 2000 caracteres com `secret_ok = false`, até 120/h. Banco fora ao conferir ou gravar → **400** `{"success": false, "message": "Try again"}`, para a operadora reenviar (diferente da rota do backend, que responde 200: aqui reenviar conserta). Log `[avisos] <código> id=<linha> bytes=<n> ms=<n>`, sem a URL |
+| `GET` | `/health` | `200 {"ok": true}` sempre que o processo responde — o healthcheck do Render, que não toca o banco |
+| `GET` | `/health/banco` | `200 {"ok": true}` se `SELECT 1` responde em 3 s; senão **503** — a sonda de produção |
+
+O backend drena a caixa a cada 10 s (thread `caixa-de-avisos`, `VIRTUAL_CAIXA_INTERVAL`) e como
+**primeira rotina** de `ciclo_de_varredura` (antes de `expirar_reservas`): `registrar_aviso` /
+`registrar_aviso_invalido` → `drained_at` → `processar_aviso`. A rota do backend abaixo continua
+registrada para os links criados antes da 340 e como plano B (env `INFINITEPAY_AVISO_BASE_URL`
+apontada para `https://app.mantoproducoes.com.br` devolve os links novos a ela).
+
 **Pagamento ligado com segurança** — feature 310 (pronta, aguardando deploy). A máquina de estados
 e as invariantes estão em `docs/04` §4; a tela, em `docs/02`.
 
@@ -2220,7 +2265,7 @@ Gates por módulo (todos em `app/api/`):
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
 | `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções) | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
-| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` | — |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |
@@ -2580,9 +2625,11 @@ pública. A variável precisa do MESMO valor nos dois serviços. O `console.erro
 
 O deploy é o blueprint `render.yaml` na raiz — o **único** arquivo que descreve produção. Os
 arquivos `railway.json`/`nixpacks.toml` (raiz e `frontend/`) foram removidos na feature 296; o que
-eles ensinavam está abaixo. Três recursos, todos em Oregon: `manto-postgres` (basic-1gb),
-`manto-backend` (python, plano standard) e `manto-frontend` (node, starter). `autoDeploy: true` nos
-dois serviços web — **push na `main` é o deploy** (~60s até o bundle novo). Os envVars com
+eles ensinavam está abaixo. Quatro recursos, todos em Oregon: `manto-postgres` (basic-1gb),
+`manto-backend` (python, plano standard), `manto-frontend` (node, starter) e, desde a 340,
+`manto-avisos` (python, starter). `autoDeploy: true` nos três serviços web — **push na `main` é o
+deploy** (~60s), mas só de quem mudou: `rootDir` (frontend e avisos) e `buildFilter.ignoredPaths`
+(backend) decidem; mudança no próprio `render.yaml` é processada sempre. Os envVars com
 `sync: false` são preenchidos um a um no painel pelo dono, nunca copiando o `.env` inteiro (hotfix
 269b); `PORTAL_URL`, `PUBLIC_BASE_URL` e `SESSION_COOKIE_DOMAIN` **não se definem** (o default do
 código é o endereço público real; cookie host-only basta e funciona também na URL `*.onrender.com`).
@@ -2596,6 +2643,10 @@ flask db upgrade && python seed.py && gunicorn run:app \
   --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
 ```
 
+- **Filtro de caminhos** (340): `buildFilter.ignoredPaths` = `docs/**`, `specs/**`, `frontend/**`,
+  `servicos/**`, `.claude/**`, `.specify/**` (caminhos da raiz). Push só dessas pastas não reinicia
+  o backend. O Flask não lê nenhuma delas em tempo de execução — se um dia ler, tire a pasta da
+  lista.
 - **Healthcheck**: `healthCheckPath: /health` — o Render bate **direto no serviço**, sem passar pelo
   Node; é ele que gateia a troca de container. Devolve JSON com `threads` e
   `db_pool_em_uso`/`db_pool_disponivel` e é sempre 200 por construção (healthcheck que falha sob
@@ -2638,6 +2689,9 @@ flask db upgrade && python seed.py && gunicorn run:app \
   `SQLALCHEMY_ENGINE_OPTIONS`, hoje `pool_size 10 + max_overflow 10` = 20 por worker; cada worker
   consome pelas 12 threads de requisição MAIS as 6 de background) — `scripts/validar_startcommand.py`
   confere. As 6 threads de fundo sobem uma vez por worker (3 cópias de cada; desperdício conhecido).
+  ⚠️ O "6" está desatualizado: o `create_app` sobe 10 `_start_*` hoje e a 340 acrescentou a 11ª
+  (`caixa-de-avisos`). Cada uma só segura conexão durante a própria volta, então o teto prático não
+  estourou; a conta do validador está registrada como dívida no `docs/05`.
   Assinatura de diagnóstico: **CPU plana + p99 alto + 0% de erro = requisição presa segurando
   thread, não carga**; o 502 nasce no proxy Node quando o Flask não responde.
 
@@ -2655,10 +2709,20 @@ flask db upgrade && python seed.py && gunicorn run:app \
 `buildCommand: npm install && npm run build` (compila os **três** SPAs — `frontend/package.json`),
 `startCommand: npm run start` → `node server.js`. Variáveis: `BACKEND_URL` (origem pública do
 Flask, `sync: false` — §5.2.1), `VITE_API_BASE_URL` **vazia** no build, `PORTAL_HOSTS`/`ALO_HOSTS`
-(§5.2.2). ⚠️ **Sem `healthCheckPath` e sem `watchPatterns`**: cada push (inclusive só de docs)
-rebuilda os dois serviços e abre ~1 min de 502 na porta pública enquanto o container troca.
-Ausência conhecida — decisão pendente do dono (`docs/05`); acrescentar muda o pipeline e vai em
-commit isolado. (`npm install` está no blueprint; `npm ci` seria mais seguro — também em `docs/05`.)
+(§5.2.2). **`healthCheckPath: /`** desde a 340: sem disco e com healthcheck, o Render só troca o
+container depois de o novo responder — push de tela não abre mais 502. `/` não passa pelo Flask (host
+desconhecido, como o do healthcheck, serve o index do app interno). O `rootDir: frontend` já fazia
+o deploy daqui acontecer só quando `frontend/` muda. (`npm install` está no blueprint; `npm ci`
+seria mais seguro — `docs/05`.)
+
+**Serviço de avisos** — `manto-avisos` (340): `rootDir: servicos/avisos`, `buildCommand: pip install
+-r requirements.txt` (`gunicorn`, `psycopg[binary]` 3), `startCommand: gunicorn app:aplicacao
+--workers 1 --threads 8 --timeout 30 …`, log de acesso **sem** `%(U)s`/`%(r)s` (o segredo mora no
+caminho), `healthCheckPath: /health`, **sem disco**, `DATABASE_URL` do `manto-postgres`. Recebe o aviso
+da InfinitePay e só guarda (contrato em §3.13.4 "Feature 340"). Plano `starter`: o `free` dorme após
+15 min sem tráfego e perderia o aviso. Sonda: `GET https://manto-avisos.onrender.com/health/banco`
+→ 200. O `startCommand` dele não passa pelo `validar_startcommand.py` (que lê só o backend); o
+`verify_340.py` o valida com o mesmo parser.
 
 **Variáveis que sobrevivem da migração** (`docs/CONTINGENCIA_RENDER.md`, passo 4):
 `GOOGLE_OAUTH_REDIRECT_URI` recebe a URL pública registrada no Google Cloud Console +

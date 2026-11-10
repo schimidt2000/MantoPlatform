@@ -445,7 +445,7 @@ fora.
 | # | Prio | Onde | O quê | Ação |
 |---|---|---|---|---|
 | 21 | **P1** | painel do Render, `manto-backend` | `AUDIT_AGENT_TOKEN` e `MARKETING_AGENT_TOKEN` não foram preenchidos na migração de 28/08: `/api/audit-agent/*` e `/api/marketing-agent/*` respondem 404 e as rodadas semanais (221, 256) estão paradas | o dono preenche no painel a partir de `.audit-agent-token`/`.marketing-agent-token` (locais), fora do horário — mudar env redeploya (janela de 502) |
-| 22 | **P2** | `render.yaml`, bloco `manto-frontend` | sem `healthCheckPath` e sem `watchPatterns`: cada push (inclusive só de docs) rebuilda os dois serviços e abre ~1 min de 502 na porta pública | decisão do dono; `healthCheckPath: /` (o `server.js` responde a SPA) e `watchPatterns` excluindo `docs/`/`specs/` — cada um em commit isolado, fora do horário, Events abertos (comportamento de serviço sem disco não conferido) |
+| ~~22~~ | ~~P2~~ | ✅ **RESOLVIDO na feature 340** — `healthCheckPath: /` no `manto-frontend`; o frontend já só fazia deploy quando `frontend/` mudava (`rootDir`), e o backend ganhou `buildFilter.ignoredPaths`. Ver "Baixa da feature 340" | — |
 | 23 | **P2** | `app/models.py` × banco | drift antigo que `flask db check` acusa no `manto_local`: `remove_index ix_calendar_events_cancelled_at`, `remove_constraint UNIQUE(clients.phone)`, `add_fk` em `ensaio_materials` (event_id, user_id) e `talent_media.talent_id`, índices em `figurino_producoes` e `special_expenses` | decidir de que lado está a verdade item a item ANTES de qualquer migration que toque essas tabelas; nunca autogenerate (o `flask db upgrade` do start executaria em produção) |
 | 24 | **P2** | pasta do repositório | sincronizada pelo Google Drive Desktop (`.tmp.drive*` na raiz): `.git/`, `instance/`, `.env`, tokens e `backups/*.dump` vão para a nuvem do dono | confirmar intenção; excluir `.git/`, `instance/` e `backups/` do sync |
 | 25 | **P3** | `render.yaml:buildCommand` do frontend | `npm install` (o antigo `nixpacks.toml` usava `npm ci`, que exige lockfile em sincronia) | alinhar para `npm ci` em commit isolado, ou manter e registrar |
@@ -803,6 +803,22 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 |---|---|---|---|---|
 | 176 | **P5** | `app/calendar/routes.py` (`_handle_update_comercial` → `comercial_ops.sincronizar_notas`, Jinja) | o editor Jinja da venda, inalcançável em produção mas registrado, ainda **apaga a nota emitida** ao desligar o chip e não carimba "pedida por" nem avisa; as portas da API seguem a 323 (desligar exclui só as a emitir) | sai junto com o Jinja (`docs/PARADA_REMOCAO_JINJA.md`); não corrigir de passagem |
 | 177 | **P4** | notas `a_emitir` antigas (antes da 323) | a Home do Superadmin passa a listar como urgentes as notas a emitir que já existiam — no espelho de 28/10 eram 6, de eventos de setembro, várias sem CNPJ; podem ter sido emitidas fora do sistema sem o PDF inserido | o Superadmin insere o PDF (vira emitida); nota que não será emitida não tem botão de excluir no React (o `useDeleteNotaFiscal` de `lib/eventOps.ts` existe sem tela) — pôr "Excluir" no card de notas fiscais resolve; sem script |
+
+## Baixa da feature 340-caixa-de-avisos (2026-11-10, branch)
+
+**Quitada.** 22 — `healthCheckPath: /` no `manto-frontend`. Correção do registro: o "cada push
+(inclusive só de docs) rebuilda os dois serviços" valia só para o backend (`rootDir: .`); o
+frontend tem `rootDir: frontend`, e o Render só faz deploy dele quando essa pasta muda. O backend
+ganhou `buildFilter.ignoredPaths` na mesma feature. **Criadas.** (202–206; as branches 332–339 já
+usam até a 201.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 202 | **P2** | `render.yaml`, `manto-backend` (disco em `instance/`) | todo push que mexe no backend ainda abre ~1 min de 502 para a equipe: serviço com disco não tem deploy sem queda no Render ("Adding a disk to a service prevents zero-downtime deploys"). A 340 tirou o dinheiro desse caminho (`manto-avisos`), não a queda | **janeiro, depois do Natal** (decisão do dono, 10/11): uploads, `nfc_media/`, `virtual_videos/` e miniaturas para armazenamento externo (R2/S3), `.secret_key` em env, disco removido. Feature Nível 1, com ensaio |
+| 203 | **P3** | Render (workspace Pro) | não há staging: todo push vai direto para produção. O plano Pro já libera *preview environments* (cobrados como serviço comum, por segundo) | avaliar junto da 202, que é o que torna o backend reproduzível num ambiente efêmero |
+| 204 | **P4** | `scripts/validar_startcommand.py` (`THREADS_DE_FUNDO = 6`) | o validador do pool conta 6 threads de fundo por worker; o `create_app` sobe 10 e a 340 acrescentou a 11ª (`caixa-de-avisos`). Pela conta dele, 12 + 11 = 23 > 20 conexões. Na prática cada thread só segura conexão durante a própria volta e nada estourou | recontar as threads que usam o banco e acertar a constante (ou o pool) num commit sozinho, fora do horário |
+| 205 | **P4** | `frontend/apps/public/src/pages/PedidoVirtualPage.tsx` (`usePedidoVirtual`) | a leitura do pedido que falha com 5xx (o backend trocando de container) cai no estado de erro e a página diz "Pedido não encontrado" até chegar dado novo. Com a 340 o retorno do checkout repete e repõe o pedido na tela; quem só abre o link durante a troca continua lendo "não encontrado" por ~1 min (conferido na tela da 340) | distinguir 404 de 5xx/rede na página: em 5xx manter o último dado ou "Estamos conferindo seu pedido…" e seguir consultando |
+| 206 | **P5** | `specs/310-pagamento-loja-virtual/verify_310.py` (usuário "outro") | o verify escolhe o "outro" com `.first()` sem ordem; quando cai num usuário só Revendedor EducaManto, o guard da feature 078 devolve 403 em toda `/api/` pública e 23 cenários a partir do 32 falham com `KeyError: 'order_nsu'` (aconteceu numa rodada da regressão da 340; a rodada seguinte, mesmo código, deu 652/652) | `order_by(User.id)` e excluir `REVENDEDOR_EDUCAMANTO` na escolha, ou `logout` no fim do cenário 31 |
 
 ## Baixa da correção 331-atrasados-na-planilha (2026-11-03)
 

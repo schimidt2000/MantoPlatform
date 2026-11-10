@@ -21,16 +21,16 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
 
 ## Phase 1: Setup
 
-- [ ] T001 Constantes `VIRTUAL_CAIXA_ARRENDAMENTO_MIN = 5`, `VIRTUAL_CAIXA_ALERTA_HORAS = 1`,
+- [X] T001 Constantes `VIRTUAL_CAIXA_ARRENDAMENTO_MIN = 5`, `VIRTUAL_CAIXA_ALERTA_HORAS = 1`,
       `VIRTUAL_CAIXA_LOTE = 50` em `app/constants.py`, junto das `VIRTUAL_AVISO_*` (comentário com o
       porquê de cada número)
-- [ ] T002 [P] Config em `app/config.py`: constante de módulo `AVISOS_BASE_URL =
+- [X] T002 [P] Config em `app/config.py`: constante de módulo `AVISOS_BASE_URL =
       "https://manto-avisos.onrender.com"` ao lado de `PLATFORM_BASE_URL`;
       `Config.INFINITEPAY_AVISO_BASE_URL = _url_para_fora(os.getenv("INFINITEPAY_AVISO_BASE_URL"),
       AVISOS_BASE_URL, "INFINITEPAY_AVISO_BASE_URL", permitir_local=MAIL_SUPPRESS_SEND)` perto de
       `PUBLIC_BASE_URL`; `Config.VIRTUAL_CAIXA_INTERVAL = int(os.getenv("VIRTUAL_CAIXA_INTERVAL", "10"))`
       perto de `VIRTUAL_SWEEP_INTERVAL`
-- [ ] T003 [P] Pasta `servicos/avisos/` com `requirements.txt` (`gunicorn==23.0.0`,
+- [X] T003 [P] Pasta `servicos/avisos/` com `requirements.txt` (`gunicorn==23.0.0`,
       `psycopg[binary]==3.3.4`, research R3) e `README.md` (o que é, por que não importa `app/`, como rodar local,
       contrato em `specs/340-caixa-de-avisos/contracts/manto-avisos.md`)
 
@@ -38,14 +38,14 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T004 Modelo `VirtualPaymentInbox` em `app/models.py`, logo depois de
+- [X] T004 Modelo `VirtualPaymentInbox` em `app/models.py`, logo depois de
       `VirtualPaymentNotification`, conforme `data-model.md` (docstring com o porquê: guardar antes
       de decidir; nunca o segredo; relógio `now_sp`)
-- [ ] T005 Migration manual `migrations/versions/e340c1a2b3d4_caixa_de_avisos.py` (`down_revision =
+- [X] T005 Migration manual `migrations/versions/e340c1a2b3d4_caixa_de_avisos.py` (`down_revision =
       "d323b5a1c0e7"`): tabela, FK `ON DELETE SET NULL` para `virtual_payment_notifications`, índice
       parcial `ix_virtual_payment_inbox_pendentes` (`WHERE drained_at IS NULL`); `downgrade`
       completo; aplicar no `manto_340` com `flask db upgrade`
-- [ ] T006 **`specs/340-caixa-de-avisos/verify_340.py`** — os 18 cenários da seção "Verificação" da
+- [X] T006 **`specs/340-caixa-de-avisos/verify_340.py`** — os 18 cenários da seção "Verificação" da
       spec, no molde do `verify_310.py` (disjuntor de rede, dublês da InfinitePay e do Google,
       `_db` por conexão separada, `cenario()` com BLOQUEADO para função/arquivo ausente, limpeza no
       `finally` restaurando `site_settings`); o receptor carregado por `importlib` de
@@ -64,7 +64,7 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
 
 **Verificação da história**: cenários 1, 2, 13–17 do `verify_340.py` em PASS.
 
-- [ ] T007 [US1] `servicos/avisos/app.py`: fábrica `criar_aplicacao(database_url)` e
+- [X] T007 [US1] `servicos/avisos/app.py`: fábrica `criar_aplicacao(database_url)` e
       `aplicacao = criar_aplicacao(os.environ.get("DATABASE_URL"))` no módulo (o verify cria uma
       com URL inválida para o "banco fora"), com o caminho feliz de
       `POST /api/webhooks/infinitepay/<token>` — leitura do corpo com teto, conferência do segredo
@@ -73,13 +73,13 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
       Paulo, 200 `{"success": true, "message": null}`; falha de banco ao conferir ou gravar → 400 com
       corpo fixo; conexão psycopg 3 curta (`connect_timeout=3`), URL normalizada (`postgres://`,
       `postgresql+driver://` → `postgresql://`)
-- [ ] T008 [US1] `app/marketing/virtuais_ops.py`: `drenar_caixa_de_avisos(limite=VIRTUAL_CAIXA_LOTE)`
+- [X] T008 [US1] `app/marketing/virtuais_ops.py`: `drenar_caixa_de_avisos(limite=VIRTUAL_CAIXA_LOTE)`
       + auxiliares (`_reivindicar_caixa` — `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)
       RETURNING id` com arrendamento de 5 min; `_drenar_linha` — `secret_ok` → `registrar_aviso` →
       marca `drained_at`/`notification_id` (commit) → `processar_aviso`; `secret_ok` falso →
       `registrar_aviso_invalido`; falha → `attempts`/`error`, sem marcar); corpo que não é objeto JSON
       vira `{}`; as funções da 310 não mudam
-- [ ] T009 [US1] `app/marketing/virtuais_ops.py`: `("caixa", drenar_caixa_de_avisos)` como PRIMEIRA
+- [X] T009 [US1] `app/marketing/virtuais_ops.py`: `("caixa", drenar_caixa_de_avisos)` como PRIMEIRA
       rotina de `ciclo_de_varredura()` (docstring: por que antes de `expirar_reservas`)
 
 **Checkpoint**: aviso guardado → venda; duplicado, concorrência, ordem e retorno forjado cobertos.
@@ -92,12 +92,12 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
 
 **Verificação da história**: cenário 9 do `verify_340.py` em PASS.
 
-- [ ] T010 [US2] `app/__init__.py`: `_start_caixa_de_avisos(app)` no molde de `_start_virtual_sweep`
+- [X] T010 [US2] `app/__init__.py`: `_start_caixa_de_avisos(app)` no molde de `_start_virtual_sweep`
       (thread daemon `caixa-de-avisos`, `VIRTUAL_CAIXA_INTERVAL`, uma volta do laço em função própria
       `_volta_da_caixa(app)` — o verify chama só ela, `app_context` dentro,
       `except Exception` com log, guarda de `WERKZEUG_RUN_MAIN` em desenvolvimento), chamada no bloco
       que `MANTO_SEM_THREADS=1` desliga
-- [ ] T011 [US2] `app/marketing/virtuais_ops.py` (~linha 1081): `webhook_url` montado de
+- [X] T011 [US2] `app/marketing/virtuais_ops.py` (~linha 1081): `webhook_url` montado de
       `current_app.config["INFINITEPAY_AVISO_BASE_URL"]`; `redirect_url` segue em `PUBLIC_BASE_URL`;
       comentário com o porquê (a rota antiga continua para links já abertos)
 
@@ -112,11 +112,11 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
 **Verificação da história**: cenários 3–8 e 10 do `verify_340.py` em PASS (3 e 4b DEVEM falhar a
 autenticação → 404).
 
-- [ ] T012 [US3] `servicos/avisos/app.py`: segredo errado → 404 e linha `secret_ok=false` com 2 KB,
+- [X] T012 [US3] `servicos/avisos/app.py`: segredo errado → 404 e linha `secret_ok=false` com 2 KB,
       até 120/h em memória (acima, 404 sem gravar); corpo > 64 KB com ou sem `Content-Length` → 413;
       60/min por cliente (último item do `X-Forwarded-For`, senão `REMOTE_ADDR`) → 429; outros
       caminhos/métodos → 404/405 com corpo fixo
-- [ ] T013 [US3] `servicos/avisos/app.py`: log de uma linha por chamada sem a URL
+- [X] T013 [US3] `servicos/avisos/app.py`: log de uma linha por chamada sem a URL
       (`[avisos] <código> id=<linha|-> bytes=<n> ms=<n>`); `GET /health` (sem banco) e
       `GET /health/banco` (`SELECT 1`, 503 se falhar)
 
@@ -131,7 +131,7 @@ autenticação → 404).
 **Verificação da história**: tela aberta em 375×812 com o backend parado e levantado; `npm run
 typecheck`.
 
-- [ ] T014 [US4] `frontend/apps/public/src/lib/virtuais.ts`: `useRetornoCheckout` com `retry`
+- [X] T014 [US4] `frontend/apps/public/src/lib/virtuais.ts`: `useRetornoCheckout` com `retry`
       (até 3, só quando o erro não é `ApiRequestError` ou tem `status >= 500`) e `retryDelay`
       (5 s, 20 s, 60 s), constantes nomeadas e comentário com o porquê
 
@@ -146,14 +146,14 @@ typecheck`.
 **Verificação da história**: cenário 11 do `verify_340.py` em PASS; `python
 scripts/validar_startcommand.py` verde; Events do Render no primeiro deploy (quickstart §2.6).
 
-- [ ] T015 [US5] `render.yaml`: serviço `manto-avisos` (python, `plan: starter`, `region: oregon`,
+- [X] T015 [US5] `render.yaml`: serviço `manto-avisos` (python, `plan: starter`, `region: oregon`,
       `rootDir: servicos/avisos`, `buildCommand: pip install -r requirements.txt`, `startCommand`
       gunicorn `app:aplicacao` com 1 worker, threads, `--access-logformat` sem `%(U)s`,
       `healthCheckPath: /health`, `autoDeploy: true`, `DATABASE_URL` do `manto-postgres`,
       `PYTHON_VERSION`), sem disco; comentário com o porquê — **commit sozinho**
-- [ ] T016 [US5] `render.yaml`: `healthCheckPath: /` no `manto-frontend` e o comentário de "ausência
+- [X] T016 [US5] `render.yaml`: `healthCheckPath: /` no `manto-frontend` e o comentário de "ausência
       conhecida" reescrito — **commit sozinho**
-- [ ] T017 [US5] `render.yaml`: `buildFilter.ignoredPaths` no `manto-backend` (`docs/**`, `specs/**`,
+- [X] T017 [US5] `render.yaml`: `buildFilter.ignoredPaths` no `manto-backend` (`docs/**`, `specs/**`,
       `frontend/**`, `servicos/**`, `.claude/**`, `.specify/**`) e o comentário do topo ("todo push
       redeploya os dois serviços") corrigido — **commit sozinho**; rodar o validador
 
@@ -167,7 +167,7 @@ scripts/validar_startcommand.py` verde; Events do Render no primeiro deploy (qui
 
 **Verificação da história**: cenário 12 do `verify_340.py` em PASS.
 
-- [ ] T018 [US6] `app/marketing/virtuais_ops.py`: dentro de `drenar_caixa_de_avisos`, linhas com
+- [X] T018 [US6] `app/marketing/virtuais_ops.py`: dentro de `drenar_caixa_de_avisos`, linhas com
       `drained_at` nulo, `received_at` há mais de `VIRTUAL_CAIXA_ALERTA_HORAS` e `alerted_at` nulo →
       `_avisar_a_conferir("virtual.caixa:<id>", "Loja virtual: aviso de pagamento parado na caixa",
       …)` e `alerted_at` gravado
@@ -178,29 +178,29 @@ scripts/validar_startcommand.py` verde; Events do Render no primeiro deploy (qui
 
 ## Phase 9: Polimento e transversais
 
-- [ ] T019 Regressão contra `manto_340`: `verify_310.py`, `verify_304.py` e `verify_205.py` (este em
+- [X] T019 Regressão contra `manto_340`: `verify_310.py`, `verify_304.py` e `verify_205.py` (este em
       `scripts/db/` do checkout principal, se existir) — diferenças só as intencionais
-- [ ] T020 `ruff check` nos `.py` tocados; `ruff format` em `servicos/avisos/app.py`, no verify e na
+- [X] T020 `ruff check` nos `.py` tocados; `ruff format` em `servicos/avisos/app.py`, no verify e na
       migration; `cd frontend && npm run typecheck`
-- [ ] T021 Tela aberta (skill `manto-conferir-tela`): página do pedido em 375×812, retorno com o
+- [X] T021 Tela aberta (skill `manto-conferir-tela`): página do pedido em 375×812, retorno com o
       backend local parado e levantado
-- [ ] T022 Princípio XV: texto do sino revisado (tom interno); nenhum texto visível novo na loja
-- [ ] T023 [P] Constituição 3.2.0 em `.specify/memory/constitution.md` (Operação e Deploy §1: quarto
+- [X] T022 Princípio XV: texto do sino revisado (tom interno); nenhum texto visível novo na loja
+- [X] T023 [P] Constituição 3.2.0 em `.specify/memory/constitution.md` (Operação e Deploy §1: quarto
       serviço, frontend com healthcheck, aviso pela caixa, sem janela proibida por pagamento; Sync
       Impact Report e changelog)
-- [ ] T024 [P] `DEVELOPMENT.md` (§Publicar, §Operar a produção: R-20 substituída, sonda do
+- [X] T024 [P] `DEVELOPMENT.md` (§Publicar, §Operar a produção: R-20 substituída, sonda do
       `/health/banco`, desligar o caminho novo) e `.claude/skills/manto-deploy/SKILL.md` (item 6)
-- [ ] T025 [P] `CLAUDE.md` §2 (serviços do `render.yaml`, regra de horário) e `docs/00` §2
+- [X] T025 [P] `CLAUDE.md` §2 (serviços do `render.yaml`, regra de horário) e `docs/00` §2
       (topologia)
-- [ ] T026 [P] `docs/01`: §2.10 (tabela `virtual_payment_inbox`), §4.3 (rota do receptor), §5
+- [X] T026 [P] `docs/01`: §2.10 (tabela `virtual_payment_inbox`), §4.3 (rota do receptor), §5
       (`render.yaml`, deploy sem queda do frontend, filtro do backend, `manto-avisos`, sondas)
-- [ ] T027 [P] `docs/02` (página do pedido: retentativa do retorno) e `docs/04` §Loja Virtual (o aviso
+- [X] T027 [P] `docs/02` (página do pedido: retentativa do retorno) e `docs/04` §Loja Virtual (o aviso
       entra pela caixa; ordem caixa → expiração)
-- [ ] T028 [P] `docs/05`: quitar a dívida 22 (e corrigir o registro: o frontend já filtrava por
+- [X] T028 [P] `docs/05`: quitar a dívida 22 (e corrigir o registro: o frontend já filtrava por
       `rootDir`); registrar "tirar o disco do `manto-backend` — janeiro" e "preview environments"
-- [ ] T029 `docs/03`: entrada nova no topo + linha no índice + Loja de Interações Virtuais; inclui a
+- [X] T029 `docs/03`: entrada nova no topo + linha no índice + Loja de Interações Virtuais; inclui a
       pegadinha do `create-new-feature.sh` (ignora branches `+` de outro worktree e propôs 337)
-- [ ] T030 `quickstart.md` §1 executado de ponta a ponta; §2 fica para o deploy com o dono
+- [X] T030 `quickstart.md` §1 executado de ponta a ponta; §2 fica para o deploy com o dono
 
 ---
 

@@ -13,16 +13,16 @@ lacuna levaram a correção da spec (anotada na linha).
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_340.py` verde contra `manto_340`, escrita conferida por conexão separada, um cenário que falha
-- [ ] CHK004 Tela aberta de verdade; superfície pública em viewport mobile
-- [ ] CHK005 Migration manual criada e aplicada no `manto_340` se `models.py` mudou; destrutiva ensaiada
-- [ ] CHK006 `scripts/validar_startcommand.py` verde se tocou o `startCommand` do `render.yaml`
-- [ ] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
-- [ ] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
+- [x] CHK003 `verify_340.py` verde contra `manto_340`, escrita conferida por conexão separada, um cenário que falha
+- [x] CHK004 Tela aberta de verdade; superfície pública em viewport mobile
+- [x] CHK005 Migration manual criada e aplicada no `manto_340` se `models.py` mudou; destrutiva ensaiada
+- [x] CHK006 `scripts/validar_startcommand.py` verde se tocou o `startCommand` do `render.yaml`
+- [x] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
+- [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `00`/`04`/`05` se aplicável
 - [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo ou alterado (tela, e-mail, PDF, erro da API) revisado pelo Princípio XV: tom da superfície e glossário, lido na tela aberta
+- [x] CHK010 Texto novo ou alterado (tela, e-mail, PDF, erro da API) revisado pelo Princípio XV: tom da superfície e glossário, lido na tela aberta
 - [ ] CHK011 Antes de "em produção": `git status` limpo, `git log -1` = cabeçalho do `docs/03`, sonda `/api/`
 
 ## Completude dos requisitos
