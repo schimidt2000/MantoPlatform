@@ -21,6 +21,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.clientes.importer import normalize_phone
 from app.constants import CORTE_FORMULARIOS_PADRAO, FORM_TIPO_ROTULOS
+from app.documentos import doc_valido, eh_cnpj
 from app.models import (
     CalendarEvent,
     Client,
@@ -505,6 +506,11 @@ def apply_event_link(
     if decisao_humana:
         response.event_link_locked = True
     resultado = _levar_cliente(response, event)
+    # Feature 342: as respostas da nota completam a venda (só campo vazio). Import tardio: este
+    # módulo é folha e a ponte importa `calendar.pedido_de_nota_ops`.
+    from app.formularios import nota_do_formulario_ops
+
+    nota_do_formulario_ops.levar_para_o_evento(response, event)
     from app.notificacoes import notificacoes_ops
 
     notificacoes_ops.marcar_lidas_por_entidade(
@@ -629,6 +635,29 @@ def _parse_options(raw: str) -> list[str]:
     return [line.strip() for line in (raw or "").splitlines() if line.strip()]
 
 
+def _condicao_do_corpo(
+    form_type: str, data: dict, *, proprio: str | None
+) -> tuple[str | None, str | None]:
+    """A condição de exibição pedida pelo editor (feature 342). Vazio nos dois = aparece sempre.
+
+    Raises:
+        FormValidationError: controle inexistente, o próprio campo, de tipo sem respostas fechadas,
+            ou condição sem valor.
+    """
+    chave = (data.get("show_if_key") or "").strip()
+    valor = (data.get("show_if_value") or "").strip()
+    if not chave:
+        return None, None
+    controle = FormFieldDefinition.query.filter_by(form_type=form_type, field_key=chave).first()
+    if controle is None or chave == proprio or controle.field_type not in TIPOS_DE_CONTROLE:
+        raise FormValidationError(
+            "show_if_key", "Selecione um campo de seleção ou de sim/não deste formulário."
+        )
+    if not valor:
+        raise FormValidationError("show_if_value", "Informe o valor que faz o campo aparecer.")
+    return chave, valor[:200]
+
+
 def create_field(form_type: str, data: dict) -> FormFieldDefinition:
     """Adiciona um campo personalizado ao fim de uma seção.
 
@@ -654,6 +683,7 @@ def create_field(form_type: str, data: dict) -> FormFieldDefinition:
                 "options", "Um campo de seleção precisa de pelo menos uma opção."
             )
         options = json.dumps(opts, ensure_ascii=False)
+    show_if_key, show_if_value = _condicao_do_corpo(form_type, data, proprio=None)
     field = FormFieldDefinition(
         form_type=form_type,
         section_name=section_name,
@@ -665,6 +695,8 @@ def create_field(form_type: str, data: dict) -> FormFieldDefinition:
         options=options,
         order=_next_order(form_type),
         is_system=False,
+        show_if_key=show_if_key,
+        show_if_value=show_if_value,
     )
     db.session.add(field)
     db.session.commit()
@@ -690,6 +722,12 @@ def update_field(field: FormFieldDefinition, data: dict) -> FormFieldDefinition:
                 "options", "Um campo de seleção precisa de pelo menos uma opção."
             )
         field.options = json.dumps(opts, ensure_ascii=False)
+    # Feature 342: a condição de campo do sistema é do sistema (as perguntas da nota dependem
+    # dela) — o que o editor mandar é ignorado. Corpo sem a chave (tela antiga) não mexe.
+    if not field.is_system and "show_if_key" in data:
+        field.show_if_key, field.show_if_value = _condicao_do_corpo(
+            field.form_type, data, proprio=field.field_key
+        )
     field.label = label
     field.help_text = (data.get("help_text") or "").strip() or None
     field.placeholder = (data.get("placeholder") or "").strip() or None
@@ -754,7 +792,18 @@ FIELD_TYPE_LABELS = {
     "cnpj": "CNPJ",
     "cep": "CEP",
     "sim_nao": "Sim/Não",
+    "cpf_cnpj": "CNPJ ou CPF",
 }
+
+# Feature 342 — as perguntas da nota (campos do sistema, semeados pela migration `d342a7c1e9f3`).
+CHAVE_PRECISA_NOTA = "precisa_nota"
+CHAVE_DOC_DA_NOTA = "nota_doc"
+CHAVE_EMAIL_DA_NOTA = "nota_email"
+CHAVE_ISS_SO_PARA_CNPJ = "nota_iss"
+CHAVE_REFERENCIA_DA_NOTA = "nota_referencia"
+MSG_DOC_DO_FORMULARIO = "Confira o CNPJ ou CPF: o número não parece válido."
+# Só estes tipos têm um conjunto fechado de respostas para a condição comparar.
+TIPOS_DE_CONTROLE = ("selecao", "sim_nao")
 
 # Campos de endereço acoplados ao autopreenchimento por CEP (só existem no formulário 'comum').
 CEP_TARGET_KEYS = ("logradouro", "bairro", "cidade", "estado")
@@ -999,11 +1048,39 @@ def _grouped_sections(fields: list[FormFieldDefinition]) -> list[dict]:
     return [{"secao": name, "campos": by_section[name]} for name in section_order]
 
 
+def _valor_enviado(f, field: FormFieldDefinition) -> str:
+    """O valor de um campo como a condição o enxerga (telefone não serve de controle)."""
+    return (f.get(field.field_key) or "").strip()
+
+
+def campo_visivel(f, field: FormFieldDefinition, por_chave: dict[str, FormFieldDefinition]) -> bool:
+    """O campo aparece para esta submissão? (feature 342)
+
+    Sem condição: sempre. Com condição: quando o campo de controle foi respondido com o valor
+    declarado. Um nível só — a condição do controle não é consultada. Controle que sumiu do
+    formulário esconde o campo (melhor não perguntar do que exigir o que ninguém vê).
+
+    Regra fixa da pergunta do ISS (`CHAVE_ISS_SO_PARA_CNPJ`): além da condição, o documento da nota
+    precisa ser um CNPJ — depende do TAMANHO de outro campo, que a condição do editor não expressa.
+    """
+    if field.show_if_key:
+        controle = por_chave.get(field.show_if_key)
+        if controle is None or _valor_enviado(f, controle) != (field.show_if_value or ""):
+            return False
+    if field.field_key == CHAVE_ISS_SO_PARA_CNPJ:
+        return eh_cnpj(f.get(CHAVE_DOC_DA_NOTA))
+    return True
+
+
 def _validate_dynamic(f, fields: list[FormFieldDefinition]) -> dict[str, str]:
     """Valida um formulário público a partir da definição de campos vigente (feature 123)."""
     errors: dict[str, str] = {}
+    por_chave = {field.field_key: field for field in fields}
     for field in fields:
         key = field.field_key
+        # Feature 342: campo escondido pela condição não é exigido nem validado.
+        if not campo_visivel(f, field, por_chave):
+            continue
         if field.field_type == "telefone":
             if field.required and len(_only_digits(f.get(f"{key}_national"))) < 10:
                 errors[f"{key}_national"] = f'Informe "{field.label}" com DDD.'
@@ -1017,6 +1094,8 @@ def _validate_dynamic(f, fields: list[FormFieldDefinition]) -> dict[str, str]:
             errors[key] = "CPF inválido — confira os 11 dígitos."
         elif field.field_type == "cnpj" and len(_only_digits(raw)) != 14:
             errors[key] = "CNPJ inválido — confira os 14 dígitos."
+        elif field.field_type == "cpf_cnpj" and not doc_valido(raw):
+            errors[key] = MSG_DOC_DO_FORMULARIO
         elif field.field_type == "cep" and len(_only_digits(raw)) != 8:
             errors[key] = "CEP inválido — confira os 8 dígitos."
         elif field.field_type == "email" and not _valid_email(raw):
@@ -1041,8 +1120,13 @@ def _build_sections_dynamic(f, fields: list[FormFieldDefinition]) -> list[dict]:
     """
     by_section: dict[str, list[list[str]]] = {}
     section_order: list[str] = []
+    por_chave = {field.field_key: field for field in fields}
     for field in fields:
-        if field.field_type == "telefone":
+        # Feature 342: o que ficou digitado num campo que a condição escondeu é descartado — a
+        # cliente desmarcou "Preciso de nota fiscal" e o documento não pode seguir para a venda.
+        if not campo_visivel(f, field, por_chave):
+            value = ""
+        elif field.field_type == "telefone":
             value = _build_phone_display(f, field.field_key)
         elif field.field_type == "data":
             value = _fmt_date_br(_parse_event_date(f.get(field.field_key)))

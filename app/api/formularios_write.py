@@ -15,6 +15,8 @@ from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
 from app.formularios.formularios_ops import (
+    CHAVE_DOC_DA_NOTA,
+    CHAVE_ISS_SO_PARA_CNPJ,
     FORM_META,
     _attempt_auto_link,
     _build_message,
@@ -46,6 +48,14 @@ def _field_schema(field: FormFieldDefinition) -> dict[str, Any]:
         "placeholder": field.placeholder,
         "required": field.required,
         "options": field.options_list if field.field_type == "selecao" else None,
+        # Feature 342 — campo condicional; a tela esconde, o servidor é quem decide o que vale.
+        "show_if": (
+            {"key": field.show_if_key, "value": field.show_if_value or ""}
+            if field.show_if_key else None
+        ),
+        "only_for_cnpj_of": (
+            CHAVE_DOC_DA_NOTA if field.field_key == CHAVE_ISS_SO_PARA_CNPJ else None
+        ),
     }
 
 

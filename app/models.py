@@ -353,7 +353,10 @@ class CalendarEvent(db.Model):
     # WhatsApp, e a 069 já divide a venda em várias notas. Documento vazio = vale o do cliente.
     nota_tomador_doc     = db.Column(db.String(14), nullable=True)    # só dígitos: CNPJ (14) ou CPF (11)
     nota_iss_retido      = db.Column(db.Boolean, nullable=True)       # ISS retido pelo tomador
-    nota_municipio       = db.Column(db.String(120), nullable=True)   # município da prestação (com ISS retido)
+    # Feature 342: nulo em `nota_iss_retido` = ninguém informou (o formulário da cliente pode
+    # preencher); o município vale com ou sem ISS retido — é onde o ISS do 17.10 é devido.
+    nota_municipio       = db.Column(db.String(120), nullable=True)   # município do evento ("Cidade - UF")
+    nota_email           = db.Column(db.String(200), nullable=True)   # para onde a nota é enviada; vazio = o do cadastro
     nota_referencia      = db.Column(db.String(120), nullable=True)   # AF, pedido de compra do cliente
     nota_observacoes     = db.Column(db.Text, nullable=True)          # o que o cliente pediu na discriminação
 
@@ -2329,6 +2332,7 @@ class FormFieldDefinition(db.Model):
     FIELD_TYPES = (
         "texto_curto", "texto_longo", "selecao", "data", "hora",
         "telefone", "email", "cpf", "cnpj", "cep", "sim_nao",
+        "cpf_cnpj",  # feature 342: um campo só, validado pelos dígitos verificadores
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -2343,6 +2347,10 @@ class FormFieldDefinition(db.Model):
     options = db.Column(db.Text, nullable=True)  # JSON list[str] — só para field_type='selecao'
     order = db.Column(db.Integer, nullable=False)
     is_system = db.Column(db.Boolean, default=False, nullable=False)
+    # Feature 342 — campo condicional: só aparece (e só vale) quando o campo `show_if_key` do mesmo
+    # formulário foi respondido com `show_if_value`. Os dois nulos = aparece sempre. Um nível só.
+    show_if_key = db.Column(db.String(60), nullable=True)
+    show_if_value = db.Column(db.String(200), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(
         db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

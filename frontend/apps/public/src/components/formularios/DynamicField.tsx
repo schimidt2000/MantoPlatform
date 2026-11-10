@@ -7,6 +7,7 @@ import {
   onlyDigits,
   type FieldSchema,
 } from "../../lib/formularios";
+import { maskCpfCnpj } from "../../lib/documento";
 
 export const FIELD = "h-11 w-full rounded-md border border-line bg-panel px-3 text-sm text-ink";
 export const LABEL = "mb-1 block text-sm text-muted";
@@ -26,10 +27,19 @@ interface DynamicFieldProps {
   errors: Record<string, string>;
   onChange: (key: string, value: string) => void;
   onBlurCep?: (value: string) => void;
+  /** Feature 342: confere o CNPJ ou CPF ao sair do campo. */
+  onBlurDoc?: (key: string, value: string) => void;
 }
 
 /** Despacha o widget certo por `field.type` — paridade com a macro Jinja `field()`. */
-export function DynamicField({ field, values, errors, onChange, onBlurCep }: DynamicFieldProps) {
+export function DynamicField({
+  field,
+  values,
+  errors,
+  onChange,
+  onBlurCep,
+  onBlurDoc,
+}: DynamicFieldProps) {
   const label = (
     <label className={LABEL} htmlFor={field.key}>
       {field.required && <span className="text-red">* </span>}
@@ -105,6 +115,7 @@ export function DynamicField({ field, values, errors, onChange, onBlurCep }: Dyn
             </option>
           ))}
         </select>
+        {field.help_text && <p className="mt-1 text-xs text-muted">{field.help_text}</p>}
         <FieldError message={errors[field.key]} />
       </div>
     );
@@ -113,15 +124,20 @@ export function DynamicField({ field, values, errors, onChange, onBlurCep }: Dyn
   if (field.type === "sim_nao") {
     return (
       <div>
-        <label className="flex items-center gap-2 text-sm text-ink">
+        {/* min-h-11: a linha inteira é a área de toque (44 px) no celular. */}
+        <label className="flex min-h-11 items-center gap-2 text-sm text-ink">
           <input
             type="checkbox"
-            className="h-[18px] w-[18px] accent-accent"
+            className="h-5 w-5 shrink-0 accent-accent"
             checked={values[field.key] === "Sim"}
             onChange={(e) => onChange(field.key, e.target.checked ? "Sim" : "")}
           />
-          {field.required && <span className="text-red">*</span>} {field.label}
+          <span>
+            {field.required && <span className="text-red">* </span>}
+            {field.label}
+          </span>
         </label>
+        {field.help_text && <p className="mt-1 text-xs text-muted">{field.help_text}</p>}
         <FieldError message={errors[field.key]} />
       </div>
     );
@@ -147,8 +163,15 @@ export function DynamicField({ field, values, errors, onChange, onBlurCep }: Dyn
     cpf: maskCpf,
     cnpj: maskCnpj,
     cep: maskCep,
+    cpf_cnpj: maskCpfCnpj,
   };
   const mask = maskByType[field.type];
+  const aoSair =
+    field.type === "cep"
+      ? () => onBlurCep?.(values[field.key] ?? "")
+      : field.type === "cpf_cnpj"
+        ? () => onBlurDoc?.(field.key, values[field.key] ?? "")
+        : undefined;
 
   return (
     <div>
@@ -161,7 +184,7 @@ export function DynamicField({ field, values, errors, onChange, onBlurCep }: Dyn
         placeholder={field.placeholder ?? undefined}
         value={values[field.key] ?? ""}
         onChange={(e) => onChange(field.key, mask ? mask(onlyDigits(e.target.value)) : e.target.value)}
-        onBlur={field.type === "cep" ? () => onBlurCep?.(values[field.key] ?? "") : undefined}
+        onBlur={aoSair}
       />
       {field.help_text && <p className="mt-1 text-xs text-muted">{field.help_text}</p>}
       <FieldError message={errors[field.key]} />

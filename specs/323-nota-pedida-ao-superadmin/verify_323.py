@@ -291,7 +291,11 @@ def cen_02_editar_tudo() -> None:
 def cen_03_card_comercial() -> None:
     eid = _criar("com", _corpo_criacao("comercial", dias=62, nota=False, cliente_id=estado["cli_sem"]))
     estado["ev_com"] = eid
-    _patch("com", f"/api/events/{eid}/comercial", _corpo_comercial(eid, with_invoice=True))
+    # Feature 342: pedir nota exige o CNPJ ou CPF de quem recebe, e este cliente não tem documento
+    # no cadastro — o pedido leva o documento (o mesmo do cenário 5). A recusa sem documento é o
+    # cenário 11 do `verify_342.py`.
+    _patch("com", f"/api/events/{eid}/comercial",
+           _corpo_comercial(eid, with_invoice=True, nota={"tomador_doc": "16.643.750/0001-11"}))
     notas = _notas(eid)
     _garante(len(notas) == 1 and notas[0].status == "a_emitir", f"card Comercial não pediu a nota: {notas}")
 

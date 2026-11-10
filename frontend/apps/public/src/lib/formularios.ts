@@ -14,7 +14,8 @@ export type FieldType =
   | "cpf"
   | "cnpj"
   | "cep"
-  | "sim_nao";
+  | "sim_nao"
+  | "cpf_cnpj";
 
 export interface FieldSchema {
   key: string;
@@ -24,6 +25,27 @@ export interface FieldSchema {
   placeholder: string | null;
   required: boolean;
   options: string[] | null;
+  /** Feature 342 — campo condicional. Opcional: servidor antigo não manda. */
+  show_if?: { key: string; value: string } | null;
+  /** Só aparece quando o campo apontado tem um CNPJ (a pergunta do ISS). */
+  only_for_cnpj_of?: string | null;
+}
+
+/** Chaves dos campos do sistema que a tela usa para adiantar as respostas da nota (feature 342). */
+export const CHAVE_PRECISA_NOTA = "precisa_nota";
+export const CHAVE_DOC_DA_NOTA = "nota_doc";
+export const CHAVE_EMAIL_DA_NOTA = "nota_email";
+
+/**
+ * O campo aparece com estas respostas? Mesma regra de `campo_visivel` no servidor, que é quem
+ * decide o que vale: a tela só esconde.
+ */
+export function campoVisivel(field: FieldSchema, values: Record<string, string>): boolean {
+  if (field.show_if && (values[field.show_if.key] ?? "") !== field.show_if.value) return false;
+  if (field.only_for_cnpj_of) {
+    return onlyDigits(values[field.only_for_cnpj_of] ?? "").length === 14;
+  }
+  return true;
 }
 
 export interface SectionSchema {

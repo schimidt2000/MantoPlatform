@@ -39,7 +39,7 @@ function LinhaNotaAEmitir({ nota }: { nota: NotaAEmitir }) {
         </span>
         <span className="flex flex-wrap items-center gap-1.5">
           <Badge tone="red">Urgente</Badge>
-          {nota.iss_retido && <Badge tone="gold">ISS retido · {nota.municipio}</Badge>}
+          {nota.iss_retido && <Badge tone="gold">ISS retido</Badge>}
           {nota.cancelado && <Badge tone="neutral">Evento cancelado</Badge>}
         </span>
       </div>
@@ -53,6 +53,13 @@ function LinhaNotaAEmitir({ nota }: { nota: NotaAEmitir }) {
         {(nota.tomador.email || nota.tomador.endereco) && (
           <span className="block break-words text-muted">
             {[nota.tomador.email, nota.tomador.endereco].filter(Boolean).join(" · ")}
+          </span>
+        )}
+        {/* Feature 342: onde o ISS é devido — o confirmado pela vendedora ou a sugestão. */}
+        {(nota.municipio || nota.municipio_sugerido) && (
+          <span className="block text-muted">
+            Município do evento:{" "}
+            {nota.municipio ?? `${nota.municipio_sugerido} (pelo endereço, a confirmar)`}
           </span>
         )}
       </div>

@@ -179,6 +179,16 @@ export interface EventoDaCliente {
 }
 
 export interface ValoresDoFormulario {
+  /** Feature 342: a cliente pediu nota — o chip e os dados chegam sugeridos ao cadastro. */
+  with_invoice?: boolean;
+  nota?: {
+    tomador_doc?: string | null;
+    email?: string | null;
+    iss_retido?: boolean;
+    /** O texto da resposta ("Sim", "Não", "Não sei"), para a vendedora conferir. */
+    iss_resposta?: string | null;
+    referencia?: string | null;
+  };
   date?: string;
   start?: string;
   end?: string;
@@ -406,6 +416,18 @@ export interface FormFieldDefinition {
   options: string | null;
   order: number;
   is_system: boolean;
+  /** Feature 342 — campo condicional (opcionais: servidor antigo não manda). */
+  show_if_key?: string | null;
+  show_if_value?: string | null;
+}
+
+/** Só estes tipos têm respostas fechadas para a condição comparar (`TIPOS_DE_CONTROLE`). */
+export const TIPOS_DE_CONTROLE = ["selecao", "sim_nao"];
+
+/** As respostas possíveis de um campo de controle: as opções da seleção, ou "Sim". */
+export function respostasDoControle(campo: FormFieldDefinition): string[] {
+  if (campo.field_type === "sim_nao") return ["Sim"];
+  return optionsToText(campo.options).split("\n").filter(Boolean);
 }
 
 /** Definição de campos de um formulário (`comum`/`corporativo`). */
@@ -433,6 +455,7 @@ export const FIELD_TYPES = [
   { value: "cnpj", label: "CNPJ" },
   { value: "cep", label: "CEP" },
   { value: "sim_nao", label: "Sim/Não" },
+  { value: "cpf_cnpj", label: "CNPJ ou CPF" },
 ] as const;
 
 /**
@@ -457,6 +480,9 @@ export interface CreateFieldInput {
   placeholder?: string;
   required?: boolean;
   options?: string;
+  /** Feature 342: os dois vazios = o campo aparece sempre. */
+  show_if_key?: string;
+  show_if_value?: string;
 }
 
 /**
@@ -471,6 +497,9 @@ export type UpdateFieldInput = {
   placeholder?: string;
   required: boolean;
   options?: string;
+  /** Feature 342: sempre enviados (vazios limpam a condição); em campo do sistema são ignorados. */
+  show_if_key?: string;
+  show_if_value?: string;
 };
 
 /** Adiciona um campo personalizado ao fim de uma seção. */
