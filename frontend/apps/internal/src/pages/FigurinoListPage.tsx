@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   Button,
   Card,
@@ -11,7 +11,7 @@ import {
   CheckboxList,
 } from "@manto/ui";
 import { assetSrcSet, assetUrl, API_BASE } from "@manto/api-client";
-import { Pencil, Printer } from "lucide-react";
+import { ImageOff, Pencil, Printer } from "lucide-react";
 import {
   useFigurinoSheets,
   useDismissMissingCharacter,
@@ -269,6 +269,11 @@ export function FigurinoListPage() {
   const [q, setQ] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [linkingSheet, setLinkingSheet] = useState<FigurinoSheetItem | null>(null);
+  // "Sem foto" mora no endereço (feature 337): a ficha nasce sem foto quando o catálogo ainda não
+  // tem o personagem, e `/figurinos?sem_foto=1` vira a lista de pendências que se manda para
+  // quem vai fotografar.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const soSemFoto = searchParams.get("sem_foto") === "1";
 
   const elencoBusca = useCatalogElencoBusca();
   const linkCharacter = useLinkCharacterFigurino();
@@ -292,17 +297,29 @@ export function FigurinoListPage() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [items]);
 
+  // `photo_url` já cai no `thumbnail_url` do Drive no servidor: só conta como pendente a ficha
+  // que não tem imagem nenhuma para mostrar.
+  const semFotoCount = useMemo(() => items.filter((s) => !s.photo_url).length, [items]);
+
   const filtered = useMemo(() => {
     const needle = normalizeSearch(q);
     return items.filter((s) => {
       const matchesName = !needle || normalizeSearch(s.character_name).includes(needle);
       const matchesTags = selectedTags.length === 0 || selectedTags.every((t) => s.tags.includes(t));
-      return matchesName && matchesTags;
+      const matchesFoto = !soSemFoto || !s.photo_url;
+      return matchesName && matchesTags && matchesFoto;
     });
-  }, [items, q, selectedTags]);
+  }, [items, q, selectedTags, soSemFoto]);
 
   const toggleTag = (tag: string) =>
     setSelectedTags((tags) => (tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag]));
+
+  const toggleSemFoto = () => {
+    const proximo = new URLSearchParams(searchParams);
+    if (soSemFoto) proximo.delete("sem_foto");
+    else proximo.set("sem_foto", "1");
+    setSearchParams(proximo, { replace: true });
+  };
 
   return (
     <div className="mx-auto max-w-[110rem] space-y-4 p-4 sm:p-6">
@@ -338,6 +355,26 @@ export function FigurinoListPage() {
             />
           </FilterDropdown>
         )}
+        {/* Some quando não há pendência e o filtro está desligado: botão que sempre leva a uma
+            lista vazia é ruído. Ligado, fica visível para dar como desligar. */}
+        {(semFotoCount > 0 || soSemFoto) && (
+          <button
+            type="button"
+            aria-pressed={soSemFoto}
+            onClick={toggleSemFoto}
+            className={`flex h-9 items-center gap-1.5 rounded-md border px-3 text-sm transition-colors ${
+              soSemFoto
+                ? "border-accent bg-accent-soft text-accent-dark"
+                : "border-line bg-panel text-ink hover:bg-surface-2"
+            }`}
+          >
+            <ImageOff className="h-3.5 w-3.5" aria-hidden="true" />
+            Sem foto
+            <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-gold-soft px-1 text-[10px] font-semibold text-gold-ink">
+              {semFotoCount}
+            </span>
+          </button>
+        )}
       </div>
 
       {query.isLoading && (
@@ -355,7 +392,11 @@ export function FigurinoListPage() {
       )}
 
       {query.data && filtered.length === 0 && (
-        <p className="text-sm text-muted">Nenhuma ficha encontrada.</p>
+        <p className="text-sm text-muted">
+          {soSemFoto && semFotoCount === 0
+            ? "Todas as fichas já têm foto."
+            : "Nenhuma ficha encontrada."}
+        </p>
       )}
 
       {filtered.length > 0 && (
