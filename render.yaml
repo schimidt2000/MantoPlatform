@@ -119,3 +119,28 @@ services:
         sync: false           # preencher com a URL publica do manto-backend depois que ele existir
       - key: MANTO_PROXY_SECRET
         sync: false           # o mesmo valor do manto-backend (feature 310)
+
+  # Caixa de avisos de pagamento (feature 340). Recebe o aviso da InfinitePay e SÓ guarda em
+  # `virtual_payment_inbox`; o manto-backend drena e decide. Existe porque o backend tem disco e o
+  # Render não troca serviço com disco sem queda: num push, o aviso que pegava o 502 se perdia (a
+  # operadora só reenvia com 400). Este serviço não tem disco e tem healthcheck — o Render só troca
+  # o container depois de o novo responder — e o `rootDir` faz o deploy acontecer só quando
+  # `servicos/avisos/` muda. `starter` porque o `free` dorme após 15 min e levaria o aviso junto.
+  # Log de acesso SEM `%(U)s`/`%(r)s`: o segredo do aviso mora no caminho da URL.
+  - type: web
+    name: manto-avisos
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: servicos/avisos
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:aplicacao --workers 1 --threads 8 --bind 0.0.0.0:$PORT --timeout 30 --graceful-timeout 30 --access-logfile - --access-logformat '%(h)s %(m)s %(s)s %(b)s %(D)s'
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: manto-postgres
+          property: connectionString
+      - key: PYTHON_VERSION
+        value: 3.11.9
