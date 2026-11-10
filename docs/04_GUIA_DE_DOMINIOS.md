@@ -821,7 +821,8 @@ pedido, travado ou vendido = devolução de conflito; começa em menos de 30 min
 **Efetivação (`_efetivar_no_banco` + `_pos_venda`)** — a venda nasce inteira no banco num commit:
 `CalendarEvent` com `google_event_id = 'virtual-local-<nsu>'` (`GOOGLE_ID_LOCAL_PREFIX`), pré-escala
 talento+figurino (`_pre_escalar`), slot `vendido` **com `order_id` do dono**, baixa de estoque de
-gravado, `VirtualMediaDelivery` com prazo, presente 3D **na mesma fila que a equipe já opera**
+gravado, `VirtualMediaDelivery` com prazo (`prazo_do_video`, 341: a data "Entrega dos vídeos até" da
+campanha quando preenchida e ainda não passada, senão pagamento + dias), presente 3D **na mesma fila que a equipe já opera**
 (`_injetar_presente_3d` → `impressoes3d_ops.add_event_gift`). Depois do commit, `regerar_sala` cria o
 evento no Google (marcado com `manto_virtual_nsu`) e o e-mail sai. Falha do Google não desfaz nada:
 `meet_pending` e a varredura retenta a cada 10 min até o horário (alerta com menos de 6 h).

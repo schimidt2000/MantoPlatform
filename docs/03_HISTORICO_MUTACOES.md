@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **341-papai-noel-para-todos** | *(branch, sobre a 340, aguardando o dono)* O Papai Noel liga para qualquer idade: a loja fala de "quem vai receber" (a criança da casa, a vovó, o padrinho), com a cartinha como o momento da criança; "Nome de quem vai receber", "Para", FAQ "É só para criança?". O vídeo ganha data de entrega na campanha ("Entrega dos vídeos até", `prazo_do_video`): página, e-mail e Fila de Produção dizem 13/12 | 2026-11-10 | `e341a1b2c3d4` | (aqui) | ver Registro |
 | **340-caixa-de-avisos** | *(branch, aguardando o dono)* O pagamento da loja não se perde num push: o aviso da InfinitePay entra pelo serviço novo `manto-avisos` (sem disco, healthcheck, deploy só pela própria pasta), que só guarda em `virtual_payment_inbox`; o backend drena a cada 10 s e antes da expiração, pela regra da 310 sem mudança. O retorno do checkout repete em 5xx; o frontend ganha healthcheck e o backend ignora push só de docs/specs/tela. Cai a R-20 (sem deploy 9h–23h na campanha); constituição 3.2.0 | 2026-11-10 | `e340c1a2b3d4` | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
@@ -374,7 +375,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | Assunto | Features |
 |---|---|
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
-| Loja de Interações Virtuais | 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
+| Loja de Interações Virtuais | 341, 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
@@ -406,6 +407,47 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 341 — O Papai Noel liga para qualquer idade, e o vídeo tem data de entrega   (341-papai-noel-para-todos · 2026-11-10 · migration `e341a1b2c3d4`)
+
+> **Branch sobre a 340, aguardando o dono** (worktree `C:\tmp\mp341`). Nível 1 (migration). Spec,
+> plano e roteiro em `specs/341-papai-noel-para-todos/`. Migration aditiva sobre `e340c1a2b3d4`: as
+> duas vão juntas no deploy (com a loja no ar, push só depois das 23h até a 340 estar em produção).
+
+**O pedido.** O dono, em 10/11, com a loja já vendendo: "a maioria das pessoas vai contratar para
+criança, só que ela pode contratar, por exemplo, para uma avó, um adulto […] não deixar tão focado
+em criança. Mas também que serve para criança" e "os vídeos serão entregues até o dia 13 do 12 […]
+pode colocar direto".
+
+**Já em produção sem código (10/11, pela tela da campanha):** apresentação ("quem você quer
+surpreender: a criança da casa, a vovó, o padrinho…") e termos ("outra família", vídeo "até 13 de
+dezembro") da campanha `papai-noel`.
+
+**O que mudou.**
+- **Texto** (Princípio XV, site público): `lojaTema.ts` (topo, formatos, passos, FAQ com "É só para
+  criança?", dicas da ficha com exemplo para a vovó, dicas do dia), página da campanha ("Nome de quem
+  vai receber", cartões), página do pedido ("Para"), e-mails (cartinha "se for uma criança", "dados do
+  pedido", preheader neutro), erros da ficha, "Para:" no evento da venda, "Para" na Fila de Produção e
+  na seção do pedido no evento. Chaves `child_name`/`child_age` não mudam.
+- **Data de entrega do vídeo**: `virtual_campaigns.recorded_delivery_until`; `prazo_do_video(campanha,
+  hoje)` decide o `due_date` (data preenchida e não passada → a data; senão pagamento + dias); campo
+  "Entrega dos vídeos até" na gestão; "entregue até 13 de dezembro" na landing (data pelo texto, sem
+  fuso); "até 13/12/2026" no e-mail de compra, lido do prazo da entrega.
+
+**Verificação.** `verify_341.py` 20/20 contra o `manto_340` (antes do núcleo: 12 FALHA, 2 BLOQUEADO).
+Regressão: `verify_304` 23/27 e `verify_205` 137/138 com as mesmas falhas da `main` no mesmo banco
+(dado do espelho); a "cartinha" da apresentação e do e-mail ao vivo segue (V1.6, V4.4) e o e-mail do
+vídeo segue sem ela (V4.5). `npm run typecheck` limpo; `ruff` limpo. Tela: landing em 375×812 (sem
+rolagem horizontal; cartões, ficha e FAQ novos; "entregue até 13 de dezembro") e gestão (campo grava e
+limpa, conferido no banco).
+
+**Pegadinhas.**
+- Depois do deploy, **preencher "Entrega dos vídeos até" = 13/12/2026** na campanha do Papai Noel: a
+  coluna nasce nula e, sem ela, o vídeo continua "em até 7 dias". Hoje o vídeo está esgotado
+  (capacidade 0); a data só pesa quando a equipe abrir vagas.
+- Vídeo pago depois da data vence em pagamento + dias, para a Fila nunca nascer com prazo vencido.
+
+**Fora de escopo.** Renomear `child_*`; abrir vagas de vídeo; texto de outras estações.
 
 ### 340 — O pagamento da loja não se perde num push: o aviso espera numa caixa fora do deploy   (340-caixa-de-avisos · 2026-11-10 · migration `e340c1a2b3d4`)
 
