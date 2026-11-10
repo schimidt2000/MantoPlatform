@@ -12,8 +12,8 @@ v3.1.0) é lida em tempo de execução — o Constitution Check abaixo é o que 
 ## Resumo
 
 O aviso de pagamento da InfinitePay passa a entrar por um serviço web separado, `manto-avisos`
-(`servicos/avisos/app.py`, WSGI puro + gunicorn + psycopg2), que confere o segredo, guarda o corpo
-numa tabela nova (`virtual_payment_inbox`) e responde. Sem disco e com healthcheck, ele nunca fica
+(`servicos/avisos/app.py`, WSGI puro + gunicorn + psycopg 3), que confere o segredo, guarda o corpo
+numa tabela nova (`virtual_payment_inbox`) e responde (driver psycopg 3, research R3). Sem disco e com healthcheck, ele nunca fica
 fora num deploy, e o `rootDir` faz com que só reinicie quando a própria pasta muda. O backend drena
 a caixa a cada 10 s e no início de cada varredura, chamando as funções da 310 sem alterá-las. A
 página de retorno da família ganha retentativa pelo próprio TanStack Query. O `render.yaml` ganha o
@@ -25,9 +25,9 @@ documentação e a constituição vai para 3.2.0. Pesquisa: [research.md](./rese
 **Linguagem/Versão**: Python 3.11 (Flask + SQLAlchemy) no backend; Python 3.11 WSGI puro no
 receptor; TypeScript + React 18 (Vite) no frontend
 
-**Dependências principais**: backend inalterado. Receptor: `gunicorn==23.0.0`,
-`psycopg2-binary==2.9.10` (as versões da raiz), biblioteca padrão (`hmac`, `json`, `zoneinfo`,
-`threading`). Frontend: `@tanstack/react-query` (`retry`/`retryDelay` de `useMutation`)
+**Dependências principais**: backend inalterado. Receptor: `gunicorn==23.0.0` (versão da raiz),
+`psycopg[binary]==3.3.4` (o driver do `.venv` de desenvolvimento, para o verify exercitar o de
+produção — research R3), biblioteca padrão (`hmac`, `json`, `zoneinfo`, `threading`). Frontend: `@tanstack/react-query` (`retry`/`retryDelay` de `useMutation`)
 
 **Armazenamento**: PostgreSQL (`manto-postgres`). Tabela nova `virtual_payment_inbox`
 ([data-model.md](./data-model.md)); o receptor lê `site_settings` (3 colunas do segredo) e escreve
@@ -97,7 +97,7 @@ specs/340-caixa-de-avisos/
 
 ```text
 servicos/avisos/app.py            # NOVO — receptor WSGI (rotas, segredo, limites, gravação)
-servicos/avisos/requirements.txt  # NOVO — gunicorn, psycopg2-binary
+servicos/avisos/requirements.txt  # NOVO — gunicorn, psycopg[binary] 3
 servicos/avisos/README.md         # NOVO — o que é, por que não importa app/, como rodar local
 app/models.py                     # VirtualPaymentInbox
 migrations/versions/e340c1a2b3d4_caixa_de_avisos.py   # NOVO, aditiva

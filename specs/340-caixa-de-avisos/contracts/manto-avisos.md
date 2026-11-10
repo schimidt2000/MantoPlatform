@@ -36,7 +36,8 @@ sondagem do quickstart e do `manto-deploy`.
 
 ## Qualquer outro caminho ou método
 
-`404` / `405` com `{"success": false, "message": "Not found"}`.
+`404` `{"success": false, "message": "Not found"}` / `405`
+`{"success": false, "message": "Method not allowed"}`.
 
 ---
 

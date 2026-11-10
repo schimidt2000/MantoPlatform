@@ -34,9 +34,11 @@ perde o caso "retorno forjado antes do aviso" (o aviso autenticado seria descart
 
 ## R3 — O receptor não importa `app/`
 
-**Decisão**: WSGI puro (biblioteca padrão) + `gunicorn` + `psycopg2-binary`, nas versões da raiz
-(`gunicorn==23.0.0`, `psycopg2-binary==2.9.10`), em `servicos/avisos/` com `requirements.txt`
-próprio. SQL direto, conexão curta por chamada (`connect_timeout=3`).
+**Decisão**: WSGI puro (biblioteca padrão) + `gunicorn==23.0.0` (versão da raiz) +
+`psycopg[binary]==3.3.4`, em `servicos/avisos/` com `requirements.txt` próprio. SQL direto, conexão
+curta por chamada (`connect_timeout=3`). O driver é o psycopg 3, não o `psycopg2-binary` da raiz:
+o `.venv` de desenvolvimento (Python 3.14) tem só o psycopg 3.3.4, e o verify tem de exercitar o
+mesmo driver que roda em produção (achado da implementação, 10/11).
 
 **Por quê**: importar `app/` traz `create_app`, as threads de fundo, o Google e o e-mail; o build
 instalaria o `requirements.txt` inteiro da raiz; e qualquer mudança no backend passaria a exigir

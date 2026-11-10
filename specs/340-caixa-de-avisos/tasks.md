@@ -31,7 +31,7 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
       `PUBLIC_BASE_URL`; `Config.VIRTUAL_CAIXA_INTERVAL = int(os.getenv("VIRTUAL_CAIXA_INTERVAL", "10"))`
       perto de `VIRTUAL_SWEEP_INTERVAL`
 - [ ] T003 [P] Pasta `servicos/avisos/` com `requirements.txt` (`gunicorn==23.0.0`,
-      `psycopg2-binary==2.9.10`) e `README.md` (o que é, por que não importa `app/`, como rodar local,
+      `psycopg[binary]==3.3.4`, research R3) e `README.md` (o que é, por que não importa `app/`, como rodar local,
       contrato em `specs/340-caixa-de-avisos/contracts/manto-avisos.md`)
 
 ---
@@ -71,7 +71,7 @@ cenários do receptor e do dreno ficam BLOQUEADOS (arquivo/função ausente) e o
       contra `site_settings` (atual; anterior enquanto `…_anterior_ate` > agora em São Paulo; vazio
       nunca vale; `hmac.compare_digest`), `INSERT` em `virtual_payment_inbox` com `received_at` em São
       Paulo, 200 `{"success": true, "message": null}`; falha de banco ao conferir ou gravar → 400 com
-      corpo fixo; conexão `psycopg2` curta (`connect_timeout=3`), URL normalizada (`postgres://`,
+      corpo fixo; conexão psycopg 3 curta (`connect_timeout=3`), URL normalizada (`postgres://`,
       `postgresql+driver://` → `postgresql://`)
 - [ ] T008 [US1] `app/marketing/virtuais_ops.py`: `drenar_caixa_de_avisos(limite=VIRTUAL_CAIXA_LOTE)`
       + auxiliares (`_reivindicar_caixa` — `UPDATE … WHERE id IN (SELECT … FOR UPDATE SKIP LOCKED)
