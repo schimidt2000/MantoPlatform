@@ -14,7 +14,7 @@ Aditiva: o código anterior lê e grava no banco migrado. Rollback = reverter o 
 só derruba as colunas.
 
 Revision ID: e339a7c1b2d4
-Revises: d323b5a1c0e7
+Revises: d338c5a9e2b1
 Create Date: 2026-11-09
 """
 
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "e339a7c1b2d4"
-down_revision = "d323b5a1c0e7"
+down_revision = "d338c5a9e2b1"
 branch_labels = None
 depends_on = None
 

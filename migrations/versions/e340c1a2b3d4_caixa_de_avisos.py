@@ -9,7 +9,7 @@ Aditiva: o código anterior não lê a tabela. Rollback = reverter o merge; o ``
 a tabela.
 
 Revision ID: e340c1a2b3d4
-Revises: d323b5a1c0e7
+Revises: e339a7c1b2d4
 Create Date: 2026-11-10
 """
 
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "e340c1a2b3d4"
-down_revision = "d323b5a1c0e7"
+down_revision = "e339a7c1b2d4"
 branch_labels = None
 depends_on = None
 

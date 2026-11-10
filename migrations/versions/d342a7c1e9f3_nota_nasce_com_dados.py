@@ -12,7 +12,7 @@ porque quem exige é o servidor novo). Rollback = reverter o merge; o ``downgrad
 campos e as colunas — as respostas já salvas guardam o texto no próprio JSON e não se perdem.
 
 Revision ID: d342a7c1e9f3
-Revises: d323b5a1c0e7
+Revises: e341a1b2c3d4
 Create Date: 2026-11-10
 """
 
@@ -23,7 +23,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "d342a7c1e9f3"
-down_revision = "d323b5a1c0e7"
+down_revision = "e341a1b2c3d4"
 branch_labels = None
 depends_on = None
 
