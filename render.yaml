@@ -99,10 +99,12 @@ services:
       - key: MANTO_PROXY_SECRET
         sync: false
 
-  # Ausência conhecida, não esquecimento: o frontend NÃO tem `healthCheckPath` nem
-  # `watchPatterns`. Consequência: cada push troca o container e abre ~1 min de 502 na porta
-  # pública (o backend tem healthcheck; este não). Decisão pendente do dono (docs/05). Acrescentar
-  # muda o pipeline — commit sozinho, fora do horário, Events abertos.
+  # Healthcheck desde a feature 340 (era a dívida 22 do docs/05): sem ele o Render derrubava o
+  # container velho antes do novo responder e cada push de tela abria ~1 min de 502 na porta
+  # pública. Com ele, e sem disco, o Render só troca depois de o novo responder. `/` não passa pelo
+  # Flask: com host desconhecido (o do healthcheck) o server.js serve o index do app interno — prova
+  # que o Node subiu e o bundle existe, sem depender do backend. O `rootDir` já faz o deploy daqui
+  # acontecer só quando `frontend/` muda.
   - type: web
     name: manto-frontend
     runtime: node
@@ -111,6 +113,7 @@ services:
     rootDir: frontend
     buildCommand: npm install && npm run build
     startCommand: npm run start
+    healthCheckPath: /
     autoDeploy: true
     envVars:
       - key: NODE_VERSION
