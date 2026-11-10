@@ -4,7 +4,9 @@ import { Button, Input, Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import {
   FIELD_TYPES,
+  TIPOS_DE_CONTROLE,
   optionsToText,
+  respostasDoControle,
   useCreateField,
   useDeleteField,
   useFormFieldDefinitions,
@@ -27,6 +29,9 @@ interface FieldDraft {
   placeholder: string;
   required: boolean;
   options: string;
+  /** Feature 342 — campo condicional: vazio = aparece sempre. */
+  show_if_key: string;
+  show_if_value: string;
 }
 
 const EMPTY_DRAFT: FieldDraft = {
@@ -37,6 +42,8 @@ const EMPTY_DRAFT: FieldDraft = {
   placeholder: "",
   required: false,
   options: "",
+  show_if_key: "",
+  show_if_value: "",
 };
 
 function draftFromField(f: FormFieldDefinition): FieldDraft {
@@ -48,7 +55,16 @@ function draftFromField(f: FormFieldDefinition): FieldDraft {
     placeholder: f.placeholder ?? "",
     required: f.required,
     options: optionsToText(f.options),
+    show_if_key: f.show_if_key ?? "",
+    show_if_value: f.show_if_value ?? "",
   };
+}
+
+/** "Aparece só quando «Forma de Pagamento» for «Outros»" — a condição em palavras. */
+function textoDaCondicao(field: FormFieldDefinition, todos: FormFieldDefinition[]): string | null {
+  if (!field.show_if_key) return null;
+  const controle = todos.find((f) => f.field_key === field.show_if_key);
+  return `Aparece só quando “${controle?.label ?? field.show_if_key}” for “${field.show_if_value ?? ""}”`;
 }
 
 function errorMessage(error: unknown): string {
@@ -62,11 +78,33 @@ interface FieldFormProps {
   /** Em edição o tipo e a seção são imutáveis no backend (`update_field`). */
   lockStructure: boolean;
   sections: string[];
+  /** Feature 342: os campos que podem controlar a exibição deste (seleção e sim/não). */
+  controles: FormFieldDefinition[];
+  /** Campo do sistema: a condição é do sistema e só se lê. */
+  condicaoTravada: boolean;
 }
 
-function FieldForm({ draft, onChange, lockStructure, sections }: FieldFormProps) {
+function FieldForm({
+  draft,
+  onChange,
+  lockStructure,
+  sections,
+  controles,
+  condicaoTravada,
+}: FieldFormProps) {
   const set = <K extends keyof FieldDraft>(key: K, value: FieldDraft[K]) =>
     onChange({ ...draft, [key]: value });
+  const controle = controles.find((c) => c.field_key === draft.show_if_key);
+  const respostas = controle ? respostasDoControle(controle) : [];
+  const escolherControle = (chave: string) => {
+    const novo = controles.find((c) => c.field_key === chave);
+    // Trocar o campo de controle troca as respostas possíveis: começa pela primeira.
+    onChange({
+      ...draft,
+      show_if_key: chave,
+      show_if_value: novo ? (respostasDoControle(novo)[0] ?? "") : "",
+    });
+  };
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -175,6 +213,58 @@ function FieldForm({ draft, onChange, lockStructure, sections }: FieldFormProps)
         />
         Preenchimento obrigatório
       </label>
+
+      {/* Feature 342 — campo condicional. */}
+      <div>
+        <label className={LABEL} htmlFor="campo-condicao">
+          Quando aparece
+        </label>
+        <select
+          id="campo-condicao"
+          className={CONTROL}
+          value={draft.show_if_key}
+          disabled={condicaoTravada}
+          onChange={(e) => escolherControle(e.target.value)}
+        >
+          <option value="">Sempre</option>
+          {controles.map((c) => (
+            <option key={c.field_key} value={c.field_key}>
+              Só quando “{c.label}” for…
+            </option>
+          ))}
+        </select>
+      </div>
+      {draft.show_if_key && (
+        <div>
+          <label className={LABEL} htmlFor="campo-condicao-valor">
+            Resposta que faz o campo aparecer
+          </label>
+          <select
+            id="campo-condicao-valor"
+            className={CONTROL}
+            value={draft.show_if_value}
+            disabled={condicaoTravada}
+            onChange={(e) => set("show_if_value", e.target.value)}
+          >
+            {/* A resposta gravada pode ter saído das opções: continua à vista para ser trocada. */}
+            {!respostas.includes(draft.show_if_value) && (
+              <option value={draft.show_if_value}>{draft.show_if_value || "Selecione…"}</option>
+            )}
+            {respostas.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {draft.show_if_key && (
+        <p className="text-xs text-muted sm:col-span-2">
+          {condicaoTravada
+            ? "Campo do sistema: a condição não pode ser alterada."
+            : "Escondido, o campo não é exigido e a resposta não é salva."}
+        </p>
+      )}
     </div>
   );
 }
@@ -189,6 +279,8 @@ interface FieldRowProps {
   busy: boolean;
   /** Direção em voo **para este campo** — só a seta clicada mostra spinner (Princípio V). */
   movingDirection: "up" | "down" | null;
+  /** Feature 342: a condição de exibição em palavras, quando há. */
+  condicao: string | null;
 }
 
 function FieldRow({
@@ -200,6 +292,7 @@ function FieldRow({
   onDelete,
   busy,
   movingDirection,
+  condicao,
 }: FieldRowProps) {
   const typeLabel = FIELD_TYPES.find((t) => t.value === field.field_type)?.label ?? field.field_type;
   return (
@@ -212,7 +305,10 @@ function FieldRow({
             <span className="ml-2 rounded bg-surface-2 px-1.5 py-0.5 text-xs text-muted">sistema</span>
           )}
         </p>
-        <p className="truncate text-xs text-muted">{typeLabel}</p>
+        <p className="truncate text-xs text-muted">
+          {typeLabel}
+          {condicao && ` · ${condicao}`}
+        </p>
       </div>
       <div className="flex shrink-0 items-center gap-1">
         <Button
@@ -307,6 +403,8 @@ export function FormFieldEditor({ formType }: FormFieldEditorProps) {
           placeholder: draft.placeholder,
           required: draft.required,
           options: draft.options,
+          show_if_key: draft.show_if_key,
+          show_if_value: draft.show_if_value,
         },
         { onSuccess: () => setEditing(null), onError },
       );
@@ -320,6 +418,8 @@ export function FormFieldEditor({ formType }: FormFieldEditorProps) {
           placeholder: draft.placeholder,
           required: draft.required,
           options: draft.options,
+          show_if_key: draft.show_if_key,
+          show_if_value: draft.show_if_value,
         },
         { onSuccess: () => setEditing(null), onError },
       );
@@ -383,6 +483,10 @@ export function FormFieldEditor({ formType }: FormFieldEditorProps) {
                 onChange={setDraft}
                 lockStructure={editing !== "new"}
                 sections={sections}
+                controles={list.filter(
+                  (f) => TIPOS_DE_CONTROLE.includes(f.field_type) && f.id !== editing,
+                )}
+                condicaoTravada={list.some((f) => f.id === editing && f.is_system)}
               />
               {error && <p className="mt-3 text-sm text-red">{error}</p>}
               <div className="mt-4 flex justify-end gap-2">
@@ -412,6 +516,7 @@ export function FormFieldEditor({ formType }: FormFieldEditorProps) {
               <FieldRow
                 key={f.id}
                 field={f}
+                condicao={textoDaCondicao(f, list)}
                 isFirst={i === 0}
                 isLast={i === campos.length - 1}
                 busy={busy}

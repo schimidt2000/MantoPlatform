@@ -401,6 +401,27 @@ def _cadastro(response: FormResponse, campos: dict[str, str], p: _Preenchido) ->
     p.alertar(alerta_local, alerta_tipo, alerta_pagamento, alerta_cliente)
 
 
+def _nota(response: FormResponse, p: _Preenchido) -> None:
+    """A cliente pediu nota (feature 342): o chip e os dados da nota chegam sugeridos ao cadastro.
+
+    Aqui o chip pode vir ligado porque a venda ainda não existe — é a vendedora que digita o valor
+    e salva. No evento que já existe, o formulário nunca liga a nota (`completar_pelo_formulario`).
+    """
+    from app.formularios import nota_do_formulario_ops
+
+    respostas = nota_do_formulario_ops.respostas_da_nota(response)
+    if respostas is None:
+        return
+    p.usar("with_invoice", True)
+    p.usar("nota", {
+        "tomador_doc": respostas["doc"],
+        "email": respostas["email"],
+        "iss_retido": respostas["iss"] == nota_do_formulario_ops.RESPOSTA_SIM,
+        "iss_resposta": respostas["iss"],
+        "referencia": respostas["referencia"],
+    })
+
+
 def extrair_para_evento(response: FormResponse) -> dict:
     """``{valores, origem, observacoes, alertas, eventos_da_cliente}`` para o cadastro de evento.
 
@@ -415,6 +436,7 @@ def extrair_para_evento(response: FormResponse) -> dict:
     _cadastro(response, campos, p)
     nomes, personagens_escritos = _personagens(campos)
     p.usar("characters", nomes)
+    _nota(response, p)
     return {
         "valores": p.valores,
         "origem": p.origem,

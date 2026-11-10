@@ -2,8 +2,13 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button, Card, CardHeader, CardTitle, CardContent, Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
+import { MENSAGEM_DOC_INVALIDO, docValido } from "../../lib/documento";
 import {
   CEP_TARGET_KEYS,
+  CHAVE_DOC_DA_NOTA,
+  CHAVE_EMAIL_DA_NOTA,
+  CHAVE_PRECISA_NOTA,
+  campoVisivel,
   fetchCep,
   onlyDigits,
   useFormSchema,
@@ -25,6 +30,8 @@ function buildFormData(fields: FieldSchema[], values: Record<string, string>): F
   const formData = new FormData();
   formData.append("website", values.website ?? ""); // honeypot — sempre vazio para humanos
   for (const field of fields) {
+    // Feature 342: o que ficou digitado num campo escondido não segue (o servidor também descarta).
+    if (!campoVisivel(field, values)) continue;
     if (field.type === "telefone") {
       formData.append(`${field.key}_ddi`, values[`${field.key}_ddi`] ?? "+55");
       formData.append(`${field.key}_national`, values[`${field.key}_national`] ?? "");
@@ -46,8 +53,24 @@ export function DynamicForm({ formType }: DynamicFormProps) {
   const [serverError, setServerError] = useState<string | null>(null);
 
   const setValue = (key: string, value: string) => {
-    setValues((prev) => ({ ...prev, [key]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [key]: value };
+      // Feature 342: ao marcar "Preciso de nota fiscal", o documento e o e-mail já digitados acima
+      // adiantam as respostas da nota. Só em campo vazio: nunca troca o que a cliente escreveu.
+      if (key === CHAVE_PRECISA_NOTA && value === "Sim") {
+        if (!prev[CHAVE_DOC_DA_NOTA]) next[CHAVE_DOC_DA_NOTA] = prev.cnpj || prev.cpf || "";
+        if (!prev[CHAVE_EMAIL_DA_NOTA]) next[CHAVE_EMAIL_DA_NOTA] = prev.email || "";
+      }
+      return next;
+    });
     setErrors((prev) => (prev[key] ? { ...prev, [key]: "" } : prev));
+  };
+
+  /** Avisa do documento errado ao sair do campo, sem esperar o envio. */
+  const conferirDoc = (key: string, value: string) => {
+    if (value.trim() && !docValido(value)) {
+      setErrors((prev) => ({ ...prev, [key]: MENSAGEM_DOC_INVALIDO }));
+    }
   };
 
   async function handleBlurCep(rawValue: string) {
@@ -134,6 +157,7 @@ export function DynamicForm({ formType }: DynamicFormProps) {
           <CardContent className="space-y-4">
             {section.campos
               .filter((field) => field.key !== "descreva_outros" || paymentMethod === "Outros")
+              .filter((field) => campoVisivel(field, values))
               .map((field) => (
                 <DynamicField
                   key={field.key}
@@ -142,6 +166,7 @@ export function DynamicForm({ formType }: DynamicFormProps) {
                   errors={errors}
                   onChange={setValue}
                   onBlurCep={field.type === "cep" ? handleBlurCep : undefined}
+                  onBlurDoc={conferirDoc}
                 />
               ))}
           </CardContent>

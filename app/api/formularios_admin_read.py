@@ -224,6 +224,8 @@ def api_formularios_editor_get(form_type: str) -> Any:
                 "options": f.options,
                 "order": f.order,
                 "is_system": f.is_system,
+                "show_if_key": f.show_if_key,
+                "show_if_value": f.show_if_value,
             }
             for f in fields
         ]

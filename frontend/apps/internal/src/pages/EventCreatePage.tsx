@@ -17,7 +17,7 @@ import {
   primeiroCampoDoErro,
   type EventFormValues,
 } from "../lib/eventFormSchema";
-import { useDocDoContratante } from "../lib/notaFiscal";
+import { formatarDoc, useDocDoContratante, type NotaDoFormulario } from "../lib/notaFiscal";
 import {
   useCreateEvent,
   precoDaDuracao,
@@ -36,6 +36,7 @@ import {
   mensagemDaApi,
   useLinkEvent,
   useParaEvento,
+  type ParaEvento,
   useUsarClienteDoEvento,
   type AlertaFormulario,
   type DivergenciaCliente,
@@ -83,6 +84,28 @@ function preencherCamposDoFormulario(setValue: UseFormSetValue<EventFormValues>,
   if (v.payment_installments) {
     setValue("payment_installments", String(v.payment_installments), sujo);
   }
+  // Feature 342: a cliente pediu nota no formulário — o chip e os dados chegam sugeridos; é o
+  // Salvar da vendedora que grava (e o valor da venda é ela quem digita).
+  if (v.with_invoice && v.nota) {
+    setValue("with_invoice", true, sujo);
+    setValue("nota_tomador_doc", formatarDoc(v.nota.tomador_doc), sujo);
+    setValue("nota_email", v.nota.email ?? "", sujo);
+    setValue("nota_iss_retido", Boolean(v.nota.iss_retido), sujo);
+    setValue("nota_referencia", v.nota.referencia ?? "", sujo);
+  }
+}
+
+/** As respostas da nota do formulário da criação, no formato que o bloco "Dados da nota" mostra. */
+function notaDoFormularioDaCriacao(p: ParaEvento | undefined): NotaDoFormulario | null {
+  const nota = p?.valores?.nota;
+  if (!p?.form_response || !p.valores?.with_invoice || !nota) return null;
+  return {
+    response_id: p.form_response.id,
+    doc: nota.tomador_doc ?? null,
+    email: nota.email ?? null,
+    iss: nota.iss_resposta ?? null,
+    referencia: nota.referencia ?? null,
+  };
 }
 
 /** As clientes do formulário somadas às já escolhidas, sem repetir a ficha. */
@@ -899,7 +922,11 @@ export function EventCreatePage() {
               talents={opts.assignable_talents}
             />
 
-            <ValoresBlock sellers={opts.sellers} docDoCliente={docDoContratante} />
+            <ValoresBlock
+              sellers={opts.sellers}
+              docDoCliente={docDoContratante}
+              notaDoFormulario={notaDoFormularioDaCriacao(paraEvento.data)}
+            />
 
             {(prefill.data?.acrescimos_do_orcamento || bvErros.bv_recipient || bvErros.bv_pix) && (
               <BvDoOrcamentoBlock

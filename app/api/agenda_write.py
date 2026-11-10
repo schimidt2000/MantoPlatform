@@ -1076,6 +1076,26 @@ def _dados_da_nota(body: dict) -> tuple[Any, dict[str, str]]:
         return None, exc.fields
 
 
+def _erro_de_documento_da_nota(
+    event: CalendarEvent | None, data: dict, dados_nota: Any, *, card_comercial: bool = False
+) -> dict[str, str]:
+    """Feature 342 — pedir nota exige o CNPJ ou CPF de quem recebe, nas três portas da venda.
+
+    A criação e o "Editar tudo" definem os clientes no mesmo corpo (vale o contratante que vai
+    ficar); o card Comercial não mexe neles (vale o do evento). A regra, e por que o pedido antigo
+    sem documento continua salvando, está em `pedido_de_nota_ops.erro_de_documento`.
+    """
+    from app.calendar import pedido_de_nota_ops
+
+    return pedido_de_nota_ops.erro_de_documento(
+        event,
+        com_nota=bool(data.get("with_invoice")),
+        dados=dados_nota,
+        contratante_id=pedido_de_nota_ops.contratante_do_corpo(data.get("client_pairs") or []),
+        usar_contratante_do_evento=card_comercial,
+    )
+
+
 def _client_pairs_from_json(raw: list) -> list[tuple[int, str]]:
     """Normaliza clientes vindos do corpo JSON — mesma regra de `_parse_client_pairs` (routes.py):
     dedup por cliente, ids inexistentes ignorados, relação fora da lista vira "Outros".
@@ -1275,6 +1295,7 @@ def api_create_event() -> Any:
     from app.calendar.routes import _validate_event_core
 
     data["nota"], erros_nota = _dados_da_nota(body)
+    erros_nota = erros_nota or _erro_de_documento_da_nota(None, data, data["nota"])
     errors = {**_validate_event_core(data), **erros_nota}
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
@@ -1436,6 +1457,7 @@ def api_update_event(event_id: int) -> Any:
         satelite=event.is_satellite,
     )
     dados_nota, erros_nota = _dados_da_nota(body)
+    erros_nota = erros_nota or _erro_de_documento_da_nota(event, data, dados_nota)
     errors = {**errors, **erros_nota}
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
@@ -1646,6 +1668,7 @@ def api_update_event_comercial(event_id: int) -> Any:
     from app.models import SiteSetting
 
     dados_nota, erros_nota = _dados_da_nota(body)
+    erros_nota = erros_nota or _erro_de_documento_da_nota(event, data, dados_nota, card_comercial=True)
     erros = {
         **erros_do_valor_na_aba_comercial(data, event),
         **erros_da_comissao_do_vendedor(data, event, SiteSetting.query.get(1)),

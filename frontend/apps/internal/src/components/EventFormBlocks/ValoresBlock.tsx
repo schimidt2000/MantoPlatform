@@ -4,7 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { MoneyInput, formatBRL } from "@manto/money";
 import type { EventFormValues } from "../../lib/eventFormSchema";
 import { percentualDoDesconto, textoDoPercentual } from "../../lib/desconto";
-import type { DadosDaNota } from "../../lib/notaFiscal";
+import type { DadosDaNota, NotaDoFormulario } from "../../lib/notaFiscal";
 import { DadosDaNotaCampos } from "./DadosDaNotaCampos";
 import { FIELD, FIELD_ERROR, LABEL, FieldError, BlockCard } from "./shared";
 
@@ -15,6 +15,7 @@ const CAMPO_DA_NOTA = {
   municipio: "nota_municipio",
   referencia: "nota_referencia",
   observacoes: "nota_observacoes",
+  email: "nota_email",
 } as const;
 
 const CHIP = "rounded-full border px-3 py-1.5 text-sm font-medium transition-colors";
@@ -34,6 +35,8 @@ export interface ValoresBlockProps {
   vendedorTravado?: string | null;
   /** Feature 323: o CNPJ/CPF do cadastro do cliente, que vale com o campo do tomador em branco. */
   docDoCliente?: string | null;
+  /** Feature 342: as respostas da nota no formulário da cliente, para conferir. */
+  notaDoFormulario?: NotaDoFormulario | null;
 }
 
 /**
@@ -69,6 +72,7 @@ export function ValoresBlock({
   principal = null,
   vendedorTravado = null,
   docDoCliente = null,
+  notaDoFormulario = null,
 }: ValoresBlockProps) {
   const {
     register,
@@ -89,6 +93,7 @@ export function ValoresBlock({
     municipio: watch("nota_municipio"),
     referencia: watch("nota_referencia"),
     observacoes: watch("nota_observacoes"),
+    email: watch("nota_email"),
   };
   const alterarNota = (patch: Partial<DadosDaNota>) => {
     for (const [chave, valor] of Object.entries(patch) as [keyof DadosDaNota, string | boolean][]) {
@@ -250,6 +255,13 @@ export function ValoresBlock({
       >
         {withInvoice ? "✓ " : ""}Precisa de nota fiscal
       </button>
+      {/* Feature 342: o formulário nunca liga a nota sozinho (muda o preço) — só avisa. */}
+      {!withInvoice && notaDoFormulario && (
+        <p className="text-sm text-muted">
+          A cliente pediu nota fiscal no formulário. Ligue "Precisa de nota fiscal" se a venda
+          inclui a nota.
+        </p>
+      )}
 
       {/* Feature 323: o pedido da nota leva o que a emissão precisa. */}
       <AnimatePresence initial={false}>
@@ -268,8 +280,10 @@ export function ValoresBlock({
                 nota_tomador_doc: errors.nota_tomador_doc?.message,
                 nota_municipio: errors.nota_municipio?.message,
                 nota_observacoes: errors.nota_observacoes?.message,
+                nota_email: errors.nota_email?.message,
               }}
               docDoCliente={docDoCliente}
+              doFormulario={notaDoFormulario}
               refDoc={register("nota_tomador_doc").ref}
               refMunicipio={register("nota_municipio").ref}
             />

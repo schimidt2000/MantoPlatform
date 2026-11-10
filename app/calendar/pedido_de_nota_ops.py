@@ -29,6 +29,7 @@ from sqlalchemy.orm import selectinload
 
 from app import db
 from app.constants import EDUCAMANTO_TITLE_PREFIX, RoleName, now_sp
+from app.documentos import doc_valido
 from app.models import CalendarEvent, Client, EventClient, EventInvoice, Role, User
 
 logger = logging.getLogger(__name__)
@@ -41,14 +42,19 @@ DOC_CPF_DIGITOS = 11
 MUNICIPIO_MAX = 120
 REFERENCIA_MAX = 120
 OBSERVACOES_MAX = 1000
+EMAIL_MAX = 200
 
 MSG_DOC_INVALIDO = "Informe o CNPJ com 14 dígitos ou o CPF com 11."
+MSG_DOC_DIGITO = "CNPJ ou CPF inválido. Confira os números."
+MSG_DOC_FALTANDO = "Informe o CNPJ ou CPF de quem recebe a nota."
+MSG_EMAIL_INVALIDO = "Informe um e-mail válido."
 MSG_MUNICIPIO_FALTANDO = "Informe o município onde o serviço é prestado."
 MSG_OBSERVACOES_LONGAS = f"Use no máximo {OBSERVACOES_MAX} caracteres."
 
 CAMPO_DOC = "nota_tomador_doc"
 CAMPO_MUNICIPIO = "nota_municipio"
 CAMPO_OBSERVACOES = "nota_observacoes"
+CAMPO_EMAIL = "nota_email"
 
 
 class NotaInvalida(Exception):
@@ -61,13 +67,19 @@ class NotaInvalida(Exception):
 
 @dataclass(frozen=True)
 class DadosDaNota:
-    """Os cinco dados da nota, já normalizados (vazio = `None`)."""
+    """Os dados da nota, já normalizados (vazio = `None`).
+
+    `email` só vale com `mexe_no_email` (feature 342): a tela aberta antes do deploy não manda a
+    chave, e ausência não pode apagar o e-mail que a cliente informou no formulário.
+    """
 
     tomador_doc: str | None
     iss_retido: bool
     municipio: str | None
     referencia: str | None
     observacoes: str | None
+    email: str | None = None
+    mexe_no_email: bool = False
 
 
 # ── Entrada ─────────────────────────────────────────────────────────────────────────────────
@@ -82,18 +94,26 @@ def ler_dados_da_nota(raw: Any) -> DadosDaNota | None:
     """Converte a chave `nota` do corpo. `None` (chave ausente) = não mexer no que está gravado.
 
     Raises:
-        NotaInvalida: documento sem 11/14 dígitos, ISS retido sem município ou observações longas.
+        NotaInvalida: documento sem 11/14 dígitos ou com dígito verificador errado, e-mail
+            inválido, ISS retido sem município ou observações longas.
     """
     if raw is None or not isinstance(raw, dict):
         return None
     doc = re.sub(r"\D", "", str(raw.get("tomador_doc") or "")) or None
     iss = bool(raw.get("iss_retido"))
-    municipio = _texto(raw.get("municipio"), MUNICIPIO_MAX) if iss else None
+    # Feature 342: o município é onde o ISS do 17.10 é devido — vale com ou sem ISS retido.
+    municipio = _texto(raw.get("municipio"), MUNICIPIO_MAX)
     observacoes_brutas = str(raw.get("observacoes") or "").strip()
+    mexe_no_email = "email" in raw
+    email = _texto(raw.get("email"), EMAIL_MAX) if mexe_no_email else None
 
     erros: dict[str, str] = {}
     if doc and len(doc) not in (DOC_CNPJ_DIGITOS, DOC_CPF_DIGITOS):
         erros[CAMPO_DOC] = MSG_DOC_INVALIDO
+    elif doc and not doc_valido(doc):
+        erros[CAMPO_DOC] = MSG_DOC_DIGITO
+    if email and not email_valido(email):
+        erros[CAMPO_EMAIL] = MSG_EMAIL_INVALIDO
     if iss and not municipio:
         erros[CAMPO_MUNICIPIO] = MSG_MUNICIPIO_FALTANDO
     if len(observacoes_brutas) > OBSERVACOES_MAX:
@@ -107,22 +127,82 @@ def ler_dados_da_nota(raw: Any) -> DadosDaNota | None:
         municipio=municipio,
         referencia=_texto(raw.get("referencia"), REFERENCIA_MAX),
         observacoes=observacoes_brutas or None,
+        email=email,
+        mexe_no_email=mexe_no_email,
     )
 
 
-def _dados_gravados(event: Any) -> DadosDaNota:
+def email_valido(email: str) -> bool:
+    """A mesma régua leve do formulário público: tem "@", ponto no domínio e nenhum espaço."""
+    return "@" in email and "." in email.split("@")[-1] and " " not in email
+
+
+def _dados_gravados(event: Any, *, com_email: bool) -> DadosDaNota:
     return DadosDaNota(
         tomador_doc=event.nota_tomador_doc or None,
         iss_retido=bool(event.nota_iss_retido),
         municipio=event.nota_municipio or None,
         referencia=event.nota_referencia or None,
         observacoes=event.nota_observacoes or None,
+        email=(event.nota_email or None) if com_email else None,
+        mexe_no_email=com_email,
     )
 
 
 def dados_mudariam(event: Any, dados: DadosDaNota | None) -> bool:
     """O corpo alteraria os dados gravados? Entra no "venda mudaria" do cancelado (306)."""
-    return dados is not None and dados != _dados_gravados(event)
+    return dados is not None and dados != _dados_gravados(event, com_email=dados.mexe_no_email)
+
+
+def erro_de_documento(
+    event: Any | None,
+    *,
+    com_nota: bool,
+    dados: DadosDaNota | None,
+    contratante_id: int | None = None,
+    usar_contratante_do_evento: bool = False,
+) -> dict[str, str]:
+    """Pedido de nota sem CNPJ nem CPF é recusado (feature 342). Só lê; não escreve.
+
+    Recusa quando a gravação deixa a venda com nota e sem documento — nem na venda, nem no cadastro
+    da contratante — **e** o pedido nasce agora ou a gravação apagaria o documento que existia. O
+    pedido antigo sem documento continua salvando: "Editar tudo" é usado por quem não vende, e
+    travar o horário do evento pelo CNPJ que falta seria cobrar a pessoa errada.
+
+    Args:
+        event: o evento gravado; `None` na criação.
+        com_nota: "Precisa de nota fiscal" como vai ficar.
+        dados: a chave `nota` do corpo; `None` = o corpo não mexe nos dados gravados.
+        contratante_id: o cliente contratante que ESTA gravação define (criação e "Editar tudo"
+            trocam os clientes no mesmo corpo).
+        usar_contratante_do_evento: o card Comercial não mexe nos clientes — vale o do evento.
+
+    Returns:
+        `{}` ou `{"nota_tomador_doc": mensagem}`, pronto para o `fields` do `json_error`.
+    """
+    if not com_nota or (event is not None and (event.is_cancelled or event.is_satellite)):
+        return {}
+    gravado = (event.nota_tomador_doc or None) if event is not None else None
+    if dados.tomador_doc if dados is not None else gravado:
+        return {}
+    if usar_contratante_do_evento and event is not None:
+        cliente = contratante(event)
+    else:
+        cliente = db.session.get(Client, contratante_id) if contratante_id else None
+    if doc_do_cliente(cliente):
+        return {}
+    nasce = event is None or not event.with_invoice
+    apagaria = dados is not None and bool(gravado)
+    return {CAMPO_DOC: MSG_DOC_FALTANDO} if nasce or apagaria else {}
+
+
+def contratante_do_corpo(pares: list[tuple[int, str]]) -> int | None:
+    """O contratante entre os clientes do corpo: o marcado "Contratante"; sem ele, o primeiro —
+    a mesma escolha de `contratante` depois de gravado."""
+    for cliente_id, relacao in pares:
+        if relacao == RELACAO_CONTRATANTE:
+            return cliente_id
+    return pares[0][0] if pares else None
 
 
 def contratante(event: Any) -> Client | None:
@@ -146,6 +226,44 @@ def gravar_dados_da_nota(event: Any, dados: DadosDaNota | None) -> None:
     event.nota_municipio = dados.municipio
     event.nota_referencia = dados.referencia
     event.nota_observacoes = dados.observacoes
+    if dados.mexe_no_email:
+        event.nota_email = dados.email
+
+
+def completar_pelo_formulario(
+    event: Any,
+    *,
+    doc: str | None,
+    email: str | None,
+    iss_retido: bool | None,
+    referencia: str | None,
+) -> list[str]:
+    """As respostas da cliente completam os dados da nota — só campo vazio (feature 342). Sem commit.
+
+    Nunca sobrescreve: o que já está na venda foi digitado por alguém ou veio de um formulário
+    anterior. `nota_iss_retido` nulo é "ninguém informou"; depois que a vendedora salva o bloco ele
+    é `True`/`False` e é dela. Não toca `with_invoice`, não cria pedido e não avisa ninguém: ligar a
+    nota muda o preço, e isso é decisão de quem vende.
+
+    Returns:
+        Os nomes das colunas preenchidas (vazio = nada mudou).
+    """
+    if event.is_cancelled or event.is_satellite:
+        return []
+    preenchidos: list[str] = []
+    candidatos = (
+        ("nota_tomador_doc", re.sub(r"\D", "", doc or "") or None),
+        ("nota_email", _texto(email, EMAIL_MAX)),
+        ("nota_referencia", _texto(referencia, REFERENCIA_MAX)),
+    )
+    for coluna, valor in candidatos:
+        if valor and not (getattr(event, coluna) or "").strip():
+            setattr(event, coluna, valor)
+            preenchidos.append(coluna)
+    if iss_retido is not None and event.nota_iss_retido is None:
+        event.nota_iss_retido = iss_retido
+        preenchidos.append("nota_iss_retido")
+    return preenchidos
 
 
 def completar_documento_do_cliente(event: Any, dados: DadosDaNota | None) -> None:
@@ -303,7 +421,8 @@ def tomador(event: Any) -> dict[str, str | None]:
     return {
         "nome": (cliente.company or cliente.name) if cliente else None,
         "doc": event.nota_tomador_doc or doc_do_cliente(cliente),
-        "email": cliente.email if cliente else None,
+        # Feature 342: o e-mail que a cliente pediu para a nota; sem ele, o do cadastro.
+        "email": event.nota_email or (cliente.email if cliente else None),
         "endereco": cliente.address if cliente else None,
     }
 
@@ -371,6 +490,8 @@ def serializar_item(nota: EventInvoice, hoje: date) -> dict[str, Any]:
         "tomador": tomador(event),
         "iss_retido": bool(event.nota_iss_retido),
         "municipio": event.nota_municipio,
+        # Feature 342: sem município confirmado, a sugestão pelo endereço — "a confirmar".
+        "municipio_sugerido": _municipio_sugerido(event),
         "referencia": event.nota_referencia,
         "observacoes": event.nota_observacoes,
         "pedida_por": nome_de_quem_pediu(nota),
@@ -394,6 +515,8 @@ def painel() -> dict[str, Any]:
             selectinload(EventInvoice.event).selectinload(CalendarEvent.client),
             selectinload(EventInvoice.event).selectinload(CalendarEvent.seller),
             selectinload(EventInvoice.pedida_por),
+            # Feature 342: a sugestão de município lê o formulário ligado.
+            selectinload(EventInvoice.event).selectinload(CalendarEvent.form_responses),
         )
         .order_by(
             EventInvoice.pedida_em.is_(None),
@@ -415,5 +538,22 @@ def serializar_dados(event: Any) -> dict[str, Any]:
         "municipio": event.nota_municipio,
         "referencia": event.nota_referencia,
         "observacoes": event.nota_observacoes,
+        # Feature 342 — chaves novas, opcionais na tela.
+        "email": event.nota_email,
+        "municipio_sugerido": _municipio_sugerido(event),
+        "do_formulario": _do_formulario(event),
     }
+
+
+def _municipio_sugerido(event: Any) -> str | None:
+    # Import tardio: a ponte do formulário importa este módulo para escrever.
+    from app.formularios.nota_do_formulario_ops import municipio_sugerido
+
+    return municipio_sugerido(event)
+
+
+def _do_formulario(event: Any) -> dict[str, Any] | None:
+    from app.formularios.nota_do_formulario_ops import do_formulario_do_evento
+
+    return do_formulario_do_evento(event)
 

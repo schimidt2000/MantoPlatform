@@ -297,6 +297,8 @@ def _field_dict(f: FormFieldDefinition) -> dict:
         "options": f.options,
         "order": f.order,
         "is_system": f.is_system,
+        "show_if_key": f.show_if_key,
+        "show_if_value": f.show_if_value,
     }
 
 

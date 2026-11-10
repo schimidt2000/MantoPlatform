@@ -499,6 +499,7 @@ export function EventEditPage() {
             <ValoresBlock
               sellers={opts.sellers}
               docDoCliente={docDoContratante}
+              notaDoFormulario={data.venda?.nota?.do_formulario ?? null}
               satelite={Boolean(data.event.is_satellite)}
               principal={data.event.group?.leader ?? null}
               vendedorTravado={

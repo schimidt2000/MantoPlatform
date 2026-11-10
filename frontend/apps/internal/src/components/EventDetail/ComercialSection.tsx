@@ -465,6 +465,12 @@ function VendaForm({
         />
         Cliente solicitou nota fiscal
       </label>
+      {/* Feature 342: o formulário nunca liga a nota sozinho (muda o preço) — só avisa. */}
+      {!form.with_invoice && venda.nota?.do_formulario && (
+        <p className="text-sm text-muted">
+          A cliente pediu nota fiscal no formulário. Marque a opção acima se a venda inclui a nota.
+        </p>
+      )}
       {form.with_invoice && (
         <DadosDaNotaCampos
           idPrefixo="venda_nota"
@@ -474,8 +480,10 @@ function VendaForm({
             nota_tomador_doc: camposDoErro?.nota_tomador_doc,
             nota_municipio: camposDoErro?.nota_municipio,
             nota_observacoes: camposDoErro?.nota_observacoes,
+            nota_email: camposDoErro?.nota_email,
           }}
           docDoCliente={venda.nota?.doc_do_cliente}
+          doFormulario={venda.nota?.do_formulario}
           refDoc={refDoc}
           refMunicipio={refMunicipio}
         />
@@ -1209,6 +1217,10 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
             <Badge tone="blue">Solicitada</Badge>
           </DataRow>
         )}
+        {/* Feature 342: a cliente pediu nota no formulário e a venda está sem nota. */}
+        {!venda.with_invoice && venda.nota?.do_formulario && (
+          <DataRow label="Nota fiscal">A cliente pediu no formulário; a venda está sem nota.</DataRow>
+        )}
         {/* Feature 323: o que a emissão precisa, como a vendedora informou. */}
         {venda.with_invoice && venda.nota && (
           <>
@@ -1219,10 +1231,17 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
                   ? `${formatarDoc(venda.nota.doc_do_cliente)} (do cadastro)`
                   : "Não informado"}
             </DataRow>
+            {venda.nota.email && <DataRow label="E-mail da nota">{venda.nota.email}</DataRow>}
             <DataRow label="ISS">
-              {venda.nota.iss_retido
-                ? `Retido pelo tomador — ${venda.nota.municipio ?? ""}`
-                : "Não retido"}
+              {venda.nota.iss_retido ? "Retido pelo tomador" : "Não retido"}
+              {/* Feature 342: a cliente não soube dizer — fica à vista de quem vai emitir. */}
+              {venda.nota.do_formulario?.iss === "Não sei" && " (a cliente não soube informar)"}
+            </DataRow>
+            <DataRow label="Município do evento">
+              {venda.nota.municipio ??
+                (venda.nota.municipio_sugerido
+                  ? `${venda.nota.municipio_sugerido} (pelo endereço, a confirmar)`
+                  : "Não informado")}
             </DataRow>
             {venda.nota.referencia && (
               <DataRow label="Referência">{venda.nota.referencia}</DataRow>
