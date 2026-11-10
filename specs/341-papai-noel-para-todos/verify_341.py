@@ -125,16 +125,26 @@ class Operadora:
         self.cobrancas: dict[str, dict] = {}
 
     def pagar(self, nsu: str, valor: Decimal) -> dict:
-        c = {"tx": f"tx341-{RUN}-{secrets.token_hex(4)}", "slug": f"sl-{secrets.token_hex(4)}",
-             "valor": valor}
+        c = {
+            "tx": f"tx341-{RUN}-{secrets.token_hex(4)}",
+            "slug": f"sl-{secrets.token_hex(4)}",
+            "valor": valor,
+        }
         self.cobrancas[nsu] = c
         return c
 
     def aviso(self, nsu: str, c: dict) -> dict:
         centavos = int(c["valor"] * 100)
-        return {"order_nsu": nsu, "transaction_nsu": c["tx"], "invoice_slug": c["slug"],
-                "amount": centavos, "paid_amount": centavos, "capture_method": "pix",
-                "receipt_url": "https://recibo/x", "items": []}
+        return {
+            "order_nsu": nsu,
+            "transaction_nsu": c["tx"],
+            "invoice_slug": c["slug"],
+            "amount": centavos,
+            "paid_amount": centavos,
+            "capture_method": "pix",
+            "receipt_url": "https://recibo/x",
+            "items": [],
+        }
 
     def criar_link_pagamento(self, **kw):
         return {"payment_url": f"https://checkout.dublê/{kw['order_nsu']}"}
@@ -142,10 +152,22 @@ class Operadora:
     def consultar_pagamento(self, *, handle, order_nsu, transaction_nsu=None, slug=None, **kw):
         c = self.cobrancas.get(order_nsu)
         if c and transaction_nsu == c["tx"] and slug == c["slug"]:
-            return {"resultado": "pago", "paid": True, "amount": c["valor"],
-                    "paid_amount": c["valor"], "capture_method": "pix", "raw": {"success": True}}
-        return {"resultado": "nao_encontrado", "paid": False, "amount": None,
-                "paid_amount": None, "capture_method": None, "raw": {"success": False}}
+            return {
+                "resultado": "pago",
+                "paid": True,
+                "amount": c["valor"],
+                "paid_amount": c["valor"],
+                "capture_method": "pix",
+                "raw": {"success": True},
+            }
+        return {
+            "resultado": "nao_encontrado",
+            "paid": False,
+            "amount": None,
+            "paid_amount": None,
+            "capture_method": None,
+            "raw": {"success": False},
+        }
 
 
 OP = Operadora()
@@ -157,8 +179,16 @@ from app.calendar import service as gcal  # noqa: E402
 GOOGLE: list[dict] = []
 
 
-def _g_insert(calendar_id, title, start_dt, end_dt, description="", location="",
-              conference_request_id=None, **kw):
+def _g_insert(
+    calendar_id,
+    title,
+    start_dt,
+    end_dt,
+    description="",
+    location="",
+    conference_request_id=None,
+    **kw,
+):
     GOOGLE.append({"title": title, "description": description})
     gid = f"g341{RUN}{len(GOOGLE)}"
     return {"id": gid, "htmlLink": f"https://cal/{gid}", "hangoutLink": f"https://meet/{gid}"}
@@ -194,8 +224,13 @@ with app.app_context():
     s.infinitepay_webhook_token = TOKEN
     s.virtuais_pagamento_ativo = True
     PERSONAGEM_ID = CatalogCharacter.query.filter_by(is_active=True).first().id
-    u = (User.query.filter(User.has_access.is_(True)).filter(User.roles.any(name=RoleName.SUPERADMIN))
-         .filter(User.email.isnot(None)).order_by(User.id).first())
+    u = (
+        User.query.filter(User.has_access.is_(True))
+        .filter(User.roles.any(name=RoleName.SUPERADMIN))
+        .filter(User.email.isnot(None))
+        .order_by(User.id)
+        .first()
+    )
     u.set_password(PASSWORD)
     SUPERADMIN["email"] = u.email
     db.session.commit()
@@ -207,9 +242,12 @@ _SEQ = [0]
 def nova_campanha(**extra) -> tuple[int, str]:
     with app.app_context():
         c = ops.criar_campanha(
-            catalog_character_id=PERSONAGEM_ID, title=f"Verify341 {RUN} {len(CRIADAS)}",
-            price_live=Decimal("100.00"), price_recorded=Decimal("60.00"),
-            recorded_capacity=5, tolerance_terms="termos",
+            catalog_character_id=PERSONAGEM_ID,
+            title=f"Verify341 {RUN} {len(CRIADAS)}",
+            price_live=Decimal("100.00"),
+            price_recorded=Decimal("60.00"),
+            recorded_capacity=5,
+            tolerance_terms="termos",
             cover_url="/catalogo/midia/campanhas/x.jpg",
         )
         c.max_reservations_per_origin = 10_000
@@ -224,9 +262,11 @@ def nova_campanha(**extra) -> tuple[int, str]:
 def novo_horario(camp_id: int) -> int:
     _SEQ[0] += 1
     with app.app_context():
-        h = VirtualCampaignSlot(campaign_id=camp_id,
-                                start_at=datetime(2031, 6, 2, 9, 0) + timedelta(minutes=10 * _SEQ[0]),
-                                status="livre")
+        h = VirtualCampaignSlot(
+            campaign_id=camp_id,
+            start_at=datetime(2031, 6, 2, 9, 0) + timedelta(minutes=10 * _SEQ[0]),
+            status="livre",
+        )
         db.session.add(h)
         db.session.commit()
         return h.id
@@ -236,24 +276,34 @@ def reservar(slug: str, slot_id: int | None, *, modalidade="ao_vivo", nome="Teo"
     tel = f"119{secrets.randbelow(10**8):08d}"
     return client.post(
         f"/api/virtuais/campanhas/{slug}/reservar",
-        json={"modality": modalidade, "slot_id": slot_id, "child_name": nome, "child_age": idade,
-              "contact_phone": tel, "contact_email": f"v341-{RUN}@example.com",
-              "client_token": secrets.token_hex(8)},
+        json={
+            "modality": modalidade,
+            "slot_id": slot_id,
+            "child_name": nome,
+            "child_age": idade,
+            "contact_phone": tel,
+            "contact_email": f"v341-{RUN}@example.com",
+            "client_token": secrets.token_hex(8),
+        },
         headers={"X-Manto-Client-Ip": "203.0.113.41", "User-Agent": "verify-341"},
     )
 
 
 def pagar(nsu: str) -> None:
-    total = Decimal(str(_db("select total_value from virtual_orders where order_nsu=:n",
-                            n=nsu)[0][0]))
+    total = Decimal(
+        str(_db("select total_value from virtual_orders where order_nsu=:n", n=nsu)[0][0])
+    )
     c = OP.pagar(nsu, total)
     r = client.post(f"/api/webhooks/infinitepay/{TOKEN}", json=OP.aviso(nsu, c))
     assert r.status_code == 200, r.status_code
 
 
 def prazo_da_entrega(nsu: str):
-    linha = _db("select d.due_date from virtual_media_deliveries d join virtual_orders o "
-                "on o.id = d.order_id where o.order_nsu=:n", n=nsu)
+    linha = _db(
+        "select d.due_date from virtual_media_deliveries d join virtual_orders o "
+        "on o.id = d.order_id where o.order_nsu=:n",
+        n=nsu,
+    )
     return linha[0][0] if linha else None
 
 
@@ -264,36 +314,62 @@ def c1():
     h = novo_horario(cid)
     sem_nome = (reservar(slug, h, nome="").get_json() or {}).get("error", {}).get("fields", {})
     sem_idade = (reservar(slug, h, idade="").get_json() or {}).get("error", {}).get("fields", {})
-    check("1.1 sem nome", sem_nome.get("child_name") == "Informe o nome de quem vai receber.",
-          str(sem_nome))
+    check(
+        "1.1 sem nome",
+        sem_nome.get("child_name") == "Informe o nome de quem vai receber.",
+        str(sem_nome),
+    )
     check("1.2 sem idade", sem_idade.get("child_age") == "Informe a idade.", str(sem_idade))
     adulto = reservar(slug, h, nome="Vó Cida", idade=82)
-    check("1.3 adulto de 82 anos reserva", adulto.status_code in (200, 201), str(adulto.status_code))
+    check(
+        "1.3 adulto de 82 anos reserva", adulto.status_code in (200, 201), str(adulto.status_code)
+    )
 
 
 @cenario("2  e-mails sem 'criança' fora da cartinha condicionada")
 def c2():
     EMAILS.clear()
     with app.app_context():
-        campanha = SimpleNamespace(title="Uma chamada com o Papai Noel", recorded_delivery_days=7,
-                                   recorded_delivery_until=date(2026, 12, 13), slug="papai-noel")
-        base = dict(campaign=campanha, child_name="Cida", contact_email="familia@example.com",
-                    total_value=Decimal("120.00"), public_token="tok341")
-        ao_vivo = SimpleNamespace(**base, modality="ao_vivo",
-                                  slot=SimpleNamespace(start_at=datetime(2026, 12, 6, 14, 0)))
-        gravado = SimpleNamespace(**base, modality="gravado", slot=None,
-                                  media_delivery=SimpleNamespace(due_date=date(2026, 12, 13)))
+        campanha = SimpleNamespace(
+            title="Uma chamada com o Papai Noel",
+            recorded_delivery_days=7,
+            recorded_delivery_until=date(2026, 12, 13),
+            slug="papai-noel",
+        )
+        base = dict(
+            campaign=campanha,
+            child_name="Cida",
+            contact_email="familia@example.com",
+            total_value=Decimal("120.00"),
+            public_token="tok341",
+        )
+        ao_vivo = SimpleNamespace(
+            **base, modality="ao_vivo", slot=SimpleNamespace(start_at=datetime(2026, 12, 6, 14, 0))
+        )
+        gravado = SimpleNamespace(
+            **base,
+            modality="gravado",
+            slot=None,
+            media_delivery=SimpleNamespace(due_date=date(2026, 12, 13)),
+        )
         email_service.send_virtual_order_confirmed_email(ao_vivo)
         email_service.send_virtual_order_confirmed_email(gravado)
         email_service.send_virtual_video_ready_email(gravado)
     vivo, video_compra, video_pronto = (e["html"] for e in EMAILS[:3])
-    check("2.1 ao vivo: cartinha só 'se for uma criança'",
-          "cartinha" in vivo and vivo.count("criança") == vivo.count("se for uma criança")
-          + vivo.count("Se for uma criança"), vivo[-600:])
+    check(
+        "2.1 ao vivo: cartinha só 'se for uma criança'",
+        "cartinha" in vivo
+        and vivo.count("criança")
+        == vivo.count("se for uma criança") + vivo.count("Se for uma criança"),
+        vivo[-600:],
+    )
     check("2.2 vídeo comprado: sem 'criança'", "criança" not in video_compra, "")
     check("2.3 vídeo pronto: sem 'criança'", "criança" not in video_pronto, "")
-    check("8.2 e-mail de compra do vídeo com a data da entrega", "13/12/2026" in video_compra,
-          video_compra[-500:])
+    check(
+        "8.2 e-mail de compra do vídeo com a data da entrega",
+        "13/12/2026" in video_compra,
+        video_compra[-500:],
+    )
 
 
 @cenario("3  descrição do evento da venda diz 'Para:'")
@@ -303,23 +379,32 @@ def c3():
     GOOGLE.clear()
     pagar(r.get_json()["order_nsu"])
     descricoes = [g["description"] for g in GOOGLE]
-    check("3.1 'Para: Vó Cida, 82 anos'", any("Para: Vó Cida, 82 anos" in d for d in descricoes),
-          str(descricoes)[:200])
+    check(
+        "3.1 'Para: Vó Cida, 82 anos'",
+        any("Para: Vó Cida, 82 anos" in d for d in descricoes),
+        str(descricoes)[:200],
+    )
     check("3.2 sem 'Criança:'", not any("Criança:" in d for d in descricoes), "")
 
 
 @cenario("4  com data de entrega, vídeo pago antes dela vence na data")
 def c4():
     limite = (now_sp() + timedelta(days=40)).date()
-    cid, slug = nova_campanha(recorded_delivery_until=limite) if hasattr(
-        VirtualCampaign, "recorded_delivery_until") else (None, None)
+    cid, slug = (
+        nova_campanha(recorded_delivery_until=limite)
+        if hasattr(VirtualCampaign, "recorded_delivery_until")
+        else (None, None)
+    )
     if cid is None:
         raise Bloqueado("VirtualCampaign.recorded_delivery_until ainda não existe")
     r = reservar(slug, None, modalidade="gravado")
     nsu = r.get_json()["order_nsu"]
     pagar(nsu)
-    check("4.1 due_date = data da campanha", prazo_da_entrega(nsu) == limite,
-          f"{prazo_da_entrega(nsu)} ≠ {limite}")
+    check(
+        "4.1 due_date = data da campanha",
+        prazo_da_entrega(nsu) == limite,
+        f"{prazo_da_entrega(nsu)} ≠ {limite}",
+    )
 
 
 @cenario("5  data já passada → pagamento + dias")
@@ -341,47 +426,65 @@ def c6():
     nsu = reservar(slug, None, modalidade="gravado").get_json()["order_nsu"]
     pagar(nsu)
     esperado = now_sp().date() + timedelta(days=7)
-    check("6.2 fluxo sem data: hoje + 7", prazo_da_entrega(nsu) == esperado,
-          f"{prazo_da_entrega(nsu)} ≠ {esperado}")
+    check(
+        "6.2 fluxo sem data: hoje + 7",
+        prazo_da_entrega(nsu) == esperado,
+        f"{prazo_da_entrega(nsu)} ≠ {esperado}",
+    )
 
 
 @cenario("7  gestão grava, limpa e recusa data inválida (deve falhar)")
 def c7():
     cid, _ = nova_campanha()
     client.post("/api/auth/logout")
-    login = client.post("/api/auth/login",
-                        json={"email": SUPERADMIN["email"], "password": PASSWORD})
+    login = client.post(
+        "/api/auth/login", json={"email": SUPERADMIN["email"], "password": PASSWORD}
+    )
     if login.status_code != 200:
         raise Bloqueado(f"login falhou: {login.status_code}")
     try:
-        r = client.patch(f"/api/virtuais/campanhas/{cid}",
-                         json={"recorded_delivery_until": "2026-12-13"})
+        r = client.patch(
+            f"/api/virtuais/campanhas/{cid}", json={"recorded_delivery_until": "2026-12-13"}
+        )
         gravado = _db("select recorded_delivery_until from virtual_campaigns where id=:c", c=cid)
-        check("7.1 grava (conexão separada)", r.status_code == 200
-              and gravado[0][0] == date(2026, 12, 13)
-              and (r.get_json() or {}).get("recorded_delivery_until") == "2026-12-13",
-              f"{r.status_code} {gravado}")
+        check(
+            "7.1 grava (conexão separada)",
+            r.status_code == 200
+            and gravado[0][0] == date(2026, 12, 13)
+            and (r.get_json() or {}).get("recorded_delivery_until") == "2026-12-13",
+            f"{r.status_code} {gravado}",
+        )
         r = client.patch(f"/api/virtuais/campanhas/{cid}", json={"recorded_delivery_until": ""})
         limpo = _db("select recorded_delivery_until from virtual_campaigns where id=:c", c=cid)
         check("7.2 vazio limpa", r.status_code == 200 and limpo[0][0] is None, str(limpo))
-        r = client.patch(f"/api/virtuais/campanhas/{cid}",
-                         json={"recorded_delivery_until": "2026-02-31"})
+        r = client.patch(
+            f"/api/virtuais/campanhas/{cid}", json={"recorded_delivery_until": "2026-02-31"}
+        )
         campos = ((r.get_json() or {}).get("error") or {}).get("fields") or {}
-        check("7.3 inválida → 400 no campo", r.status_code == 400
-              and "recorded_delivery_until" in campos, f"{r.status_code} {campos}")
+        check(
+            "7.3 inválida → 400 no campo",
+            r.status_code == 400 and "recorded_delivery_until" in campos,
+            f"{r.status_code} {campos}",
+        )
     finally:
         client.post("/api/auth/logout")
 
 
 @cenario("8  API pública traz a data")
 def c8():
-    _, slug = nova_campanha(recorded_delivery_until=date(2026, 12, 13)) if hasattr(
-        VirtualCampaign, "recorded_delivery_until") else (None, None)
+    _, slug = (
+        nova_campanha(recorded_delivery_until=date(2026, 12, 13))
+        if hasattr(VirtualCampaign, "recorded_delivery_until")
+        else (None, None)
+    )
     if slug is None:
         raise Bloqueado("VirtualCampaign.recorded_delivery_until ainda não existe")
     dados = client.get(f"/api/virtuais/campanhas/{slug}").get_json() or {}
-    check("8.1 recorded_delivery_until no JSON público",
-          dados.get("recorded_delivery_until") == "2026-12-13", str(dados.get("recorded_delivery_until")))
+    check(
+        "8.1 recorded_delivery_until no JSON público",
+        dados.get("recorded_delivery_until") == "2026-12-13",
+        str(dados.get("recorded_delivery_until")),
+    )
 
 
 def limpar() -> None:
@@ -389,30 +492,57 @@ def limpar() -> None:
         db.session.rollback()
     with _engine.begin() as conn:
         for cid in CRIADAS:
-            ordens = [r[0] for r in conn.execute(text(
-                "select id from virtual_orders where campaign_id=:c"), {"c": cid})]
-            eventos = [r[0] for r in conn.execute(text(
-                "select event_id from virtual_orders where campaign_id=:c and event_id is not null"),
-                {"c": cid})]
+            ordens = [
+                r[0]
+                for r in conn.execute(
+                    text("select id from virtual_orders where campaign_id=:c"), {"c": cid}
+                )
+            ]
+            eventos = [
+                r[0]
+                for r in conn.execute(
+                    text(
+                        "select event_id from virtual_orders where campaign_id=:c and event_id is not null"
+                    ),
+                    {"c": cid},
+                )
+            ]
             if ordens:
-                conn.execute(text("update virtual_campaign_slots set order_id=null "
-                                  "where campaign_id=:c"), {"c": cid})
-                for tabela in ("virtual_payment_notifications", "virtual_refund_requests",
-                               "virtual_order_notifications", "virtual_media_deliveries"):
-                    conn.execute(text(f"delete from {tabela} where order_id = any(:o)"),
-                                 {"o": ordens})
+                conn.execute(
+                    text("update virtual_campaign_slots set order_id=null where campaign_id=:c"),
+                    {"c": cid},
+                )
+                for tabela in (
+                    "virtual_payment_notifications",
+                    "virtual_refund_requests",
+                    "virtual_order_notifications",
+                    "virtual_media_deliveries",
+                ):
+                    conn.execute(
+                        text(f"delete from {tabela} where order_id = any(:o)"), {"o": ordens}
+                    )
                 conn.execute(text("delete from virtual_orders where campaign_id=:c"), {"c": cid})
             for ev in eventos:
-                if conn.execute(text("select 1 from information_schema.tables where "
-                                     "table_name='event_3d_gifts'")).first():
+                if conn.execute(
+                    text(
+                        "select 1 from information_schema.tables where table_name='event_3d_gifts'"
+                    )
+                ).first():
                     conn.execute(text("delete from event_3d_gifts where event_id=:e"), {"e": ev})
                 conn.execute(text("delete from event_roles where event_id=:e"), {"e": ev})
                 conn.execute(text("delete from calendar_events where id=:e"), {"e": ev})
-            conn.execute(text("delete from virtual_campaign_slots where campaign_id=:c"), {"c": cid})
-            if conn.execute(text("select 1 from information_schema.tables where "
-                                 "table_name='virtual_campaign_acervo'")).first():
-                conn.execute(text("delete from virtual_campaign_acervo where campaign_id=:c"),
-                             {"c": cid})
+            conn.execute(
+                text("delete from virtual_campaign_slots where campaign_id=:c"), {"c": cid}
+            )
+            if conn.execute(
+                text(
+                    "select 1 from information_schema.tables where "
+                    "table_name='virtual_campaign_acervo'"
+                )
+            ).first():
+                conn.execute(
+                    text("delete from virtual_campaign_acervo where campaign_id=:c"), {"c": cid}
+                )
             conn.execute(text("delete from virtual_campaigns where id=:c"), {"c": cid})
     with app.app_context():
         s = SiteSetting.query.get(1)

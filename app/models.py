@@ -3350,6 +3350,10 @@ class VirtualCampaign(db.Model):
     recorded_capacity      = db.Column(db.Integer, nullable=False, server_default="0")
     recorded_sold          = db.Column(db.Integer, nullable=False, server_default="0")
     recorded_delivery_days = db.Column(db.Integer, nullable=False, server_default="7")
+    # Feature 341: data em que todo vídeo vendido até ela fica pronto ("até 13/12"). A equipe grava
+    # depois do dia das chamadas; "pagamento + dias" fazia um vídeo comprado em novembro vencer antes
+    # de ser gravado. Nula = vale `recorded_delivery_days` (`virtuais_ops.prazo_do_video`).
+    recorded_delivery_until = db.Column(db.Date, nullable=True)
 
     talent_id            = db.Column(db.Integer, db.ForeignKey("talents.id"), nullable=True)
     figurino_sheet_id    = db.Column(

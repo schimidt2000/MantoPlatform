@@ -82,6 +82,7 @@ def api_virtuais_campanha_create() -> Any:
             price_gift=data.get("price_gift", 0),
             recorded_capacity=data.get("recorded_capacity", 0),
             recorded_delivery_days=data.get("recorded_delivery_days", 7),
+            recorded_delivery_until=data.get("recorded_delivery_until"),
             intro_html=data.get("intro_html"),
             tolerance_terms=data.get("tolerance_terms"),
             faq=data.get("faq"),
