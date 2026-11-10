@@ -396,6 +396,52 @@ def _start_virtual_sweep(app):
     app.logger.info(f"[virtual-sweep] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _volta_da_caixa(app) -> None:
+    """Uma volta do dreno da caixa de avisos (feature 340) — separada para o verify chamar só ela.
+
+    Sem lock de execução única: a reivindicação por linha (`FOR UPDATE SKIP LOCKED` + arrendamento)
+    já impede dois workers de pegarem o mesmo aviso, e cada worker drenar o que achar só encurta a
+    fila.
+    """
+    from app.marketing.virtuais_ops import drenar_caixa_de_avisos
+
+    with app.app_context():
+        resumo = drenar_caixa_de_avisos()
+        if any(resumo.values()):
+            app.logger.info("[caixa-de-avisos] %s", resumo)
+
+
+def _start_caixa_de_avisos(app):
+    """Thread que drena a caixa de avisos de pagamento a cada 10 s (feature 340).
+
+    O `manto-avisos` guarda o aviso da InfinitePay mesmo com este backend fora num deploy; esta
+    thread o passa para a fila da 310. A varredura de 60 s também drena (primeira rotina), mas
+    esperar por ela seria regressão: antes da caixa o aviso era decidido na hora.
+    """
+    import os as _os
+    import threading
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    INTERVAL = app.config.get("VIRTUAL_CAIXA_INTERVAL", 10)
+
+    def _loop():
+        import time
+        time.sleep(20)  # aguarda o app estar pronto (e o `flask db upgrade` do start)
+        while True:
+            try:
+                _volta_da_caixa(app)
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[caixa-de-avisos] erro: {exc}")
+            time.sleep(INTERVAL)
+
+    t = threading.Thread(target=_loop, daemon=True, name="caixa-de-avisos")
+    t.start()
+    app.logger.info(f"[caixa-de-avisos] thread iniciada (intervalo: {INTERVAL}s)")
+
+
 def _start_nfc_video_worker(app):
     """Thread que converte os vídeos das tags NFC, um de cada vez (feature 297).
 
@@ -1078,6 +1124,9 @@ def create_app():
 
         # ── Expiração das reservas da Loja de Interações Virtuais ──
         _start_virtual_sweep(app)
+
+        # ── Caixa de avisos de pagamento (feature 340) ─────────────
+        _start_caixa_de_avisos(app)
 
         # ── Devoluções de email viram fila de contato do casting ───
         _start_email_bounce_sweep(app)

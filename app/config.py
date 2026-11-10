@@ -16,6 +16,12 @@ PLATFORM_BASE_URL = "https://app.mantoproducoes.com.br"
 # por WhatsApp, então tem valor fixo e não pode depender de a env estar setada.
 PORTAL_BASE_URL = "https://portal.mantoproducoes.com.br"
 
+# Endereço do `manto-avisos` (feature 340): o serviço sem disco que recebe o aviso de pagamento da
+# InfinitePay e só guarda. Ele não cai num push do backend; é para ele que vai o `webhook_url` de
+# todo link novo. O Render deriva o subdomínio do nome do serviço — se um dia ele der outro, esta
+# constante muda ANTES de a loja ser ligada (quickstart da 340).
+AVISOS_BASE_URL = "https://manto-avisos.onrender.com"
+
 # Bloco bancário das notas fiscais (feature 323) — o texto exato das NFS-e 99 a 103.
 NOTA_DADOS_BANCARIOS_PADRAO = (
     "Esses são os dados da minha conta no Inter:\n"
@@ -380,6 +386,15 @@ class Config:
         permitir_local=MAIL_SUPPRESS_SEND,
     )
 
+    # Base do endereço do aviso de pagamento (feature 340). Separada de `PUBLIC_BASE_URL` porque o
+    # aviso não pode passar pelo frontend nem pelo backend, que caem ~1 min em todo push: vai para o
+    # `manto-avisos`. Saída sem deploy de código: apontar a env para `PLATFORM_BASE_URL` devolve os
+    # links novos à rota antiga do backend, que continua registrada.
+    INFINITEPAY_AVISO_BASE_URL = _url_para_fora(
+        os.getenv("INFINITEPAY_AVISO_BASE_URL"), AVISOS_BASE_URL, "INFINITEPAY_AVISO_BASE_URL",
+        permitir_local=MAIL_SUPPRESS_SEND,
+    )
+
     # Dados bancários que fecham a discriminação de toda nota fiscal (feature 323), copiados das
     # notas que o dono emite. Default real no código (Princípio XIV): sem ele a discriminação
     # sairia sem conta para o cliente pagar. A env só sobrepõe (troca de banco), com "\n" literal
@@ -391,6 +406,10 @@ class Config:
 
     # Intervalo (segundos) da varredura que expira as reservas virtuais (feature 205, FR-057).
     VIRTUAL_SWEEP_INTERVAL = int(os.getenv("VIRTUAL_SWEEP_INTERVAL", "60"))
+    # Intervalo (s) do dreno da caixa de avisos (feature 340). Curto de propósito: antes da caixa o
+    # aviso era decidido na hora; esperar a varredura de 60 s seria regressão para a família que não
+    # volta pelo "Continuar".
+    VIRTUAL_CAIXA_INTERVAL = int(os.getenv("VIRTUAL_CAIXA_INTERVAL", "10"))
 
     # ClickSign (feature 317). O token SÓ vem da env (`render.yaml`, `sync: false`): o
     # `SiteSetting` vai inteiro para o backup no Drive e para o `manto_local`, então segredo de API

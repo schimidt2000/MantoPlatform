@@ -673,6 +673,15 @@ VIRTUAL_AVISO_REPROCESSA_HORAS = 48
 VIRTUAL_AVISO_RETRY_LONGO_MIN = 10
 # Segredo anterior do aviso continua aceito por 24 h depois de regerar (R-12).
 VIRTUAL_TOKEN_ANTERIOR_HORAS = 24
+# Caixa de avisos (feature 340): o `manto-avisos` guarda o aviso e o backend drena.
+# Linha reivindicada há mais que isto sem dreno = o processo morreu no meio (deploy) e ela volta
+# a ser elegível — o mesmo critério do claim de `_reivindicar_aviso`.
+VIRTUAL_CAIXA_ARRENDAMENTO_MIN = 5
+# Sem dreno há mais que isto, a equipe é avisada: o caso normal leva segundos, e 1 h parada é
+# defeito, não fila.
+VIRTUAL_CAIXA_ALERTA_HORAS = 1
+# Linhas por volta do dreno: a volta roda a cada 10 s, e o pico da campanha são dezenas por hora.
+VIRTUAL_CAIXA_LOTE = 50
 
 # Política única de retry para chamadas externas (FR-056): 3 tentativas nos minutos 0, 1 e 2.
 # O intervalo curto é deliberado — protege contra vender horário já pago sem prender estoque no

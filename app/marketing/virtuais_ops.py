@@ -50,6 +50,9 @@ from app.constants import (  # feature 310
     VIRTUAL_AVISO_STATE_DECIDIDO,
     VIRTUAL_AVISO_STATE_PENDENTE,
     VIRTUAL_AVISO_STATE_PROCESSANDO,
+    VIRTUAL_CAIXA_ALERTA_HORAS,
+    VIRTUAL_CAIXA_ARRENDAMENTO_MIN,
+    VIRTUAL_CAIXA_LOTE,
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_CAMPAIGN_STATUSES,
@@ -105,6 +108,7 @@ from app.models import (
     VirtualMediaDelivery,
     VirtualOrder,
     VirtualOrderNotification,
+    VirtualPaymentInbox,
     VirtualPaymentNotification,
     VirtualRefundRequest,
 )
@@ -1078,7 +1082,11 @@ def _gerar_link_pagamento(
         if redirect_url_builder
         else f"{base_url}/catalogo/v/pedido/{order.public_token}"
     )
-    webhook_url = f"{base_url}/api/webhooks/infinitepay/{token}"
+    # Feature 340: o aviso vai para o `manto-avisos`, que não cai num push — a família volta pelo
+    # frontend, mas a operadora avisa a caixa. A rota antiga do backend continua para os links que
+    # já nasceram com ela.
+    base_aviso = (current_app.config.get("INFINITEPAY_AVISO_BASE_URL") or base_url).rstrip("/")
+    webhook_url = f"{base_aviso}/api/webhooks/infinitepay/{token}"
     cfg = _ipc_cfg()
     valid_until = None
     if order.locked_until is not None:
@@ -1261,11 +1269,16 @@ def ciclo_de_varredura() -> dict[str, Any]:
     prazo de rodar (FR-057b): são responsabilidades independentes, e acoplá-las faria uma falha
     numa esconder as outras duas.
 
+    **A caixa de avisos vem primeiro** (feature 340). Um pagamento feito durante o deploy do backend
+    espera no ``manto-avisos``; se a expiração rodasse antes, a reserva vencida seria liberada sem
+    ver o aviso guardado e a família pagaria por um horário que já não é dela.
+
     Returns:
         Resumo por rotina, para o log do ciclo.
     """
     resumo: dict[str, Any] = {}
     rotinas: list[tuple[str, Callable[[], Any]]] = [
+        ("caixa", drenar_caixa_de_avisos),
         ("reservas", expirar_reservas),
         ("avisos", reprocessar_avisos),
         ("salas", retentar_salas),
@@ -2397,6 +2410,128 @@ def reprocessar_avisos(*, limite: int = 50) -> dict[str, int]:
             db.session.rollback()
             logger.warning("[virtuais] reprocessamento do aviso %s falhou: %s", aviso.id, exc)
     return resultado
+
+
+# ── Caixa de avisos (feature 340) ───────────────────────────────────────────────────────────
+def drenar_caixa_de_avisos(*, limite: int = VIRTUAL_CAIXA_LOTE) -> dict[str, int]:
+    """Passa para a fila da 310 os avisos que o ``manto-avisos`` guardou (feature 340).
+
+    O receptor só guarda — ele não cai num push do backend, e a InfinitePay não reenvia aviso que
+    recebeu 502. Aqui cada linha entra pela mesma porta do aviso direto (``registrar_aviso`` ou
+    ``registrar_aviso_invalido``) e, registrada, é decidida por ``processar_aviso``. A caixa
+    responde só pelo trecho "chegou → registrado": a linha fica drenada ANTES da decisão, e se a
+    decisão falhar quem retoma é a ``reprocessar_avisos``, porque o aviso já está na fila dela.
+
+    Roda na thread ``caixa-de-avisos`` (10 s) e como primeira rotina de ``ciclo_de_varredura``.
+
+    Returns:
+        ``{"drenadas", "falhas", "alertadas"}``.
+    """
+    resultado = {"drenadas": 0, "falhas": 0, "alertadas": 0}
+    for linha_id in _reivindicar_caixa(limite):
+        resultado["drenadas" if _drenar_linha(linha_id) else "falhas"] += 1
+    # Depois do dreno: a linha que esperou o backend voltar e drenou agora não vira alarme.
+    resultado["alertadas"] = _alertar_caixa_parada()
+    return resultado
+
+
+def _reivindicar_caixa(limite: int) -> list[int]:
+    """Reivindica até ``limite`` linhas sem dreno; duas voltas ao mesmo tempo nunca pegam a mesma.
+
+    ``FOR UPDATE SKIP LOCKED`` protege só o instante da reivindicação: as funções da 310 fazem
+    commit e soltariam uma trava de linha no meio do trabalho. Quem segura a linha é o arrendamento
+    ``claimed_at`` — passado ``VIRTUAL_CAIXA_ARRENDAMENTO_MIN`` sem dreno (processo morto num
+    deploy), ela volta a ser elegível.
+    """
+    from sqlalchemy import text
+
+    momento = agora()
+    vencido = momento - timedelta(minutes=VIRTUAL_CAIXA_ARRENDAMENTO_MIN)
+    ids = db.session.execute(
+        text(
+            "UPDATE virtual_payment_inbox SET claimed_at = :agora, attempts = attempts + 1 "
+            "WHERE id IN (SELECT id FROM virtual_payment_inbox WHERE drained_at IS NULL "
+            "AND (claimed_at IS NULL OR claimed_at < :vencido) ORDER BY id LIMIT :limite "
+            "FOR UPDATE SKIP LOCKED) RETURNING id"
+        ),
+        {"agora": momento, "vencido": vencido, "limite": limite},
+    ).scalars().all()
+    db.session.commit()
+    return sorted(ids)
+
+
+def _corpo_da_caixa(corpo: str | None) -> dict:
+    """O corpo guardado como dict; o que não é objeto JSON vira ``{}``, como na rota da 310."""
+    try:
+        payload = json.loads(corpo or "{}")
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _drenar_linha(linha_id: int) -> bool:
+    """Registra uma linha da caixa na fila da 310 e decide; ``True`` se a linha ficou drenada."""
+    linha = db.session.get(VirtualPaymentInbox, linha_id)
+    payload = _corpo_da_caixa(linha.body)
+    try:
+        if linha.secret_ok:
+            registro_id = registrar_aviso(payload)
+        else:
+            registrar_aviso_invalido(payload)
+            registro_id = None
+    except Exception as exc:  # noqa: BLE001 — a linha fica na caixa e volta na próxima volta
+        db.session.rollback()
+        linha = db.session.get(VirtualPaymentInbox, linha_id)
+        linha.error = f"{type(exc).__name__}: {exc}"[:500]
+        db.session.commit()
+        logger.warning("[virtuais] caixa: linha %s não entrou na fila: %s", linha_id, exc)
+        return False
+    linha = db.session.get(VirtualPaymentInbox, linha_id)
+    linha.drained_at = agora()
+    linha.notification_id = registro_id
+    db.session.commit()
+    if registro_id is not None:
+        _decidir_da_caixa(registro_id)
+    return True
+
+
+def _decidir_da_caixa(registro_id: int) -> None:
+    """Decide o aviso que a caixa acabou de registrar; falha fica para a varredura da 310."""
+    try:
+        desfecho = processar_aviso(registro_id)
+        logger.info("[virtuais] caixa: aviso %s decidido: %s", registro_id, desfecho)
+    except Exception as exc:  # noqa: BLE001 — o aviso já está na fila; a varredura retoma
+        db.session.rollback()
+        logger.warning("[virtuais] caixa: decisão do aviso %s falhou: %s", registro_id, exc)
+
+
+def _alertar_caixa_parada() -> int:
+    """Sino para linha sem dreno há mais de ``VIRTUAL_CAIXA_ALERTA_HORAS``, uma vez por linha.
+
+    O caso normal leva segundos; uma hora parada é defeito (backend sem drenar, erro repetido no
+    registro), e o pagamento dessa família não aparece em lugar nenhum da tela.
+    """
+    limite = agora() - timedelta(hours=VIRTUAL_CAIXA_ALERTA_HORAS)
+    paradas = (
+        VirtualPaymentInbox.query.filter(
+            VirtualPaymentInbox.drained_at.is_(None),
+            VirtualPaymentInbox.alerted_at.is_(None),
+            VirtualPaymentInbox.received_at < limite,
+        )
+        .order_by(VirtualPaymentInbox.id.asc())
+        .limit(VIRTUAL_CAIXA_LOTE)
+        .all()
+    )
+    for linha in paradas:
+        linha.alerted_at = agora()
+        db.session.commit()
+        _avisar_a_conferir(
+            f"virtual.caixa:{linha.id}",
+            "Loja virtual: aviso de pagamento parado na caixa",
+            f"Um aviso de pagamento da InfinitePay chegou em {linha.received_at:%d/%m às %H:%M} e "
+            "não entrou na fila de pagamentos. Confira o pedido no painel da InfinitePay.",
+        )
+    return len(paradas)
 
 
 def registrar_retorno(order: VirtualOrder, dados: dict) -> str | None:
