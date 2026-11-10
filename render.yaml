@@ -1,5 +1,6 @@
 # Blueprint de PRODUÇÃO da Manto no Render — FONTE ÚNICA do deploy desde 28/08/2026.
-# Todo push na `main` redeploya os dois serviços web (autoDeploy abaixo, ~60s). Não há staging.
+# Push na `main` é deploy (autoDeploy, ~60s), só dos serviços cujos arquivos mudaram (rootDir e
+# buildFilter abaixo — feature 340). Não há staging.
 # Contrato de deploy e operação: docs/01_SISTEMA_E_BANCO.md §5. Como publicar: DEVELOPMENT.md.
 # História da migração (Railway banido em 28/08/2026): docs/03, entrada 264; registro do incidente
 # em docs/CONTINGENCIA_RENDER.md. Os envVars com sync:false ficam vazios de propósito (segredos
@@ -31,6 +32,19 @@ services:
     startCommand: flask db upgrade && python seed.py && gunicorn run:app --workers 3 --worker-class gthread --threads 12 --bind 0.0.0.0:$PORT --timeout 120 --graceful-timeout 120 --max-requests 800 --max-requests-jitter 100 --access-logfile - --access-logformat '%(h)s %(m)s %(U)s %(s)s %(b)s %(D)s'
     healthCheckPath: /health
     autoDeploy: true
+    # Feature 340: push que não mexe no backend não o reinicia. Este serviço tem disco, e todo
+    # deploy dele é ~1 min de queda; antes, até o commit de "novidades" derrubava a equipe. Os
+    # caminhos são da raiz do repositório. Mudança no próprio render.yaml é processada sempre. O
+    # Flask não lê nada destas pastas em tempo de execução (conferido na 340) — se um dia ler,
+    # tire a pasta daqui.
+    buildFilter:
+      ignoredPaths:
+        - docs/**
+        - specs/**
+        - frontend/**
+        - servicos/**
+        - .claude/**
+        - .specify/**
     disk:
       name: manto-instance
       mountPath: /opt/render/project/src/instance   # uploads/, nfc_media/, virtual_videos/, .secret_key
