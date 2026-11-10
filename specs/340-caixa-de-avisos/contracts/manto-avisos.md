@@ -16,6 +16,7 @@ Quem chama: a InfinitePay, no endereço que vai no campo `webhook_url` de cada l
 | segredo certo, gravou | `200` `{"success": true, "message": null}` | linha `secret_ok=true` com o corpo inteiro |
 | segredo certo, banco fora / erro ao gravar | `400` `{"success": false, "message": "Try again"}` | nada (a operadora reenvia) |
 | banco fora ao conferir o segredo | `400` | nada |
+| qualquer exceção inesperada | `400` `{"success": false, "message": "Try again"}` | nada; log só com o tipo — subir ao gunicorn logaria a URI com o segredo e responderia 500, que a operadora não reenvia |
 
 Segredo válido = `site_settings.infinitepay_webhook_token` (id 1), ou
 `infinitepay_webhook_token_anterior` enquanto `infinitepay_webhook_token_anterior_ate` > agora em São

@@ -65,8 +65,13 @@ RESPOSTA_EXCESSO = {"success": False, "message": "Too many requests"}
 RESPOSTA_METODO = {"success": False, "message": "Method not allowed"}
 
 STATUS = {
-    200: "200 OK", 400: "400 Bad Request", 404: "404 Not Found", 405: "405 Method Not Allowed",
-    413: "413 Payload Too Large", 429: "429 Too Many Requests", 503: "503 Service Unavailable",
+    200: "200 OK",
+    400: "400 Bad Request",
+    404: "404 Not Found",
+    405: "405 Method Not Allowed",
+    413: "413 Payload Too Large",
+    429: "429 Too Many Requests",
+    503: "503 Service Unavailable",
 }
 
 SQL_SEGREDO = (
@@ -184,15 +189,31 @@ class Receptor:
 
     def __call__(self, environ: dict, start_response: Callable) -> Iterable[bytes]:
         inicio = time.monotonic()
-        codigo, corpo, linha_id, tamanho = self.atender(environ)
+        try:
+            codigo, corpo, linha_id, tamanho = self.atender(environ)
+        except Exception as exc:  # noqa: BLE001 — subir ao gunicorn vazaria o segredo
+            # O gunicorn loga "Error handling request <URI>" — a URI tem o segredo — e responde
+            # 500, que a InfinitePay não reenvia. Aqui vira 400 (ela reenvia) e o log leva só o tipo.
+            logger.warning("[avisos] falha inesperada: %s", type(exc).__name__)
+            codigo, corpo, linha_id, tamanho = 400, RESPOSTA_TENTE_DE_NOVO, None, 0
         if environ.get("PATH_INFO", "").startswith(CAMINHO_DO_AVISO):
             # Nunca a URL: o segredo mora no caminho.
-            logger.info("[avisos] %s id=%s bytes=%s ms=%d", codigo, linha_id or "-", tamanho,
-                        (time.monotonic() - inicio) * 1000)
+            logger.info(
+                "[avisos] %s id=%s bytes=%s ms=%d",
+                codigo,
+                linha_id or "-",
+                tamanho,
+                (time.monotonic() - inicio) * 1000,
+            )
         dados = json.dumps(corpo).encode("utf-8")
-        start_response(STATUS[codigo], [("Content-Type", "application/json"),
-                                        ("Content-Length", str(len(dados))),
-                                        ("Cache-Control", "no-store")])
+        start_response(
+            STATUS[codigo],
+            [
+                ("Content-Type", "application/json"),
+                ("Content-Length", str(len(dados))),
+                ("Cache-Control", "no-store"),
+            ],
+        )
         return [dados]
 
     def atender(self, environ: dict) -> tuple[int, dict, int | None, int]:
@@ -206,7 +227,7 @@ class Receptor:
                 return 200, {"ok": True}, None, 0
             ok = banco_responde(self.url)
             return (200 if ok else 503), {"ok": ok}, None, 0
-        token = caminho[len(CAMINHO_DO_AVISO):] if caminho.startswith(CAMINHO_DO_AVISO) else ""
+        token = caminho[len(CAMINHO_DO_AVISO) :] if caminho.startswith(CAMINHO_DO_AVISO) else ""
         if not token or "/" in token:
             return 404, RESPOSTA_NAO_ENCONTRADO, None, 0
         if metodo != "POST":
@@ -242,8 +263,12 @@ class Receptor:
             return None
 
 
-def criar_aplicacao(database_url: str | None, *, limite_minuto: int = LIMITE_POR_MINUTO,
-                    teto_recusas: int = TETO_RECUSAS_HORA) -> Receptor:
+def criar_aplicacao(
+    database_url: str | None,
+    *,
+    limite_minuto: int = LIMITE_POR_MINUTO,
+    teto_recusas: int = TETO_RECUSAS_HORA,
+) -> Receptor:
     """Fábrica da aplicação WSGI; o verify cria uma por cenário (limites zerados, banco fora)."""
     url = normalizar_url(database_url)
     if not url:

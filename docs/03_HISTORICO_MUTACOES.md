@@ -453,9 +453,10 @@ não drenadas. Detalhe em `docs/01` §2.10.2.
 **RBAC.** Nenhum papel novo. A rota do receptor é pública com segredo no caminho (mesma regra da 310);
 `/health*` públicas sem dado (`docs/01` §4.3).
 
-**Verificação.** `verify_340.py` **63/63** contra o `manto_340` (dump de 10/11; o `manto_local` está na
+**Verificação.** `verify_340.py` **64/64** contra o `manto_340` (dump de 10/11; o `manto_local` está na
 migration do CRM 334): receptor como WSGI (segredo atual/anterior/vencido, 413 com e sem tamanho,
-429 com XFF forjado, teto de recusas, banco fora 400, log sem segredo, saúde), dreno pela regra da 310
+429 com XFF forjado, teto de recusas, banco fora 400, log sem segredo, exceção inesperada 400, saúde),
+dreno pela regra da 310
 (venda com evento e e-mail, duplicado, dois drenos concorrentes, caixa antes da expiração, retorno
 forjado), sino de linha parada, thread conferida **no código** (sem subir `create_app()` sem a trava),
 `render.yaml` e o `startCommand` do receptor pelo parser real do gunicorn. Contra `dc78c788` (antes do
@@ -466,6 +467,11 @@ produção pausada e com preço novo). `ruff` limpo nos arquivos novos e sem avi
 `npm run typecheck` limpo; `validar_startcommand.py` verde. Tela: `/v/pedido/<token>` em 375×812 com o
 backend parado — o `POST …/retorno` falhou duas vezes, passou na terceira com o backend de volta e a
 página saiu de "Pedido não encontrado" para "Confirmando o pagamento…" sozinha.
+
+**Convergência (T031–T032).** O receptor só tratava erro do banco: qualquer outra exceção subia ao
+gunicorn, que loga `Error handling request <URI>` — a URI carrega o segredo — e responde 500, que a
+InfinitePay não reenvia. Agora `Receptor.__call__` captura tudo: 400 de corpo fixo e log só com o tipo
+(cenário 8.4, que falhou antes da correção).
 
 **Pegadinhas.**
 - **O alocador do spec-kit propôs 337**: `create-new-feature.sh` lê `git branch -a` e descarta as

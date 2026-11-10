@@ -224,3 +224,10 @@ scripts/validar_startcommand.py` verde; Events do Render no primeiro deploy (qui
 - **MVP**: Setup + Foundational + US1 + US2 + US3 — o caminho do dinheiro completo e seguro. US4 e
   US5 completam a promessa de "push de dia"; US6 é rede de segurança.
 - Merge e push só quando o dono pedir, à noite, com os Events abertos (quickstart §2).
+
+---
+
+## Phase 10: Convergence
+
+- [X] T031 `servicos/avisos/app.py`: captura geral em `Receptor.__call__` — exceção inesperada vira 400 de corpo fixo e log só com o tipo, nunca sobe ao gunicorn (que loga `Error handling request <URI>` com o segredo e responde 500, que a operadora não reenvia) per FR-008, FR-006 (partial)
+- [X] T032 `specs/340-caixa-de-avisos/verify_340.py`: cenário 8.4 — exceção forçada na conferência do segredo → 400 e nenhuma linha de log com o segredo per spec §Verificação #8 (partial)
