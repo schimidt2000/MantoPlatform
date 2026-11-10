@@ -38,7 +38,7 @@ export function PedidoVirtualSection({ data }: PedidoVirtualSectionProps) {
     >
       <dl className="divide-y divide-line text-[13px]">
         <div className="flex justify-between gap-3 py-2">
-          <dt className="text-muted">Criança</dt>
+          <dt className="text-muted">Para</dt>
           <dd className="text-right font-medium text-ink">
             {pedido.child_name}, {pedido.child_age} anos
           </dd>
@@ -74,7 +74,7 @@ export function PedidoVirtualSection({ data }: PedidoVirtualSectionProps) {
           <p className="mt-1 whitespace-pre-line text-[13px] text-ink">{pedido.behavior_notes}</p>
         </div>
       ) : (
-        <Empty>A família não deixou dicas sobre a criança.</Empty>
+        <Empty>Nenhuma dica deixada pela família.</Empty>
       )}
 
       {aoVivo && (

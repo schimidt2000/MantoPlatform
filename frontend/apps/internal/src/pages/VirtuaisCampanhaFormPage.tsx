@@ -87,6 +87,7 @@ export function VirtuaisCampanhaFormPage() {
   const [priceGift, setPriceGift] = useState(0);
   const [recordedCapacity, setRecordedCapacity] = useState(0);
   const [deliveryDays, setDeliveryDays] = useState(7);
+  const [deliveryUntil, setDeliveryUntil] = useState("");
   const [faq, setFaq] = useState<VirtualFaqItem[]>([]);
   const [acervoIds, setAcervoIds] = useState<number[]>([]);
   const [listada, setListada] = useState(true);
@@ -111,6 +112,7 @@ export function VirtuaisCampanhaFormPage() {
     setPriceGift(apiMoneyToNumber(campaign.price_gift));
     setRecordedCapacity(campaign.recorded_capacity);
     setDeliveryDays(campaign.recorded_delivery_days);
+    setDeliveryUntil(campaign.recorded_delivery_until ?? "");
     setFaq(campaign.faq);
     setAcervoIds(campaign.acervo_item_ids);
     setListada(campaign.listada);
@@ -129,6 +131,7 @@ export function VirtuaisCampanhaFormPage() {
         price_gift: numberToApiMoney(priceGift),
         recorded_capacity: recordedCapacity,
         recorded_delivery_days: deliveryDays,
+        recorded_delivery_until: deliveryUntil,
         faq,
         listada,
         ...(cover ? { cover } : {}),
@@ -456,6 +459,23 @@ export function VirtuaisCampanhaFormPage() {
                 />
                 <FieldError message={errors.recorded_delivery_days} />
               </div>
+            </div>
+
+            <div>
+              <label className="text-[12px] font-medium text-muted" htmlFor="delivery-until">
+                Entrega dos vídeos até
+              </label>
+              <Input
+                id="delivery-until"
+                type="date"
+                value={deliveryUntil}
+                onChange={(e) => setDeliveryUntil(e.target.value)}
+              />
+              <p className="mt-1 text-[11px] text-muted">
+                Preenchida, todo vídeo vendido até esta data tem ela como prazo, e a página mostra
+                &quot;entregue até&quot; a data. Vazia, vale o prazo em dias.
+              </p>
+              <FieldError message={errors.recorded_delivery_until} />
             </div>
 
             <p className="text-[11px] text-muted">

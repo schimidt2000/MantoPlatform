@@ -91,7 +91,7 @@ function DeliveryRow({ delivery }: { delivery: VirtualDelivery }) {
         </div>
       </TableCell>
 
-      {/* Criança */}
+      {/* Para quem (criança, avó, adulto — feature 341) */}
       <TableCell>
         <div className="font-medium text-ink">{delivery.child_name}</div>
         <div className="text-[11px] text-muted">
@@ -365,7 +365,7 @@ export function FilaProducaoMidiaPage() {
             <thead>
               <TableRow head>
                 <TableCell as="th">Quando</TableCell>
-                <TableCell as="th">Criança</TableCell>
+                <TableCell as="th">Para</TableCell>
                 <TableCell as="th">Dicas da família</TableCell>
                 <TableCell as="th">Presente 3D</TableCell>
                 <TableCell as="th">Situação</TableCell>

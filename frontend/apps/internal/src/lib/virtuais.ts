@@ -72,6 +72,11 @@ export interface VirtualCampaign {
   recorded_capacity: number;
   recorded_sold: number;
   recorded_delivery_days: number;
+  /**
+   * Entrega dos vídeos até esta data (`AAAA-MM-DD`, feature 341); nula = vale o prazo em dias.
+   * Opcional: bundle e backend ficam em versões diferentes por minutos em todo deploy.
+   */
+  recorded_delivery_until?: string | null;
   catalog_character_id: number;
   talent_id: number | null;
   figurino_sheet_id: number | null;
@@ -161,6 +166,8 @@ export interface VirtualCampaignInput {
   price_gift?: string;
   recorded_capacity?: number;
   recorded_delivery_days?: number;
+  /** `AAAA-MM-DD`, ou `""` para limpar. */
+  recorded_delivery_until?: string;
   intro_html?: string;
   tolerance_terms?: string;
   faq?: VirtualFaqItem[];

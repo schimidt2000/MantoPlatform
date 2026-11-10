@@ -39,7 +39,35 @@ export interface VirtualCampaignPublic {
   price_gift: string | null;
   recorded_available: number;
   recorded_delivery_days: number;
+  /**
+   * Data em que todo vídeo fica pronto (`AAAA-MM-DD`, feature 341). Opcional: o bundle e o backend
+   * ficam em versões diferentes por minutos em todo deploy.
+   */
+  recorded_delivery_until?: string | null;
   gift_items: VirtualGiftItem[];
+}
+
+const MESES = [
+  "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+  "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+] as const;
+
+/**
+ * "13 de dezembro" a partir de `AAAA-MM-DD`, pelo texto: `new Date("2026-12-13")` é meia-noite em
+ * UTC e no Brasil vira o dia 12.
+ */
+export function dataPorExtenso(iso: string): string {
+  const [, mes, dia] = iso.slice(0, 10).split("-");
+  return `${Number(dia)} de ${MESES[Number(mes) - 1] ?? ""}`.trim();
+}
+
+/** Quando o vídeo chega: "até 13 de dezembro" com a data da campanha, senão "em até 7 dias". */
+export function entregaDoVideo(
+  campanha: Pick<VirtualCampaignPublic, "recorded_delivery_days" | "recorded_delivery_until">,
+): string {
+  return campanha.recorded_delivery_until
+    ? `até ${dataPorExtenso(campanha.recorded_delivery_until)}`
+    : `em até ${campanha.recorded_delivery_days} dias`;
 }
 
 /** Card da vitrine — o que a home da loja mostra de cada campanha publicada. */
