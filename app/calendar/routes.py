@@ -2483,6 +2483,7 @@ def sync_events(items: list[dict]) -> None:
             # sync — junto com "precisa ensaio" e a vaga de som — porque a Agenda ainda não
             # tinha recebido o título novo (ou a escrita no Google falhou).
             titulo_mudou = (title or "").strip() != (old_title or "").strip()
+            old_event_type = event.event_type
             if titulo_mudou:
                 event.event_type = event_type
             tipo_efetivo = event.event_type
@@ -2535,7 +2536,7 @@ def sync_events(items: list[dict]) -> None:
             # criado pela plataforma, que até aqui nunca tinha as vagas reconciliadas (caso 1423) —
             # e os ensaios futuros recebem o título novo. Roda ANTES do `continue` da plataforma.
             if titulo_mudou and not title.startswith("🟧 ENSAIO"):
-                _reconciliar_titulo_no_sync(event, old_title, title)
+                _reconciliar_titulo_no_sync(event, old_title, title, old_event_type)
 
         # Eventos criados pela plataforma: atualiza metadados mas preserva roles
         if event.source == "platform":
@@ -2601,14 +2602,22 @@ def sync_events(items: list[dict]) -> None:
     _mark_talents_worked()
 
 
-def _reconciliar_titulo_no_sync(event: CalendarEvent, old_title: str | None, title: str) -> None:
+def _reconciliar_titulo_no_sync(
+    event: CalendarEvent, old_title: str | None, title: str, old_event_type: str | None = None
+) -> None:
     """Feature 339: título mudou no Google → vagas (o que saiu) e ensaios futuros (o título novo).
+
+    E, se o prefixo trocou o tipo entrando ou saindo de SHOW (converge, T044), o teto é recalculado e
+    Casting, Ensaio e Superadmin são avisados — a troca feita direto no Google Agenda era o mesmo
+    silêncio do pedido. A parte destrutiva da saída de SHOW (cancelar ensaios, tirar as vagas de som)
+    continua só na troca pela plataforma, como antes.
 
     Comita e só então empurra o título dos ensaios ao Google (`docs/00` §6 item 25). Uma falha aqui
     não pode derrubar a rodada: o SAVEPOINT desfaz só esta parte — um `rollback()` levaria junto o
     que os eventos vindos do Google já gravaram nesta rodada e ainda não foi comitado.
     """
     from app.calendar import titulo_ops
+    from app.calendar.event_ops import avisar_troca_de_tipo_do_google
     from app.constants import now_sp
 
     agora = now_sp()
@@ -2618,6 +2627,7 @@ def _reconciliar_titulo_no_sync(event: CalendarEvent, old_title: str | None, tit
                 event, old_title, title,
                 autor_id=None, autor_nome="Sistema", autor_papel="Sistema", agora=agora,
             )
+            avisar_troca_de_tipo_do_google(event, old_event_type, event.event_type)
             ensaios = titulo_ops.propagar_titulo_aos_ensaios(event, agora=agora)
     except Exception as exc:  # noqa: BLE001 — um evento não pode parar o sync dos demais
         current_app.logger.warning(

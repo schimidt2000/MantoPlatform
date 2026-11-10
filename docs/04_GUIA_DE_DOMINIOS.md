@@ -306,13 +306,16 @@ ato (306), não da vaga de hoje.
 10. `cache_cap` em `EventRole` é **teto** vindo do orçamento: `casting_ops.assign_role` trunca para
     não-superadmin e gera nota de auditoria quando ultrapassado. **Feature 339**: o limite aplicado é
     `teto_ops.teto_efetivo` = `max(cache_cap + parcela do carrinho, teto_autorizado, cachê atual)` —
-    a mesma função serve a trava e a tela. O `teto_autorizado` é **da vaga**: só o Superadmin o grava
+    a mesma função serve a trava e a tela; o cachê atual só conta para a **mesma pessoa** (no
+    "Salvar" que troca o artista ele não vira limite de quem entra). O `teto_autorizado` é **da vaga**: só o Superadmin o grava
     (salvando acima do limite, com artista e cachê > 0; salvar dentro do limite o limpa), tirar a
     pessoa não o mexe, e recálculo de tipo e vínculo de orçamento (que reescrevem o `cache_cap`)
     nunca o tocam. Trocar o tipo entrando ou saindo de SHOW refaz o `cache_cap` pela conta da criação
     com o show trocado (`teto_ops.recalcular_tetos_pelo_tipo`) e avisa Casting, Ensaio e Superadmin
-    (menos o autor) com faixa de "Ciente" por pessoa (`notifications.ciente_em`). O cachê de quem
-    já está escalado nunca muda sozinho.
+    (menos o autor) com faixa de "Ciente" por pessoa (`notifications.ciente_em`). A troca feita
+    direto no Google (prefixo do título) também recalcula e avisa pelo sync
+    (`event_ops.avisar_troca_de_tipo_do_google`), sem a parte destrutiva da saída de SHOW, que segue
+    só na troca pela plataforma. O cachê de quem já está escalado nunca muda sozinho.
 10b. **Título ↔ vagas ↔ ensaio (feature 339, `app/calendar/titulo_ops.py`).** O título conta
     personagens com repetição (`parse_characters` + `orcamento_evento_ops._chave`). O que **sai** do
     título (antigo × novo, por sync ou edição) mexe nas vagas; diferença antiga de grafia nunca.

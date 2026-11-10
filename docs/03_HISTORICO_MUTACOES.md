@@ -412,7 +412,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 > **Na branch `339-evento-mudou-avisa-casting` (worktree `C:\tmp\mp339`), sem merge.** Nível 1. Migration
 > `e339a7c1b2d4`, aditiva, sobre `d323b5a1c0e7` — 328/329/330/332–335/338 partem do mesmo head: quem entrar na
 > `main` depois troca o `down_revision`. Detalhe: `specs/339-evento-mudou-avisa-casting/` (spec com as decisões
-> D1–D5 e o clarify, plano, pesquisa R1–R9, `verify_339.py` 30/30 no `manto_339`).
+> D1–D5 e o clarify, plano, pesquisa R1–R9, `verify_339.py` 37/37 no `manto_339` depois do converge).
 
 **O pedido.** O dono (09/11), com o evento 1423 (13/11, Star Wars) na mão: a Comercial trocou R&I → SHOW e (1) o
 teto ficou o do orçamento de R&I (R$ 325) e ninguém do Casting nem do Ensaio soube; (2) o Superadmin salvou R$ 400
@@ -448,6 +448,15 @@ estava preso na migration da 334: verificação no `manto_339`, restaurado do du
 **Dados.** No `manto_339` (cópia de 09/11), o preenchimento da migration deu teto autorizado a 100 vagas (as com
 cachê acima do cap, sem carrinho; 19 com carrinho ficaram de fora). O título do evento 1423 e do ensaio 1496 continuam com dois STORMTROOPERS: a 339
 não corrige o passado — corrigir uma vez no Google Agenda. Dívidas 199–201 no `docs/05`.
+
+**Converge (10/11, leitura independente).** Dez lacunas, nenhuma alta; seis corrigidas: a sobra que volta
+depois de resolvida avisa de novo (o carimbo da marca entra na chave); troca de tipo feita direto no
+Google recalcula o teto e avisa pelo sync, sem a parte destrutiva; o piso do cachê salvo vale só para a
+mesma pessoa (antes, na troca direta A→B, o B herdava o valor acima do limite de A); no cancelado a vaga
+marcada não sai e o cancelamento limpa a marca; o "Editar" que tira a vaga marcada fecha a sobra; a faixa
+mostra a grafia da vaga e as ocupadas de agora. Mais duas vistas antes (sobra resolvida quando o título
+volta a pedir; autor no handler Jinja). Quatro aceitas com motivo no `tasks.md` (T049–T052). Verify
+37/37; mutação de duas regras derrubou os cenários 33 e 36.
 
 ### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
 

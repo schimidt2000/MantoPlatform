@@ -34,7 +34,7 @@ Chave nova no topo, para **qualquer** usuário que abre o evento (sem gate extra
 `dados` por `kind`: `evento.tipo_show` → `{entrou: bool, autor: str | null}`; `evento.vaga_sobrando`
 → `{personagem: str, pedido: int, vagas: int}`. Derivado no serializer da `dedupe_key`, que carrega
 esses valores (`evento.tipo_show:{id}:{entrou|saiu}:{autor_id|0}:{carimbo}`,
-`evento.vaga_sobrando:{id}:{nome}:{pedido}:{vagas}`) — nenhuma coluna JSON nova.
+`evento.vaga_sobrando:{id}:{nome}:{pedido}:{vagas}:{marca}`) — nenhuma coluna JSON nova. Na faixa de vaga a mais, nome e contagens são trocados pelos vivos (grafia da vaga, ocupadas de agora).
 
 Em cada item de `elenco` (`_serialize_role`):
 

@@ -407,12 +407,21 @@ def frase_da_sobra(nome: str, pedido: int, vagas: int) -> str:
 
 
 def notificar_vaga_sobrando(
-    event: CalendarEvent, nome: str, *, chave: str, pedido: int, vagas: int, autor_id: int | None
+    event: CalendarEvent,
+    nome: str,
+    *,
+    chave: str,
+    pedido: int,
+    vagas: int,
+    autor_id: int | None,
+    marca: datetime,
 ) -> int:
     """Feature 339 (FR-020): o título pede um personagem menos vezes e as vagas dele estão ocupadas.
 
-    A chave carrega personagem, pedido e vagas: a mesma situação nunca vira dois avisos, mesmo com o
-    sync passando de novo (FR-022). Não comita.
+    A chave carrega personagem, pedido, vagas e o carimbo da marca (`sobrando_desde`): a mesma
+    situação nunca vira dois avisos com o sync passando de novo (FR-022) — a marca não muda enquanto
+    a sobra não se resolve —, mas a sobra que volta depois de resolvida é outra ocorrência e avisa
+    de novo (converge, T043). Não comita.
     """
     _garante_id(event)
     return emitir(
@@ -421,7 +430,7 @@ def notificar_vaga_sobrando(
         body=frase_da_sobra(nome, pedido, vagas),
         link_path=f"/events/{event.id}",
         entidade=("calendar_event", event.id),
-        dedupe_key=f"{KIND_EVENTO_VAGA_SOBRANDO}:{event.id}:{chave}:{pedido}:{vagas}",
+        dedupe_key=f"{KIND_EVENTO_VAGA_SOBRANDO}:{event.id}:{chave}:{pedido}:{vagas}:{marca:%Y%m%d%H%M%S%f}",
         severity="urgent" if _urgente(event) else "info",
         destinatarios=_sem_o_autor(KIND_EVENTO_VAGA_SOBRANDO, autor_id),
     )
@@ -494,13 +503,15 @@ def dados_do_aviso(n: Notification) -> dict:
     if n.kind == KIND_EVENTO_TIPO_SHOW and len(partes) >= 5:
         autor = User.query.get(int(partes[3])) if partes[3].isdigit() and partes[3] != "0" else None
         return {"entrou": partes[2] == "entrou", "autor": autor.name if autor else None}
-    if n.kind == KIND_EVENTO_VAGA_SOBRANDO and len(partes) >= 5:
-        # O nome pode ter ":"; pedido e vagas são sempre os dois últimos campos.
+    if n.kind == KIND_EVENTO_VAGA_SOBRANDO and len(partes) >= 6:
+        # O nome pode ter ":"; pedido, vagas e o carimbo são sempre os três últimos campos. O nome
+        # aqui é o normalizado (sem acento) e as contagens são as do dia do aviso: a faixa troca os
+        # dois pelos vivos (`agenda_read`), e estes ficam para quem não tem o evento à mão.
         try:
             return {
-                "personagem": ":".join(partes[2:-2]),
-                "pedido": int(partes[-2]),
-                "vagas": int(partes[-1]),
+                "personagem": ":".join(partes[2:-3]),
+                "pedido": int(partes[-3]),
+                "vagas": int(partes[-2]),
             }
         except ValueError:
             return {}

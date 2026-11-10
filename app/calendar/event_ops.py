@@ -470,6 +470,36 @@ def _recalcular_e_avisar(
     return trecho, avisos
 
 
+def avisar_troca_de_tipo_do_google(event: Any, tipo_antigo: str | None, tipo_novo: str | None) -> bool:
+    """Feature 339 (converge, T044): troca de tipo com SHOW feita direto no Google Agenda.
+
+    O sync aplica o tipo lido do prefixo do título; aqui entram só o recálculo do teto e o aviso a
+    Casting, Ensaio e Superadmin (FR-007/008/012) — sem a parte destrutiva de `_sair_de_show`
+    (ensaio cancelado no Google, vagas de som removidas), que segue exclusiva da troca pela
+    plataforma. O e-mail do Ensaio na entrada em SHOW o sync já manda quando liga "precisa ensaio".
+    Não comita.
+
+    Returns:
+        `True` quando a troca envolvia SHOW e o aviso saiu.
+    """
+    antigo = (tipo_antigo or "").strip().upper()
+    novo = (tipo_novo or "").strip().upper()
+    if antigo == novo or EVENT_TYPE_SHOW not in (antigo, novo) or novo == "ENSAIO":
+        return False
+    trecho, _avisos = _recalcular_e_avisar(event, entrou=novo == EVENT_TYPE_SHOW, autor_id=None)
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name="Sistema",
+        actor_role="Sistema",
+        message=(
+            f"Tipo do evento mudou no Google Agenda: {antigo or '—'} → {novo or '—'}."
+            f"{trecho} Casting, Ensaio e Superadmin avisados."
+        ),
+        created_at=now_sp(),
+    ))
+    return True
+
+
 def _entrar_em_show(
     event: Any, tipo_antigo: str, *, actor_name: str, tz: ZoneInfo, autor_id: int | None = None
 ) -> list[str]:
@@ -1150,18 +1180,20 @@ def _reconciliar_pelo_titulo(
 
     Roda depois de gravar título e elenco do formulário e antes do commit. O flush + expire faz a
     coleção `event.roles` enxergar o que `_reconcile_characters` acabou de remover — senão a vaga
-    que a Comercial tirou junto com o nome contaria como "a mais".
+    que a Comercial tirou junto com o nome contaria como "a mais". Mesmo sem o título mudar, a
+    vaga marcada como sobrando que o formulário tirou fecha a sobra (converge, T047).
     """
-    if (event.title or "") == (old_title or ""):
-        return
     from app.calendar import titulo_ops
 
     db.session.flush()
     db.session.expire(event, ["roles"])
-    titulo_ops.reconciliar_vagas_pelo_titulo(
-        event, old_title, event.title,
-        autor_id=autor_id, autor_nome=actor_name, autor_papel="Comercial", agora=now_sp(),
-    )
+    if (event.title or "") != (old_title or ""):
+        titulo_ops.reconciliar_vagas_pelo_titulo(
+            event, old_title, event.title,
+            autor_id=autor_id, autor_nome=actor_name, autor_papel="Comercial", agora=now_sp(),
+        )
+    else:
+        titulo_ops.revisar_sobras(event, autor_nome=actor_name, autor_papel="Comercial", agora=now_sp())
 
 
 # ── Edição pontual na própria tela de detalhe — feature 215 ──────────────────

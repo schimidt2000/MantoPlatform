@@ -1611,6 +1611,10 @@ def ao_cancelar(event: CalendarEvent, *, alcance: str, novo_principal: CalendarE
 
     solicitacao_ops.fechar_no_cancelamento(event, alcance=alcance, novo_principal=novo_principal)
     encerrar_avisos_do_evento(event.id)
+    # E a marca de vaga sobrando sai: o card do cancelado é só consulta, não pede mais "remova
+    # alguém da escala" (converge, T046).
+    for role in event.roles:
+        role.sobrando_desde = None
 
 
 def _recusas_de_estado(event: CalendarEvent) -> None:

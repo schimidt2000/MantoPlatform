@@ -515,6 +515,30 @@ def _serialize_role(
     return data
 
 
+def _dados_vivos_do_aviso(n: Any, event: CalendarEvent) -> dict[str, Any]:
+    """`dados` da faixa (339) com o que vale AGORA na vaga a mais (converge, T048).
+
+    A chave do aviso guarda o nome normalizado (sem acento: "MÔNICA" viraria "MONICA") e as
+    contagens do dia em que ele nasceu; a faixa mostra a grafia da vaga e quantas estão ocupadas
+    hoje. Sem vaga do personagem (já resolvida), fica o que a chave diz.
+    """
+    from app.calendar.titulo_ops import chave_do_nome, contar_personagens
+    from app.notificacoes import notificacoes_ops
+
+    dados = notificacoes_ops.dados_do_aviso(n)
+    if n.kind != notificacoes_ops.KIND_EVENTO_VAGA_SOBRANDO or not dados.get("personagem"):
+        return dados
+    chave = dados["personagem"]
+    vagas = [
+        r for r in event.roles if r.role_type != "extra" and chave_do_nome(r.character_name) == chave
+    ]
+    if vagas:
+        dados["personagem"] = vagas[0].character_name
+        dados["pedido"] = contar_personagens(event.title).get(chave, 0)
+        dados["vagas"] = sum(1 for r in vagas if r.talent_id)
+    return dados
+
+
 def _sobra_da_vaga(role: Any) -> dict[str, int] | None:
     """`{pedido, vagas}` da vaga marcada como sobrando (339), ou `None`."""
     if role.sobrando_desde is None or role.role_type == "extra":
@@ -1043,7 +1067,7 @@ def serialize_event_detail(
             "body": n.body,
             "severity": n.severity,
             "created_at": n.created_at.isoformat(timespec="seconds") if n.created_at else None,
-            "dados": notificacoes_ops.dados_do_aviso(n),
+            "dados": _dados_vivos_do_aviso(n, event),
         }
         for n in notificacoes_ops.avisos_pendentes_do_evento(user.id, event.id)
     ] if getattr(user, "id", None) else []

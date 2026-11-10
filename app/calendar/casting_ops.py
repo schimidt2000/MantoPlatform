@@ -188,7 +188,9 @@ def assign_role(
     # Casting que tira e põe outro artista consegue salvar de novo o valor autorizado.
     from app.calendar import teto_ops
 
-    limite = teto_ops.teto_efetivo(role, parcela_transporte)
+    limite = teto_ops.teto_efetivo(
+        role, parcela_transporte, mesma_pessoa=role.talent_id == old_talent_id
+    )
     limite_da_nota = teto_ops.teto_da_nota(role, parcela_transporte)
     if new_cache is not None and limite is not None and new_cache > limite and not is_superadmin:
         new_cache = limite
@@ -249,7 +251,13 @@ def assign_role(
     # não muda: ele já pede o número certo.
     removidas_pela_sobra: list[str] = []
     nome_da_vaga = role.character_name
-    if old_talent_id and not role.talent_id and role.sobrando_desde is not None:
+    # No cancelado a vaga fica, vazia, como registro do elenco (312, Q10): nada de remoção pela sobra.
+    if (
+        old_talent_id
+        and not role.talent_id
+        and role.sobrando_desde is not None
+        and not getattr(event, "is_cancelled", False)
+    ):
         from app.calendar.titulo_ops import resolver_sobra
 
         removidas_pela_sobra = resolver_sobra(

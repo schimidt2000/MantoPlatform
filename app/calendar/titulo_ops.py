@@ -209,20 +209,37 @@ def reconciliar_vagas_pelo_titulo(
         from app.notificacoes.notificacoes_ops import notificar_vaga_sobrando
 
         notificar_vaga_sobrando(
-            event, nome, chave=chave, pedido=pedido, vagas=len(ocupadas), autor_id=autor_id
+            event,
+            nome,
+            chave=chave,
+            pedido=pedido,
+            vagas=len(ocupadas),
+            autor_id=autor_id,
+            # A marca mais antiga é a da ocorrência: o sync que passa de novo não a muda (sem aviso
+            # repetido), e a sobra que volta depois de resolvida nasce com marca nova (aviso novo).
+            marca=min(r.sobrando_desde for r in ocupadas),
         )
     # O título voltou a pedir um personagem que tinha vaga marcada (converge): a sobra se resolve
     # pelo mesmo caminho da escala — marca limpa e aviso encerrado quando título e vagas batem.
-    for chave, pedido in novo.items():
-        if pedido <= antigo.get(chave, 0):
-            continue
-        marcadas = [r for r in _vagas_do_nome(event, chave) if r.sobrando_desde]
-        if marcadas:
-            resolver_sobra(
-                event, marcadas[0].character_name,
-                autor_nome=autor_nome, autor_papel=autor_papel, agora=agora,
-            )
+    revisar_sobras(event, autor_nome=autor_nome, autor_papel=autor_papel, agora=agora)
     return resultado
+
+
+def revisar_sobras(event: Any, *, autor_nome: str, autor_papel: str, agora: datetime) -> None:
+    """Passa `resolver_sobra` em cada personagem com vaga marcada (converge, T041/T047). Não comita.
+
+    Serve a quem mudou título ou elenco por fora das portas da escala: o título que voltou a pedir o
+    personagem, ou o "Editar" que tirou a vaga marcada sem mexer no título.
+    """
+    if getattr(event, "is_cancelled", False):
+        return
+    nomes = {
+        chave_do_nome(r.character_name): r.character_name
+        for r in event.roles
+        if r.role_type != "extra" and r.sobrando_desde
+    }
+    for nome in nomes.values():
+        resolver_sobra(event, nome, autor_nome=autor_nome, autor_papel=autor_papel, agora=agora)
 
 
 def resolver_sobra(

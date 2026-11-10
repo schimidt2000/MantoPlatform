@@ -44,23 +44,27 @@ def _dec(valor: Any) -> Decimal:
     return valor if isinstance(valor, Decimal) else Decimal(str(valor or 0))
 
 
-def teto_efetivo(role: Any, parcela: Decimal) -> Decimal | None:
+def teto_efetivo(role: Any, parcela: Decimal, *, mesma_pessoa: bool = True) -> Decimal | None:
     """O limite que a trava aplica e que a tela anuncia (sem o número, para o Casting).
 
     Args:
         role: O `EventRole`, **antes** de gravar o cachê novo (o `cache_value` é o da pessoa atual).
         parcela: A parcela do carrinho de transporte (239) — zero quando a vaga não leva carro.
+        mesma_pessoa: `False` quando o "Salvar" troca o artista (converge, T045): o cachê salvo de
+            quem sai não vira limite de quem entra — senão o Casting pagaria a B, sem Superadmin, o
+            valor acima do limite que era de A. O que passa de uma pessoa para a outra é só o teto
+            autorizado, que é da vaga.
 
     Returns:
         `None` quando a vaga não tem teto de orçamento (sem limite nenhum); senão o maior entre
-        `cache_cap + parcela`, `teto_autorizado` e o `cache_value` atual.
+        `cache_cap + parcela`, `teto_autorizado` e — com a mesma pessoa — o `cache_value` atual.
     """
     if role.cache_cap is None:
         return None
     return max(
         _dec(role.cache_cap) + parcela,
         _dec(role.teto_autorizado),
-        _dec(role.cache_value),
+        _dec(role.cache_value) if mesma_pessoa else Decimal("0"),
     )
 
 

@@ -915,6 +915,123 @@ def cen_27b() -> None:
     _garante(all(v.sobrando_desde is None for v in _vagas(eid)), "marca não limpou")
 
 
+# ── Convergence (T043–T048) ────────────────────────────────────────────────────────────────────
+
+
+def _sobras_de(chave: str, eid: int) -> list:
+    return [r for r in _avisos(eid, nops.KIND_EVENTO_VAGA_SOBRANDO) if r.user_id == estado[chave]]
+
+
+def cen_31_sobra_que_volta() -> None:
+    """T043: resolvida e voltando, a mesma sobra avisa de novo (uma vez)."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) STORMTROOPERS + STORMTROOPERS",
+            [("Stormtroopers", estado["t"][0]), ("Stormtroopers", estado["t"][1])],
+        )
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS")
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS + STORMTROOPERS")
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS")
+    meus = _sobras_de("castA", eid)
+    _garante(len(meus) == 2, f"avisos de A: {len(meus)} (esperado 2)")
+    _garante(sum(1 for r in meus if r.ciente_em is None) == 1, "o aviso novo não está pendente")
+
+
+def cen_32_tipo_trocado_no_google() -> None:
+    """T044: R&I → SHOW pelo prefixo do Google recalcula e avisa (sem a parte destrutiva)."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) STORMTROOPERS + LUKE",
+            [("Stormtroopers", None), ("Luke", estado["t"][0])],
+            orc_id=estado["orc_ri"],
+            fonte="google_calendar",
+            tetos=estado["tetos_ri"],
+        )
+        ev = CalendarEvent.query.get(eid)
+        item = {
+            "id": ev.google_event_id, "summary": "(SHOW) STORMTROOPERS + LUKE", "status": "confirmed",
+            "start": {"dateTime": ev.start_at.strftime("%Y-%m-%dT%H:%M:%S-03:00")},
+            "end": {"dateTime": ev.end_at.strftime("%Y-%m-%dT%H:%M:%S-03:00")},
+            "location": ev.location, "htmlLink": "https://exemplo",
+        }
+        cal_routes.sync_events([item])
+    quem = {r.user_id for r in _avisos(eid, nops.KIND_EVENTO_TIPO_SHOW)}
+    _garante({estado["castA"], estado["ens"], estado["sa"]} <= quem, "troca no Google sem aviso")
+    _garante(
+        Decimal(_vaga(eid, "Luke").cache_cap) == estado["tetos_show"]["Luke"],
+        f"teto não recalculado: {_vaga(eid, 'Luke').cache_cap}",
+    )
+    _garante(any("mudou no Google Agenda" in m for m in _logs(eid)), "histórico sem a troca")
+
+
+def cen_33_piso_so_da_mesma_pessoa() -> None:
+    """T045: o cachê acima do limite de A não vira limite de B (sem autorização da vaga)."""
+    with app.app_context():
+        eid = _evento("(R&I) LUKE", [("Luke", estado["t"][0])], tetos={"Luke": Decimal("300")})
+        db.session.execute(
+            text("UPDATE event_roles SET cache_value = 400, teto_autorizado = NULL WHERE event_id = :i"),
+            {"i": eid},
+        )
+        db.session.commit()
+    luke = _vaga(eid, "Luke")
+    _assign("castA", luke.id, estado["t"][0], 400)
+    _garante(Decimal(_vaga(eid, "Luke").cache_value) == Decimal("400"), "a mesma pessoa perdeu o piso")
+    _assign("castA", luke.id, estado["t"][1], 400)
+    _garante(
+        Decimal(_vaga(eid, "Luke").cache_value) == Decimal("300"),
+        f"B herdou o valor de A: {_vaga(eid, 'Luke').cache_value}",
+    )
+
+
+def cen_34_cancelado_nao_remove() -> None:
+    """T046: no cancelado, tirar o artista da vaga marcada não a remove."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) STORMTROOPERS + STORMTROOPERS",
+            [("Stormtroopers", estado["t"][0]), ("Stormtroopers", estado["t"][1])],
+        )
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS")
+    with app.app_context():
+        db.session.execute(text("UPDATE calendar_events SET cancelled_at = now() WHERE id = :i"), {"i": eid})
+        db.session.commit()
+    alvo = [v for v in _vagas(eid) if v.character_name == "Stormtroopers"][-1]
+    r = _cliente("castA").post(f"/api/roles/{alvo.id}/assign", json={"talent_id": None})
+    _garante(r.status_code == 200, f"tirar no cancelado → {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(len([v for v in _vagas(eid) if v.character_name == "Stormtroopers"]) == 2, "vaga do cancelado removida")
+
+
+def cen_35_editar_tira_a_marcada() -> None:
+    """T047: o "Editar" tira a vaga marcada sem mexer no título → a sobra se fecha."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) STORMTROOPERS + STORMTROOPERS",
+            [("Stormtroopers", estado["t"][0]), ("Stormtroopers", estado["t"][1])],
+        )
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS")
+    alvo = [v for v in _vagas(eid) if v.character_name == "Stormtroopers"][-1]
+    with app.app_context():
+        # O que `_reconcile_characters` faz quando a Comercial tira a vaga no formulário.
+        db.session.delete(EventRole.query.get(alvo.id))
+        ev = CalendarEvent.query.get(eid)
+        event_ops._reconciliar_pelo_titulo(ev, ev.title, autor_id=estado["com"], actor_name="verify")
+        db.session.commit()
+    _garante(all(v.sobrando_desde is None for v in _vagas(eid)), "marca ficou depois do Editar")
+    _garante(all(r.ciente_em for r in _avisos(eid, nops.KIND_EVENTO_VAGA_SOBRANDO)), "aviso pendente")
+
+
+def cen_36_faixa_viva() -> None:
+    """T048: a faixa traz a grafia da vaga (com acento) e as ocupadas de agora."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) MÔNICA + MÔNICA",
+            [("Mônica", estado["t"][0]), ("Mônica", estado["t"][1])],
+        )
+    _basico("com", eid, titulo="(R&I) MÔNICA")
+    faixa = [a for a in _detalhe("castA", eid)["avisos"] if a["kind"] == nops.KIND_EVENTO_VAGA_SOBRANDO]
+    _garante(len(faixa) == 1, f"faixas: {faixa}")
+    _garante(faixa[0]["dados"] == {"personagem": "Mônica", "pedido": 1, "vagas": 2}, f"dados: {faixa[0]['dados']}")
+
+
 def cen_28_limpeza() -> None:
     with app.app_context():
         limpar()
@@ -964,6 +1081,12 @@ def main() -> int:
         ("26. vaga fora do título: título igual, histórico 'não encontrado'", cen_26),
         ("27. Google recusa: vaga sai e a resposta avisa", cen_27),
         ("27b. remover a vaga sobrando não tira o nome duas vezes", cen_27b),
+        ("31. a mesma sobra resolvida e de volta avisa de novo (converge)", cen_31_sobra_que_volta),
+        ("32. troca de tipo feita no Google recalcula e avisa (converge)", cen_32_tipo_trocado_no_google),
+        ("33. o piso do cachê é só da mesma pessoa (converge)", cen_33_piso_so_da_mesma_pessoa),
+        ("34. no cancelado a vaga marcada não sai (converge)", cen_34_cancelado_nao_remove),
+        ("35. Editar que tira a vaga marcada fecha a sobra (converge)", cen_35_editar_tira_a_marcada),
+        ("36. faixa com grafia e contagem vivas (converge)", cen_36_faixa_viva),
     ]
     manter = os.environ.get("VERIFY_339_MANTER") == "1"
     try:

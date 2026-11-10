@@ -53,7 +53,7 @@ Sem índice novo: a faixa filtra por `entity_type/entity_id` (`ix_notifications_
 | `kind` | Destinatários (`DESTINATARIOS_POR_KIND`) | `dedupe_key` | Tem "Ciente" |
 |---|---|---|---|
 | `evento.tipo_show` | CASTING, ENSAIO, SUPERADMIN, menos o autor | `evento.tipo_show:{event_id}:{entrou\|saiu}:{autor_id\|0}:{AAAAMMDDHHMMSSffffff}` | sim |
-| `evento.vaga_sobrando` | CASTING, SUPERADMIN, menos o autor | `evento.vaga_sobrando:{event_id}:{nome}:{pedido}:{vagas}` | sim |
+| `evento.vaga_sobrando` | CASTING, SUPERADMIN, menos o autor | `evento.vaga_sobrando:{event_id}:{nome}:{pedido}:{vagas}:{marca AAAAMMDDHHMMSSffffff}` (o carimbo da marca: o sync de novo não duplica, a sobra que volta depois de resolvida avisa de novo) | sim |
 
 `KINDS_COM_CIENTE = {evento.tipo_show, evento.vaga_sobrando}`. Retenção: linha desses `kind` com
 `ciente_em IS NULL` segue a regra de "não lida" (180 dias).

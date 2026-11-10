@@ -193,7 +193,7 @@ do Ensaio.
 - [X] T039 `docs/01` (colunas, `POST /api/notificacoes/<id>/ciente` e portas alteradas em §4.3),
       `docs/02` (detalhe do evento, sino), `docs/04` §Agenda (troca de tipo, título × vagas × ensaio,
       teto efetivo), `docs/05` (personagem que entra no título), `docs/03` (entrada no topo + índice)
-- [ ] T040 `/speckit-converge` sem gaps
+- [X] T040 `/speckit-converge` sem gaps
 
 ---
 
@@ -211,3 +211,22 @@ do Ensaio.
 - **MVP**: Phase 1–3 (US1) — destrava o Casting no caso real.
 - Incremental: cada história fecha com os cenários dela em PASS; commit por história (`feat(339):`), por
   caminho.
+
+## Phase 10: Convergence
+
+Leitura independente do código contra a spec (subagente, 10/11/2026) + duas lacunas vistas antes dela.
+Ordem: MEDIUM primeiro.
+
+- [X] T041 Resolver a sobra quando o título volta a pedir o personagem (`titulo_ops.reconciliar_vagas_pelo_titulo` → `resolver_sobra`; cenário 15b) per FR-017 / data-model "transições de sobrando_desde" (partial)
+- [X] T042 Passar `autor_id` no handler Jinja `_handle_assign_casting` (`app/calendar/routes.py`) per FR-001 (partial)
+- [X] T043 Dar a cada ocorrência de vaga a mais uma chave própria (carimbo da marca), para a mesma situação voltar a avisar depois de resolvida sem duplicar dentro de uma rodada (`notificacoes_ops.notificar_vaga_sobrando`, `dados_do_aviso`) per FR-022, H4/AC5 (partial)
+- [X] T044 Troca de tipo com SHOW feita no Google: o sync recalcula o teto e avisa Casting/Ensaio/Superadmin, sem a parte destrutiva da saída de SHOW (`routes.py::_reconciliar_titulo_no_sync`, `event_ops`) per FR-007/008/012 (partial)
+- [X] T045 O piso do cachê salvo vale só para a mesma pessoa: na troca direta A→B o limite não herda o cachê de A (`teto_ops.teto_efetivo`, `casting_ops.assign_role`) per FR-002 e caso de borda "cachê acima do teto rebaixado" (contradicts)
+- [X] T046 No evento cancelado, tirar o artista não remove a vaga marcada, e o cancelamento limpa `sobrando_desde` (`casting_ops.assign_role`, `cancel_ops.ao_cancelar`) per caso de borda "Evento cancelado" (contradicts)
+- [X] T047 "Editar" que tira a vaga marcada sem mexer no título também resolve a sobra (`event_ops._reconciliar_pelo_titulo`) per FR-017 (partial)
+- [X] T048 Faixa de vaga a mais com nome e contagens vivos (grafia da vaga, ocupadas de agora), não os da chave (`agenda_read.serialize_event_detail`) per spec "Textos" (partial)
+- [X] T049 Vaga com carrinho fora do preenchimento do teto autorizado — aceito: decisão registrada em research.md R1 (a parcela é calculada em tempo de execução) per FR-005 (partial)
+- [X] T050 Vagas não recalculadas citadas só no aviso da Comercial e no histórico — aceito: o Casting não lê limite nem teto (decisão da 215); quem age sobre o teto é a Comercial/Superadmin per caso de borda "teto que não veio de orçamento" (partial)
+- [X] T051 Troca de tipo recusada pelo Google (409) não propaga o título ao ensaio — aceito: com o Google fora não há ensaio a empurrar; o sync seguinte iguala per FR-030 (partial)
+- [X] T052 Handlers Jinja de vaga não devolvem `avisos` — aceito: superfície Jinja inalcançável em produção (`docs/00` §7), a falha fica no histórico per FR-031 (partial)
+- [X] T053 Cenários do verify para T043–T048 e rodada completa em PASS
