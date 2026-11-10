@@ -187,10 +187,29 @@ export interface RetornoCheckout {
 }
 
 /**
+ * Esperas entre as tentativas do retorno (feature 340): cobrem o ~1 min em que o backend troca de
+ * container num deploy. O índice é o `failureCount` do TanStack, que começa em 0.
+ */
+const ESPERAS_DO_RETORNO_MS = [5_000, 20_000, 60_000] as const;
+
+/**
+ * Erro que vale tentar de novo: a rede caiu (não é `ApiRequestError`) ou o servidor estava fora
+ * (5xx, o 502 do deploy). 4xx é resposta: o servidor decidiu, repetir não muda nada.
+ */
+function retornoValeRepetir(falhas: number, erro: unknown): boolean {
+  if (falhas >= ESPERAS_DO_RETORNO_MS.length) return false;
+  return !(erro instanceof ApiRequestError) || erro.status >= 500;
+}
+
+/**
  * Manda ao servidor os identificadores do retorno do checkout (feature 310, R3).
  *
  * É a segunda prova de pagamento além do aviso: sem eles a operadora não distingue "não pago" de
  * "não achei". Quem decide continua sendo a reconsulta no servidor.
+ *
+ * Feature 340: a página manda os identificadores uma vez só e limpa a URL. Se a família volta
+ * no minuto em que o backend troca de container, o envio repete sozinho — a mutação guarda os
+ * identificadores entre as tentativas.
  */
 export function useRetornoCheckout(token: string | undefined) {
   const queryClient = useQueryClient();
@@ -200,6 +219,8 @@ export function useRetornoCheckout(token: string | undefined) {
         method: "POST",
         body: JSON.stringify(dados),
       }),
+    retry: retornoValeRepetir,
+    retryDelay: (falhas) => ESPERAS_DO_RETORNO_MS[falhas] ?? ESPERAS_DO_RETORNO_MS[0],
     onSuccess: (data) => {
       queryClient.setQueryData(["virtuais", "pedido", token], data);
     },

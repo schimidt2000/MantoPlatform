@@ -335,11 +335,21 @@ ensaios.
   `manto_local` nenhum link nasce e nenhuma reconsulta sai, mesmo com a tag e o segredo reais do
   espelho (o aviso local apontaria para a produção). Para testar o fluxo, os verifies usam dublês;
   não ligue `INFINITEPAY_ALLOW_LOCAL_CALLS`.
-- **Deploy durante a campanha (spec 310, R-20)**: de **1º/11 a 25/12**, nenhum deploy entre **9h e
-  23h** (BRT) — cada deploy abre ~1 min de 502, e um aviso de pagamento perdido nessa janela, com a
-  família que não voltou pelo "Continuar", só aparece no app da InfinitePay. Depois de **cada**
-  deploy, conferir a aba **"Pagamentos a conferir"** (`/virtuais/devolucoes`) e o painel "Seus
-  Checkouts" da InfinitePay.
+- **Deploy durante a campanha** (a R-20 da 310 caiu na feature 340): o aviso de pagamento entra pelo
+  `manto-avisos`, um serviço sem disco que não cai num push, e espera na caixa
+  (`virtual_payment_inbox`) até o backend voltar — não há mais janela proibida por pagamento. O que
+  continua: push que mexe no backend abre ~1 min de 502 para a equipe (de preferência a partir das
+  19h); migration e `startCommand` só à noite; depois de **cada** deploy, conferir a aba
+  **"Pagamentos a conferir"** (`/virtuais/devolucoes`) e o painel "Seus Checkouts" da InfinitePay.
+- **Receptor vivo**: `GET https://manto-avisos.onrender.com/health/banco` → 200 `{"ok": true}`
+  (o `/health` só prova o processo). Log do receptor: `[avisos] <código> id=<linha>`, sem a URL; log
+  do backend: `[caixa-de-avisos] {...}` quando drena.
+- **Desligar o caminho novo sem deploy de código**: env `INFINITEPAY_AVISO_BASE_URL =
+  https://app.mantoproducoes.com.br` no `manto-backend` — os links novos voltam a avisar a rota antiga
+  do backend, que continua registrada. Links já abertos seguem com o endereço com que nasceram.
+- **Linha parada na caixa**: o sino "Loja virtual: aviso de pagamento parado na caixa" sai com 1 h
+  sem dreno. Ver `select id, received_at, attempts, error from virtual_payment_inbox where drained_at
+  is null` no Shell do backend e o log `[virtuais] caixa:`.
 
 ---
 

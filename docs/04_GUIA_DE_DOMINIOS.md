@@ -955,6 +955,15 @@ e `orfao` também aparecem lá e tocam o sino.
     aviso forjado não contamina a reconsulta do verdadeiro.
 11. **`recorded_sold <= recorded_capacity`**: reserva ativa de vídeo ocupa vaga enquanto a trava vale,
     e a efetivação confere o teto com a campanha travada.
+12. **O aviso entra pela caixa e sai pela mesma porta (feature 340).** Links criados desde a 340
+    avisam o `manto-avisos`, um serviço sem disco que não cai num push e só grava o corpo em
+    `virtual_payment_inbox`. O backend drena (`drenar_caixa_de_avisos`, thread de 10 s e primeira
+    rotina da varredura) chamando `registrar_aviso`/`registrar_aviso_invalido` → `processar_aviso`:
+    nenhuma regra da 310 tem cópia fora do backend. A caixa responde só por "chegou → registrado"; a
+    decisão e o reprocessamento seguem a máquina de estados acima.
+13. **Caixa antes da expiração.** `ciclo_de_varredura` drena a caixa antes de `expirar_reservas`:
+    o pagamento feito durante um deploy espera na caixa, e a expiração que rodasse antes liberaria o
+    horário da família que pagou.
 
 ### Regras de ouro do módulo
 

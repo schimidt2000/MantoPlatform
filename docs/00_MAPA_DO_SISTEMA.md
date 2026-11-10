@@ -44,8 +44,9 @@ Agenda" (travada fora da produção).
 | SPA Público | `frontend/apps/public` (28) | vitrine `/catalogo`, formulários, loja virtual |
 | Pacotes | `frontend/packages/{ui,api-client,money}` (21) | design system, `apiFetch`/`assetUrl`, dinheiro |
 | Servidor de produção | `frontend/server.js` | serve os 3 bundles + proxy reverso para o Flask |
-| Hospedagem | Render — `render.yaml` (raiz) | `manto-backend` (python, disco persistente, healthcheck), `manto-frontend` (node, **sem** healthcheck), `manto-postgres`; detalhe em `docs/01` §5 |
-| Deploy | push na `main` | auto-deploy nos dois serviços, ~60s, ~1 min de 502 na porta pública; regras em `CLAUDE.md` §2 e constituição §Operação |
+| Hospedagem | Render — `render.yaml` (raiz) | `manto-backend` (python, disco persistente, healthcheck), `manto-frontend` (node, healthcheck), `manto-avisos` (python, sem disco — recebe o aviso de pagamento da InfinitePay e só guarda; feature 340), `manto-postgres`; detalhe em `docs/01` §5 |
+| Receptor de avisos | `servicos/avisos/app.py` | WSGI puro, **não importa `app/`**; grava em `virtual_payment_inbox`, o backend drena (`virtuais_ops.drenar_caixa_de_avisos`) |
+| Deploy | push na `main` | auto-deploy só de quem mudou (`rootDir`/`buildFilter`), ~60s; o backend (disco) cai ~1 min, frontend e avisos trocam sem queda; regras em `CLAUDE.md` §2 e constituição §Operação |
 
 **Regra de roteamento que quebra tudo se ignorada:** o Node só devolve ao Flask os prefixos de
 `BACKEND_PREFIXES` (`frontend/server.js:192`) e os regexes de `BACKEND_PATTERNS` (`:237`). Rota fora

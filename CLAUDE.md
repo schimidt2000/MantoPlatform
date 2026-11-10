@@ -43,13 +43,17 @@ conflito, ela prevalece). Como rodar, publicar e operar: `DEVELOPMENT.md`.
 * Produção = **Render** desde 28/08/2026 (Railway banido em definitivo — só história, `docs/03`
   264). O único arquivo que descreve produção é `render.yaml`: `manto-backend` (python, gunicorn,
   disco persistente em `/opt/render/project/src/instance`, `healthCheckPath: /health`),
-  `manto-frontend` (node, `server.js`, SEM healthcheck), `manto-postgres`. Detalhe: `docs/01` §5.
-* **Push na `main` É o deploy** (`autoDeploy: true`): ~60s até o bundle novo, com ~1 min de 502
-  na porta pública. Não há staging. Só publique quando o dono pedir ("push", "sobe", "publica");
-  "push" significa merge na `main` + `git push origin main`, não push da branch. Skill
-  `manto-deploy`.
-* Publicar = agrupar num deploy só, fora do horário da equipe (a partir das ~19h BRT). A
-  calculadora de orçamento dispara request a cada tecla e é a primeira a sangrar.
+  `manto-frontend` (node, `server.js`, `healthCheckPath: /`), `manto-avisos` (python, sem disco:
+  recebe o aviso de pagamento da InfinitePay e só guarda — `servicos/avisos/`, feature 340),
+  `manto-postgres`. Detalhe: `docs/01` §5.
+* **Push na `main` É o deploy** (`autoDeploy: true`), ~60s, só do serviço cujos arquivos mudaram
+  (`rootDir`/`buildFilter`): backend (disco) cai ~1 min; frontend e avisos trocam sem queda; push só
+  de `docs/`/`specs/` não reinicia nada. Não há staging. Só publique quando o dono pedir ("push",
+  "sobe", "publica"); "push" significa merge na `main` + `git push origin main`, não push da
+  branch. Skill `manto-deploy`.
+* Publicar backend = agrupar num deploy só, de preferência fora do horário da equipe (a partir das
+  ~19h BRT). A calculadora de orçamento dispara request a cada tecla e é a primeira a sangrar.
+  Pagamento da loja não é mais motivo de janela proibida (340).
 * Mudança no `startCommand` do `manto-backend` vai em commit sozinho, fora do horário, com os
   Events do Render abertos, depois de `python scripts/validar_startcommand.py` verde. Serviço
   com disco não sobrepõe deploy: start que falha = produção fora.

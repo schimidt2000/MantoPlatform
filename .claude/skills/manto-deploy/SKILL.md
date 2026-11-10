@@ -12,8 +12,8 @@ description: >
 
 ## "Push" significa produção
 
-`autoDeploy: true` nos dois serviços do `render.yaml`: push na `main` publica em ~60s, sem
-staging. "Push" = merge da branch na `main` (merge commit, estilo `merge: NNN — …`) +
+`autoDeploy: true` nos três serviços web do `render.yaml` (`manto-backend`, `manto-frontend`,
+`manto-avisos`): push na `main` publica em ~60s só o serviço cujos arquivos mudaram, sem staging. "Push" = merge da branch na `main` (merge commit, estilo `merge: NNN — …`) +
 `git push origin main`. Parar no push da branch não é entregar. Só publique quando o dono pedir.
 
 ## Antes do merge
@@ -25,13 +25,13 @@ staging. "Push" = merge da branch na `main` (merge commit, estilo `merge: NNN �
    §Migrations).
 4. Tocou o `startCommand` do `render.yaml`? `python scripts/validar_startcommand.py` verde e
    **commit sozinho**, fora do horário, com os Events do Render abertos.
-5. Horário: publicar em lote e fora do expediente (~19h BRT em diante). Cada deploy abre ~1 min
-   de 502 na porta pública (o `manto-frontend` não tem healthcheck); a calculadora de orçamento
-   dispara request a cada tecla e é a primeira a sangrar.
-6. **Campanha da loja virtual (spec 310, R-20)**: de **1º/11 a 25/12**, nenhum deploy entre **9h e
-   23h** BRT — um aviso de pagamento perdido no 502 só aparece no app da InfinitePay. Depois de
-   cada deploy, conferir "Pagamentos a conferir" (`/virtuais/devolucoes`) e o painel da InfinitePay
-   (`DEVELOPMENT.md` §Operar a produção).
+5. Horário: push que mexe no **backend** abre ~1 min de 502 para a equipe (o `manto-backend` tem
+   disco e não troca sem queda): publicar em lote, de preferência a partir das ~19h BRT — a
+   calculadora de orçamento dispara request a cada tecla e é a primeira a sangrar. Push só de
+   `docs/`/`specs/` não reinicia nada, e só de `frontend/` troca sem queda (feature 340).
+6. **Loja virtual**: desde a 340 não há janela proibida por pagamento — o aviso espera no
+   `manto-avisos` enquanto o backend troca. Depois de cada deploy, conferir "Pagamentos a conferir"
+   (`/virtuais/devolucoes`) e o painel da InfinitePay (`DEVELOPMENT.md` §Operar a produção).
 
 ## Publicar
 
@@ -46,7 +46,12 @@ curl.exe -s https://app.mantoproducoes.com.br/api/formularios/comum/schema
 ```
 
 JSON = Flask no ar e migration aplicada (o start é `flask db upgrade && python seed.py &&
-gunicorn`). **Nunca** use `/health` na URL pública: não está em `BACKEND_PREFIXES`, cai no
+gunicorn`). E o receptor de avisos de pagamento (feature 340), que precisa responder 200:
+
+```powershell
+curl.exe -s https://manto-avisos.onrender.com/health/banco
+```
+ **Nunca** use `/health` na URL pública: não está em `BACKEND_PREFIXES`, cai no
 fallback da SPA e devolve 200 com o Flask morto. 502 isolado nos primeiros minutos é troca de
 container — repita antes de investigar. `curl -w '%{http_code}' || echo 000` vira `000000` em
 falha e finge que voltou.

@@ -1,14 +1,15 @@
 <!-- Sync Impact Report
-Version change: 3.0.0 → 3.1.0 (MINOR: princípio novo XV — texto que o usuário lê, com tom por
-superfície e glossário único; portão novo "texto revisado pelo XV")
-Modified principles: V (redação: "Salvando…", "excluir, remover", mensagens de erro apontam para o XV)
-Added sections: XV Texto que o usuário lê: tom por superfície e vocabulário único (correção 316b,
-a partir da revisão de 505 textos da feature 316)
+Version change: 3.1.0 → 3.2.0 (MINOR: Operação e Deploy materialmente ampliada — quarto serviço
+`manto-avisos`, deploy só de quem mudou, frontend com healthcheck, aviso de pagamento fora do
+caminho do deploy; feature 340)
+Modified principles: nenhum
+Modified sections: Operação e Deploy (item 1 reescrito, item 1a novo); Stack e Restrições ("Banco")
+sem mudança
 Removed sections: nenhuma
-Templates requiring updates: plan-template (linha XV no Constitution Check), checklist-template
-(portão CHK010), tasks-template (tarefa de polimento) — atualizados na mesma rodada; CLAUDE.md §5 e
-docs/00 §5 ganham o ponteiro
-Follow-up TODOs: caixa do menu lateral e dos títulos de módulo (dívida 146 do docs/05)
+Templates requiring updates: nenhum (o plan-template não cita a regra de horário); CLAUDE.md §2,
+DEVELOPMENT.md e skill manto-deploy atualizados na mesma feature
+Follow-up TODOs: tirar o disco do manto-backend em janeiro (dívida 202 do docs/05), quando o item 1
+perde a ressalva do backend
 -->
 # Constituição da Plataforma Manto
 
@@ -338,8 +339,15 @@ resto da tela. Uma mensagem de erro continua dizendo o que aconteceu e o que faz
 ## Operação e Deploy (Render)
 Regras operacionais — o detalhe técnico mora em `docs/01` §5 e o procedimento em `DEVELOPMENT.md`:
 1. **Push na `main` é o deploy.** Não há staging. "Push" significa merge da branch na `main` +
-   `git push origin main`, e só acontece quando o dono pede. Publicar em lote, fora do horário da
-   equipe; cada deploy abre ~1 min de 502 na porta pública (o frontend não tem healthcheck).
+   `git push origin main`, e só acontece quando o dono pede. Só faz deploy o serviço cujos arquivos
+   mudaram (`rootDir`/`buildFilter` do `render.yaml`). O `manto-backend` tem disco e cai ~1 min a
+   cada deploy: push que mexe nele vai em lote, de preferência fora do horário da equipe. O
+   `manto-frontend` e o `manto-avisos` têm healthcheck e nenhum disco, e trocam sem queda.
+1a. **Aviso de operadora de pagamento entra por serviço que não cai num push.** O aviso da
+   InfinitePay vai para o `manto-avisos` (`servicos/avisos/`), que só grava em
+   `virtual_payment_inbox`; o backend drena e decide pela regra única da 310. O receptor não importa
+   `app/` nem decide nada. Por isso pagamento não impõe janela proibida de deploy; depois de cada
+   deploy, conferir "Pagamentos a conferir".
 2. **`startCommand` do `manto-backend` muda em commit sozinho**, fora do horário, com os Events do
    Render abertos, depois de `python scripts/validar_startcommand.py` verde. O serviço tem disco:
    start que falha deixa a produção fora.
@@ -402,9 +410,14 @@ Uma tarefa só está concluída quando:
   `docs/03` é o registro. A constituição chega às skills `speckit-*` em tempo de execução — o que
   está aqui é o que o plano e as tarefas vão cobrar.
 
-**Versão**: 3.1.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-10-23
+**Versão**: 3.2.0 | **Ratificada**: 2026-07-20 | **Última alteração**: 2026-11-10
 
 **Changelog**
+* **3.2.0** (2026-11-10): Operação e Deploy, feature 340. O dono não podia publicar de dia na
+  campanha de Natal (R-20 da 310): cada push derrubava os dois serviços web por ~1 min e o aviso
+  de pagamento que pegava o 502 se perdia. Item 1 reescrito (deploy só de quem mudou; só o backend,
+  que tem disco, cai) e item 1a novo (o aviso de pagamento entra pelo `manto-avisos`, serviço sem
+  disco que só guarda; o backend decide). Aprovado pelo dono junto do plano da 340 (10/11).
 * **3.1.0** (2026-10-23): Princípio XV, texto que o usuário lê (correção 316b). A revisão de 505
   textos da feature 316 fixou um tom por superfície (interno operacional; público lúdico e claro;
   portal cordial; WhatsApp copiado em tom de conversa) e um glossário único (Inserir/Ver/Excluir

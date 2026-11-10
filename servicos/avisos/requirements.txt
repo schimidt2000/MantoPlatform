@@ -1,0 +1,5 @@
+# Receptor de avisos de pagamento (feature 340). O receptor não importa o app; fala com o mesmo
+# Postgres. Driver psycopg 3 (não o psycopg2 da raiz) porque é o que o .venv de desenvolvimento
+# tem: o verify_340.py exercita este mesmo driver, e não um diferente do de produção.
+gunicorn==23.0.0
+psycopg[binary]==3.3.4

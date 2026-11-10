@@ -3627,6 +3627,46 @@ class VirtualPaymentNotification(db.Model):
     )
 
 
+class VirtualPaymentInbox(db.Model):
+    """O aviso de pagamento como chegou ao ``manto-avisos``, antes de qualquer decisão (feature 340).
+
+    Quem escreve é o receptor (``servicos/avisos/app.py``), um serviço sem disco que não cai num push;
+    quem drena é o backend (``virtuais_ops.drenar_caixa_de_avisos``), que passa o corpo para
+    ``registrar_aviso`` — a mesma porta do aviso direto da 310. A caixa existe porque a InfinitePay só
+    reenvia com 400: um 502 de deploy perdia o aviso.
+
+    Guarda o corpo e o resultado da conferência do segredo **na chegada** (``secret_ok``), nunca o
+    segredo. Relógio de São Paulo, como as demais ``virtual_*``.
+    """
+
+    __tablename__ = "virtual_payment_inbox"
+    __table_args__ = (
+        db.Index(
+            "ix_virtual_payment_inbox_pendentes", "id",
+            postgresql_where=db.text("drained_at IS NULL"),
+        ),
+    )
+
+    id              = db.Column(db.Integer, primary_key=True)
+    received_at     = db.Column(db.DateTime, default=now_sp, nullable=False)
+    body            = db.Column(db.Text, nullable=False)
+    secret_ok       = db.Column(db.Boolean, nullable=False, default=False, server_default="0")
+    # Arrendamento do dreno: reivindicada há mais de `VIRTUAL_CAIXA_ARRENDAMENTO_MIN` sem dreno, a
+    # linha volta a ser elegível (processo morto no meio). Trava de linha não serve aqui: as funções
+    # da 310 fazem commit e a soltariam no meio do trabalho.
+    claimed_at      = db.Column(db.DateTime, nullable=True)
+    attempts        = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    error           = db.Column(db.Text, nullable=True)
+    # Registrado na fila da 310: daqui em diante quem responde é a `reprocessar_avisos`.
+    drained_at      = db.Column(db.DateTime, nullable=True)
+    notification_id = db.Column(
+        db.Integer,
+        db.ForeignKey("virtual_payment_notifications.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    alerted_at      = db.Column(db.DateTime, nullable=True)
+
+
 class VirtualMediaDelivery(db.Model):
     """A unidade de trabalho da Fila de Produção de Mídia (feature 205).
 

@@ -1712,7 +1712,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `transaction_nsu`, `capture_method` e `receipt_url` na URL. A página lê esses parâmetros **uma
   vez**, manda ao servidor (`POST …/retorno`), põe o resumo que voltar no cache e **limpa a URL** na
   hora (`replace`) — o link compartilhado depois não carrega identificador nenhum. Falha do envio
-  não trava a tela; a varredura termina o trabalho.
+  não trava a tela; a varredura termina o trabalho. **Desde a 340 o envio repete sozinho** em
+  erro de rede ou 5xx (o 502 de um deploy do backend): até 3 vezes, em 5 s, 20 s e 60 s
+  (`useRetornoCheckout`, `retry`/`retryDelay` do TanStack, que guarda os identificadores entre as
+  tentativas); a página fica em "Confirmando o pagamento…" enquanto tenta. Resposta 2xx ou 4xx não
+  repete. Nenhum texto novo.
 - **API**: `GET /api/virtuais/pedidos/<public_token>` · `POST /api/virtuais/pedidos/<public_token>/retorno`.
 
 #### `/virtuais/devolucoes` — Devoluções pendentes *(feature 205 US3)*
