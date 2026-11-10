@@ -211,6 +211,17 @@ def reconciliar_vagas_pelo_titulo(
         notificar_vaga_sobrando(
             event, nome, chave=chave, pedido=pedido, vagas=len(ocupadas), autor_id=autor_id
         )
+    # O título voltou a pedir um personagem que tinha vaga marcada (converge): a sobra se resolve
+    # pelo mesmo caminho da escala — marca limpa e aviso encerrado quando título e vagas batem.
+    for chave, pedido in novo.items():
+        if pedido <= antigo.get(chave, 0):
+            continue
+        marcadas = [r for r in _vagas_do_nome(event, chave) if r.sobrando_desde]
+        if marcadas:
+            resolver_sobra(
+                event, marcadas[0].character_name,
+                autor_nome=autor_nome, autor_papel=autor_papel, agora=agora,
+            )
     return resultado
 
 

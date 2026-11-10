@@ -705,6 +705,24 @@ def cen_15() -> None:
     _garante(_titulo(eid) == "(R&I) STORMTROOPERS + LUKE", f"título mexido: {_titulo(eid)}")
 
 
+def cen_15b() -> None:
+    """Converge: o título volta a pedir o personagem → marca e aviso encerram (data-model, FR-017)."""
+    with app.app_context():
+        eid = _evento(
+            "(R&I) STORMTROOPERS + STORMTROOPERS",
+            [("Stormtroopers", estado["t"][0]), ("Stormtroopers", estado["t"][1])],
+        )
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS")
+    _garante(all(v.sobrando_desde for v in _vagas(eid)), "preparo: sem marca")
+    _basico("com", eid, titulo="(R&I) STORMTROOPERS + STORMTROOPERS")
+    _garante(all(v.sobrando_desde is None for v in _vagas(eid)), "a marca ficou com o título pedindo de novo")
+    _garante(
+        all(r.ciente_em for r in _avisos(eid, nops.KIND_EVENTO_VAGA_SOBRANDO)),
+        "aviso continuou pendente",
+    )
+    _garante(len(_vagas(eid)) == 2, "vaga sumiu")
+
+
 def cen_17() -> None:
     remocoes.clear()
     with app.app_context():
@@ -934,6 +952,7 @@ def main() -> int:
         ("14. título 2 → 1 com as duas ocupadas: marca e avisa, sem e-mail", cen_14),
         ("16. mesma reconciliação de novo: nenhum aviso repetido", cen_16),
         ("15. Casting tira um artista: vaga vazia sai, marca e aviso encerram", cen_15),
+        ("15b. título volta a pedir: marca e aviso encerram (converge)", cen_15b),
         ("17. evento do Google: vaga ocupada fica, sem e-mail, marcada", cen_17),
         ("18. nome de equipe e ENSAIO: regra de hoje", cen_18),
         ("22. vaga com grafia diferente do título não é tocada", cen_22),

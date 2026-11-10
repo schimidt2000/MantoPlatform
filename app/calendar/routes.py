@@ -597,6 +597,8 @@ def _handle_assign_casting(event: CalendarEvent, tz_sp: ZoneInfo) -> None:
         actor_name=current_user.name,
         is_superadmin=any(r.name == RoleName.SUPERADMIN for r in current_user.roles),
         tz=tz_sp,
+        # Feature 339: o teto autorizado guarda quem autorizou, também por esta porta legada.
+        autor_id=current_user.id,
     )
     if message:
         flash(message, "success")
