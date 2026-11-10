@@ -17,6 +17,7 @@ from app import db, _safe_next
 # views Jinja saírem na fase 6, este arquivo some e sobra só o `comissoes_ops`.
 from app.financeiro.comissoes_ops import (  # noqa: F401
     DEFAULT_COMMISSION,
+    DEFAULT_TAX_RATE,
     EDUCAMANTO_COMMISSION_RATE,
     _commission_beneficiary,
     _educamanto_commission_rate,
@@ -25,9 +26,11 @@ from app.financeiro.comissoes_ops import (  # noqa: F401
     _event_commission,
     _event_cost,
     _get_commission_rate,
+    _get_tax_rate,
     _group_cost,
     _resync_pending_commissions,
     _sync_commission_payment,
+    comissao_do_vendedor_edu,
 )
 from app.models import CalendarEvent, EventRole, EventPayment, EventInstallment, EventInvoice, SiteSetting, User, Role, SalaryHistory, CommissionPayment, SalaryPayment, SalaryAdvance, SpecialExpense, EventAcrescimo, RecurringExpenseEntry
 from app.money import format_brl
@@ -109,7 +112,8 @@ def _prev_month(year: int, month: int):
 
 
 # ── Constantes fiscais (sobrescrevíveis em Settings) ──────────────────────────
-DEFAULT_TAX_RATE = Decimal("16")        # % provisionamento de imposto sobre vendas com nota
+# `DEFAULT_TAX_RATE` e `_get_tax_rate` moram em `comissoes_ops` desde a 338 (a base da comissão
+# EducaManto desconta o imposto) e chegam aqui pelo import do topo.
 DEFAULT_FATOR_R = Decimal("28")         # % corte folha/faturamento (Simples Anexo III vs V)
 FATOR_R_RATE_LOW = "6"                  # alíquota protegida (rótulo)
 FATOR_R_RATE_HIGH = "15,5"             # alíquota de risco (rótulo)
@@ -124,12 +128,6 @@ def _pct(num, den) -> Decimal:
 
 def _is_permuta(event) -> bool:
     return bool(getattr(event, "is_cortesia_permuta", False))
-
-
-def _get_tax_rate(settings) -> Decimal:
-    if settings and settings.tax_rate is not None:
-        return Decimal(str(settings.tax_rate))
-    return DEFAULT_TAX_RATE
 
 
 def _get_fator_r_threshold(settings) -> Decimal:
@@ -243,6 +241,11 @@ def _compute_drg(events, settings, salary_cost: Decimal, gastos_extras: Decimal,
 
     marketing = Decimal(sum(_event_cost(e) for e in permutas))
     comissoes = sum((_event_commission(e, settings) for e in normais), Decimal("0"))
+    # Feature 338: a comissão do vendedor EducaManto também sai do resultado (é a parte do preço
+    # que vai para quem vendeu), no mês do evento, como a do responsável.
+    do_vendedor = sum((comissao_do_vendedor_edu(e, settings)[0] for e in normais), Decimal("0"))
+    if do_vendedor:  # só quando há: somar zero mudaria o expoente da DRE de um mês sem ela
+        comissoes += do_vendedor
     if houve:
         comissoes += cancelamentos["comissao_retido"]
     pessoal = Decimal(salary_cost)
@@ -1036,6 +1039,8 @@ def _build_commission_items(period_start: date, period_end: date, due_date: date
                 "amount": c.amount,
                 "ciclo": (lambda d: d.strftime("%Y-%m") if d else None)(ciclo_de_pagamento_da_linha(c)),
                 "status": c.status,
+                # Feature 338: a Planilha diz que a linha é a comissão do vendedor EducaManto.
+                "origem": c.source,
             }
             for c in sorted(grupo, key=lambda c: c.id)
         ]

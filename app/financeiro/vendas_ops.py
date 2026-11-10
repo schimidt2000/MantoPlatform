@@ -302,6 +302,7 @@ def build_kpis(
         ``desconto_concedido`` (diferença entre o preço de tabela e o valor fechado), e — com
         cancelados — ``retido_cancelamentos``, ``n_cancelados`` e ``comissao_retido``.
     """
+    from app.financeiro.comissoes_ops import comissao_do_vendedor_edu
     from app.financeiro.routes import _commission_beneficiary, _event_commission
 
     faturaveis = billable_sales(sales)
@@ -322,6 +323,11 @@ def build_kpis(
 
     comissao = Decimal("0")
     for event in faturaveis:
+        # Feature 338: a comissão do vendedor EducaManto conta para o vendedor dela — em "Minhas
+        # vendas", só quando a pessoa é o vendedor; no total, sempre.
+        do_vendedor, vendedor = comissao_do_vendedor_edu(event, settings)
+        if do_vendedor and (commission_target_id is None or (vendedor is not None and vendedor.id == commission_target_id)):
+            comissao += do_vendedor
         if commission_target_id is not None:
             beneficiary = _commission_beneficiary(event, settings)
             if beneficiary is None or beneficiary.id != commission_target_id:
@@ -344,6 +350,16 @@ def build_kpis(
                 for r in cancelados
                 if commission_target_id is None
                 or (r.beneficiario is not None and r.beneficiario.id == commission_target_id)
+            ),
+            Decimal("0"),
+        )
+        # Feature 338: a comissão do vendedor EducaManto do retido, do vendedor congelado.
+        comissao_retido += sum(
+            (
+                r.comissao_vendedor_retido
+                for r in cancelados
+                if commission_target_id is None
+                or (r.vendedor_edu is not None and r.vendedor_edu.id == commission_target_id)
             ),
             Decimal("0"),
         )

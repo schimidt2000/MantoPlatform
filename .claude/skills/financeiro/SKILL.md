@@ -66,7 +66,9 @@ experimentos pesados (atualize antes com `.\scripts\db\refresh-local-db.ps1 -Fre
 - `event_roles` — cachês: `event_id`, `talent_id` → `talents.full_name`, `cache_value`,
   `travel_cache`, `payment_status` ('nao_pago'→'pago'), `dismissed_at` (ignorar dispensados).
 - `commission_payments` — comissões: `seller_id` → `users.name`, `amount` (negativo =
-  estorno), `status`, `paid_at`, `payable_from`.
+  estorno), `status`, `paid_at`, `payable_from`, `source` (feature 338: NULL = comissão do
+  evento; `vendedor_educamanto` = comissão do vendedor EducaManto, segunda linha no mesmo
+  evento — `calendar_events.educamanto_seller_commission` é o valor que a gerou).
 - `special_expenses` — gastos extras: `amount`, `category`, `expense_date`, `status`,
   `disbursement_type` ('fornecedor' → `supplier_name`/`supplier_pix`; 'reembolso' →
   `reimburse_user_id`), `event_id` (nullable), `receipt_path`.

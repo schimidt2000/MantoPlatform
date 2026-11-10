@@ -329,6 +329,14 @@ class ResumoCancelado:
     seller_id: int | None
     linhas: list[CommissionPayment]
     bvs: list[dict[str, Any]] = field(default_factory=list)
+    # Feature 338: a comissão do vendedor EducaManto do retido e quem a recebe (congelados no ato).
+    comissao_vendedor_retido: Decimal = Decimal("0.00")
+    vendedor_edu: User | None = None
+
+    @property
+    def comissoes_do_retido(self) -> Decimal:
+        """As duas comissões do retido somadas: a do evento e a do vendedor EducaManto (338)."""
+        return self.comissao_retido + self.comissao_vendedor_retido
 
     @property
     def bv_retido(self) -> Decimal:
@@ -341,8 +349,8 @@ class ResumoCancelado:
 
     @property
     def efeito_resultado(self) -> Decimal:
-        """O que o cancelado soma ao resultado: retido − comissão − BV − imposto."""
-        return self.retido - self.comissao_retido - self.bv_retido - self.imposto_que_conta
+        """O que o cancelado soma ao resultado: retido − comissões − BV − imposto."""
+        return self.retido - self.comissoes_do_retido - self.bv_retido - self.imposto_que_conta
 
     @property
     def tem_dinheiro(self) -> bool:
@@ -426,6 +434,10 @@ def resumos_cancelados(ids: list[int]) -> dict[int, ResumoCancelado]:
         ev.cancelamento.commission_seller_id
         for ev in eventos
         if ev.cancelamento is not None and ev.cancelamento.commission_seller_id
+    } | {
+        ev.cancelamento.educamanto_seller_id
+        for ev in eventos
+        if ev.cancelamento is not None and ev.cancelamento.educamanto_seller_id
     }
     pessoas = {u.id: u for u in User.query.filter(User.id.in_(beneficiarios)).all()} if beneficiarios else {}
     de_fora = set(principais.values()) - {ev.id for ev in eventos}
@@ -448,8 +460,13 @@ def resumos_cancelados(ids: list[int]) -> dict[int, ResumoCancelado]:
 
             cheia = _dinheiro(canc.commission_full)
             comissao_retido = comissao_do_retido(cheia, retido, venda)
+            vendedor_retido = (
+                comissao_do_retido(canc.educamanto_seller_commission, retido, venda)
+                if canc.educamanto_seller_id
+                else Decimal("0.00")
+            )
         else:
-            cheia, comissao_retido = Decimal("0.00"), Decimal("0.00")
+            cheia, comissao_retido, vendedor_retido = Decimal("0.00"), Decimal("0.00"), Decimal("0.00")
         congeladas = {b.acrescimo_id: b for b in (canc.bvs if canc is not None else []) if b.acrescimo_id is not None}
         bvs = []
         for a in acrescimos.get(ev.id, []):
@@ -495,6 +512,8 @@ def resumos_cancelados(ids: list[int]) -> dict[int, ResumoCancelado]:
             seller_id=(canc.seller_id if canc is not None and canc.seller_id else ev.seller_id),
             linhas=linhas_por.get(ev.id, []),
             bvs=bvs,
+            comissao_vendedor_retido=vendedor_retido,
+            vendedor_edu=pessoas.get(canc.educamanto_seller_id) if canc is not None else None,
         )
     return out
 
@@ -640,7 +659,8 @@ def totais_cancelamentos(resumos: list[ResumoCancelado]) -> dict[str, Any]:
         "devolvido": soma(lambda r: r.devolvido),
         "devolucao_a_pagar": a_pagar,
         "retido": soma(lambda r: r.retido),
-        "comissao_retido": soma(lambda r: r.comissao_retido),
+        # Feature 338: com a comissão do vendedor EducaManto do retido (a DRE soma este total).
+        "comissao_retido": soma(lambda r: r.comissoes_do_retido),
         "bv_retido": soma(lambda r: r.bv_retido),
         "imposto": soma(lambda r: r.imposto_que_conta),
         "efeito_resultado": soma(lambda r: r.efeito_resultado),
@@ -676,15 +696,21 @@ def painel_de_cancelamentos(
     totais = totais if totais is not None else totais_cancelamentos(resumos)
     status = event_payment_status(0, 0, False, cancelado=True)  # o rótulo do cancelado (306)
 
-    def _do_alvo(r: ResumoCancelado) -> bool:
-        return commission_target_id is None or (
-            r.beneficiario is not None and r.beneficiario.id == commission_target_id
-        )
+    def _comissao_do_alvo(r: ResumoCancelado) -> Decimal:
+        """As comissões do retido de `r` que são do alvo — a do evento e a do vendedor (338)."""
+        if commission_target_id is None:
+            return r.comissoes_do_retido
+        total = Decimal("0.00")
+        if r.beneficiario is not None and r.beneficiario.id == commission_target_id:
+            total += r.comissao_retido
+        if r.vendedor_edu is not None and r.vendedor_edu.id == commission_target_id:
+            total += r.comissao_vendedor_retido
+        return total
 
     comissao = (
         totais["comissao_retido"]
         if commission_target_id is None
-        else sum((r.comissao_retido for r in resumos if _do_alvo(r)), Decimal("0.00"))
+        else sum((_comissao_do_alvo(r) for r in resumos), Decimal("0.00"))
     )
     nomes = {
         u.id: u.name
@@ -713,7 +739,7 @@ def painel_de_cancelamentos(
                     Decimal("0.00"),
                 )),
                 "retido": float(r.retido),
-                "comissao_retido": float(r.comissao_retido if _do_alvo(r) else Decimal("0.00")),
+                "comissao_retido": float(_comissao_do_alvo(r)),
                 "status": status,
             }
             for r in resumos
@@ -1111,10 +1137,20 @@ class ContaDoAto:
     custo: Decimal | None
     bvs: list[dict[str, Any]]
     comissao_retido: Decimal
+    # Feature 338: a comissão do vendedor EducaManto no ato — quem, quanto (0,00 no EducaManto sem
+    # ela; `None` fora do EducaManto) e a parte do retido, pela mesma proporção do responsável.
+    vendedor_id: int | None = None
+    vendedor_valor: Decimal | None = None
+    vendedor_retido: Decimal = Decimal("0.00")
 
     @property
     def alvos(self) -> dict[int, Decimal]:
         return {self.beneficiario_id: self.comissao_retido} if self.beneficiario_id else {}
+
+    @property
+    def alvos_do_vendedor(self) -> dict[int, Decimal]:
+        """Os alvos da trilha do vendedor EducaManto (338): quem recebia, pela parte do retido."""
+        return {self.vendedor_id: self.vendedor_retido} if self.vendedor_id else {}
 
     @property
     def bv_retido(self) -> Decimal:
@@ -1133,13 +1169,16 @@ def _dinheiro_do_grupo(ids: list[int]) -> tuple[Decimal, Decimal]:
 
 
 def _custo_congelado(event: CalendarEvent, settings) -> Decimal | None:
-    """O custo de cachês que a comissão EducaManto usa (sobre o lucro); fora dela, `None`."""
+    """O custo que a comissão EducaManto usa (sobre o lucro); fora dela, `None`.
+
+    Feature 338: cachês, gastos extras aprovados e a comissão do vendedor dos dias vivos
+    (`custo_da_base_educamanto`) — o imposto é refeito pela venda congelada (`cheia_do_congelado`).
+    """
     from app.financeiro import comissoes_ops
 
     if not (event.is_educamanto and comissoes_ops._educamanto_responsavel(settings) is not None):
         return None
-    custo = comissoes_ops._group_cost(event) if event.is_group_leader else comissoes_ops._event_cost(event)
-    return _dinheiro(custo)
+    return _dinheiro(comissoes_ops.custo_da_base_educamanto(event, settings))
 
 
 def _conta_do_ato(
@@ -1160,6 +1199,11 @@ def _conta_do_ato(
         ja_pago = (a.bv_payment_status or "nao_pago") in ("pago", "no_banco")
         conta = _dinheiro(a.amount_brl) if ja_pago else bv_do_retido(a.amount_brl, retido, venda)
         bvs.append({"acrescimo": a, "cheio": _dinheiro(a.amount_brl), "conta": conta, "pago": ja_pago})
+    # Feature 338: o EducaManto congela também a comissão do vendedor (0,00 sem ela — é a marca do
+    # ato da regra nova, `_imposto_na_base_congelada`); fora dele, nada.
+    vendedor_valor, vendedor = (
+        comissoes_ops.comissao_do_vendedor_edu(event, settings) if custo is not None else (None, None)
+    )
     return ContaDoAto(
         pago=pago,
         ja_devolvido=ja_devolvido,
@@ -1173,6 +1217,9 @@ def _conta_do_ato(
         custo=custo,
         bvs=bvs,
         comissao_retido=comissoes_ops.comissao_do_retido(cheia, retido, venda),
+        vendedor_id=vendedor.id if vendedor is not None else None,
+        vendedor_valor=vendedor_valor,
+        vendedor_retido=comissoes_ops.comissao_do_retido(vendedor_valor or 0, retido, venda),
     )
 
 
@@ -1407,13 +1454,15 @@ def _bvs_depois_do_corte(principal: CalendarEvent, conta: ContaDoCorte) -> list[
 
 def _custo_sem_o_dia(vivo: CalendarEvent, dia: CalendarEvent, settings) -> Decimal | None:
     """O custo da comissão EducaManto do principal que fica, sem o dia cortado (que ainda não tem
-    `cancelled_at` quando a comissão é refeita). Fora da EducaManto, `None`."""
-    from app.calendar.group_ops import dias_vivos
+    `cancelled_at` quando a comissão é refeita). Fora da EducaManto, `None`.
+
+    Feature 338: sai com o dia o cachê e os gastos extras dele; a comissão do vendedor fica (ela é
+    da venda, que mora no principal)."""
     from app.financeiro import comissoes_ops
 
     if not (vivo.is_educamanto and comissoes_ops._educamanto_responsavel(settings) is not None):
         return None
-    return _dinheiro(sum((comissoes_ops._event_cost(e) for e in dias_vivos(vivo) if e.id != dia.id), 0))
+    return _dinheiro(comissoes_ops.custo_da_base_educamanto(vivo, settings, sem_o_dia=dia))
 
 
 def _previa_do_corte(event: CalendarEvent, devolucao: Any, venda_nova: Any) -> dict[str, Any]:
@@ -1533,6 +1582,7 @@ def _efeito(event: CalendarEvent, conta: ContaDoAto, plano: list[dict], settings
         "ciclo": ciclo.strftime("%Y-%m") if ciclo else None,
         "repasse_em": repasse.isoformat() if repasse else None,
         "imposto_referencia": float(referencia) if referencia is not None else None,
+        **_efeito_do_vendedor(conta),
     }
 
 
@@ -1581,6 +1631,16 @@ def previa_cancelamento(event: CalendarEvent, devolucao: Any, venda_nova: Any = 
             event, conta.alvos, motivo=MOTIVO_AJUSTE_RETIDO, hoje=now_sp().date(), simular=True
         )
     return _efeito(event, conta, plano, settings)
+
+
+def _efeito_do_vendedor(conta: ContaDoAto) -> dict[str, Any]:
+    """A comissão do vendedor EducaManto na prévia do ato (feature 338): a cheia e a do retido."""
+    if conta.vendedor_id is None:
+        return {}
+    return {
+        "comissao_vendedor": float(conta.vendedor_valor or 0),
+        "comissao_vendedor_retido": float(conta.vendedor_retido),
+    }
 
 
 def _brl(valor: Any) -> str:
@@ -1723,6 +1783,8 @@ def _congelar(event: CalendarEvent, *, regime: str, pedido: PedidoDeCancelamento
         commission_rate=conta.taxa if venda else None,
         commission_cost=conta.custo if venda else None,
         commission_seller_id=conta.beneficiario_id if venda else None,
+        educamanto_seller_id=conta.vendedor_id if venda else None,
+        educamanto_seller_commission=conta.vendedor_valor if venda else None,
         seller_id=event.seller_id,
         with_invoice=bool(event.with_invoice) if venda else False,
         retained_tax=pedido.imposto if venda and event.with_invoice else None,
@@ -1982,7 +2044,7 @@ def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, se
         todos os dias do "todos"; no corte e na passagem, a do dia; na Loja Virtual, nenhuma.
     """
     from app.calendar import group_ops
-    from app.constants import MOTIVO_AJUSTE_RETIDO, REGIME_VENDA
+    from app.constants import MOTIVO_AJUSTE_RETIDO, ORIGEM_VENDEDOR_EDUCAMANTO, REGIME_VENDA
     from app.financeiro import comissoes_ops
 
     if not forma.corta:
@@ -2000,6 +2062,12 @@ def _gravar_o_ato(forma: FormaDoAto, regime: str, pedido, conta, actor: User, se
         db.session.flush()
         if regime == REGIME_VENDA:
             comissoes_ops.reconciliar_comissao_do_cancelado(forma.principal, conta.alvos, motivo=MOTIVO_AJUSTE_RETIDO)
+            # Feature 338: a trilha do vendedor EducaManto, com os alvos dela (sem esta chamada a
+            # linha dele ficaria com o valor cheio de uma venda que não houve).
+            comissoes_ops.reconciliar_comissao_do_cancelado(
+                forma.principal, conta.alvos_do_vendedor, motivo=MOTIVO_AJUSTE_RETIDO,
+                fonte=ORIGEM_VENDEDOR_EDUCAMANTO,
+            )  # fmt: skip
         return gasto, canc
     dia = forma.dias[0]
     canc = _congelar_dia(dia, principal=forma.vivo, pedido=pedido, conta=conta, actor=actor)
@@ -2794,7 +2862,11 @@ def _piso_da_devolucao(aprovadas: list[SpecialExpense]) -> Decimal:
 
 
 def reaplicar_cancelado(
-    event: CalendarEvent, *, motivo: str, motivos: dict[int, str] | None = None
+    event: CalendarEvent,
+    *,
+    motivo: str,
+    motivos: dict[int, str] | None = None,
+    motivos_vendedor: dict[int, str] | None = None,
 ) -> list[dict]:
     """Refaz a comissão do retido de um cancelado `venda` pelo dinheiro de agora. Não faz commit.
 
@@ -2802,8 +2874,11 @@ def reaplicar_cancelado(
     retido é lido na hora (`bv_da_planilha`), então não há o que gravar nele. Supõe a T4 tomada.
     A cheia não se recalcula aqui (o comprovante não a mexe): quem corrige a venda recongela antes
     (`recongelar_do_comercial`) e passa os `motivos` por beneficiário da troca de vendedor.
+
+    Feature 338: refaz também a trilha da comissão do vendedor EducaManto (o valor e o vendedor
+    congelados × retido ÷ venda), com os `motivos_vendedor` da troca de vendedor.
     """
-    from app.constants import REGIME_VENDA
+    from app.constants import ORIGEM_VENDEDOR_EDUCAMANTO, REGIME_VENDA
     from app.financeiro import comissoes_ops
 
     canc = event.cancelamento
@@ -2814,6 +2889,13 @@ def reaplicar_cancelado(
     alvo = comissoes_ops.comissao_do_retido(canc.commission_full, resumo.retido, canc.sale_value)
     alvos = {canc.commission_seller_id: alvo} if canc.commission_seller_id else {}
     plano = comissoes_ops.reconciliar_comissao_do_cancelado(event, alvos, motivo=motivo, motivos=motivos)
+    alvo_vendedor = comissoes_ops.comissao_do_retido(
+        canc.educamanto_seller_commission or 0, resumo.retido, canc.sale_value
+    )
+    alvos_vendedor = {canc.educamanto_seller_id: alvo_vendedor} if canc.educamanto_seller_id else {}
+    plano += comissoes_ops.reconciliar_comissao_do_cancelado(
+        event, alvos_vendedor, motivo=motivo, motivos=motivos_vendedor, fonte=ORIGEM_VENDEDOR_EDUCAMANTO
+    )
     db.session.expire(event, ["commission_payments"])
     return plano
 
@@ -2842,6 +2924,39 @@ def travar_para_corrigir_venda(event: CalendarEvent, *, novo_vendedor_id: Any = 
     _travar_linhas_de_comissao(
         ids, {antigo, novo, getattr(responsavel, "id", None), *_beneficiarios_das_linhas(ids)}
     )
+
+
+def _trocar_vendedor_congelado(canc, event: CalendarEvent) -> dict[int, str]:
+    """A troca de vendedor no cancelado leva a comissão do vendedor EducaManto ao novo (338).
+
+    O valor é o do ato; quem recebe passa a ser o vendedor novo, se ele comissiona (senão, ninguém).
+    Devolve os motivos da trilha do vendedor: o antigo "devolve o já recebido", o novo leva "a
+    comissão do retido" — os mesmos da troca na comissão do evento.
+    """
+    from app.constants import MOTIVO_AJUSTE_TROCA_DEVOLVE, MOTIVO_AJUSTE_TROCA_RETIDO
+
+    if not canc.educamanto_seller_commission:
+        return {}
+    antigo = canc.educamanto_seller_id
+    pessoa = db.session.get(User, event.seller_id) if event.seller_id else None
+    novo = pessoa.id if pessoa is not None and pessoa.receives_commission else None
+    canc.educamanto_seller_id = novo
+    motivos: dict[int, str] = {}
+    if antigo is not None and antigo != novo:
+        motivos[antigo] = MOTIVO_AJUSTE_TROCA_DEVOLVE
+    if novo is not None and novo != antigo:
+        motivos[novo] = MOTIVO_AJUSTE_TROCA_RETIDO
+    return motivos
+
+
+def _imposto_na_base_congelada(canc) -> bool:
+    """O imposto sai da base EducaManto congelada? Só no ato da regra da 338 (feature 338).
+
+    O ato da 338 grava sempre `educamanto_seller_commission` (0,00 sem comissão do vendedor) no
+    EducaManto; o de antes deixou nulo e congelou a base só com os cachês. A correção da venda do
+    cancelado antigo refaz a cheia pela régua do ato dele, nunca pela de hoje.
+    """
+    return bool(canc.with_invoice) and canc.educamanto_seller_commission is not None
 
 
 def _bv_congelado_total(canc) -> Decimal:
@@ -2911,6 +3026,7 @@ def recongelar_do_comercial(
         cheia, beneficiario, _taxa = comissoes_ops.comissao_cheia_do_evento(
             event, SiteSetting.query.get(1), venda=canc.sale_value, taxa=canc.commission_rate,
             bv_total=_bv_congelado_total(canc), custo=canc.commission_cost,
+            com_nota=_imposto_na_base_congelada(canc),
         )  # fmt: skip
     else:
         beneficiario = antigo
@@ -2920,6 +3036,7 @@ def recongelar_do_comercial(
             else comissoes_ops.cheia_do_congelado(
                 event, venda=canc.sale_value, taxa=canc.commission_rate,
                 bv_total=_bv_congelado_total(canc), custo=canc.commission_cost,
+                com_nota=_imposto_na_base_congelada(canc),
             )  # fmt: skip
         )
     if cheia != _dinheiro(canc.commission_full):
@@ -2936,10 +3053,13 @@ def recongelar_do_comercial(
         motivos = dict.fromkeys(devolvem, MOTIVO_AJUSTE_TROCA_DEVOLVE)
         if beneficiario is not None:
             motivos[beneficiario] = MOTIVO_AJUSTE_TROCA_RETIDO
+    motivos_vendedor = _trocar_vendedor_congelado(canc, event) if vendedor_mudou else {}
     db.session.flush()
     # T4 de novo, já com o beneficiário resolvido (as linhas já travadas não esperam).
-    _travar_linhas_de_comissao(ids, {antigo, beneficiario, *_beneficiarios_das_linhas(ids)})
-    plano = reaplicar_cancelado(event, motivo=motivo, motivos=motivos)
+    _travar_linhas_de_comissao(
+        ids, {antigo, beneficiario, canc.educamanto_seller_id, *_beneficiarios_das_linhas(ids)}
+    )
+    plano = reaplicar_cancelado(event, motivo=motivo, motivos=motivos, motivos_vendedor=motivos_vendedor)
     papel = ", ".join(r.name for r in actor.roles)[:60] or None
     texto = "Venda do cancelado corrigida" + (f" ({'; '.join(mudou)})" if mudou else "")
     db.session.add(
@@ -3551,6 +3671,8 @@ def aplicar_estorno_comissao(event: CalendarEvent) -> None:
                     status="a_pagar",
                     original_id=cp.id,
                     notes=comissoes_ops._nota_do_ajuste(MOTIVO_AJUSTE_EXCLUSAO, "estorno automático"),
+                    # Feature 338: o estorno da comissão do vendedor EducaManto diz de onde veio.
+                    source=cp.source,
                 )
             )
             cp.event_id = None

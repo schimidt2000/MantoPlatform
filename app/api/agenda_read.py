@@ -563,9 +563,17 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
     # Feature 267: o número exibido passa a ser o que o Financeiro paga. Antes eram 2% flat
     # sobre venda−BV aqui e a régua de 9 ramos lá, e a tela do evento mostrava um valor que a
     # planilha nunca confirmava. `kpi_event` é o LÍDER do grupo — venda e comissão vivem só nele.
-    from app.financeiro.comissoes_ops import comissao_exibida_do_evento
+    from app.financeiro.comissoes_ops import (
+        _commission_beneficiary,
+        comissao_do_vendedor_exibida,
+        comissao_exibida_do_evento,
+    )
 
     commission, commission_source = comissao_exibida_do_evento(kpi_event, settings)
+    # Feature 338: a comissão do vendedor EducaManto sai à parte — `commission` é só a do evento,
+    # que no EducaManto é do responsável (o nome dele vai junto, para a tela não pôr o do vendedor).
+    seller_commission, seller_commission_name = comissao_do_vendedor_exibida(kpi_event, settings)
+    beneficiario = _commission_beneficiary(kpi_event, settings)
     # `lucro` segue sem descontar comissão: é o que a dica da tela declara ("venda − cachês −
     # gastos"). Mudar isso é decisão de negócio, não correção.
     lucro = sale - Decimal(cost) - expenses_total - bv_total
@@ -581,6 +589,9 @@ def _compute_kpi(event: CalendarEvent) -> dict[str, Any]:
         # "Comissão (2,5%)" sobre esse valor seria uma conta que não fecha.
         "rate": float(rate),
         "commission_source": commission_source,
+        "commission_beneficiary": beneficiario.name if beneficiario else None,
+        "seller_commission": _money(seller_commission),
+        "seller_commission_name": seller_commission_name,
         "group_size": len(vivos),
         "seller": kpi_event.seller.name if kpi_event.seller else None,
     }
@@ -914,6 +925,7 @@ def serialize_event_detail(
     """
     from app.calendar import solicitacao_ops
     from app.calendar.routes import parse_characters
+    from app.financeiro.comissoes_ops import _edu_com_responsavel
 
     flags = flags_do_detalhe(event, user, impersonate)
     cancelado = event.is_cancelled
@@ -1212,6 +1224,10 @@ def serialize_event_detail(
             "seller_id": event.seller_id,
             "sale_date": event.sale_date.isoformat() if event.sale_date else None,
             "commission_rate": event.commission_rate,
+            # Feature 338: a comissão do vendedor EducaManto e se o card mostra o campo (evento
+            # EducaManto com responsável configurado — fora dele a API recusa o valor).
+            "educamanto_seller_commission": _money(event.educamanto_seller_commission),
+            "mostra_comissao_do_vendedor": _edu_com_responsavel(event, settings),
             # Hotfix 215b — o que a tela trava, com a mesma regra que a escrita recusa
             # (`event_ops.taxa_e_vendedor_negados`): taxa só o Superadmin; vendedor já gravado
             # só Financeiro e Superadmin trocam (a Comercial preenche o vazio).

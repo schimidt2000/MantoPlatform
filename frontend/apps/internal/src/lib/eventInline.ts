@@ -98,6 +98,8 @@ export interface EventComercialInput {
   seller_id: number | null;
   sale_date: string | null;
   commission_rate: number | null;
+  /** Feature 338: só no EducaManto com responsável; ausente = o servidor não mexe no valor. */
+  educamanto_seller_commission?: number | null;
   payment_method: string | null;
   payment_installments: number | null;
   payment_due_date: string | null;

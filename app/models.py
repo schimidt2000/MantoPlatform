@@ -346,6 +346,10 @@ class CalendarEvent(db.Model):
     payment_due_date     = db.Column(db.Date, nullable=True)          # data de vencimento (faturado)
     transport_value      = db.Column(db.Numeric(12, 2), nullable=True)  # valor transporte separado (R$)
     acrescimo_value      = db.Column(db.Numeric(12, 2), nullable=True)  # acréscimo separado (R$)
+    # Feature 338: a comissão do vendedor que entrou no preço pela calculadora EducaManto. Vai
+    # inteira para o vendedor do evento (linha própria de comissão) e sai da base do responsável.
+    # Campo de venda: só no principal (`group_ops.SATELLITE_FIELDS_CLEARED`).
+    educamanto_seller_commission = db.Column(db.Numeric(12, 2), nullable=True)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
     invoice_due_date     = db.Column(db.Date, nullable=True)          # data prevista de emissão da NF (feature 065)
@@ -1075,6 +1079,10 @@ class CommissionPayment(db.Model):
     notes       = db.Column(db.Text, nullable=True)
     original_id = db.Column(db.Integer, db.ForeignKey("commission_payments.id"), nullable=True)
     created_at  = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Feature 338: de que fonte a linha é. NULL = a comissão do evento (a de sempre: vendedor ou
+    # responsável EducaManto, e os ajustes dela); `ORIGEM_VENDEDOR_EDUCAMANTO` = a comissão do
+    # vendedor EducaManto. Cada trilha se sincroniza e se reconcilia sozinha.
+    source      = db.Column(db.String(30), nullable=True)
 
     seller   = db.relationship("User", foreign_keys=[seller_id], lazy=True)
     event    = db.relationship(
@@ -2668,6 +2676,10 @@ class EventCancellation(db.Model):
     # Sem `ondelete`: o beneficiário e o vendedor congelados bloqueiam a exclusão do usuário (FR-073).
     commission_seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    # Feature 338: a comissão do vendedor EducaManto no ato — quem e quanto. O alvo dele no
+    # cancelado é este valor × retido ÷ venda, como o do responsável. Sem `ondelete` (FR-073).
+    educamanto_seller_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
+    educamanto_seller_commission = db.Column(db.Numeric(12, 2), nullable=True)
     with_invoice = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     retained_tax = db.Column(db.Numeric(12, 2), nullable=True)
     group_leader_id = db.Column(
@@ -2698,6 +2710,7 @@ class EventCancellation(db.Model):
     group_leader = db.relationship("CalendarEvent", foreign_keys=[group_leader_id], lazy=True)
     seller = db.relationship("User", foreign_keys=[seller_id], lazy=True)
     commission_seller = db.relationship("User", foreign_keys=[commission_seller_id], lazy=True)
+    educamanto_seller = db.relationship("User", foreign_keys=[educamanto_seller_id], lazy=True)
     updated_by = db.relationship("User", foreign_keys=[updated_by_id], lazy=True)
 
 

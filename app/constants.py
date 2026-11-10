@@ -545,6 +545,19 @@ MOTIVOS_AJUSTE_COMISSAO = {
 # `NOTA_CICLO_VALOR_TARDIO`. `_comissao_existente` e a reconciliação ignoram a linha marcada.
 NOTA_COMISSAO_PROPRIA_DO_DIA = "Comissão própria do dia"
 
+# Feature 338: a comissão do vendedor EducaManto — o valor que quem vende põe no preço pela
+# calculadora e que vai inteiro para ele. É uma segunda linha no mesmo evento, separada da
+# comissão do responsável pela coluna `commission_payments.source` (NULL = a comissão do evento).
+ORIGEM_VENDEDOR_EDUCAMANTO = "vendedor_educamanto"
+ROTULO_ORIGEM_VENDEDOR_EDUCAMANTO = "Comissão do vendedor (EducaManto)"
+NOTA_SEM_COMISSAO_DO_VENDEDOR = "Cancelado: sem comissão do vendedor"
+MSG_COMISSAO_VENDEDOR_INVALIDA = "Informe um valor válido para a comissão do vendedor."
+MSG_COMISSAO_VENDEDOR_ACIMA_DA_VENDA = "A comissão do vendedor não pode passar do valor da venda."
+MSG_COMISSAO_VENDEDOR_FORA_DO_EDUCAMANTO = "A comissão do vendedor só existe em evento EducaManto."
+MSG_COMISSAO_VENDEDOR_DO_CANCELADO = (
+    "A comissão do vendedor do evento cancelado é a do ato e não pode ser alterada."
+)
+
 # ── Contratos da ClickSign (feature 317) ──────────────────────────────────────────────────────
 # O que é cada envelope da conta: só o de cliente liga a uma venda; o de artista (contrato de
 # prestação de serviços) e os avulsos ficam fora das listas.

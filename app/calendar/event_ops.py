@@ -31,6 +31,10 @@ from app.constants import (
     EVENT_TYPE_SHOW,
     MENSAGEM_VALOR_A_DEFINIR,
     MENSAGEM_VALOR_SIMBOLICO,
+    MSG_COMISSAO_VENDEDOR_ACIMA_DA_VENDA,
+    MSG_COMISSAO_VENDEDOR_DO_CANCELADO,
+    MSG_COMISSAO_VENDEDOR_FORA_DO_EDUCAMANTO,
+    MSG_COMISSAO_VENDEDOR_INVALIDA,
     VALOR_MINIMO_DE_VENDA,
     RoleName,
     now_sp,
@@ -803,6 +807,79 @@ def erros_do_valor_na_aba_comercial(data: dict, event: Any) -> dict[str, str]:
     )
 
 
+#: A chave da comissão do vendedor EducaManto no corpo do card Comercial (feature 338).
+CAMPO_COMISSAO_DO_VENDEDOR = "educamanto_seller_commission"
+
+
+def _decimal_ou_none(bruto: Any) -> Decimal | None:
+    """O número do corpo, ou `None` quando não é número (texto, NaN, infinito)."""
+    from decimal import InvalidOperation
+
+    try:
+        valor = Decimal(str(bruto))
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+    return valor if valor.is_finite() else None
+
+
+def comissao_do_vendedor_do_corpo(bruto: Any) -> Decimal | None:
+    """O valor a gravar: vazio, zero ou não informado → `None` (sem comissão do vendedor)."""
+    if bruto in (None, ""):
+        return None
+    valor = _decimal_ou_none(bruto)
+    if valor is None or valor == 0:
+        return None
+    return valor.quantize(Decimal("0.01"))
+
+
+def erros_da_comissao_do_vendedor(data: dict, event: Any, settings: Any) -> dict[str, str]:
+    """A regra da comissão do vendedor EducaManto no card Comercial (feature 338).
+
+    A chave ausente não é validada (o bundle antigo não a manda e não mexe no valor). Recusa o que
+    não é número ou é negativo, o valor em evento que não é EducaManto com responsável e o valor
+    acima da venda — quando a venda tem valor: a venda "a definir" aceita o número, e a linha só
+    nasce com a venda. A cortesia não tem o que conferir (grava vazio).
+    """
+    from app.financeiro.comissoes_ops import _edu_com_responsavel
+
+    if CAMPO_COMISSAO_DO_VENDEDOR not in data or data.get("is_cortesia_permuta"):
+        return {}
+    bruto = data[CAMPO_COMISSAO_DO_VENDEDOR]
+    if bruto in (None, ""):
+        return {}
+    valor = _decimal_ou_none(bruto)
+    if valor is None or valor < 0:
+        return {CAMPO_COMISSAO_DO_VENDEDOR: MSG_COMISSAO_VENDEDOR_INVALIDA}
+    if valor == 0:
+        return {}
+    if not _edu_com_responsavel(event, settings):
+        return {CAMPO_COMISSAO_DO_VENDEDOR: MSG_COMISSAO_VENDEDOR_FORA_DO_EDUCAMANTO}
+    venda = _decimal_ou_none(data.get("sale_value")) if data.get("sale_value") not in (None, "") else None
+    if venda is not None and venda > 0 and valor > venda:
+        return {CAMPO_COMISSAO_DO_VENDEDOR: MSG_COMISSAO_VENDEDOR_ACIMA_DA_VENDA}
+    return {}
+
+
+def _gravar_comissao_do_vendedor(event: Any, data: dict, *, is_cortesia: bool) -> None:
+    """Grava a comissão do vendedor do card (feature 338); no cancelado, o valor do ato não muda.
+
+    Raises:
+        CancelValidationError: 409 `cancelado` — o cancelado congelou o valor no ato, e esta porta
+            não recongela (a regra única da 306: a porta que não recongela recusa para todos).
+    """
+    if CAMPO_COMISSAO_DO_VENDEDOR not in data:
+        return
+    novo = None if is_cortesia else comissao_do_vendedor_do_corpo(data[CAMPO_COMISSAO_DO_VENDEDOR])
+    if event.is_cancelled and not _mesmo_valor(novo, event.educamanto_seller_commission):
+        from app.calendar.cancel_ops import CancelValidationError
+        from app.constants import CODIGO_EVENTO_CANCELADO
+
+        raise CancelValidationError(
+            MSG_COMISSAO_VENDEDOR_DO_CANCELADO, status=409, codigo=CODIGO_EVENTO_CANCELADO
+        )
+    event.educamanto_seller_commission = novo
+
+
 def resolver_data_da_venda(
     informada: date | None,
     venda: Any,
@@ -1245,7 +1322,8 @@ def update_event_comercial(
         event: O `CalendarEvent` a atualizar.
         data: Valores já convertidos (`sale_value`, `sale_value_gross`, `transport_value`,
             `with_invoice`, `is_cortesia_permuta`, `seller_id`, `sale_date`, `commission_rate`,
-            `payment_method`, `payment_installments`, `payment_due_date`).
+            `payment_method`, `payment_installments`, `payment_due_date` e, só quando o corpo a
+            trouxe, `educamanto_seller_commission` — feature 338).
         actor_name: Nome de quem editou, para o `EventLog`.
         tz: Fuso usado no carimbo do log.
         dados_nota: Os dados da nota (`pedido_de_nota_ops.DadosDaNota`); `None` não mexe (323).
@@ -1288,6 +1366,8 @@ def update_event_comercial(
 
         cancel_ops.travar_para_corrigir_venda(event, novo_vendedor_id=data.get("seller_id"))
     is_cortesia = bool(data.get("is_cortesia_permuta"))
+    # Feature 338: antes de qualquer outro campo — o 409 do cancelado não deixa escrita pela metade.
+    _gravar_comissao_do_vendedor(event, data, is_cortesia=is_cortesia)
     venda_anterior, data_anterior = event.sale_value, event.sale_date
     event.is_cortesia_permuta = is_cortesia
     event.sale_value = 0 if is_cortesia else data.get("sale_value")

@@ -247,8 +247,17 @@ const ROTULO_DO_TIPO: Record<CommissionLineTipo, string> = {
 };
 
 /** "Comissão", "Ajuste" ou "Estorno"; sem o campo (backend antigo), "Comissão". */
-export function rotuloDoTipoDaLinha(tipo: CommissionLineTipo | null | undefined): string {
-  return ROTULO_DO_TIPO[tipo ?? "comissao"] ?? "Comissão";
+export function rotuloDoTipoDaLinha(
+  tipo: CommissionLineTipo | null | undefined,
+  origem?: CommissionOrigem | null,
+): string {
+  const rotulo = ROTULO_DO_TIPO[tipo ?? "comissao"] ?? "Comissão";
+  // Feature 338: a linha da comissão do vendedor EducaManto diz de onde vem (é outra pessoa,
+  // no mesmo evento da comissão do responsável).
+  if (origem !== "vendedor_educamanto") return rotulo;
+  return (tipo ?? "comissao") === "comissao"
+    ? "Comissão do vendedor (EducaManto)"
+    : `${rotulo} — vendedor (EducaManto)`;
 }
 
 /** `AAAA-MM` → `MM/AAAA`; sem ciclo, "—". */
@@ -284,7 +293,12 @@ export interface CommissionEntry {
   ciclo?: string | null;
   /** O código do motivo do ajuste (`cancelamento`, `correcao`, `exclusao`…). */
   motivo?: string | null;
+  /** Feature 338 — opcional: `vendedor_educamanto` = a comissão do vendedor EducaManto. */
+  origem?: CommissionOrigem | null;
 }
+
+/** Feature 338: de que fonte é a linha de comissão (`null` = a comissão do evento). */
+export type CommissionOrigem = "vendedor_educamanto";
 
 export interface CommissionSeller {
   id: number;
@@ -462,6 +476,8 @@ export interface CommissionLine {
   /** `AAAA-MM`. */
   ciclo: string | null;
   status: CommissionStatus;
+  /** Feature 338 — opcional no backend antigo. */
+  origem?: CommissionOrigem | null;
 }
 
 export interface PagamentoTotals {
