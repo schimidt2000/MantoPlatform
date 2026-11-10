@@ -809,7 +809,7 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 **Quitada.** 22 — `healthCheckPath: /` no `manto-frontend`. Correção do registro: o "cada push
 (inclusive só de docs) rebuilda os dois serviços" valia só para o backend (`rootDir: .`); o
 frontend tem `rootDir: frontend`, e o Render só faz deploy dele quando essa pasta muda. O backend
-ganhou `buildFilter.ignoredPaths` na mesma feature. **Criadas.** (202–206; as branches 332–339 já
+ganhou `buildFilter.ignoredPaths` na mesma feature. **Criadas.** (202–207; as branches 332–339 já
 usam até a 201.)
 
 | # | Prioridade | Onde | O quê | Saída |
@@ -819,6 +819,7 @@ usam até a 201.)
 | 204 | **P4** | `scripts/validar_startcommand.py` (`THREADS_DE_FUNDO = 6`) | o validador do pool conta 6 threads de fundo por worker; o `create_app` sobe 10 e a 340 acrescentou a 11ª (`caixa-de-avisos`). Pela conta dele, 12 + 11 = 23 > 20 conexões. Na prática cada thread só segura conexão durante a própria volta e nada estourou | recontar as threads que usam o banco e acertar a constante (ou o pool) num commit sozinho, fora do horário |
 | 205 | **P4** | `frontend/apps/public/src/pages/PedidoVirtualPage.tsx` (`usePedidoVirtual`) | a leitura do pedido que falha com 5xx (o backend trocando de container) cai no estado de erro e a página diz "Pedido não encontrado" até chegar dado novo. Com a 340 o retorno do checkout repete e repõe o pedido na tela; quem só abre o link durante a troca continua lendo "não encontrado" por ~1 min (conferido na tela da 340) | distinguir 404 de 5xx/rede na página: em 5xx manter o último dado ou "Estamos conferindo seu pedido…" e seguir consultando |
 | 206 | **P5** | `specs/310-pagamento-loja-virtual/verify_310.py` (usuário "outro") | o verify escolhe o "outro" com `.first()` sem ordem; quando cai num usuário só Revendedor EducaManto, o guard da feature 078 devolve 403 em toda `/api/` pública e 23 cenários a partir do 32 falham com `KeyError: 'order_nsu'` (aconteceu numa rodada da regressão da 340; a rodada seguinte, mesmo código, deu 652/652) | `order_by(User.id)` e excluir `REVENDEDOR_EDUCAMANTO` na escolha, ou `logout` no fim do cenário 31 |
+| 207 | **P3** | `virtuais_ops.remover_slot` / `DELETE /api/virtuais/horarios/<id>` | horário livre que já foi reservado e expirou continua referenciado por `virtual_orders.slot_id`; a remoção bate no `fk_virtual_orders_slot_id` e a tela recebe **500 genérico** ("Erro interno do servidor"). Aconteceu em 10/11 ao trocar o Papai Noel de 01/12 para 06/12: o horário 01/12 14:50 tinha os pedidos de teste 1 e 2 (expirados, 19/10) e foi removido pelo Shell com os pedidos desvinculados (AuditLog `VirtualCampaignSlot` 6) | `remover_slot` desvincula pedidos `expirado`/`cancelado` do horário antes de apagar (ou recusa com 409 e mensagem), dentro da trava do horário |
 
 ## Baixa da correção 331-atrasados-na-planilha (2026-11-03)
 
