@@ -777,6 +777,8 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > porta cria a nota a emitir (antes só a criação); desligar (na transição) exclui só as a emitir. Contrato completo:
 > `specs/323-nota-pedida-ao-superadmin/contracts/api.md`.
 
+> **Feature 342** (na branch, sem merge): migration `d342a7c1e9f3` — `calendar_events.nota_email` (String 200), `form_field_definitions.show_if_key`/`show_if_value` (campo condicional) e cinco campos do sistema na seção "Nota fiscal" de cada formulário (`precisa_nota`, `nota_doc`, `nota_email`, `nota_iss`, `nota_referencia`). `nota_municipio` passa a valer com ou sem ISS retido e `nota_iss_retido` nulo = ninguém informou. `GET /api/formularios/<tipo>/schema` manda `show_if: {key, value}` e `only_for_cnpj_of` por campo e o tipo novo `cpf_cnpj`; o `POST` descarta o valor de campo escondido. A chave `nota` das três portas aceita `email` (ausente = não mexe) e ganha os 400 `fields.nota_tomador_doc` ("CNPJ ou CPF inválido…" e "Informe o CNPJ ou CPF de quem recebe a nota.") e `fields.nota_email`. `venda.nota` traz `email`, `municipio_sugerido` e `do_formulario`; o item do painel traz `municipio_sugerido`. O editor (`POST`/`PATCH …/formularios/editor/…`) aceita `show_if_key`/`show_if_value`. Nenhum endpoint nem gate novo. Contrato: `specs/342-nota-nasce-com-dados/contracts/api.md`.
+
 > **Feature 239**: `GET /api/dashboard` ganhou `portal_url` (raiz do Portal do Artista, mesma
 > fonte de `_portal_url()` em `app/email_service.py`; `null` quando a env `PORTAL_URL` não está
 > setada). O card "Confirmações pendentes" usa para incluir o link do portal na mensagem de

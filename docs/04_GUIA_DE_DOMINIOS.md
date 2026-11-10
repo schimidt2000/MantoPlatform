@@ -676,6 +676,23 @@ Invariantes:
 - Os dados da nota são da **venda** (`calendar_events.nota_*`): documento em branco vale o CNPJ (senão o CPF) do
   cliente contratante; documento informado completa o cadastro do cliente só se estiver vazio.
 
+#### Os dados da nota vêm do formulário (feature 342, na branch)
+
+- **Só campo vazio, nunca o chip.** No vínculo formulário → evento (`apply_event_link`),
+  `nota_do_formulario_ops.levar_para_o_evento` completa `nota_tomador_doc`, `nota_email`, `nota_referencia` e
+  `nota_iss_retido` quando estão vazios. Não liga `with_invoice`, não cria nota, não avisa. Satélite e cancelado
+  não recebem.
+- **`nota_iss_retido` nulo = ninguém informou.** "Sim"/"Não" da cliente gravam; "Não sei" não. Depois que a
+  vendedora salva o bloco, o valor é dela.
+- **Pedido de nota exige documento**, na venda ou no cadastro da contratante, quando o pedido nasce ou quando a
+  gravação apagaria o documento que existia (`pedido_de_nota_ops.erro_de_documento`). O pedido antigo sem
+  documento continua salvando.
+- **Município do evento** (`nota_municipio`) é onde o ISS do 17.10 é devido; a sugestão
+  (`municipio_sugerido`: formulário, depois endereço) nunca é gravada sozinha. A emissão direta (329) decide
+  por `is_outside_sp`, não por este texto.
+- **Campo condicional dos formulários**: `campo_visivel` é a régua única do servidor (validação e gravação);
+  a tela só esconde.
+
 ### Invariantes que valem para todo relatório financeiro
 
 1. **Satélites nunca são linha própria.** Venda e comissão vivem só no líder; os cachês entram via

@@ -201,6 +201,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **342-nota-nasce-com-dados** | *(pronta na branch, SEM merge nem push)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
@@ -405,6 +406,66 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 342 — O pedido de nota já nasce com os dados que a emissão exige   (342-nota-nasce-com-dados · 2026-11-10 · migration `d342a7c1e9f3`, aditiva)
+
+> **Pronta na branch `342-nota-nasce-com-dados` (worktree `C:\tmp\mp342`), SEM merge nem push**, a pedido do dono.
+> Nível 1. `verify_342.py` 19/19 e `verify_323.py` 15/15 contra o espelho `manto_342` (dump de 10/11). Detalhe:
+> `specs/342-nota-nasce-com-dados/`.
+
+**O pedido.** O dono (09 e 10/11): desde 01/11 a NFS-e sai pelo Emissor Nacional, que pede mais dados; das 16
+notas do painel "Notas a emitir", só 4 tinham CNPJ ou CPF, e ele cobrou a equipe pelo WhatsApp. "Quando o
+cliente marca que precisa de nota, o formulário deve abrir algumas perguntinhas básicas, sem tomar muito tempo
+dele. Depois esses dados são puxados automaticamente para o pedido de nota, ou o vendedor digita."
+
+**O que mudou.**
+- **Formulário público** (`/f/pre-contrato`, `/f/corporativo`): seção "Nota fiscal" com a caixa "Preciso de
+  nota fiscal" (opcional) e, marcada, quatro perguntas: CNPJ ou CPF de quem recebe (tipo novo `cpf_cnpj`,
+  dígitos verificadores na tela e no servidor), e-mail, "A empresa retém o ISS da nota?" (Não / Sim / Não sei,
+  só quando o documento é CNPJ) e o que precisa constar na nota. Documento e e-mail abrem preenchidos com o
+  CPF/CNPJ e o e-mail digitados acima.
+- **Campo condicional** (a parte que o editor não tinha): `form_field_definitions.show_if_key`/`show_if_value`.
+  `formularios_ops.campo_visivel` é a régua única: escondido, o campo não é validado e o valor é descartado
+  na gravação. O editor ganhou "Quando aparece"; campo do sistema tem a condição travada.
+- **Do formulário para a venda**: `nota_do_formulario_ops.levar_para_o_evento`, chamado dentro de
+  `apply_event_link` (o núcleo único do vínculo, 298), entrega as respostas a
+  `pedido_de_nota_ops.completar_pelo_formulario`, que preenche `nota_tomador_doc`, `nota_email`,
+  `nota_referencia` e `nota_iss_retido` **só quando vazios**. Nunca liga `with_invoice`, não cria nota e não
+  avisa ninguém. Na criação a partir do formulário, o chip e os dados chegam sugeridos na tela.
+- **Venda**: `pedido_de_nota_ops.erro_de_documento` recusa (400 `fields.nota_tomador_doc`) o pedido que nasce
+  sem documento na venda nem no cadastro da contratante, nas três portas; `calendar_events.nota_email`;
+  `nota_municipio` vale com ou sem ISS retido; `venda.nota` traz `email`, `municipio_sugerido` e
+  `do_formulario`; o painel mostra e-mail da nota e município (ou a sugestão "a confirmar").
+
+**Decisões (premissas, sem pergunta ao dono).**
+1. **O formulário não liga "Precisa de nota fiscal" na venda que já existe**: ligar muda o preço e avisa o
+   Superadmin. A tela mostra "A cliente pediu nota fiscal no formulário." e a vendedora decide.
+2. **A regra do documento não é retroativa**: recusa só o pedido que nasce na gravação ou a gravação que
+   apagaria o documento que existia. As 12 notas pendentes sem documento continuam editáveis ("Editar tudo" é
+   usado por quem não vende).
+3. **"Não sei" não grava nada**: a venda segue "não retido" (padrão da contadora) e a resposta aparece no bloco
+   e na leitura do card.
+4. **A sugestão de município nunca é gravada sozinha**: abre no campo e vira dado quando alguém salva o bloco.
+
+**Pegadinhas.**
+- `nota_iss_retido` nulo passou a ter sentido ("ninguém informou"): é o que deixa o formulário preencher sem
+  sobrescrever. O contrato de `venda.nota.iss_retido` segue booleano.
+- O documento digitado na venda completa o cadastro do cliente (regra da 323). Num verify, o cliente "sem
+  documento" deixa de estar sem documento depois do primeiro pedido: os cenários 11 a 15 usam cliente próprio.
+- `verify_323.py` cenário 3 passou a mandar o documento no pedido (o cliente dele não tem cadastro): sem isso a
+  regra nova o recusa, e os cenários 7 e 12 caíam em cascata.
+- A tela antiga manda `municipio: ""` sem ISS retido; nos minutos do deploy isso apaga um município confirmado
+  (a sugestão volta na abertura seguinte). `email` ausente no corpo não mexe no gravado.
+- A pergunta do ISS depende do **tamanho** de outro campo, que a condição do editor não expressa: regra fixa
+  por chave (`CHAVE_ISS_SO_PARA_CNPJ`), ao lado de `descreva_outros` (dívida 189).
+- **Três cadeias de migration descem de `d323b5a1c0e7`** sem merge: o CRM (325…335), a 329 e esta. A segunda a
+  entrar na `main` reaponta o `down_revision` (dívida 190). O `manto_local` está na cadeia do CRM: o verify
+  roda no espelho `manto_342` (URL em `.local-db-url` do worktree).
+- A 329 não foi tocada: ela decide a incidência por `is_outside_sp` e lê `nota_iss_retido` e o documento, que
+  continuam nos mesmos lugares.
+
+**Não conferido em tela**: o "Editar tudo" e a criação de evento a partir do formulário (cobertos por
+typecheck e pelos cenários 6, 15 e 16 do verify, não abertos no navegador).
 
 ### 336 — Buscar o evento por data no vínculo da tag NFC   (336-busca-evento-tag-nfc · 2026-11-05 · sem migration)
 

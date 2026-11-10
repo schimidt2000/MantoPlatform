@@ -2414,6 +2414,8 @@ Todas as telas são **mobile-first** (Princípio VIII).
   (`FormFieldDefinition`, editável em `/formularios`). Resposta vira `FormResponse` e dispara
   mensagem para o WhatsApp configurado.
 
+- **Feature 342** (na branch, sem merge): seção "Nota fiscal" no fim dos dois formulários. A caixa "Preciso de nota fiscal" abre "CNPJ ou CPF de quem vai receber a nota" e "E-mail para receber a nota" (já preenchidos com o que a cliente digitou acima), "A empresa retém o ISS da nota?" (só com CNPJ) e "Precisa que algo apareça na nota?". Documento errado avisa ao sair do campo. No interno, o bloco **Dados da nota** ganhou o quadro "A cliente informou no formulário", "E-mail para envio da nota" e "Município do evento" sempre visível (abre com a sugestão do endereço); com a venda sem nota e o formulário pedindo, a tela avisa "A cliente pediu nota fiscal no formulário.". O painel "Notas a emitir" mostra o e-mail da nota e o município. No **Editor de campos**, "Quando aparece" (Sempre / Só quando «campo» for «resposta»), e a lista mostra a condição de cada campo.
+
 #### `/catalogo/avaliar/:token` — Avaliação da Cliente
 - **UX**: link público por token do evento; grava `ClientFeedback`, exibido em
   `/clientes/avaliacoes`.
