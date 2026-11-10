@@ -7,6 +7,7 @@ import { formatBRL } from "@manto/money";
 import { EnderecoInput } from "../components/EnderecoInput";
 import {
   apiMoneyToNumber,
+  entregaDoVideo,
   fieldErrorsFrom,
   getClientToken,
   lembrarReservaDaAba,
@@ -41,6 +42,9 @@ import {
  * Cada reserva é de UM formato — chamada ao vivo ou vídeo gravado (decisão do dono, 304). A
  * cartinha não é campo: é algo que a criança faz durante a chamada, e o formulário só convida a
  * família a contar o que está escrito nela.
+ *
+ * A chamada não é só para criança (feature 341): a avó, o padrinho, um adulto também recebem. O
+ * texto fala de "quem vai receber"; a cartinha continua, como o momento da criança.
  */
 
 const CAMPOS_ROLAVEIS = [
@@ -333,7 +337,7 @@ export function CampanhaVirtualPage() {
               {FORMATOS.ao_vivo.detalhe}
             </span>
             <span className="mt-1 block text-[13px] text-alo-ink">
-              A criança conversa ao vivo e pode mostrar a cartinha.
+              Uma conversa ao vivo. Se for uma criança, dá para mostrar a cartinha.
             </span>
           </button>
 
@@ -357,8 +361,7 @@ export function CampanhaVirtualPage() {
               {FORMATOS.gravado.detalhe}
             </span>
             <span className="mt-1 block text-[13px] text-alo-ink">
-              Um recado só para a sua criança, entregue em até {campanha.recorded_delivery_days}{" "}
-              dias.
+              Um recado só para quem você escolher, entregue {entregaDoVideo(campanha)}.
             </span>
           </button>
         </div>
@@ -461,13 +464,13 @@ export function CampanhaVirtualPage() {
         </section>
       )}
 
-      {/* ── Ficha da criança ───────────────────────────────────────────── */}
+      {/* ── Ficha de quem vai receber ──────────────────────────────────── */}
       <section className="mt-8 space-y-4">
         <TituloSecao>{CAMPANHA.fichaTitulo}</TituloSecao>
 
         <div>
           <label className="text-[13px] text-alo-muted" htmlFor="child_name">
-            Nome da criança
+            Nome de quem vai receber
           </label>
           <input
             id="child_name"

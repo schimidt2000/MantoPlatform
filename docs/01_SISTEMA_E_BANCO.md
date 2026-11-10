@@ -7,7 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-10** · **340-caixa-de-avisos** (migration **`e340c1a2b3d4`**, aditiva
+> Última atualização: **2026-11-10** · **341-papai-noel-para-todos** (migration **`e341a1b2c3d4`**,
+> aditiva — head: `virtual_campaigns.recorded_delivery_until`, §2.10.0; o campo nas rotas da campanha
+> e as mensagens novas da ficha, §3.13.4). Antes: **2026-11-10** · **340-caixa-de-avisos** (migration **`e340c1a2b3d4`**, aditiva
 > — head: tabela `virtual_payment_inbox`, §2.10.2; o serviço novo `manto-avisos` e a rota dele,
 > §3.13.4 "Feature 340" e §4.3; o `webhook_url` dos links novos aponta para ele; `render.yaml` com
 > quatro recursos, healthcheck no frontend e filtro de caminhos no backend, §5.3).
@@ -696,6 +698,13 @@ Desde a **310**, `config_ops.update_settings` só muda o que veio no envio para
 `educamanto_seller_id`, `email_notifications_enabled`, `whatsapp_form_number` e `release_date`: o
 upload do logo manda só o arquivo, e as atribuições incondicionais desligavam de carona todos os
 e-mails (a confirmação de compra da loja inclusive), o WhatsApp e a data de corte.
+
+### 2.10.0 Data de entrega dos vídeos (feature 341)
+
+Migration **`e341a1b2c3d4`** (`down_revision = e340c1a2b3d4`), aditiva: `virtual_campaigns.
+recorded_delivery_until` (date, nulo). Preenchida e não passada na hora do pagamento, é o `due_date`
+da `VirtualMediaDelivery` do vídeo; senão vale pagamento + `recorded_delivery_days`
+(`virtuais_ops.prazo_do_video`, a única regra).
 
 ### 2.10.1 Loja de Interações Virtuais — colunas de pagamento (feature 310)
 
@@ -1678,7 +1687,7 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 | `GET` | `/api/virtuais/campanhas` | Lista campanhas com vendidos, faturado, horários restantes e capacidade de vídeo consumida. |
 | `POST` | `/api/virtuais/campanhas` | Cria campanha (JSON ou multipart com `cover`). Nasce em `rascunho`. |
 | `GET` | `/api/virtuais/campanhas/<id>/admin` | Detalhe completo + `slots` + `available_gift_items` (o Acervo 3D ativo inteiro, para o seletor). |
-| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). Desde a 310 aceita `listada` (bool): desligado, a campanha publicada some da vitrine e só abre pelo link. |
+| `PATCH` | `/api/virtuais/campanhas/<id>` | Edição parcial (campo ausente = não alterar). Desde a 310 aceita `listada` (bool): desligado, a campanha publicada some da vitrine e só abre pelo link. Desde a 341 aceita `recorded_delivery_until` (`AAAA-MM-DD`; vazio ou `null` limpa; inválida → 400 com `fields.recorded_delivery_until`), também no `POST`; a campanha pública e a da gestão devolvem o campo (ISO ou `null`). Mensagens da ficha na reserva: "Informe o nome de quem vai receber." e "Informe a idade." |
 | `POST` | `/api/virtuais/campanhas/<id>/publicar` | `{"status": "publicada"\|"pausada"\|"rascunho"}`. Publicar exige preços, capa, prazo e termos — falta de qualquer um vira **400** com o campo culpado. Desde a 310 também exige o pagamento configurado **e ligado** (tag, token e interruptor): senão **400** no campo `pagamento` — publicar com o pagamento desligado punha no ar uma campanha em que a família preenchia a ficha para receber erro no fim. |
 | `PUT` | `/api/virtuais/campanhas/<id>/acervo` | `{"item_ids": [...]}` — substitui a seleção inteira. Peça inativa é recusada. |
 | `POST` | `/api/virtuais/campanhas/<id>/horarios` | `{date, start, end}` → `{created, skipped}`. **Idempotente**: reexecutar a mesma janela devolve tudo em `skipped`. Teto de 500 slots por chamada. |

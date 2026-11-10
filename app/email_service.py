@@ -1390,11 +1390,15 @@ def send_virtual_order_confirmed_email(order) -> bool:
 
     campanha = order.campaign
     ao_vivo = order.modality == "ao_vivo"
-    quando = (
-        order.slot.start_at.strftime("%d/%m/%Y às %H:%M") + " (horário de Brasília)"
-        if order.slot and order.slot.start_at
-        else f"em até {campanha.recorded_delivery_days} dias"
-    )
+    # O prazo do vídeo é o da entrega (`virtuais_ops.prazo_do_video`, feature 341): a mesma data da
+    # página do pedido e da Fila de Produção — "até 13/12/2026", não "em até 7 dias".
+    prazo = getattr(getattr(order, "media_delivery", None), "due_date", None)
+    if order.slot and order.slot.start_at:
+        quando = order.slot.start_at.strftime("%d/%m/%Y às %H:%M") + " (horário de Brasília)"
+    elif prazo:
+        quando = f"até {prazo.strftime('%d/%m/%Y')}"
+    else:
+        quando = f"em até {campanha.recorded_delivery_days} dias"
     formato = "Chamada ao vivo (10 minutos)" if ao_vivo else "Vídeo gravado"
 
     rows = _info_row("Reserva", campanha.title)
@@ -1406,7 +1410,7 @@ def send_virtual_order_confirmed_email(order) -> bool:
     url = _virtuais_order_url(order)
     proximo_passo = (
         "No dia, abra a página do pedido alguns minutos antes: o link da chamada fica lá. "
-        "Deixe a cartinha por perto — a criança pode mostrar na câmera."
+        "Se for uma criança, deixe a cartinha por perto para ela mostrar na câmera."
         if ao_vivo
         else "Assim que o vídeo ficar pronto, mandamos outro e-mail. Ele fica na página do pedido."
     )
@@ -1417,7 +1421,7 @@ def send_virtual_order_confirmed_email(order) -> bool:
         + _btn("Ver meu pedido →", url, tema=TEMA_LOJA_VIRTUAL)
         + _paragraph(proximo_passo)
         + _paragraph(
-            "Para ver os dados da criança na página do pedido, pedimos o telefone da compra — "
+            "Para ver os dados do pedido na página, pedimos o telefone da compra — "
             "assim eles não ficam abertos a quem só tiver o link. Guarde este e-mail."
         )
     )
@@ -1568,6 +1572,6 @@ def send_virtual_video_ready_email(order) -> bool:
             else "🎄 O seu vídeo ficou pronto!"
         ),
         html=_html_wrap(
-            content, preheader="O vídeo da sua criança já está disponível.", tema=TEMA_LOJA_VIRTUAL
+            content, preheader="O seu vídeo já está disponível.", tema=TEMA_LOJA_VIRTUAL
         ),
     )

@@ -1607,7 +1607,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     carregado e reenviado sem ter editor, então saía sempre vazio na landing. Enviar capa faz a
     requisição virar `multipart` (`campaignBody` em `lib/virtuais.ts`).
   - **Preços e estoque** — os três preços em `MoneyInput` (digitação mascarada, valor cru no JSON),
-    capacidade de vídeos com "N de M já vendidos" e prazo de entrega em dias.
+    capacidade de vídeos com "N de M já vendidos" e prazo de entrega em dias. Desde a 341, **"Entrega
+    dos vídeos até"** (data, opcional, erro no campo): preenchida, todo vídeo vendido até ela vence
+    nessa data e a landing diz "entregue até 13 de dezembro"; vazia, vale o prazo em dias.
   - **Estoque de horários** — data + janela início/fim geram os slots de 10 min; o retorno diz
     quantos foram criados e quantos já existiam. Lista os horários com selo de situação; só os
     livres têm botão de remover.
@@ -1637,7 +1639,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   os dois formatos, passos, dicas do formulário, WhatsApp da empresa). Trocar de estação = trocar
   esse arquivo, a paleta `alo.*`, `TEMA_LOJA_VIRTUAL` (`app/email_service.py`) e a prévia
   `loja` de `frontend/server.js` com a imagem `apps/public/public/loja/og-natal.jpg`.
-- Regras de redação: nunca presumir menina ou menino; cada reserva é de **um** formato.
+- Regras de redação: **não é só para criança** (341 — a avó, o padrinho, um adulto também recebem:
+  o texto fala de "quem vai receber", a criança é o caso comum e a cartinha é "se for uma
+  criança"); nunca presumir menina ou menino; cada reserva é de **um** formato.
 - O botão flutuante da lista de desejos não aparece em `/v*`.
 
 #### `/v` — Vitrine da loja *(app público, feature 224e; tema na 304)*
@@ -1656,6 +1660,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 > fuso); o campo de dicas muda de rótulo e exemplo com o formato ("O que o Papai Noel precisa
 > saber?" × "O que o Papai Noel deve dizer no vídeo?"); campanha sem FAQ próprio mostra o FAQ da
 > loja; o WhatsApp cai no da empresa quando a campanha não tem um.
+
+> **341**: a ficha pede "Nome de quem vai receber" (a chave segue `child_name`); o cartão da
+> chamada diz "Se for uma criança, dá para mostrar a cartinha"; o do vídeo, "entregue até 13 de
+> dezembro" com a data da campanha (`entregaDoVideo`, data pelo texto, sem fuso) ou "em até N dias";
+> o FAQ da loja ganhou "É só para criança?". A página do pedido mostra "Para" no lugar de "Criança".
 
 > ⚠️ **Rota de produção: `/catalogo/v/:slug`.** Estas telas moram em `frontend/apps/public`
 > (`App.tsx:37-38`), que roda sob o basename `/catalogo` em produção — é assim que o backend gera os

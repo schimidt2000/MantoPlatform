@@ -219,6 +219,32 @@ def _parse_date(raw: Any, field: str, *, label: str) -> date:
         raise VirtuaisValidationError(field, f"{label} inválido (use AAAA-MM-DD).") from None
 
 
+def _parse_data_de_entrega(raw: Any) -> date | None:
+    """Data de entrega dos vídeos (feature 341): ``AAAA-MM-DD``; vazio ou nulo limpa."""
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        return None
+    try:
+        return _parse_date(raw, "recorded_delivery_until", label="Data")
+    except VirtuaisValidationError:
+        raise VirtuaisValidationError(
+            "recorded_delivery_until", "Informe uma data de entrega válida (dia/mês/ano)."
+        ) from None
+
+
+def prazo_do_video(campanha: Any, hoje: date) -> date:
+    """O prazo de entrega de um vídeo pago ``hoje`` — a única regra (feature 341).
+
+    Com ``recorded_delivery_until`` preenchida e ainda não passada, todo vídeo vence nessa data: a
+    equipe grava depois do dia das chamadas, e "pagamento + dias" fazia um vídeo comprado em
+    novembro vencer antes de ser gravado. Data passada (venda depois dela) ou vazia: pagamento +
+    ``recorded_delivery_days``, para a Fila de Produção nunca nascer com prazo vencido.
+    """
+    ate = getattr(campanha, "recorded_delivery_until", None)
+    if ate and hoje <= ate:
+        return ate
+    return hoje + timedelta(days=getattr(campanha, "recorded_delivery_days", None) or 7)
+
+
 def slugify(value: str) -> str:
     """Converte um texto livre no slug da campanha (minúsculas, sem acento, hifens)."""
     text = unicodedata.normalize("NFKD", (value or "").strip().lower())
@@ -278,6 +304,7 @@ def criar_campanha(
     price_gift: Any = 0,
     recorded_capacity: Any = 0,
     recorded_delivery_days: Any = 7,
+    recorded_delivery_until: Any = None,
     intro_html: str | None = None,
     tolerance_terms: str | None = None,
     faq: Any = None,
@@ -331,6 +358,7 @@ def criar_campanha(
             recorded_delivery_days or 7, "recorded_delivery_days",
             label="Prazo de entrega do vídeo", minimum=1,
         ),
+        recorded_delivery_until=_parse_data_de_entrega(recorded_delivery_until),
         talent_id=talent_id or None,
         figurino_sheet_id=figurino_sheet_id or character.figurino_sheet_id,
     )
@@ -377,6 +405,9 @@ def atualizar_campanha(campaign: VirtualCampaign, **campos: Any) -> VirtualCampa
                 campaign, field,
                 _parse_int(campos[field], field, label=label, minimum=minimum),
             )
+
+    if "recorded_delivery_until" in campos:
+        campaign.recorded_delivery_until = _parse_data_de_entrega(campos["recorded_delivery_until"])
 
     for field in ("intro_html", "tolerance_terms", "whatsapp_phone"):
         if field in campos:
@@ -764,19 +795,21 @@ def listar_slots_disponiveis(campaign: VirtualCampaign, *, day: str | None = Non
 
 
 def _validar_ficha(dados: dict[str, Any], *, exige_endereco: bool) -> dict[str, Any]:
-    """Valida os campos da ficha da criança e devolve os valores limpos (FR-014).
+    """Valida a ficha de quem vai receber e devolve os valores limpos (FR-014).
 
-    Cada erro aponta o campo culpado, para o React destacá-lo sem o usuário caçar o que faltou.
+    Cada erro aponta o campo culpado, para o React destacá-lo sem o usuário caçar o que faltou. As
+    chaves continuam ``child_*`` (API e banco), mas o texto não fala em criança: a chamada também
+    é comprada para a avó ou um adulto (feature 341).
     """
     nome = (dados.get("child_name") or "").strip()
     if not nome:
-        raise VirtuaisValidationError("child_name", "O nome da criança é obrigatório.")
+        raise VirtuaisValidationError("child_name", "Informe o nome de quem vai receber.")
 
     idade_raw = dados.get("child_age")
     try:
         idade = int(idade_raw)
     except (TypeError, ValueError):
-        raise VirtuaisValidationError("child_age", "Informe a idade da criança.") from None
+        raise VirtuaisValidationError("child_age", "Informe a idade.") from None
     if idade < 0 or idade > 120:
         raise VirtuaisValidationError("child_age", "Idade inválida.")
 
@@ -1581,7 +1614,7 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
     titulo = f"🎥 VIRTUAL — {personagem} para {order.child_name}"
     descricao = (
         f"Interação virtual vendida pela loja (pedido {order.order_nsu}).\n"
-        f"Criança: {order.child_name}, {order.child_age} anos.\n"
+        f"Para: {order.child_name}, {order.child_age} anos.\n"
         f"Contato: {order.contact_phone_display or order.contact_phone} · {order.contact_email}\n"
     )
     if order.behavior_notes:
@@ -1695,7 +1728,7 @@ def _efetivar_no_banco(order: VirtualOrder) -> None:
 
     prazo = None
     if order.modality == VIRTUAL_MODALITY_GRAVADO:
-        prazo = (agora() + timedelta(days=campanha.recorded_delivery_days or 7)).date()
+        prazo = prazo_do_video(campanha, agora().date())
     db.session.add(
         VirtualMediaDelivery(
             order_id=order.id,
@@ -3160,6 +3193,12 @@ def serialize_campaign(campaign: VirtualCampaign) -> dict[str, Any]:
         # reserva recusava com "esgotaram" (feature 310).
         "recorded_available": max(_vagas_de_video_livres(campaign), 0),
         "recorded_delivery_days": campaign.recorded_delivery_days,
+        # Feature 341: "entregue até 13 de dezembro" em vez de "em até 7 dias".
+        "recorded_delivery_until": (
+            campaign.recorded_delivery_until.isoformat()
+            if campaign.recorded_delivery_until
+            else None
+        ),
         "gift_items": [
             {"id": item.id, "name": item.name, "photo_url": item.photo_url}
             for item in campaign.acervo_items

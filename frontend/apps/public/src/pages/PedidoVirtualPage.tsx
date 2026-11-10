@@ -292,7 +292,7 @@ export function PedidoVirtualPage() {
             className={`mt-1 ${classeCampo(false)}`}
           />
           <p className="mt-1 text-[12px] text-alo-muted">
-            É assim que garantimos que só você vê os dados da sua criança.
+            É assim que garantimos que só você vê os dados do seu pedido.
           </p>
 
           {verificar.isError && (
@@ -323,7 +323,7 @@ export function PedidoVirtualPage() {
         >
           <dl className="divide-y divide-alo-line rounded-2xl border border-alo-line bg-alo-surface">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
-              <dt className="text-[13px] text-alo-muted">Criança</dt>
+              <dt className="text-[13px] text-alo-muted">Para</dt>
               <dd className="text-[15px] text-alo-ink">
                 {completo.child_name}, {completo.child_age} anos
               </dd>

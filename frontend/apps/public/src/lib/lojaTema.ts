@@ -9,9 +9,12 @@
  * O que é de cada campanha (título, apresentação, termos, FAQ específico, preços) continua na tela
  * de gestão. Aqui mora o que vale para a loja toda.
  *
- * Duas regras de redação que valem para qualquer estação:
- * - **nunca presumir menina ou menino**: o sujeito é "a criança" ou "sua criança" (a 205 dizia
- *   "o personagem preferido dela" e deixava fora metade das famílias);
+ * Três regras de redação que valem para qualquer estação:
+ * - **não é só para criança** (feature 341): a maioria compra para a criança da casa, mas a avó, o
+ *   padrinho e um adulto também recebem. O sujeito é "quem vai receber" / "quem você escolher"; a
+ *   criança aparece como o caso comum ("se for uma criança…"), nunca como o único;
+ * - **nunca presumir menina ou menino** (a 205 dizia "o personagem preferido dela" e deixava fora
+ *   metade das famílias);
  * - **cada pedido é de um formato só** — chamada ao vivo OU vídeo gravado (decisão do dono).
  */
 
@@ -30,8 +33,9 @@ export const HERO = {
   destaque: "Papai Noel",
   subtitulo: "Um encontro mágico, sem sair de casa.",
   texto:
-    "O Papai Noel liga para a sua criança por vídeo, chama pelo nome e já chega sabendo o que " +
-    "ela pediu, quem são os irmãos e como foi o ano. É só atender.",
+    "O Papai Noel liga por vídeo para quem você quer surpreender — a criança da casa, a vovó, o " +
+    "padrinho —, chama pelo nome e já chega sabendo dos pedidos, da família e de como foi o ano. " +
+    "É só atender.",
   cta: "Ver horários",
 };
 
@@ -41,15 +45,15 @@ export const FORMATOS = {
     nome: "Chamada ao vivo",
     detalhe: "10 minutos · dia e hora marcados",
     texto:
-      "O Papai Noel liga pelo Google Meet no horário que você escolher. A criança conversa com " +
-      "ele, conta como foi o ano e pode mostrar a cartinha para ele ler na hora.",
+      "O Papai Noel liga pelo Google Meet no horário que você escolher, conversa e relembra o ano. " +
+      "Se for uma criança, ela pode mostrar a cartinha para ele ler na hora.",
   },
   gravado: {
     nome: "Vídeo do Papai Noel",
     detalhe: "Recado gravado · sem hora marcada",
     texto:
-      "Um vídeo gravado só para a sua criança, com o nome dela e o recado que você pedir. Chega " +
-      "pronto para guardar, reassistir e mostrar para a família inteira.",
+      "Um vídeo gravado só para quem você escolher, com o nome da pessoa e o recado que você " +
+      "pedir. Chega pronto para guardar, reassistir e mostrar para a família inteira.",
   },
 } as const;
 
@@ -59,13 +63,14 @@ export const AVISO_UM_FORMATO =
 export const PASSOS = [
   {
     titulo: "Escolha o formato",
-    texto: "Chamada ao vivo, com dia e hora marcados, ou um vídeo gravado só para a sua criança.",
+    texto:
+      "Chamada ao vivo, com dia e hora marcados, ou um vídeo gravado só para quem você escolher.",
   },
   {
     titulo: "Conte tudo para o Papai Noel",
     texto:
-      "Nome, idade, o que pediu na cartinha, o nome do irmão e do cachorro. Quanto mais você " +
-      "contar, mais mágico fica.",
+      "Nome, idade, o que pediu de presente, quem são os irmãos, os netos ou o cachorro. Quanto " +
+      "mais você contar, mais mágico fica.",
   },
   {
     titulo: "No dia, é só atender",
@@ -85,10 +90,17 @@ export const FAQ_LOJA = [
       "conta.",
   },
   {
+    pergunta: "É só para criança?",
+    resposta:
+      "Não! A maioria das chamadas é para crianças, mas o Papai Noel também liga para a vovó, o " +
+      "vovô, os pais, os padrinhos — para qualquer pessoa que você queira emocionar neste Natal. " +
+      "Conte no formulário quem é e o que ele precisa saber.",
+  },
+  {
     pergunta: "Quanto tempo dura?",
     resposta:
-      "Dez minutos ao vivo, só para a sua criança. Dá tempo de conversar, contar como foi o ano, " +
-      "mostrar a cartinha e até cantar uma música de Natal.",
+      "Dez minutos ao vivo, só para quem vai receber a chamada. Dá tempo de conversar, contar " +
+      "como foi o ano, mostrar a cartinha e até cantar uma música de Natal.",
   },
   {
     pergunta: "A criança pode mostrar a cartinha?",
@@ -98,33 +110,33 @@ export const FAQ_LOJA = [
       "chega sabendo.",
   },
   {
-    pergunta: "O Papai Noel sabe mesmo o nome da criança?",
+    pergunta: "O Papai Noel sabe mesmo o nome de quem vai atender?",
     resposta:
       "Sabe. Na reserva você conta o nome, a idade e o que for especial — o que pediu de presente, " +
-      "o nome dos irmãos e do bichinho, uma conquista do ano. Ele chega sabendo de tudo.",
+      "o nome dos irmãos ou dos netos, do bichinho, uma conquista do ano. Ele chega sabendo de tudo.",
   },
   {
-    pergunta: "E se a criança ficar com vergonha?",
+    pergunta: "E se a pessoa ficar com vergonha?",
     resposta:
-      "Acontece muito, e é aí que o Papai Noel trabalha: puxa conversa, pergunta, brinca. Quase " +
-      "sempre a timidez passa antes do primeiro minuto.",
+      "Acontece muito, com criança e com adulto, e é aí que o Papai Noel trabalha: puxa conversa, " +
+      "pergunta, brinca. Quase sempre a timidez passa antes do primeiro minuto.",
   },
   {
     pergunta: "Posso gravar a chamada?",
     resposta:
-      "Pode, e a gente recomenda — de preferência com um segundo celular filmando o rosto da " +
-      "criança. A reação vale mais do que a tela da chamada.",
+      "Pode, e a gente recomenda — de preferência com um segundo celular filmando o rosto de quem " +
+      "está conversando com o Papai Noel. A reação vale mais do que a tela da chamada.",
   },
   {
     pergunta: "Como é o vídeo do Papai Noel?",
     resposta:
-      "O Papai Noel grava um recado só para a sua criança, com o nome dela e o que você pedir no " +
-      "formulário. Não é ao vivo, então não tem hora marcada: você recebe um aviso por e-mail e " +
-      "assiste na página do pedido. Costuma ser a saída quando os horários acabam.",
+      "O Papai Noel grava um recado só para quem você escolher, com o nome da pessoa e o que você " +
+      "pedir no formulário. Não é ao vivo, então não tem hora marcada: você recebe um aviso por " +
+      "e-mail e assiste na página do pedido. Costuma ser a saída quando os horários acabam.",
   },
   {
     pergunta: "Posso pedir a chamada e o vídeo juntos?",
-    resposta: `${AVISO_UM_FORMATO} Escolha o que faz mais sentido para a sua criança.`,
+    resposta: `${AVISO_UM_FORMATO} Escolha o que faz mais sentido para quem vai receber.`,
   },
   {
     pergunta: "Como faço o pagamento?",
@@ -149,14 +161,14 @@ export const CAMPANHA = {
     ao_vivo: {
       rotulo: "O que o Papai Noel precisa saber?",
       exemplo:
-        "Ex.: pediu uma bicicleta na cartinha, a irmã se chama Bia, o cachorro é o Thor, " +
-        "aprendeu a nadar este ano.",
+        "Ex.: pediu uma bicicleta na cartinha, a irmã se chama Bia, o cachorro é o Thor. Para a " +
+        "vovó: os netos são Ana e Leo, e ela faz o melhor panetone da família.",
     },
     gravado: {
       rotulo: "O que o Papai Noel deve dizer no vídeo?",
       exemplo:
-        "Ex.: dar parabéns por ter tirado a fralda, lembrar de escovar os dentes, dizer que " +
-        "recebeu a cartinha pedindo uma bicicleta.",
+        "Ex.: dar parabéns por ter tirado a fralda, lembrar de escovar os dentes. Para um adulto: " +
+        "agradecer pelo ano e mandar um abraço dos netos.",
     },
   },
 };
@@ -164,8 +176,8 @@ export const CAMPANHA = {
 /** Dicas para a família depois do pagamento da chamada ao vivo. */
 export const DICAS_DO_DIA = [
   "Abra o link alguns minutos antes, para testar câmera e som.",
-  "Deixe a cartinha por perto, para a criança mostrar ao Papai Noel.",
-  "Um segundo celular filmando o rosto da criança guarda a melhor parte.",
+  "Se for uma criança, deixe a cartinha por perto para ela mostrar ao Papai Noel.",
+  "Um segundo celular filmando o rosto de quem está na chamada guarda a melhor parte.",
 ];
 
 export const RODAPE = "Manto Produções · personagens vivos desde sempre";
