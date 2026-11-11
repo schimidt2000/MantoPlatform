@@ -1,7 +1,7 @@
 # 310b — O link de pagamento da loja não cabe mais em 500 caracteres
 
-**Branch**: `310b-link-de-pagamento-longo` · **Created**: 2026-11-11 · **Status**: pronto, aguardando
-deploy (`verify_310b.py` 12/12) · **Migration**: `f310b2a4c6e8` (`down_revision = d342a7c1e9f3`), só
+**Branch**: `310b-link-de-pagamento-longo` · **Created**: 2026-11-11 · **Status**: EM PRODUÇÃO desde
+11/11/2026 ~03h40, merge `39dd2613` (`verify_310b.py` 12/12) · **Migration**: `f310b2a4c6e8` (`down_revision = d342a7c1e9f3`), só
 alarga uma coluna
 
 > Nível 2 com migration, por exceção: a loja do Papai Noel está publicada e a maior parte das reservas
