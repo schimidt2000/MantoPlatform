@@ -7,7 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-10** · **341-papai-noel-para-todos** (migration **`e341a1b2c3d4`**,
+> Última atualização: **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
+> head: `virtual_orders.payment_url` vira `text`, §2.10.0b). Antes: **2026-11-10** ·
+> **341-papai-noel-para-todos** (migration **`e341a1b2c3d4`**,
 > aditiva — head: `virtual_campaigns.recorded_delivery_until`, §2.10.0; o campo nas rotas da campanha
 > e as mensagens novas da ficha, §3.13.4). Antes: **2026-11-10** · **340-caixa-de-avisos** (migration **`e340c1a2b3d4`**, aditiva
 > — head: tabela `virtual_payment_inbox`, §2.10.2; o serviço novo `manto-avisos` e a rota dele,
@@ -705,6 +707,14 @@ Migration **`e341a1b2c3d4`** (`down_revision = e340c1a2b3d4`), aditiva: `virtual
 recorded_delivery_until` (date, nulo). Preenchida e não passada na hora do pagamento, é o `due_date`
 da `VirtualMediaDelivery` do vídeo; senão vale pagamento + `recorded_delivery_days`
 (`virtuais_ops.prazo_do_video`, a única regra).
+
+### 2.10.0b Link de pagamento sem teto (hotfix 310b)
+
+Migration **`f310b2a4c6e8`** (`down_revision = d342a7c1e9f3`): `virtual_orders.payment_url` passa de
+`varchar(500)` a `text` (no PostgreSQL, só metadado). O link da InfinitePay leva a cobrança inteira num
+parâmetro só (`lenc`) e cresce com o título da campanha, o e-mail e o segredo do aviso; o do Papai Noel
+mede ~500 e o da campanha de teste chegou a 513 em 11/11/2026. O `downgrade` volta a `varchar(500)` e
+anula os links mais longos.
 
 ### 2.10.1 Loja de Interações Virtuais — colunas de pagamento (feature 310)
 
