@@ -64,7 +64,7 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
   // 336b: a tag se vincula antes da festa em quase todos os casos; o que já aconteceu só polui a
   // lista. Fica atrás de um botão para a exceção (vínculo atrasado, correção).
   const [comPassados, setComPassados] = useState(false);
-  const eventSearch = useAgendaSearch(eventQuery, { futuros: !comPassados });
+  const eventSearch = useAgendaSearch(eventQuery, { futuros: !comPassados, soFestas: true });
   const clientSearch = useClientSearch(clientQuery);
   const update = useAtualizarNfcTag();
 

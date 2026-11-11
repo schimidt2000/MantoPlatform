@@ -29,6 +29,7 @@ from app.calendar import pedido_de_nota_ops
 from app.constants import (
     DEPARTURE_DEFAULT_LOCATION,
     EVENT_TYPE_SHOW,
+    MARCADORES_COMPROMISSO_INTERNO,
     MENSAGEM_VALOR_A_DEFINIR,
     MENSAGEM_VALOR_SIMBOLICO,
     MSG_COMISSAO_VENDEDOR_ACIMA_DA_VENDA,
@@ -1921,12 +1922,18 @@ def _search_date(q: str) -> tuple[int, int, int | None] | None:
     return day, month, year
 
 
-def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> list[Any]:
+def search_events(
+    q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False, only_bookings: bool = False
+) -> list[Any]:
     """Busca eventos por título, nome da cliente, telefone ou data (fonte única da agenda).
 
     Termo que é uma data (`_search_date`) busca SÓ pelo dia do evento: sem ano, o dia/mês em
     qualquer ano (o mais recente primeiro). Sem isso "07/11" viraria os dígitos "0711" e casaria
     telefone por acaso.
+
+    `only_bookings` (336c) tira o compromisso interno (título começando com 🟧/🟠: ensaio, visita
+    técnica, gravação, empréstimo de figurino) das duas buscas, texto e data: tag NFC só se vincula
+    a festa contratada.
 
     `upcoming` (336b) é para quem vincula ANTES da festa (tag NFC): a busca de texto só traz
     eventos de hoje em diante (relógio de São Paulo), o mais próximo primeiro. A busca por data
@@ -1950,7 +1957,7 @@ def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> 
         Eventos ordenados por `start_at` decrescente, com `event_clients→client` e `client`
         pré-carregados (a serialização do resultado não faz N+1).
     """
-    from sqlalchemy import extract, nullslast, or_
+    from sqlalchemy import extract, func, not_, nullslast, or_
     from sqlalchemy.orm import selectinload
 
     from app.models import CalendarEvent, Client
@@ -1959,6 +1966,15 @@ def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> 
     q = (q or "").strip()
     if len(q) < SEARCH_MIN_CHARS:
         return []
+
+    not_internal = (
+        [
+            not_(func.ltrim(func.coalesce(CalendarEvent.title, "")).like(f"{marcador}%"))
+            for marcador in MARCADORES_COMPROMISSO_INTERNO
+        ]
+        if only_bookings
+        else []
+    )
 
     loading = (
         selectinload(CalendarEvent.event_clients).selectinload(EventClient.client),
@@ -1975,7 +1991,9 @@ def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> 
         if year is not None:
             date_conditions.append(extract("year", CalendarEvent.start_at) == year)
         return (
-            CalendarEvent.query.filter(*date_conditions, CalendarEvent.cancelled_at.is_(None))
+            CalendarEvent.query.filter(
+                *date_conditions, CalendarEvent.cancelled_at.is_(None), *not_internal
+            )
             .options(*loading)
             .order_by(nullslast(CalendarEvent.start_at.desc()))
             .limit(limit)
@@ -2009,6 +2027,7 @@ def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> 
             # ela, do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
             CalendarEvent.cancelled_at.is_(None),
             *upcoming_filter,
+            *not_internal,
         )
         .options(*loading)
         .order_by(

@@ -7,7 +7,10 @@ Cenários (spec §Verificação):
     mais distante.                                                         (falha no antigo)
  4. `futuros=1` bate com o banco (conexão separada): mesmos ids e ordem do SELECT direto.
  5. Data passada digitada com `futuros=1` ainda devolve os eventos daquele dia.
- 6. Limpeza (usuário descartável apagado).
+ 6. Sem `so_festas`, "ensaio" continua trazendo ensaios (agenda e vínculo de ensaio dependem).
+ 7. Com `so_festas=1` (336c), nenhum título começa com 🟧/🟠 — nem na busca de texto, nem na
+    busca pela data de um ensaio — e os shows do mesmo dia continuam.     (falha no antigo)
+ 8. Limpeza (usuário descartável apagado).
 
 Só leitura sobre eventos; o único registro gravado é o usuário descartável.
 
@@ -79,8 +82,14 @@ def cenario(nome: str, fn: Callable[[], None]) -> None:
 TERMO = "show"  # está em centenas de títulos, passados e futuros
 
 
-def _busca(q: str, futuros: bool = False, http=None) -> tuple[int, list[dict]]:
-    params = {"q": q, "futuros": "1"} if futuros else {"q": q}
+def _busca(
+    q: str, futuros: bool = False, http=None, so_festas: bool = False
+) -> tuple[int, list[dict]]:
+    params = {"q": q}
+    if futuros:
+        params["futuros"] = "1"
+    if so_festas:
+        params["so_festas"] = "1"
     r = (http or estado["http"]).get("/api/agenda/search", query_string=params)
     corpo = r.get_json(silent=True) or {}
     return r.status_code, corpo.get("items", [])
@@ -172,6 +181,42 @@ def c5_data_passada_aparece() -> None:
     )
 
 
+def _interno(item: dict) -> bool:
+    return item["title"].lstrip().startswith(("🟧", "🟠"))
+
+
+def c6_sem_so_festas_ensaio_aparece() -> None:
+    status, itens = _busca("ensaio")
+    _garante(status == 200, f"status {status}")
+    _garante(any(_interno(i) for i in itens), "sem `so_festas` os ensaios sumiram da busca")
+
+
+def c7_so_festas() -> None:
+    for termo, futuros in (("ensaio", False), ("show", True), ("show", False)):
+        status, itens = _busca(termo, futuros=futuros, so_festas=True)
+        _garante(status == 200, f"{termo} → {status}")
+        internos = [i["title"] for i in itens if _interno(i)]
+        _garante(not internos, f"compromisso interno com `so_festas` ({termo}): {internos[:2]}")
+    _garante(itens, "`so_festas` esvaziou a busca por 'show'")
+    # Um dia futuro que tem ensaio E festa: a data traz a festa e deixa o ensaio de fora.
+    dia = _no_banco(
+        "SELECT e.start_at::date FROM calendar_events e WHERE e.title LIKE '🟧%'"
+        " AND e.cancelled_at IS NULL AND e.start_at >= :h AND EXISTS (SELECT 1 FROM calendar_events f"
+        " WHERE f.start_at::date = e.start_at::date AND f.cancelled_at IS NULL"
+        " AND f.title NOT LIKE '🟧%' AND f.title NOT LIKE '🟠%') ORDER BY e.start_at LIMIT 1",
+        h=_hoje(),
+    )[0][0]
+    termo = dia.strftime("%d/%m/%Y")
+    _, com = _busca(termo)
+    _, sem = _busca(termo, so_festas=True)
+    _garante(any(_interno(i) for i in com), f"{termo}: controle sem ensaio")
+    _garante(sem and not any(_interno(i) for i in sem), f"{termo}: ensaio na busca por data")
+    _garante(
+        {i["id"] for i in sem} == {i["id"] for i in com if not _interno(i)},
+        f"{termo}: `so_festas` tirou festa junto",
+    )
+
+
 def limpar() -> None:
     with app.app_context():
         for u in User.query.filter(User.email.like(f"{PREFIX}%")).all():
@@ -191,8 +236,10 @@ if __name__ == "__main__":
         cenario("3. `futuros=1` só de hoje em diante, mais próximo primeiro", c3_so_futuros)
         cenario("4. bate com o banco (conexão separada)", c4_bate_com_banco)
         cenario("5. data passada digitada ainda aparece", c5_data_passada_aparece)
+        cenario("6. sem `so_festas` o ensaio aparece", c6_sem_so_festas_ensaio_aparece)
+        cenario("7. `so_festas=1` tira ensaio e compromisso interno", c7_so_festas)
     finally:
-        cenario("6. limpeza", limpar)
+        cenario("8. limpeza", limpar)
     ok = sum(1 for _, passou, _ in resultados if passou)
     print(f"\n{ok}/{len(resultados)} cenários OK")
     sys.exit(0 if ok == len(resultados) else 1)

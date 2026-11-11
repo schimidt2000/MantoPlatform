@@ -213,7 +213,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **336b-tag-nfc-so-eventos-futuros** | *(na branch, aguardando merge)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro | 2026-11-10 | — | (aqui) | ver Registro |
+| **336b-tag-nfc-so-eventos-futuros** | *(EM PRODUÇÃO 10/11 ~22h)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`), e só festas — sem ensaio nem compromisso interno 🟧/🟠 (`so_festas=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro de data | 2026-11-10 | — | (aqui) | ver Registro |
 | **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
 | **341-papai-noel-para-todos** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O Papai Noel liga para qualquer idade: a loja fala de "quem vai receber" (a criança da casa, a vovó, o padrinho), com a cartinha como o momento da criança; "Nome de quem vai receber", "Para", FAQ "É só para criança?". O vídeo ganha data de entrega na campanha ("Entrega dos vídeos até", `prazo_do_video`): página, e-mail e Fila de Produção dizem 13/12 | 2026-11-10 | `e341a1b2c3d4` | (aqui) | ver Registro |
 | **340-caixa-de-avisos** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pagamento da loja não se perde num push: o aviso da InfinitePay entra pelo serviço novo `manto-avisos` (sem disco, healthcheck, deploy só pela própria pasta), que só guarda em `virtual_payment_inbox`; o backend drena a cada 10 s e antes da expiração, pela regra da 310 sem mudança. O retorno do checkout repete em 5xx; o frontend ganha healthcheck e o backend ignora push só de docs/specs/tela. Cai a R-20 (sem deploy 9h–23h na campanha); constituição 3.2.0 | 2026-11-10 | `e340c1a2b3d4` | (aqui) | ver Registro |
@@ -427,7 +427,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 336b — O vínculo da tag NFC só lista eventos de hoje em diante   (336b-tag-nfc-so-eventos-futuros · 2026-11-10 · sem migration)
 
-> **Na branch, aguardando o merge.** Nível 2, hotfix da 336. Detalhe:
+> **EM PRODUÇÃO desde 10/11/2026 ~22h.** Nível 2, hotfix da 336. Detalhe:
 > `specs/336b-tag-nfc-so-eventos-futuros/spec.md`.
 
 **O pedido.** Roberto (repassado pelo dono em 10/11): a data na lista ajudou muito, mas eventos que já aconteceram
@@ -436,6 +436,10 @@ poderiam sair da lista de vínculo. O dono confirmou que a tag se vincula antes 
 **O que mudou.** `search_events(..., upcoming=True)` filtra `start_at >=` hoje 0h (São Paulo) e ordena do
 mais próximo ao mais distante; `GET /api/agenda/search?futuros=1` liga. `useAgendaSearch(q, { futuros })`;
 só o `AssociarDialog` passa `futuros`, com o botão "Mostrar os que já aconteceram" logo abaixo do campo.
+A pedido do dono na mesma conversa ("ensaios e outros compromissos não devem aparecer"):
+`only_bookings`/`so_festas=1` tira o compromisso interno (título começando com 🟧/🟠,
+`MARCADORES_COMPROMISSO_INTERNO`, a mesma regra do painel de casting da 308) das buscas de texto e de data;
+o diálogo da tag passa sempre, com ou sem passados.
 
 **Decisões.** Esconder, não excluir: o 1% (vínculo atrasado, correção) precisa de saída. Data digitada ignora
 o filtro, porque quem digita "22/08" pediu aquele dia. O filtro é parâmetro, não padrão: agenda, ensaio e Pix
@@ -443,8 +447,8 @@ usam a mesma rota e precisam do passado. "Hoje" inteiro conta (a festa das 15h a
 
 **Pegadinha.** O `manto_local` estava atrás das migrations 338 a 342 (coluna
 `educamanto_seller_commission` ausente): o verify e a tela rodaram no espelho `manto_336b`, restaurado do dump
-de 10/11 + `flask db upgrade`. Os ensaios ("🟧 ENSAIO — …") casam com a busca e, na ordem crescente, aparecem
-junto dos shows do mesmo dia; não foram filtrados (fora do pedido).
+de 10/11 + `flask db upgrade`. O filtro de compromisso interno é pelo marcador do título, não por
+`event_type`: "🟧 VISITA TECNICA" e "🟠 GRAVAÇÃO…" têm tipo vazio, igual a festas antigas sem prefixo.
 
 ### 342 — O pedido de nota já nasce com os dados que a emissão exige   (342-nota-nasce-com-dados · 2026-11-10 · migration `d342a7c1e9f3`, aditiva)
 
