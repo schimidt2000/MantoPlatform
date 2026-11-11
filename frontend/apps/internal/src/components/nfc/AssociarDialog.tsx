@@ -61,7 +61,10 @@ export interface AssociarDialogProps {
 export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
   const [eventQuery, setEventQuery] = useState("");
   const [clientQuery, setClientQuery] = useState("");
-  const eventSearch = useAgendaSearch(eventQuery);
+  // 336b: a tag se vincula antes da festa em quase todos os casos; o que já aconteceu só polui a
+  // lista. Fica atrás de um botão para a exceção (vínculo atrasado, correção).
+  const [comPassados, setComPassados] = useState(false);
+  const eventSearch = useAgendaSearch(eventQuery, { futuros: !comPassados, soFestas: true });
   const clientSearch = useClientSearch(clientQuery);
   const update = useAtualizarNfcTag();
 
@@ -93,6 +96,7 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
   function close() {
     setEventQuery("");
     setClientQuery("");
+    setComPassados(false);
     update.reset();
     onClose();
   }
@@ -134,7 +138,11 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
                   ? "Digite a data da festa, um personagem ou o nome da cliente."
                   : undefined
               }
-              emptyMessage="Nenhum evento encontrado. Tente a data no formato 07/11."
+              emptyMessage={
+                comPassados
+                  ? "Nenhum evento encontrado. Tente a data no formato 07/11."
+                  : "Nenhum evento de hoje em diante. Tente a data (07/11) ou mostre os que já aconteceram."
+              }
               aria-label="Buscar evento"
             />
             {fieldError(update.error, "event_id") && (
@@ -143,6 +151,20 @@ export function AssociarDialog({ tag, onClose }: AssociarDialogProps) {
               </p>
             )}
           </label>
+          <div className="-mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted">
+            <span>
+              {comPassados
+                ? "Mostrando também eventos que já aconteceram."
+                : "Mostrando eventos de hoje em diante."}
+            </span>
+            <button
+              type="button"
+              className="underline underline-offset-2 hover:text-ink"
+              onClick={() => setComPassados((v) => !v)}
+            >
+              {comPassados ? "Só de hoje em diante" : "Mostrar os que já aconteceram"}
+            </button>
+          </div>
 
           <label className="block">
             <span className="mb-1 block text-sm text-muted">

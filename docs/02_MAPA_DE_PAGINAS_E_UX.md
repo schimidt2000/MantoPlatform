@@ -1346,7 +1346,8 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
     badge neutra "sem vídeo" —, acessos (tooltip com o último), badge Ativa/Inativa e ações.
   - **Vincular (evento OU cliente direta)**: `Dialog` com dois `Combobox` **assíncronos** —
     evento pela busca da agenda (`useAgendaSearch`; aceita data `07/11` — *336*; opção com título,
-    "sáb, 07/11/2026 · 20h30 · cliente" e calendarinho dia/mês) e **cliente direta** pela busca de clientes
+    "sáb, 07/11/2026 · 20h30 · cliente" e calendarinho dia/mês; *336b*: só festas (sem ensaio nem
+    compromisso interno 🟧/🟠), de hoje em diante, o mais próximo primeiro, com "Mostrar os que já aconteceram" abaixo do campo) e **cliente direta** pela busca de clientes
     (`useClientSearch`), para o caso de campanha/brinde **sem show** (a pessoa é cadastrada no
     módulo Clientes e vinculada aqui). Escolher **já salva** (PATCH e fecha); "Desvincular
     evento"/"Desvincular cliente" no rodapé. Na tabela, cliente direta aparece com badge

@@ -84,11 +84,23 @@ export interface AgendaBusca {
 /**
  * Busca textual de eventos (título, cliente, telefone). Só dispara com 2+ caracteres;
  * `keepPreviousData` evita a lista piscar a cada tecla (espelho de `useClientSearch`).
+ *
+ * `futuros` (336b): só eventos de hoje em diante, o mais próximo primeiro — para quem vincula
+ * antes da festa (tag NFC). A busca por data ignora o filtro no servidor.
  */
-export function useAgendaSearch(q: string) {
+export function useAgendaSearch(
+  q: string,
+  opts: { futuros?: boolean; soFestas?: boolean } = {},
+) {
+  const futuros = opts.futuros ?? false;
+  // 336c: sem ensaio nem compromisso interno (🟧/🟠) — tag só se vincula a festa contratada.
+  const soFestas = opts.soFestas ?? false;
   return useQuery<AgendaBusca>({
-    queryKey: ["agenda-search", q],
-    queryFn: () => apiFetch<AgendaBusca>(`/api/agenda/search?q=${encodeURIComponent(q)}`),
+    queryKey: ["agenda-search", q, futuros, soFestas],
+    queryFn: () =>
+      apiFetch<AgendaBusca>(
+        `/api/agenda/search?q=${encodeURIComponent(q)}${futuros ? "&futuros=1" : ""}${soFestas ? "&so_festas=1" : ""}`,
+      ),
     enabled: q.trim().length >= 2,
     placeholderData: keepPreviousData,
   });

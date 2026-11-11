@@ -174,7 +174,7 @@
 > de `/orcamento/*`.
 >
 > Rotas novas da 207: `GET /api/agenda/search?q=` (busca textual; nome/telefone da cliente só
-> para vendas; desde a 336, `q` que é data — `07/11`, `7/11/26`, `2026-11-07` — filtra só pelo dia do evento), `POST /api/admin/catalogo/personagens/<id>/adotar-foto` (SUPERADMIN),
+> para vendas; desde a 336, `q` que é data — `07/11`, `7/11/26`, `2026-11-07` — filtra só pelo dia do evento; desde a 336b, `futuros=1` traz só de hoje em diante, em ordem crescente, e não vale para `q` que é data; `so_festas=1` tira título começando com 🟧/🟠, em texto e em data), `POST /api/admin/catalogo/personagens/<id>/adotar-foto` (SUPERADMIN),
 > `DELETE /api/clientes/avaliacoes/<id>` (SUPERADMIN, auditado). Mudanças de payload:
 > `GET /api/avaliar/<token>` ganhou `google_review_url`; `GET /api/clientes/avaliacoes` ganhou
 > `can_delete`; `GET /api/admin/settings` ganhou `google_review_url`; no detalhe do evento a

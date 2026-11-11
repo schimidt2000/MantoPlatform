@@ -62,7 +62,13 @@ def api_agenda_search() -> Any:
     from app.calendar.solicitacao_ops import solicitacoes_da_venda
 
     q = (request.args.get("q") or "").strip()
-    events = search_events(q)
+    # 336b: `futuros=1` é o vínculo da tag NFC — só de hoje em diante, o mais próximo primeiro.
+    # 336c: `so_festas=1` tira ensaio e compromisso interno (🟧/🟠) — tag só se vincula a festa.
+    events = search_events(
+        q,
+        upcoming=request.args.get("futuros") == "1",
+        only_bookings=request.args.get("so_festas") == "1",
+    )
     da_venda = solicitacoes_da_venda(events)
 
     vendas_roles = {RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN}
