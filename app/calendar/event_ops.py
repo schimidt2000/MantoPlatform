@@ -1921,12 +1921,16 @@ def _search_date(q: str) -> tuple[int, int, int | None] | None:
     return day, month, year
 
 
-def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
+def search_events(q: str, limit: int = SEARCH_LIMIT, upcoming: bool = False) -> list[Any]:
     """Busca eventos por título, nome da cliente, telefone ou data (fonte única da agenda).
 
     Termo que é uma data (`_search_date`) busca SÓ pelo dia do evento: sem ano, o dia/mês em
     qualquer ano (o mais recente primeiro). Sem isso "07/11" viraria os dígitos "0711" e casaria
     telefone por acaso.
+
+    `upcoming` (336b) é para quem vincula ANTES da festa (tag NFC): a busca de texto só traz
+    eventos de hoje em diante (relógio de São Paulo), o mais próximo primeiro. A busca por data
+    ignora o filtro de propósito — quem digita "22/08" pediu aquele dia, mesmo passado.
 
     Estratégia de match (paridade com `client_ops._name_search_conditions`):
     - título e nome da cliente sem acento, via `unaccent_lower_sql` (app/utils.py);
@@ -1990,6 +1994,10 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
         client_conditions.append(Client.phone.ilike(f"%{digits}%"))
     client_match = or_(*client_conditions)
 
+    # 336b: "hoje" inteiro conta — a tag da festa das 15h ainda se vincula às 16h.
+    today = now_sp().replace(hour=0, minute=0, second=0, microsecond=0)
+    upcoming_filter = [CalendarEvent.start_at >= today] if upcoming else []
+
     return (
         CalendarEvent.query.filter(
             or_(
@@ -2000,9 +2008,12 @@ def search_events(q: str, limit: int = SEARCH_LIMIT) -> list[Any]:
             # Feature 312: o cancelado sai da busca antes do limite (não ocupa vaga dos 30) e, com
             # ela, do vínculo de ensaio, da tag NFC e dos candidatos do grupo.
             CalendarEvent.cancelled_at.is_(None),
+            *upcoming_filter,
         )
         .options(*loading)
-        .order_by(nullslast(CalendarEvent.start_at.desc()))
+        .order_by(
+            nullslast(CalendarEvent.start_at.asc() if upcoming else CalendarEvent.start_at.desc())
+        )
         .limit(limit)
         .all()
     )
