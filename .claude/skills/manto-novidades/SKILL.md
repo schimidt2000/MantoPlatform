@@ -4,7 +4,8 @@ description: >
   Contar à equipe o que mudou no sistema depois de um deploy. Lista o que entrou na `main` desde
   o último aviso (`scripts/novidades.py`), escreve uma mensagem de WhatsApp por grupo (vendas,
   casting, ensaios, figurinos, redes sociais), mais o resumo completo da Maria Gabriella
-  (Superadmin), no tom da casa e grava em
+  (Superadmin) e o hiper-resumo bem-humorado do grupo geral "Manto Produções", no tom da casa e
+  grava em
   `docs/novidades/AAAA-MM-DD.md` e, com o texto aprovado pelo dono, envia pelo WhatsApp Web no
   Claude in Chrome, um grupo por vez. Use quando o dono disser "avisa a equipe",
   "novidades", "manda para os grupos", "/manto-novidades", e depois de todo deploy (o gancho
@@ -75,14 +76,37 @@ quantas mudanças ainda não foram contadas.
 - O texto é o que vai ser copiado: nada de "(ver docs)" ou link interno. Link só do portal ou
   da loja, quando a pessoa precisa abrir.
 
+## O hiper-resumo do grupo geral
+
+O tom dos grupos e da Maria Gabriella **não muda** (o dono aprovou como está). O grupo geral é a
+única mensagem com outro tom, porque quem lê ali não precisa aprender a usar nada: só ficar
+sabendo, de bom humor, que a casa andou.
+
+- **Curto**: uma linha de abertura, uma linha por novidade (de quatro a oito linhas) e o fecho.
+  Cabe na tela do celular sem rolar. Novidades pequenas do mesmo assunto viram uma linha só.
+- **Uma linha = um emoji + o que é, em poucas palavras**, com graça. Diz o que a novidade faz pela
+  pessoa, não como se usa: "🎭 Evento virou SHOW? O casting e o ensaio ficam sabendo na hora."
+  O passo a passo fica na mensagem do grupo de cada área.
+- **Bem-humorado, não palhaço**: brincadeira leve com a rotina da casa; nunca com cliente, com
+  artista, com erro de alguém ou com dinheiro de alguém. Um emoji por linha, no começo; sem
+  fileira de emojis nem texto em maiúsculas.
+- Português correto e com acento, como nas outras (sem "pra", "tá", "né"). O humor vem da frase.
+- **Fica de fora** o que só o financeiro ou o Superadmin veem, o que está desligado e o que não
+  muda a vida de ninguém na tela. Vale o mesmo "Não entra" das regras de texto.
+- Abre com algo como "Oi, pessoal! 🎉 Resumão das novidades do sistema:" e fecha apontando para o
+  detalhe: "Os detalhes já estão no grupo de cada área. Qualquer dúvida, me chama. 💜". A abertura
+  pode variar a cada rodada; o fecho mantém as duas ideias.
+- Passa pela mesma aprovação do dono e pelo mesmo envio assistido das outras.
+
 ## Grupos e papéis
 
 Os nomes são os dos grupos no WhatsApp (informados pelo dono em 28/10). A seção do arquivo do dia
 tem o mesmo nome do grupo, para o dono achar pela busca do WhatsApp.
 
 Nome exato no WhatsApp (conferido em 29/10): "MANTO - VENDAS", "MANTO - CASTING", "MANTO -
-ENSAIOS", "* FIGURINOS *" e "MANTO - REDES SOCIAIS". Cuidado: "✨ CASTING MANTO ✨" é outro grupo,
-e "MANTO - PAGAMENTOS" e "MANTO - CONTRATOS" não recebem novidades.
+ENSAIOS", "* FIGURINOS *" e "MANTO - REDES SOCIAIS"; o grupo geral é "Manto Produções" (conferido
+em 11/11). Cuidado: "✨ CASTING MANTO ✨" é outro grupo, e "MANTO - PAGAMENTOS" e "MANTO -
+CONTRATOS" não recebem novidades.
 
 | Grupo no WhatsApp | Quem está (papel no sistema) | Assuntos |
 |---|---|---|
@@ -95,8 +119,13 @@ e "MANTO - PAGAMENTOS" e "MANTO - CONTRATOS" não recebem novidades.
 - **Financeiro não tem grupo**: hoje ninguém além do dono cuida dele. Mudança só financeira
   (gastos extras, pagamentos, DRE, devolução) não vira mensagem; se ela muda o trabalho de outro
   grupo (comissão da vendedora, multa ao elenco), entra na mensagem desse grupo.
-- **Não há grupo geral**: o que vale para todo mundo (navegação, arquivo, textos) entra em cada
-  mensagem, com a frase ajustada ao grupo.
+- **Grupo geral "Manto Produções"** (todo mundo da casa; regra do dono, 11/11): em toda rodada que
+  vai aos grupos, ele recebe um **hiper-resumo** da rodada, curto e bem-humorado. Seção
+  `### geral (Manto Produções)` no arquivo do dia; vai por último, depois dos grupos. Regras
+  próprias em "O hiper-resumo do grupo geral", abaixo. Ele não substitui as mensagens dos grupos:
+  o que vale para todo mundo (navegação, arquivo, textos) continua entrando em cada uma, com a
+  frase ajustada ao grupo. Rodada em que nenhum grupo recebe nada (só a Maria Gabriella) não tem
+  hiper-resumo.
 - **Artistas** só recebem aviso se o dono pedir (não há grupo; seria lista de transmissão).
 - **Maria Gabriella** (Superadmin, assistente do dono em tudo) recebe em **toda** rodada um texto
   com **todas** as mudanças (regra do dono, 29/10), numa conversa individual, não em grupo. Seção
@@ -125,7 +154,9 @@ WhatsApp Web arrisca o número da empresa. O envio é assistido:
    caixa), não digitar linha a linha.
 4. Um grupo por vez; se algo sair diferente do aprovado (texto cortado, grupo errado), pare e
    avise o dono antes de seguir. Nunca contato individual (a única exceção é a conversa da Maria
-   Gabriella, conferida pelo nome no cabeçalho), nunca grupo fora da lista.
+   Gabriella, conferida pelo nome no cabeçalho), nunca grupo fora da lista. O grupo geral "Manto
+   Produções" vai por último; se a caixa de texto dele já tiver um rascunho, não apague: avise o
+   dono.
 5. Depois de cada envio, anotar "enviado em dd/mm hh:mm" na seção do grupo.
 
 ## Armadilhas

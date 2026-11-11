@@ -51,9 +51,10 @@ PISTAS = [
     (r"email_service|notific", "(aviso por e-mail ou sino)"),
 ]
 
-# Nomes reais dos grupos no WhatsApp (dono, 28/10). Financeiro não tem grupo nem há grupo geral:
-# a tabela grupo × papel está na skill manto-novidades. A Maria Gabriella (Superadmin, assistente
-# do dono) recebe tudo em conversa individual a cada rodada (dono, 29/10).
+# Nomes reais dos grupos no WhatsApp (dono, 28/10). Financeiro não tem grupo: a tabela grupo ×
+# papel está na skill manto-novidades. A Maria Gabriella (Superadmin, assistente do dono) recebe
+# tudo em conversa individual a cada rodada (dono, 29/10). O grupo geral "Manto Produções" recebe
+# um hiper-resumo bem-humorado de cada rodada que vai aos grupos (dono, 11/11).
 GRUPOS_PADRAO = [
     "vendas",
     "casting",
@@ -61,6 +62,7 @@ GRUPOS_PADRAO = [
     "figurinos",
     "redes sociais",
     "Maria Gabriella (Superadmin)",
+    "geral (Manto Produções)",
 ]
 
 
