@@ -3540,7 +3540,11 @@ class VirtualOrder(db.Model):
     total_value       = db.Column(db.Numeric(12, 2), nullable=False)
 
     locked_until    = db.Column(db.DateTime, nullable=True)
-    payment_url     = db.Column(db.String(500), nullable=True)
+    # 310b: Text, não String(500). O link da InfinitePay leva a cobrança inteira codificada num
+    # parâmetro só (`lenc`) e cresce com o título, o e-mail e o segredo do aviso — em 11/11/2026
+    # passou de 500 e a gravação falhava: a reserva dava erro 500 e o pedido ficava sem botão de
+    # pagar. O tamanho é da operadora, não nosso; não há teto que valha.
+    payment_url     = db.Column(db.Text, nullable=True)
     invoice_slug    = db.Column(db.String(120), nullable=True)
     transaction_nsu = db.Column(db.String(120), nullable=True)
     paid_at         = db.Column(db.DateTime, nullable=True)

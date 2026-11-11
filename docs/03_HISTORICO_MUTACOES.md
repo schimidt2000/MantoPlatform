@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
+> Última atualização: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
+> `f310b2a4c6e8`; em branch). Antes: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
 > pedido do dono ("pode fazer agora mesmo", com a loja no ar e antes das 23h da R-20), num push só, na ordem dos
 > merges: **337-figurino-sem-foto** (só tela), **338-comissao-vendedor-educamanto** (`verify_338.py` 12/12),
 > **339-evento-mudou-avisa-casting** (`verify_339.py` 37/37), **340-caixa-de-avisos** (serviço novo `manto-avisos`;
@@ -213,6 +214,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **310b-link-de-pagamento-longo** | Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
 | **336b-tag-nfc-so-eventos-futuros** | *(EM PRODUÇÃO 10/11 ~22h)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`), e só festas — sem ensaio nem compromisso interno 🟧/🟠 (`so_festas=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro de data | 2026-11-10 | — | (aqui) | ver Registro |
 | **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
 | **341-papai-noel-para-todos** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O Papai Noel liga para qualquer idade: a loja fala de "quem vai receber" (a criança da casa, a vovó, o padrinho), com a cartinha como o momento da criança; "Nome de quem vai receber", "Para", FAQ "É só para criança?". O vídeo ganha data de entrega na campanha ("Entrega dos vídeos até", `prazo_do_video`): página, e-mail e Fila de Produção dizem 13/12 | 2026-11-10 | `e341a1b2c3d4` | (aqui) | ver Registro |
@@ -424,6 +426,31 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 310b — O link de pagamento da loja não cabe mais em 500 caracteres   (310b-link-de-pagamento-longo · 2026-11-11 · migration `f310b2a4c6e8`)
+
+> Nível 2 com migration, por exceção (a loja do Papai Noel publicada falharia na maior parte das
+> reservas). Detalhe: `specs/310b-link-de-pagamento-longo/spec.md`.
+
+**O pedido.** No Teste A pela caixa de avisos (11/11, ~02h20), "Reservar e pagar" não abria o pagamento:
+o primeiro clique dava 500 e o segundo deixava a página em "Gerando o pagamento…". O dono: "corrija".
+
+**A causa.** A InfinitePay devolve o link com a cobrança inteira codificada num parâmetro só (`lenc`),
+que cresce com o título, o e-mail, o telefone e o segredo do endereço de aviso. Veio com 513 caracteres;
+`payment_url` era `varchar(500)`, o `commit` falhava (`StringDataRightTruncation`) e o pedido ficava
+`reservado` sem link. Medido em produção com um contato real: Papai Noel 504, campanha de teste com
+título curto 446. No Teste A de 20/10 o link coube.
+
+**O que mudou.** `payment_url` vira `text` (migration `f310b2a4c6e8`, só metadado no PostgreSQL;
+`downgrade` volta a 500 anulando os mais longos).
+
+**Pegadinhas.** (1) Para medir o link sem efeito, troque só o NSU e não grave: criar link na operadora
+não cobra ninguém. Medir com o segredo trocado por `xxxx` subestima — o `lenc` é comprimido e um texto
+repetido encolhe; o segredo real é aleatório. (2) O erro aparece como 500 genérico porque o
+`try/except` de `reservar` só desfaz a reserva para `VirtuaisOperadoraError`/`VirtuaisPagamentoFechadoError`
+(dívida 208). (3) O Teste A pela caixa passou na mesma madrugada, com o título encurtado à mão: aviso
+recebido 02:28:22, drenado 02:28:28 (`efetivado`), evento com Meet e `compra_confirmada`; pedido 7
+limpo com `limpar_venda_teste.py` (no Render precisa de `PYTHONPATH=.`).
 
 ### 336b — O vínculo da tag NFC só lista eventos de hoje em diante   (336b-tag-nfc-so-eventos-futuros · 2026-11-10 · sem migration)
 

@@ -843,3 +843,14 @@ usam até a 201.)
 | 199 | **P4** | `app/calendar/titulo_ops.py`, `sync_events` | o título que passa a pedir um personagem **mais** vezes do que há vagas não cria vaga nem avisa (fora de escopo da 339): em evento da plataforma a vaga nasce só pelo "Editar"; em evento do Google o sync cria só a 1ª ocorrência de um nome | se virar dor: a mesma régua "o que entrou no título" cria a vaga vazia e avisa o Casting |
 | 200 | **P5** | `app/calendar/event_ops.py` (`update_event_core`) | o "Editar" completo empurra o título do formulário ao Google; um formulário aberto antes de alguém mudar o título no Google devolve o título velho (suspeita no caso do evento 1423, sem prova) | conferir no salvar se `event.title` mudou desde que o formulário abriu e devolver 409, como o `estado_mudou` da 306 |
 | 201 | **P5** | eventos e ensaios anteriores à 339 | título com mais ocorrências do que vagas fica como está (a 339 não corrige o passado): o evento 1423 e o ensaio 1496 têm dois STORMTROOPERS para uma vaga | corrigir uma vez no Google Agenda; sem script |
+
+## Baixa da correção 310b-link-de-pagamento-longo (2026-11-11)
+
+**Quitada.** Nenhuma. **Criadas.** (208–209.) A causa (o link da InfinitePay com mais de 500
+caracteres não cabia em `virtual_orders.payment_url`) foi corrigida na própria 310b; o que fica é o
+que o caso mostrou em volta dela.
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 208 | **P2** | `virtuais_ops.reservar` / `_gerar_link_pagamento`; `PedidoVirtualPage.tsx` | erro que não é da operadora **depois** do commit da reserva (foi o `StringDataRightTruncation` de 11/11) sobe como 500 sem desfazer a reserva: o pedido fica `reservado` sem link, a página fica em "Gerando o pagamento…" **sem botão de desistir**, e a nova tentativa com o mesmo telefone devolve o mesmo pedido (mesmo `client_token`) ou cai no "Você já tem uma reserva em andamento" até a trava vencer (15 min). Em 11/11 o pedido 5 foi desfeito pelo `abandonar` com o token da aba | `reservar` desfaz a reserva para qualquer exceção do link (não só `VirtuaisOperadoraError`) e responde 502; a página mostra "Desistir desta reserva" também no estado sem link |
+| 209 | **P4** | `_gerar_link_pagamento` (`customer.phone_number`) | o checkout da InfinitePay pede um código por SMS ao telefone que mandamos; telefone digitado errado na ficha = o código vai para outro número e a família não paga (11/11, pedido 6: final 7384 em vez de 7394; o dono pagou no pedido 7). A tela oferece "Enviar via WhatsApp", que vai para o mesmo número errado | decidir com o dono: confirmar o telefone na ficha (digitar duas vezes ou "é este mesmo?") ou não mandar `phone_number` à operadora (ela pergunta no checkout) |
