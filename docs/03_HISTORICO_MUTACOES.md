@@ -4,7 +4,19 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-03** · Estado do repositório: pós-**deploy em lote de 03/11/2026 (~20h)**, a
+> Última atualização: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
+> pedido do dono ("pode fazer agora mesmo", com a loja no ar e antes das 23h da R-20), num push só, na ordem dos
+> merges: **337-figurino-sem-foto** (só tela), **338-comissao-vendedor-educamanto** (`verify_338.py` 12/12),
+> **339-evento-mudou-avisa-casting** (`verify_339.py` 37/37), **340-caixa-de-avisos** (serviço novo `manto-avisos`;
+> `verify_340.py` 64/64), **341-papai-noel-para-todos** (`verify_341.py` 20/20) e **342-nota-nasce-com-dados**
+> (`verify_342.py` 19/19; `verify_323.py` 15/15). As cinco migrations desciam de `d323b5a1c0e7` e foram
+> **encadeadas no merge** (`55bb108c`): `d323b5a1c0e7` → `d338c5a9e2b1` → `e339a7c1b2d4` → `e340c1a2b3d4` →
+> `e341a1b2c3d4` → `d342a7c1e9f3` — onde as entradas abaixo dizem "sobre `d323b5a1c0e7`", vale esta cadeia; o CRM
+> (325–335) e a 329 reencadeiam sobre `d342a7c1e9f3` quando entrarem. Ensaio de `flask db upgrade && python seed.py`
+> num banco descartável do dump de 10/11 02h; `verify_310` 652/652 na terceira rodada (as duas primeiras, 23 falhas da
+> dívida 206). No merge da 342 sobre a 338, `update_comercial` (`app/api/agenda_write.py`) soma as duas validações
+> (comissão do vendedor e documento da nota). Ficam fora: o CRM próprio e a NFS-e (329) — antes dele pós-**deploy em
+> lote de 03/11/2026 (~20h)**, a
 > pedido do dono, fora do horário, num push só, na ordem dos merges, todos sem migration:
 > **239c-coordenador-pre-escalado-com-orcamento** (o coordenador escolhido na criação vale também com orçamento;
 > `verify_239c.py` 7/7), **324-config-precos-legivel** (Configuração de Preços legível, só tela),
@@ -201,12 +213,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **342-nota-nasce-com-dados** | *(pronta na branch, SEM merge nem push)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
-| **341-papai-noel-para-todos** | *(branch, sobre a 340, aguardando o dono)* O Papai Noel liga para qualquer idade: a loja fala de "quem vai receber" (a criança da casa, a vovó, o padrinho), com a cartinha como o momento da criança; "Nome de quem vai receber", "Para", FAQ "É só para criança?". O vídeo ganha data de entrega na campanha ("Entrega dos vídeos até", `prazo_do_video`): página, e-mail e Fila de Produção dizem 13/12 | 2026-11-10 | `e341a1b2c3d4` | (aqui) | ver Registro |
-| **340-caixa-de-avisos** | *(branch, aguardando o dono)* O pagamento da loja não se perde num push: o aviso da InfinitePay entra pelo serviço novo `manto-avisos` (sem disco, healthcheck, deploy só pela própria pasta), que só guarda em `virtual_payment_inbox`; o backend drena a cada 10 s e antes da expiração, pela regra da 310 sem mudança. O retorno do checkout repete em 5xx; o frontend ganha healthcheck e o backend ignora push só de docs/specs/tela. Cai a R-20 (sem deploy 9h–23h na campanha); constituição 3.2.0 | 2026-11-10 | `e340c1a2b3d4` | (aqui) | ver Registro |
-| **339-evento-mudou-avisa-casting** | *(na branch, sem merge)* Mudança no evento avisa o Casting e o teto do cachê acompanha: valor do Superadmin acima do teto vira teto DA VAGA (sobrevive à troca de artista); virar/deixar de ser SHOW recalcula o teto pela conta da criação e avisa Casting, Ensaio e Superadmin (sino + faixa com "Ciente" por pessoa); o que sai do título remove vaga vazia ou marca a ocupada (sync nunca mais apaga vaga com artista); remover/acrescentar vaga ajusta uma ocorrência do título, e o ensaio futuro acompanha; vínculo de orçamento novo reescreve os tetos | 2026-11-09 | `e339a7c1b2d4` | (aqui) | ver Registro |
-| **338-comissao-vendedor-educamanto** | *(branch, sem merge)* Comissão do vendedor e lucro real no EducaManto: a base do responsável desconta gastos extras aprovados, imposto da nota e a comissão do vendedor (Jundiaí Shopping → R$ 771,82; Santo Américo → R$ 61,01); o valor que o vendedor põe na calculadora entra no card Comercial e vira a linha de comissão dele (`source = vendedor_educamanto`), no ciclo do mês do evento e proporcional ao retido no cancelado | 2026-11-06 | `d338c5a9e2b1` (aditiva) | (aqui) | ver Registro |
-| **337-figurino-sem-foto** | Filtro "Sem foto" no Banco de Figurinos: botão com o número de fichas sem imagem, filtro no endereço (`/figurinos?sem_foto=1`) para virar lista de pendências; ficha do Drive com miniatura não conta. Só tela | 2026-11-05 | — | (aqui) | ver Registro |
+| **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
+| **341-papai-noel-para-todos** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O Papai Noel liga para qualquer idade: a loja fala de "quem vai receber" (a criança da casa, a vovó, o padrinho), com a cartinha como o momento da criança; "Nome de quem vai receber", "Para", FAQ "É só para criança?". O vídeo ganha data de entrega na campanha ("Entrega dos vídeos até", `prazo_do_video`): página, e-mail e Fila de Produção dizem 13/12 | 2026-11-10 | `e341a1b2c3d4` | (aqui) | ver Registro |
+| **340-caixa-de-avisos** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pagamento da loja não se perde num push: o aviso da InfinitePay entra pelo serviço novo `manto-avisos` (sem disco, healthcheck, deploy só pela própria pasta), que só guarda em `virtual_payment_inbox`; o backend drena a cada 10 s e antes da expiração, pela regra da 310 sem mudança. O retorno do checkout repete em 5xx; o frontend ganha healthcheck e o backend ignora push só de docs/specs/tela. Cai a R-20 (sem deploy 9h–23h na campanha); constituição 3.2.0 | 2026-11-10 | `e340c1a2b3d4` | (aqui) | ver Registro |
+| **339-evento-mudou-avisa-casting** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* Mudança no evento avisa o Casting e o teto do cachê acompanha: valor do Superadmin acima do teto vira teto DA VAGA (sobrevive à troca de artista); virar/deixar de ser SHOW recalcula o teto pela conta da criação e avisa Casting, Ensaio e Superadmin (sino + faixa com "Ciente" por pessoa); o que sai do título remove vaga vazia ou marca a ocupada (sync nunca mais apaga vaga com artista); remover/acrescentar vaga ajusta uma ocorrência do título, e o ensaio futuro acompanha; vínculo de orçamento novo reescreve os tetos | 2026-11-09 | `e339a7c1b2d4` | (aqui) | ver Registro |
+| **338-comissao-vendedor-educamanto** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* Comissão do vendedor e lucro real no EducaManto: a base do responsável desconta gastos extras aprovados, imposto da nota e a comissão do vendedor (Jundiaí Shopping → R$ 771,82; Santo Américo → R$ 61,01); o valor que o vendedor põe na calculadora entra no card Comercial e vira a linha de comissão dele (`source = vendedor_educamanto`), no ciclo do mês do evento e proporcional ao retido no cancelado | 2026-11-06 | `d338c5a9e2b1` (aditiva) | (aqui) | ver Registro |
+| **337-figurino-sem-foto** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* Filtro "Sem foto" no Banco de Figurinos: botão com o número de fichas sem imagem, filtro no endereço (`/figurinos?sem_foto=1`) para virar lista de pendências; ficha do Drive com miniatura não conta. Só tela | 2026-11-05 | — | (aqui) | ver Registro |
 | **336-busca-evento-tag-nfc** | *(EM PRODUÇÃO 05/11 ~10h30, deploy avulso a pedido do dono)* Vincular evento à tag NFC por data: `GET /api/agenda/search` aceita `07/11`, `7/11/26`, `2026-11-07` (só o dia do evento, sem casar telefone); a opção mostra o título inteiro, "sáb, 07/11/2026 · 20h30 · Cliente" e um calendarinho com o dia no lugar das iniciais quebradas | 2026-11-05 | — | (aqui) | ver Registro |
 | **331-atrasados-na-planilha** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O que ficou em aberto vem para o mês atual da Planilha de Pagamentos: a planilha do mês de hoje soma o que está Não pago ou No banco nas planilhas de maio/2026 em diante, com a data original e a etiqueta "De outubro · há 14 dias"; cartão-filtro "De meses anteriores"; o mês passado avisa que o item também está no atual. Só leitura: data, mês e DRE não mudam. CSV do mês atual com os cachês de antes | 2026-11-03 | — | (aqui) | ver Registro |
 | **327-cliente-para-coordenador** | *(EM PRODUÇÃO 03/11 ~20h, lote)* O coordenador vê o nome da cliente no Portal do Artista depois de aceitar: `cliente` em `GET /api/portal/agenda` só no cargo Coordenador com convite aceito (pendente, nunca enviado, elenco e outros cargos: `null`); dia agrupado usa a cliente do principal; só o nome, nunca o contato; linha "Cliente:" no cartão da Agenda | 2026-11-03 | — | (aqui) | ver Registro |
@@ -414,7 +426,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 342 — O pedido de nota já nasce com os dados que a emissão exige   (342-nota-nasce-com-dados · 2026-11-10 · migration `d342a7c1e9f3`, aditiva)
 
-> **Pronta na branch `342-nota-nasce-com-dados` (worktree `C:\tmp\mp342`), SEM merge nem push**, a pedido do dono.
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)**, a pedido do dono (feita no worktree `C:\tmp\mp342`).
 > Nível 1. `verify_342.py` 19/19 e `verify_323.py` 15/15 contra o espelho `manto_342` (dump de 10/11). Detalhe:
 > `specs/342-nota-nasce-com-dados/`.
 
@@ -474,7 +486,7 @@ typecheck e pelos cenários 6, 15 e 16 do verify, não abertos no navegador).
 
 ### 341 — O Papai Noel liga para qualquer idade, e o vídeo tem data de entrega   (341-papai-noel-para-todos · 2026-11-10 · migration `e341a1b2c3d4`)
 
-> **Branch sobre a 340, aguardando o dono** (worktree `C:\tmp\mp341`). Nível 1 (migration). Spec,
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)** (feita sobre a 340, worktree `C:\tmp\mp341`). Nível 1 (migration). Spec,
 > plano e roteiro em `specs/341-papai-noel-para-todos/`. Migration aditiva sobre `e340c1a2b3d4`: as
 > duas vão juntas no deploy (com a loja no ar, push só depois das 23h até a 340 estar em produção).
 
@@ -515,7 +527,7 @@ limpa, conferido no banco).
 
 ### 340 — O pagamento da loja não se perde num push: o aviso espera numa caixa fora do deploy   (340-caixa-de-avisos · 2026-11-10 · migration `e340c1a2b3d4`)
 
-> **Branch, aguardando o dono** (worktree `C:\tmp\mp340`). Nível 1. Spec, plano, pesquisa, contrato e
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)** (worktree `C:\tmp\mp340`). Nível 1. Spec, plano, pesquisa, contrato e
 > roteiro em `specs/340-caixa-de-avisos/`. Migration aditiva `e340c1a2b3d4` sobre `d323b5a1c0e7`;
 > quem mergear por último reencadeia o `down_revision` (o CRM 325–335, a 329 e a 338/339 também
 > partem dessa cabeça).
@@ -598,7 +610,7 @@ InfinitePay não reenvia. Agora `Receptor.__call__` captura tudo: 400 de corpo f
 
 ### 339 — Mudança no evento avisa o Casting, e o teto do cachê acompanha   (339-evento-mudou-avisa-casting · 2026-11-09 · migration `e339a7c1b2d4`)
 
-> **Na branch `339-evento-mudou-avisa-casting` (worktree `C:\tmp\mp339`), sem merge.** Nível 1. Migration
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)** (worktree `C:\tmp\mp339`). Nível 1. Migration
 > `e339a7c1b2d4`, aditiva, sobre `d323b5a1c0e7` — 328/329/330/332–335/338 partem do mesmo head: quem entrar na
 > `main` depois troca o `down_revision`. Detalhe: `specs/339-evento-mudou-avisa-casting/` (spec com as decisões
 > D1–D5 e o clarify, plano, pesquisa R1–R9, `verify_339.py` 37/37 no `manto_339` depois do converge).
@@ -649,7 +661,7 @@ volta a pedir; autor no handler Jinja). Quatro aceitas com motivo no `tasks.md` 
 
 ### 338 — Comissão do vendedor e lucro real no EducaManto   (338-comissao-vendedor-educamanto · 2026-11-06 · migration `d338c5a9e2b1`)
 
-> **Na branch `338-comissao-vendedor-educamanto` (worktree `C:\tmp\mp338`), sem merge.** Nível 1 (Financeiro +
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)** (worktree `C:\tmp\mp338`). Nível 1 (Financeiro +
 > Agenda + migration aditiva, quatro colunas anuláveis sobre `d323b5a1c0e7`). Detalhe:
 > `specs/338-comissao-vendedor-educamanto/` (spec, plano, research, verify).
 
@@ -699,7 +711,7 @@ correção do dado pela tela: no Jundiaí Shopping, vendedor Thaís e R$ 1.500.
 
 ### 337 — Filtro "Sem foto" no Banco de Figurinos   (337-figurino-sem-foto · 2026-11-05 · sem migration)
 
-> **Pronto na branch, sem deploy.** Nível 2 (Figurino, só tela). Detalhe: `specs/337-figurino-sem-foto/spec.md`.
+> **EM PRODUÇÃO desde 10/11/2026 ~21h10 (deploy em lote)**. Nível 2 (Figurino, só tela). Detalhe: `specs/337-figurino-sem-foto/spec.md`.
 
 **O pedido.** O dono (05/11): as fichas que a Lucimara pede pelo WhatsApp sobem com a foto tirada do
 catálogo; quando o personagem não está lá, sobem sem foto, e isso tem de ser uma pendência filtrável.
