@@ -159,7 +159,7 @@ def api_virtuais_campanha_acervo(campaign_id: int) -> Any:
 @api_bp.route("/virtuais/campanhas/<int:campaign_id>/horarios", methods=["POST"])
 @api_login_required
 def api_virtuais_gerar_horarios(campaign_id: int) -> Any:
-    """Gera o estoque de horários de 10 minutos de uma janela (FR-004).
+    """Gera o estoque de horários de uma janela, um a cada 15 minutos (FR-004; 341b).
 
     Idempotente: reexecutar a mesma janela devolve tudo em ``skipped``.
     """

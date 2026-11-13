@@ -1611,9 +1611,10 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     capacidade de vídeos com "N de M já vendidos" e prazo de entrega em dias. Desde a 341, **"Entrega
     dos vídeos até"** (data, opcional, erro no campo): preenchida, todo vídeo vendido até ela vence
     nessa data e a landing diz "entregue até 13 de dezembro"; vazia, vale o prazo em dias.
-  - **Estoque de horários** — data + janela início/fim geram os slots de 10 min; o retorno diz
-    quantos foram criados e quantos já existiam. Lista os horários com selo de situação; só os
-    livres têm botão de remover.
+  - **Estoque de horários** — data + janela início/fim geram um horário a cada 15 min (chamada de
+    10 + 5 de pausa do artista; 341b: 14h00–18h00 dá 14h00 … 17h45); o retorno diz quantos foram
+    criados e quantos foram pulados (já existiam ou ficariam a menos de 15 min de outro). Lista os
+    horários com selo de situação; só os livres têm botão de remover.
   - **Presentes 3D liberados** — `Combobox` pesquisável do Acervo 3D com miniatura **quadrada**
     (Princípio XII.2); as peças já liberadas viram chips removíveis.
   - Publicar/Pausar no cabeçalho, ao lado de Salvar. Todo botão mostra estado de carregamento

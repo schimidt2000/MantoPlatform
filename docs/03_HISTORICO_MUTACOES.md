@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
+> Última atualização: **2026-11-12** · **341b-chamadas-a-cada-15-min** (hotfix da 341, sem migration;
+> em branch). Antes: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
 > `f310b2a4c6e8`) **EM PRODUÇÃO desde 11/11/2026 ~03h40** (merge `39dd2613`, a pedido do dono: "Pode
 > publicar"). Antes: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
 > pedido do dono ("pode fazer agora mesmo", com a loja no ar e antes das 23h da R-20), num push só, na ordem dos
@@ -215,6 +216,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **341b-chamadas-a-cada-15-min** | Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
 | **310b-link-de-pagamento-longo** | *(EM PRODUÇÃO 11/11 ~03h40)* Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
 | **336b-tag-nfc-so-eventos-futuros** | *(EM PRODUÇÃO 10/11 ~22h)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`), e só festas — sem ensaio nem compromisso interno 🟧/🟠 (`so_festas=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro de data | 2026-11-10 | — | (aqui) | ver Registro |
 | **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
@@ -427,6 +429,26 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 341b — Um horário de chamada a cada 15 minutos   (341b-chamadas-a-cada-15-min · 2026-11-12 · sem migration)
+
+> Nível 2, hotfix da 341. Detalhe: `specs/341b-chamadas-a-cada-15-min/spec.md`.
+
+**O pedido.** O dono, em 12/11: a chamada dura até 10 min e o Papai Noel precisa de pelo menos 5 de
+pausa — "se a primeira é 2, a segunda começa 2:15"; e "pode colocar até as 19h". Na mesma conversa:
+abrir 40 vídeos, com entrega até 13/12.
+
+**O que mudou.** Em produção, no mesmo dia e sem deploy, pelas funções do sistema por SSH: Papai Noel
+de 24 horários (14h00–17h50, de 10 em 10) para 20 (14h00–18h45, de 15 em 15) e 40 vídeos. No código:
+`VIRTUAL_SLOT_INTERVAL_MINUTES = 15` separado da duração (`VIRTUAL_SLOT_MINUTES = 10`); `gerar_slots`
+anda de 15 em 15 e pula o horário a menos de 15 min de outro; a tela explica e diz quantos pulou.
+
+**Pegadinhas.** (1) Enquanto a 341b não sobe, a produção ainda gera de 10 em 10: para criar um
+horário avulso sem deploy, chame `gerar_slots` com uma janela de 10 min (cria exatamente um). (2) O
+`verify_205` contava avisos e pedidos pagos do banco inteiro; num espelho com a venda de teste paga e
+cancelada (Teste A de 11/11) dava 3 × 1 sem nada errado — agora conta só a campanha dele. (3) A dívida
+206 (o "outro" do `verify_310` às vezes era Revendedor EducaManto) derrubava 23 cenários, entre eles
+os de cancelamento e desistência; com `order_by` e o revendedor excluído, 652/652.
 
 ### 310b — O link de pagamento da loja não cabe mais em 500 caracteres   (310b-link-de-pagamento-longo · 2026-11-11 · migration `f310b2a4c6e8`)
 

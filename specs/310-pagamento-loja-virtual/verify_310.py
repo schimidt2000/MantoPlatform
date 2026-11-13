@@ -272,10 +272,14 @@ with app.app_context():
         if u is not None:
             u.set_password(PASSWORD)
             USUARIOS[papel] = u.email
+    # Dívida 206: sem ordem, o `.first()` às vezes caía num Revendedor EducaManto, e o guard da
+    # feature 078 devolve 403 a ele em toda `/api/` — inclusive na loja pública que os cenários
+    # seguintes usam com a mesma sessão. 23 cenários falhavam por acaso, não pelo código.
     outro = (User.query.filter(User.has_access.is_(True))
              .filter(~User.roles.any(name=RoleName.SUPERADMIN))
              .filter(~User.roles.any(name=RoleName.COMERCIAL))
-             .filter(User.email.isnot(None)).first())
+             .filter(~User.roles.any(name=RoleName.REVENDEDOR_EDUCAMANTO))
+             .filter(User.email.isnot(None)).order_by(User.id).first())
     if outro is not None:
         outro.set_password(PASSWORD)
         USUARIOS["outro"] = outro.email
@@ -1269,6 +1273,8 @@ def c31():
     login("outro")
     r = client.get("/api/virtuais/pagamentos-a-conferir")
     check("31.1 403", r.status_code == 403, str(r.status_code))
+    # A loja pública dos cenários seguintes é anônima: não deixar a sessão do "outro" pendurada.
+    client.post("/api/auth/logout")
 
 
 @cenario("32 devolução nova → notificação no sino")
