@@ -448,7 +448,9 @@ da varredura apaga as dicas em 30 dias (pedido, evento, Google); `meta_pixel_id`
 aviso de cookies e `PageView`/`InitiateCheckout`/`Purchase` só com aceite.
 
 **Verificação.** `verify_344.py` 57/57 no `manto_344` (antes do núcleo: 16 FALHA e 4 BLOQUEADO pelo
-motivo certo). Telas abertas na cópia local: loja em 375 px (formulário, erro do nome, privacidade,
+motivo certo). Regressão sobre o lote 341b + 344 (`C:\tmp\mplote344`), espelho limpo do dump de
+16/11: `verify_341b` 14/14, `verify_310` 652/652, `verify_340` 64/64, `verify_341` 20/20, `verify_310b`
+12/12, `verify_205` 138/138. Telas abertas na cópia local: loja em 375 px (formulário, erro do nome, privacidade,
 aviso de cookies com aceite — pixel por dublê no navegador, nada chegou à Meta — e recusa), card de
 visitas, configurações (erro no campo e gravação) e ficha do cliente.
 

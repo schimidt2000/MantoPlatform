@@ -34,7 +34,7 @@
 
 ## Fase 6: Portões e fechamento
 
-- [ ] T016 `verify_344.py` verde; regressão `verify_310/340/341/310b/205` no `manto_344`
+- [X] T016 `verify_344.py` verde; regressão `verify_310/340/341/310b/205` no `manto_344`
 - [X] T017 `ruff check` nos tocados, `ruff format` nos novos; `npm run typecheck`
 - [X] T018 Telas no Browser pane: loja (375×812: campanha, privacidade, aviso de cookies com e sem ID, pedido), campanha interna (card e links), configurações, ficha do cliente
 - [X] T019 Docs: `docs/01` (tabela, colunas, endpoints, RBAC §4.3), `docs/02`, `docs/03` (entrada + índice), `docs/04` (invariantes), `docs/05` (dívidas)
