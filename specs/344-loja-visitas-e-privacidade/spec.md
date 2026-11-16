@@ -1,6 +1,6 @@
 # Feature 344 — A loja conta as visitas e pede licença para mandar novidades
 
-**Branch**: `344-loja-visitas-e-privacidade` (da `main`) · **Created**: 2026-11-16 · **Status**: pronto, aguardando deploy (`verify_344.py` 57/57) ·
+**Branch**: `344-loja-visitas-e-privacidade` (da `main`) · **Created**: 2026-11-16 · **Status**: EM PRODUÇÃO desde 16/11/2026 ~20h27, push `cdfaf3ed` (`verify_344.py` 57/57) ·
 **Migration**: uma, aditiva (tabela nova de visitas; colunas novas em pedido, cliente e configurações) ·
 **Nível**: 1 (feature) — constituição, Princípio VI
 

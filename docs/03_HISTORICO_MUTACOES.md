@@ -4,9 +4,10 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration `e344a1b2c3d4`;
-> em branch). Antes: **2026-11-12** · **341b-chamadas-a-cada-15-min** (hotfix da 341, sem migration;
-> em branch). Antes: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
+> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration `e344a1b2c3d4`) e
+> **341b-chamadas-a-cada-15-min** (sem migration) **EM PRODUÇÃO desde 16/11/2026 ~20h27**, num push só
+> (`cdfaf3ed`, a pedido do dono: "Publica a 344"); Pixel da Meta da loja ligado nas Configurações
+> (`3118233441678985`, o mesmo do site). Antes: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
 > `f310b2a4c6e8`) **EM PRODUÇÃO desde 11/11/2026 ~03h40** (merge `39dd2613`, a pedido do dono: "Pode
 > publicar"). Antes: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
 > pedido do dono ("pode fazer agora mesmo", com a loja no ar e antes das 23h da R-20), num push só, na ordem dos
@@ -217,8 +218,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **344-loja-visitas-e-privacidade** | A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
-| **341b-chamadas-a-cada-15-min** | Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
+| **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
+| **341b-chamadas-a-cada-15-min** | *(EM PRODUÇÃO 16/11 ~20h27)* Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
 | **310b-link-de-pagamento-longo** | *(EM PRODUÇÃO 11/11 ~03h40)* Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
 | **336b-tag-nfc-so-eventos-futuros** | *(EM PRODUÇÃO 10/11 ~22h)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`), e só festas — sem ensaio nem compromisso interno 🟧/🟠 (`so_festas=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro de data | 2026-11-10 | — | (aqui) | ver Registro |
 | **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
@@ -434,6 +435,10 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 344 — A loja conta as visitas e pede licença   (344-loja-visitas-e-privacidade · 2026-11-16 · migration `e344a1b2c3d4`)
 
+> **EM PRODUÇÃO desde 16/11/2026 ~20h27** (push `cdfaf3ed`, lote 341b + 344; migration aplicada às
+> 20h27). Pixel ligado logo depois pela função das Configurações (`3118233441678985`); conferido no
+> celular: aviso com "Recusar"/"Aceitar" e nenhum pedido à Meta antes do aceite. No mesmo dia a
+> campanha "Alô Papai Noel" da Meta foi ativada com links `?origem=meta-nome|meta-psiu|meta-reel`.
 > Nível 1. Detalhe: `specs/344-loja-visitas-e-privacidade/` (spec, plan, tasks, `verify_344.py`).
 
 **O pedido.** No dia em que começou a divulgar o Papai Noel (16/11), o dono perguntou quantas visitas
@@ -470,7 +475,8 @@ relacionamento — cancelar venda e `limpar_venda_teste.py` seguem funcionando),
 
 ### 341b — Um horário de chamada a cada 15 minutos   (341b-chamadas-a-cada-15-min · 2026-11-12 · sem migration)
 
-> Nível 2, hotfix da 341. Detalhe: `specs/341b-chamadas-a-cada-15-min/spec.md`.
+> **EM PRODUÇÃO desde 16/11/2026 ~20h27** (push `cdfaf3ed`, junto da 344). Nível 2, hotfix da 341.
+> Detalhe: `specs/341b-chamadas-a-cada-15-min/spec.md`.
 
 **O pedido.** O dono, em 12/11: a chamada dura até 10 min e o Papai Noel precisa de pelo menos 5 de
 pausa — "se a primeira é 2, a segunda começa 2:15"; e "pode colocar até as 19h". Na mesma conversa:

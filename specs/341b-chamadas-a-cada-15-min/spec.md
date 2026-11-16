@@ -1,7 +1,7 @@
 # 341b — Um horário de chamada a cada 15 minutos
 
-**Branch**: `341b-chamadas-a-cada-15-min` · **Created**: 2026-11-12 · **Status**: pronto, aguardando
-deploy (`verify_341b.py` 14/14) · **Migration**: nenhuma
+**Branch**: `341b-chamadas-a-cada-15-min` · **Created**: 2026-11-12 · **Status**: EM PRODUÇÃO desde
+16/11/2026 ~20h27, push `cdfaf3ed` (`verify_341b.py` 14/14) · **Migration**: nenhuma
 
 > Nível 2, hotfix da 341 (Papai Noel para todos). Um domínio (loja virtual), sem migration.
 
