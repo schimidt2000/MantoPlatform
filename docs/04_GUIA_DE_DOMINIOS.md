@@ -840,6 +840,14 @@ pendente (o re-export de `ensure_recurring_entries`).
 repositório** — os docstrings explicam consistentemente o *porquê*. É também um balde por camada: ~6
 responsabilidades técnicas distintas num arquivo (ver `docs/05`).
 
+### Horários (341b)
+
+A chamada dura `VIRTUAL_SLOT_MINUTES` (10; é o fim do evento e da sala) e os horários de uma campanha
+nascem a cada `VIRTUAL_SLOT_INTERVAL_MINUTES` (15): os 5 de diferença são a pausa do artista entre
+famílias. **Invariante:** `gerar_slots` nunca cria um horário a menos de 15 min de outro da mesma
+campanha — o que encostaria (grade antiga de 10 em 10, janela vizinha) vai para `skipped`. Horário
+gravado à mão (Shell, script) não passa por essa conferência.
+
 ### O fluxo da venda, ponta a ponta
 
 **`reservar()` (`:775`) — a ordem das etapas é a regra:** duplo clique (mesmo `client_token` devolve o

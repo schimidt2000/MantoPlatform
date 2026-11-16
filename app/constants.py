@@ -668,6 +668,9 @@ VIRTUAL_NOTIFICATION_LABELS = {
 
 # Duração fixa de uma chamada ao vivo e janela do "soft lock" do horário (FR-017).
 VIRTUAL_SLOT_MINUTES = 10
+# 341b: distância entre o início de uma chamada e o da seguinte. A chamada dura até 10 min e o
+# artista precisa de 5 de pausa (decisão do dono, 12/11/2026): 14h00, 14h15, 14h30…
+VIRTUAL_SLOT_INTERVAL_MINUTES = 15
 VIRTUAL_SOFT_LOCK_MINUTES = 15
 # Feature 310. Reservar só até 2 h antes (decisão do dono, 19/10/2026: a equipe lê as dicas e o
 # artista se prepara). No PAGAMENTO a folga é outra, 30 min: quem reservou 2h01 antes e pagou 15 min

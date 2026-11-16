@@ -162,7 +162,9 @@ export function VirtuaisCampanhaFormPage() {
         onSuccess: (result) =>
           setSlotFeedback(
             `${result.created} horário(s) criado(s)` +
-              (result.skipped > 0 ? ` · ${result.skipped} já existiam` : ""),
+              (result.skipped > 0
+                ? ` · ${result.skipped} pulado(s): já existiam ou ficariam sem a pausa de 5 min`
+                : ""),
           ),
         onError: (error) => setErrors(extractFieldErrors(error)),
       },
@@ -535,14 +537,15 @@ export function VirtuaisCampanhaFormPage() {
               onClick={handleGerarSlots}
             >
               <CalendarPlus className="size-4" />
-              Gerar horários de 10 min
+              Gerar horários
             </Button>
 
             {slotFeedback && <p className="text-[12px] text-green">{slotFeedback}</p>}
 
             <p className="text-[11px] text-muted">
               {campaign.slots_available} disponível(is) de {campaign.slots_total} horário(s).
-              Gerar a mesma janela novamente não duplica horários.
+              Um horário a cada 15 min: a chamada dura 10 e o artista tem 5 de pausa. Gerar a mesma
+              janela novamente não duplica horários.
             </p>
 
             {campaign.slots.length > 0 && (

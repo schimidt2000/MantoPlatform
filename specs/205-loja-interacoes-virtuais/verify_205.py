@@ -285,9 +285,10 @@ try:
         json={"date": amanha, "start": "14:00", "end": "18:00"},
     )
     primeira = resp.get_json() if resp.status_code == 201 else {}
+    # 341b: um horário a cada 15 min (chamada de 10 + 5 de pausa) — 4h dão 16, não 24.
     check(
-        "V1.8 gera 24 horários de 10 min em 4h",
-        primeira.get("created") == 24 and primeira.get("skipped") == 0,
+        "V1.8 gera 16 horários (um a cada 15 min) em 4h",
+        primeira.get("created") == 16 and primeira.get("skipped") == 0,
         str(primeira),
     )
 
@@ -297,14 +298,14 @@ try:
     )
     segunda = resp.get_json() if resp.status_code == 201 else {}
     check(
-        "V1.9 reexecutar é idempotente (created=0, skipped=24)",
-        segunda.get("created") == 0 and segunda.get("skipped") == 24,
+        "V1.9 reexecutar é idempotente (created=0, skipped=16)",
+        segunda.get("created") == 0 and segunda.get("skipped") == 16,
         str(segunda),
     )
 
     resp = client.get(f"/api/virtuais/campanhas/{slug}/horarios")
     slots = (resp.get_json() or {}).get("slots", [])
-    check("V1.10 horários aparecem no público", len(slots) == 24, f"{len(slots)} slots")
+    check("V1.10 horários aparecem no público", len(slots) == 16, f"{len(slots)} slots")
 
     # Horário vendido não pode ser removido (FR-008).
     with app.app_context():
@@ -787,14 +788,20 @@ try:
           f"{eventos_antes} -> {eventos_depois}")
 
     # ── V8: um único aviso por pedido (SC-020) ──────────────────────────────
+    # Só os pedidos desta campanha: o espelho de produção traz vendas de teste que foram pagas e
+    # depois canceladas (Teste A de 11/11) — o aviso delas existe, o "pago" não, e a conta global
+    # falhava sem nada de errado no código (achado na 341b).
     with app.app_context():
-        avisos_compra = _N.query.filter_by(kind="compra_confirmada").count()
-        pedidos_pagos = VirtualOrder.query.filter_by(status="pago").count()
+        desta = VirtualOrder.query.filter_by(campaign_id=campaign_id).with_entities(VirtualOrder.id)
+        avisos_compra = _N.query.filter(
+            _N.kind == "compra_confirmada", _N.order_id.in_(desta)
+        ).count()
+        pedidos_pagos = VirtualOrder.query.filter_by(campaign_id=campaign_id, status="pago").count()
     check("V8.1 um aviso de compra por pedido pago, mesmo com 6 webhooks",
           avisos_compra == pedidos_pagos, f"{avisos_compra} avisos / {pedidos_pagos} pagos")
 
     with app.app_context():
-        cancelamentos = _N.query.filter_by(kind="cancelamento").count()
+        cancelamentos = _N.query.filter(_N.kind == "cancelamento", _N.order_id.in_(desta)).count()
     check("V8.2 cancelamento também avisa uma vez", cancelamentos == 1, str(cancelamentos))
 
     # V8.3 — política de retry: 3 tentativas nos minutos 0, 1 e 2, sem a quarta.

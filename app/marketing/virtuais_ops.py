@@ -86,6 +86,7 @@ from app.constants import (  # feature 310
     VIRTUAL_RETRY_MAX_ATTEMPTS,
     VIRTUAL_SALA_ALERTA_HORAS,
     VIRTUAL_SALA_RETRY_LONGO_MIN,
+    VIRTUAL_SLOT_INTERVAL_MINUTES,
     VIRTUAL_SLOT_MINUTES,
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
@@ -527,11 +528,16 @@ def definir_acervo_liberado(campaign: VirtualCampaign, item_ids: list[Any]) -> V
 
 
 def gerar_slots(campaign: VirtualCampaign, *, day: Any, start: Any, end: Any) -> dict[str, int]:
-    """Gera os horários de 10 minutos de uma janela (FR-004).
+    """Gera os horários de uma janela, um a cada 15 minutos (FR-004; 341b).
+
+    A chamada dura 10 minutos (``VIRTUAL_SLOT_MINUTES``); os outros 5 são a pausa do artista entre
+    uma família e a seguinte (``VIRTUAL_SLOT_INTERVAL_MINUTES``). Só o início precisa caber na
+    janela: 14h00–18h00 gera 14h00, 14h15, …, 17h45.
 
     **Idempotente**: horários que já existem são contados em ``skipped`` e nada é duplicado — a
     garantia final é o ``UNIQUE(campaign_id, start_at)`` do banco, mas conferimos antes para poder
-    responder quantos foram pulados.
+    responder quantos foram pulados. Também vai para ``skipped`` o horário que ficaria a menos de
+    15 minutos de outro já existente (de uma grade antiga ou de outra janela).
 
     Args:
         campaign: A campanha que recebe os horários.
@@ -554,18 +560,21 @@ def gerar_slots(campaign: VirtualCampaign, *, day: Any, start: Any, end: Any) ->
     if fim <= inicio:
         raise VirtuaisValidationError("end", "A hora de fim precisa ser depois da de início.")
 
-    total = int((fim - inicio).total_seconds() // 60 // VIRTUAL_SLOT_MINUTES)
+    total = int((fim - inicio).total_seconds() // 60 // VIRTUAL_SLOT_INTERVAL_MINUTES)
     if total > MAX_SLOTS_POR_GERACAO:
         raise VirtuaisValidationError(
             "end", f"Janela grande demais: geraria {total} horários (máximo {MAX_SLOTS_POR_GERACAO})."
         )
 
+    # A busca vai um intervalo além da janela dos dois lados: um horário de fora (14h10 de uma
+    # grade antiga, de 10 em 10) também tira a pausa de quem nascer encostado nele (14h15).
+    intervalo = timedelta(minutes=VIRTUAL_SLOT_INTERVAL_MINUTES)
     existentes = {
         slot.start_at
         for slot in VirtualCampaignSlot.query.filter(
             VirtualCampaignSlot.campaign_id == campaign.id,
-            VirtualCampaignSlot.start_at >= inicio,
-            VirtualCampaignSlot.start_at < fim,
+            VirtualCampaignSlot.start_at > inicio - intervalo,
+            VirtualCampaignSlot.start_at < fim + intervalo,
         ).all()
     }
 
@@ -573,7 +582,9 @@ def gerar_slots(campaign: VirtualCampaign, *, day: Any, start: Any, end: Any) ->
     skipped = 0
     momento = inicio
     while momento < fim:
-        if momento in existentes:
+        # Pula o que já existe e o que cairia a menos de 15 min de outro horário: duas famílias
+        # com o mesmo artista sem a pausa entre elas (341b).
+        if any(abs(momento - outro) < intervalo for outro in existentes):
             skipped += 1
         else:
             db.session.add(
@@ -584,7 +595,7 @@ def gerar_slots(campaign: VirtualCampaign, *, day: Any, start: Any, end: Any) ->
                 )
             )
             created += 1
-        momento += timedelta(minutes=VIRTUAL_SLOT_MINUTES)
+        momento += intervalo
 
     if created:
         audit(
