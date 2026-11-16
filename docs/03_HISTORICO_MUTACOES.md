@@ -459,7 +459,10 @@ da criação do pedido; o pré-filtro `created_at <= corte` depende disso — um
 horário (e não a criação) não acha o pedido. (3) Campanha pausada responde 410 também na contagem (o
 mesmo `_campanha_publicada_ou_erro` da landing). (4) `alo.mantoproducoes.com.br/<slug>` preserva a
 query no 302 — é a base dos links por canal. (5) `GET /api/clientes` sem a barra final dá 308 para o
-Flask direto e o navegador da cópia local recusa ("Failed to fetch"); use `/api/clientes/`.
+Flask direto e o navegador da cópia local recusa ("Failed to fetch"); use `/api/clientes/`. (6) Toda
+venda agora tem linha em `event_clients`: apagar o evento pelo ORM leva junto (`cascade` do
+relacionamento — cancelar venda e `limpar_venda_teste.py` seguem funcionando), mas DELETE por SQL em
+`calendar_events` estoura a chave estrangeira. As limpezas dos `verify_310/340/341` ganharam a linha.
 
 ### 310b — O link de pagamento da loja não cabe mais em 500 caracteres   (310b-link-de-pagamento-longo · 2026-11-11 · migration `f310b2a4c6e8`)
 

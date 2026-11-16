@@ -1787,6 +1787,13 @@ def limpar() -> None:
                                "virtual_order_notifications", "virtual_media_deliveries"):
                     conn.execute(text(f"delete from {tabela} where order_id = any(:o)"),
                                  {"o": ordens})
+                # Feature 344: a venda cria a ficha do comprador; sai junto, se não tiver outro evento.
+                conn.execute(text("delete from event_clients where event_id in (select event_id from "
+                                  "virtual_orders where campaign_id=:c and event_id is not null)"), {"c": cid})
+                conn.execute(text("delete from clients c where c.source='loja_virtual' and c.phone in "
+                                  "(select '55' || contact_phone from virtual_orders where campaign_id=:c) "
+                                  "and not exists (select 1 from event_clients ec where ec.client_id=c.id)"),
+                             {"c": cid})
                 conn.execute(text("delete from virtual_orders where campaign_id=:c"), {"c": cid})
             for ev in eventos:
                 conn.execute(text("delete from event_3d_gifts where event_id=:e"), {"e": ev}) \
