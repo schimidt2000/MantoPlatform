@@ -7,7 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
+> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
+> head: contador de visitas, aceite de novidades, pixel, §2.10.0c; rotas novas em §3.13.4). Antes:
+> **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
 > head: `virtual_orders.payment_url` vira `text`, §2.10.0b). Antes: **2026-11-10** ·
 > **341-papai-noel-para-todos** (migration **`e341a1b2c3d4`**,
 > aditiva — head: `virtual_campaigns.recorded_delivery_until`, §2.10.0; o campo nas rotas da campanha
@@ -715,6 +717,21 @@ Migration **`f310b2a4c6e8`** (`down_revision = d342a7c1e9f3`): `virtual_orders.p
 parâmetro só (`lenc`) e cresce com o título da campanha, o e-mail e o segredo do aviso; o do Papai Noel
 mede ~500 e o da campanha de teste chegou a 513 em 11/11/2026. O `downgrade` volta a `varchar(500)` e
 anula os links mais longos.
+
+### 2.10.0c Visitas, aceite de novidades e pixel da loja (feature 344)
+
+Migration **`e344a1b2c3d4`** (`down_revision = f310b2a4c6e8`), aditiva:
+
+- **`virtual_campaign_visits`** (`VirtualCampaignVisit`): contador anônimo — `campaign_id` (FK, `ON DELETE
+  CASCADE`), `day` (date, São Paulo), `origem` (varchar 20, uma de `VIRTUAL_ORIGENS`), `visits` (int).
+  `UNIQUE(campaign_id, day, origem)` (`uq_virtual_visit_campaign_day_origem`) é o alvo do upsert
+  (`INSERT … ON CONFLICT DO UPDATE`, `virtuais_ops.registrar_visita`). Sem IP, sem cookie, sem aparelho.
+- **`virtual_orders`**: `origem` (varchar 20), `buyer_name` (varchar 120, "Seu nome" de quem compra),
+  `marketing_opt_in_at` (timestamp, nulo = não marcou) e `marketing_opt_in_version` (varchar 20,
+  `VIRTUAL_ACEITE_VERSAO` — qual texto a pessoa viu).
+- **`clients`**: `marketing_opt_in_at` (último aceite) e `marketing_opt_in_source` (varchar 160, "Loja:
+  <campanha>"). `source` ganha o valor `loja_virtual` (balde `loja` em `client_metrics`).
+- **`site_settings`**: `meta_pixel_id` (varchar 30; nulo = pixel desligado).
 
 ### 2.10.1 Loja de Interações Virtuais — colunas de pagamento (feature 310)
 
@@ -1724,6 +1741,16 @@ Núcleo em `app/marketing/virtuais_ops.py`; cliente da operadora em
 | `POST` | `/api/virtuais/campanhas/<slug>/reservar` | **Público.** Cria o pedido, trava o horário por 15 min e devolve o link de pagamento (desde a 310 com `seconds_left`). `400` validação (com campo culpado) · `409` horário/vaga tomada (vem com a lista atualizada; desde a 310 também "Este horário fecha 2 horas antes. Escolha outro.") · `429` limite anti-abuso · **`503`** "As reservas estão fechadas por enquanto." com o pagamento desligado ou sem configuração (310; nada é travado) · `502` operadora fora, recusa da operadora ("Não conseguimos abrir o pagamento. A equipe já foi avisada…", código gravado em `payment_link_error`, sino para a equipe) ou "Pagamento travado neste ambiente (cópia de teste)." — em todos a reserva já foi desfeita. |
 | `GET` | `/api/virtuais/pedidos/<public_token>` | **Público.** Resumo do pedido: situação, horário, valor e dica do telefone. Nenhum dado de criança. Desde a 310: `seconds_left` (segundos até a trava vencer, calculados no servidor — `locked_until` é hora de parede sem fuso e o aparelho em Manaus contava 75 min) e `confirming` (há aviso de pagamento deste pedido ainda sem decisão). `locked_until` continua no payload para o bundle antigo em cache. |
 | `GET` | `/api/virtuais/enderecos/autocomplete` | **Público, com teto por origem.** Variante sem login de `/api/maps/address-autocomplete`; reusa `app.maps.address_autocomplete`. |
+| `POST` | `/api/virtuais/campanhas/<slug>/visita` | **Público, 30/min por IP** (feature 344). `{origem}` → `204`; soma 1 no contador do dia (São Paulo) e da origem reduzida (`normalizar_origem`: lista fechada, desconhecida = `outro`, vazia = `direto`). Mesmo critério de campanha da landing: rascunho/inexistente `404`, pausada `410`. Não lê nem grava IP. |
+| `GET` | `/api/virtuais/rastreamento` | **Público** (344). `{meta_pixel_id: "…" \| null}` — com `null` a loja não mostra aviso de cookies nem carrega nada da Meta. |
+| `GET` | `/api/virtuais/campanhas/<id>/funil` | **Comercial, Superadmin** (`require_virtuais_access`, 344). `{public_url, links[], totais, por_origem[], por_dia[14]}`: visitas (contador), reservas (pedidos criados com origem), vendas (pedidos `pago`), conversão = vendas ÷ visitas × 100. Pedido sem origem (de antes da 344) fica fora. Links no domínio `LOJA_PUBLIC_BASE_URL` (default `https://alo.mantoproducoes.com.br`). |
+
+Desde a 344 o `reservar` aceita três campos opcionais — `buyer_name`, `marketing_opt_in` (só `true`
+vale) e `origem` — e a venda efetivada cria/completa a ficha do comprador no CRM
+(`_cliente_da_venda`, num SAVEPOINT: falha não desfaz a venda). `PATCH /api/admin/settings` aceita
+`meta_pixel_id` (só dígitos, 6–20; vazio desliga; outra coisa → `400` no campo) e o `GET` o devolve.
+`GET /api/clientes/<id>` devolve `source`, `marketing_opt_in_at` e `marketing_opt_in_source`;
+`GET /api/clientes/metricas` ganha `new_by_month[].loja`.
 
 - **Concorrência**: toda mudança de posse do slot passa por `with_for_update()`. Dois visitantes
   simultâneos entram em fila no banco; o segundo recebe 409. Coberto por `verify_205.py` V2.7/V2.8
@@ -2302,9 +2329,9 @@ Gates por módulo (todos em `app/api/`):
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
-| `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções) | `COMERCIAL`, `SUPERADMIN` |
+| `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções); desde a 344, `GET /api/virtuais/campanhas/<id>/funil` | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
-| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` | — |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |

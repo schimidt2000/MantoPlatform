@@ -16,6 +16,7 @@ from sqlalchemy.orm import joinedload
 
 from app import db
 from app.clientes.importer import normalize_phone
+from app.constants import CLIENT_SOURCE_LOJA
 from app.feedback.feedback_ops import ATTENTION_TAGS, POSITIVE_TAGS
 from app.models import CalendarEvent, Client, ClientFeedback, EventClient, FormResponse
 from app.talents.rating_ops import parse_period as _parse_period
@@ -224,10 +225,13 @@ def client_metrics() -> dict:
         "whatsform_import": "formulario",
         "formulario": "formulario",
         "kommo_import": "kommo",
+        # Feature 344: ficha nascida de uma venda da Loja de Interações Virtuais.
+        CLIENT_SOURCE_LOJA: "loja",
     }
     for month, source, count in rows:
         entry = by_month.setdefault(
-            month, {"month": month, "total": 0, "formulario": 0, "kommo": 0, "manual": 0}
+            month,
+            {"month": month, "total": 0, "formulario": 0, "kommo": 0, "loja": 0, "manual": 0},
         )
         entry["total"] += count
         entry[source_keys.get(source, "manual")] += count

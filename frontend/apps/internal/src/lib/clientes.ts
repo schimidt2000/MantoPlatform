@@ -57,6 +57,12 @@ export interface ClientDetail extends ClientSummary {
    */
   cancelamentos?: { quantidade: number; retido: number };
   form_history: ClientFormHistoryItem[];
+  /** Feature 344: de onde a ficha nasceu (`loja_virtual` = venda da loja). */
+  source?: string;
+  /** Feature 344: último "sim" para receber novidades (LGPD). `null` = não prospectar. */
+  marketing_opt_in_at?: string | null;
+  /** Feature 344: de onde veio o aceite ("Loja: <campanha>"). */
+  marketing_opt_in_source?: string | null;
 }
 
 /** Um mês do gráfico de novos clientes (origem agregada no servidor). */
@@ -65,6 +71,8 @@ export interface ClientsMonthMetric {
   total: number;
   formulario: number;
   kommo: number;
+  /** Feature 344: fichas nascidas de venda da loja. Ausente em backend velho. */
+  loja?: number;
   manual: number;
 }
 

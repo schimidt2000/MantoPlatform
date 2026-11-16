@@ -1,6 +1,7 @@
 import { useEffect, type ReactNode } from "react";
-import { Outlet } from "react-router-dom";
+import { Link, Outlet } from "react-router-dom";
 import { RODAPE, TITULO_LOJA } from "../../lib/lojaTema";
+import { AvisoCookies } from "./AvisoCookies";
 
 /**
  * Moldura das três páginas da loja de conversas (`/v`, `/v/:slug`, `/v/pedido/:token`) — feature
@@ -28,7 +29,15 @@ export function LojaLayout() {
       <footer className="mx-auto max-w-lg px-4 pb-10 pt-4 text-center">
         <Ornamento />
         <p className="mt-3 text-[12px] uppercase tracking-[0.25em] text-alo-muted">{RODAPE}</p>
+        {/* Feature 344: o aviso de privacidade fica a um toque de qualquer página da loja. */}
+        <Link
+          to="/v/privacidade"
+          className="mt-3 inline-flex min-h-[44px] items-center text-[13px] text-alo-muted underline underline-offset-2"
+        >
+          Privacidade
+        </Link>
       </footer>
+      <AvisoCookies />
     </div>
   );
 }

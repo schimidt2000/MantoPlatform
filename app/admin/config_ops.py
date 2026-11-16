@@ -103,6 +103,20 @@ def update_settings(settings: SiteSetting, fields: dict[str, Any], logo_file=Non
         settings.infinitepay_webhook_token = secrets.token_urlsafe(32)
         audit("edit", "settings", 1, "Pagamento da loja virtual",
               "Segredo do aviso de pagamento regerado (o anterior vale por 24 h)")
+    # Feature 344: ID do Pixel da Meta da loja. Só dígitos (é o que o Gerenciador de Eventos mostra);
+    # vazio desliga — sem ele a loja não mostra aviso de cookies nem carrega nada da Meta.
+    if "meta_pixel_id" in fields:
+        pixel = re.sub(r"\s", "", str(fields.get("meta_pixel_id") or ""))
+        if pixel and not re.fullmatch(r"\d{6,20}", pixel):
+            raise ConfigValidationError(
+                "meta_pixel_id",
+                "O ID do Pixel tem só números (ex.: 123456789012345). Copie do Gerenciador de Eventos.",
+            )
+        if (pixel or None) != (settings.meta_pixel_id or None):
+            audit("edit", "settings", 1, "Pixel da Meta da loja",
+                  f"Pixel {'ligado: ' + pixel if pixel else 'desligado'}")
+        settings.meta_pixel_id = pixel or None
+
     if "virtuais_pagamento_ativo" in fields:
         ativo = str(fields.get("virtuais_pagamento_ativo")).lower() in ("1", "true", "on")
         if ativo != bool(settings.virtuais_pagamento_ativo):

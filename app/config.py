@@ -22,6 +22,11 @@ PORTAL_BASE_URL = "https://portal.mantoproducoes.com.br"
 # constante muda ANTES de a loja ser ligada (quickstart da 340).
 AVISOS_BASE_URL = "https://manto-avisos.onrender.com"
 
+# Endereço curto da Loja de Interações Virtuais (feature 224d): `alo.mantoproducoes.com.br/<slug>`
+# redireciona para a landing levando a query junto. É a base dos links por canal da 344
+# (`?origem=instagram`) que a equipe cola no story, no grupo e no anúncio.
+LOJA_BASE_URL = "https://alo.mantoproducoes.com.br"
+
 # Bloco bancário das notas fiscais (feature 323) — o texto exato das NFS-e 99 a 103.
 NOTA_DADOS_BANCARIOS_PADRAO = (
     "Esses são os dados da minha conta no Inter:\n"
@@ -394,6 +399,10 @@ class Config:
         os.getenv("INFINITEPAY_AVISO_BASE_URL"), AVISOS_BASE_URL, "INFINITEPAY_AVISO_BASE_URL",
         permitir_local=MAIL_SUPPRESS_SEND,
     )
+
+    # Feature 344: base dos links por canal mostrados na tela da campanha. Só exibição — nenhum
+    # efeito externo —, então a env sobrepõe sem a checagem de endereço local.
+    LOJA_PUBLIC_BASE_URL = (os.getenv("LOJA_PUBLIC_BASE_URL") or LOJA_BASE_URL).rstrip("/")
 
     # Dados bancários que fecham a discriminação de toda nota fiscal (feature 323), copiados das
     # notas que o dono emite. Default real no código (Princípio XIV): sem ele a discriminação

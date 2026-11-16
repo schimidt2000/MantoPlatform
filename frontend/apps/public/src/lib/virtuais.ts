@@ -134,6 +134,12 @@ export interface ReservaInput {
   contact_phone: string;
   contact_email: string;
   delivery_address?: string;
+  /** Feature 344: "Seu nome" — de quem compra; vai para o cadastro de clientes. */
+  buyer_name?: string;
+  /** Feature 344: a caixinha de novidades. Só `true` vale como aceite. */
+  marketing_opt_in?: boolean;
+  /** Feature 344: de onde veio a visita (o servidor reduz à lista fechada). */
+  origem?: string;
 }
 
 export interface ReservaResponse {
@@ -143,6 +149,86 @@ export interface ReservaResponse {
   seconds_left: number | null;
   total_value: string | null;
   payment_url: string | null;
+}
+
+/**
+ * Procedências que dão para reconhecer pelo `document.referrer` (feature 344). O WhatsApp não manda
+ * procedência — por isso o link do grupo leva `?origem=whatsapp`.
+ */
+const ORIGEM_POR_PROCEDENCIA: [RegExp, string][] = [
+  [/(^|\.)instagram\.com$/, "instagram"],
+  [/(^|\.)(facebook\.com|fb\.com|fb\.me)$/, "facebook"],
+  [/(^|\.)google\.[a-z.]+$/, "google"],
+  [/(^|\.)tiktok\.com$/, "tiktok"],
+];
+
+const CHAVE_ORIGEM = "manto_loja_origem";
+
+/**
+ * De onde veio esta visita (feature 344): `?origem=` > `utm_source` > procedência > "direto".
+ *
+ * Guardada na aba (`sessionStorage`) na primeira página da loja, para a reserva — que pode vir
+ * depois de navegar — levar a mesma origem. Sem cookie e sem nada da pessoa: é só um rótulo de
+ * canal, reduzido de novo no servidor à lista fechada.
+ */
+export function origemDaVisita(): string {
+  try {
+    const guardada = sessionStorage.getItem(CHAVE_ORIGEM);
+    const params = new URLSearchParams(window.location.search);
+    const doLink = (params.get("origem") || params.get("utm_source") || "").trim().toLowerCase();
+    if (doLink) {
+      sessionStorage.setItem(CHAVE_ORIGEM, doLink);
+      return doLink;
+    }
+    if (guardada) return guardada;
+    let origem = "direto";
+    if (document.referrer) {
+      const host = new URL(document.referrer).hostname.toLowerCase();
+      // Navegar dentro da própria loja não é procedência.
+      if (host !== window.location.hostname) {
+        origem = ORIGEM_POR_PROCEDENCIA.find(([re]) => re.test(host))?.[1] ?? "outro";
+      }
+    }
+    sessionStorage.setItem(CHAVE_ORIGEM, origem);
+    return origem;
+  } catch {
+    // Aba anônima com storage bloqueado: conta sem origem em vez de quebrar a página.
+    return "direto";
+  }
+}
+
+/**
+ * Conta UMA visita por aba e campanha (feature 344). Recarregar a página na mesma aba não conta de
+ * novo. Disparada depois do primeiro render e sem esperar resposta: a contagem nunca atrasa nem
+ * quebra a página (FR-007).
+ */
+export function useRegistrarVisita(slug: string | undefined) {
+  useEffect(() => {
+    if (!slug) return;
+    const chave = `manto_loja_visita_${slug}`;
+    let jaContou = false;
+    try {
+      jaContou = sessionStorage.getItem(chave) === "1";
+      sessionStorage.setItem(chave, "1");
+    } catch {
+      // storage bloqueado: conta assim mesmo (no máximo uma a mais por recarga)
+    }
+    if (jaContou) return;
+    apiFetch(`/api/virtuais/campanhas/${slug}/visita`, {
+      method: "POST",
+      body: JSON.stringify({ origem: origemDaVisita() }),
+    }).catch(() => undefined);
+  }, [slug]);
+}
+
+/** ID do Pixel da Meta da loja, ou `null` (feature 344). Pouco muda: cache de 5 minutos. */
+export function useRastreamento() {
+  return useQuery<{ meta_pixel_id: string | null }>({
+    queryKey: ["virtuais", "rastreamento"],
+    queryFn: () => apiFetch<{ meta_pixel_id: string | null }>("/api/virtuais/rastreamento"),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
 }
 
 export function useCampanhaVirtual(slug: string | undefined) {

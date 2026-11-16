@@ -12,6 +12,7 @@ import { FormularioEnviadoPage } from "./pages/FormularioEnviadoPage";
 import { AvaliarPage } from "./pages/AvaliarPage";
 import { CampanhaVirtualPage } from "./pages/CampanhaVirtualPage";
 import { PedidoVirtualPage } from "./pages/PedidoVirtualPage";
+import { PrivacidadeLojaPage } from "./pages/PrivacidadeLojaPage";
 import { VitrineVirtualPage } from "./pages/VitrineVirtualPage";
 import { NfcPage } from "./pages/NfcPage";
 import { LojaLayout } from "./components/loja/LojaLayout";
@@ -70,6 +71,10 @@ export function App() {
           <Route path="/v" element={<VitrineVirtualPage />} />
           <Route path="/v/:slug" element={<CampanhaVirtualPage />} />
           <Route path="/v/pedido/:token" element={<PedidoVirtualPage />} />
+          {/* Feature 344: aviso de privacidade da loja. Antes do `/v/:slug` não precisa — um
+              slug "privacidade" não existe (o slug vem do título da campanha), mas a rota
+              literal ganha do parâmetro no React Router de qualquer forma. */}
+          <Route path="/v/privacidade" element={<PrivacidadeLojaPage />} />
         </Route>
         {/* Tag NFC da luminária (feature 255): superfície de raiz, ver isRootSurface. */}
         <Route path="/nfc/:code" element={<NfcPage />} />

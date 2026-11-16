@@ -27,6 +27,7 @@ export function AdminSettingsPage() {
   const [infinitepayHandle, setInfinitepayHandle] = useState("");
   const [regenerarToken, setRegenerarToken] = useState(false);
   const [pagamentoAtivo, setPagamentoAtivo] = useState(false);
+  const [metaPixelId, setMetaPixelId] = useState("");
   const [confirmarSegredo, setConfirmarSegredo] = useState(false);
   const [address, setAddress] = useState("");
   const [margin, setMargin] = useState("");
@@ -44,6 +45,7 @@ export function AdminSettingsPage() {
       setEducamantoCommission(String(query.data.educamanto_commission_rate ?? ""));
       setInfinitepayHandle(query.data.infinitepay_handle ?? "");
       setPagamentoAtivo(Boolean(query.data.virtuais_pagamento_ativo));
+      setMetaPixelId(query.data.meta_pixel_id ?? "");
       setAddress(query.data.manto_address);
       setMargin(String(query.data.departure_margin_minutes ?? ""));
       setMapsKey(query.data.google_maps_api_key);
@@ -69,6 +71,9 @@ export function AdminSettingsPage() {
     // qualquer de outro campo.
     virtuais_pagamento_ativo:
       pagamentoAtivo !== Boolean(query.data?.virtuais_pagamento_ativo) ? pagamentoAtivo : undefined,
+    // Feature 344: idem — só quando mudou, para uma aba velha não apagar o pixel de carona.
+    meta_pixel_id:
+      metaPixelId.trim() !== (query.data?.meta_pixel_id ?? "") ? metaPixelId.trim() : undefined,
     manto_address: address,
     departure_margin_minutes: margin ? Number(margin) : undefined,
     google_maps_api_key: mapsKey,
@@ -238,6 +243,29 @@ export function AdminSettingsPage() {
                   guarda sozinho, você não precisa copiar nada. Gerar de novo troca o segredo;
                   o anterior ainda vale por 24 horas para os links já abertos. Só faça isso se
                   suspeitar que vazou.
+                </p>
+              </div>
+              {/* Feature 344: vazio, a loja não carrega nada da Meta nem mostra aviso de cookies. */}
+              <div>
+                <label className={LABEL} htmlFor="meta_pixel_id">
+                  ID do Pixel da Meta
+                </label>
+                <input
+                  id="meta_pixel_id"
+                  className={INPUT}
+                  inputMode="numeric"
+                  value={metaPixelId}
+                  placeholder="123456789012345"
+                  onChange={(e) => setMetaPixelId(e.target.value)}
+                  aria-invalid={Boolean(erroDoCampo.meta_pixel_id)}
+                />
+                {erroDoCampo.meta_pixel_id && (
+                  <p className="mt-1 text-[12px] text-red">{erroDoCampo.meta_pixel_id}</p>
+                )}
+                <p className="mt-1 text-xs text-muted">
+                  Está no Gerenciador de Eventos da Meta (Fontes de dados). Preenchido, a loja
+                  mostra um aviso de cookies e, com o aceite da pessoa, avisa a Meta da visita, do
+                  início da compra e da compra — sem nome, e-mail nem telefone. Vazio, desliga.
                 </p>
               </div>
             </CardContent>

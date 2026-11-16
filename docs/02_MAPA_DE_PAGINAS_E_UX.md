@@ -1600,6 +1600,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 #### `/virtuais/campanhas/:id` — Edição da campanha
 - **Acesso**: idem.
+- **Visitas e vendas** (feature 344), card no topo, largura inteira: quatro números (Visitas,
+  Reservas, Vendas, Conversão), tabela "De onde" × Visitas/Reservas/Vendas/Conversão (só origens com
+  movimento, mais visitadas primeiro; vazia: "Nenhuma visita ainda. Divulgue um dos links abaixo…"),
+  "Últimos 14 dias" (só dias com movimento, mais recente primeiro) e **Links para divulgar** — um por
+  canal (`alo.mantoproducoes.com.br/<slug>?origem=instagram` etc.) com botão "Copiar" → "Copiado ✓".
+  Atualiza a cada minuto. "Visita" = abertura da página numa aba (sem cookie).
+  `GET /api/virtuais/campanhas/<id>/funil`.
 - **UX**: quatro cards.
   - **Conteúdo público** — título, **foto de capa** (upload com prévia), texto de apresentação,
     termos de tolerância, WhatsApp de atendimento e **editor de perguntas frequentes** (feature
@@ -1646,6 +1653,27 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   criança"); nunca presumir menina ou menino; cada reserva é de **um** formato.
 - O botão flutuante da lista de desejos não aparece em `/v*`.
 
+#### `/v/privacidade` — Aviso de privacidade da loja *(app público, feature 344)*
+
+- **Acesso**: público, dentro do `LojaLayout` (tema e aviso de cookies). Link no rodapé de toda tela
+  `/v*` ("Privacidade"), embaixo do botão de reservar e no aviso de cookies ("Saiba mais").
+- **Conteúdo**, em linguagem simples: quem cuida (Manto Produções; canal = WhatsApp da loja), o que
+  pedimos e para quê (de quem recebe, de quem compra, da visita), com quem dividimos (InfinitePay só
+  e-mail e telefone; Google agenda e Meet; Meta só com o aceite), novidades só para quem marcou, por
+  quanto tempo (dicas apagadas 30 dias depois da chamada ou do prazo do vídeo), direitos e cookies. Com
+  o pixel ligado e uma escolha feita, "Mudar minha escolha" desfaz e recarrega.
+- **Rascunho operacional**: falta revisão de advogado, CNPJ e e-mail do encarregado (`docs/05`).
+
+#### Aviso de cookies *(app público, feature 344)*
+
+- Só existe com `meta_pixel_id` preenchido (`GET /api/virtuais/rastreamento`) e enquanto a pessoa não
+  escolheu (`localStorage`). Cartão fixo no rodapé: "Usamos cookies da Meta para saber quais anúncios
+  trazem você até aqui. Só com o seu ok. Saiba mais" + **Recusar** / **Aceitar** (44px). Escolheu,
+  some na hora (sem animação de saída: com `AnimatePresence` ele ficava transparente por cima do botão
+  de reservar). Só com "Aceitar" carrega o `fbevents.js`: `PageView` por página da loja,
+  `InitiateCheckout` na reserva, `Purchase` uma vez por pedido pago (`enviarCompraUmaVez`). Nada de
+  nome, e-mail ou telefone vai para a Meta.
+
 #### `/v` — Vitrine da loja *(app público, feature 224e; tema na 304)*
 
 - **Acesso**: público. É o que `alo.mantoproducoes.com.br` abre.
@@ -1667,6 +1695,14 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 > chamada diz "Se for uma criança, dá para mostrar a cartinha"; o do vídeo, "entregue até 13 de
 > dezembro" com a data da campanha (`entregaDoVideo`, data pelo texto, sem fuso) ou "em até N dias";
 > o FAQ da loja ganhou "É só para criança?". A página do pedido mostra "Para" no lugar de "Criança".
+
+> **344**: a página conta **uma visita por aba** (`useRegistrarVisita`, guard em `sessionStorage`) com a
+> origem do link (`?origem=`/`utm_source`) ou da procedência (`origemDaVisita`), sem cookie; a ficha
+> ganha **"Seu nome"** (obrigatório na tela — "Conte para a gente o seu nome." —, opcional no
+> servidor) e, depois do e-mail, a caixinha **desmarcada** "Quero receber novidades da Manto Produções
+> por WhatsApp e e-mail" (versão do texto em `VIRTUAL_ACEITE_VERSAO`); abaixo do "Cartão ou PIX" vem
+> "Usamos seus dados só para a reserva, o pagamento e a chamada. Privacidade" (link para
+> `/v/privacidade`). Com o pixel ligado e aceito, a reserva criada manda `InitiateCheckout`.
 
 > ⚠️ **Rota de produção: `/catalogo/v/:slug`.** Estas telas moram em `frontend/apps/public`
 > (`App.tsx:37-38`), que roda sob o basename `/catalogo` em produção — é assim que o backend gera os
@@ -1871,7 +1907,12 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **UX**: busca, criação rápida (dedupe por telefone), edição, exclusão, histórico de eventos.
 - **Métricas no topo da lista (feature 220)**: KPIs **Novos este mês**, **Com evento** e
   **Recorrentes (2+ eventos)** + barras de **novos clientes por mês** (12 meses; tooltip com a
-  quebra formulário/Kommo/manual). `GET /api/clientes/metricas`.
+  quebra formulário/Kommo/manual; desde a 344 também **Loja**, as fichas nascidas de venda da loja).
+  `GET /api/clientes/metricas`.
+- **Novidades (feature 344)**: no card **Contato** da ficha, a linha "Novidades" — "Aceitou em dd/mm/aaaa"
+  com a origem ("Loja: <campanha>") ou "Sem aceite registrado". É o que diz se a equipe pode mandar
+  novidade por WhatsApp/e-mail (LGPD: consentimento). A ficha do comprador nasce na **venda** da loja,
+  com nome, telefone, e-mail e a origem do acesso — nunca os dados de quem recebe.
 - **Ficha (`/clientes/:id`, feature 220)**: no card **Eventos**, o cancelado não aparece (feature 312; vê-se na
   página de Cancelamentos); o cabeçalho diz "N evento(s) · total vendido", e o total, que soma o retido (306),
   ganha a sublinha "inclui R$ X retidos de N cancelamento(s)". No histórico de formulários, o evento de um
@@ -2373,7 +2414,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
 | `/admin/usuarios` · `/novo` · `/:id` | Usuários | `SUPERADMIN`, `FINANCEIRO` | papéis, PIX, salário (`SalaryHistory`), conceder acesso, reset de senha, exclusão; usuários "apenas pagamento" (`has_access=False`). **Feature 218**: a lista virou tabela com busca, filtros combináveis (papel · situação · frequência), ordenação e resumo de folha do mês; a ficha virou duas colunas e cada faixa do histórico salarial tem **corrigir/excluir inline (só SUPERADMIN)**, que realinha a planilha de pagamentos |
-| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, e-mail, anonimato de avaliações, WhatsApp dos formulários (a ClickSign **não** é configurada aqui: o token vem da env e o aviso se cadastra por comando — feature 317, `docs/01` §3.13.6). **Feature 310** — card **"Pagamento da Loja de Interações Virtuais"**: caixa **"Pagamento da loja ligado"** (vale no Salvar da tela; nasce desligada; a ajuda diz que desligada nenhuma família reserva — a campanha mostra "reservas fechadas" —, nenhuma campanha se publica, e os pedidos já abertos continuam sendo confirmados); a InfiniteTag com o erro do servidor **no campo** (`aria-invalid`, URL colada ou espaço são recusados); "gerar segredo novo" marcado faz o Salvar abrir um `ConfirmDialog` "Gerar um segredo novo?" com **"Há N pedido(s) aguardando pagamento"** e o aviso de que o anterior vale 24 h — a caixa desmarca depois de salvar (antes cada Salvar trocava o segredo de novo). O erro geral do Salvar mostra a mensagem do servidor. Subir só o logo não mexe em mais nada (antes desligava os e-mails, o WhatsApp e a data de corte) |
+| `/admin/configuracoes` | Administração | `SUPERADMIN` | `SiteSetting`: cores/logo, comissão padrão, responsável EducaManto, imposto, Fator R, endereço base, e-mail, anonimato de avaliações, WhatsApp dos formulários (a ClickSign **não** é configurada aqui: o token vem da env e o aviso se cadastra por comando — feature 317, `docs/01` §3.13.6). **Feature 310** — card **"Pagamento da Loja de Interações Virtuais"**: caixa **"Pagamento da loja ligado"** (vale no Salvar da tela; nasce desligada; a ajuda diz que desligada nenhuma família reserva — a campanha mostra "reservas fechadas" —, nenhuma campanha se publica, e os pedidos já abertos continuam sendo confirmados); a InfiniteTag com o erro do servidor **no campo** (`aria-invalid`, URL colada ou espaço são recusados); "gerar segredo novo" marcado faz o Salvar abrir um `ConfirmDialog` "Gerar um segredo novo?" com **"Há N pedido(s) aguardando pagamento"** e o aviso de que o anterior vale 24 h — a caixa desmarca depois de salvar (antes cada Salvar trocava o segredo de novo). O erro geral do Salvar mostra a mensagem do servidor. Subir só o logo não mexe em mais nada (antes desligava os e-mails, o WhatsApp e a data de corte). **Feature 344** — no mesmo card, **"ID do Pixel da Meta"** (só números; erro no campo: "O ID do Pixel tem só números…"); vai no Salvar só quando mudou; vazio desliga — sem ele a loja não mostra aviso de cookies nem carrega nada da Meta |
 | `/admin/logs` | Logs | `SUPERADMIN` | `AuditLog` |
 | `/rh` | Painel de RH (`RhDashboardPage`, `App.tsx:130`) | **`SUPERADMIN` na prática** | ⚠️ Única tela do sistema cujo endpoint usa o **segundo mecanismo de RBAC** — `current_user.has_permission('rh.view')` (`app/api/rh_read.py:20`), código de permissão, não `RoleName`. E `rh.view` **nunca é semeado** (`seed.py` só cria `user.manage`), então todo mundo que não é SUPERADMIN recebe 403. Ver `docs/01` §4.3 e `docs/05` §7.1 |
 | `/admin/desempenho` | Desempenho | `SUPERADMIN` | métricas por vendedor/período; **feature 306**: o cancelado sai do total do vendedor, e o retido do período aparece à parte, "+ R$ X retidos de N cancelamento(s)" |

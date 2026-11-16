@@ -860,3 +860,14 @@ que o caso mostrou em volta dela.
 **Quitada.** 206 (o `verify_310.py` voltou a 652/652). **Criadas.** Nenhuma. A 207 (remover pela tela
 um horário que já teve reserva expirada dá 500) continua aberta e ficou mais provável durante a venda
 do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover horário.
+
+## Baixa da feature 344-loja-visitas-e-privacidade (2026-11-16)
+
+**Quitada.** Nenhuma. **Criadas.** (210–213.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 210 | **P3** | `PrivacidadeLojaPage.tsx` | o aviso de privacidade é um rascunho operacional: não tem CNPJ nem e-mail do encarregado, e não passou por advogado; o resto do site (catálogo, formulários, portal) continua sem aviso nenhum | o dono informa CNPJ e e-mail do encarregado; advogado revisa; um aviso único do site, com a seção da loja apontando para ele |
+| 211 | **P3** | `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
+| 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
+| 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |

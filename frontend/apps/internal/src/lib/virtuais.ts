@@ -157,6 +157,39 @@ export function useVirtualCampaign(id: number | null) {
   });
 }
 
+/** Uma linha do funil por origem (feature 344). Conversão em % (vendas ÷ visitas). */
+export interface FunilLinha {
+  origem: string;
+  rotulo: string;
+  visitas: number;
+  reservas: number;
+  vendas: number;
+  conversao: number;
+}
+
+export interface FunilCampanha {
+  /** Endereço curto da página (`alo.mantoproducoes.com.br/<slug>`). */
+  public_url: string;
+  links: { origem: string; rotulo: string; url: string }[];
+  totais: { visitas: number; reservas: number; vendas: number; conversao: number };
+  por_origem: FunilLinha[];
+  /** Últimos 14 dias, do mais antigo ao mais novo. */
+  por_dia: { dia: string; visitas: number; reservas: number; vendas: number }[];
+}
+
+/**
+ * Visitas, reservas e vendas da campanha por origem e por dia (feature 344). Atualiza a cada minuto
+ * com a tela aberta: é o painel que o dono olha durante a divulgação.
+ */
+export function useFunilCampanha(id: number | null) {
+  return useQuery<FunilCampanha>({
+    queryKey: ["virtuais", "funil", id],
+    queryFn: () => apiFetch<FunilCampanha>(`/api/virtuais/campanhas/${id}/funil`),
+    enabled: id !== null,
+    refetchInterval: 60_000,
+  });
+}
+
 /** Campos aceitos na criação/edição — dinheiro sempre em string decimal de reais. */
 export interface VirtualCampaignInput {
   catalog_character_id?: number;

@@ -43,6 +43,8 @@ def _settings_summary(settings: SiteSetting) -> dict:
         # antes de regerar o segredo (o anterior vale 24 h, mas a decisão é de quem clica).
         "virtuais_pagamento_ativo": bool(getattr(settings, "virtuais_pagamento_ativo", False)),
         "virtuais_pedidos_aguardando": _pedidos_aguardando(),
+        # Feature 344: ID do Pixel da Meta da loja ("" = desligado).
+        "meta_pixel_id": getattr(settings, "meta_pixel_id", None) or "",
         "tax_rate": settings.tax_rate,
         "fator_r_threshold": settings.fator_r_threshold,
         "manto_address": settings.manto_address or "",
