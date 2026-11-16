@@ -28,7 +28,7 @@ from app.constants import (
     now_sp,
 )
 from app.marketing import virtuais_ops as ops
-from app.models import VirtualCampaign, VirtualOrder
+from app.models import SiteSetting, VirtualCampaign, VirtualOrder
 
 
 def _campanha_publicada_ou_erro(slug: str) -> tuple[Any, Any]:
@@ -81,6 +81,34 @@ def api_virtuais_horarios_publicos(slug: str) -> Any:
     )
 
 
+@api_bp.route("/virtuais/campanhas/<slug>/visita", methods=["POST"])
+@limiter.limit("30 per minute")
+def api_virtuais_registrar_visita(slug: str) -> Any:
+    """Conta uma abertura da página da campanha, por dia e origem (feature 344).
+
+    Público e anônimo: não lê nem grava IP, cookie ou aparelho — só soma no contador. O limite
+    por IP do Flask-Limiter (em memória) segura robô; a página chama uma vez por aba.
+    """
+    campaign, erro = _campanha_publicada_ou_erro(slug)
+    if erro:
+        return erro
+    data = request.get_json(silent=True) or {}
+    ops.registrar_visita(campaign, data.get("origem"))
+    return "", 204
+
+
+@api_bp.route("/virtuais/rastreamento", methods=["GET"])
+def api_virtuais_rastreamento() -> Any:
+    """ID do Pixel da Meta da loja, ou ``null`` (feature 344).
+
+    Público: o ID não é segredo (vai no HTML de quem aceita os cookies). Com ``null`` a loja não
+    mostra aviso de cookies nem carrega nada da Meta.
+    """
+    settings = SiteSetting.query.get(1)
+    pixel = (getattr(settings, "meta_pixel_id", None) or "").strip() if settings else ""
+    return jsonify({"meta_pixel_id": pixel or None})
+
+
 @api_bp.route("/virtuais/campanhas/<slug>/reservar", methods=["POST"])
 @limiter.limit("20 per minute")
 def api_virtuais_reservar(slug: str) -> Any:
@@ -117,6 +145,10 @@ def api_virtuais_reservar(slug: str) -> Any:
             contact_phone=data.get("contact_phone"),
             contact_email=data.get("contact_email"),
             delivery_address=data.get("delivery_address"),
+            # Feature 344: os três são opcionais — a página antiga em cache não os manda.
+            origem=data.get("origem"),
+            buyer_name=data.get("buyer_name"),
+            marketing_opt_in=data.get("marketing_opt_in"),
         )
     except ops.VirtuaisValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})

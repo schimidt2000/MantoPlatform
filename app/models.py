@@ -1003,6 +1003,9 @@ class SiteSetting(db.Model):
     virtuais_pagamento_ativo = db.Column(
         db.Boolean, nullable=False, default=False, server_default="0"
     )
+    # Feature 344: ID do Pixel da Meta da loja. Nulo = desligado — sem ele a loja não mostra aviso
+    # de cookies nem carrega nada da Meta. O ID não é segredo (vai no HTML de quem aceita).
+    meta_pixel_id = db.Column(db.String(30), nullable=True)
     # Marcador do último ciclo da varredura de reservas virtuais. Serve de "lock" de execução única
     # entre os workers do gunicorn — mesmo papel de `calendar_auto_sync_at` (FR-057a): dois
     # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
@@ -2095,6 +2098,10 @@ class Client(db.Model):
     utm_medium = db.Column(db.String(200), nullable=True)
     utm_campaign = db.Column(db.String(200), nullable=True)
     notes = db.Column(db.Text, nullable=True)
+    # Feature 344: último "sim" para receber novidades (LGPD, consentimento) e de onde veio
+    # ("Loja: <campanha>"). Nulo = não há aceite registrado — não prospectar por WhatsApp/e-mail.
+    marketing_opt_in_at = db.Column(db.DateTime, nullable=True)
+    marketing_opt_in_source = db.Column(db.String(160), nullable=True)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -3445,6 +3452,30 @@ class VirtualCampaign(db.Model):
         return self.status == VIRTUAL_CAMPAIGN_STATUS_PUBLICADA
 
 
+class VirtualCampaignVisit(db.Model):
+    """Quantas vezes a página de uma campanha foi aberta, por dia e origem (feature 344).
+
+    É um CONTADOR, não um registro por visita: não guarda IP, aparelho nem nada de quem abriu — por
+    isso não precisa de aviso de cookies. A linha única por campanha + dia + origem é o alvo do
+    upsert (`virtuais_ops.registrar_visita`), que soma 1 sem ler antes.
+    """
+
+    __tablename__ = "virtual_campaign_visits"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "campaign_id", "day", "origem", name="uq_virtual_visit_campaign_day_origem"
+        ),
+    )
+
+    id          = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(
+        db.Integer, db.ForeignKey("virtual_campaigns.id", ondelete="CASCADE"), nullable=False
+    )
+    day         = db.Column(db.Date, nullable=False)      # dia em São Paulo
+    origem      = db.Column(db.String(20), nullable=False)  # uma de `VIRTUAL_ORIGENS`
+    visits      = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+
+
 class VirtualCampaignSlot(db.Model):
     """Um horário de 10 minutos vendável de uma campanha (feature 205).
 
@@ -3532,6 +3563,15 @@ class VirtualOrder(db.Model):
     contact_phone_display = db.Column(db.String(30), nullable=True)
     contact_email         = db.Column(db.String(180), nullable=False)
     delivery_address      = db.Column(db.String(300), nullable=True)
+
+    # Feature 344. `buyer_name` é de quem COMPRA (vai para o cadastro de clientes); os `child_*`
+    # acima são de quem RECEBE e nunca saem da loja. O aceite de novidades é consentimento (LGPD,
+    # art. 7º, I): nulo = não marcou; a versão diz qual texto a pessoa viu. `origem` é de onde veio
+    # a visita que gerou o pedido (`VIRTUAL_ORIGENS`) — o funil da campanha soma por ela.
+    buyer_name               = db.Column(db.String(120), nullable=True)
+    marketing_opt_in_at      = db.Column(db.DateTime, nullable=True)
+    marketing_opt_in_version = db.Column(db.String(20), nullable=True)
+    origem                   = db.Column(db.String(20), nullable=True)
 
     gift_item_id = db.Column(db.Integer, db.ForeignKey("acervo_3d_items.id"), nullable=True)
 

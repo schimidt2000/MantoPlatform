@@ -666,6 +666,37 @@ VIRTUAL_NOTIFICATION_LABELS = {
     VIRTUAL_NOTIFICATION_KIND_CANCELAMENTO: "Cancelamento e devolução",
 }
 
+# Feature 344: de onde veio a visita da loja. Lista FECHADA — o servidor reduz qualquer texto do
+# link (`?origem=`/`utm_source`) a uma destas; o que não reconhece vira "outro", e a tabela de
+# visitas nunca ganha origem nova por um link digitado errado.
+VIRTUAL_ORIGEM_DIRETO = "direto"
+VIRTUAL_ORIGEM_OUTRO = "outro"
+VIRTUAL_ORIGENS_ROTULOS = {
+    "instagram": "Instagram",
+    "facebook": "Facebook",
+    "whatsapp": "WhatsApp",
+    "google": "Google",
+    "tiktok": "TikTok",
+    "email": "E-mail",
+    VIRTUAL_ORIGEM_OUTRO: "Outro",
+    VIRTUAL_ORIGEM_DIRETO: "Direto",
+}
+VIRTUAL_ORIGENS = tuple(VIRTUAL_ORIGENS_ROTULOS)
+# Apelidos aceitos no link além do nome da origem (o Meta Ads manda `utm_source=fb`/`ig`).
+VIRTUAL_ORIGENS_APELIDOS = {
+    "ig": "instagram", "fb": "facebook", "meta": "facebook", "wa": "whatsapp", "zap": "whatsapp",
+    "e-mail": "email", "mail": "email", "tt": "tiktok",
+}
+# Versão do texto da caixinha "Quero receber novidades…" gravada com o aceite (LGPD, art. 8º §2º:
+# o ônus da prova é de quem coleta). Mudou o texto da tela? Muda a versão junto.
+VIRTUAL_ACEITE_VERSAO = "2026-11-16"
+# Dias, contados da data de referência (chamada, prazo do vídeo, ou criação do pedido que não virou
+# venda), até as dicas sobre quem recebe serem apagadas (LGPD, art. 15/16).
+VIRTUAL_DICAS_RETENCAO_DIAS = 30
+# `Client.source` da ficha que nasce de uma venda da loja (feature 344). Tem balde próprio ("loja")
+# no gráfico de clientes novos (`client_ops.client_metrics`).
+CLIENT_SOURCE_LOJA = "loja_virtual"
+
 # Duração fixa de uma chamada ao vivo e janela do "soft lock" do horário (FR-017).
 VIRTUAL_SLOT_MINUTES = 10
 VIRTUAL_SOFT_LOCK_MINUTES = 15

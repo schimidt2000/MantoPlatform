@@ -78,6 +78,13 @@ def api_clientes_detail(client_id: int) -> Any:
             "cpf": client.cpf or "",
             "cnpj": client.cnpj or "",
             "address": client.address or "",
+            # Feature 344: de onde a ficha veio e se a pessoa aceitou receber novidades — é o que
+            # diz à equipe se pode prospectar por WhatsApp/e-mail (LGPD, consentimento).
+            "source": client.source,
+            "marketing_opt_in_at": (
+                client.marketing_opt_in_at.isoformat() if client.marketing_opt_in_at else None
+            ),
+            "marketing_opt_in_source": client.marketing_opt_in_source,
             "events": [
                 {
                     "id": e.id,

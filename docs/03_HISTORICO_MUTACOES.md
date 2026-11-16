@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
+> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration `e344a1b2c3d4`;
+> em branch). Antes: **2026-11-11** · **310b-link-de-pagamento-longo** (hotfix da 310, migration
 > `f310b2a4c6e8`) **EM PRODUÇÃO desde 11/11/2026 ~03h40** (merge `39dd2613`, a pedido do dono: "Pode
 > publicar"). Antes: **2026-11-10** · Estado do repositório: pós-**deploy em lote de 10/11/2026 (~21h10)**, a
 > pedido do dono ("pode fazer agora mesmo", com a loja no ar e antes das 23h da R-20), num push só, na ordem dos
@@ -215,6 +216,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **344-loja-visitas-e-privacidade** | A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
 | **310b-link-de-pagamento-longo** | *(EM PRODUÇÃO 11/11 ~03h40)* Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
 | **336b-tag-nfc-so-eventos-futuros** | *(EM PRODUÇÃO 10/11 ~22h)* Hotfix da 336: o vínculo da tag NFC lista só eventos de hoje em diante, o mais próximo primeiro (`GET /api/agenda/search?futuros=1`), e só festas — sem ensaio nem compromisso interno 🟧/🟠 (`so_festas=1`); "Mostrar os que já aconteceram" traz os passados; data digitada ignora o filtro de data | 2026-11-10 | — | (aqui) | ver Registro |
 | **342-nota-nasce-com-dados** | *(EM PRODUÇÃO 10/11 ~21h10, lote)* O pedido de nota já nasce com os dados da emissão: os dois formulários públicos perguntam "Preciso de nota fiscal" e, com ela marcada, o CNPJ ou CPF de quem recebe (dígitos verificadores), o e-mail, se a empresa retém o ISS (só para CNPJ, com "Não sei") e a referência; campo condicional no editor; as respostas completam os `nota_*` do evento no vínculo, só em campo vazio; pedir nota sem documento é recusado nas três portas da venda; e-mail da nota e município do evento sugerido pelo endereço | 2026-11-10 | `d342a7c1e9f3` | (aqui) | ver Registro |
@@ -427,6 +429,37 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 344 — A loja conta as visitas e pede licença   (344-loja-visitas-e-privacidade · 2026-11-16 · migration `e344a1b2c3d4`)
+
+> Nível 1. Detalhe: `specs/344-loja-visitas-e-privacidade/` (spec, plan, tasks, `verify_344.py`).
+
+**O pedido.** No dia em que começou a divulgar o Papai Noel (16/11), o dono perguntou quantas visitas
+teve — a loja não contava nenhuma — e quis prospectar quem comprar para vender outros serviços — a loja
+não tinha aviso de privacidade, aceite nem levava o comprador ao CRM. "Bora fazer os urgentes, trace o
+plano e execute": contagem, LGPD e o Pixel da Meta pronto para ligar.
+
+**O que mudou.** Contador anônimo `virtual_campaign_visits` (upsert por campanha + dia + origem; a
+página dispara uma vez por aba) e funil na tela da campanha (`GET …/funil`) com os links
+`alo.mantoproducoes.com.br/<slug>?origem=<canal>`. Formulário com "Seu nome" e a caixinha desmarcada
+de novidades (data + `VIRTUAL_ACEITE_VERSAO` no pedido); `/v/privacidade`; na venda, `_cliente_da_venda`
+cria/completa o `Client` (`source=loja_virtual`, aceite, evento ligado) num SAVEPOINT; rotina `dicas`
+da varredura apaga as dicas em 30 dias (pedido, evento, Google); `meta_pixel_id` nas Configurações,
+aviso de cookies e `PageView`/`InitiateCheckout`/`Purchase` só com aceite.
+
+**Verificação.** `verify_344.py` 57/57 no `manto_344` (antes do núcleo: 16 FALHA e 4 BLOQUEADO pelo
+motivo certo). Telas abertas na cópia local: loja em 375 px (formulário, erro do nome, privacidade,
+aviso de cookies com aceite — pixel por dublê no navegador, nada chegou à Meta — e recusa), card de
+visitas, configurações (erro no campo e gravação) e ficha do cliente.
+
+**Pegadinhas.** (1) `AnimatePresence` deixava o aviso de cookies montado e transparente depois de
+"Recusar", por cima do botão de reservar — agora ele simplesmente sai (sem animação de saída) e a
+faixa em volta do cartão tem `pointer-events-none`. (2) A data de referência das dicas nunca é antes
+da criação do pedido; o pré-filtro `created_at <= corte` depende disso — um teste que envelhece só o
+horário (e não a criação) não acha o pedido. (3) Campanha pausada responde 410 também na contagem (o
+mesmo `_campanha_publicada_ou_erro` da landing). (4) `alo.mantoproducoes.com.br/<slug>` preserva a
+query no 302 — é a base dos links por canal. (5) `GET /api/clientes` sem a barra final dá 308 para o
+Flask direto e o navegador da cópia local recusa ("Failed to fetch"); use `/api/clientes/`.
 
 ### 310b — O link de pagamento da loja não cabe mais em 500 caracteres   (310b-link-de-pagamento-longo · 2026-11-11 · migration `f310b2a4c6e8`)
 

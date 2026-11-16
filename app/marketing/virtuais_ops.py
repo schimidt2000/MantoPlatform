@@ -32,8 +32,10 @@ from sqlalchemy.orm import lazyload
 
 from app import db
 from app.constants import (  # feature 310
+    CLIENT_SOURCE_LOJA,
     EVENT_TYPE_VIRTUAL,
     GIFT_3D_STATUS_PENDENTE,
+    VIRTUAL_ACEITE_VERSAO,
     VIRTUAL_ANTECEDENCIA_RESERVA_HORAS,
     VIRTUAL_AVISO_CONFLITO,
     VIRTUAL_AVISO_DEVOLUCAO,
@@ -56,6 +58,7 @@ from app.constants import (  # feature 310
     VIRTUAL_CAMPAIGN_STATUS_PUBLICADA,
     VIRTUAL_CAMPAIGN_STATUS_RASCUNHO,
     VIRTUAL_CAMPAIGN_STATUSES,
+    VIRTUAL_DICAS_RETENCAO_DIAS,
     VIRTUAL_GOOGLE_TIMEOUT_S,
     VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO,
     VIRTUAL_MODALITIES,
@@ -70,6 +73,11 @@ from app.constants import (  # feature 310
     VIRTUAL_ORDER_STATUS_EXPIRADO,
     VIRTUAL_ORDER_STATUS_PAGO,
     VIRTUAL_ORDER_STATUS_RESERVADO,
+    VIRTUAL_ORIGEM_DIRETO,
+    VIRTUAL_ORIGEM_OUTRO,
+    VIRTUAL_ORIGENS,
+    VIRTUAL_ORIGENS_APELIDOS,
+    VIRTUAL_ORIGENS_ROTULOS,
     VIRTUAL_PRODUCTION_STATUS_FINALIZADO,
     VIRTUAL_PRODUCTION_STATUS_PENDENTE,
     VIRTUAL_PRODUCTION_STATUSES,
@@ -101,10 +109,12 @@ from app.models import (
     Acervo3DItem,
     CalendarEvent,
     CatalogCharacter,
+    Client,
     EventRole,
     SiteSetting,
     VirtualCampaign,
     VirtualCampaignSlot,
+    VirtualCampaignVisit,
     VirtualMediaDelivery,
     VirtualOrder,
     VirtualOrderNotification,
@@ -794,6 +804,153 @@ def listar_slots_disponiveis(campaign: VirtualCampaign, *, day: str | None = Non
     return slots
 
 
+def normalizar_origem(raw: Any) -> str:
+    """Reduz o texto do link (`?origem=`, `utm_source`) a uma das ``VIRTUAL_ORIGENS`` (feature 344).
+
+    Vazio vira "direto"; desconhecido vira "outro" — um link digitado errado nunca cria origem nova
+    na contagem. Aceita apelidos comuns (`fb`, `ig`, `zap`) e ignora maiúsculas e pontuação.
+    """
+    texto = re.sub(r"[^a-z0-9-]", "", str(raw or "").strip().lower())
+    if not texto:
+        return VIRTUAL_ORIGEM_DIRETO
+    texto = VIRTUAL_ORIGENS_APELIDOS.get(texto, texto)
+    return texto if texto in VIRTUAL_ORIGENS else VIRTUAL_ORIGEM_OUTRO
+
+
+def _aceite_de_novidades(valor: Any, momento: datetime) -> dict[str, Any]:
+    """Colunas do aceite de novidades para o pedido (feature 344, LGPD art. 7º I e 8º §2º).
+
+    Consentimento não se presume: só ``True`` (ou o texto "true" de um form) vale. Sem aceite, nada
+    é gravado — nem um ``False`` que alguém leria como "recusou".
+    """
+    aceitou = valor is True or (isinstance(valor, str) and valor.strip().lower() in ("true", "1", "on"))
+    if not aceitou:
+        return {}
+    return {"marketing_opt_in_at": momento, "marketing_opt_in_version": VIRTUAL_ACEITE_VERSAO}
+
+
+def registrar_visita(campaign: VirtualCampaign, origem: Any) -> str:
+    """Soma 1 visita à campanha no dia de hoje (São Paulo), na origem informada (feature 344).
+
+    Um único ``INSERT … ON CONFLICT DO UPDATE``: duas visitas simultâneas não se perdem nem criam
+    linha dupla (o ``UNIQUE`` decide). Nada de quem visitou é gravado.
+
+    Returns:
+        A origem já reduzida (o que foi contado).
+    """
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+    chave = normalizar_origem(origem)
+    stmt = pg_insert(VirtualCampaignVisit).values(
+        campaign_id=campaign.id, day=agora().date(), origem=chave, visits=1
+    )
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_virtual_visit_campaign_day_origem",
+        set_={"visits": VirtualCampaignVisit.visits + 1},
+    )
+    db.session.execute(stmt)
+    db.session.commit()
+    return chave
+
+
+def _conversao(vendas: int, visitas: int) -> float:
+    return round(vendas * 100 / visitas, 1) if visitas else 0.0
+
+
+def funil_da_campanha(campaign: VirtualCampaign, *, base_url: str, dias: int = 14) -> dict[str, Any]:
+    """Visitas, reservas e vendas da campanha por origem e por dia, e os links por canal (344).
+
+    - **Visitas**: o contador anônimo (`VirtualCampaignVisit`).
+    - **Reservas**: pedidos criados, em qualquer situação — é quem chegou a preencher e clicar.
+    - **Vendas**: pedidos hoje pagos (o cancelado por conflito ou desistência não é venda).
+    Pedido sem origem (de antes da 344) fica fora: não há como saber de onde veio, e somá-lo em
+    "Direto" inventaria um número.
+
+    Args:
+        campaign: A campanha.
+        base_url: Endereço curto da loja (`LOJA_PUBLIC_BASE_URL`), base dos links por canal.
+        dias: Quantos dias, terminando hoje, na série diária.
+    """
+    from sqlalchemy import func
+
+    hoje = agora().date()
+    inicio = hoje - timedelta(days=dias - 1)
+
+    visitas_por_origem = dict(
+        db.session.query(VirtualCampaignVisit.origem, func.sum(VirtualCampaignVisit.visits))
+        .filter(VirtualCampaignVisit.campaign_id == campaign.id)
+        .group_by(VirtualCampaignVisit.origem)
+        .all()
+    )
+    visitas_por_dia = dict(
+        db.session.query(VirtualCampaignVisit.day, func.sum(VirtualCampaignVisit.visits))
+        .filter(VirtualCampaignVisit.campaign_id == campaign.id, VirtualCampaignVisit.day >= inicio)
+        .group_by(VirtualCampaignVisit.day)
+        .all()
+    )
+    pedidos = (
+        VirtualOrder.query.filter(
+            VirtualOrder.campaign_id == campaign.id, VirtualOrder.origem.isnot(None)
+        )
+        .with_entities(VirtualOrder.origem, VirtualOrder.status, VirtualOrder.created_at,
+                       VirtualOrder.paid_at)
+        .all()
+    )
+
+    reservas_origem: dict[str, int] = {}
+    vendas_origem: dict[str, int] = {}
+    reservas_dia: dict[Any, int] = {}
+    vendas_dia: dict[Any, int] = {}
+    for origem, status, criado, pago_em in pedidos:
+        reservas_origem[origem] = reservas_origem.get(origem, 0) + 1
+        reservas_dia[criado.date()] = reservas_dia.get(criado.date(), 0) + 1
+        if status == VIRTUAL_ORDER_STATUS_PAGO:
+            vendas_origem[origem] = vendas_origem.get(origem, 0) + 1
+            dia_venda = (pago_em or criado).date()
+            vendas_dia[dia_venda] = vendas_dia.get(dia_venda, 0) + 1
+
+    por_origem = []
+    for origem in VIRTUAL_ORIGENS:
+        v = int(visitas_por_origem.get(origem) or 0)
+        r = reservas_origem.get(origem, 0)
+        s = vendas_origem.get(origem, 0)
+        if v or r:
+            por_origem.append({
+                "origem": origem, "rotulo": VIRTUAL_ORIGENS_ROTULOS[origem],
+                "visitas": v, "reservas": r, "vendas": s, "conversao": _conversao(s, v),
+            })
+    por_origem.sort(key=lambda linha: (-linha["visitas"], -linha["reservas"]))
+
+    por_dia = []
+    for i in range(dias):
+        dia = inicio + timedelta(days=i)
+        por_dia.append({
+            "dia": dia.isoformat(),
+            "visitas": int(visitas_por_dia.get(dia) or 0),
+            "reservas": reservas_dia.get(dia, 0),
+            "vendas": vendas_dia.get(dia, 0),
+        })
+
+    total_visitas = sum(int(v or 0) for v in visitas_por_origem.values())
+    total_reservas = sum(reservas_origem.values())
+    total_vendas = sum(vendas_origem.values())
+    public_url = f"{base_url.rstrip('/')}/{campaign.slug}"
+    canais = [o for o in VIRTUAL_ORIGENS if o not in (VIRTUAL_ORIGEM_OUTRO, VIRTUAL_ORIGEM_DIRETO)]
+    return {
+        "public_url": public_url,
+        "links": [
+            {"origem": o, "rotulo": VIRTUAL_ORIGENS_ROTULOS[o], "url": f"{public_url}?origem={o}"}
+            for o in canais
+        ],
+        "totais": {
+            "visitas": total_visitas, "reservas": total_reservas, "vendas": total_vendas,
+            "conversao": _conversao(total_vendas, total_visitas),
+        },
+        "por_origem": por_origem,
+        "por_dia": por_dia,
+    }
+
+
 def _validar_ficha(dados: dict[str, Any], *, exige_endereco: bool) -> dict[str, Any]:
     """Valida a ficha de quem vai receber e devolve os valores limpos (FR-014).
 
@@ -927,6 +1084,9 @@ def reservar(
     origin_ip: str | None = None,
     origin_user_agent: str | None = None,
     redirect_url_builder: Callable[[str], str] | None = None,
+    origem: Any = None,
+    buyer_name: Any = None,
+    marketing_opt_in: Any = False,
     **ficha: Any,
 ) -> VirtualOrder:
     """Cria o pedido, aplica o soft lock de 15 minutos e gera o link de pagamento.
@@ -947,6 +1107,11 @@ def reservar(
         origin_ip / origin_user_agent: Insumos do hash de origem (nunca persistidos crus).
         redirect_url_builder: Recebe o ``public_token`` e devolve para onde a operadora manda a
             família de volta.
+        origem: De onde veio a visita (feature 344); reduzida a ``VIRTUAL_ORIGENS``.
+        buyer_name: "Seu nome", de quem compra (feature 344). Opcional no servidor: a página antiga
+            em cache não manda e não pode ter a reserva recusada por isso.
+        marketing_opt_in: A caixinha de novidades (feature 344). Só ``True`` explícito vale como
+            aceite — consentimento não se presume.
 
     Raises:
         VirtuaisValidationError: Campo inválido (400).
@@ -991,16 +1156,17 @@ def reservar(
             )
 
     dados = _validar_ficha(ficha, exige_endereco=peca is not None)
-    origem = hash_origem(origin_ip, origin_user_agent)
+    # `origem_hash` é a origem de REDE (anti-abuso); `origem` (parâmetro) é a de MARKETING (344).
+    origem_hash = hash_origem(origin_ip, origin_user_agent)
     # Uma linha, sem o IP: é como o teste de produção confere que duas redes dão duas origens
     # (quickstart §2.3). `publico=nao` aqui em produção = o IP ainda é o da infraestrutura.
     try:
         publico = ipaddress.ip_address((origin_ip or "").strip()).is_global
     except ValueError:
         publico = False
-    logger.info("[virtuais] origem: hash=%s publico=%s", (origem or "")[:8],
+    logger.info("[virtuais] origem: hash=%s publico=%s", (origem_hash or "")[:8],
                 "sim" if publico else "nao")
-    _checar_limites(campaign, dados["contact_phone"], origem)
+    _checar_limites(campaign, dados["contact_phone"], origem_hash)
 
     momento = agora()
     locked_until = momento + timedelta(minutes=VIRTUAL_SOFT_LOCK_MINUTES)
@@ -1037,8 +1203,11 @@ def reservar(
         price_gift=Decimal(preco_presente),
         total_value=total,
         locked_until=locked_until,
-        origin_hash=origem,
+        origin_hash=origem_hash,
         client_token=(client_token or None),
+        origem=normalizar_origem(origem),
+        buyer_name=(str(buyer_name or "").strip()[:120] or None),
+        **_aceite_de_novidades(marketing_opt_in, momento),
         **dados,
     )
     db.session.add(order)
@@ -1316,6 +1485,8 @@ def ciclo_de_varredura() -> dict[str, Any]:
         ("avisos", reprocessar_avisos),
         ("salas", retentar_salas),
         ("prazos", alertar_prazos_video),
+        # Feature 344: por último — é limpeza (LGPD), nada de dinheiro espera por ela.
+        ("dicas", apagar_dicas_vencidas),
     ]
     for nome, rotina in rotinas:
         try:
@@ -1588,6 +1759,25 @@ def extrair_meet_url(evento_google: dict) -> str | None:
     return None
 
 
+def _textos_do_evento_google(order: VirtualOrder, *, com_dicas: bool) -> tuple[str, str]:
+    """Título e descrição do evento da venda na agenda externa.
+
+    Fonte única para a criação (com as dicas) e para a limpeza da 344 (sem elas): a descrição sem
+    dicas tem de ser idêntica ao resto da original, senão a limpeza apagaria mais do que as dicas.
+    """
+    campanha = order.campaign
+    personagem = campanha.character.name if campanha.character else campanha.title
+    titulo = f"🎥 VIRTUAL — {personagem} para {order.child_name}"
+    descricao = (
+        f"Interação virtual vendida pela loja (pedido {order.order_nsu}).\n"
+        f"Para: {order.child_name}, {order.child_age} anos.\n"
+        f"Contato: {order.contact_phone_display or order.contact_phone} · {order.contact_email}\n"
+    )
+    if com_dicas and order.behavior_notes:
+        descricao += f"Dicas da família: {order.behavior_notes}\n"
+    return titulo, descricao
+
+
 def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | None]:
     """Cria o evento na agenda externa com sala do Meet.
 
@@ -1606,19 +1796,9 @@ def _criar_evento_google(order: VirtualOrder) -> tuple[str, str | None, str | No
     if current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True):
         raise RuntimeError("Escrita na agenda travada neste ambiente (cópia de teste).")
 
-    campanha = order.campaign
     inicio = order.slot.start_at if order.slot else agora()
     fim = inicio + timedelta(minutes=VIRTUAL_SLOT_MINUTES)
-    personagem = campanha.character.name if campanha.character else campanha.title
-
-    titulo = f"🎥 VIRTUAL — {personagem} para {order.child_name}"
-    descricao = (
-        f"Interação virtual vendida pela loja (pedido {order.order_nsu}).\n"
-        f"Para: {order.child_name}, {order.child_age} anos.\n"
-        f"Contato: {order.contact_phone_display or order.contact_phone} · {order.contact_email}\n"
-    )
-    if order.behavior_notes:
-        descricao += f"Dicas da família: {order.behavior_notes}\n"
+    titulo, descricao = _textos_do_evento_google(order, com_dicas=True)
 
     # Sala só faz sentido na chamada ao vivo. Pedir uma para vídeo gravado criaria um link que
     # ninguém usa — e apareceria para a família como "entrar na chamada" num produto que não tem
@@ -1740,11 +1920,88 @@ def _efetivar_no_banco(order: VirtualOrder) -> None:
     if order.gift_item_id:
         _injetar_presente_3d(order, evento)
 
+    # Feature 344: quem comprou entra no cadastro de clientes. Num SAVEPOINT e com a venda já
+    # descarregada antes: um erro do CRM desfaz só a ficha — a venda é dinheiro recebido e não
+    # pode depender dele (FR-017). O flush fora do `try` garante que um erro da VENDA não seja
+    # engolido aqui.
+    db.session.flush()
+    try:
+        with db.session.begin_nested():
+            _cliente_da_venda(order, evento)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[virtuais] ficha de cliente da venda %s falhou: %s", order.order_nsu, exc)
+
     audit(
         "create", "CalendarEvent", evento.id, evento.title,
         f"Venda virtual efetivada (pedido {order.order_nsu})",
     )
     db.session.commit()
+
+
+def _nome_do_comprador(order: VirtualOrder) -> str:
+    """Nome para a ficha do cliente: o "Seu nome" ou, sem ele, o começo do e-mail.
+
+    Nunca o nome de quem recebe (`child_name`): a ficha é de quem compra, e os dados de quem recebe
+    — muitas vezes criança — não vão para o cadastro de clientes (FR-016).
+    """
+    if order.buyer_name:
+        return order.buyer_name
+    prefixo = (order.contact_email or "").split("@")[0].strip()
+    return prefixo[:200] or "Cliente da loja"
+
+
+def _cliente_da_venda(order: VirtualOrder, evento: CalendarEvent) -> Client | None:
+    """Cria ou completa a ficha do comprador no cadastro de clientes (feature 344).
+
+    A chave é o telefone no formato do CRM (só dígitos, com DDI): o pedido guarda sem o 55, e sem
+    normalizar a mesma pessoa viraria duas fichas. Ficha nova nasce com origem ``loja_virtual``;
+    ficha existente só ganha o que está vazio — o nome e o e-mail que a equipe já tinha valem mais.
+    O aceite de novidades só sobe (nunca é apagado por uma compra sem aceite), e o evento da venda
+    fica ligado à ficha.
+
+    Returns:
+        A ficha, ou ``None`` quando o telefone não tem o formato do CRM (a venda segue sem ficha).
+    """
+    from app.clientes.importer import normalize_phone
+    from app.formularios.formularios_ops import ensure_event_client
+
+    telefone = normalize_phone(order.contact_phone)
+    if not telefone:
+        logger.warning("[virtuais] venda %s sem telefone válido para o CRM", order.order_nsu)
+        return None
+
+    de_onde = f"Loja: {order.campaign.title}"
+    cliente = Client.query.filter_by(phone=telefone).first()
+    if cliente is None:
+        cliente = Client(
+            name=_nome_do_comprador(order),
+            phone=telefone,
+            phone_display=order.contact_phone_display,
+            email=order.contact_email,
+            source=CLIENT_SOURCE_LOJA,
+            lead_origin=de_onde[:120],
+            utm_source=order.origem,
+        )
+        db.session.add(cliente)
+        db.session.flush()
+    else:
+        if not cliente.email:
+            cliente.email = order.contact_email
+        if not cliente.phone_display:
+            cliente.phone_display = order.contact_phone_display
+        if not cliente.lead_origin:
+            cliente.lead_origin = de_onde[:120]
+        if not cliente.utm_source and order.origem:
+            cliente.utm_source = order.origem
+
+    if order.marketing_opt_in_at and (
+        cliente.marketing_opt_in_at is None or cliente.marketing_opt_in_at < order.marketing_opt_in_at
+    ):
+        cliente.marketing_opt_in_at = order.marketing_opt_in_at
+        cliente.marketing_opt_in_source = de_onde[:160]
+
+    ensure_event_client(evento, cliente.id)
+    return cliente
 
 
 def _pos_venda(order: VirtualOrder) -> None:
@@ -2825,6 +3082,88 @@ def alertar_prazos_video(*, dias: int = 2, limite: int = 100) -> int:
     if vencendo:
         db.session.commit()
     return len(vencendo)
+
+
+def _referencia_das_dicas(order: VirtualOrder) -> datetime:
+    """Data a partir da qual as dicas deixam de servir (feature 344, FR-018).
+
+    Venda ao vivo: o horário da chamada. Venda de vídeo: o prazo de entrega (ou o pagamento, sem
+    prazo). Pedido que não virou venda: a criação.
+    """
+    if order.status == VIRTUAL_ORDER_STATUS_PAGO:
+        if order.slot is not None:
+            return order.slot.start_at
+        entrega = VirtualMediaDelivery.query.filter_by(order_id=order.id).first()
+        if entrega is not None and entrega.due_date is not None:
+            return datetime.combine(entrega.due_date, time())
+        return order.paid_at or order.created_at
+    return order.created_at
+
+
+def _apagar_dicas_do_pedido(order: VirtualOrder) -> None:
+    """Tira as dicas do pedido, do evento do sistema e da descrição do evento no Google.
+
+    O Google vem PRIMEIRO: se falhar, a exceção sobe antes de qualquer mudança no banco e o pedido
+    volta na próxima volta inteiro — nada fica apagado pela metade.
+    """
+    notas = order.behavior_notes or ""
+    evento = CalendarEvent.query.get(order.event_id) if order.event_id else None
+    gid = evento.google_event_id if evento is not None else None
+    escreve_no_google = not current_app.config.get("CALENDAR_SUPPRESS_EVENT_WRITES", True)
+    if gid and not gid.startswith(GOOGLE_ID_LOCAL_PREFIX) and escreve_no_google:
+        from app.calendar.routes import CALENDAR_ID
+        from app.calendar.service import update_event
+
+        titulo, descricao = _textos_do_evento_google(order, com_dicas=False)
+        inicio = evento.start_at
+        fim = evento.end_at or inicio + timedelta(minutes=VIRTUAL_SLOT_MINUTES)
+        update_event(CALENDAR_ID, gid, titulo, inicio, fim, description=descricao)
+
+    if evento is not None and evento.description and notas and notas in evento.description:
+        evento.description = evento.description.replace(notas, "").strip() or None
+    order.behavior_notes = None
+
+
+def apagar_dicas_vencidas(*, limite: int = 50) -> dict[str, int]:
+    """Apaga as dicas sobre quem recebe depois do prazo de retenção (feature 344, LGPD).
+
+    Roda na varredura. As dicas ("o que o Papai Noel precisa saber") muitas vezes falam de uma
+    criança; servem para a chamada ou o vídeo e, passados ``VIRTUAL_DICAS_RETENCAO_DIAS`` da data de
+    referência, deixam de ter finalidade (art. 15/16). O pedido em si (valor, pagamento, contato)
+    fica — é registro de venda.
+
+    Um pedido por commit; falha (Google fora) deixa só aquele pedido para a próxima volta.
+
+    Returns:
+        ``{"apagadas": n, "falhas": n}``.
+    """
+    corte = agora() - timedelta(days=VIRTUAL_DICAS_RETENCAO_DIAS)
+    # A referência nunca é antes da criação, então `created_at <= corte` é um pré-filtro seguro.
+    candidatos = (
+        VirtualOrder.query.filter(
+            VirtualOrder.behavior_notes.isnot(None), VirtualOrder.created_at <= corte
+        )
+        .order_by(VirtualOrder.id)
+        .all()
+    )
+    apagadas = 0
+    falhas = 0
+    for order in candidatos:
+        if apagadas + falhas >= limite:
+            break
+        if _referencia_das_dicas(order) > corte:
+            continue
+        try:
+            _apagar_dicas_do_pedido(order)
+            audit("edit", "VirtualOrder", order.id, order.order_nsu,
+                  "Dicas sobre quem recebe apagadas (retenção da LGPD)")
+            db.session.commit()
+            apagadas += 1
+        except Exception as exc:  # noqa: BLE001 — um pedido não trava os outros
+            db.session.rollback()
+            falhas += 1
+            logger.warning("[virtuais] dicas do pedido %s não apagadas: %s", order.order_nsu, exc)
+    return {"apagadas": apagadas, "falhas": falhas}
 
 
 # ── Acesso da família à página do pedido (US5) ───────────────────────────────

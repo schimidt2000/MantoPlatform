@@ -9,7 +9,7 @@ autenticação — são coisas diferentes de propósito.
 
 from typing import Any
 
-from flask import jsonify, request
+from flask import current_app, jsonify, request
 from flask_login import current_user
 
 from app.api import api_bp
@@ -123,4 +123,19 @@ def api_virtuais_campanha_detail(campaign_id: int) -> Any:
             **ops.serialize_campaign_admin(campaign),
             "slots": [ops.serialize_slot(s) for s in campaign.slots],
         }
+    )
+
+
+@api_bp.route("/virtuais/campanhas/<int:campaign_id>/funil", methods=["GET"])
+@api_login_required
+def api_virtuais_campanha_funil(campaign_id: int) -> Any:
+    """Visitas, reservas e vendas por origem e por dia, e os links por canal (feature 344)."""
+    denied = require_virtuais_access()
+    if denied:
+        return denied
+    campaign = VirtualCampaign.query.get(campaign_id)
+    if campaign is None:
+        return json_error("Campanha não encontrada", 404)
+    return jsonify(
+        ops.funil_da_campanha(campaign, base_url=current_app.config["LOJA_PUBLIC_BASE_URL"])
     )

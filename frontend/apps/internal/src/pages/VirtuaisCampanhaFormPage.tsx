@@ -14,6 +14,9 @@ import {
   Input,
   PageHeader,
   Skeleton,
+  Table,
+  TableCell,
+  TableRow,
   type ComboboxOption,
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -21,6 +24,7 @@ import { MoneyInput, formatBRL } from "@manto/money";
 import {
   apiMoneyToNumber,
   numberToApiMoney,
+  useFunilCampanha,
   useGerarSlots,
   useRemoverSlot,
   useSetVirtualCampaignAcervo,
@@ -233,6 +237,8 @@ export function VirtuaisCampanhaFormPage() {
           {Object.values(errors)[0]}
         </div>
       )}
+
+      <FunilDaCampanha campaignId={campaign.id} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
@@ -646,5 +652,142 @@ export function VirtuaisCampanhaFormPage() {
         </Card>
       </div>
     </motion.div>
+  );
+}
+
+/** "16/11" a partir de `AAAA-MM-DD`, pelo texto (sem `Date`, que em UTC volta um dia). */
+function diaCurto(iso: string): string {
+  const [, mes, dia] = iso.split("-");
+  return `${dia}/${mes}`;
+}
+
+/** Botão "Copiar" com texto: a pessoa precisa ver que o link foi para a área de transferência. */
+function BotaoCopiar({ valor, rotulo }: { valor: string; rotulo: string }) {
+  const [copiado, setCopiado] = useState(false);
+  const copiar = async () => {
+    try {
+      await navigator.clipboard.writeText(valor);
+    } catch {
+      // Clipboard bloqueado: o link continua visível ao lado para selecionar à mão.
+      return;
+    }
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 1800);
+  };
+  return (
+    <Button variant="outline" size="sm" onClick={copiar} aria-label={`Copiar link do ${rotulo}`}>
+      {copiado ? "Copiado ✓" : "Copiar"}
+    </Button>
+  );
+}
+
+/**
+ * Visitas e vendas da campanha (feature 344): quantas pessoas abriram a página, de onde vieram,
+ * quantas reservaram e quantas pagaram — e os links prontos por canal. A contagem é anônima (sem
+ * cookie): "visita" é uma abertura da página numa aba.
+ */
+function FunilDaCampanha({ campaignId }: { campaignId: number }) {
+  const { data: funil, isLoading } = useFunilCampanha(campaignId);
+
+  if (isLoading || !funil) {
+    return <Skeleton className="h-40 w-full" />;
+  }
+
+  const diasComMovimento = [...funil.por_dia]
+    .reverse()
+    .filter((d) => d.visitas > 0 || d.reservas > 0 || d.vendas > 0);
+  const numeros = [
+    { rotulo: "Visitas", valor: String(funil.totais.visitas) },
+    { rotulo: "Reservas", valor: String(funil.totais.reservas) },
+    { rotulo: "Vendas", valor: String(funil.totais.vendas) },
+    { rotulo: "Conversão", valor: `${funil.totais.conversao.toLocaleString("pt-BR")}%` },
+  ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Visitas e vendas</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {numeros.map((n) => (
+            <div key={n.rotulo} className="rounded-lg border border-line px-3 py-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-muted">{n.rotulo}</p>
+              <p className="mt-0.5 text-[22px] font-semibold tabular-nums text-ink">{n.valor}</p>
+            </div>
+          ))}
+        </div>
+
+        {funil.por_origem.length === 0 ? (
+          <p className="text-[13px] text-muted">
+            Nenhuma visita ainda. Divulgue um dos links abaixo: a contagem começa na primeira pessoa
+            que abrir a página.
+          </p>
+        ) : (
+          <Table>
+            <thead>
+              <TableRow head>
+                <TableCell as="th">De onde</TableCell>
+                <TableCell as="th" align="right">Visitas</TableCell>
+                <TableCell as="th" align="right">Reservas</TableCell>
+                <TableCell as="th" align="right">Vendas</TableCell>
+                <TableCell as="th" align="right">Conversão</TableCell>
+              </TableRow>
+            </thead>
+            <tbody>
+              {funil.por_origem.map((linha) => (
+                <TableRow key={linha.origem}>
+                  <TableCell>{linha.rotulo}</TableCell>
+                  <TableCell align="right" className="tabular-nums">{linha.visitas}</TableCell>
+                  <TableCell align="right" className="tabular-nums">{linha.reservas}</TableCell>
+                  <TableCell align="right" className="tabular-nums">{linha.vendas}</TableCell>
+                  <TableCell align="right" className="tabular-nums">
+                    {linha.conversao.toLocaleString("pt-BR")}%
+                  </TableCell>
+                </TableRow>
+              ))}
+            </tbody>
+          </Table>
+        )}
+
+        {diasComMovimento.length > 0 && (
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
+              Últimos 14 dias
+            </p>
+            <ul className="mt-1 divide-y divide-line text-[13px]">
+              {diasComMovimento.map((d) => (
+                <li key={d.dia} className="flex justify-between gap-3 py-1.5 tabular-nums">
+                  <span className="text-ink">{diaCurto(d.dia)}</span>
+                  <span className="text-muted">
+                    {d.visitas} visita(s) · {d.reservas} reserva(s) · {d.vendas} venda(s)
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-wide text-muted">
+            Links para divulgar
+          </p>
+          <p className="mt-0.5 text-[12px] text-muted">
+            Use um link por canal: é por ele que a visita aparece na linha certa da tabela.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {funil.links.map((link) => (
+              <li key={link.origem} className="flex items-center gap-2">
+                <span className="w-20 shrink-0 text-[13px] text-ink">{link.rotulo}</span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-muted" title={link.url}>
+                  {link.url}
+                </span>
+                <BotaoCopiar valor={link.url} rotulo={link.rotulo} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

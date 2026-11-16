@@ -12,6 +12,7 @@ import {
   type VirtualOrderSummary,
 } from "../lib/virtuais";
 import { DICAS_DO_DIA, FORMATOS, whatsappLink } from "../lib/lojaTema";
+import { enviarCompraUmaVez } from "../lib/pixel";
 import {
   BOTAO_PRINCIPAL,
   BOTAO_SECUNDARIO,
@@ -141,6 +142,15 @@ export function PedidoVirtualPage() {
   const { data: completoDaSessao } = usePedidoCompleto(token, verificar.isSuccess);
   const completo = verificar.data ?? completoDaSessao;
   const erroExtra = verificar.error as unknown as { attempts_left?: number } | null;
+
+  // Feature 344: a compra vai para a Meta uma vez por pedido — e só se a pessoa aceitou os cookies.
+  const statusDoPedido = pedido?.status;
+  const valorDoPedido = pedido?.total_value ?? null;
+  useEffect(() => {
+    if (token && statusDoPedido === "pago") {
+      enviarCompraUmaVez(token, apiMoneyToNumber(valorDoPedido));
+    }
+  }, [token, statusDoPedido, valorDoPedido]);
 
   if (isLoading) {
     return (

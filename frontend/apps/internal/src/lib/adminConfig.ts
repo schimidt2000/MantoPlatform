@@ -19,6 +19,8 @@ export interface AdminSettings {
   virtuais_pagamento_ativo: boolean;
   /** Pedidos com link aberto — mostrado antes de regerar o segredo (feature 310). */
   virtuais_pedidos_aguardando?: number;
+  /** ID do Pixel da Meta da loja (feature 344). Vazio = desligado. */
+  meta_pixel_id?: string;
   tax_rate: number | null;
   fator_r_threshold: number | null;
   manto_address: string;

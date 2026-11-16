@@ -840,6 +840,27 @@ pendente (o re-export de `ensure_recurring_entries`).
 repositório** — os docstrings explicam consistentemente o *porquê*. É também um balde por camada: ~6
 responsabilidades técnicas distintas num arquivo (ver `docs/05`).
 
+### Medição e privacidade (344)
+
+- **Contagem anônima.** `registrar_visita` soma 1 em `virtual_campaign_visits` (campanha + dia de São
+  Paulo + origem) num upsert; nada de quem visitou é gravado. A página dispara uma vez por aba. A
+  origem é sempre uma de `VIRTUAL_ORIGENS` (`normalizar_origem`): desconhecida vira `outro`, vazia
+  `direto`. O funil soma reservas e vendas pela `VirtualOrder.origem`; pedido sem origem (anterior à
+  344) fica fora.
+- **O comprador vira cliente na venda, não na reserva.** `_efetivar_no_banco` chama
+  `_cliente_da_venda` num SAVEPOINT depois de descarregar a venda: erro do CRM desfaz só a ficha.
+  Chave = `normalize_phone` (com DDI 55); ficha nova `source=loja_virtual`; ficha existente só ganha o
+  que está vazio; o aceite só sobe. **Nome, idade e dicas de quem recebe nunca vão para o `Client`.**
+- **Aceite é consentimento explícito.** Só `marketing_opt_in=True` grava `marketing_opt_in_at` +
+  `VIRTUAL_ACEITE_VERSAO`; mudou o texto da caixinha, muda a versão.
+- **Retenção das dicas.** `apagar_dicas_vencidas` (rotina `dicas` da varredura, a última) apaga
+  `behavior_notes` 30 dias (`VIRTUAL_DICAS_RETENCAO_DIAS`) depois da referência — chamada, prazo do
+  vídeo, ou criação do pedido que não virou venda — no pedido, no `CalendarEvent.description` e na
+  descrição do evento no Google (`update_event` com `_textos_do_evento_google(com_dicas=False)`). O
+  Google vai primeiro: se falhar, nada é apagado e o pedido volta na próxima volta.
+- **Pixel desligado por padrão.** `SiteSetting.meta_pixel_id` nulo = a loja não carrega nada da Meta;
+  preenchido, só com o "Aceitar" do aviso de cookies.
+
 ### O fluxo da venda, ponta a ponta
 
 **`reservar()` (`:775`) — a ordem das etapas é a regra:** duplo clique (mesmo `client_token` devolve o

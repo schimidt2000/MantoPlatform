@@ -854,3 +854,14 @@ que o caso mostrou em volta dela.
 |---|---|---|---|---|
 | 208 | **P2** | `virtuais_ops.reservar` / `_gerar_link_pagamento`; `PedidoVirtualPage.tsx` | erro que não é da operadora **depois** do commit da reserva (foi o `StringDataRightTruncation` de 11/11) sobe como 500 sem desfazer a reserva: o pedido fica `reservado` sem link, a página fica em "Gerando o pagamento…" **sem botão de desistir**, e a nova tentativa com o mesmo telefone devolve o mesmo pedido (mesmo `client_token`) ou cai no "Você já tem uma reserva em andamento" até a trava vencer (15 min). Em 11/11 o pedido 5 foi desfeito pelo `abandonar` com o token da aba | `reservar` desfaz a reserva para qualquer exceção do link (não só `VirtuaisOperadoraError`) e responde 502; a página mostra "Desistir desta reserva" também no estado sem link |
 | 209 | **P4** | `_gerar_link_pagamento` (`customer.phone_number`) | o checkout da InfinitePay pede um código por SMS ao telefone que mandamos; telefone digitado errado na ficha = o código vai para outro número e a família não paga (11/11, pedido 6: final 7384 em vez de 7394; o dono pagou no pedido 7). A tela oferece "Enviar via WhatsApp", que vai para o mesmo número errado | decidir com o dono: confirmar o telefone na ficha (digitar duas vezes ou "é este mesmo?") ou não mandar `phone_number` à operadora (ela pergunta no checkout) |
+
+## Baixa da feature 344-loja-visitas-e-privacidade (2026-11-16)
+
+**Quitada.** Nenhuma. **Criadas.** (210–213.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 210 | **P3** | `PrivacidadeLojaPage.tsx` | o aviso de privacidade é um rascunho operacional: não tem CNPJ nem e-mail do encarregado, e não passou por advogado; o resto do site (catálogo, formulários, portal) continua sem aviso nenhum | o dono informa CNPJ e e-mail do encarregado; advogado revisa; um aviso único do site, com a seção da loja apontando para ele |
+| 211 | **P3** | `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
+| 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
+| 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |

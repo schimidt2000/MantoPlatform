@@ -11,16 +11,19 @@ import {
   fieldErrorsFrom,
   getClientToken,
   lembrarReservaDaAba,
+  origemDaVisita,
   renovarClientToken,
   tokenDaAbaPara,
   useAbandonarReserva,
   useContagemDeSegundos,
   useCampanhaVirtual,
   useHorariosVirtuais,
+  useRegistrarVisita,
   useReservar,
   type VirtualModality,
   type VirtualSlotPublic,
 } from "../lib/virtuais";
+import { eventoPixel } from "../lib/pixel";
 import { AVISO_UM_FORMATO, CAMPANHA, FAQ_LOJA, FORMATOS, whatsappLink } from "../lib/lojaTema";
 import {
   BOTAO_PRINCIPAL,
@@ -50,6 +53,7 @@ import {
 const CAMPOS_ROLAVEIS = [
   "child_name",
   "child_age",
+  "buyer_name",
   "contact_phone",
   "contact_email",
   "delivery_address",
@@ -93,12 +97,17 @@ export function CampanhaVirtualPage() {
     modalidade === "ao_vivo",
   );
   const reservar = useReservar(slug);
+  // Feature 344: uma visita por aba, com a origem do link — sem cookie, sem nada da pessoa.
+  useRegistrarVisita(slug);
 
   const [slotId, setSlotId] = useState<number | null>(null);
   const [presenteId, setPresenteId] = useState<number | null>(null);
   const [nome, setNome] = useState("");
   const [idade, setIdade] = useState("");
   const [dicas, setDicas] = useState("");
+  const [comprador, setComprador] = useState("");
+  // Consentimento não se presume (LGPD): a caixinha nasce desmarcada.
+  const [aceitaNovidades, setAceitaNovidades] = useState(false);
   const [telefone, setTelefone] = useState("");
   const [email, setEmail] = useState("");
   const [endereco, setEndereco] = useState("");
@@ -137,6 +146,15 @@ export function CampanhaVirtualPage() {
     setErros({});
     setAvisoTopo(null);
     setReservaExistente(null);
+    // "Seu nome" é obrigatório só aqui: o servidor aceita sem ele, para a página antiga em cache
+    // não ter a reserva recusada por um campo que nem mostra (feature 344).
+    if (!comprador.trim()) {
+      setErros({ buyer_name: "Conte para a gente o seu nome." });
+      const el = refs.current.buyer_name;
+      el?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
+      el?.focus?.();
+      return;
+    }
     reservar.mutate(
       {
         modality: modalidade,
@@ -149,9 +167,17 @@ export function CampanhaVirtualPage() {
         contact_phone: telefone,
         contact_email: email,
         delivery_address: endereco,
+        buyer_name: comprador.trim(),
+        marketing_opt_in: aceitaNovidades,
+        origem: origemDaVisita(),
       },
       {
         onSuccess: (data) => {
+          // Feature 344: início da compra para a Meta — só sai se a pessoa aceitou os cookies.
+          eventoPixel("InitiateCheckout", {
+            value: apiMoneyToNumber(data.total_value),
+            currency: "BRL",
+          });
           // Feature 310 (FR-036): a próxima reserva nesta aba (outro horário, o irmão) é um
           // pedido novo, não o link deste. Antes de trocar, guarda a prova para "abandonar".
           lembrarReservaDaAba(data.public_token, getClientToken());
@@ -515,6 +541,23 @@ export function CampanhaVirtualPage() {
         </div>
 
         <div>
+          <label className="text-[13px] text-alo-muted" htmlFor="buyer_name">
+            Seu nome
+          </label>
+          <input
+            id="buyer_name"
+            ref={(el) => (refs.current.buyer_name = el)}
+            value={comprador}
+            onChange={(e) => setComprador(e.target.value)}
+            autoComplete="name"
+            className={classeCampo(Boolean(erros.buyer_name))}
+          />
+          {erros.buyer_name && (
+            <p className="mt-1 text-[13px] text-alo-error">{erros.buyer_name}</p>
+          )}
+        </div>
+
+        <div>
           <label className="text-[13px] text-alo-muted" htmlFor="contact_phone">
             Seu telefone (WhatsApp)
           </label>
@@ -553,6 +596,24 @@ export function CampanhaVirtualPage() {
             É por aqui que mandamos a confirmação e a página do pedido.
           </p>
         </div>
+
+        {/* Feature 344 (LGPD): consentimento para novidades — opcional e desmarcado. O texto é o
+            da versão `VIRTUAL_ACEITE_VERSAO` (app/constants.py); mudou aqui, muda a versão lá. */}
+        <label
+          htmlFor="marketing_opt_in"
+          className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-lg border border-alo-line px-3 py-3"
+        >
+          <input
+            id="marketing_opt_in"
+            type="checkbox"
+            checked={aceitaNovidades}
+            onChange={(e) => setAceitaNovidades(e.target.checked)}
+            className="mt-0.5 h-5 w-5 shrink-0 accent-alo-gold"
+          />
+          <span className="text-[14px] leading-snug text-alo-ink">
+            Quero receber novidades da Manto Produções por WhatsApp e e-mail
+          </span>
+        </label>
 
         {presenteId && (
           <div ref={(el) => (refs.current.delivery_address = el)} tabIndex={-1}>
@@ -597,6 +658,12 @@ export function CampanhaVirtualPage() {
           {reservar.isPending ? "Reservando…" : "Reservar e pagar →"}
         </button>
         <p className="mt-2 text-center text-[12px] text-alo-muted">Cartão ou PIX, em link seguro.</p>
+        <p className="mt-1 text-center text-[12px] leading-relaxed text-alo-muted">
+          Usamos seus dados só para a reserva, o pagamento e a chamada.{" "}
+          <Link to="/v/privacidade" className="text-alo-gold underline underline-offset-2">
+            Privacidade
+          </Link>
+        </p>
 
         {campanha.tolerance_terms && (
           <p className="mt-3 whitespace-pre-line border-t border-alo-line pt-3 text-[12px] leading-relaxed text-alo-muted">

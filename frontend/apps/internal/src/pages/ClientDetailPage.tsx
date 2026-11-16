@@ -123,6 +123,27 @@ export function ClientDetailPage() {
                     <dd className="text-ink">{query.data.company}</dd>
                   </>
                 )}
+                {/* Feature 344 (LGPD): a equipe só prospecta por WhatsApp/e-mail quem disse sim. */}
+                {query.data.marketing_opt_in_at !== undefined && (
+                  <>
+                    <dt className="text-muted">Novidades</dt>
+                    <dd className="text-ink">
+                      {query.data.marketing_opt_in_at ? (
+                        <>
+                          Aceitou em{" "}
+                          {new Date(query.data.marketing_opt_in_at).toLocaleDateString("pt-BR")}
+                          {query.data.marketing_opt_in_source && (
+                            <span className="block text-xs text-muted">
+                              {query.data.marketing_opt_in_source}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted">Sem aceite registrado</span>
+                      )}
+                    </dd>
+                  </>
+                )}
               </dl>
             </CardContent>
           </Card>
