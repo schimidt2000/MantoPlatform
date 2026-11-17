@@ -1774,6 +1774,20 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   o pixel ligado e uma escolha feita, "Mudar minha escolha" desfaz e recarrega.
 - **Rascunho operacional**: falta revisão de advogado, CNPJ e e-mail do encarregado (`docs/05`).
 
+#### `/privacidade` — Política de privacidade do atendimento *(app público, feature 354, SEM login)*
+
+- **Endereço**: raiz do domínio (`app.mantoproducoes.com.br/privacidade`), servida pelo bundle da vitrine
+  pelo mesmo mecanismo do `/cadastro` (`PRIVACIDADE_PREFIX` em `frontend/server.js`, `isRootSurface` no
+  `App.tsx`). Também abre em `/catalogo/privacidade`. No host da loja (`alo.*`), `/privacidade` vai para o
+  aviso da loja. **URL gravada no app "Manto Plataforma" da Meta**: não renomear.
+- **Conteúdo**, em linguagem simples: quem cuida (Manto Produções; canal = WhatsApp), o que guardamos e
+  para quê (a conversa, o anúncio de origem, os dados do contrato, as anotações da equipe), quem vê
+  (comercial e administração), com quem dividimos (Meta, Render nos EUA, Google, ClickSign, meio de
+  pagamento), por quanto tempo (sem prazo automático; o apagado no Instagram some), direitos pelo
+  WhatsApp e o link para o aviso da loja. Sem cabeçalho nem lista de desejos.
+- **Rascunho operacional**, como o da loja: falta advogado, CNPJ e encarregado (`docs/05` 210); exclusão
+  a pedido é manual (`docs/05` 236).
+
 #### Aviso de cookies *(app público, feature 344)*
 
 - Só existe com `meta_pixel_id` preenchido (`GET /api/virtuais/rastreamento`) e enquanto a pessoa não

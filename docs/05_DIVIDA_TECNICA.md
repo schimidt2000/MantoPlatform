@@ -877,6 +877,16 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
+## Baixa da correção 354-politica-de-privacidade (2026-11-17, branch)
+
+**Quitada em parte.** A **210**: o atendimento (conversas, ficha, orçamento, contrato) passa a ter política própria
+em `/privacidade`. Continua faltando o que a 210 pede de CNPJ, e-mail do encarregado e revisão de advogado — agora
+para as duas páginas — e o aviso do catálogo, dos formulários e do portal. **Criada.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 236 | **P3** | `PrivacidadePage.tsx` / `app/conversas` | a política promete apagar os dados a pedido, mas não há botão para excluir conversa (mensagens, mídias no disco, anúncio de origem) nem ficha com histórico: o pedido vira trabalho manual no banco de produção | "Excluir a pedido da cliente" para Superadmin, que apaga a conversa e as mídias e anonimiza a ficha, mantendo o que a lei obriga (contrato, nota) |
+
 ## Baixa da feature 351-painel-atribuido (2026-11-17, branch)
 
 **Quitada em parte.** A **214** (custo por venda misto): o painel mostra, ao lado do misto, o custo por venda

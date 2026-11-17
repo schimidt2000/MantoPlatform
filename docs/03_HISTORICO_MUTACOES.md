@@ -257,6 +257,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **354-politica-de-privacidade** | *(pronta na branch, sem merge)* Política de privacidade do atendimento em `/privacidade` (superfície de raiz da vitrine): o que a conversa do WhatsApp e do Instagram guarda, quem vê, com quem divide, por quanto tempo e os direitos; é a URL que o app "Manto Plataforma" da Meta exige para publicar | 2026-11-17 | — | (aqui) | ver Registro |
 | **190b-data-da-venda-um-dia-antes** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
 | **351-painel-atribuido** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
 | **350-base-autorizada** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
@@ -487,6 +488,29 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 354 — Política de privacidade do atendimento (`/privacidade`)   (354-politica-de-privacidade · 2026-11-17 · sem migration)
+
+> **Pronta na branch, sem merge.** Nível 2. Detalhe: `specs/354-politica-de-privacidade/spec.md`.
+
+**O pedido.** Ligando o CRM no número de teste (17/11, ~20h40: app Meta "Manto Plataforma", 7 variáveis no
+`manto-backend`, webhook verificado e `messages` assinado), a Meta avisou que app **não publicado só recebe o
+teste do painel** — nem a mensagem do próprio dono chega. Publicar exige a URL da política de privacidade, e só
+existia o aviso da loja (344). O dono: "pode criar a página geral".
+
+**O que mudou.** `PrivacidadePage` em `/privacidade`, superfície de raiz da vitrine como `/cadastro` e `/nfc`
+(`isRootSurface` em `apps/public/src/App.tsx` + `PRIVACIDADE_PREFIX` em `frontend/server.js`). O texto descreve o que
+o sistema faz hoje: conversa, mídias, anúncio de origem, notas da equipe e a ficha; quem vê (Comercial e
+Superadmin); Meta, Render (EUA), Google, ClickSign e o meio de pagamento; sem prazo automático de exclusão; o
+apagado no Instagram some do sistema; direitos pelo WhatsApp; link para o aviso da loja.
+
+**Pegadinhas.**
+- No host da loja (`alo.mantoproducoes.com.br`), `/privacidade` **continua** indo para o aviso da loja: o bloco
+  novo do `server.js` pula os `ALO_HOSTS`, que redirecionam tudo para `/catalogo/v/...`.
+- `app.mantoproducoes.com.br/v/privacidade` respondia 200 antes, mas era o fallback do ERP, não o aviso da loja (o
+  endereço certo é `/catalogo/v/privacidade`). Sonda de status não prova página.
+- A URL fica gravada no cadastro do app na Meta: renomear despublica o CRM sem sintoma no código.
+- Exclusão a pedido é manual (sem botão): dívida 236.
 
 ### 190b — "Data da venda" um dia antes no detalhe do evento   (lote-1711 · 2026-11-17 · sem migration)
 
