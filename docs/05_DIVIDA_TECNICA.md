@@ -804,6 +804,11 @@ infraestrutura do Render, e agora lê o do cliente (`X-Manto-Client-Ip` + `ip_do
 | 176 | **P5** | `app/calendar/routes.py` (`_handle_update_comercial` → `comercial_ops.sincronizar_notas`, Jinja) | o editor Jinja da venda, inalcançável em produção mas registrado, ainda **apaga a nota emitida** ao desligar o chip e não carimba "pedida por" nem avisa; as portas da API seguem a 323 (desligar exclui só as a emitir) | sai junto com o Jinja (`docs/PARADA_REMOCAO_JINJA.md`); não corrigir de passagem |
 | 177 | **P4** | notas `a_emitir` antigas (antes da 323) | a Home do Superadmin passa a listar como urgentes as notas a emitir que já existiam — no espelho de 28/10 eram 6, de eventos de setembro, várias sem CNPJ; podem ter sido emitidas fora do sistema sem o PDF inserido | o Superadmin insere o PDF (vira emitida); nota que não será emitida não tem botão de excluir no React (o `useDeleteNotaFiscal` de `lib/eventOps.ts` existe sem tela) — pôr "Excluir" no card de notas fiscais resolve; sem script |
 
+> **Números repetidos (lote de 16/11/2026).** O CRM (325–335) e as correções 331/342 numeraram dívidas em
+> paralelo: **186 a 191 existem duas vezes** neste arquivo, uma na seção da 331/342 e outra nas seções do CRM.
+> Ao citar uma delas, diga a seção ("186 da 331", "189 da 330"). Renumerar fica para uma correção própria,
+> porque as specs e o `docs/03` citam os números.
+
 ## Baixa da feature 340-caixa-de-avisos (2026-11-10, branch)
 
 **Quitada.** 22 — `healthCheckPath: /` no `manto-frontend`. Correção do registro: o "cada push
