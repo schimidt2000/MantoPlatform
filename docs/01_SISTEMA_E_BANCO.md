@@ -1314,6 +1314,16 @@ Contrato completo: `specs/345-marketing-integrado/contracts/api-345.md`.
 - `POST …/propostas/<id>/execucao` — só de `aprovada`; gera o diário.
 - `POST …/diario/<id>/resultado`.
 - O `POST …/run` da 256 aceita `conversations` e `leads` em `campaign_metrics`.
+- **345b**: o `POST …/run` aceita `diario` (lista opcional de `{titulo, motivo, evidencia?,
+  resultado_esperado?, reavaliar_em?}`), para as mudanças que o dono aprovou no chat. Cada item vira
+  `marketing_diario` com `origem = "rotina"` e autor = titular do cartão; a resposta traz `diario: [ids]`.
+  Tudo é validado antes de a rodada escrever (item inválido → 400 com `fields["diario[i].campo"]`, nada
+  gravado) e o `run_id` repetido não duplica.
+- **Google Ads (345b)**: sem conector MCP. `scripts/marketing/google_ads.py` fala com a API REST (OAuth "App
+  para computador" do projeto Cloud `manto-marketing`, conta `4115580695`, token em `~/.google-ads/`, fora do
+  repositório): `coletar` devolve `campaign_metrics` e `items` prontos, com a conversão do Google ("Contato por
+  Whatsapp" = toque no botão) em `results` e **nunca** em `conversations`; `ler`/`pausar`/`ativar`/`verba` vão
+  em ensaio (`validateOnly`) sem `--aplicar`.
 
 **Tela** (`marketing_comando_read.py` / `_write.py`):
 

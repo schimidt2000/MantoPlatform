@@ -26,6 +26,10 @@ PROD_BASE_URL = "https://app.mantoproducoes.com.br"
 LOCAL_BASE_URL = "http://localhost:5000"
 HTTP_TIMEOUT = 90
 
+# Google Ads (345b): conta da Manto, sem MCC. O cliente OAuth e o token ficam fora do repositório.
+GOOGLE_ADS_CUSTOMER_ID = "4115580695"
+GOOGLE_ADS_DIR = Path.home() / ".google-ads"
+
 # Destinatários do relatório semanal (usuários internos ativos; o servidor filtra)
 REPORT_RECIPIENTS = ["joao@mantoproducoes.com.br"]
 

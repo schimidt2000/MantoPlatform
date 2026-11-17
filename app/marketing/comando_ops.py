@@ -28,6 +28,7 @@ from sqlalchemy.orm import aliased, lazyload
 
 from app import db
 from app.constants import (
+    DIARIO_ORIGENS,
     DIARIO_REAVALIAR_DIAS,
     DIARIO_VEREDITOS,
     LIBERADO_NAO,
@@ -1016,6 +1017,20 @@ def diario_a_reavaliar() -> list[MarketingDiario]:
 
 def criar_entrada(dados: Any, *, autor_id: int | None, origem: str = "pessoa") -> MarketingDiario:
     """Entrada escrita à mão (ou pela rotina): o que mudou, por quê, e quando reavaliar."""
+    entrada = montar_entrada(dados, autor_id=autor_id, origem=origem)
+    db.session.add(entrada)
+    db.session.commit()
+    return entrada
+
+
+def montar_entrada(dados: Any, *, autor_id: int | None, origem: str) -> MarketingDiario:
+    """Valida e monta a entrada sem gravar.
+
+    Separado de `criar_entrada` para o `POST /run` (345b) validar todas as entradas do `diario`
+    antes de escrever qualquer coisa da rodada: item inválido derruba a rodada inteira.
+    """
+    if origem not in DIARIO_ORIGENS:
+        raise ComandoError("Origem inválida.", field="origem")
     d = dados if isinstance(dados, dict) else {}
     titulo = str(d.get("titulo") or "").strip()
     motivo = str(d.get("motivo") or "").strip()
@@ -1039,8 +1054,6 @@ def criar_entrada(dados: Any, *, autor_id: int | None, origem: str = "pessoa") -
         autor_id=autor_id,
         criado_em=datetime.utcnow(),
     )
-    db.session.add(entrada)
-    db.session.commit()
     return entrada
 
 
