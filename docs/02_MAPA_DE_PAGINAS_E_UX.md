@@ -2373,6 +2373,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 #### `/financeiro/pagamentos` — Planilha de Pagamentos *(paridade restaurada na feature 189; visualização e filtro por faixa na feature 194; celular, busca e janela de adiantamentos na 226)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.
+- **Gasto parcelado** *(feature 353)*: cada parcela é um item próprio (`expense_parcela`, selo "Gasto"), na data dela,
+  com o valor dela e "{descrição} · Parcela N de M" na segunda linha; marca-se sozinha (seletor e lote) e entra nos
+  atrasados pelo mês da data. O gasto parcelado não aparece inteiro. Marcar uma parcela recarrega também Gastos Extras.
 - **Comissão paga à parte** *(hotfix 267c)*: por vendedor e ciclo, "Comissões MM/AAAA" traz só o que
   falta pagar, e "Comissões MM/AAAA — pago" o que já saiu. O item pago mostra "Pago" sem seletor; o
   Superadmin vê o seletor sem "No banco", e o "Não pago" pede o motivo ("só para pagamento marcado
@@ -2544,6 +2547,14 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   categoria, todos editáveis. Digitar desfaz a escolha. Abaixo do campo: "Fornecedor novo: ficará salvo para os
   próximos gastos." ou "Já cadastrado: o gasto será salvo como “…”.". Para Financeiro/Superadmin, o cabeçalho ganha
   o botão **Fornecedores**. O `Modal` deixou de fechar no Escape que o `Combobox` usa para fechar a lista.
+- **Feature 353 — pagar em parcelas.** Com "Reembolso a funcionário" ou "Pagamento a fornecedor" (e categoria que não
+  seja devolução nem multa), o formulário mostra **"Pagar em parcelas"** (`components/Gastos/ParcelasCampo.tsx`). Ligada,
+  nascem duas linhas (a 1ª com a "Data do gasto" e o valor digitado, a 2ª vazia), cada uma com data, `MoneyInput` e
+  "Remover parcela" (até sobrarem duas), "+ Adicionar parcela" (até 24) e "Total das parcelas"; o "Valor (R$)" do gasto
+  fica somente leitura com a soma ("Soma das parcelas."). Uma nota fiscal só. Na edição, a parcela paga ou "no banco"
+  aparece desligada com "Paga: altere na Planilha de Pagamentos para editar." e a caixa não desliga ("Com parcela paga,
+  o gasto continua parcelado."). Erros chegam por parcela (`parcelas.N.data|valor`) sem apagar o digitado. Na lista, o
+  gasto parcelado ganha o bloco "N parcelas" (data · valor · A pagar/No banco/Paga), no cartão e na tabela.
 
 #### `/gastos/fornecedores` — Fornecedores *(feature 352)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN` (item "Fornecedores" no grupo do Financeiro, depois de Gastos Recorrentes;
