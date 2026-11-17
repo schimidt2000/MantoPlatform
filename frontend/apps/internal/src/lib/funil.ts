@@ -27,6 +27,27 @@ export interface GrupoDoFunil {
   quantidades: Record<EtapaDoFunil, number>;
   /** Evento fechado ÷ chegou, em porcentagem. */
   conversao: number | null;
+  /** Feature 349 (opcionais: backend velho não manda). */
+  qualificadas?: number;
+  perdidas?: number;
+  mediana_minutos?: number | null;
+  ate_15_min?: number | null;
+}
+
+/** Feature 349: o tempo da primeira resposta da coorte; a resposta sem autor (celular) contada à parte. */
+export interface PrimeiraRespostaDoFunil {
+  respondidas: number;
+  sem_resposta: number;
+  sem_autor: number;
+  mediana_minutos: number | null;
+  /** % das respondidas em até 15 min. */
+  ate_15_min: number | null;
+}
+
+export interface MotivoContado {
+  codigo: string;
+  rotulo: string;
+  quantidade: number;
 }
 
 export interface OpcaoDeCampanha {
@@ -42,6 +63,10 @@ export interface Funil {
   dividir: DivisaoDoFunil;
   grupos: GrupoDoFunil[];
   campanhas: OpcaoDeCampanha[];
+  primeira_resposta?: PrimeiraRespostaDoFunil;
+  qualificadas?: number;
+  perdidas?: number;
+  motivos_de_perda?: MotivoContado[];
 }
 
 export interface ConversaParada {
@@ -51,6 +76,13 @@ export interface ConversaParada {
   vendedor: string | null;
   primeiro_contato: string;
   campanha: string;
+  /** Feature 349 (opcionais). */
+  perdida?: { motivo: string; rotulo: string } | null;
+  qualificada?: boolean;
+  primeira_resposta_minutos?: number | null;
+  primeira_resposta_sem_autor?: boolean;
+  primeira_resposta_pendente?: boolean;
+  lembrete_em?: string | null;
 }
 
 export interface Parados {

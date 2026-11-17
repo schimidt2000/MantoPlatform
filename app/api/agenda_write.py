@@ -1346,6 +1346,16 @@ def api_create_event() -> Any:
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
 
+    # Feature 349: a conversa de origem ("Criar evento" na conversa) é conferida antes do Google — a recusa não
+    # deixa evento órfão na Agenda. O vínculo é gravado depois do núcleo, num ponto único (`fechamento_ops`).
+    from app.conversas import fechamento_ops
+    from app.conversas.recusa import Recusa
+
+    try:
+        conversa_de_origem = fechamento_ops.conversa_para_evento(body.get("conversa_id"))
+    except Recusa as exc:
+        return json_error(exc.mensagem, exc.status, fields=exc.fields, codigo=exc.codigo)
+
     # Prefixo "(TIPO)" do título: a normalização virou `build_gc_title` em `event_ops`
     # (feature 239), para a criação e as duas telas de edição usarem a MESMA regra — o sync do
     # Google deriva o tipo desse prefixo.
@@ -1412,6 +1422,14 @@ def api_create_event() -> Any:
             "[agenda] formulário %s ganhou destino durante a criação; evento Google %s órfão",
             data.get("form_response_id"), created.get("id"))
         return json_error(exc.message, 409)
+
+    if conversa_de_origem is not None:
+        # O núcleo já comitou o evento: o vínculo com a conversa vem numa transação curta logo depois (a ficha da
+        # conversa entre as clientes e a perda apagada; a 348 grava `conversa_id` no mesmo ponto).
+        from app import db
+
+        fechamento_ops.ligar_evento_a_conversa(event, conversa_de_origem)
+        db.session.commit()
 
     impersonate = session.get("impersonate_role")
     result = serialize_event_detail(event, current_user, impersonate)

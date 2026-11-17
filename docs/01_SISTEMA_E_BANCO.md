@@ -661,6 +661,17 @@ Pontos que valem para quem for ler esses dados:
     ou código 803).
   - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
     `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
+- **O comercial mede e fecha** (feature 349, migration `a349c0e1f2a3`, aditiva sobre `d334b2c4e6f8`; as features 348,
+  350 e 351 encadeiam na mesma head e são reencadeadas no lote de merge). Só em `conversas`, todas anuláveis, UTC.
+  Detalhe em `specs/349-comercial-mede-e-fecha/data-model.md`.
+  - Primeira resposta: `primeira_recebida_em` (a mensagem da cliente mais antiga, sem reação; só anda para trás),
+    `primeira_resposta_em`, `primeira_resposta_por_id` → `users` (SET NULL; nulo no eco do celular/outro app) e
+    `primeira_resposta_origem` (`plataforma` \| `celular` \| `outro`). A migration preenche as conversas que já existem.
+  - Perda: `perdida_em` (define "perdida"), `perdida_motivo` (30, lista fechada `MOTIVOS_DE_PERDA`), `perdida_nota`
+    (300) e `perdida_por_id` → `users` (SET NULL).
+  - Qualificação: `qualificacao` (`qualificada` \| `nao_qualificada`; nulo = segue a pontuação por regras, calculada
+    na leitura), `qualificacao_em` e `qualificacao_por_id` → `users` (SET NULL).
+  - Lembrete: `lembrar_em` (index `ix_conversas_lembrar_em`) e `lembrar_para_id` → `users` (SET NULL).
 - **Origem completa** (feature 348, migration `a348c0d1e2f3`, aditiva sobre `d334b2c4e6f8`). Detalhe em
   `specs/348-origem-completa/data-model.md`.
   - `origem_codigos` (nova): o clique de campanha que chegou ao site. `codigo` (8, `uq_origem_codigos_codigo`: 5
@@ -997,7 +1008,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | PATCH | `/api/events/<id>/devolucao` *(feature 306 — "Alterar devolução" do cancelado; só Superadmin real; responde `{ok, resumo}`)* |
 | PATCH | `/api/events/<id>/motivo-cancelamento` *(feature 306b — "Editar motivo" do cancelado; Superadmin ou Comercial pelo papel real; corpo `{motivo}`; o texto vale para os dias do grupo cancelados com o mesmo motivo e troca o antigo no `EventLog` e no `AuditLog` `event_cancelled`; 409 `nao_cancelado`, 400 `fields.motivo`; responde `{ok, motivo, eventos}`)* |
 | POST | `/api/events/<id>/multas` *(feature 306 — multa ao elenco depois do ato; só Superadmin real; responde `{ok, resumo, gastos}`)* |
-| POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
+| POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` *(feature 349: `POST /api/events` aceita `conversa_id` opcional — conversa inexistente ou não inteiro → **422** `fields.conversa_id`, **antes do Google**; depois do núcleo, `fechamento_ops.ligar_evento_a_conversa` põe a ficha da conversa entre as clientes (Contratante se não houver nenhuma, senão Outros) e apaga a perda, numa transação curta. É ali que a 348 grava `calendar_events.conversa_id`)* |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
 | POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 só quando `event.is_outside_sp` é `False` — desconhecido vira `True` ao marcar (hotfix 239b); `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
@@ -2190,15 +2201,19 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 |---|---|---|
 | `GET` | `/api/webhooks/whatsapp` | **Público.** Desafio da Meta: com `hub.mode=subscribe` e `hub.verify_token` = `WHATSAPP_VERIFY_TOKEN` (`compare_digest`) → 200 `text/plain` com o `hub.challenge`; senão, ou com o módulo desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
-| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. |
+| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. (349) `recorte` (`esperando` · `orcamento_parado` · `anuncio`; outro → 422 `fields.recorte`) e `dias` (2 · 5 · 9, padrão 2; outro → 422 `fields.dias`); cada conversa ganha `venda` `{anuncio, etapa, etapa_rotulo, qualificada, perdida{motivo, rotulo}\|null, lembrete_em}`, em lote. |
 | `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
 | `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
 | `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
 | `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
 | `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
-| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
-| `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. (349) Ganha `primeira_resposta {respondidas, sem_resposta, sem_autor, mediana_minutos, ate_15_min}`, `qualificadas`, `perdidas` e `motivos_de_perda[{codigo, rotulo, quantidade}]`; cada grupo ganha `qualificadas`, `perdidas`, `mediana_minutos` e `ate_15_min`. |
+| `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). (349) Cada conversa ganha `perdida`, `qualificada`, `primeira_resposta_minutos`, `primeira_resposta_sem_autor`, `primeira_resposta_pendente` e `lembrete_em`; a perdida continua na lista, com o motivo. |
+| `GET` | `/api/conversas/<id>/venda` | (349) O painel da venda: `etapa`, `anuncio`, `primeira_resposta` (com `autor` nulo e `origem` no eco), `perda`, `qualificacao` (`qualificada`, `pela` regra\|decisao, `pontos`, `corte`, `sinais[]`, quem decidiu), `lembrete`, `parado` (`orcamento_em`, `dias`), `fechamento` (`orcamento_id`, `cliente`, `vendedor`) e `motivos_de_perda[{codigo, rotulo, pede_frase}]`. 404. |
+| `POST`/`DELETE` | `/api/conversas/<id>/perdida` | (349) `{motivo, frase?}` (motivo da lista; frase obrigatória no `outro`, até 300) → 200 `{venda}`; 422 `fields.motivo`/`frase`. Marcar apaga o lembrete. `DELETE` reabre (idempotente). |
+| `POST` | `/api/conversas/<id>/qualificacao` | (349) `{decisao: qualificada \| nao_qualificada \| null}` → 200 `{venda}`; `null` volta para a regra; 422 `fields.decisao`. |
+| `POST`/`DELETE` | `/api/conversas/<id>/lembrete` | (349) "Lembrar amanhã" (9h de São Paulo do próximo dia, para quem tocou; um por conversa) / cancelar → 200 `{venda}`. Nada sai para a cliente. |
 | `GET` | `/api/clientes/<id>/linha-do-tempo` | (335) `{marcos[{tipo, quando, titulo, detalhe, link}]}`, do mais novo para o mais antigo, até 300; `quando` em ISO com o fuso. |
 | `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
 | `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
@@ -2237,6 +2252,22 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
     vira "não entregue" com o motivo próprio.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
+
+**O comercial mede e fecha (feature 349).** Rotas novas em `app/api/conversas_venda.py`. Fluxo e invariantes em
+`docs/04` §6; contrato em `specs/349-comercial-mede-e-fecha/contracts/api.md`.
+- **Primeira resposta** (`primeira_resposta_ops`): UPDATE condicional nos pontos que já abrem e encerram a espera da 328
+  — `aviso_ops._gravar_recebida`/`instagram_ops._chegou_da_cliente` (primeira mensagem), `equipe_ops.resposta_da_equipe`
+  (Plataforma, com autor), `aviso_ops._gravar_eco` (celular) e `instagram_ops._gravar_eco` (outro app), sem autor. O
+  `failed` depois do aceite recalcula pelas mensagens.
+- **Pontuação** (`pontuacao_ops`, só leitura e em lote): formulário +3, data do evento até 90 dias +2 (mais longe +1),
+  orçamento +1, recompra +2; corte 3. Constantes em `app/conversas/constantes.py`.
+- **Lista** (`venda_ops.resumos_da_lista`): reusa `funil_ops._etapas` e a pontuação para a página inteira — ~10 consultas
+  por página de 50, nunca uma por conversa. O recorte `orcamento_parado` é o mesmo SQL da régua (`parado_ops`).
+- **Lembrete e régua** (`parado_ops.avisar_lembretes`, última rotina da `whatsapp-sweep`): sino `conversa.lembrete`
+  (quem marcou; sem acesso, quem atende ou a equipe) e `conversa.orcamento_parado` (degraus 2/5/9 dias, `dedupe_key =
+  conversa.orcamento_parado:{id}:{epoch do orçamento}:{degrau}`, só o degrau atual, até o 10º dia), das 9h às 21h;
+  push com a tag `lembrete-{id}` depois do commit. Nada escreve na conversa.
+- **Criar evento**: `POST /api/events` aceita `conversa_id` (abaixo) e o ponto único `fechamento_ops.ligar_evento_a_conversa`.
 
 **Linha do tempo e funil (feature 335, Fase 3c do plano).** Só leitura, sem tabela nova. Fluxo e invariantes em
 `docs/04` §6; contrato em `specs/335-crm-linha-do-tempo/contracts/api.md`.
@@ -2655,6 +2686,8 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
 | `pode_conversas()` (feature 335) | `conversas_funil` (`GET /api/conversas/funil`, `GET /api/conversas/funil/parados`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `pode_conversas()` (feature 349) | `conversas_venda` (`GET /api/conversas/<id>/venda`, `POST`/`DELETE …/perdida`, `POST …/qualificacao`, `POST`/`DELETE …/lembrete`); `recorte`/`dias` e `venda` em `GET /api/conversas`; campos novos do funil | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `_can_create_event()` (feature 349) | `conversa_id` em `POST /api/events` | o gate de sempre (`COMERCIAL`, `SUPERADMIN`); a conversa só precisa existir (422 `fields.conversa_id`) |
 | `_require_vendas()` (feature 335) | `clientes_read` (`GET /api/clientes/<id>/linha-do-tempo`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; os links de conversa e de orçamento só para `COMERCIAL`/`SUPERADMIN` (papel real) |
 | `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
 | `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |

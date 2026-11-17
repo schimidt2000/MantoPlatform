@@ -215,6 +215,10 @@ export function OrcamentoCalculadoraPage() {
   const [searchParams] = useSearchParams();
   const recalcularId = searchParams.get("recalcular_id");
   const recalcularIdNum = recalcularId ? Number(recalcularId) : null;
+  // Feature 349 ("cotar sem sair"): aberta pela conversa, a calculadora já vem com o nome e volta para lá com o
+  // envio pronto. Lidos uma vez, no estado inicial: nenhum cálculo a mais (o nome entra no primeiro, que já sairia).
+  const conversaDeOrigem = Number(searchParams.get("conversa")) || null;
+  const nomeDaConversa = (searchParams.get("cliente") ?? "").trim();
 
   const opcoes = useOrcamentoOpcoes();
   const calcular = useCalcularOrcamento();
@@ -228,7 +232,7 @@ export function OrcamentoCalculadoraPage() {
   const [coordenadorQty, setCoordenadorQty] = useState(INITIAL_STATE.coordenadorQty);
   const [eventDate, setEventDate] = useState(INITIAL_STATE.eventDate);
   const [eventTime, setEventTime] = useState(INITIAL_STATE.eventTime);
-  const [clientName, setClientName] = useState(INITIAL_STATE.clientName);
+  const [clientName, setClientName] = useState(() => nomeDaConversa || INITIAL_STATE.clientName);
   const [eventLocation, setEventLocation] = useState(INITIAL_STATE.eventLocation);
   const [deslocamento, setDeslocamento] = useState<Deslocamento>(INITIAL_STATE.deslocamento);
   const [transporteTipo, setTransporteTipo] = useState<"van" | "carro">(INITIAL_STATE.transporteTipo);
@@ -564,7 +568,8 @@ export function OrcamentoCalculadoraPage() {
     salvar.mutate(result, {
       onSuccess: ({ id }) => {
         setSaved(true);
-        navigate(`/orcamento/${id}`);
+        // Vinda da conversa, volta para ela com o envio aberto e este orçamento escolhido (feature 349).
+        navigate(conversaDeOrigem ? `/conversas?c=${conversaDeOrigem}&orcamento=${id}` : `/orcamento/${id}`);
       },
     });
   };
@@ -581,6 +586,18 @@ export function OrcamentoCalculadoraPage() {
           </Button>
         }
       />
+
+      {conversaDeOrigem ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-accent bg-accent-soft px-3 py-2 text-sm">
+          <p className="min-w-0">
+            Orçamento para a conversa{nomeDaConversa ? ` com ${nomeDaConversa}` : ""}. Ao gerar, ele volta pronto
+            para enviar.
+          </p>
+          <Button asChild variant="outline" size="sm" className="h-11 shrink-0 md:h-9">
+            <Link to={`/conversas?c=${conversaDeOrigem}`}>Voltar para a conversa</Link>
+          </Button>
+        </div>
+      ) : null}
 
       {historicoDetalhe.isFetching && (
         <p className="text-xs text-muted">Carregando orçamento para recalcular…</p>

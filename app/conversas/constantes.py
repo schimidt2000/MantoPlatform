@@ -536,3 +536,86 @@ ORIGEM_DA_FICHA_LEGIVEL = {
     "manual": "Cadastrada à mão",
     "whatsform_import": "Veio do formulário",
 }
+
+# ── O comercial mede e fecha (feature 349) ──────────────────────────────────────────────────────
+# Motivo da perda: lista fechada, na ordem da tela. As chaves vão para o banco e a API; os rótulos são
+# a ÚNICA fonte do texto (a API manda a lista pronta, como os motivos de encerramento do formulário, 298).
+MOTIVO_PRECO = "preco"
+MOTIVO_OUTRA_EMPRESA = "outra_empresa"
+MOTIVO_SEM_DATA = "sem_data"
+MOTIVO_DESISTIU = "desistiu"
+MOTIVO_SEM_RESPOSTA = "sem_resposta"
+MOTIVO_FORA_DA_AREA = "fora_da_area"
+MOTIVO_OUTRO = "outro"  # exige frase
+MOTIVOS_DE_PERDA = (
+    MOTIVO_PRECO,
+    MOTIVO_OUTRA_EMPRESA,
+    MOTIVO_SEM_DATA,
+    MOTIVO_DESISTIU,
+    MOTIVO_SEM_RESPOSTA,
+    MOTIVO_FORA_DA_AREA,
+    MOTIVO_OUTRO,
+)
+ROTULO_DO_MOTIVO = {
+    MOTIVO_PRECO: "Achou caro",
+    MOTIVO_OUTRA_EMPRESA: "Fechou com outra empresa",
+    MOTIVO_SEM_DATA: "Sem data ou elenco na data",
+    MOTIVO_DESISTIU: "Desistiu ou adiou a festa",
+    MOTIVO_SEM_RESPOSTA: "Parou de responder",
+    MOTIVO_FORA_DA_AREA: "Fora da área atendida",
+    MOTIVO_OUTRO: "Outro",
+}
+PERDA_NOTA_MAXIMA = 300
+TEXTO_MOTIVO_INVALIDO = "Selecione um dos motivos."
+TEXTO_FRASE_OBRIGATORIA = "Informe em uma frase por que a conversa foi perdida."
+TEXTO_FRASE_LONGA = f"Use no máximo {PERDA_NOTA_MAXIMA} caracteres."
+
+# Qualificação: a decisão da vendedora vale sobre a regra; nulo = segue a pontuação.
+QUALIFICACAO_QUALIFICADA = "qualificada"
+QUALIFICACAO_NAO = "nao_qualificada"
+DECISOES_DE_QUALIFICACAO = (QUALIFICACAO_QUALIFICADA, QUALIFICACAO_NAO)
+TEXTO_DECISAO_INVALIDA = "Selecione qualificada, não qualificada ou usar a regra."
+# A pontuação por regras (pesquisa §6.5): hipótese inicial, revista a cada trimestre com a taxa de
+# fechamento por sinal. Trocar um número aqui muda a tela e o funil juntos.
+SINAL_FORMULARIO = "formulario"
+SINAL_DATA_PROXIMA = "data_proxima"
+SINAL_DATA_DISTANTE = "data_distante"
+SINAL_ORCAMENTO = "orcamento"
+SINAL_RECOMPRA = "recompra"
+PONTOS_DA_REGRA = {
+    SINAL_FORMULARIO: 3,
+    SINAL_DATA_PROXIMA: 2,
+    SINAL_DATA_DISTANTE: 1,
+    SINAL_ORCAMENTO: 1,
+    SINAL_RECOMPRA: 2,
+}
+DIAS_DA_DATA_PROXIMA = 90
+CORTE_DA_QUALIFICADA = 3
+ROTULO_DO_SINAL = {
+    SINAL_FORMULARIO: "Formulário preenchido",
+    SINAL_DATA_PROXIMA: f"Data do evento em até {DIAS_DA_DATA_PROXIMA} dias",
+    SINAL_DATA_DISTANTE: f"Data do evento a mais de {DIAS_DA_DATA_PROXIMA} dias",
+    SINAL_ORCAMENTO: "Orçamento enviado",
+    SINAL_RECOMPRA: "Já fechou evento antes",
+}
+
+# Recortes da lista (combináveis com Todas/Minhas/Sem responsável e o canal).
+RECORTE_ESPERANDO = "esperando"
+RECORTE_ORCAMENTO_PARADO = "orcamento_parado"
+RECORTE_ANUNCIO = "anuncio"
+RECORTES_DA_LISTA = (RECORTE_ESPERANDO, RECORTE_ORCAMENTO_PARADO, RECORTE_ANUNCIO)
+TEXTO_RECORTE_INVALIDO = "Recorte desconhecido."
+TEXTO_DIAS_INVALIDOS = "Escolha 2, 5 ou 9 dias."
+# A régua do orçamento parado cobre a janela de decisão da família (6 a 10 dias, pesquisa §8.4): avisa
+# no 2º, no 5º e no 9º dia, e acaba no 10º. O filtro da lista usa os mesmos degraus.
+DEGRAUS_DA_REGUA = (2, 5, 9)
+FIM_DA_REGUA_DIAS = 10
+# "Lembrar amanhã" vence às 9h de São Paulo do próximo dia do calendário.
+HORA_DO_LEMBRETE = 9
+# O "até 15 min" do funil: o mesmo limite do alerta de espera (328).
+RESPOSTA_RAPIDA_MINUTOS = 15
+
+TITULO_LEMBRETE = "Lembrete: retomar a conversa com {nome}."
+TITULO_ORCAMENTO_PARADO = "Orçamento para {nome} sem retorno há {dias} dias."
+CORPO_ORCAMENTO_PARADO = "Retome a conversa ou marque como perdida."
+TEXTO_CONVERSA_PARA_EVENTO = "Conversa não encontrada."

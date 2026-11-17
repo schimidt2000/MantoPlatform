@@ -12,7 +12,7 @@ import logging
 from sqlalchemy import text
 
 from app import db
-from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops
+from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops, parado_ops
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc
 from app.conversas.configuracao import cfg_whatsapp
@@ -91,10 +91,17 @@ def ciclo_de_varredura() -> dict[str, int]:
 
     O alerta de cliente esperando (feature 328) vem por último: depois dos avisos refeitos, a
     resposta que chegou atrasada já encerrou a espera e não vira aviso falso. A campanha do anúncio
-    que a Meta recusou volta aqui, uma vez por dia (feature 334).
+    que a Meta recusou volta aqui, uma vez por dia (feature 334). Por último, o lembrete vencido e a
+    régua do orçamento parado (feature 349): só sino e celular da equipe, nada para a cliente.
     """
     resumo: dict[str, int] = {}
-    rotinas = (reprocessar_avisos, reprocessar_midias, anuncio_ops.reconsultar, equipe_ops.alertar_esperas)
+    rotinas = (
+        reprocessar_avisos,
+        reprocessar_midias,
+        anuncio_ops.reconsultar,
+        equipe_ops.alertar_esperas,
+        parado_ops.avisar_lembretes,
+    )
     for rotina in rotinas:
         try:
             resumo.update(rotina())

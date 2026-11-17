@@ -33,3 +33,8 @@ def tag_da_espera(conversa_id: int) -> str:
 
 def tag_da_transferencia(conversa_id: int) -> str:
     return f"transferida-{conversa_id}"
+
+
+def tag_do_lembrete(conversa_id: int) -> str:
+    """Feature 349: o "Lembrar amanhã" e a régua do orçamento parado da mesma conversa se substituem."""
+    return f"lembrete-{conversa_id}"

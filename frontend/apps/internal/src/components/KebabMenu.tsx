@@ -20,6 +20,8 @@ interface KebabMenuProps {
    * (feature 190) usa esta forma em vez de um segundo componente de dropdown (Princípio I).
    */
   triggerLabel?: string;
+  /** Feature 349: o ícone com 44 px de toque no celular (a faixa da venda na conversa). */
+  grande?: boolean;
 }
 
 /**
@@ -41,7 +43,7 @@ const PAINEL_CLASSES =
  * implementação enxuta própria, no mesmo espírito de `FilterDropdown` já existente
  * (research.md §7). Fecha ao clicar fora ou Esc.
  */
-export function KebabMenu({ items, label = "Mais ações", triggerLabel }: KebabMenuProps) {
+export function KebabMenu({ items, label = "Mais ações", triggerLabel, grande = false }: KebabMenuProps) {
   const [open, setOpen] = useState(false);
   // Ancorado à direita por padrão (o uso original é o kebab na última coluna de uma tabela, que
   // tem de crescer para dentro da tela). Vira para a esquerda quando não cabe — ver abaixo.
@@ -115,7 +117,9 @@ export function KebabMenu({ items, label = "Mais ações", triggerLabel }: Kebab
         className={
           triggerLabel
             ? "flex h-9 items-center gap-1.5 rounded-md border border-line px-3 text-sm text-ink hover:bg-surface-2"
-            : "flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
+            : grande
+              ? "flex h-11 w-11 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink md:h-8 md:w-8"
+              : "flex h-8 w-8 items-center justify-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
         }
       >
         <MoreVertical className="h-4 w-4" aria-hidden="true" />

@@ -4514,11 +4514,40 @@ class Conversa(db.Model):
     # perfil (UTC). Sem nome e com o carimbo de mais de 24 h, o perfil é buscado de novo.
     usuario = db.Column(db.String(64), nullable=True)
     perfil_em = db.Column(db.DateTime, nullable=True)
+    # Feature 349 — o tempo da primeira resposta (UTC). A primeira mensagem da cliente (sem reação) só anda
+    # para trás; a primeira resposta é a primeira da equipe depois dela. Guardadas, e não derivadas na
+    # leitura, para o funil de um ano não varrer as mensagens. O eco do celular/outro app entra SEM autor
+    # (coexistência): a origem diz de onde veio e a tela mostra o caso, em vez de esconder.
+    primeira_recebida_em = db.Column(db.DateTime, nullable=True)
+    primeira_resposta_em = db.Column(db.DateTime, nullable=True)
+    primeira_resposta_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    primeira_resposta_origem = db.Column(db.String(12), nullable=True)
+    # Perda com motivo (no molde do encerramento de formulário, 298): `perdida_em` define "perdida";
+    # reabrir apaga as quatro. Mensagem nova da cliente NÃO reabre (clarify de 17/11).
+    perdida_em = db.Column(db.DateTime, nullable=True)
+    perdida_motivo = db.Column(db.String(30), nullable=True)
+    perdida_nota = db.Column(db.String(300), nullable=True)
+    perdida_por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # A decisão da vendedora sobre a qualificação; nula = segue a pontuação por regras (calculada na leitura).
+    qualificacao = db.Column(db.String(20), nullable=True)
+    qualificacao_em = db.Column(db.DateTime, nullable=True)
+    qualificacao_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # "Lembrar amanhã": um por conversa; a varredura avisa no sino quando vence e apaga.
+    lembrar_em = db.Column(db.DateTime, nullable=True, index=True)
+    lembrar_para_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     cliente = db.relationship("Client", lazy=True, backref=db.backref("conversas", lazy=True))
     responsavel = db.relationship("User", lazy=True, foreign_keys=[responsavel_id])
+    primeira_resposta_por = db.relationship("User", lazy=True, foreign_keys=[primeira_resposta_por_id])
+    perdida_por = db.relationship("User", lazy=True, foreign_keys=[perdida_por_id])
+    qualificacao_por = db.relationship("User", lazy=True, foreign_keys=[qualificacao_por_id])
+    lembrar_para = db.relationship("User", lazy=True, foreign_keys=[lembrar_para_id])
 
 
 class PushAssinatura(db.Model):

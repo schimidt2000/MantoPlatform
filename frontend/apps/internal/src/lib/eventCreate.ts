@@ -205,6 +205,8 @@ export interface EventCreateInput {
   clients: ClientLinkInput[];
   form_response_id: number | null;
   observations: Array<Omit<ObservationInput, "obs_type" | "file"> & { obs_type: "text" | "link" }>;
+  /** Feature 349: a conversa de origem ("Criar evento" na conversa); o servidor liga o evento a ela. */
+  conversa_id?: number | null;
 }
 
 /** Corpo de `PATCH /api/events/<id>` (feature 184) — atualização em bloco dos campos centrais.

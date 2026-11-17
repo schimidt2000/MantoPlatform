@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, exists, or_
 from sqlalchemy.orm import joinedload
 
 from app import db
@@ -18,7 +18,7 @@ from app.conversas import constantes as K
 from app.conversas.acesso import responsavel_ativo
 from app.conversas.relogio import agora_utc
 from app.conversas.telefone import so_digitos
-from app.models import Client, Conversa, ConversaMensagem, ConversaNota
+from app.models import Client, Conversa, ConversaAnuncio, ConversaMensagem, ConversaNota
 
 BUSCA_MINIMA = 2
 
@@ -208,16 +208,39 @@ def _link_do_instagram(mensagem: ConversaMensagem) -> str | None:
     return url if isinstance(url, str) and url.startswith("https://") else None
 
 
+def _recortar(consulta: Any, recorte: str | None, dias: int) -> Any:
+    """O recorte da lista (feature 349) como filtro SQL: a paginação por cursor continua certa."""
+    if recorte == K.RECORTE_ESPERANDO:
+        return consulta.filter(Conversa.aguardando_desde.isnot(None))
+    if recorte == K.RECORTE_ANUNCIO:
+        return consulta.filter(
+            exists().where(
+                ConversaAnuncio.conversa_id == Conversa.id,
+                ConversaAnuncio.tipo == K.CONTATO_ANUNCIO,
+            )
+        )
+    if recorte == K.RECORTE_ORCAMENTO_PARADO:
+        # Import tardio: `parado_ops` usa `nome_da_conversa` daqui (o import de topo fecharia um ciclo).
+        from app.conversas.parado_ops import filtro_da_lista
+
+        return consulta.filter(filtro_da_lista(dias, agora_utc()))
+    return consulta
+
+
 def listar_conversas(
     busca: str | None,
     antes: str | None,
     filtro: str = K.FILTRO_TODAS,
     usuario_id: int | None = None,
     canal: str | None = None,
+    recorte: str | None = None,
+    dias: int = K.DEGRAUS_DA_REGUA[0],
 ) -> tuple[list[Conversa], str | None]:
     """Página da lista, da última mensagem para trás. Devolve as conversas e o próximo cursor.
 
     ``filtro`` (feature 328): ``minhas`` = responsável é ``usuario_id``; ``sem_responsavel`` = fila.
+    ``recorte`` (feature 349, validado pela rota): ``esperando`` = a cliente espera resposta; ``anuncio`` = veio de
+    anúncio; ``orcamento_parado`` = o último orçamento tem ``dias`` dias ou mais sem decisão (``parado_ops``).
     """
     consulta = Conversa.query.options(
         joinedload(Conversa.cliente), joinedload(Conversa.responsavel)
@@ -228,6 +251,7 @@ def listar_conversas(
         consulta = consulta.filter(Conversa.responsavel_id.is_(None))
     if canal:
         consulta = consulta.filter(Conversa.canal == canal)
+    consulta = _recortar(consulta, recorte, dias)
     termo = (busca or "").strip()
     if len(termo) >= BUSCA_MINIMA:
         filtros = [Conversa.nome_perfil.ilike(f"%{termo}%"), Client.name.ilike(f"%{termo}%")]
