@@ -888,6 +888,12 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 | 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
 | 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
 | 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |
+
+## Baixa da correção 345b-google-na-rotina (2026-11-17)
+
+**Quitada em parte.** A 21: o `MARKETING_AGENT_TOKEN` está no `manto-backend` desde 17/11 (o `/api/marketing-agent/*`
+respondeu 200 com o token local). O `AUDIT_AGENT_TOKEN` não foi conferido e a linha 21 segue por ele. **Criada.**
+Nenhuma. O que a 345b não resolve já está registrado: a conversa vinda do Google só existe com a 348 (214).
 ## Baixa da feature 325-crm-whatsapp-fundacao (2026-10-30)
 
 **Criada.** (178–182.) Nenhuma quitada.

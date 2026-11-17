@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **345b-google-na-rotina** | *(na branch, sem push)* Hotfix da 345: o Google Ads entra na rotina de segunda pela API REST (`scripts/marketing/google_ads.py`, sem MCP), com a conversão do Google ("toque no botão") em `results`, nunca em `conversations`; o `POST /run` aceita `diario` para as mudanças aprovadas no chat; o Desempenho usa o relógio de SP (`date.today()` virava o dia às 21h); skill com a sazonalidade e as regras de parada da pesquisa de 17/11 | 2026-11-17 | — | (aqui) | ver Registro |
 | **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
@@ -462,6 +463,52 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 345b — Google Ads na rotina e diário das mudanças aprovadas no chat   (345b-google-na-rotina · 2026-11-17 · sem migration)
+
+> **Na branch, sem push** (worktree `C:\tmp\mp345b`, saída de `20bf93c0`). Nível 2. Detalhe: `specs/345b-google-na-rotina/`.
+
+**O pedido.** "Siga com a 345b", depois da análise do Google Ads e da pesquisa "Máquina de vendas Manto" (17/11). A 345
+entrou em produção esperando o conector MCP `google-ads`, que não foi instalado: o MCP oficial só lê e pede `gcloud`.
+O acesso ficou pela API REST, com o OAuth do próprio dono. E as mudanças de 17/11 no Google (PMAX e Concorrentes
+pausados; as duas Pesquisas limpas, só busca, região "presença", teto de R$ 3 no clique, 19 negativos) foram feitas no
+chat, fora do diário.
+
+**O que mudou.**
+- `scripts/marketing/google_ads.py` (novo): `login`, `coletar`, `ler`, `pausar`, `ativar`, `verba`, `gaql`.
+  - Mudança sem `--aplicar` vai como ensaio (`validateOnly`).
+  - Verba compartilhada entre campanhas é recusada.
+  - Os conversores são puros, sem rede, e o verify os chama direto.
+  - `config.py` ganha `GOOGLE_ADS_CUSTOMER_ID` e `GOOGLE_ADS_DIR`.
+- `POST …/run` aceita `diario`:
+  - novo `comando_ops.montar_entrada`, que valida e monta sem gravar;
+  - `criar_entrada` passa a usá-lo;
+  - `desempenho_ops._montar_diario` valida todos os itens antes da primeira escrita da rodada.
+- `app/api/marketing_read.py`: `date.today()` → `comando_ops.hoje_sp()`.
+- Skill `marketing-auditor`:
+  - Google pelo script, nos passos 2, 4 e 5;
+  - passo 6 novo, "mudanças aprovadas no chat → diário";
+  - sazonalidade refeita com a pesquisa: escola planeja em jun–ago e fecha fornecedor em out–dez; empresa pede proposta de ago a nov;
+  - regras de parada: sem aumento de verba com menos de 80% das conversas com origem; PMax só com 30 conversas qualificadas por mês vindas do Google.
+  - A verba do mês (R$ 4.000 jan–jul; R$ 2.500–3.000 ago–dez) não mudou: é decisão do dono.
+- Textos:
+  - estado vazio e subtítulo do Desempenho sem "exports";
+  - README dos scripts com Render no lugar de Railway e o caminho do Google.
+
+**Verificação.**
+- `verify_345b.py`: 32/32 no `manto_345b`, cópia do `manto_lote` em `d334b2c4e6f8`.
+- O mesmo verify com o código da `main`: 22/30. Falham os cenários 1–3 (o `diario` era ignorado e a rodada com item ruim gravava) e o 5 (`end` = 17/11/2026, o dia do servidor, em vez do domingo de SP).
+- `ruff check` limpo e `npm run typecheck` limpo.
+- Desempenho aberto em 375 px (backend e Vite da worktree em 5345/6345), sem erro no console.
+- Leitura real do Google pelo script novo:
+  - `ler` da campanha Amplo;
+  - `coletar` de 10 a 16/11: 28 linhas de campanha, 63 de anúncio, R$ 508,50;
+  - ensaio de `pausar` na Institucional, que respondeu "nada mudou".
+
+**Pegadinhas.**
+1. `comando_ops` importa `desempenho_ops` no topo. Por isso o `_montar_diario` importa `comando_ops` dentro da função.
+2. Data no verify: 08/03/2031 é sábado. O cenário do relógio usa domingo 09/03 às 22h30 (SP), que já é segunda em UTC.
+3. A conversão do Google é toque no botão do WhatsApp. Somada como `conversations`, ela faria o Google parecer 10× melhor que a Meta (7.393 "conversões" e nenhuma conversa rastreada no Tintim).
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 

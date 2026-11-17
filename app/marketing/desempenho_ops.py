@@ -39,6 +39,7 @@ from app.models import (
     MarketingAdSpendBatch,
     MarketingAgentRun,
     MarketingCampaignMetric,
+    MarketingDiario,
     MarketingImportFile,
     MarketingPost,
     MarketingPostMetric,
@@ -387,7 +388,7 @@ def _validate_payload(payload: dict[str, Any]) -> tuple[datetime, datetime]:
         raise IngestValidationError("Campos obrigatórios ausentes", faltando)
     if payload["mode"] not in ("prod", "local"):
         raise IngestValidationError("mode inválido", {"mode": "prod | local"})
-    for lista in ("files", "post_metrics", "campaign_metrics", "account_metrics", "findings"):
+    for lista in ("files", "post_metrics", "campaign_metrics", "account_metrics", "findings", "diario"):
         if not isinstance(payload.get(lista, []), list):
             raise IngestValidationError(f"{lista} deve ser lista", {lista: "lista"})
     return _parse_window(payload["window"])
@@ -504,6 +505,24 @@ def _apply_run_totals(run: MarketingAgentRun, arquivos: dict[str, int], upserted
     run.findings_json = json.dumps(payload.get("findings", []), ensure_ascii=False)
 
 
+def _montar_diario(itens: list[Any], *, autor_id: int) -> list[MarketingDiario]:
+    """Mudanças que o dono aprovou no chat e a rotina aplicou na Meta/Google (345b).
+
+    Viram entradas do diário com `origem = "rotina"` e autor = titular do cartão (quem aprova no
+    chat). Tudo é validado antes de a rodada escrever: um item inválido derruba o `/run` inteiro.
+    """
+    # Import local: `comando_ops` importa este módulo no topo.
+    from app.marketing import comando_ops
+
+    entradas = []
+    for i, item in enumerate(itens):
+        try:
+            entradas.append(comando_ops.montar_entrada(item, autor_id=autor_id, origem="rotina"))
+        except comando_ops.ComandoError as exc:
+            raise IngestValidationError(exc.message, {f"diario[{i}].{exc.field or 'item'}": exc.message}) from None
+    return entradas
+
+
 def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     """Ingestão idempotente de uma rodada (ver contracts/agent-endpoints.md, `POST /run`).
 
@@ -519,6 +538,7 @@ def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     existente = MarketingAgentRun.query.filter_by(run_id=str(payload["run_id"])[:40]).first()
     if existente is not None and existente.result_json:
         return {**json.loads(existente.result_json), "replayed": True}
+    entradas = _montar_diario(payload.get("diario") or [], autor_id=titular.id)
 
     run = MarketingAgentRun(run_id=str(payload["run_id"])[:40], mode=payload["mode"],
                             window_start=inicio, window_end=fim, executed_at=datetime.utcnow())
@@ -529,9 +549,12 @@ def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     post_links = link_post_metrics()
     ad_spend, findings_server = sync_ad_spend(run, card_holder=titular)
     _apply_run_totals(run, arquivos, upserted, payload)
+    db.session.add_all(entradas)
+    db.session.flush()
     resultado = {
         "run_id": run.run_id, "replayed": False, "files": arquivos, "upserted": upserted,
         "post_links": post_links, "ad_spend": ad_spend, "findings_server": findings_server,
+        "diario": [e.id for e in entradas],
     }
     run.result_json = json.dumps(resultado, ensure_ascii=False)
     db.session.commit()

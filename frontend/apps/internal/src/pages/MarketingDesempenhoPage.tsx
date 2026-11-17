@@ -67,17 +67,12 @@ function EstadoVazio() {
     <Card className="p-5">
       <h3 className="text-base font-semibold text-ink">Nenhuma rodada do auditor de marketing ainda</h3>
       <p className="mt-2 text-sm text-muted">
-        Toda segunda-feira às 06:30 o auditor lê os exports salvos em{" "}
-        <code className="rounded bg-surface-2 px-1 text-xs text-ink">scripts/marketing/inbox/</code> no computador da
-        rotina, grava o histórico nesta tela e envia o relatório por e-mail. Para a primeira rodada, exporte:
+        Toda segunda-feira de manhã a rotina de marketing lê a Meta e o Google direto das contas de anúncio, grava o
+        gasto e as conversas nesta tela e envia o relatório por e-mail. Ninguém precisa exportar nada.
       </p>
-      <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-ink">
-        <li>Meta Business Suite → Insights → <strong>Conteúdo</strong> → Exportar (CSV, últimos 90 dias)</li>
-        <li>Meta Business Suite → Insights → <strong>Público/Conta</strong> → Exportar (CSV)</li>
-        <li>Gerenciador de Anúncios → Relatórios → <strong>Detalhamento: Dia</strong> → Exportar CSV</li>
-        <li>Google Ads → Campanhas → Segmento <strong>Dia</strong> → Baixar CSV</li>
-      </ul>
-      <p className="mt-3 text-sm text-muted">Salve tudo na pasta até domingo à noite. Se um arquivo não for reconhecido, ele aparece nesta tela e no e-mail com o motivo.</p>
+      <p className="mt-3 text-sm text-muted">
+        Se esta tela continuar vazia depois de uma segunda-feira, a rodada não aconteceu: avise o dono.
+      </p>
     </Card>
   );
 }
@@ -413,8 +408,8 @@ export function MarketingDesempenhoPage() {
         title="Desempenho de marketing"
         subtitle={
           query.data
-            ? `${dataCurta(query.data.period.start)} – ${dataCurta(query.data.period.end)} · o que os exports da Meta e do Google dizem, semana a semana`
-            : "O que os exports da Meta e do Google dizem, semana a semana"
+            ? `${dataCurta(query.data.period.start)} – ${dataCurta(query.data.period.end)} · o que a Meta e o Google dizem, semana a semana`
+            : "O que a Meta e o Google dizem, semana a semana"
         }
         filters={seletor}
       />

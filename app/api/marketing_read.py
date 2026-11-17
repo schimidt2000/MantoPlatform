@@ -172,8 +172,9 @@ def api_marketing_desempenho() -> Any:
         if weeks not in DESEMPENHO_WEEKS:
             weeks = DESEMPENHO_WEEKS_DEFAULT
         # Semanas fechadas de segunda a domingo, terminando na semana corrente — assim a série
-        # tem exatamente `weeks` pontos (a última, parcial).
-        fim = date.today()
+        # tem exatamente `weeks` pontos (a última, parcial). O "hoje" é o de São Paulo: o servidor
+        # roda em UTC e, com `date.today()`, a semana virava às 21h de domingo (345b).
+        fim = comando_ops.hoje_sp()
         inicio = fim - timedelta(days=fim.weekday()) - timedelta(days=(weeks - 1) * 7)
     # Feature 345: o bloco por frente (custo por venda contra o teto) vem do `comando_ops`.
     return jsonify({**desempenho_ops.desempenho_summary(inicio, fim, weeks=weeks),
