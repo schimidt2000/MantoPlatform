@@ -174,6 +174,9 @@ function KanbanCard({
         </div>
 
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          {/* Feature 345: o card de anúncio e o pedido aberto pela rotina se reconhecem de relance. */}
+          {post.tipo === "anuncio" && <Badge tone="gold">Anúncio</Badge>}
+          {post.origem === "rotina" && <Badge tone="blue">Pedido da rotina</Badge>}
           {post.platform && <Badge tone="accent">{post.platform.toUpperCase()}</Badge>}
           <DeadlineBadge deadline={post.deadline_date} />
           {post.review_space && (

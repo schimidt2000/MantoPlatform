@@ -1236,6 +1236,51 @@ MARKETING/SUPERADMIN, `marketing_read.py`). `GET /api/gastos` passa a devolver `
 (null nos gastos comuns). `PATCH /api/marketing/posts/<id>` aceita `permalink` (http(s), sem
 querystring).
 
+#### Painel de comando de marketing (feature 345) — `app/marketing/comando_ops.py`
+
+Contrato completo: `specs/345-marketing-integrado/contracts/api-345.md`.
+
+**Agente** (mesmo token, 404 sem ele):
+- `GET …/comando?start&end` — o contexto da rodada.
+- `POST …/anuncios` — métrica por anúncio e dia, idempotente.
+- `POST …/licencas/sugestoes` — nunca confirma.
+- `POST …/pedidos` — cards `origem=rotina`.
+- `POST …/posts/<id>/anuncios` — vínculo; 409 se o anúncio é de outro card.
+- `POST …/propostas` — nascem `pendente`.
+- `POST …/propostas/<id>/execucao` — só de `aprovada`; gera o diário.
+- `POST …/diario/<id>/resultado`.
+- O `POST …/run` da 256 aceita `conversations` e `leads` em `campaign_metrics`.
+
+**Tela** (`marketing_comando_read.py` / `_write.py`):
+
+| Rota | Papéis |
+|---|---|
+| `GET/PATCH /api/marketing/frentes` | ler: MARKETING, SUPERADMIN · gravar: só SUPERADMIN |
+| `PATCH /api/marketing/campanhas/frente` | MARKETING, SUPERADMIN |
+| `GET /api/marketing/temas-licenca`, `POST …/confirmar` | MARKETING, SUPERADMIN |
+| `PATCH …/temas-licenca/<id>` | MARKETING, SUPERADMIN; liberar licenciado só SUPERADMIN (403 `so_superadmin`) |
+| `GET /api/marketing/propostas` | MARKETING, SUPERADMIN |
+| `POST …/propostas/<id>/decidir` | **só SUPERADMIN**; 409 `ja_decidida`/`expirada` |
+| `GET/POST /api/marketing/diario` | MARKETING, SUPERADMIN |
+
+`GET /api/marketing/desempenho` ganha `frentes`, `sem_frente`, `plataformas` e `frente_opcoes`. `POST/PATCH
+/api/marketing/posts` aceita `tipo`, `frente`, `formato` e `briefing_*`, com 422 `tema_nao_liberado` em card de
+anúncio.
+
+**Schema** (migration `f345c0a1b2d3`):
+- Colunas novas:
+  - `catalog_items`: `licenca_origem`, `liberado_anuncio`, `licenca_por_id`, `licenca_em`, `licenca_sugestao*`;
+  - `marketing_posts`: `tipo`, `frente`, `formato`, `briefing_*`, `origem`;
+  - `marketing_campaign_metrics`: `conversations`, `leads`;
+  - `site_settings`: `marketing_resp_foto_id`, `marketing_resp_video_id`.
+- Tabelas novas:
+  - `marketing_frentes` — 5 linhas, teto nulo = padrão;
+  - `marketing_campanha_frentes`;
+  - `marketing_ad_metrics` — única por plataforma + anúncio + dia;
+  - `marketing_post_anuncios` — única por plataforma + anúncio;
+  - `marketing_propostas`;
+  - `marketing_diario` — `proposta_id` único.
+
 Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,
 `pay_seller_month`). O Jinja legado `app/financeiro/routes.py` **não** importa deste módulo
@@ -2329,6 +2374,7 @@ Gates por módulo (todos em `app/api/`):
 | `_require_use()` / `_require_manage()` | `educamanto_*` | uso: `COMERCIAL`, `SUPERADMIN`, `ENSAIO`, `REVENDEDOR_EDUCAMANTO`; gestão: `COMERCIAL`, `SUPERADMIN` |
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
+| `require_marketing_access()` + `eh_superadmin()` (345) | `marketing_comando_read/write` | `MARKETING`, `SUPERADMIN`; tetos, decidir proposta e liberar licenciado: só `SUPERADMIN` (o "Ver como" não conta) |
 | `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções); desde a 344, `GET /api/virtuais/campanhas/<id>/funil` | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
 | — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel | — |

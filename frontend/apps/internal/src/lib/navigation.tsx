@@ -28,6 +28,7 @@ import {
   Repeat,
   Scissors,
   Settings,
+  ShieldCheck,
   Shirt,
   SlidersHorizontal,
   Star,
@@ -241,6 +242,26 @@ const SECTIONS: NavSectionConfig[] = [
         icon: <LineChart />,
         hint: "Alcance, gasto por campanha, leads e rodadas do auditor",
         isActive: (path) => path === "/marketing/desempenho",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
+      },
+      {
+        // Feature 345 — o que a rotina propõe (o Superadmin aprova) e o diário do porquê.
+        key: "marketing-decisoes",
+        label: "Decisões",
+        href: "/marketing/decisoes",
+        icon: <ListChecks />,
+        hint: "Propostas da rotina para aprovar e diário de decisões",
+        isActive: (path) => path === "/marketing/decisoes",
+        isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
+      },
+      {
+        // Feature 345 — o que pode ir para anúncio (autoral × licenciado).
+        key: "marketing-temas",
+        label: "Temas e licença",
+        href: "/marketing/temas",
+        icon: <ShieldCheck />,
+        hint: "Autoral ou licenciado; o que está liberado para anúncio",
+        isActive: (path) => path === "/marketing/temas",
         isVisible: (user) => notRevendedor(user) && hasRole(user, "MARKETING", "SUPERADMIN"),
       },
       {

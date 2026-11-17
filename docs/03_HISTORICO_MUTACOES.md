@@ -218,6 +218,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **345-marketing-integrado** | *(SEM push)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(pronto na branch, sem push)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
 | **341b-chamadas-a-cada-15-min** | *(EM PRODUÇÃO 16/11 ~20h27)* Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
@@ -434,6 +435,63 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
+
+> **Pronta na branch, SEM push** (worktree `C:\tmp\mp345`, saída de `68f232a7`). Nível 1. Detalhe:
+> `specs/345-marketing-integrado/` (spec, plan, research, data-model, contrato, tasks, `verify_345.py`).
+
+**O pedido.** O dono abriu o "chat oficial de marketing" em 16/11. As ferramentas eram Tintim, Kommo, Meta Ads e Google
+Ads, e ele queria "um sistema de marketing extremamente competente, baseado em estudos e evidências [...] atrelar tudo
+isso ao nosso sistema". A leitura do dia mostrou o tamanho do problema:
+- R$ 1.465 em 90 dias na Meta viraram 3 conversas: as campanhas otimizavam para clique e compravam clique acidental.
+- Nenhum dos 258 clientes de 2026 tinha origem registrada.
+- A rotina da 256 estava parada desde 08/09: o token não foi para o Render na migração.
+
+O dono separou quatro frentes (corporativo, social, EducaManto, festas) e quis tirar da Gabi a parte administrativa do
+Gerenciador de Anúncios, deixando-a no criativo com a Erika. Também quis que só ele (depois: Superadmin) aprove gasto.
+Pôs duas regras de marca:
+- licenciado não vai para anúncio, salvo caso a caso ("Labubu pode");
+- nenhuma imagem por IA, mas letreiro com IA por cima pode.
+
+**O que mudou.** Núcleo `app/marketing/comando_ops.py`:
+- **Frente da campanha**: correção manual > prefixo do nome `CORP`/`SOCIAL`/`EDU`/`FESTA`/`LOJA`.
+- **Frente da venda**: regra derivada do evento.
+- **Custo por venda misto** por frente contra um teto (25% da margem bruta mediana do último ano, editável). Aparece no
+  bloco "Por frente" do Desempenho.
+- **Licença dupla no tema**: origem (autoral/licenciado/não classificado) + "liberado para anúncio". Só o Superadmin
+  libera licenciado. O servidor recusa card de anúncio com tema não liberado (422 `tema_nao_liberado`), conferido antes
+  de tocar no card.
+- **Card do Kanban vira pedido de criativo**: tipo, frente, formato e briefing. Ganha o vínculo com o anúncio e o
+  resultado da peça.
+- **Propostas** que só o Superadmin decide: trava sem JOIN, 409 `ja_decidida`/`expirada`, validade de 7 dias.
+- **Diário de decisões**: reavaliação em 14 dias.
+
+Oito rotas novas no agente da 256 (mesmo token). Telas novas `/marketing/decisoes` e `/marketing/temas`. A skill
+`marketing-auditor` lê Meta e Google pelos conectores, com `scripts/marketing/agente.py` como porta.
+
+**Verificação.**
+- `verify_345.py`: 64/64 checagens (17 cenários) no `manto_345`, o dump de 16/11 + e344/f345. Antes do núcleo: 6
+  FALHA e 13 BLOQUEADO pelo motivo certo.
+- `verify_256`: 12/12.
+- `verify_204` (scripts/db): 53/62, com as **mesmas 9 falhas na `main`**. São metas por tema e não vêm da 345.
+- Migration com ida e volta.
+- `npm run typecheck` limpo.
+- Telas abertas na cópia local (backend e Vite da worktree em 5346/5345):
+  - Desempenho com a correção de frente;
+  - diálogo de tetos;
+  - temas, com a confirmação em lote;
+  - decisões em 390 px, sem rolagem lateral e com Aprovar;
+  - card de anúncio com o aviso e o 422 no campo.
+
+**Pegadinhas.**
+1. `with_for_update()` com relações `lazy="joined"` vira LEFT JOIN, e o Postgres recusa ("FOR UPDATE não pode ser
+   aplicado ao lado anulável"). Por isso `options(lazyload("*"))` na trava.
+2. Os carimbos são UTC naive. A proposta criada às 23h de SP mostrava a data de amanhã, então `iso_sp()` serializa no
+   horário de parede.
+3. `_q2` da 256 arredonda meio-par. O custo por conversa da 345 usa `ROUND_HALF_UP` (`docs/00` §6 item 4).
+4. O `/run` local cria o Gasto Extra de reembolso do mês. O verify usa março/2031 e apaga o lote.
+5. O `preview_start` lê a `launch.json` do checkout principal. A tela da worktree subiu por processo em segundo plano.
+6. A Google Ads API não tem mais developer token nem MCC desde 09/09/2026: basta o projeto Cloud no nível Explorer.
 ### 346 — O painel de Figurino da Home não lista evento que já passou   (346-figurino-sem-evento-passado · 2026-11-16 · sem migration)
 
 > **Pronto na branch, sem push.** Nível 2 (correção num domínio, sem migration). Detalhe:

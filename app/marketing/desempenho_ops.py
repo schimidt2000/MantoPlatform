@@ -52,7 +52,8 @@ CATEGORIA_MARKETING = "Marketing"
 # entrar no contexto para o vínculo.
 JANELA_POSTS_DIAS = 90
 _POST_METRIC_COLS = ("reach", "impressions", "likes", "comments", "saves", "shares", "views")
-_CAMPAIGN_INT_COLS = ("impressions", "reach", "clicks", "results", "conversions")
+# Feature 345: `conversations` e `leads` entram aqui — o `POST /run` passa a aceitá-los sem mais nada.
+_CAMPAIGN_INT_COLS = ("impressions", "reach", "clicks", "results", "conversions", "conversations", "leads")
 
 
 class IngestValidationError(ValueError):

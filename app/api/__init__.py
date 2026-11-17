@@ -58,6 +58,8 @@ from app.api import nfc_read as _nfc_read  # noqa: E402,F401
 from app.api import nfc_write as _nfc_write  # noqa: E402,F401
 from app.api import marketing_read as _marketing_read  # noqa: E402,F401
 from app.api import marketing_write as _marketing_write  # noqa: E402,F401
+from app.api import marketing_comando_read as _marketing_comando_read  # noqa: E402,F401
+from app.api import marketing_comando_write as _marketing_comando_write  # noqa: E402,F401
 from app.api import virtuais_public as _virtuais_public  # noqa: E402,F401
 from app.api import virtuais_read as _virtuais_read  # noqa: E402,F401
 from app.api import virtuais_write as _virtuais_write  # noqa: E402,F401

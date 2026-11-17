@@ -16,6 +16,7 @@ import {
 import { LineSeriesChart } from "../components/charts/LineSeriesChart";
 import { BarListChart } from "../components/charts/BarListChart";
 import { FunnelChart } from "../components/charts/FunnelChart";
+import { PainelFrentes } from "../components/marketing/PainelFrentes";
 
 const WEEK_OPTIONS: { value: DesempenhoWeeks; label: string }[] = [
   { value: 4, label: "4 semanas" },
@@ -434,6 +435,7 @@ export function MarketingDesempenhoPage() {
           className={`transition-opacity duration-200 ${query.isPlaceholderData ? "opacity-60" : ""}`}
           aria-busy={query.isPlaceholderData || undefined}
         >
+          <PainelFrentes data={query.data} />
           {query.data.empty ? <EstadoVazio /> : <Conteudo data={query.data} />}
         </motion.div>
       )}

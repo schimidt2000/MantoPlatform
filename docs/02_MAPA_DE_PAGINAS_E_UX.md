@@ -1590,6 +1590,51 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **Rotina que alimenta**: `scripts/marketing/` (collect → publish → checks → report), scheduled
   task `auditoria-marketing-semanal` (segunda 06:30, catch-up), skill local `marketing-auditor`.
   Relatório por e-mail com barras em HTML/CSS (Gmail não renderiza SVG).
+- **Feature 345 — bloco "Por frente" no topo** (`components/marketing/PainelFrentes.tsx`):
+  - Um card por frente (corporativo, social, EducaManto, festas, loja), com:
+    - o custo por venda **misto** contra o teto (o texto diz que é misto);
+    - o selo de estado: "Dentro do teto" / "Acima do teto" / "Gasto sem venda" / "Sem anúncio";
+    - gasto, conversas, vendas (quantas de cliente novo) e faturamento.
+  - Selos da situação da Meta e do Google; "sem conexão" no lugar de gasto zero.
+  - "Campanhas sem frente", com `<select>` que grava a correção.
+  - Botão "Tetos e responsáveis" (`FrentesConfigDialog`): só o Superadmin salva.
+  - Aparece também quando ainda não há rodada (vendas sem gasto).
+  - A rotina passou a ler pelos conectores (skill `marketing-auditor`); o CSV ficou como plano B.
+
+#### `/marketing/decisoes` — Decisões de marketing *(feature 345)*
+- **Acesso**: `MARKETING`, `SUPERADMIN`. Aprovar e recusar: só `SUPERADMIN`. Os outros veem "Só o Superadmin aprova
+  ou recusa".
+- **Objetivo**: o que a rotina semanal propõe mudar na Meta/Google (nada muda sem aprovação) e o diário do porquê de
+  cada mudança.
+- **UX**:
+  - Abas no endereço (`?aba=diario`).
+  - Propostas: pendentes primeiro, cada uma com:
+    - o antes → depois e o custo por dia;
+    - o motivo com o número e a evidência;
+    - "vale até" (7 dias);
+    - Observação + Recusar/Aprovar.
+  - Diário: selo "A reavaliar" ou o veredito, e "Nova entrada".
+  - Datas no horário de SP.
+  - Conferida em 390 px (o dono aprova pelo celular): cards empilhados, sem rolagem lateral.
+- **API**: `GET /api/marketing/propostas`, `POST …/<id>/decidir`, `GET|POST /api/marketing/diario`.
+
+#### `/marketing/temas` — Temas e licença *(feature 345)*
+- **Acesso**: `MARKETING`, `SUPERADMIN`. "Liberar para anúncio" de um licenciado só aparece para o Superadmin (o
+  servidor dá 403 aos outros).
+- **Objetivo**: o que pode ir para anúncio. A origem (autoral/licenciado/não classificado) é separada do "liberado".
+- **UX**:
+  - Contagem por origem.
+  - Busca e filtros no endereço: origem, liberado, "só com sugestão".
+  - Cada linha mostra a miniatura, a sugestão da rotina com o motivo, o `<select>` de origem, o selo do liberado e
+    o botão Liberar/Tirar do anúncio.
+  - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar todas as sugestões da lista". Autoral
+    confirmado sai liberado; licenciado sai não liberado.
+- **Card do Kanban** (`MarketingPostDialog`):
+  - Alterna entre "Post orgânico" e "Anúncio". O anúncio abre frente, formato e briefing (objetivo, o que mostrar,
+    letreiro), com a regra de imagem escrita no próprio pedido.
+  - Tema não liberado aparece em vermelho antes de salvar, e o 422 cai no campo.
+  - O card de anúncio mostra o resultado da peça.
+  - No Kanban, selos "Anúncio" e "Pedido da rotina".
 
 #### `/virtuais/campanhas` — Interações Virtuais (feature 205, US1)
 - **Acesso**: `COMERCIAL`, `SUPERADMIN` (gate de servidor `require_virtuais_access()`).
