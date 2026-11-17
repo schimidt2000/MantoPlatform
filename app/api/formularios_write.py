@@ -14,6 +14,7 @@ from flask import current_app, jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
+from app.conversas import codigo_ops
 from app.formularios.formularios_ops import (
     CHAVE_DOC_DA_NOTA,
     CHAVE_ISS_SO_PARA_CNPJ,
@@ -146,4 +147,13 @@ def api_formularios_submit(form_type: str) -> Any:
     _notificar_comercial(response)
 
     message = _build_message(meta["message_title"], sections)
+    # Feature 348: o código do site (clique de campanha guardado no navegador) vai no fim da mensagem e
+    # liga a resposta ao clique. Falha aqui nunca segura o WhatsApp da cliente (FR-008).
+    try:
+        message = codigo_ops.anexar_a_mensagem(message, f.get("origem_codigo"), response.id)
+    except Exception:  # noqa: BLE001 — a resposta já foi salva; a mensagem sai sem o código
+        db.session.rollback()
+        current_app.logger.exception(
+            "[formularios_write] falha ao anexar o código do site (resposta %s)", response.id
+        )
     return jsonify({"wa_link": _whatsapp_link(message), "contact_name": contact_name}), 201

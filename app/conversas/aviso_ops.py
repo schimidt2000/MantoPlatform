@@ -21,7 +21,7 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
-from app.conversas import anuncio_ops, celular_ops, equipe_ops
+from app.conversas import anuncio_ops, celular_ops, codigo_ops, equipe_ops
 from app.conversas import constantes as K
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.ficha_ops import ficha_pelo_telefone
@@ -377,6 +377,11 @@ def _gravar_recebida(
     if isinstance(mensagem.get("referral"), dict):
         # A cliente veio de um anúncio "clique para o WhatsApp" (feature 334).
         anuncio_ops.contato_do_whatsapp(conversa, str(mensagem["id"]), mensagem["referral"], momento)
+    if tipo == K.TIPO_TEXTO and texto:
+        # O "Código do site: #XXXXX" da mensagem pronta (feature 348): liga o clique no Google à conversa.
+        # Em qualquer mensagem, não só na primeira — a conversa é uma por telefone, e a cliente que volta
+        # por outro clique escreve numa conversa antiga.
+        codigo_ops.ler_na_mensagem(conversa, texto, momento)
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento

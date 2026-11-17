@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from app import db
 from app.config import PLATFORM_BASE_URL
 from app.conversas import constantes as K
-from app.conversas import envio_ops, ficha_ops
+from app.conversas import envio_ops, ficha_ops, origem_ops
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.leitura_ops import nome_da_conversa
 from app.conversas.recusa import Recusa, campo
@@ -212,6 +212,9 @@ def enviar_orcamento(
             .where(OrcamentoHistory.id == entry.id, OrcamentoHistory.client_id.is_(None))
             .values(client_id=ficha.id)
         )
+        # Feature 348: a conversa e o contato de origem deste momento, congelados no orçamento (o primeiro
+        # envio vence). É o que o evento criado dele herda — e não a ficha, que mistura as vendas.
+        origem_ops.ligar_orcamento(entry, conversa)
         db.session.commit()
         registro = _registro(chave, entry, conversa, autor_id)
     mensagens: list[ConversaMensagem] = []

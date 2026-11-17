@@ -34,9 +34,19 @@ _UTM = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term")
 # (tabela, coluna, tabela alvo, nome da FK) — a conversa e o contato de origem da venda.
 _LIGACOES_DA_VENDA = (
     ("orcamento_history", "conversa_id", "conversas", "fk_orcamento_history_conversa_id"),
-    ("orcamento_history", "origem_contato_id", "conversa_anuncios", "fk_orcamento_history_origem_contato_id"),
+    (
+        "orcamento_history",
+        "origem_contato_id",
+        "conversa_anuncios",
+        "fk_orcamento_history_origem_contato_id",
+    ),
     ("calendar_events", "conversa_id", "conversas", "fk_calendar_events_conversa_id"),
-    ("calendar_events", "origem_contato_id", "conversa_anuncios", "fk_calendar_events_origem_contato_id"),
+    (
+        "calendar_events",
+        "origem_contato_id",
+        "conversa_anuncios",
+        "fk_calendar_events_origem_contato_id",
+    ),
 )
 
 
@@ -85,7 +95,9 @@ def upgrade():
         sa.Column(
             "conversa_id",
             sa.Integer(),
-            sa.ForeignKey("conversas.id", name="fk_origem_codigos_conversa_id", ondelete="SET NULL"),
+            sa.ForeignKey(
+                "conversas.id", name="fk_origem_codigos_conversa_id", ondelete="SET NULL"
+            ),
             nullable=True,
         ),
         sa.Column("usado_em", sa.DateTime(), nullable=True),
@@ -104,8 +116,12 @@ def upgrade():
     op.add_column("conversa_anuncios", sa.Column("ctwa_clid", sa.String(512), nullable=True))
     op.add_column("conversa_anuncios", sa.Column("codigo_id", sa.Integer(), nullable=True))
     op.create_foreign_key(
-        "fk_conversa_anuncios_codigo_id", "conversa_anuncios", "origem_codigos",
-        ["codigo_id"], ["id"], ondelete="SET NULL",
+        "fk_conversa_anuncios_codigo_id",
+        "conversa_anuncios",
+        "origem_codigos",
+        ["codigo_id"],
+        ["id"],
+        ondelete="SET NULL",
     )
 
     op.add_column("anuncios_meta", sa.Column("conjunto_id", sa.String(64), nullable=True))

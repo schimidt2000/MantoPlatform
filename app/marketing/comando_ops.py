@@ -22,11 +22,12 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import and_, case, exists, func, or_
+from sqlalchemy import and_, case, exists, func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import aliased, lazyload
 
 from app import db
+from app.calendar import frente_ops
 from app.constants import (
     DIARIO_REAVALIAR_DIAS,
     DIARIO_VEREDITOS,
@@ -76,8 +77,6 @@ from app.models import (
 )
 
 CENTAVO = Decimal("0.01")
-# Palavras que fazem uma venda ser da frente social (Clarification 1). Regex do Postgres (`~*`).
-SOCIAL_REGEX = "(15 anos|debut|casamento|noiv|bodas)"
 
 
 class ComandoError(Exception):
@@ -187,16 +186,12 @@ def corrigir_frente_campanha(
 
 
 def frente_venda_sql() -> Any:
-    """Expressão SQL da frente de uma venda (Clarification 1) — a mesma regra dos números de 16/11."""
-    titulo = func.coalesce(CalendarEvent.title, "")
-    tipo = func.coalesce(CalendarEvent.event_type, "")
-    return case(
-        (or_(titulo.ilike("(EDU%"), tipo == "EDUCAMANTO"), "educamanto"),
-        (tipo == "CORP", "corporativo"),
-        (titulo.op("~*")(SOCIAL_REGEX), "social"),
-        (tipo.in_(("VM", "VIRTUAL")), "loja"),
-        else_="festas",
-    )
+    """Expressão SQL da frente de uma venda.
+
+    Feature 348: a frente é campo do evento, escolhido na venda; a regra de 16/11 (Clarification 1) virou a
+    sugestão para o evento sem frente gravada. A leitura única mora em `calendar/frente_ops`.
+    """
+    return frente_ops.frente_sql()
 
 
 def _filtro_venda() -> list[Any]:
