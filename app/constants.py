@@ -871,6 +871,43 @@ DIARIO_REAVALIAR_DIAS = 14
 TETO_FRACAO_MARGEM = Decimal("0.25")
 TETO_JANELA_DIAS = 365
 
+# ── Painel atribuído (feature 351) ──────────────────────────────────────────
+# A venda conta para o último contato pago até 45 dias antes dela (pesquisa de 17/11, §9.3).
+ATRIBUICAO_JANELA_DIAS = 45
+# Antes de jun/2026 o evento quase nunca tem ficha de cliente: a atribuição daria zero falso.
+ATRIBUICAO_DESDE = date(2026, 6, 1)
+# Premissa declarada na tela: metade das vendas atribuídas teria acontecido sem o anúncio
+# (a plataforma superestima o que causou — pesquisa §3.5 e §3.8). Vale até existir teste.
+INCREMENTALIDADE_PREMISSA = Decimal("0.50")
+# "No ar" = gastou num destes últimos dias com leitura da plataforma. O sistema não guarda a
+# situação do anúncio na Meta; o gasto é o fato que existe.
+ANUNCIO_NO_AR_DIAS = 3
+# Impacto mensal de proposta: verba por dia × 30.
+DIAS_NO_MES_DO_IMPACTO = 30
+# Teste estruturado do diário: o que se mede e a janela (dias) antes e depois da mudança.
+METRICAS_DO_TESTE = {
+    "conversas": "Conversas",
+    "custo_conversa": "Custo por conversa",
+    "gasto": "Gasto",
+    "cliques": "Cliques",
+    "cadastros": "Cadastros",
+}
+JANELA_TESTE_PADRAO = 7
+JANELA_TESTE_MIN = 3
+JANELA_TESTE_MAX = 28
+# Métrica que a entrada do diário herda da proposta executada, por tipo.
+METRICA_DA_PROPOSTA = {
+    "verba": "custo_conversa",
+    "publico": "custo_conversa",
+    "ativar": "conversas",
+    "pausar": "conversas",
+}
+TEMAS_POR_PAGINA = 50
+# Card de anúncio sem anúncio montado continua na fila da rotina mesmo se alguém o arrastou
+# adiante (Agendado/Publicado não têm sentido para anúncio sem anúncio).
+MARKETING_STATUS_FILA_ANUNCIO = ("pronto", "agendado", "publicado")
+CONCEITO_MAX = 120
+
 # Feature 302: local de saída padrão do evento. O literal já vivia em três lugares
 # (o diff de `save_logistics`, o e-mail de convite e o formulário interno, que pré-preenche o
 # campo com ele). Virou constante para o portal não acrescentar a quarta cópia — e para a

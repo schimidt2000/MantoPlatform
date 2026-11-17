@@ -3141,6 +3141,9 @@ class MarketingPost(db.Model):
     briefing_mostrar  = db.Column(db.Text, nullable=True)
     briefing_letreiro = db.Column(db.Text, nullable=True)
     origem            = db.Column(db.String(10), nullable=False, default="pessoa", server_default="pessoa")
+    # Feature 351: o ângulo da peça ("mãe que surpreende", "bastidores"). É por ele que o funil
+    # compara custo por conversa entre ideias, não entre arquivos.
+    conceito          = db.Column(db.String(120), nullable=True)
 
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at       = db.Column(
@@ -3399,6 +3402,36 @@ class MarketingFrente(db.Model):
 
     slug = db.Column(db.String(16), primary_key=True)
     teto_custo_venda = db.Column(db.Numeric(12, 2), nullable=True)
+    # Feature 351: o padrão do mês (o calendário vence mês a mês). Meta = todas as vendas da
+    # frente no mês; verba = gasto em anúncio da frente no mês.
+    meta_vendas_mes = db.Column(db.Integer, nullable=True)
+    verba_mes = db.Column(db.Numeric(12, 2), nullable=True)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+
+class MarketingCalendario(db.Model):
+    """O calendário do ano por frente: meta, verba e foco de cada mês (feature 351).
+
+    Era prosa na skill da rotina; virou dado para a rotina ler no contexto da semana e para a
+    tela mostrar o mês corrente. `meta_vendas`/`verba` nulos = vale o padrão da frente. As 60
+    linhas (5 frentes × 12 meses) nascem na migration.
+    """
+
+    __tablename__ = "marketing_calendario"
+    __table_args__ = (
+        db.UniqueConstraint("frente", "mes", name="uq_marketing_calendario_frente_mes"),
+        db.CheckConstraint("mes BETWEEN 1 AND 12", name="ck_marketing_calendario_mes"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    frente = db.Column(
+        db.String(16), db.ForeignKey("marketing_frentes.slug", ondelete="CASCADE"), nullable=False
+    )
+    mes = db.Column(db.SmallInteger, nullable=False)
+    meta_vendas = db.Column(db.Integer, nullable=True)
+    verba = db.Column(db.Numeric(12, 2), nullable=True)
+    foco = db.Column(db.Text, nullable=True)
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True)
 
@@ -3491,6 +3524,11 @@ class MarketingProposta(db.Model):
     valor_antes = db.Column(db.String(200), nullable=True)
     valor_depois = db.Column(db.String(200), nullable=True)
     custo_dia_estimado = db.Column(db.Numeric(12, 2), nullable=True)
+    # Feature 351: o valor em número (verba por dia) para somar o impacto do mês, e a frente
+    # para mostrar o teto ao lado. O texto continua sendo o que a rotina escreveu.
+    frente = db.Column(db.String(16), nullable=True)
+    valor_antes_num = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_depois_num = db.Column(db.Numeric(12, 2), nullable=True)
     motivo = db.Column(db.Text, nullable=False)
     evidencia = db.Column(db.Text, nullable=True)
     post_id = db.Column(
@@ -3535,6 +3573,20 @@ class MarketingDiario(db.Model):
     )
     autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Feature 351: o teste estruturado. Com alvo + métrica, o servidor calcula o antes e o
+    # depois na leitura; a linha de base é congelada na criação (o número que justificou a
+    # mudança não pode andar depois). O controle é um alvo que ficou igual no mesmo período.
+    alvo_platform = db.Column(db.String(20), nullable=True)
+    alvo_tipo = db.Column(db.String(10), nullable=True)
+    alvo_id = db.Column(db.String(80), nullable=True)
+    alvo_nome = db.Column(db.String(300), nullable=True)
+    metrica = db.Column(db.String(20), nullable=True)
+    mudou_em = db.Column(db.Date, nullable=True)
+    janela_dias = db.Column(db.SmallInteger, nullable=True)
+    linha_base = db.Column(db.Numeric(14, 4), nullable=True)
+    controle_tipo = db.Column(db.String(10), nullable=True)
+    controle_id = db.Column(db.String(80), nullable=True)
+    controle_nome = db.Column(db.String(300), nullable=True)
 
     autor = db.relationship("User", foreign_keys=[autor_id], lazy="joined")
     proposta = db.relationship("MarketingProposta", foreign_keys=[proposta_id], lazy="joined")
