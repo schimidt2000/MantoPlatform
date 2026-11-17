@@ -100,6 +100,11 @@ export interface EventComercialInput {
   commission_rate: number | null;
   /** Feature 338: só no EducaManto com responsável; ausente = o servidor não mexe no valor. */
   educamanto_seller_commission?: number | null;
+  /**
+   * Feature 348: a frente da venda. Presente = o servidor exige uma frente na venda de verdade; ausente
+   * (servidor antigo) = não mexe. `null` não apaga a escolhida.
+   */
+  frente?: string | null;
   payment_method: string | null;
   payment_installments: number | null;
   payment_due_date: string | null;

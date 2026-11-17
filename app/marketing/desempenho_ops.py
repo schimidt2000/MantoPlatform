@@ -308,6 +308,8 @@ def attributed_clients(window_start: datetime, window_end: datetime) -> list[dic
             "utm_source": cliente.utm_source,
             "utm_medium": cliente.utm_medium,
             "utm_campaign": cliente.utm_campaign,
+            # Feature 348: o id da campanha de origem — é por ele que o lead casa com a campanha.
+            "utm_campaign_id": cliente.utm_campaign_id,
             "events": _serialize_events(eventos),
         })
     return saida
@@ -321,18 +323,21 @@ def retornos_por_campanha(window_start: datetime, window_end: datetime) -> list[
     `momento` (UTC) só compara com o `created_at` do evento, também UTC.
     """
     momento_sp = _sp_no_banco(ConversaAnuncio.momento)
+    # Feature 348: a campanha é a mesma pelo id (o nome pode ter mudado entre dois anúncios dela).
+    campanha_chave = func.coalesce(AnuncioMeta.campanha_id, AnuncioMeta.campanha_nome)
     linhas = (
-        db.session.query(Conversa.client_id, AnuncioMeta.campanha_nome, func.min(ConversaAnuncio.momento))
+        db.session.query(Conversa.client_id, func.max(AnuncioMeta.campanha_nome),
+                         func.max(AnuncioMeta.campanha_id), func.min(ConversaAnuncio.momento))
         .join(Conversa, Conversa.id == ConversaAnuncio.conversa_id)
         .join(AnuncioMeta, AnuncioMeta.anuncio_id == ConversaAnuncio.anuncio_id)
         .filter(ConversaAnuncio.tipo == CONTATO_ANUNCIO, Conversa.client_id.isnot(None),
                 AnuncioMeta.campanha_nome.isnot(None),
                 momento_sp >= window_start, momento_sp < window_end)
-        .group_by(Conversa.client_id, AnuncioMeta.campanha_nome)
+        .group_by(Conversa.client_id, campanha_chave)
         .all()
     )
     saida = []
-    for client_id, campanha, momento in linhas:
+    for client_id, campanha, campanha_id, momento in linhas:
         cliente = db.session.get(Client, client_id)
         entrada = _entrada(cliente) if cliente is not None else None
         dia = _sp(momento).date()
@@ -343,6 +348,7 @@ def retornos_por_campanha(window_start: datetime, window_end: datetime) -> list[
             "returned_at": dia.isoformat(),
             "utm_source": UTM_SOURCE_DO_ANUNCIO,
             "utm_campaign": campanha,
+            "utm_campaign_id": campanha_id,
             "events": _serialize_events(_eventos_do_cliente(client_id, CalendarEvent.created_at >= momento)),
         })
     return saida
@@ -920,26 +926,42 @@ def _weekly_series(inicio: date, fim: date, fotos, campanhas, conta, clientes) -
 
 
 def _campaign_table(campanhas, clientes, retornos=()) -> list[dict[str, Any]]:
+    """A tabela por campanha. Feature 348: a campanha é a mesma pelo **id** (renomear não parte a linha; vale o
+    nome mais recente) e o lead casa pelo id quando a ficha o tem; sem id (Kommo, formulário), pelo nome."""
     grupos: dict[tuple[str, str], dict[str, Any]] = {}
+    ultimo_dia: dict[tuple[str, str], date] = {}
     for ln in campanhas:
-        g = grupos.setdefault((ln.platform, ln.campaign_name), {
-            "platform": ln.platform, "campaign_name": ln.campaign_name, "spend": Decimal(0),
-            "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "returns": 0, "return_events": 0,
-            "currency": ln.currency})
+        chave = (ln.platform, ln.campaign_id)
+        g = grupos.setdefault(chave, {
+            "platform": ln.platform, "campaign_id": ln.campaign_id, "campaign_name": ln.campaign_name,
+            "spend": Decimal(0), "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "returns": 0,
+            "return_events": 0, "currency": ln.currency})
+        if chave not in ultimo_dia or ln.period_end >= ultimo_dia[chave]:
+            ultimo_dia[chave] = ln.period_end
+            g["campaign_name"] = ln.campaign_name
         g["spend"] += ln.spend
         g["impressions"] += ln.impressions or 0
         g["clicks"] += ln.clicks or 0
     por_slug: dict[str, list[dict[str, Any]]] = {}
+    por_id: dict[str, list[dict[str, Any]]] = {}
     for g in grupos.values():
         por_slug.setdefault(normalize_campaign_name(g["campaign_name"]), []).append(g)
+        por_id.setdefault(str(g["campaign_id"]), []).append(g)
+
+    def _grupo(item: dict[str, Any]) -> dict[str, Any] | None:
+        candidatos = por_id.get(str(item.get("utm_campaign_id") or ""), [])
+        if not candidatos:
+            candidatos = por_slug.get(normalize_campaign_name(item["utm_campaign"]), [])
+        return pick_campaign_group(candidatos, item.get("utm_source"))
+
     for cl in clientes:
-        g = pick_campaign_group(por_slug.get(normalize_campaign_name(cl["utm_campaign"]), []), cl.get("utm_source"))
+        g = _grupo(cl)
         if g is not None:
             g["leads"] += 1
             g["events"] += len(cl["events"])
     # Feature 334: a repescagem. O retorno não entra no custo por lead: a ficha já estava na base.
     for rt in retornos:
-        g = pick_campaign_group(por_slug.get(normalize_campaign_name(rt["utm_campaign"]), []), rt.get("utm_source"))
+        g = _grupo(rt)
         if g is not None:
             g["returns"] += 1
             g["return_events"] += len(rt["events"])

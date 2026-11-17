@@ -1177,8 +1177,15 @@ def set_event_orcamento(
         from app.calendar.cancel_ops import EventoCanceladoError
 
         raise EventoCanceladoError("O orçamento de um evento cancelado não se aplica nem se troca.")
+    # Feature 348: a conversa da venda acompanha o orçamento (o que veio dele vai junto; a ligação feita
+    # pela conversa fica). Import tardio: `conversas` não é dependência de topo do Calendar.
+    from app.conversas import origem_ops
+
     if entry is None:
         anterior = event.orcamento_history_id
+        origem_ops.acompanhar_orcamento(
+            event, db.session.get(OrcamentoHistory, anterior) if anterior else None, None
+        )
         event.orcamento_history_id = None
         if anterior:
             db.session.add(EventLog(
@@ -1200,6 +1207,10 @@ def set_event_orcamento(
         raise OrcamentoJaVinculado(outro.id)
 
     novo_vinculo = event.orcamento_history_id != entry.id
+    antigo = (
+        db.session.get(OrcamentoHistory, event.orcamento_history_id) if event.orcamento_history_id else None
+    )
+    origem_ops.acompanhar_orcamento(event, antigo, entry)
     event.orcamento_history_id = entry.id
     relatorio: dict = {"vinculado": entry.id, "novo_vinculo": novo_vinculo}
 

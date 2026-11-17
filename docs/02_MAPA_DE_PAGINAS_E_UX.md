@@ -795,6 +795,17 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     nome) ao lado de "Comissão" — que passa a mostrar só a comissão do evento, com o nome de **quem
     a recebe** (no EducaManto, o responsável) em vez do vendedor do evento. Só no card Comercial: a
     edição completa, a criação e o Jinja não têm o campo.
+  - **Feature 348 na aba Comercial — frente e origem da venda**: o formulário da venda ganha **"Frente"**
+    (seletor com as cinco frentes do marketing, logo abaixo dos valores). A frente escolhida, ou a sugestão
+    **certa** pelo título (`(EDU`/EducaManto, tipo CORP, "15 anos"/"casamento"…, loja), vem selecionada; a
+    sugestão **por exclusão** (festas) fica vazia, com "Sugestão pelo título: Festas. Selecione a frente da
+    venda.", e salvar a venda sem escolher dá "Selecione a frente da venda." no campo, com o foco nele. A
+    leitura ganha as linhas **"Frente"** ("Festas · sugerida pelo título" quando ninguém escolheu) e
+    **"Origem da venda"** quando a venda tem conversa: o contato que a trouxe ("Anúncio da Meta: “título” ·
+    campanha · conjunto", "Publicação: …", "Site: campanha · código #XXXXX" ou "Conversa sem anúncio nos 90
+    dias anteriores") e, embaixo, "Conversa com <nome>" e **"Ver conversa"** (para quem usa as Conversas:
+    Comercial e Superadmin; o Financeiro lê sem o link). Conferida em desktop e 390 px. A edição completa e a
+    criação não têm o campo (a criação grava sozinha só a sugestão certa).
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o
@@ -2666,6 +2677,12 @@ Todas as telas são **mobile-first** (Princípio VIII).
 - **UX**: lista persistida em **`localStorage`** (degrada sem quebrar em modo privado/cota);
   revisar itens e **enviar por WhatsApp** (`api.whatsapp.com/send?phone=...&text=...`), com o
   número vindo de `SiteSetting` no payload do catálogo.
+- **Feature 348 — código do site**: a visita que chegou com marcador de campanha (`gclid`, `gbraid`,
+  `wbraid`, `fbclid`, `gad_campaignid`, `utm_*`) leva, no fim da mensagem, uma linha em branco e
+  "Código do site: #XXXXX". O app público guarda os marcadores no `localStorage` (`manto_origem`, 90 dias) no
+  primeiro carregamento de qualquer página da vitrine (menos a loja `/v`) e pede o código sem esperar; visita
+  sem marcador, storage bloqueado ou servidor fora do ar = a mensagem de sempre. Nada visual muda; conferida em
+  390 px.
 
 #### `/cadastro` e `/cadastro/enviado` — Cadastro de Talento
 > **Endereço canônico na RAIZ do domínio** (hotfix cadastro-raiz), nos hosts `app.` e `portal.` —
@@ -2692,6 +2709,9 @@ Todas as telas são **mobile-first** (Princípio VIII).
 - **UX**: formulários de pré-contrato com **schema dinâmico** vindo do servidor
   (`FormFieldDefinition`, editável em `/formularios`). Resposta vira `FormResponse` e dispara
   mensagem para o WhatsApp configurado.
+- **Feature 348**: com o código do site guardado no navegador (ver lista de desejos), o envio leva
+  `origem_codigo` e a mensagem pronta do WhatsApp termina com "Código do site: #XXXXX"; a resposta fica ligada
+  ao clique. Sem código, nada muda.
 
 - **Feature 342** (na branch, sem merge): seção "Nota fiscal" no fim dos dois formulários. A caixa "Preciso de nota fiscal" abre "CNPJ ou CPF de quem vai receber a nota" e "E-mail para receber a nota" (já preenchidos com o que a cliente digitou acima), "A empresa retém o ISS da nota?" (só com CNPJ) e "Precisa que algo apareça na nota?". Documento errado avisa ao sair do campo. No interno, o bloco **Dados da nota** ganhou o quadro "A cliente informou no formulário", "E-mail para envio da nota" e "Município do evento" sempre visível (abre com a sugestão do endereço); com a venda sem nota e o formulário pedindo, a tela avisa "A cliente pediu nota fiscal no formulário.". O painel "Notas a emitir" mostra o e-mail da nota e o município. No **Editor de campos**, "Quando aparece" (Sempre / Só quando «campo» for «resposta»), e a lista mostra a condição de cada campo.
 

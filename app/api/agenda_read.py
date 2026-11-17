@@ -1265,7 +1265,9 @@ def serialize_event_detail(
                 orcamento_resumo["pode_gerir"] = bool(
                     flags["is_superadmin"] or entry_orc.user_id == user.id
                 )
+        from app.calendar import frente_ops
         from app.calendar.event_ops import sem_valor_de_venda, valor_a_definir, valor_simbolico
+        from app.conversas import origem_ops
 
         # Feature 299: a aba Comercial mostra "A definir" (vazio ou zero) e marca o valor
         # simbólico. Os três ficam falsos na cortesia, que é venda zero de propósito.
@@ -1289,6 +1291,10 @@ def serialize_event_detail(
             # Feature 338: a comissão do vendedor EducaManto e se o card mostra o campo (evento
             # EducaManto com responsável configurado — fora dele a API recusa o valor).
             "educamanto_seller_commission": _money(event.educamanto_seller_commission),
+            # Feature 348: a frente (gravada ou sugerida pelo título) e de onde a venda veio (conversa e
+            # contato de origem congelado). Só neste bloco, que é de quem vê o comercial.
+            "frente": frente_ops.frente_do_evento(event),
+            "origem": origem_ops.origem_da_venda(event, user),
             "mostra_comissao_do_vendedor": _edu_com_responsavel(event, settings),
             # Hotfix 215b — o que a tela trava, com a mesma regra que a escrita recusa
             # (`event_ops.taxa_e_vendedor_negados`): taxa só o Superadmin; vendedor já gravado

@@ -10,6 +10,11 @@
   varredura depois de 24 h.
 - **Ficha**: o primeiro anúncio nunca é sobrescrito e dá a origem à ficha que ainda não tem; o mais
   recente acompanha a repescagem. A ficha nascida pela conversa sem anúncio ganha o canal.
+
+Feature 348: o contato guarda o ``ctwa_clid`` (o clique, que a Conversions API pede para devolver a venda);
+a consulta traz também o conjunto; a ficha guarda o id da campanha (o Desempenho casa por ele). E o contato
+pelo **site** (o código da mensagem pronta, `codigo_ops`) também dá origem à ficha: vale o primeiro contato,
+anúncio ou site.
 """
 
 from __future__ import annotations
@@ -27,7 +32,7 @@ from app.conversas.configuracao import conexao_dos_anuncios
 from app.conversas.relogio import agora_utc
 from app.integracoes import meta_anuncios_client as mac
 from app.integracoes import whatsapp_client as wc
-from app.models import AnuncioMeta, Client, Conversa, ConversaAnuncio
+from app.models import AnuncioMeta, Client, Conversa, ConversaAnuncio, OrigemCodigo
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +66,7 @@ def contato_do_whatsapp(
         titulo=referral.get("headline") or referral.get("body"),
         link=referral.get("source_url"),
         momento=momento,
+        ctwa_clid=referral.get("ctwa_clid"),
     )
 
 
@@ -91,10 +97,13 @@ def registrar_contato(
     titulo: Any,
     link: Any,
     momento: datetime,
+    ctwa_clid: Any = None,
+    codigo_id: int | None = None,
 ) -> bool:
     """Grava o contato sem duplicar (FR-001) e, no anúncio, deixa-o na fila da consulta e na ficha.
 
-    Devolve se o contato é novo. Não comita: é a transação do aviso.
+    O contato pelo site (feature 348) vai à ficha também. Devolve se o contato é novo. Não comita: é a
+    transação do aviso.
     """
     anuncio_id = _texto(anuncio_id, 64)
     if tipo == K.CONTATO_ANUNCIO and not anuncio_id:
@@ -112,6 +121,8 @@ def registrar_contato(
             link=_texto(link, 2000),
             momento=momento,
             created_at=agora_utc(),
+            ctwa_clid=_texto(ctwa_clid, 512),
+            codigo_id=codigo_id,
         )
         .on_conflict_do_nothing(index_elements=["chave"])
         .returning(tabela.c.id)
@@ -125,6 +136,7 @@ def registrar_contato(
             .values(anuncio_id=anuncio_id, definitivo=False)
             .on_conflict_do_nothing(index_elements=["anuncio_id"])
         )
+    if tipo in (K.CONTATO_ANUNCIO, K.CONTATO_SITE):
         ficha = db.session.get(Client, conversa.client_id) if conversa.client_id else None
         if ficha is not None:
             aplicar_na_ficha(conversa, ficha)
@@ -146,31 +158,62 @@ def _sem_origem(ficha: Client) -> bool:
     )
 
 
+def _origem_do_anuncio(ficha: Client, contato: ConversaAnuncio) -> None:
+    anuncio = db.session.get(AnuncioMeta, contato.anuncio_id) if contato.anuncio_id else None
+    ficha.lead_origin = K.ORIGEM_DO_ANUNCIO.get(contato.canal)
+    ficha.utm_source = K.UTM_SOURCE_DO_ANUNCIO
+    ficha.utm_medium = K.UTM_MEDIUM_DO_ANUNCIO
+    # Desconhecidas ainda: a consulta, quando responder, preenche (`_propagar`).
+    ficha.utm_campaign = ((anuncio.campanha_nome if anuncio else None) or "")[:200] or None
+    ficha.utm_campaign_id = anuncio.campanha_id if anuncio else None
+
+
+def _origem_do_site(ficha: Client, contato: ConversaAnuncio) -> None:
+    """A origem do clique no site (feature 348). Sem ``utm_source``, o clique com id do Google é
+    "google"/"cpc" — é o que o Desempenho reconhece como Google Ads."""
+    codigo = db.session.get(OrigemCodigo, contato.codigo_id) if contato.codigo_id else None
+    if codigo is None:
+        return
+    do_google = any((codigo.gclid, codigo.gbraid, codigo.wbraid))
+    ficha.lead_origin = K.ORIGEM_DO_SITE
+    ficha.utm_source = codigo.utm_source or (K.UTM_SOURCE_DO_GOOGLE if do_google else None)
+    ficha.utm_medium = codigo.utm_medium or (K.UTM_MEDIUM_DO_CLIQUE if do_google else None)
+    ficha.utm_campaign = codigo.utm_campaign
+    ficha.utm_campaign_id = codigo.campanha_id
+
+
 def aplicar_na_ficha(conversa: Conversa, ficha: Client) -> bool:
     """O primeiro e o mais recente anúncio da conversa na ficha (FR-004, FR-005, FR-007).
 
-    Devolve se a conversa tem contato por anúncio. Não comita.
+    A origem (``lead_origin``/``utm_*``) da ficha que ainda não tem vem do PRIMEIRO contato, anúncio ou
+    site (feature 348); o primeiro anúncio nunca é sobrescrito. Devolve se a conversa tem contato por
+    anúncio ou pelo site. Não comita.
     """
     contatos = (
-        ConversaAnuncio.query.filter_by(conversa_id=conversa.id, tipo=K.CONTATO_ANUNCIO)
+        ConversaAnuncio.query.filter(
+            ConversaAnuncio.conversa_id == conversa.id,
+            ConversaAnuncio.tipo.in_((K.CONTATO_ANUNCIO, K.CONTATO_SITE)),
+        )
         .order_by(ConversaAnuncio.momento, ConversaAnuncio.id)
         .all()
     )
     if not contatos:
         return False
-    primeiro, recente = contatos[0], contatos[-1]
-    if ficha.anuncio_origem_id is None:
-        ficha.anuncio_origem_id = primeiro.anuncio_id
-        ficha.anuncio_origem_em = primeiro.momento
-        if _sem_origem(ficha):
-            ficha.lead_origin = K.ORIGEM_DO_ANUNCIO.get(primeiro.canal)
-            ficha.utm_source = K.UTM_SOURCE_DO_ANUNCIO
-            ficha.utm_medium = K.UTM_MEDIUM_DO_ANUNCIO
-            # Desconhecida ainda: a consulta, quando responder, preenche (`_propagar`).
-            ficha.utm_campaign = (_campanha(primeiro.anuncio_id) or "")[:200] or None
-    if ficha.anuncio_recente_em is None or recente.momento > ficha.anuncio_recente_em:
-        ficha.anuncio_recente_id = recente.anuncio_id
-        ficha.anuncio_recente_em = recente.momento
+    anuncios = [c for c in contatos if c.tipo == K.CONTATO_ANUNCIO]
+    if anuncios and ficha.anuncio_origem_id is None:
+        ficha.anuncio_origem_id = anuncios[0].anuncio_id
+        ficha.anuncio_origem_em = anuncios[0].momento
+    if _sem_origem(ficha):
+        primeiro = contatos[0]
+        if primeiro.tipo == K.CONTATO_ANUNCIO:
+            _origem_do_anuncio(ficha, primeiro)
+        else:
+            _origem_do_site(ficha, primeiro)
+    if anuncios:
+        recente = anuncios[-1]
+        if ficha.anuncio_recente_em is None or recente.momento > ficha.anuncio_recente_em:
+            ficha.anuncio_recente_id = recente.anuncio_id
+            ficha.anuncio_recente_em = recente.momento
     return True
 
 
@@ -200,17 +243,22 @@ def _reivindicar(condicao: str, params: dict[str, Any]) -> list[str]:
     return [linha[0] for linha in linhas]
 
 
-def _propagar(anuncio_id: str, campanha: str) -> None:
+def _propagar(anuncio_id: str, campanha: str, campanha_id: str | None = None) -> None:
     """A campanha que chegou depois vai às fichas que este anúncio trouxe e ainda estão sem ela
-    (FR-005). Só as que a 334 atribuiu: a origem que veio de outro lugar não muda."""
+    (FR-005). Só as que a 334 atribuiu: a origem que veio de outro lugar não muda. Feature 348: o id
+    da campanha vai junto, também para a ficha que já tinha o nome e ainda não o id."""
     db.session.execute(
         text(
-            "UPDATE clients SET utm_campaign = :campanha "
+            "UPDATE clients SET "
+            "utm_campaign = CASE WHEN utm_campaign IS NULL OR utm_campaign = '' THEN :campanha "
+            "ELSE utm_campaign END, "
+            "utm_campaign_id = COALESCE(utm_campaign_id, :campanha_id) "
             "WHERE anuncio_origem_id = :anuncio AND utm_source = :fonte AND utm_medium = :meio "
-            "AND (utm_campaign IS NULL OR utm_campaign = '')"
+            "AND (utm_campaign IS NULL OR utm_campaign = '' OR utm_campaign_id IS NULL)"
         ),
         {
             "campanha": campanha[:200],
+            "campanha_id": campanha_id,
             "anuncio": anuncio_id,
             "fonte": K.UTM_SOURCE_DO_ANUNCIO,
             "meio": K.UTM_MEDIUM_DO_ANUNCIO,
@@ -240,13 +288,16 @@ def _consultar_um(conexao: wc.ConexaoMeta, anuncio_id: str) -> None:
         logger.warning("[anuncios] consulta do anúncio %s falhou: %s", anuncio_id, exc)
         return
     campanha = _texto(dados.get("campanha_nome"), 255)
+    campanha_id = _texto(dados.get("campanha_id"), 64)
     if campanha:
-        _propagar(anuncio_id, campanha)
+        _propagar(anuncio_id, campanha, campanha_id)
     _gravar(
         anuncio_id,
         nome=_texto(dados.get("nome"), 255),
-        campanha_id=_texto(dados.get("campanha_id"), 64),
+        campanha_id=campanha_id,
         campanha_nome=campanha,
+        conjunto_id=_texto(dados.get("conjunto_id"), 64),
+        conjunto_nome=_texto(dados.get("conjunto_nome"), 255),
         erro=None,
         definitivo=False,
     )
@@ -278,11 +329,16 @@ def _propagar_pendentes() -> int:
     outro worker consultava o mesmo anúncio não é vista pelo ``_propagar`` dele. Idempotente."""
     resultado = db.session.execute(
         text(
-            "UPDATE clients SET utm_campaign = LEFT(anuncios_meta.campanha_nome, 200) FROM anuncios_meta "
+            "UPDATE clients SET "
+            "utm_campaign = CASE WHEN clients.utm_campaign IS NULL OR clients.utm_campaign = '' "
+            "THEN LEFT(anuncios_meta.campanha_nome, 200) ELSE clients.utm_campaign END, "
+            "utm_campaign_id = COALESCE(clients.utm_campaign_id, anuncios_meta.campanha_id) "
+            "FROM anuncios_meta "
             "WHERE clients.anuncio_origem_id = anuncios_meta.anuncio_id "
             "AND anuncios_meta.campanha_nome IS NOT NULL "
             "AND clients.utm_source = :fonte AND clients.utm_medium = :meio "
-            "AND (clients.utm_campaign IS NULL OR clients.utm_campaign = '')"
+            "AND (clients.utm_campaign IS NULL OR clients.utm_campaign = '' "
+            "OR (clients.utm_campaign_id IS NULL AND anuncios_meta.campanha_id IS NOT NULL))"
         ),
         {"fonte": K.UTM_SOURCE_DO_ANUNCIO, "meio": K.UTM_MEDIUM_DO_ANUNCIO},
     )
