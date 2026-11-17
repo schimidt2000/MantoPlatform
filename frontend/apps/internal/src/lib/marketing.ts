@@ -80,6 +80,9 @@ export interface MarketingCatalogItemRef {
   /** Capa do Tema; passar por `assetUrl()` antes de exibir. */
   cover_url: string | null;
   is_active: boolean;
+  /** Feature 345 — opcionais: backend e bundle ficam em versões diferentes durante o deploy. */
+  licenca_origem?: LicencaOrigem;
+  liberado_anuncio?: LiberadoAnuncio;
 }
 
 export interface MarketingAssigneeRef {
@@ -115,6 +118,16 @@ export interface MarketingPost {
   catalog_items: MarketingCatalogItemRef[];
   review_space_id: number | null;
   review_space: MarketingReviewSpaceRef | null;
+  // Feature 345 — o card vira pedido de criativo. Tudo opcional (`docs/00` §6 item 21).
+  tipo?: MarketingPostTipo;
+  frente?: string | null;
+  formato?: string | null;
+  briefing_objetivo?: string | null;
+  briefing_mostrar?: string | null;
+  briefing_letreiro?: string | null;
+  origem?: "pessoa" | "rotina";
+  anuncios?: { platform: string; ad_id: string }[];
+  resultado?: MarketingPostResultado | null;
   created_at: string | null;
   updated_at: string | null;
 }
@@ -123,6 +136,154 @@ export interface MarketingPostsResponse {
   items: MarketingPost[];
   statuses: MarketingStatus[];
   plataformas: string[];
+  /** Feature 345: slug → nome. */
+  frentes?: Record<string, string>;
+  formatos?: Record<string, string>;
+}
+
+// ── Feature 345: painel de comando ──────────────────────────────────────────
+
+export type MarketingPostTipo = "post" | "anuncio";
+export type LicencaOrigem = "autoral" | "licenciado" | "nao_classificado";
+export type LiberadoAnuncio = "sim" | "nao" | "nao_decidido";
+
+export const LICENCA_ORIGEM_LABELS: Record<LicencaOrigem, string> = {
+  autoral: "Autoral",
+  licenciado: "Licenciado",
+  nao_classificado: "Não classificado",
+};
+
+export const LIBERADO_LABELS: Record<LiberadoAnuncio, string> = {
+  sim: "Liberado",
+  nao: "Não liberado",
+  nao_decidido: "Não decidido",
+};
+
+/** Resultado somado dos anúncios ligados ao card (dinheiro em string decimal). */
+export interface MarketingPostResultado {
+  spend: string;
+  conversations: number;
+  impressions: number;
+  clicks: number;
+  custo_conversa: string | null;
+}
+
+export type FrenteEstado = "ok" | "acima_do_teto" | "sem_venda" | "sem_gasto";
+
+export interface DesempenhoFrente {
+  slug: string;
+  nome: string;
+  gasto: string;
+  conversas: number;
+  cadastros: number;
+  vendas: number;
+  vendas_cliente_novo: number;
+  faturamento: string;
+  custo_venda: string | null;
+  teto: string | null;
+  estado: FrenteEstado;
+}
+
+export interface CampanhaSemFrente {
+  platform: string;
+  campaign_id: string;
+  campaign_name: string;
+  gasto: string;
+}
+
+export interface PlataformaSituacao {
+  platform: string;
+  ultima_data: string | null;
+  situacao: "ok" | "atrasada" | "sem_conexao";
+}
+
+export interface FrentesConfig {
+  frentes: {
+    slug: string;
+    nome: string;
+    teto: string | null;
+    teto_padrao: string | null;
+    base_teto: string;
+    teto_editado: boolean;
+  }[];
+  responsaveis: { foto: MarketingAssigneeRef | null; video: MarketingAssigneeRef | null };
+  pode_editar: boolean;
+}
+
+export interface TemaLicenca {
+  id: number;
+  name: string;
+  cover_url: string | null;
+  is_active: boolean;
+  licenca_origem: LicencaOrigem;
+  liberado_anuncio: LiberadoAnuncio;
+  licenca_sugestao: "autoral" | "licenciado" | null;
+  licenca_sugestao_motivo: string | null;
+  licenca_por: MarketingAssigneeRef | null;
+  licenca_em: string | null;
+}
+
+export interface TemasLicencaResponse {
+  items: TemaLicenca[];
+  contagem: Record<LicencaOrigem, number>;
+  com_sugestao: number;
+  pode_liberar_licenciado: boolean;
+}
+
+export type PropostaSituacao = "pendente" | "aprovada" | "recusada" | "expirada" | "executada" | "falhou";
+
+export interface Proposta {
+  id: number;
+  tipo: "ativar" | "pausar" | "verba" | "publico";
+  platform: string;
+  alvo_tipo: "campanha" | "conjunto" | "anuncio";
+  alvo_id: string;
+  alvo_nome: string | null;
+  valor_antes: string | null;
+  valor_depois: string | null;
+  custo_dia_estimado: string | null;
+  motivo: string;
+  evidencia: string | null;
+  post_id: number | null;
+  post_titulo: string | null;
+  situacao: PropostaSituacao;
+  criada_em: string | null;
+  decidida_por: MarketingAssigneeRef | null;
+  decidida_em: string | null;
+  decisao_obs: string | null;
+  executada_em: string | null;
+  resultado_execucao: string | null;
+  expira_em: string | null;
+}
+
+export interface PropostasResponse {
+  items: Proposta[];
+  pendentes: number;
+  pode_decidir: boolean;
+}
+
+export type DiarioVeredito = "funcionou" | "nao_funcionou" | "inconclusivo";
+
+export interface DiarioEntrada {
+  id: number;
+  titulo: string;
+  motivo: string;
+  evidencia: string | null;
+  resultado_esperado: string | null;
+  reavaliar_em: string;
+  resultado_observado: string | null;
+  veredito: DiarioVeredito | null;
+  avaliado_em: string | null;
+  origem: "proposta" | "pessoa" | "rotina";
+  proposta_id: number | null;
+  autor: MarketingAssigneeRef | null;
+  criado_em: string | null;
+  a_reavaliar: boolean;
+}
+
+export interface DiarioResponse {
+  items: DiarioEntrada[];
+  a_reavaliar: number;
 }
 
 /** Meta de frequência com a saúde já calculada pelo servidor. */
@@ -228,6 +389,12 @@ export interface SaveMarketingPostInput {
   assignee_id?: number | null;
   catalog_item_ids?: number[];
   permalink?: string | null;
+  tipo?: MarketingPostTipo;
+  frente?: string | null;
+  formato?: string | null;
+  briefing_objetivo?: string | null;
+  briefing_mostrar?: string | null;
+  briefing_letreiro?: string | null;
 }
 
 /**
@@ -466,6 +633,11 @@ export interface DesempenhoResponse {
   runs: DesempenhoRun[];
   /** Nenhuma rodada ainda — a tela mostra as instruções de exportação. */
   empty: boolean;
+  /** Feature 345 — opcionais (deploy com backend e bundle em versões diferentes). */
+  frentes?: DesempenhoFrente[];
+  sem_frente?: CampanhaSemFrente[];
+  plataformas?: PlataformaSituacao[];
+  frente_opcoes?: { slug: string; nome: string }[];
 }
 
 export type DesempenhoWeeks = 4 | 12 | 26;
@@ -490,5 +662,144 @@ export function useMarketingDesempenho(params: DesempenhoParams) {
     queryKey: ["marketing", "desempenho", params],
     queryFn: () => apiFetch<DesempenhoResponse>(`/api/marketing/desempenho?${desempenhoQuery(params)}`),
     placeholderData: keepPreviousData,
+  });
+}
+
+// ── Feature 345: frentes, licença, propostas e diário ───────────────────────
+
+const FRENTES_KEY = ["marketing", "frentes"] as const;
+const TEMAS_LICENCA_KEY = ["marketing", "temas-licenca"] as const;
+const PROPOSTAS_KEY = ["marketing", "propostas"] as const;
+const DIARIO_KEY = ["marketing", "diario"] as const;
+
+/** Tetos de custo por venda e responsáveis por criativo. */
+export function useFrentesConfig(enabled = true) {
+  return useQuery<FrentesConfig>({
+    queryKey: FRENTES_KEY,
+    queryFn: () => apiFetch<FrentesConfig>("/api/marketing/frentes"),
+    enabled,
+  });
+}
+
+export interface SalvarFrentesInput {
+  /** slug → teto em string decimal; `null` volta ao padrão calculado. */
+  tetos?: Record<string, string | null>;
+  resp_foto_id?: number | null;
+  resp_video_id?: number | null;
+}
+
+export function useSalvarFrentes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SalvarFrentesInput) =>
+      apiFetch<FrentesConfig>("/api/marketing/frentes", { method: "PATCH", body: JSON.stringify(input) }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(FRENTES_KEY, data);
+      // O teto muda o estado de cada frente no Desempenho.
+      void queryClient.invalidateQueries({ queryKey: ["marketing", "desempenho"] });
+    },
+  });
+}
+
+/** Corrige (ou desfaz, com `frente: null`) a frente de uma campanha. */
+export function useCorrigirFrente() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { platform: string; campaign_id: string; frente: string | null }) =>
+      apiFetch<{ ok: boolean }>("/api/marketing/campanhas/frente", { method: "PATCH", body: JSON.stringify(input) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["marketing", "desempenho"] }),
+  });
+}
+
+export interface TemasLicencaFiltros {
+  q?: string;
+  origem?: LicencaOrigem | "";
+  liberado?: LiberadoAnuncio | "";
+  sugestao?: boolean;
+}
+
+export function useTemasLicenca(filtros: TemasLicencaFiltros) {
+  const qs = new URLSearchParams();
+  if (filtros.q) qs.set("q", filtros.q);
+  if (filtros.origem) qs.set("origem", filtros.origem);
+  if (filtros.liberado) qs.set("liberado", filtros.liberado);
+  if (filtros.sugestao) qs.set("sugestao", "1");
+  return useQuery<TemasLicencaResponse>({
+    queryKey: [...TEMAS_LICENCA_KEY, filtros],
+    queryFn: () => apiFetch<TemasLicencaResponse>(`/api/marketing/temas-licenca?${qs.toString()}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+function useInvalidateTemas() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: TEMAS_LICENCA_KEY });
+    // As opções do diálogo do card levam a licença de cada tema.
+    void queryClient.invalidateQueries({ queryKey: OPTIONS_KEY });
+  };
+}
+
+export function useConfirmarSugestoes() {
+  const invalidate = useInvalidateTemas();
+  return useMutation({
+    mutationFn: (ids: number[]) =>
+      apiFetch<{ confirmados: number }>("/api/marketing/temas-licenca/confirmar", {
+        method: "POST",
+        body: JSON.stringify({ ids }),
+      }),
+    onSuccess: invalidate,
+  });
+}
+
+export function useMarcarLicenca() {
+  const invalidate = useInvalidateTemas();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number; input: { licenca_origem?: LicencaOrigem; liberado_anuncio?: LiberadoAnuncio } }) =>
+      apiFetch<TemaLicenca>(`/api/marketing/temas-licenca/${id}`, { method: "PATCH", body: JSON.stringify(input) }),
+    onSuccess: invalidate,
+  });
+}
+
+export function usePropostas() {
+  return useQuery<PropostasResponse>({
+    queryKey: PROPOSTAS_KEY,
+    queryFn: () => apiFetch<PropostasResponse>("/api/marketing/propostas"),
+  });
+}
+
+export function useDecidirProposta() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decisao, obs }: { id: number; decisao: "aprovar" | "recusar"; obs?: string }) =>
+      apiFetch<Proposta>(`/api/marketing/propostas/${id}/decidir`, {
+        method: "POST",
+        body: JSON.stringify({ decisao, obs }),
+      }),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: PROPOSTAS_KEY }),
+  });
+}
+
+export function useDiario() {
+  return useQuery<DiarioResponse>({
+    queryKey: DIARIO_KEY,
+    queryFn: () => apiFetch<DiarioResponse>("/api/marketing/diario"),
+  });
+}
+
+export interface NovaEntradaDiario {
+  titulo: string;
+  motivo: string;
+  evidencia?: string;
+  resultado_esperado?: string;
+  reavaliar_em?: string;
+}
+
+export function useCriarEntradaDiario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: NovaEntradaDiario) =>
+      apiFetch<DiarioEntrada>("/api/marketing/diario", { method: "POST", body: JSON.stringify(input) }),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: DIARIO_KEY }),
   });
 }

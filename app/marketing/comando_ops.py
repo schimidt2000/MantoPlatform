@@ -18,7 +18,7 @@ Quem chama decide o papel: as funções recebem `eh_superadmin`/`user_id`, nunca
 from __future__ import annotations
 
 import statistics
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Any
 
@@ -55,6 +55,7 @@ from app.constants import (
     PROPOSTA_VALIDADE_DIAS,
     TETO_FRACAO_MARGEM,
     TETO_JANELA_DIAS,
+    TZ_SP,
     now_sp,
 )
 from app.marketing import desempenho_ops, marketing_ops
@@ -109,6 +110,17 @@ def q2(valor: Decimal) -> str:
 def hoje_sp() -> date:
     """A data do negócio — `date.today()` vira o dia errado depois das 21h (`docs/00` §6 item 3)."""
     return now_sp().date()
+
+
+def iso_sp(carimbo: datetime | None) -> str | None:
+    """Carimbo gravado em UTC naive → ISO no horário de parede de São Paulo.
+
+    As tabelas da 345 gravam `datetime.utcnow()` (convenção do sistema), mas a tela mostra o dia: sem
+    a conversão, a proposta criada às 23h de SP aparece com a data de amanhã (`docs/00` §6 item 1).
+    """
+    if carimbo is None:
+        return None
+    return carimbo.replace(tzinfo=UTC).astimezone(TZ_SP).replace(tzinfo=None).isoformat()
 
 
 def _dec_opt(valor: Any, campo: str) -> Decimal | None:
@@ -541,7 +553,7 @@ def serialize_tema_licenca(item: CatalogItem) -> dict[str, Any]:
         "licenca_sugestao": item.licenca_sugestao,
         "licenca_sugestao_motivo": item.licenca_sugestao_motivo,
         "licenca_por": _user_ref(item.licenca_por),
-        "licenca_em": item.licenca_em.isoformat() if item.licenca_em else None,
+        "licenca_em": iso_sp(item.licenca_em),
     }
 
 
@@ -800,13 +812,13 @@ def serialize_proposta(p: MarketingProposta) -> dict[str, Any]:
         "post_id": p.post_id,
         "post_titulo": p.post.title if p.post else None,
         "situacao": p.situacao,
-        "criada_em": p.criada_em.isoformat() if p.criada_em else None,
+        "criada_em": iso_sp(p.criada_em),
         "decidida_por": _user_ref(p.decidida_por),
-        "decidida_em": p.decidida_em.isoformat() if p.decidida_em else None,
+        "decidida_em": iso_sp(p.decidida_em),
         "decisao_obs": p.decisao_obs,
-        "executada_em": p.executada_em.isoformat() if p.executada_em else None,
+        "executada_em": iso_sp(p.executada_em),
         "resultado_execucao": p.resultado_execucao,
-        "expira_em": (p.criada_em + timedelta(days=PROPOSTA_VALIDADE_DIAS)).isoformat()
+        "expira_em": iso_sp(p.criada_em + timedelta(days=PROPOSTA_VALIDADE_DIAS))
         if p.criada_em and p.situacao == PROPOSTA_PENDENTE
         else None,
     }
@@ -979,11 +991,11 @@ def serialize_diario(e: MarketingDiario) -> dict[str, Any]:
         "reavaliar_em": e.reavaliar_em.isoformat(),
         "resultado_observado": e.resultado_observado,
         "veredito": e.veredito,
-        "avaliado_em": e.avaliado_em.isoformat() if e.avaliado_em else None,
+        "avaliado_em": iso_sp(e.avaliado_em),
         "origem": e.origem,
         "proposta_id": e.proposta_id,
         "autor": _user_ref(e.autor),
-        "criado_em": e.criado_em.isoformat() if e.criado_em else None,
+        "criado_em": iso_sp(e.criado_em),
         "a_reavaliar": e.avaliado_em is None and e.reavaliar_em <= hoje_sp(),
     }
 

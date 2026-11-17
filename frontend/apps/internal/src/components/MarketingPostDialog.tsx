@@ -25,13 +25,16 @@ import {
   useCreateReviewSpace,
   useDeleteMarketingPost,
   useMarketingOptions,
+  useMarketingPosts,
   useUpdateMarketingPost,
   type MarketingAssigneeRef,
   type MarketingCatalogItemRef,
   type MarketingPost,
+  type MarketingPostTipo,
   type MarketingStatus,
   type SaveMarketingPostInput,
 } from "../lib/marketing";
+import { formatBRL } from "@manto/money";
 
 const INPUT_CLASS = "h-11 w-full rounded-md border border-line bg-panel px-2 text-sm text-ink";
 const LABEL_CLASS = "mb-1 block text-xs font-medium text-muted";
@@ -283,6 +286,20 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
   const [assigneeId, setAssigneeId] = useState<string | null>(
     post?.assignee_id ? String(post.assignee_id) : null,
   );
+  // Feature 345 — o card de anúncio é um pedido de criativo com briefing.
+  const listas = useMarketingPosts();
+  const [tipo, setTipo] = useState<MarketingPostTipo>(post?.tipo ?? "post");
+  const [frente, setFrente] = useState(post?.frente ?? "");
+  const [formato, setFormato] = useState(post?.formato ?? "");
+  const [objetivo, setObjetivo] = useState(post?.briefing_objetivo ?? "");
+  const [mostrar, setMostrar] = useState(post?.briefing_mostrar ?? "");
+  const [letreiro, setLetreiro] = useState(post?.briefing_letreiro ?? "");
+  const temasNaoLiberados =
+    tipo === "anuncio"
+      ? (options.data?.temas ?? []).filter(
+          (t) => temaIds.includes(String(t.id)) && t.liberado_anuncio !== undefined && t.liberado_anuncio !== "sim",
+        )
+      : [];
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -297,6 +314,12 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
       notes: notes.trim() || null,
       assignee_id: assigneeId ? Number(assigneeId) : null,
       catalog_item_ids: temaIds.map(Number),
+      tipo,
+      frente: frente || null,
+      formato: formato || null,
+      briefing_objetivo: objetivo.trim() || null,
+      briefing_mostrar: mostrar.trim() || null,
+      briefing_letreiro: letreiro.trim() || null,
     };
     if (isEdit) {
       update.mutate({ id: post.id, input }, { onSuccess: onSaved });
@@ -317,15 +340,95 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
         />
       </Field>
 
+      <div className="inline-flex rounded-md border border-line bg-surface p-0.5" role="radiogroup" aria-label="Tipo do card">
+        {(["post", "anuncio"] as const).map((opcao) => (
+          <button
+            key={opcao}
+            type="button"
+            role="radio"
+            aria-checked={tipo === opcao}
+            onClick={() => setTipo(opcao)}
+            className={`cursor-pointer rounded px-3 py-1.5 text-sm font-medium transition-colors ${tipo === opcao ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink"}`}
+          >
+            {opcao === "post" ? "Post orgânico" : "Anúncio"}
+          </button>
+        ))}
+      </div>
+
       <Field label="Temas do catálogo" error={fieldError(error, "catalog_item_ids")}>
         <TemasMultiSelect
           temas={options.data?.temas ?? []}
           loading={options.isLoading}
           selectedIds={temaIds}
-          invalid={Boolean(fieldError(error, "catalog_item_ids"))}
+          invalid={Boolean(fieldError(error, "catalog_item_ids")) || temasNaoLiberados.length > 0}
           onChange={setTemaIds}
         />
+        {temasNaoLiberados.length > 0 && !fieldError(error, "catalog_item_ids") && (
+          <span className="mt-1 block text-[11px] text-red">
+            Não liberado para anúncio: {temasNaoLiberados.map((t) => t.name).join(", ")}. Veja em Marketing → Temas e
+            licença.
+          </span>
+        )}
       </Field>
+
+      {tipo === "anuncio" && (
+        <div className="space-y-3 rounded-md border border-line bg-surface p-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* 5 opções cada: `<select>` nativo (Princípio XII). */}
+            <Field label="Frente" error={fieldError(error, "frente")}>
+              <select className={INPUT_CLASS} value={frente} onChange={(e) => setFrente(e.target.value)} aria-label="Frente do anúncio">
+                <option value="">Escolher frente…</option>
+                {Object.entries(listas.data?.frentes ?? {}).map(([slug, nome]) => (
+                  <option key={slug} value={slug}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Formato" error={fieldError(error, "formato")}>
+              <select className={INPUT_CLASS} value={formato} onChange={(e) => setFormato(e.target.value)} aria-label="Formato da peça">
+                <option value="">Escolher formato…</option>
+                {Object.entries(listas.data?.formatos ?? {}).map(([slug, nome]) => (
+                  <option key={slug} value={slug}>
+                    {nome}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </div>
+          <Field label="Objetivo" error={fieldError(error, "briefing_objetivo")}>
+            <Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: conversas de festa em Alphaville" aria-label="Objetivo do anúncio" />
+          </Field>
+          <Field label="O que mostrar" error={fieldError(error, "briefing_mostrar")}>
+            <textarea
+              className="min-h-[64px] w-full rounded-md border border-line bg-panel p-2 text-sm text-ink"
+              value={mostrar}
+              onChange={(e) => setMostrar(e.target.value)}
+              placeholder="Ex.: a chegada do personagem, as crianças reagindo"
+              aria-label="O que a peça deve mostrar"
+            />
+          </Field>
+          <Field label="Texto do letreiro" error={fieldError(error, "briefing_letreiro")}>
+            <Input value={letreiro} onChange={(e) => setLetreiro(e.target.value)} placeholder="Ex.: Ele vai chamar pelo nome" aria-label="Texto do letreiro" />
+          </Field>
+          <p className="text-[11px] text-muted">
+            Use foto ou vídeo do acervo da Manto. Letreiro feito com IA por cima pode; personagem e fundo, nunca.
+          </p>
+          {post?.anuncios && post.anuncios.length > 0 && (
+            <div className="rounded-md bg-panel px-3 py-2 text-sm">
+              <p className="font-medium text-ink">
+                {post.anuncios.length} anúncio(s) no ar com esta peça
+              </p>
+              {post.resultado && (
+                <p className="text-muted">
+                  R$ {formatBRL(Number(post.resultado.spend))} · {post.resultado.conversations} conversa(s)
+                  {post.resultado.custo_conversa ? ` · R$ ${formatBRL(Number(post.resultado.custo_conversa))} por conversa` : ""}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       <Field label="Responsável" error={fieldError(error, "assignee_id")}>
         <Combobox
