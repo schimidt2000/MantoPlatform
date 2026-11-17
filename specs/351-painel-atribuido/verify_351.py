@@ -552,6 +552,13 @@ def c6():
         f.get("custo_venda_atribuida_desconto") == "1000.00",
         str(f.get("custo_venda_atribuida_desconto")),
     )
+    login("sa")
+    longo = client.get("/api/marketing/atribuicao?start=2030-01-01&end=2031-03-31").get_json() or {}
+    check(
+        "6.5 período de mais de um ano: lista com E1 e o funil com aviso",
+        venda_da_lista(longo, "E1") is not None and bool((longo.get("funil") or {}).get("aviso")),
+        str(longo.get("funil"))[:200],
+    )
     sem = desempenho().get("atribuicao", {}).get("sem_frente", {})
     check(
         "6.4 E7 (campanha sem frente) no bloco sem frente",

@@ -158,7 +158,9 @@ export function AtribuicaoPainel({ params }: { params: DesempenhoParams }) {
           Conversas novas do período pelo primeiro anúncio delas (CRM). Gasto da Meta: é de lá que as conversas chegam
           com origem.
         </p>
-        {funil.total === 0 ? (
+        {funil.aviso ? (
+          <p className="py-2 text-sm text-muted">{funil.aviso}</p>
+        ) : funil.total === 0 ? (
           <p className="py-2 text-sm text-muted">Nenhuma conversa com anúncio no período.</p>
         ) : (
           <ul className="divide-y divide-line">

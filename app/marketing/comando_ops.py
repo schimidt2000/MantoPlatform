@@ -402,31 +402,44 @@ def resumo_frentes(
     gastos, _ = gasto_por_frente(inicio, fim)
     tetos_ = tetos()
     mes = mes_corrente_por_frente()
-    saida = []
-    for slug, nome in MARKETING_FRENTES.items():
-        v = vendas.get(slug, {"vendas": 0, "faturamento": Decimal(0), "vendas_cliente_novo": 0})
-        g = gastos.get(slug, {"gasto": Decimal(0), "conversas": 0, "cadastros": 0})
-        custo = (g["gasto"] / v["vendas"]) if v["vendas"] and g["gasto"] > 0 else None
-        teto = tetos_[slug]["teto"]
-        a = (atribuidas or {}).get(slug, {"vendas": 0, "faturamento": Decimal(0)})
-        saida.append(
-            {
-                "slug": slug,
-                "nome": nome,
-                "gasto": q2(g["gasto"]),
-                "conversas": g["conversas"],
-                "cadastros": g["cadastros"],
-                "vendas": v["vendas"],
-                "vendas_cliente_novo": v["vendas_cliente_novo"],
-                "faturamento": q2(v["faturamento"]),
-                "custo_venda": _q2_opt(custo),
-                "teto": _q2_opt(teto),
-                "estado": _estado(g["gasto"], v["vendas"], custo, teto),
-                **_atribuido(g["gasto"], a, teto),
-                "mes_corrente": mes[slug],
-            }
-        )
-    return saida
+    return [
+        {
+            **_linha_da_frente(
+                slug,
+                nome,
+                vendas.get(slug, {"vendas": 0, "faturamento": Decimal(0), "vendas_cliente_novo": 0}),
+                gastos.get(slug, {"gasto": Decimal(0), "conversas": 0, "cadastros": 0}),
+                tetos_[slug]["teto"],
+            ),
+            **_atribuido(
+                gastos.get(slug, {}).get("gasto", Decimal(0)),
+                (atribuidas or {}).get(slug, {"vendas": 0, "faturamento": Decimal(0)}),
+                tetos_[slug]["teto"],
+            ),
+            "mes_corrente": mes[slug],
+        }
+        for slug, nome in MARKETING_FRENTES.items()
+    ]
+
+
+def _linha_da_frente(
+    slug: str, nome: str, v: dict[str, Any], g: dict[str, Any], teto: Decimal | None
+) -> dict[str, Any]:
+    """A frente da 345: gasto, conversas, vendas e o custo misto contra o teto."""
+    custo = (g["gasto"] / v["vendas"]) if v["vendas"] and g["gasto"] > 0 else None
+    return {
+        "slug": slug,
+        "nome": nome,
+        "gasto": q2(g["gasto"]),
+        "conversas": g["conversas"],
+        "cadastros": g["cadastros"],
+        "vendas": v["vendas"],
+        "vendas_cliente_novo": v["vendas_cliente_novo"],
+        "faturamento": q2(v["faturamento"]),
+        "custo_venda": _q2_opt(custo),
+        "teto": _q2_opt(teto),
+        "estado": _estado(g["gasto"], v["vendas"], custo, teto),
+    }
 
 
 def situacao_plataformas(inicio: date, fim: date) -> list[dict[str, Any]]:
@@ -1466,11 +1479,8 @@ def _data_opt(valor: Any, campo: str) -> date | None:
         raise ComandoError("Data inválida (use AAAA-MM-DD).", field=campo) from None
 
 
-def _campos_do_teste(d: dict[str, Any]) -> dict[str, Any]:
-    """Os campos opcionais do teste estruturado (351). Sem métrica e sem alvo, a entrada é só texto."""
-    metrica, alvo_id = d.get("metrica"), str(d.get("alvo_id") or "").strip()
-    if not metrica and not alvo_id:
-        return {}
+def _validar_alvo(d: dict[str, Any], metrica: Any, alvo_id: str) -> tuple[str, int]:
+    """`(plataforma, janela)` do teste, ou a recusa no campo (métrica antes do alvo: é o erro mais comum)."""
     if metrica not in METRICAS_DO_TESTE:
         raise ComandoError("Escolha a métrica do teste.", field="metrica")
     if not alvo_id:
@@ -1483,6 +1493,15 @@ def _campos_do_teste(d: dict[str, Any]) -> dict[str, Any]:
     janela = _inteiro_opt(d.get("janela_dias"), "janela_dias") or JANELA_TESTE_PADRAO
     if not JANELA_TESTE_MIN <= janela <= JANELA_TESTE_MAX:
         raise ComandoError(f"Use de {JANELA_TESTE_MIN} a {JANELA_TESTE_MAX} dias.", field="janela_dias")
+    return platform, janela
+
+
+def _campos_do_teste(d: dict[str, Any]) -> dict[str, Any]:
+    """Os campos opcionais do teste estruturado (351). Sem métrica e sem alvo, a entrada é só texto."""
+    metrica, alvo_id = d.get("metrica"), str(d.get("alvo_id") or "").strip()
+    if not metrica and not alvo_id:
+        return {}
+    platform, janela = _validar_alvo(d, metrica, alvo_id)
     controle_id = str(d.get("controle_id") or "").strip()[:80] or None
     controle_tipo = d.get("controle_tipo") or (d["alvo_tipo"] if controle_id else None)
     if controle_id and controle_tipo not in PROPOSTA_ALVOS:

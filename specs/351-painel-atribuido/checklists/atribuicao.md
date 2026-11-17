@@ -11,16 +11,16 @@ viraram correção na spec (FR-003, FR-006, FR-011, FR-023, FR-032 e um caso de 
 
 ## Portões da Manto (fixos — constituição, §Portões de Qualidade)
 
-- [ ] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
-- [ ] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
-- [ ] CHK003 `verify_351.py` verde contra `manto_351` (exceção do plano), escrita conferida por conexão separada, um cenário que falha
-- [ ] CHK004 Tela aberta de verdade (interno em 390 × 844 e tela larga)
-- [ ] CHK005 Migration manual criada e aplicada no `manto_351`
+- [x] CHK001 `cd frontend && npm run typecheck` limpo (três SPAs)
+- [x] CHK002 `ruff check` limpo nos arquivos Python tocados; `ruff format` só em arquivo novo
+- [x] CHK003 `verify_351.py` verde contra `manto_351` (exceção do plano), escrita conferida por conexão separada, um cenário que falha
+- [x] CHK004 Tela aberta de verdade (interno em 390 × 844 e tela larga)
+- [x] CHK005 Migration manual criada e aplicada no `manto_351`
 - [x] CHK006 `scripts/validar_startcommand.py` — não se aplica (não toca o `startCommand`)
-- [ ] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
-- [ ] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `04`/`05` (regra da atribuição, dívida 214)
-- [ ] CHK009 Nível 1: `/speckit-converge` sem gaps
-- [ ] CHK010 Texto novo ou alterado revisado pelo Princípio XV, lido na tela aberta
+- [x] CHK007 Gate de RBAC declarado em todo endpoint novo/alterado e linha em `docs/01` §4.3
+- [x] CHK008 Docs por fonte única: `docs/01`, `docs/02`, `docs/03` sempre; `04`/`05` (regra da atribuição, dívida 214)
+- [x] CHK009 Nível 1: `/speckit-converge` sem gaps
+- [x] CHK010 Texto novo ou alterado revisado pelo Princípio XV, lido na tela aberta
 - [x] CHK011 Antes de "em produção" — não se aplica nesta rodada (sem merge e sem push)
 
 ## Regra da atribuição

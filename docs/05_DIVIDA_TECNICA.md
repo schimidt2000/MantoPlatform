@@ -877,6 +877,21 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
+## Baixa da feature 351-painel-atribuido (2026-11-17, branch)
+
+**Quitada em parte.** A **214** (custo por venda misto): o painel mostra, ao lado do misto, o custo por venda
+**atribuída** e o mesmo com o desconto de 50% (`atribuicao_ops`). Falta o que a 214 pede de origem: `ctwa_clid`,
+código do site e `conversa_id` no evento (348), e a devolução às plataformas (features seguintes). **Criadas.**
+(218–222; numeração a conferir no lote de merge — a 348, a 349 e a 350 abrem dívidas na mesma hora.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 218 | **P2** | `atribuicao_ops.atribuir_vendas` | sem `conversa_id` no evento (348), a venda é ligada ao contato pago **pela ficha**: cliente que volta por anúncio e fecha um evento que já vinha negociando por indicação conta como atribuída, e a ficha com duas conversas mistura as duas | quando a 348 entrar: o contato da conversa ligada ao evento vence a busca pela ficha — trocar só dentro de `atribuir_vendas` |
+| 219 | **P2** | `constants.INCREMENTALIDADE_PREMISSA` | o desconto de 50% é premissa da pesquisa de 17/11, não medida da Manto; o estado "dentro/acima do teto" depende dele | rodar o teste de liga e desliga em blocos (o diário estruturado já registra) e trocar a constante pelo número medido, por frente |
+| 220 | **P3** | `atribuicao_ops._toques_da_origem` | a ficha marcada só pela origem (Tintim/Kommo) não tem a data do contato: vale a entrada na base, então a ficha antiga que voltou por anúncio não atribui (conservador de propósito) | gravar a data da primeira mensagem do Tintim (`dte_fst_msg` do CSV) na ficha, ou esperar o CRM no ar |
+| 221 | **P3** | `marketing_ops._situacao_dos_anuncios` | "no ar" é derivado do gasto (3 últimos dias com leitura): anúncio ligado sem gasto por falta de entrega aparece como "sem gasto desde"; o sistema não guarda a situação do anúncio na Meta | a rotina mandar `effective_status` junto do `/anuncios` (rota do agente) e o card preferir esse dado |
+| 222 | **P4** | `pages/MarketingPainelPage.tsx` / `MarketingKanban.tsx` | em 390 px as colunas do Kanban (264 px) ainda rolam dentro do quadro; os filtros ajudam, mas a visão "minhas peças" não é uma lista | uma visão em lista no celular (por situação, só as colunas com card) |
+
 ## Baixa da feature 345-marketing-integrado (2026-11-16)
 
 **Quitada.** Nenhuma. A 21 (token do agente fora do Render) continua: sem `MARKETING_AGENT_TOKEN` no `manto-backend`,
@@ -884,7 +899,7 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
-| 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline) |
+| 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline). **Em parte na 351**: o atribuído e o com desconto aparecem ao lado do misto (ver 218–219) |
 | 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
 | 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
 | 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |

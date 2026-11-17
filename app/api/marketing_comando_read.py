@@ -96,15 +96,18 @@ def api_marketing_atribuicao() -> Any:
     denied = require_marketing_access()
     if denied:
         return denied
+    dividir = request.args.get("dividir") or "frente"
     try:
         inicio, fim = atribuicao_ops.periodo_do_painel(
             request.args.get("start"), request.args.get("end"), request.args.get("weeks")
         )
-        funil = atribuicao_ops.funil_com_custo(inicio, fim, request.args.get("dividir") or "frente")
     except ops.ComandoError as exc:
         return json_error(exc.message, exc.status, fields={exc.field: exc.message} if exc.field else None)
+    try:
+        funil = atribuicao_ops.funil_com_custo(inicio, fim, dividir)
     except Recusa as exc:
-        return json_error(exc.mensagem, exc.status, fields=exc.fields or None, codigo=exc.codigo)
+        # O funil das conversas vai até um ano; a venda atribuída não tem esse limite e continua na resposta.
+        funil = {"dividir": dividir, "total": 0, "grupos": [], "aviso": exc.mensagem}
     pode_ver_valor = eh_superadmin(current_user)
     return jsonify(
         {

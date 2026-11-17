@@ -980,7 +980,8 @@ export interface AtribuicaoResponse {
   regra: AtribuicaoRegra;
   vendas: AtribuicaoVenda[];
   vendas_total: number;
-  funil: { dividir: DivisaoAtribuicao; total: number; grupos: FunilComCustoGrupo[] };
+  /** `aviso` = o funil recusou o período (mais de um ano); a lista de vendas vem assim mesmo. */
+  funil: { dividir: DivisaoAtribuicao; total: number; grupos: FunilComCustoGrupo[]; aviso?: string };
   pode_ver_valor: boolean;
 }
 

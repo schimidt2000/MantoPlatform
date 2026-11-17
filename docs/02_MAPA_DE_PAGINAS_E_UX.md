@@ -1606,6 +1606,25 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Botão "Tetos e responsáveis" (`FrentesConfigDialog`): só o Superadmin salva.
   - Aparece também quando ainda não há rodada (vendas sem gasto).
   - A rotina passou a ler pelos conectores (skill `marketing-auditor`); o CSV ficou como plano B.
+- **Feature 351 — painel atribuído**:
+  - O card da frente põe em destaque o **custo por venda atribuída, com desconto** (o que vai contra o teto), e logo
+    abaixo o atribuído (gasto ÷ vendas que um anúncio da frente trouxe) e o misto (gasto ÷ todas as vendas). O selo
+    passa a ser o do atribuído ("Sem venda atribuída" quando nenhuma).
+  - Acima dos cards, a regra e a premissa escritas: último contato pago até 45 dias antes da venda, evento criado
+    depois do contato, desconto de 50% "até existir teste". Aviso em âmbar quando o período começa antes de
+    01/06/2026, e a linha "N vendas vieram de campanha sem frente".
+  - No pé do card, o **mês corrente**: "27 de 60 vendas da meta", "R$ 960,00 de R$ 2.500,00 em anúncio" e o foco do
+    mês do calendário.
+  - Botões "Calendário do ano" (`CalendarioDialog`: uma frente por vez, 12 meses empilhados com meta, verba e foco,
+    abre no mês corrente) e "Metas, verba e tetos" (`FrentesConfigDialog`, que ganhou meta e verba ao lado do teto).
+    Só o Superadmin salva.
+  - Bloco novo `AtribuicaoPainel`: **Funil com custo** (Frente · Anúncio · Peça · Conceito, divisão em `?dividir=`;
+    cada grupo com conversas, orçamentos, eventos, gasto e custo por etapa) e **Vendas atribuídas** (evento, data da
+    venda, frente, de onde veio o contato; o valor só para o Superadmin; 10 primeiras e "Mostrar todas").
+  - Tile "Custo por cliente novo de anúncio": gasto ÷ clientes novos que vieram de anúncio, com "N de M clientes
+    novos vieram de anúncio".
+  - Em 390 px, campanhas, posts e a tabela semanal viram cartões; a página não rola de lado (conferido em 390 × 844).
+  - **API nova**: `GET /api/marketing/atribuicao`, `GET|PATCH /api/marketing/calendario`.
 
 #### `/marketing/decisoes` — Decisões de marketing *(feature 345)*
 - **Acesso**: `MARKETING`, `SUPERADMIN`. Aprovar e recusar: só `SUPERADMIN`. Os outros veem "Só o Superadmin aprova
@@ -1622,6 +1641,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Diário: selo "A reavaliar" ou o veredito, e "Nova entrada".
   - Datas no horário de SP.
   - Conferida em 390 px (o dono aprova pelo celular): cards empilhados, sem rolagem lateral.
+  - **Feature 351**: cada proposta mostra frente, teto por venda, verba do mês e **impacto no mês** (com sinal: a pausa
+    é negativa); o topo soma o "Aprovado neste mês". A observação ocupa a linha inteira em 390 px. A proposta nova
+    avisa cada Superadmin no sino (ícone de megafone, link para esta tela).
+  - **Feature 351**: "Nova entrada" ganha "Medir esta mudança (opcional)" — plataforma, alvo (campanha, conjunto ou
+    anúncio) e id, métrica, janela (3 a 28 dias), dia da mudança e controle. A entrada com teste mostra antes → depois
+    com a variação, o controle, o efeito líquido em pontos e a linha de base; "em andamento" enquanto a leitura não
+    cobre a janela.
 - **API**: `GET /api/marketing/propostas`, `POST …/<id>/decidir`, `GET|POST /api/marketing/diario`.
 
 #### `/marketing/temas` — Temas e licença *(feature 345)*
@@ -1633,14 +1659,23 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Busca e filtros no endereço: origem, liberado, "só com sugestão".
   - Cada linha mostra a miniatura, a sugestão da rotina com o motivo, o `<select>` de origem, o selo do liberado e
     o botão Liberar/Tirar do anúncio.
-  - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar todas as sugestões da lista". Autoral
+  - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar as sugestões desta página". Autoral
     confirmado sai liberado; licenciado sai não liberado.
+  - **Feature 351**: 50 temas por página, com a página no endereço (`?pagina=`); filtro novo volta à página 1;
+    "Anterior/Próxima" levam ao topo da lista. Em 390 px o nome fica em cima e as ações embaixo.
 - **Card do Kanban** (`MarketingPostDialog`):
   - Alterna entre "Post orgânico" e "Anúncio". O anúncio abre frente, formato e briefing (objetivo, o que mostrar,
     letreiro), com a regra de imagem escrita no próprio pedido.
   - Tema não liberado aparece em vermelho antes de salvar, e o 422 cai no campo.
   - O card de anúncio mostra o resultado da peça.
   - No Kanban, selos "Anúncio" e "Pedido da rotina".
+  - **Feature 351**: campo **Conceito** (o ângulo da peça, até 120 caracteres). O bloco do resultado diz "N anúncios
+    ligados · M no ar", e cada anúncio "no ar", "sem gasto desde dd/mm" ou "sem leitura" (antes, todo anúncio ligado
+    aparecia "no ar"); a linha "Plataforma" (gasto e conversas informadas) e a linha "Real" (conversas do CRM,
+    orçamentos, vendas atribuídas e o faturamento delas).
+  - **Feature 351, `/marketing/painel`**: filtros "Todas as frentes", "Posts e anúncios / Só posts / Só anúncios" e
+    "Minhas peças" no endereço (`?frente&tipo&minhas=1`), aplicados na tela; contagem "N de M postagens"; selo da
+    frente no card. As colunas do Kanban continuam rolando dentro do quadro (dívida no `docs/05`).
 
 #### `/virtuais/campanhas` — Interações Virtuais (feature 205, US1)
 - **Acesso**: `COMERCIAL`, `SUPERADMIN` (gate de servidor `require_virtuais_access()`).
@@ -2218,6 +2253,9 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   até 200). A tabela **Por vendedor / campanha / canal** repete as etapas, com a conversão até o evento. Sem
   conversa no período: "Nenhuma conversa nova neste período…". No celular a barra ocupa uma linha inteira (o
   trilho é igual em todas as etapas) e a tabela rola dentro do bloco.
+- **Feature 351**: a divisão ganha **Frente, Anúncio, Peça e Conceito** (pelo primeiro anúncio da conversa; grupos
+  "Sem anúncio", "Sem frente", "Sem peça", "Sem conceito" no fim). Os sete botões quebram linha no celular. Aqui não
+  há dinheiro: o custo de cada grupo fica no Desempenho (Marketing).
 - **API**: `GET /api/conversas/funil` e `GET /api/conversas/funil/parados`.
 
 #### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328, 330 e 332)*

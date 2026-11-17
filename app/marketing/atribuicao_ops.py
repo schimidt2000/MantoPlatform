@@ -58,7 +58,8 @@ FONTE_FICHA = "ficha"
 FONTE_UTM = "utm"
 # Empate de momento: o dado mais direto vence (a conversa tem o momento real; a origem da ficha, não).
 _PRIORIDADE = {FONTE_CONVERSA: 2, FONTE_FICHA: 1, FONTE_UTM: 0}
-VENDAS_NA_LISTA = 100
+# A venda atribuída é pouca (dezenas por mês): a lista cobre o período inteiro na prática (SC-002).
+VENDAS_NA_LISTA = 500
 SEMANAS_DO_PAINEL = (4, 12, 26)
 SEMANAS_PADRAO = 12
 

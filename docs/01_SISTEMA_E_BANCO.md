@@ -1345,6 +1345,46 @@ anúncio.
   - `marketing_propostas`;
   - `marketing_diario` — `proposta_id` único.
 
+#### Painel atribuído (feature 351) — `app/marketing/atribuicao_ops.py`
+
+Contrato completo: `specs/351-painel-atribuido/contracts/api-351.md`. A regra da venda atribuída mora numa função
+só (`atribuir_vendas`); a frente do evento continua em `comando_ops.frente_venda_sql` (a 348 troca pela coluna).
+
+| Rota | Papéis |
+|---|---|
+| `GET /api/marketing/atribuicao?weeks\|start&end&dividir=frente\|anuncio\|peca\|conceito` | MARKETING, SUPERADMIN; o `valor` de cada venda só para SUPERADMIN real (`pode_ver_valor`) |
+| `GET /api/marketing/calendario` | MARKETING, SUPERADMIN |
+| `PATCH /api/marketing/calendario` | **só SUPERADMIN** real (403) |
+
+Campos novos nos endpoints de antes (todos opcionais no React):
+- `GET /api/marketing/desempenho`: cada frente ganha `vendas_atribuidas`, `faturamento_atribuido`,
+  `custo_venda_atribuida`, `custo_venda_atribuida_desconto`, `estado_atribuido` e `mes_corrente`; a resposta ganha
+  `atribuicao` (regra, `parcial`, `sem_frente`); `cac` ganha `new_clients_ads` e `value` passa a ser gasto ÷ clientes
+  novos **de anúncio**.
+- `GET|PATCH /api/marketing/frentes`: `meta_vendas_mes`, `verba_mes` (escrita: `metas`, `verbas`, só SUPERADMIN).
+- `GET /api/marketing/propostas`: `frente`, `frente_nome`, `valor_*_num`, `impacto_mensal`, `teto`, `verba_mes`; a
+  resposta ganha `impacto_aprovado_mes`.
+- `GET|POST /api/marketing/diario`: o teste (`alvo_*`, `metrica`, `mudou_em`, `janela_dias`, `linha_base`,
+  `controle_*`) e, na leitura, `teste` com o antes e o depois.
+- `GET|POST|PATCH /api/marketing/posts`: `conceito`; cada anúncio ganha `no_ar`/`ultimo_gasto_em`; `resultado` ganha
+  `conversas_reais`, `orcamentos`, `eventos`, `vendas`, `faturamento`, `custo_conversa_real`, `anuncios_no_ar`,
+  `ultima_leitura`.
+- `GET /api/marketing/temas-licenca`: `?pagina=` e `total`, `pagina`, `paginas`, `por_pagina` (50).
+- `GET /api/conversas/funil`: `dividir` aceita também `frente`, `anuncio`, `peca`, `conceito` — sem dinheiro.
+- Agente (rotas sem mudança): `…/comando` ganha `calendario`, `metas_do_mes` e `atribuicao`; `…/pedidos` aceita
+  `conceito`; `…/propostas` aceita `frente`, `valor_antes_num`, `valor_depois_num` (ou lê o número do texto); a
+  execução leva o alvo e a métrica para o diário; a fila `cards_prontos_sem_anuncio` inclui Agendado e Publicado.
+- Sino: `notifications.kind = marketing.proposta` para cada SUPERADMIN ativo, na transação da proposta.
+
+**Schema** (migration `a351b0c1d2e3`, aditiva, sobre `d334b2c4e6f8`):
+- `marketing_frentes`: `meta_vendas_mes`, `verba_mes`;
+- `marketing_calendario` (nova): frente × mês (`UNIQUE(frente, mes)`, `CHECK mes 1–12`), `meta_vendas`, `verba`,
+  `foco`; 60 linhas semeadas com o foco da pesquisa de 17/11;
+- `marketing_posts.conceito`;
+- `marketing_propostas`: `frente`, `valor_antes_num`, `valor_depois_num`;
+- `marketing_diario`: `alvo_platform`, `alvo_tipo`, `alvo_id`, `alvo_nome`, `metrica`, `mudou_em`, `janela_dias`,
+  `linha_base`, `controle_tipo`, `controle_id`, `controle_nome`.
+
 Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,
 `pay_seller_month`). O Jinja legado `app/financeiro/routes.py` **não** importa deste módulo
@@ -2138,7 +2178,7 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 | `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
 | `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
 | `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
-| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`; 351: também `frente`\|`anuncio`\|`peca`\|`conceito`, pelo primeiro anúncio da conversa, sem dinheiro) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
 | `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). |
 | `GET` | `/api/clientes/<id>/linha-do-tempo` | (335) `{marcos[{tipo, quando, titulo, detalhe, link}]}`, do mais novo para o mais antigo, até 300; `quando` em ISO com o fuso. |
 | `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
@@ -2605,6 +2645,7 @@ Gates por módulo (todos em `app/api/`):
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
 | `require_marketing_access()` + `eh_superadmin()` (345) | `marketing_comando_read/write` | `MARKETING`, `SUPERADMIN`; tetos, decidir proposta e liberar licenciado: só `SUPERADMIN` (o "Ver como" não conta) |
+| `require_marketing_access()` + `eh_superadmin()` (351) | `GET /api/marketing/atribuicao`, `GET\|PATCH /api/marketing/calendario`, `PATCH /api/marketing/frentes` (`metas`, `verbas`) | `MARKETING`, `SUPERADMIN`; valor de cada venda atribuída, calendário, meta e verba: só `SUPERADMIN` real (403) |
 | `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções); desde a 344, `GET /api/virtuais/campanhas/<id>/funil` | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
 | — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel | — |

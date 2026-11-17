@@ -1,6 +1,6 @@
 # Feature 351 — Painel atribuído: quanto custa a venda que o anúncio trouxe
 
-**Branch**: `351-painel-atribuido` (da `main`, `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Rascunho ·
+**Branch**: `351-painel-atribuido` (da `main`, `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Implementada na branch (verify 83/83), sem merge ·
 **Migration**: `a351b0c1d2e3` (aditiva, sobre `d334b2c4e6f8`) · **Nível**: 1 (feature) — constituição, Princípio VI
 
 **Input**: pedido do dono (sessão principal, 17/11/2026): "Faça a feature 351 · painel atribuído", item 6 da
@@ -240,9 +240,10 @@ quantos clientes novos o mês teve no total, para comparação.
 
 **Atribuição (uma função só)**
 
-- **FR-001**: O sistema DEVE ter **uma única função** que decide qual contato pago "trouxe" cada venda; todo número
-  atribuído (frente, funil, card, cliente novo) sai dela. Quando a 348 ligar evento e orçamento à conversa, a troca é
-  só nessa função.
+- **FR-001**: O sistema DEVE ter **uma única função** que decide qual contato pago "trouxe" cada venda; toda venda
+  atribuída (por frente, na lista e no card) sai dela. Quando a 348 ligar evento e orçamento à conversa, a troca é só
+  nessa função. O funil (conversas) e o cliente novo de anúncio não são venda: leem a origem do contato (primeiro
+  anúncio da conversa; anúncio de origem ou origem paga da ficha).
 - **FR-002**: Contatos pagos de uma ficha, a partir do que a `main` já grava: (a) o contato pelo anúncio na conversa
   (`conversa_anuncios`, tipo anúncio, com o momento real); (b) o primeiro e o último anúncio gravados na ficha
   (`anuncio_origem_*`, `anuncio_recente_*`); (c) a origem paga gravada na ficha (`utm_source` da Meta ou do Google), com
