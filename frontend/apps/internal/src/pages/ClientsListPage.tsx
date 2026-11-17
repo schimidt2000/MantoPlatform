@@ -85,6 +85,23 @@ export function ClientsListPage() {
             <Button asChild variant="ghost" size="sm">
               <Link to="/clientes/avaliacoes">Avaliações ›</Link>
             </Button>
+            {/* Feature 350: o servidor diz quem abre o pós-evento e os aniversários (dado de
+                criança); Parceiros também abre para o Financeiro, que consulta a comissão. */}
+            {query.data?.flags?.pode_editar_base && (
+              <>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/clientes/pos-evento">Pós-evento ›</Link>
+                </Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/clientes/aniversarios">Aniversários ›</Link>
+                </Button>
+              </>
+            )}
+            {query.data?.flags && (
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/clientes/parceiros">Parceiros ›</Link>
+              </Button>
+            )}
             <NovaClienteDialog />
           </>
         }

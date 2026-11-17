@@ -458,6 +458,8 @@ def serializar(client: Client, *, com_criancas: bool) -> dict[str, Any]:
 
 _ESCOLHAS_DE_NOVIDADES = (None, "aceitar", "retirar")
 TEXTO_MUDOU = "O texto desta autorização mudou. Recarregue a página e confira."
+# Na página pública quem lê é a própria responsável: o pedido é direto (constituição XV, público).
+TEXTO_PUBLICO_SEM_ACEITE = "Marque a caixa de autorização para a gente guardar o aniversário."
 
 
 def bloco_publico(client: Client) -> dict[str, Any]:
@@ -488,7 +490,8 @@ def _crianca_publica(client: Client, crianca: dict[str, Any], referencia: str) -
         )
     except ConsentimentoErro as exc:
         campo = f"crianca.{exc.campo}" if exc.campo else None
-        raise ConsentimentoErro(campo, exc.mensagem, exc.status, exc.codigo) from None
+        mensagem = TEXTO_PUBLICO_SEM_ACEITE if exc.campo == "aceite" else exc.mensagem
+        raise ConsentimentoErro(campo, mensagem, exc.status, exc.codigo) from None
 
 
 def aplicar_escolhas_publicas(client: Client, corpo: dict[str, Any], *, referencia: str) -> None:

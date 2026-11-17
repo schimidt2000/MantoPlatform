@@ -27,6 +27,9 @@ import { PagamentosPage } from "./pages/PagamentosPage";
 import { ClientsListPage } from "./pages/ClientsListPage";
 import { ClientDetailPage } from "./pages/ClientDetailPage";
 import { ClientFeedbackPage } from "./pages/ClientFeedbackPage";
+import { AniversariosPage } from "./pages/AniversariosPage";
+import { ParceirosPage } from "./pages/ParceirosPage";
+import { PosEventoPage } from "./pages/PosEventoPage";
 import { RhDashboardPage } from "./pages/RhDashboardPage";
 import { AdminUsersListPage } from "./pages/AdminUsersListPage";
 import { AdminUserCreatePage } from "./pages/AdminUserCreatePage";
@@ -162,6 +165,9 @@ export function App() {
             <Route path="/educamanto/historico" element={<EducaMantoHistoricoPage />} />
             <Route path="/clientes" element={<ClientsListPage />} />
             <Route path="/clientes/avaliacoes" element={<ClientFeedbackPage />} />
+            <Route path="/clientes/pos-evento" element={<PosEventoPage />} />
+            <Route path="/clientes/aniversarios" element={<AniversariosPage />} />
+            <Route path="/clientes/parceiros" element={<ParceirosPage />} />
             <Route path="/clientes/:id" element={<ClientDetailPage />} />
             <Route path="/rh" element={<RhDashboardPage />} />
             <Route path="/admin/usuarios" element={<AdminUsersListPage />} />

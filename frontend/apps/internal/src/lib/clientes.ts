@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import type { SituacaoEvento } from "./agenda";
+import type { Consentimentos, FichaResumida, ParceiroResumido } from "./baseAutorizada";
 
 /** Cliente do CRM (feature 165) — chave real é o telefone normalizado. */
 export interface ClientSummary {
@@ -19,6 +20,8 @@ export interface ClientListItem extends ClientSummary {
 export interface ClientsListResponse {
   items: ClientListItem[];
   total_clients: number;
+  /** Feature 350: atalhos de Pós-evento e Aniversários (Comercial e Superadmin). */
+  flags?: { pode_editar_base: boolean };
 }
 
 export interface ClientEvent {
@@ -65,6 +68,14 @@ export interface ClientDetail extends ClientSummary {
   marketing_opt_in_source?: string | null;
   /** Feature 334: de onde a cliente veio. Ausente em backend velho. */
   origem?: ClientOrigem;
+  /** Feature 350: os dois consentimentos, o histórico e os textos. Ausente em backend velho. */
+  consentimentos?: Consentimentos;
+  /** Feature 350: sem aceite de novidades, nada de prospecção. */
+  pode_prospectar?: boolean;
+  indicado_por?: FichaResumida | null;
+  indicacoes?: FichaResumida[];
+  parceiro?: ParceiroResumido | null;
+  flags?: { pode_editar_base: boolean };
 }
 
 /** Um anúncio da Meta na ficha (feature 334): o título que a cliente viu e a campanha. */

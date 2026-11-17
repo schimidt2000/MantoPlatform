@@ -42,10 +42,10 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 - [X] T007 [US1] `app/api/clientes_base_write.py` (novo, docstring `RBAC:`): `POST|DELETE /clientes/<id>/consentimentos/novidades`, `POST /clientes/<id>/criancas`, `DELETE /clientes/<id>/criancas/<cid>` — gate Comercial/Superadmin; registrar em `app/api/__init__.py`
 - [X] T008 [US1] `app/api/clientes_read.py`: detalhe ganha `consentimentos` (crianças só Comercial/Superadmin), `pode_prospectar`, `flags.pode_editar_base`; lista ganha `flags`
 - [X] T009 [US1] `app/conversas/leitura_ops.py`: `_cliente` ganha `aceite_novidades`
-- [ ] T010 [P] [US1] `frontend/apps/internal/src/lib/baseAutorizada.ts`: tipos + hooks de consentimento e criança; `lib/clientes.ts` e `lib/conversas.ts` com os campos novos opcionais
-- [ ] T011 [US1] `frontend/apps/internal/src/components/clientes/AceiteDeNovidadesDialog.tsx` (texto exato, origem na lista fechada, registrar/retirar) e `CriancaDialog.tsx`
-- [ ] T012 [US1] `frontend/apps/internal/src/components/clientes/ConsentimentosCard.tsx` + encaixe em `pages/ClientDetailPage.tsx` (substitui a linha só-leitura do aceite)
-- [ ] T013 [US1] `frontend/apps/internal/src/components/conversas/AceiteNaConversa.tsx` + encaixe no cabeçalho de `ConversaAberta.tsx`
+- [X] T010 [P] [US1] `frontend/apps/internal/src/lib/baseAutorizada.ts`: tipos + hooks de consentimento e criança; `lib/clientes.ts` e `lib/conversas.ts` com os campos novos opcionais
+- [X] T011 [US1] `frontend/apps/internal/src/components/clientes/AceiteDeNovidadesDialog.tsx` (texto exato, origem na lista fechada, registrar/retirar) e `CriancaDialog.tsx`
+- [X] T012 [US1] `frontend/apps/internal/src/components/clientes/ConsentimentosCard.tsx` + encaixe em `pages/ClientDetailPage.tsx` (substitui a linha só-leitura do aceite)
+- [X] T013 [US1] `frontend/apps/internal/src/components/conversas/AceiteNaConversa.tsx` + encaixe no cabeçalho de `ConversaAberta.tsx`
 
 **Checkpoint**: aceite registrado e retirado pela ficha e pela conversa; verify 1–6 verdes.
 
@@ -71,9 +71,9 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 - [X] T018 [US3] `app/clientes/pos_evento_ops.py`: `mensagem(event, fotos_url)`, `estado(event)`, `registrar(event, canal, fotos_url, user_id)`, `enviar_pela_conversa(...)` (import tardio de `envio_ops`, chave `pos-evento-<id>`), `listar_recentes(agora)`
 - [X] T019 [US3] `app/api/clientes_base_read.py` (novo): `GET /pos-evento`, `GET /events/<id>/pos-evento`; `clientes_base_write.py`: `POST /events/<id>/pos-evento` — gate Comercial/Superadmin, 409 `cancelado`
 - [X] T020 [US3] `app/api/feedback_write.py`: bloco `consentimento` no `GET /avaliar/<token>`; `POST /avaliar/<token>/consentimento` (10/h, versão do texto, 409 `sem_ficha`/`texto_mudou`) usando `consentimento_ops`
-- [ ] T021 [P] [US3] `frontend/apps/internal/src/components/EventDetail/PosEventoDialog.tsx` + `EventHeader.tsx` ("Pós-evento" no lugar de "Pedir feedback da cliente"; `buildFeedbackMsg` sai de `lib/eventDetail.ts`)
-- [ ] T022 [US3] `frontend/apps/internal/src/pages/PosEventoPage.tsx` (rota `/clientes/pos-evento` em `App.tsx`; link no cabeçalho de `ClientsListPage.tsx`)
-- [ ] T023 [P] [US3] `frontend/apps/public/src/lib/feedback.ts` (tipos opcionais + hook do POST), `components/feedback/ConsentimentoCard.tsx`, `components/feedback/IndicarAmiga.tsx`, encaixe na tela de agradecimento de `pages/AvaliarPage.tsx` (Google intocado)
+- [X] T021 [P] [US3] `frontend/apps/internal/src/components/EventDetail/PosEventoDialog.tsx` + `EventHeader.tsx` ("Pós-evento" no lugar de "Pedir feedback da cliente"; `buildFeedbackMsg` sai de `lib/eventDetail.ts`)
+- [X] T022 [US3] `frontend/apps/internal/src/pages/PosEventoPage.tsx` (rota `/clientes/pos-evento` em `App.tsx`; link no cabeçalho de `ClientsListPage.tsx`)
+- [X] T023 [P] [US3] `frontend/apps/public/src/lib/feedback.ts` (tipos opcionais + hook do POST), `components/feedback/ConsentimentoCard.tsx`, `components/feedback/IndicarAmiga.tsx`, encaixe na tela de agradecimento de `pages/AvaliarPage.tsx` (Google intocado)
 
 **Checkpoint**: pós-evento copiado/enviado e registrado; aceite colhido na página pública.
 
@@ -85,8 +85,8 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 
 - [X] T024 [US4] `app/clientes/parceiro_ops.py` (criar, editar, listar com contagem, validação) e `app/clientes/indicacao_ops.py` (`definir`, `serializar`)
 - [X] T025 [US4] Endpoints: `GET /parceiros` em `clientes_base_read.py` (Comercial/Financeiro/Superadmin); `POST|PATCH /parceiros…` e `PATCH /clientes/<id>/indicacao` em `clientes_base_write.py`; detalhe da ficha com `indicado_por`, `indicacoes`, `parceiro`
-- [ ] T026 [P] [US4] `frontend/apps/internal/src/components/clientes/IndicacaoCard.tsx` (Combobox de ficha e de parceiro) + encaixe na ficha
-- [ ] T027 [US4] `frontend/apps/internal/src/pages/ParceirosPage.tsx` (lista, criar, editar, desativar; rota `/clientes/parceiros`; link na lista de clientes)
+- [X] T026 [P] [US4] `frontend/apps/internal/src/components/clientes/IndicacaoCard.tsx` (Combobox de ficha e de parceiro) + encaixe na ficha
+- [X] T027 [US4] `frontend/apps/internal/src/pages/ParceirosPage.tsx` (lista, criar, editar, desativar; rota `/clientes/parceiros`; link na lista de clientes)
 
 ---
 
@@ -96,7 +96,7 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 
 - [X] T028 [US5] `app/clientes/aniversario_ops.py`: `proximo_aniversario(nascimento, hoje)` (29/02) e `listar(hoje, dias)` (dois aceites)
 - [X] T029 [US5] `GET /clientes/aniversarios` em `clientes_base_read.py` (Comercial/Superadmin)
-- [ ] T030 [US5] `frontend/apps/internal/src/pages/AniversariosPage.tsx` (rota `/clientes/aniversarios`; link na lista de clientes)
+- [X] T030 [US5] `frontend/apps/internal/src/pages/AniversariosPage.tsx` (rota `/clientes/aniversarios`; link na lista de clientes)
 
 ---
 
@@ -111,9 +111,9 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 ## Phase 9: Loja (344) e polimento
 
 - [X] T032 `app/marketing/virtuais_ops.py`: a venda grava o aceite no histórico (texto e versão da loja, referência `pedido:<id>`) e não reaplica aceite anterior à última retirada (cenário 18)
-- [ ] T033 `verify_350.py` verde de ponta a ponta contra `manto_350`
-- [ ] T034 `ruff check` nos arquivos Python tocados; `ruff format` só nos novos; `cd frontend && npm run typecheck`
-- [ ] T035 Telas abertas no Browser pane (backend 5350, Vite 6350): ficha, conversa, Pós-evento, Aniversários, Parceiros, diálogo do evento em 390 px; página pública em 375×812; textos pelo Princípio XV
+- [X] T033 `verify_350.py` verde de ponta a ponta contra `manto_350`
+- [X] T034 `ruff check` nos arquivos Python tocados; `ruff format` só nos novos; `cd frontend && npm run typecheck`
+- [X] T035 Telas abertas no Browser pane (backend 5350, Vite 6350): ficha, conversa, Pós-evento, Aniversários, Parceiros, diálogo do evento em 390 px; página pública em 375×812; textos pelo Princípio XV
 - [ ] T036 Docs: `docs/01` (endpoints, gates §4.3, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` (Clientes: consentimento; Conversas: saída automática), `docs/05` (dívida do opt-out manual riscada; o que fica), `docs/00` §6 item 2 (relógio)
 - [ ] T037 Commits por caminho (`feat(350):` / `docs(350):`), sem merge e sem push
 
