@@ -108,6 +108,36 @@ services:
       # reconsulta fica autenticada; sem ela a loja funciona do mesmo jeito. O dono cola no painel.
       - key: INFINITEPAY_API_KEY
         sync: false
+      # Feature 325 (Conversas): WhatsApp pela Cloud API da Meta. Vazios = módulo desligado
+      # (webhook 404, menu oculto, aviso na subida). Token de System User, App Secret do app Meta,
+      # Verify token do webhook e os IDs do número e da conta. O dono cola no painel.
+      - key: WHATSAPP_ACCESS_TOKEN
+        sync: false
+      - key: WHATSAPP_APP_SECRET
+        sync: false
+      - key: WHATSAPP_VERIFY_TOKEN
+        sync: false
+      - key: WHATSAPP_PHONE_NUMBER_ID
+        sync: false
+      - key: WHATSAPP_WABA_ID
+        sync: false
+      # Feature 330 (Conversas): Instagram Direct pela Página do Facebook, no MESMO app Meta (o aviso
+      # usa o App Secret e o Verify token acima). Vazios = canal desligado. O dono cola no painel.
+      - key: INSTAGRAM_ACCESS_TOKEN
+        sync: false
+      - key: INSTAGRAM_PAGE_ID
+        sync: false
+      - key: INSTAGRAM_ACCOUNT_ID
+        sync: false
+      # Feature 334: token com `ads_read` para a campanha do anúncio; vazio usa o WHATSAPP_ACCESS_TOKEN.
+      - key: META_ANUNCIOS_TOKEN
+        sync: false
+      # Feature 332: avisos no celular (Web Push). O par VAPID sai de `flask webpush-chaves`, rodado pelo
+      # dono; vazio = desligado.
+      - key: WEB_PUSH_VAPID_PUBLICA
+        sync: false
+      - key: WEB_PUSH_VAPID_PRIVADA
+        sync: false
       # Feature 310: o MESMO valor no manto-frontend. Prova que a requisição veio do Node — sem
       # ele, o IP do cliente informado pelo Node é aceito sem prova (o boot avisa no log).
       - key: MANTO_PROXY_SECRET

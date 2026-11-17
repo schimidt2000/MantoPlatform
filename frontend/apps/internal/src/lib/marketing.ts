@@ -570,6 +570,10 @@ export interface DesempenhoCampaign {
   cost_per_lead: string | null;
   events: number;
   cost_per_event: string | null;
+  /** Feature 334: fichas que já estavam na base e voltaram por anúncio da campanha no período. */
+  returns?: number;
+  /** Os eventos criados depois desses retornos. */
+  return_events?: number;
   currency: string;
 }
 

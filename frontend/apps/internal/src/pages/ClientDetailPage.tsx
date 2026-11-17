@@ -17,8 +17,11 @@ import {
   useClientFeedback,
   useDeleteClient,
   useUpdateClient,
+  type ClientAnuncio,
+  type ClientOrigem,
 } from "../lib/clientes";
 import { useCurrentUser } from "../lib/useAuth";
+import { LinhaDoTempoDaFicha } from "../components/LinhaDoTempoDaFicha";
 import { SeloSituacao } from "../components/SeloSituacao";
 
 function formatDate(iso: string | null): string {
@@ -28,6 +31,53 @@ function formatDate(iso: string | null): string {
   const [year, month, day] = iso.slice(0, 10).split("-");
   if (!year || !month || !day) return "";
   return `${day}/${month}/${year}`;
+}
+
+/** O dia do contato no fuso de São Paulo (o `quando` vem em UTC: à noite já seria o dia seguinte). */
+function diaDoAnuncio(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "";
+}
+
+function descreverAnuncio(anuncio: ClientAnuncio): string {
+  return [anuncio.titulo ? `“${anuncio.titulo}”` : null, anuncio.campanha, diaDoAnuncio(anuncio.quando)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * De onde a cliente veio (feature 334, FR-009): a origem e o primeiro anúncio, que nunca mudam, e o
+ * mais recente — a repescagem —, que só aparece quando é outro contato.
+ */
+function OrigemDaFicha({ origem }: { origem: ClientOrigem | undefined }) {
+  if (!origem) return null;
+  const { primeiro, recente } = origem;
+  const outroRecente =
+    recente && (!primeiro || recente.anuncio_id !== primeiro.anuncio_id || recente.quando !== primeiro.quando);
+  // A campanha da ficha (a que o Desempenho conta) só some quando é a mesma do primeiro anúncio.
+  const campanhaPropria = origem.campanha && origem.campanha !== primeiro?.campanha ? origem.campanha : null;
+  const rotulo = [origem.lead_origin, campanhaPropria].filter(Boolean).join(" · ");
+  return (
+    <>
+      {rotulo && (
+        <>
+          <dt className="text-muted">Origem</dt>
+          <dd className="text-ink">{rotulo}</dd>
+        </>
+      )}
+      {primeiro && (
+        <>
+          <dt className="text-muted">Primeiro anúncio</dt>
+          <dd className="text-ink">{descreverAnuncio(primeiro)}</dd>
+        </>
+      )}
+      {outroRecente && recente && (
+        <>
+          <dt className="text-muted">Anúncio mais recente</dt>
+          <dd className="text-ink">{descreverAnuncio(recente)}</dd>
+        </>
+      )}
+    </>
+  );
 }
 
 export function ClientDetailPage() {
@@ -144,6 +194,7 @@ export function ClientDetailPage() {
                     </dd>
                   </>
                 )}
+                <OrigemDaFicha origem={query.data.origem} />
               </dl>
             </CardContent>
           </Card>
@@ -193,6 +244,9 @@ export function ClientDetailPage() {
           </div>
 
           <div className="space-y-4">
+          {/* Feature 335: a história da cliente num cartão só, antes das listas por tipo. */}
+          <LinhaDoTempoDaFicha clientId={id} />
+
           <Card>
             <CardHeader>
               <CardTitle>Eventos</CardTitle>

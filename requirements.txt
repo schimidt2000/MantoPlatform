@@ -31,6 +31,9 @@ pillow-heif==1.6.0
 reportlab==4.2.5
 pypdf==5.1.0
 requests==2.32.5
+# Avisos no celular (feature 332): a cifra do Web Push (RFC 8291) e o token VAPID (RFC 8292).
+# A mesma versão que a feature 329 fixa para a NFS-e; no merge das duas fica uma linha só.
+cryptography==46.0.7
 
 googlemaps==4.10.0
 

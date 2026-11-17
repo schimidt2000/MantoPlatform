@@ -3597,6 +3597,9 @@ def _build_orcamento_prefill(orcamento_id: int | None) -> dict:
         "acrescimos_do_orcamento": _acrescimos_do_prefill(entry, duracao_custom if total_custom else None),
         "with_invoice": bool(snap.get("nota_fiscal", False)),
         "caches": caches,
+        # Feature 333: a ficha a que o orçamento foi ligado ao ser mandado pela conversa; a tela a soma
+        # às clientes do evento como "Contratante". Sem ficha, a chave não vem.
+        **({"cliente": {"id": entry.cliente.id, "nome": entry.cliente.name}} if entry.cliente else {}),
         # Feature 313 (só orçamento da versão 2; ausentes no de antes): bruto_*, desconto_pct, extra_por_horas.
         **novas,
     }

@@ -89,6 +89,15 @@ def _caminho_binario(nome: str) -> str | None:
     return shutil.which(nome)
 
 
+def caminho_do_ffmpeg() -> str | None:
+    """O binário do `ffmpeg`, ou None — para quem só remuxa e não precisa do `ffprobe`.
+
+    O áudio gravado nas Conversas (feature 328) troca o recipiente webm por ogg sem recodificar;
+    expor isto evita uma segunda procura do binário fora daqui.
+    """
+    return _caminho_binario("ffmpeg")
+
+
 def ffmpeg_disponivel() -> bool:
     """True quando dá para converter vídeo nesta máquina."""
     return bool(_caminho_binario("ffmpeg") and _caminho_binario("ffprobe"))

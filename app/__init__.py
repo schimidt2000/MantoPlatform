@@ -442,6 +442,53 @@ def _start_caixa_de_avisos(app):
     app.logger.info(f"[caixa-de-avisos] thread iniciada (intervalo: {INTERVAL}s)")
 
 
+def _passada_whatsapp(app: Flask) -> None:
+    """Uma passada da varredura do WhatsApp (feature 325), só com o módulo ligado."""
+    from app.conversas.configuracao import canais_ligados
+    from app.conversas.varredura import ciclo_de_varredura
+
+    with app.app_context():
+        # Feature 330: o Instagram sozinho também precisa da varredura (avisos, mídia, alerta).
+        if not canais_ligados():
+            return
+        resumo = ciclo_de_varredura()
+        if any(resumo.values()):
+            app.logger.info("[whatsapp-sweep] %s", resumo)
+
+
+def _start_whatsapp_sweep(app: Flask) -> None:
+    """Thread que refaz avisos e mídias do WhatsApp que ficaram pelo caminho (feature 325).
+
+    O webhook grava o aviso cru e responde 200; o processamento roda numa thread que o deploy
+    pode matar. Esta varredura pega o que ficou ``pendente``/``processando`` e a mídia que não
+    baixou. Cada um dos 3 workers do gunicorn roda a sua cópia, sem lock de ciclo: o claim é por
+    linha (``UPDATE … WHERE estado='pendente'``), então ninguém processa a mesma linha duas vezes
+    (research R5). Só sobe com o módulo ligado.
+    """
+    import os as _os
+    import threading
+    import time
+
+    flask_env = _os.environ.get("FLASK_ENV", "")
+    if flask_env == "development" and _os.environ.get("WERKZEUG_RUN_MAIN") != "true":
+        return
+
+    from app.conversas.constantes import VARREDURA_INTERVALO_S
+
+    def _loop() -> None:
+        time.sleep(45)  # aguarda o app estar pronto
+        while True:
+            try:
+                _passada_whatsapp(app)
+            except Exception as exc:  # noqa: BLE001 — nunca deixar a thread morrer
+                app.logger.warning(f"[whatsapp-sweep] erro: {exc}")
+            time.sleep(VARREDURA_INTERVALO_S)
+
+    t = threading.Thread(target=_loop, daemon=True, name="whatsapp-sweep")
+    t.start()
+    app.logger.info(f"[whatsapp-sweep] thread iniciada (intervalo: {VARREDURA_INTERVALO_S}s)")
+
+
 def _start_nfc_video_worker(app):
     """Thread que converte os vídeos das tags NFC, um de cada vez (feature 297).
 
@@ -738,6 +785,55 @@ def create_app():
             "[proxy] MANTO_PROXY_SECRET ausente: X-Manto-Client-Ip aceito sem prova — quem chamar "
             "o backend direto escapa dos limites de taxa. Configure o mesmo valor no frontend."
         )
+    # Feature 325 (XIV): o WhatsApp sem as quatro chaves é um módulo desligado — precisa aparecer
+    # no log do deploy, senão some em silêncio como os tokens da migração para o Render.
+    _whatsapp_minimo = ("WHATSAPP_ACCESS_TOKEN", "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
+                        "WHATSAPP_PHONE_NUMBER_ID")
+    _whatsapp_faltando = [k for k in _whatsapp_minimo if not app.config.get(k)]
+    app.logger.info(
+        "[whatsapp] ligado=%s travado=%s versao=%s",
+        not _whatsapp_faltando, app.config.get("WHATSAPP_SUPPRESS_SEND"),
+        app.config.get("WHATSAPP_GRAPH_VERSION"),
+    )
+    if _whatsapp_faltando and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[whatsapp] Conversas desligado: faltam %s (painel do Render).", ", ".join(_whatsapp_faltando)
+        )
+    # Feature 330 (XIV): o Instagram Direct usa o segredo e a verificação do app do WhatsApp.
+    _instagram_minimo = ("INSTAGRAM_ACCESS_TOKEN", "INSTAGRAM_PAGE_ID", "INSTAGRAM_ACCOUNT_ID",
+                         "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN")
+    _instagram_faltando = [k for k in _instagram_minimo if not app.config.get(k)]
+    app.logger.info(
+        "[instagram] ligado=%s travado=%s", not _instagram_faltando, app.config.get("WHATSAPP_SUPPRESS_SEND")
+    )
+    if _instagram_faltando and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[instagram] Direct desligado: faltam %s (painel do Render).", ", ".join(_instagram_faltando)
+        )
+    # Feature 334 (XIV): a campanha do anúncio vem da Meta com o token próprio ou o do WhatsApp.
+    app.logger.info(
+        "[anuncios] consulta da campanha ligada=%s (token %s)",
+        bool(app.config.get("META_ANUNCIOS_TOKEN") or app.config.get("WHATSAPP_ACCESS_TOKEN")),
+        "próprio" if app.config.get("META_ANUNCIOS_TOKEN") else "do WhatsApp",
+    )
+    # Feature 332 (XIV): sem o par VAPID, ou com um par que não confere, os avisos no celular ficam
+    # desligados (`push_ops.chaves`).
+    from app.push.webpush import par_valido as _par_vapid_valido
+
+    _vapid_publica = (app.config.get("WEB_PUSH_VAPID_PUBLICA") or "").strip()
+    _vapid_privada = (app.config.get("WEB_PUSH_VAPID_PRIVADA") or "").strip()
+    _push_completo = bool(_vapid_publica and _vapid_privada)
+    _push_ligado = _push_completo and _par_vapid_valido(_vapid_publica, _vapid_privada)
+    app.logger.info("[push] ligado=%s travado=%s", _push_ligado, app.config.get("WEB_PUSH_SUPPRESS"))
+    if not _push_completo and not app.config.get("TESTING"):
+        app.logger.warning(
+            "[push] Avisos no celular desligados: faltam WEB_PUSH_VAPID_PUBLICA e WEB_PUSH_VAPID_PRIVADA."
+        )
+    elif _push_completo and not _push_ligado:
+        app.logger.warning(
+            "[push] Avisos no celular desligados: a WEB_PUSH_VAPID_PUBLICA não é a da WEB_PUSH_VAPID_PRIVADA "
+            "(cole novamente as duas linhas do `flask webpush-chaves`)."
+        )
 
     from app.money import format_brl
     app.jinja_env.filters['brl'] = format_brl
@@ -763,6 +859,11 @@ def create_app():
     if not app.config.get("NFC_MEDIA_FOLDER"):
         app.config["NFC_MEDIA_FOLDER"] = os.path.join(_instance, "nfc_media")
     os.makedirs(app.config["NFC_MEDIA_FOLDER"], exist_ok=True)
+    # Mídia das conversas do WhatsApp (feature 325): mesmo racional — irmã de `uploads`, só sai
+    # por `GET /api/conversas/midia/<id>`, e entra no backup (`_MEDIA_SUBDIRS`).
+    if not app.config.get("CONVERSAS_MEDIA_FOLDER"):
+        app.config["CONVERSAS_MEDIA_FOLDER"] = os.path.join(_instance, "conversas_midia")
+    os.makedirs(app.config["CONVERSAS_MEDIA_FOLDER"], exist_ok=True)
     # Subpastas da conversão de vídeo (feature 297). O arquivo ENTREGUE continua na raiz de
     # `nfc_media`, com os mesmos nomes de sempre — quem muda de lugar é só o que é novo:
     #   entrada/  o arquivo cru recebido, que vive entre o envio e o fim da conversão
@@ -1142,6 +1243,9 @@ def create_app():
 
         # ── Conferência periódica com a ClickSign (feature 317) ────
         _start_clicksign_sync(app)
+
+        # ── Reprocessamento de avisos e mídias do WhatsApp (feature 325) ──
+        _start_whatsapp_sweep(app)
 
         # ── Backup automático para o Google Drive (feature 264) ────
         from app.backup_drive import start_backup_thread

@@ -51,6 +51,8 @@ export interface OrcamentoCache {
 /** Pré-preenchimento a partir de um orçamento salvo — `GET /api/events/new/prefill`. */
 export interface OrcamentoPrefill {
   orcamento_id?: number;
+  /** Feature 333: a ficha a que o orçamento foi ligado ao ser mandado pela conversa. */
+  cliente?: { id: number; nome: string };
   date?: string;
   start_time?: string;
   location?: string;

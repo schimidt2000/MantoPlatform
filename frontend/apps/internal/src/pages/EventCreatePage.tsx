@@ -299,6 +299,16 @@ export function EventCreatePage() {
     if (livre("acrescimo_value")) setValue("acrescimo_value", p.acrescimo_value ?? 0);
     if (livre("with_invoice")) setValue("with_invoice", Boolean(p.with_invoice));
     setOrcCaches(p.caches ?? []);
+    // Feature 333: o orçamento mandado pela conversa já sabe de quem é — a cliente entra como
+    // Contratante, sem repetir a ficha que já estiver na lista.
+    const cliente = p.cliente;
+    if (cliente) {
+      setClients((atuais) =>
+        atuais.some((c) => c.client_id === cliente.id)
+          ? atuais
+          : [...atuais, { client_id: cliente.id, name: cliente.nome, relation: "Contratante" }],
+      );
+    }
     // O elenco sai do estado DESTE render (o efeito roda depois dele), nunca de um updater: o
     // StrictMode chama o updater duas vezes e o ref de quem veio do orçamento ficaria errado.
     setCharacters(elencoComOrcamento(characters, p.caches ?? [], personagensDoOrcamento.current));

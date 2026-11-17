@@ -75,6 +75,9 @@ KIND_EVENTO_VAGA_SOBRANDO = "evento.vaga_sobrando"
 #: `kind` que aparecem como faixa no detalhe do evento até a pessoa clicar "Ciente" (339). O "lida"
 #: do sino (`read_at`) não apaga a faixa: abrir o item no sino é ler, não confirmar.
 KINDS_COM_CIENTE: frozenset[str] = frozenset({KIND_EVENTO_TIPO_SHOW, KIND_EVENTO_VAGA_SOBRANDO})
+# Feature 328: a cliente esperando resposta nas Conversas e a conversa transferida para alguém.
+KIND_CONVERSA_ESPERANDO = "conversa.esperando"
+KIND_CONVERSA_TRANSFERIDA = "conversa.transferida"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -110,6 +113,10 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # cachê acima do limite. O autor da mudança fica de fora — vai explícito pelo produtor.
     KIND_EVENTO_TIPO_SHOW: (RoleName.CASTING, RoleName.ENSAIO, RoleName.SUPERADMIN),
     KIND_EVENTO_VAGA_SOBRANDO: (RoleName.CASTING, RoleName.SUPERADMIN),
+    # Feature 328: sem responsável com acesso, a espera avisa a equipe das Conversas; com
+    # responsável, o produtor manda só para ele. A transferência vai sempre explícita, para o destino.
+    KIND_CONVERSA_ESPERANDO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    KIND_CONVERSA_TRANSFERIDA: (),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -757,13 +764,16 @@ def marcar_lidas_por_entidades(entity_type: str, entity_ids, kind: str | None = 
     return resultado.rowcount or 0
 
 
-def apagar_por_entidade(entity_type: str, entity_id: int) -> int:
-    """Apaga as notificações de um objeto — para a exclusão do objeto não deixar link morto."""
-    resultado = db.session.execute(
-        delete(Notification).where(
-            Notification.entity_type == entity_type, Notification.entity_id == entity_id
-        )
-    )
+def apagar_por_entidade(entity_type: str, entity_id: int, kind: str | None = None) -> int:
+    """Apaga as notificações de um objeto — para a exclusão do objeto não deixar link morto.
+
+    Com `kind`, só as daquele tipo: a espera encerrada da conversa (328) some do sino, e o aviso de
+    transferência da mesma conversa fica.
+    """
+    condicoes = [Notification.entity_type == entity_type, Notification.entity_id == entity_id]
+    if kind:
+        condicoes.append(Notification.kind == kind)
+    resultado = db.session.execute(delete(Notification).where(*condicoes))
     return resultado.rowcount or 0
 
 

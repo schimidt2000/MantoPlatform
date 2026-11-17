@@ -236,6 +236,13 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | **326-novo-evento-cliente-e-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
 | **324-config-precos-legivel** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
 | **239c-coordenador-pre-escalado-com-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
+| **335-crm-linha-do-tempo** | *(NÃO PUBLICADO; sobre a 334)* Linha do tempo da ficha e funil das conversas, Fase 3c do `docs/PLANO_CRM_PROPRIO.md`: a ficha ganha os marcos da cliente (entrada, contatos, anúncios, orçamentos, formulários, eventos, pagamentos, avaliações) e o Comercial ganha o Funil (quem chegou no período e até onde chegou, por vendedor, campanha e canal, com quem parou em cada etapa); só leitura, sem migration | 2026-11-06 | — | (aqui) | — |
+| **334-crm-origem-do-anuncio** | *(NÃO PUBLICADO; sobre a 333)* De qual anúncio veio cada cliente, Fase 3b do `docs/PLANO_CRM_PROPRIO.md`: o `referral` de quem clica no anúncio (WhatsApp e Instagram) vira contato na conversa; a campanha vem da Meta depois do commit (falta `ads_read`); a ficha guarda o primeiro e o mais recente anúncio e o orgânico ganha o canal; o Desempenho conta o lead da conversa e os retornos | 2026-11-04 | `d334b2c4e6f8` | (aqui) | — |
+| **333-crm-orcamento-na-conversa** | *(NÃO PUBLICADO; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
+| **332-crm-avisos-no-celular** | *(NÃO PUBLICADO; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
+| **330-crm-instagram-direct** | *(NÃO PUBLICADO; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
+| **328-crm-equipe-na-caixa** | *(NÃO PUBLICADO; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
+| **325-crm-whatsapp-fundacao** | *(NÃO PUBLICADO; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -401,6 +408,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
+| Conversas / WhatsApp / Instagram / CRM próprio | 335, 334, 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 341, 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
@@ -1117,6 +1125,534 @@ sistema e ganha `escalado_pelo_comercial`); sem vaga aberta, nasce uma, como ant
 convite e aviso de conflito. Parâmetro `came_from_orcamento` removido.
 
 **Verificação.** `verify_239c.py` 7/7 (cenários 1–3 falham no código antigo); `verify_322.py` 29/29.
+### 335 — Linha do tempo da ficha e funil das conversas   (335-crm-linha-do-tempo · 2026-11-06 · sem migration)
+
+> **NÃO PUBLICADO** — branch `335-crm-linha-do-tempo`, feita **sobre a `334-crm-origem-do-anuncio`** (325 → 328 → 330
+> → 332 → 333 → 334 → 335; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/335-crm-linha-do-tempo/`.
+
+**O pedido.** O dono disse "começar a 3c" (04/11) e "bora seguir" (06/11): a ficha única com a história da cliente e o
+funil derivado dos fatos, sem cartão para arrastar (a lição da 021). Decisões do dono (06/11, todas pela recomendada):
+- o funil é uma **tela nova no Comercial**, com o acesso das Conversas;
+- conta **quem chegou no período** e até onde chegou (a taxa de conversão de verdade);
+- divide **por vendedor**, e todos veem todos;
+- a ficha mostra **só os marcos**, cada um com o link; a conversa continua nas Conversas.
+
+**O que mudou.**
+- **Funil** (`funil_ops`, `GET /api/conversas/funil` e `/funil/parados`): a coorte é a das conversas cujo primeiro
+  contato (a primeira mensagem dela ou o primeiro contato pelo anúncio) caiu no período, em datas de São Paulo. Cada
+  uma fica na etapa mais avançada que alcançou depois desse contato: Chegou → Orçamento enviado → Formulário → Evento
+  fechado → Pagou → Avaliou. Filtros de canal e campanha, divisão por vendedor, campanha ou canal, e a lista de quem
+  parou em cada etapa (até 200), com "Abrir conversa".
+- **Linha do tempo** (`linha_do_tempo_ops`, `GET /api/clientes/<id>/linha-do-tempo`): entrada, primeiro contato de cada
+  conversa, anúncios, orçamentos (um por orçamento, no primeiro envio), formulários, eventos vivos, pagamentos (a hora
+  do PIX quando há) e avaliações; os links de conversa e de orçamento só para Comercial e Superadmin.
+- **Tela**: `/funil` ("Funil" no menu Comercial, só com as Conversas ligadas) e o cartão "Linha do tempo" na ficha.
+
+**Decisões e pegadinhas.**
+- **A etapa mais avançada puxa as anteriores.** Com etapas independentes, o funil cresceria de "Orçamento" para
+  "Evento" sempre que o orçamento fosse pelo celular (coexistência). "Parou em" é ter a etapa mais avançada ali.
+- **Primeiro contato não é o `created_at` da conversa**: na virada (Fase 4) o histórico de seis meses chega de uma vez,
+  e todas as conversas nasceriam no mesmo dia.
+- **Só o fato depois do primeiro contato faz andar**: a cliente antiga que volta por uma conversa nova não chega
+  "fechada".
+- **O principal do grupo só vale vivo** (convergência): o pagamento do principal cancelado não leva o satélite a
+  "Pagou".
+- **O orçamento conta pelo envio**, no funil e na linha do tempo (convergência): a hora do cálculo não é a hora em que
+  a cliente recebeu.
+- **O filtro de campanha volta para "Todas"** quando o período ou o canal muda (convergência): a campanha escolhida
+  podia sumir da lista e zerar o funil com o seletor mostrando "Todas".
+- **No celular a barra ocupa a linha inteira** (achado na tela): com a coluna do número automática, o trilho de cada
+  etapa tinha uma largura e a comparação mentia; depois, com colunas fixas, ficou com 38 px.
+- Sem dinheiro no funil: o valor fica no Dashboard Comercial, com o acesso dele.
+
+**Verificação.**
+- `verify_335.py` deu **9/9** contra o `manto_local`, com zero escapes. As contagens do funil são conferidas pela
+  diferença para a leitura de antes de semear (o `manto_local` pode ter outras conversas) e as porcentagens no recorte
+  da campanha de teste. Cobre a virada do dia em São Paulo (23 h da véspera fora, 00h30 do 1º dia dentro), a ficha do
+  Kommo, a hora do PIX, o grupo, o cancelado com pagamento e avaliação e o período padrão. Dois cenários **devem**
+  falhar: o acesso (Financeiro sem os links; Casting 403; Financeiro e Casting fora do funil) e o período e os filtros
+  inválidos (422 com o campo).
+- `verify_334` 12/12, `verify_333` 15/15, `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22.
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5338, Vite 5339) em desktop e 375×812: o funil com as contagens, "Pararam em", a tabela
+  por vendedor e a linha do tempo da ficha, sem rolagem horizontal no celular. Os ajustes da convergência na tela (o
+  filtro que volta para "Todas", o funil apagado enquanto atualiza e os textos de erro) passaram pelo `typecheck`, sem
+  nova volta na tela.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **9 achados** (0
+críticos, 0 altos, 1 médio e 8 baixos), fechados ou aceitos em T013–T021.
+
+**Para publicar.** Merge na ordem 325 → 328 → 330 → 332 → 333 → 334 → 335. Nada a configurar: o Funil aparece com as
+Conversas ligadas.
+
+### 334 — De qual anúncio veio cada cliente   (334-crm-origem-do-anuncio · 2026-11-04 · migration `d334b2c4e6f8`)
+
+> **NÃO PUBLICADO** — branch `334-crm-origem-do-anuncio`, feita **sobre a `333-crm-orcamento-na-conversa`** (325 → 328
+> → 330 → 332 → 333 → 334; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/334-crm-origem-do-anuncio/`.
+
+**O pedido.** O dono disse "começar a 3b" (04/11): ver de qual campanha cada cliente veio, o motivo número um do CRM
+próprio. Quem clica num anúncio "clique para o WhatsApp" (ou abre o Direct pelo anúncio) chega com o `referral` no
+aviso da Meta, mas só com o id e o título do anúncio. Decisões do dono:
+- a campanha **é perguntada à Meta** pelo id do anúncio; até a permissão `ads_read` existir, fica só o anúncio, e a
+  campanha chega sozinha depois;
+- a ficha guarda **o anúncio mais antigo e o mais recente** ("para campanhas de repescagem, por exemplo");
+- quem chega sem anúncio ganha **o canal** como origem ("WhatsApp"/"Instagram").
+
+**O que mudou.**
+- **Captura** (`anuncio_ops`, dentro da transação do aviso): `conversa_anuncios`, um por contato, com a chave do
+  wamid/mid (ou `ref:{igsid}:{timestamp}` na abertura do Instagram sem mensagem, que agora cria a conversa).
+- **Campanha**: `anuncios_meta`, um por anúncio. `consultar_pendentes` depois do commit de cada aviso; `reconsultar`
+  na varredura, depois de 24 h, mais a propagação da campanha que ficou para trás. `meta_anuncios_client` usa o
+  transporte e a trava do WhatsApp; `META_ANUNCIOS_TOKEN` (vazio usa o do WhatsApp).
+- **Ficha**: `anuncio_origem_*` e `anuncio_recente_*`; a origem ("Anúncio do WhatsApp"/"do Instagram", `utm_source=meta`,
+  `utm_medium=anuncio`, a campanha) só na ficha sem origem; o canal só na ficha criada agora pela conversa.
+- **Desempenho**: o lead conta pela data em que a ficha entrou na base (o Kommo ou a criação), no horário de São Paulo;
+  a coluna **Retornos** (com os eventos depois) por campanha.
+- **Tela**: "Veio do anúncio “…” · campanha" sob o cabeçalho da conversa; Origem, Primeiro anúncio e Anúncio mais
+  recente na ficha; Retornos no Desempenho.
+
+**Decisões e pegadinhas.**
+- **O "não existe" da Graph não é um só.** O anúncio apagado costuma voltar com o código 100/33, a mesma resposta do
+  token sem acesso à conta de anúncios. Tratado como definitivo, todo anúncio capturado antes de a permissão chegar
+  ficaria sem campanha para sempre; só o 404 e o 803 são definitivos (`docs/05` 195).
+- **A consulta nunca entra na transação do aviso**: a Meta lenta não segura o aviso nem a linha travada, e a falha não
+  devolve o aviso à fila. Claim por linha (`FOR UPDATE SKIP LOCKED`) com a marca `consultando`: o processo que morre no
+  meio deixa a linha para a varredura.
+- **A campanha que chega depois vai só às fichas que a 334 atribuiu** (`meta`/`anuncio`): a ficha do Kommo com
+  campanha própria não muda.
+- **Ficha "sem origem"** é sem `lead_origin`, sem `utm_source` e sem `utm_campaign`: o formulário e o Kommo ganham.
+- **Fuso do Desempenho** (convergência): a janela e o `kommo_created_at` são de São Paulo, e o `created_at` e o momento
+  do contato são UTC. Sem converter, o lead das 21 h às 24 h caía no dia seguinte.
+- **A abertura do Instagram sem mensagem** cria uma conversa sem horário: aparece no fim da primeira página da lista,
+  não nas seguintes, até a cliente escrever (`docs/05` 196).
+- **De passagem**: o `verify_328` cenário 11 só passava depois das 14 h (a espera ficava às 13h44 de hoje); agora é
+  independente da hora.
+
+**Verificação.**
+- `verify_334.py` deu **12/12** contra o `manto_local`, com zero escapes. A consulta é dublê, conta as chamadas e confere
+  o token. Dois cenários **devem** falhar: a recusa (100/33, a varredura no dia seguinte e o 404 definitivo) e a trava e
+  a falta de token (o anúncio espera e sai na primeira consulta liberada).
+- `verify_333` 15/15, `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24, `verify_325` 22/22 e `verify_256`
+  12/12 (a data do lead mudou).
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5336, Vite 5337) em desktop e 375×812: a linha do anúncio na conversa (WhatsApp e
+  Instagram), a origem na ficha e os Retornos no Desempenho, sem rolagem horizontal no celular.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **9 achados** (0
+críticos, 0 altos, 2 médios e 7 baixos), fechados ou aceitos em T016–T023.
+
+**Para publicar.** Merge na ordem 325 → 328 → 330 → 332 → 333 → 334. Depois, dar `ads_read` ao usuário do sistema (ou
+um token próprio no `META_ANUNCIOS_TOKEN`) e conferir o log `[anuncios]` e a campanha numa ficha nova (`docs/05` 194).
+
+### 333 — Orçamento e formulário pela conversa   (333-crm-orcamento-na-conversa · 2026-11-03 · migration `c333e1a5b7d9`)
+
+> **NÃO PUBLICADO** — branch `333-crm-orcamento-na-conversa`, feita **sobre a `332-crm-avisos-no-celular`** (325 → 328
+> → 330 → 332 → 333; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
+> `specs/333-crm-orcamento-na-conversa/`.
+
+**O pedido.** O dono disse "começar a Fase 3" (03/11). O portão da fase é "um orçamento de verdade vai da conversa à
+venda sem copiar e colar". Hoje o vendedor copia a mensagem do orçamento, cola no WhatsApp, baixa o PDF, anexa e, quando
+a cliente fecha, cria o evento procurando a ficha de novo. Decisões do dono antes da spec:
+- a Fase 3 em três fatias: **3a** orçamento e formulário (esta), **3b** origem do anúncio, **3c** linha do tempo da
+  ficha e funil;
+- a cliente recebe **a mensagem pronta e o PDF** logo depois;
+- o vendedor manda **dos dois lugares**: na tela do orçamento ("Enviar na conversa") e dentro da conversa ("Enviar
+  orçamento", entre os recentes);
+- conversa sem ficha **cria a ficha na hora** (WhatsApp: telefone e nome; Instagram: escolher ou informar o telefone).
+
+**O que mudou.**
+- **Envio do orçamento** (`costura_ops.enviar_orcamento`): pré-condições antes de tudo, a ficha, o registro em
+  `orcamento_envios`, cada parte da mensagem pelo `envio_ops.enviar_texto` e o PDF pelo `enviar_arquivo`, com as chaves
+  `{chave}:n` e `{chave}:pdf`. Nada fala com a Meta fora do envio da conversa (trava, janela e "não entregue" de
+  sempre).
+- **Ficha** (`ficha_ops`): ligar, trocar e remover à mão, com `conversas.ficha_manual`. A regra "ficha pelo telefone"
+  da 325 virou fonte única (`ficha_pelo_telefone`), também da ligação automática, que agora respeita a escolha manual.
+- **Formulário**: `GET /api/conversas/<id>/formularios`, com o link curto e o texto pronto; a tela o insere no campo.
+- **Orçamento**: `client_id`; `enviado_em` no histórico (o selo); `cliente` e `envios` no detalhe; `cliente` no
+  pré-preenchimento do evento.
+- **Tela**: "Ligar à ficha"/"Trocar ficha" no cabeçalho da conversa; "Enviar orçamento" e "Enviar formulário" na caixa;
+  "Enviar na conversa" e "Envios na conversa" na tela do orçamento; o selo no histórico; a cliente no "Criar evento";
+  "Conversa" no gráfico de clientes novos.
+
+**Decisões e pegadinhas.**
+- **Pré-condições antes de criar qualquer coisa.** Com a janela fechada, uma ficha nascida no envio recusado seria lixo
+  na base. O `envio_ops` ganhou o `conferir_envio` público.
+- **Uma chave por pedido**, com sufixo por parte: repetir refaz só o que faltou (queda no meio), e o PDF só é gerado se
+  a parte dele ainda não saiu.
+- **O nome da ficha nova** é o do orçamento **só se o orçamento ainda não é de ninguém**. Achado na conferência de
+  tela: o orçamento da Ana reenviado para a conversa da Bruna criaria a ficha "Ana" com o telefone da Bruna.
+- **Remover vínculo também é escolha manual.** Sem a `ficha_manual`, a próxima mensagem religaria a ficha errada pelo
+  telefone.
+- **O orçamento fica com a ficha do primeiro envio**; reenviar a outra conversa só registra o envio.
+- **Sem endpoint novo para listar**: os recentes usam o `GET /api/orcamento/historico` (com `date_from`) e a escolha
+  da conversa usa o `GET /api/conversas?busca=`.
+- **`quote_ops.nome_do_pdf`**: o nome do PDF era montado dentro do endpoint de download; agora download e conversa usam
+  o mesmo.
+
+**Verificação.**
+- `verify_333.py` deu **15/15** contra o `manto_local`, com zero escapes. A Meta é dublê e confere o que saiu: o texto
+  igual à mensagem pronta, o `%PDF`, a ordem, as partes de até 1.000 bytes no Instagram, a queda no meio (só o PDF
+  sai de novo) e "só o PDF". Três cenários **devem** falhar: janela fechada e trava (sem ficha nem registro),
+  Casting e orçamento sem mensagem/telefone inválido.
+- `verify_332` 17/17, `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22 (a ligação automática mudou).
+- `ruff` limpo nos arquivos tocados; `npm run typecheck` limpo.
+- Tela pela worktree (backend 5334, Vite 5335) em desktop e 375×812:
+  - os dois envios, a ficha exigida no Instagram e a trava com o texto de cada canal;
+  - o formulário no campo; ligar, remover e religar a ficha;
+  - os envios na tela do orçamento, o selo e o evento com a cliente como Contratante;
+  - sem rolagem horizontal no celular.
+- Achado de passagem: a hora de criação no histórico de orçamentos sai em UTC como se fosse a de São Paulo, anterior à
+  333 (`docs/05` 193).
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **18 achados** (0
+críticos, 0 altos, 4 médios e 14 baixos), fechados em T020–T036.
+- O texto do formulário saudava "Oi, (11)!" quando a ficha nascia sem nome (o telefone batizava a ficha).
+- O PDF recusado pela Meta não tinha como sair de novo sem repetir a mensagem: nasceu **"Enviar só o PDF"**
+  (`somente_pdf`). E a tela dizia "enviado" com o PDF recusado.
+- A conferência dizia "fica ligado à ficha da conversa" para um orçamento que já era de outra ficha, e sugeria o
+  nome desse orçamento no "Criar ficha". O histórico passou a trazer a `cliente` de cada linha.
+- Erro da ficha que sumia quando a tela não pedia a escolha; o campo certo (`nome`/`telefone`) marcado; o texto do
+  formulário velho por 5 min depois de trocar a ficha.
+- A ficha nova sem `phone_display`; o número estrangeiro do WhatsApp ganhava "55"; a ficha do orçamento gravada
+  sem condição (dois primeiros envios ao mesmo tempo); o id da primeira parte só no fim.
+- O verify ganhou a queda no meio, o último envio no selo, a ficha batizada pelo telefone, o número estrangeiro e o
+  `phone_display`.
+- O botão "Trocar ficha" abre o diálogo com "Remover vínculo" (sem componente de menu na casa): a spec registra.
+- **Fora do plano, mantido e registrado aqui**: `ficha_pelo_telefone` mudou de `aviso_ops` para `ficha_ops` (fonte
+  única); `quote_ops.nome_do_pdf` (o download passou a usá-lo); 422 `chave_envio` quando a mesma chave chega para outra
+  conversa ou outro orçamento; o corpo da ficha aceita `{"id"}` além de `{"client_id"}`.
+
+### 332 — Avisos das Conversas no celular   (332-crm-avisos-no-celular · 2026-11-03 · migration `b332d5f7a9c1`)
+
+> **NÃO PUBLICADO** — branch `332-crm-avisos-no-celular`, feita **sobre a `330-crm-instagram-direct`** (325 → 328 →
+> 330 → 332; nenhuma está na `main`, por decisão do dono). Mesmo publicado, fica desligado até as duas chaves
+> `WEB_PUSH_VAPID_*` (`docs/05` 190). Nível 1. Detalhe: `specs/332-crm-avisos-no-celular/`.
+
+**O pedido.** O dono disse "começar a 2c" (03/11), a Fase 2c do plano do CRM próprio: o aviso no celular. Sem ele,
+quem não está com a Plataforma aberta só sabe da cliente pelo app do WhatsApp/Instagram, e o Kommo continua
+necessário. Duas decisões do dono antes da spec:
+- toca a **mensagem nova da cliente** (para o responsável; sem responsável, para a equipe), o **alerta de 15 min** e a
+  **transferência**;
+- **a qualquer hora**: cada pessoa silencia no próprio celular. O alerta de 15 min continua só das 9h às 21h.
+
+**O que mudou.**
+- **App instalável**: `manifest.webmanifest`, `sw.js` e os ícones em `frontend/apps/internal/public/` (servidos na raiz
+  pelo `server.js`, com `no-cache`); `index.html` com o manifesto, o `apple-touch-icon` e o `theme-color`. O service
+  worker só mostra o aviso, abre a conversa ao tocar e registra a assinatura renovada: **sem cache de página**, para o
+  deploy nunca prender a versão velha.
+- **Registro do aparelho**: `push_assinaturas` (endpoint único, FK para `users`), `GET /api/push/chave` e
+  `POST`/`DELETE /api/push/aparelhos` com `pode_conversas`. O painel "Avisos no celular" fica no cabeçalho da lista de
+  Conversas, com os estados desligado, sem suporte, iPhone fora da Tela de Início, bloqueado, desativado e ativado.
+- **Envio**: `app/push/webpush.py` (cifra e VAPID), `push_ops.despachar` (thread própria, depois do commit) e
+  `entregar` (filtra quem ainda é da equipe, apaga o aparelho que sumiu, nunca levanta).
+  - Mensagem nova: os processadores do aviso da Meta juntam num conjunto `chegadas` as conversas com mensagem da
+    cliente, e `celular_ops.avisar_mensagens` avisa depois do commit.
+  - Alerta e transferência: `equipe_ops`, depois do commit, para quem recebeu no sino.
+- **Chaves**: `flask webpush-chaves` gera o par e imprime só no terminal; `WEB_PUSH_VAPID_*` vazias = desligado;
+  `_suppress_push()` trava o local.
+
+**Decisões e pegadinhas.**
+- **Sem `pywebpush`.** Instalar a biblioteca baixaria pacote no `.venv` compartilhado e entraria no build do Render. A
+  cifra (RFC 8291) e o token VAPID (RFC 8292) foram escritos sobre o `cryptography` e o `requests`.
+- **O `cryptography` não estava no `requirements.txt`.** Ele só existia no `.venv`, instalado pela sessão da 329 (que
+  o fixa para a NFS-e). O verify passava, e o primeiro deploy derrubaria o boot no `import`. A convergência pegou;
+  agora está fixado `==46.0.7`, a mesma linha da 329. **Lição:** dependência "que já está na casa" se confere no
+  `requirements.txt`, não no `.venv`. Cifra errada não dá
+  erro em lugar nenhum (o aviso só não aparece), então o verify confere o **vetor oficial do RFC 8291 (apêndice A)**
+  byte a byte.
+- **O aviso nunca sai antes do commit** nem atrasa quem chamou: a transferência roda dentro da requisição, e o webhook
+  não pode esperar o Google/Apple. Aviso perdido num deploy não volta; o sino e a lista continuam valendo.
+- **Ordem depois do commit: perfil → celular → mídia.** O título do aviso do Instagram é o nome do perfil, e a mídia
+  pode levar minutos.
+- **`celular_ops`, não `avisos_ops`.** O plano previa `avisos_ops`, a um "s" do `aviso_ops` (o aviso da Meta).
+- **O servidor faz POST no endereço que o navegador mandou.** Só os serviços de aviso conhecidos (Google, Mozilla,
+  Microsoft, Apple), em https: senão o registro viraria um jeito de o servidor chamar um endereço interno (SSRF).
+- **Ícone da casa**: a spec previa gerar um "M"; já existia o `app/static/apple-touch-icon-app.png` do Jinja, que foi
+  redimensionado. `purpose: any` (o "M" encosta nas bordas e perderia as pontas num recorte circular).
+- **`start_url: /`**, não `/conversas`: o manifesto vale para a Plataforma inteira, e o Casting que instalar não pode
+  cair numa tela sem acesso.
+- **O Browser pane não registra service worker** e nega a permissão de avisos. O `sw.js` foi provado por um harness
+  Node com os eventos; falta tocar num celular de verdade (`docs/05` 191).
+
+**Verificação.**
+- `verify_332.py` deu **17/17** contra o `manto_local`, com zero escapes. O dublê fica no `requests.post` do
+  `webpush`: um serviço de avisos falso confere o token VAPID (assinatura, `aud`, `exp`, `sub`) e os cabeçalhos e
+  decifra cada aviso com a chave do aparelho de teste. Uma mutação (token de 25 h) derrubou 7 cenários. Três
+  cenários **devem** falhar: Casting e registro inválido (endereço fora dos serviços de aviso, ponto fora da curva,
+  aparelho do Casting gravado à força), ambiente travado e sem chaves.
+- `verify_330` 29/29, `verify_328` 24/24 e `verify_325` 22/22.
+- `ruff` limpo nos arquivos tocados (o `error_count` de `app/cli.py` é anterior); `npm run typecheck` limpo.
+- Tela pela worktree (backend 5332 com Google dublado e chaves em memória, Vite 5333) em desktop e 375×812:
+  - o botão de 44 px ao lado da busca (depois da convergência, com o ícone de celular);
+  - os estados bloqueado, desativado (com "Ativar avisos") e iPhone fora da Tela de Início;
+  - manifesto, ícones e `sw.js` servidos; sem rolagem horizontal no celular.
+- Harness do `sw.js`: 5/5 (aviso, aviso sem JSON, toque com aba aberta, link de fora barrado, assinatura renovada).
+- Achado de passagem: rolagem horizontal de ~12 px em `/conversas` no desktop, anterior à 332 (`docs/05` 192).
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **17 achados** (1
+crítico, 0 altos, 7 médios e 9 baixos), fechados em T017–T033.
+- O `cryptography` fora do `requirements.txt` (o crítico).
+- Aparelho com chave fora da curva que levantava no meio do laço e desfazia a rodada inteira.
+- Uma thread por aviso, cada uma segurando conexão do pool durante a rede (às 9h vêm as esperas da noite).
+- "Ativado" mostrado com o registro recusado pelo servidor.
+- O verify que trocava a entrega inteira e não passava pelo token nem pelos cabeçalhos; a trava derivada não
+  conferida.
+- "tente de novo" (o glossário pede "Tentar novamente").
+- `despachar` que podia levantar; o rollback que faltava no `celular_ops`; o corpo do aviso que virava "Reagiu com
+  👍"; a falha ao ler o estado que deixava o esqueleto para sempre.
+- O botão com o mesmo sino das notificações (agora o ícone de celular).
+- **Sair desativa os avisos deste aparelho**: o aviso traz o nome e o trecho da cliente, e o navegador pode ficar com
+  outra pessoa (decisão tomada aqui, pelo lado da privacidade; a saída nunca espera mais de 3 s).
+- O par VAPID que não confere passa a desligar, com aviso na subida.
+- Cenários novos: toque em botão (WhatsApp e Instagram), eco e reação do Instagram, alerta sem responsável e a
+  entrega pela thread.
+
+### 330 — Instagram Direct na caixa de Conversas   (330-crm-instagram-direct · 2026-11-03 · migration `a330c4e8f1b2`)
+
+> **NÃO PUBLICADO** — branch `330-crm-instagram-direct`, feita **sobre a `328-crm-equipe-na-caixa`** (que fica sobre a
+> 325; nenhuma está na `main`, por decisão do dono). No merge, a ordem é 325 → 328 → 330. Mesmo publicado, o canal
+> segue desligado até as três variáveis `INSTAGRAM_*` (`docs/05` 186). Nível 1. Detalhe: `specs/330-crm-instagram-direct/`.
+
+**O pedido.** O dono disse "começar a 2b" (03/11), a Fase 2b do plano do CRM próprio: o Direct na mesma caixa do
+WhatsApp. O Kommo hoje recebe os dois, e só pode ser cancelado quando o Direct também funcionar aqui. Duas decisões
+do dono antes da spec:
+- ligar **pela Página do Facebook**: o token é do portfólio e não vence, o roteamento da Meta deixa o piloto conviver
+  com o Kommo, e o anúncio de origem vem no `referral`;
+- trazer **só o Direct**, sem os comentários.
+
+**O que mudou.**
+- **Webhook** `GET|POST /api/webhooks/instagram`, assinado com o segredo do **mesmo** app Meta. O aviso entra na
+  mesma fila crua, no mesmo claim e na mesma varredura da 325; `processar_aviso` despacha pelo `object`.
+- **`instagram_ops`**:
+  - grava o que chega em `messaging[]` e em `standby[]` (outro app no controle);
+  - cada anexo vira uma mensagem (`mid`, `mid#n`);
+  - story, menção, publicação e reels viram texto pronto com o link;
+  - trata efêmera, não suportada, apagada pela cliente (some a mídia), eco de outro app (`origem=outro`, sem duplicar
+    o próprio `mid`), reação, visto pelo `read.mid` e toque em botão;
+  - busca o perfil depois do commit, no máximo uma vez por dia sem nome.
+- **Envio pela Página** (`canais.py` + `envio_ops`):
+  - janela de 24 h normal; até 7 dias com `HUMAN_AGENT`; depois, 409;
+  - texto até 1.000 bytes;
+  - foto até 8 MB, vídeo, áudio e PDF até 25 MB, com upload direto;
+  - o áudio gravado vira m4a;
+  - sem modelos (409 `sem_modelos`);
+  - motivos próprios na recusa: marca humana não liberada, conversa com outro app, token.
+  - O WhatsApp não mudou: `verify_325` e `verify_328` seguem verdes.
+- **Tela**:
+  - lista: ícone do canal, "@usuário" e o filtro "Todos · WhatsApp · Instagram" (com os dois ligados);
+  - conversa: "fora das 24 h" no cabeçalho, sem "Enviar modelo", e "Enviada por outro app";
+  - links "Abrir no Instagram".
+
+**Decisões e pegadinhas.**
+- **O IGSID é só dígitos.** A 325 derivava telefone e ficha de todo contato numérico: uma cliente do Instagram cairia na
+  ficha de um telefone qualquer. Telefone e vínculo agora são só do WhatsApp.
+- **O `mid` do Instagram passa de 128 caracteres**: `externo_id` e `resposta_a` foram para 255. Alargar varchar não
+  reescreve a tabela.
+- **Um transporte só**: o cliente do Instagram usa o `requisitar` do `whatsapp_client`, agora público, e o
+  `WhatsappRecusou` ganhou `subcode`.
+- **Adaptador mais leve que o planejado**: em vez de mover o WhatsApp para um objeto de canal, o `canais.py` traz só o
+  que é do Instagram, e o `envio_ops` desvia pelo canal num `_concluir` comum. Menos risco para a 325/328.
+- **Só o Instagram ligado** também liga o menu, a lista e a **varredura**. A convergência pegou: a passada exigia o
+  WhatsApp.
+- **A confirmar na conta de teste** (`docs/05` 187): a codificação do upload, os campos do perfil e os códigos de
+  recusa da marca humana e do roteamento.
+
+**Verificação.**
+- `verify_330.py` deu **29/29** contra o `manto_local`, com zero escapes (dublê do cliente do Instagram e do download).
+  Sete cenários **devem** falhar:
+  - token de verificação errado;
+  - assinatura errada;
+  - depois de 7 dias e modelo;
+  - planilha, foto grande e texto longo;
+  - canal desligado;
+  - envio travado;
+  - Casting.
+- `verify_328` deu 24/24 e `verify_325` 22/22.
+- `ruff` limpo; `npm run typecheck` limpo nas três SPAs.
+- Tela pela worktree (backend 5330, Vite 5331) em desktop e 375×812:
+  - filtro, ícones e @usuário;
+  - janela humana e janela fechada;
+  - links e textos da convergência.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **16 achados** (0
+críticos, 1 alto, 4 médios e 11 baixos), fechados em T030–T044.
+- A varredura parada com só o Instagram ligado.
+- A apagada que deixava a foto e a prévia.
+- Os links de story e publicação que não apareciam.
+- Os motivos do WhatsApp em conversa do Instagram.
+- O `{nome}` virando "Contato" ou "@usuário".
+- O limite em bytes só no servidor.
+- O visto que ignorava o `mid`.
+- O eco em voo olhando todas as conversas.
+- O download com cabeçalho de autorização vazio e o MIME só pelos bytes.
+- O "Passaram 7 dias" numa conversa só com ecos.
+- O toque em botão descartado.
+- Cenários de verify que não exercitavam o caminho: menção, segundo anexo, trava, eco antes do `mid` e só o Instagram.
+
+O T039 (ordem da checagem do tipo no WhatsApp) foi aceito com o motivo registrado.
+
+**Commits:**
+- `36e1f99f`, `990a89fc`, `6ed8c645` (esteira);
+- `f1b10592` (backend);
+- `8e79d9ce` (tela);
+- `e13c4429` (docs vivos);
+- os da convergência e desta entrada.
+
+### 328 — Conversas em equipe: responsável, alerta de cliente esperando, notas, respostas rápidas e áudio   (328-crm-equipe-na-caixa · 2026-11-03 · migration `f328b2d4e6a1`)
+
+> **NÃO PUBLICADO** — branch `328-crm-equipe-na-caixa`, feita **sobre a `325-crm-whatsapp-fundacao`** (que também não
+> está na `main`). O dono adiou a publicação (03/11: "Dá para continuar a implementação sem fazer o push?? Vou deixar
+> mais pra frente"). No merge, a 325 entra antes da 328. Mesmo publicado, o módulo segue desligado até as variáveis
+> `WHATSAPP_*` (`docs/05` 178). Nível 1. Detalhe: `specs/328-crm-equipe-na-caixa/`.
+
+**O pedido.** "Se tornarmos a nossa usabilidade boa o suficiente, a ideia é que 3 pessoas usem sempre pelo mesmo
+número" (30/10). É a Fase 2 do plano do CRM próprio, que o dono dividiu em 03/11. Esta é a 2a, a equipe na caixa; a 2b
+(Instagram Direct) e a 2c (push no celular) vêm depois. As quatro decisões de equipe foram do dono, todas pela opção
+recomendada:
+- fila livre;
+- alerta de 15 min das 9h às 21h;
+- respostas rápidas de qualquer Comercial;
+- esta parte primeiro.
+
+**O que mudou.**
+- **Responsável** (`conversas.responsavel_id`): a conversa nova chega na fila, e o primeiro envio que a **Meta aceitou**
+  a dá ao autor. "Assumir", "Transferir…" (com aviso `conversa.transferida` no sino de quem recebe) e "Devolver à fila"
+  por `POST /api/conversas/<id>/responsavel`. A lista filtra entre "Todas", "Minhas" e "Sem responsável".
+- **Espera e alerta** (`conversas.aguardando_desde`): a espera conta da primeira mensagem da cliente sem resposta. A
+  rotina `alertar_esperas`, na varredura do WhatsApp, avisa no sino (`conversa.esperando`, urgente) depois de 15 min, só
+  das 9h às 21h de São Paulo: avisa o responsável ou, sem ele, a equipe. A resposta apaga o aviso. A lista mostra
+  "Esperando há N min".
+- **Notas internas** (`conversa_notas`): a caixa alterna "Mensagem | Nota interna"; a nota nunca sai e aparece em dourado
+  na linha do tempo.
+- **Respostas rápidas** (`respostas_rapidas`): lista única da equipe, aberta pelo botão ou por "/" no começo do campo;
+  escolher só preenche o campo, com `{nome}` trocado pelo primeiro nome. A tela tem criar, editar e excluir.
+- **Áudio gravado**: o microfone grava pelo `MediaRecorder` (ogg no Firefox, webm no Chrome, mp4 no Safari). O servidor
+  troca o webm por ogg com o ffmpeg da casa (`-c:a copy`, sem recodificar), e o ogg com Opus sai como nota de voz
+  (`voice: true`).
+
+**Decisões e pegadinhas.**
+- **A primeira resposta fica.** Tanto a atribuição quanto assumir e transferir são UPDATEs condicionais no banco
+  (`WHERE responsavel_id IS NULL` / `IS NOT DISTINCT FROM :lido`): sem trava longa e sem "último ganha". Quem perde a
+  corrida do "Assumir" vê o nome de quem ganhou.
+- **O eco do celular não atribui**: o app não diz quem mandou. Ele encerra a espera, mas apagar ou editar pelo celular
+  não é resposta.
+- **Ciclo de import.** `equipe_ops` é importado por `aviso_ops` e `envio_ops`, então não pode importá-los. Por isso o
+  relógio UTC foi para `app/conversas/relogio.py` e a recusa para `app/conversas/recusa.py`; `EnvioRecusado` herda
+  dela, sem mudar a assinatura.
+- **`apagar_por_entidade` ganhou `kind`.** Sem ele, encerrar a espera apagaria também o aviso de transferência, que
+  aponta para a mesma conversa.
+- **Menu → botões.** O plano falava em menu; ficaram botões diretos, um toque por ação. No celular, o nome de quem
+  atende ganha linha própria, porque em 320 px ele era cortado.
+- **Ruff `--fix` no `app/api/__init__.py`** reordenaria os 70 imports que registram as rotas; o arquivo voltou ao HEAD
+  e só a linha nova entrou. O I001 dele já existia.
+
+**Verificação.**
+- `verify_328.py` deu **24/24** contra o `manto_local`, com zero escapes de rede (dublê da Meta e disjuntor de socket).
+  Oito cenários **devem** falhar: assumir a já assumida, a corrida do Assumir, transferir ao Casting, nota vazia ou
+  longa, resposta rápida inválida, Casting nas rotas novas e áudio sem ffmpeg. Os horários são injetados (14h, 22h30,
+  20h58, 21h05, 9h do dia seguinte).
+- `verify_325.py` continua 22/22. `ruff` limpo; `npm run typecheck` limpo nas três SPAs.
+- Tela aberta da worktree (backend 5328, Vite 5329) em desktop, 375×812 e 320 px:
+  - sem rolagem lateral e alvos de 44 px;
+  - transferir, devolver e assumir;
+  - nota;
+  - "/pag" + Enter preenche sem enviar, e "/xyz" + Enter com a lista vazia não envia;
+  - microfone negado com o texto do FR-012.
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura: **21 achados** (2 da
+constituição, 1 alto, 8 médios e 10 baixos), fechados em T046–T065.
+- Áudio que falhou e era reenviado com chave nova. Uma resposta perdida num 502 viraria nota de voz duplicada.
+- "Tentar novamente" sem estado.
+- "/pix" + Enter com a lista ainda carregando ia para a cliente.
+- Esperas sem resposta ocupando o lote do alerta por 24 h.
+- Abrir e encerrar a espera fora da ordem das mensagens (aviso reprocessado atrasado; resposta e mensagem nova
+  concorrentes).
+- O 👍 da cliente virando alerta.
+- Eco sem texto não contando como resposta (`NULL` no SQL).
+- Verify sem a corrida, sem o responsável que perdeu o acesso e com o áudio pulado contando como OK.
+- Textos fora do Princípio XV, entre outros.
+
+**Commits:**
+- `5ffaa4f3`, `b70a1044` (esteira e analyze);
+- `0d3b220a` (backend);
+- `9835f1bd` (tela);
+- `d247819c` (convergência);
+- o desta entrada (docs).
+
+### 325 — Conversas: o WhatsApp da Manto dentro da Plataforma (fundação do CRM próprio)   (325-crm-whatsapp-fundacao · 2026-10-30 · migration `e325a7c1d9f2`)
+
+> **NÃO PUBLICADO** — branch `325-crm-whatsapp-fundacao`, aguardando o dono pedir o push. Mesmo depois do deploy, o módulo
+> fica **desligado** até o dono criar o app na Meta e preencher as cinco variáveis `WHATSAPP_*` no Render
+> (`docs/05` 178; dívidas 178–182). Nível 1. Detalhe: `specs/325-crm-whatsapp-fundacao/`. Panorama e fases:
+> `docs/PLANO_CRM_PROPRIO.md`.
+
+**O pedido.** O dono (30/10) quer um CRM próprio no lugar do Kommo: o app dele é "muito feio, muito ruim de
+mexer", o que a equipe usa é basicamente a conversa, e ele quer "ver clientes que chegam por campanhas". Perguntou se
+é viável e se o número corre risco de banimento, ainda mais com IA. Esta é a Fase 1 do plano: a Plataforma recebe e
+envia WhatsApp pela API oficial, com uma tela mínima, provada no número de teste da Meta. O número principal não é
+tocado.
+
+**O que mudou.**
+- **Webhook** `GET|POST /api/webhooks/whatsapp` (`app/api/whatsapp_webhook.py`): o GET responde o `hub.challenge` e o
+  POST exige `X-Hub-Signature-256` (HMAC do corpo bruto com o App Secret). Desligado ou inválido → 404. O aviso é
+  gravado cru (`whatsapp_avisos`) antes de qualquer processamento e a resposta é 200 na hora.
+- **Núcleo** `app/conversas/`:
+  - `aviso_ops`: processamento idempotente (UNIQUE do wamid e de canal+contato); status que nunca regride (`played`
+    vale "lida"); eco do app do celular (`smb_message_echoes`, para a coexistência da Fase 4); vínculo com a ficha pelo
+    telefone com e sem o nono dígito, sobre `contratos_ops.chave_telefone`.
+  - `midia_ops`: a mídia baixa depois do commit para `CONVERSAS_MEDIA_FOLDER`, pasta irmã de `uploads`, nunca bucket
+    público, servida só por endpoint com gate.
+  - `envio_ops`: texto, arquivo e modelo; janela de 24 h; chave de clique duplo; a mensagem é gravada antes de chamar
+    a Meta.
+  - `varredura`: thread `whatsapp-sweep` e o comando `flask whatsapp-reprocessar`.
+- **Cliente** `app/integracoes/whatsapp_client.py`: Graph API v26.0, sem Flask. As exceções separam Recusou,
+  Indisponível, Travado e ArquivoGrande.
+- **Trava** `_suppress_whatsapp()`: banco local não envia, nem lê modelos ou mídia, sem `WHATSAPP_ALLOW_LOCAL_SEND`.
+- **Tela** `/conversas`, para Comercial e Superadmin. No computador, lista e conversa lado a lado; no celular, uma de
+  cada vez. Busca, não lidas compartilhadas pela equipe, situação da enviada, mídia, "janela fechada" que vira "Enviar
+  modelo" e link para a ficha. O item do menu vem do `conversas_ligadas` de `/api/auth/me`.
+
+**Decisões e pegadinhas.**
+- **Fase 0 (Chrome do dono, só leitura).** O Kommo está na Cloud API **oficial**, em **coexistência** com o app WhatsApp
+  Business (o tipo da conta de mensagens é "App WhatsApp Business"). A WABA é da Manto e a empresa está verificada
+  desde 13/03/2026. O custo é de **1 licença**, ~US$ 300 por ano, com o limite de leads (78%) vencendo junto com a
+  renovação de 13/02/2027. A Meta custou ~US$ 17 em outubro.
+- **IA.** Pelos termos de 15/01/2026, IA genérica como função principal do número é proibida; IA da própria empresa é
+  permitida. Por isso a Fase 5 é copiloto, e desligável.
+- **Custo da Meta.** Desde 01/10/2026 a Meta cobra a resposta dentro da janela, com 1.000 grátis por número por mês. O
+  custo é o mesmo com ou sem o Kommo.
+- **BSUID (abril de 2026).** Quem usa nome de usuário pode chegar sem telefone. A conversa guarda `contato_bsuid` e o
+  envio usa `recipient`.
+- **Varredura sem lock de ciclo.** O claim é por linha, então os 3 workers varrem juntos sem tocar no `site_settings`.
+- **URL da mídia.** Termina no nome do arquivo, porque o visualizador da 320 decide imagem ou PDF pela extensão.
+- **Porta C.** O novo modelo de contas da Meta (23/09/2026) permite várias contas de mensagens no mesmo número. Como
+  as recebidas se repartem entre elas ainda não está documentado: é teste obrigatório antes da Fase 4.
+
+**Verificação.**
+- `verify_325.py` deu 22/22 contra o `manto_local`, com zero escapes de rede: a Meta é um dublê e há disjuntor de
+  socket. Seis cenários **devem** falhar: assinatura errada, janela fechada, Casting na mídia, configuração vazia, banco
+  local travado, Casting na lista.
+- `ruff` limpo e `npm run typecheck` limpo nas três SPAs.
+- Tela aberta em 1024×768 e 375×812, com a entrada `manto-backend-local-conversas-demo` do `launch.json` (chaves
+  falsas, envio travado): sem rolagem lateral, botão Enviar com 44 px, recusa "travado" com o texto mantido no campo.
+- O ponta a ponta no número de teste da Meta depende do dono (quickstart §3).
+
+**Convergência.** O `/speckit-converge` foi feito por um revisor independente, só de leitura, e achou **20 lacunas**:
+5 da constituição, sem bloquear a P1 (função longa, campo sem realce, "Tentar novamente" sem estado, troca de
+conversa sem transição, "1 variáveis"), 7 médias e 8 baixas. Todas fecharam em T039–T058:
+- chave de envio por rascunho e envio otimista;
+- "Tentar novamente" na mensagem que falhou;
+- paginação da lista e das anteriores por `(momento, id)`;
+- mídia abandonada só por idade, com espaçamento crescente;
+- grupo ignorado e ficha exata;
+- a trava real de `create_app()` e o `conversas_ligadas` provados no verify.
+
+Pegadinha da tela: `AnimatePresence mode="wait"` travava a troca de conversa quando a aba não pinta quadros; ficou só
+a animação de entrada.
+
+**Commits:** `587b0fd8` (esteira), `5307b5fe` (backend), `2c927013` (tela), `d914a258` (docs), `0420db8c` (convergência).
 
 ### 321 — Novidades para a equipe: o que mudou vira mensagem por grupo de WhatsApp   (321-novidades-para-a-equipe · 2026-10-28 · sem migration)
 

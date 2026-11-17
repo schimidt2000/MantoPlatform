@@ -10,10 +10,14 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
+from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.clientes import client_ops
+from app.clientes import client_ops, linha_do_tempo_ops
 from app.constants import RoleName
+from app.conversas import anuncio_ops
+from app.conversas.acesso import pode_conversas
+from app.models import Client
 
 
 def _has_role(*names: str) -> bool:
@@ -61,6 +65,25 @@ def api_clientes_list() -> Any:
     return jsonify({"items": items, "total_clients": total_clients})
 
 
+@api_bp.route("/clientes/<int:client_id>/linha-do-tempo")
+@api_login_required
+def api_clientes_linha_do_tempo(client_id: int) -> Any:
+    """Os marcos da ficha (feature 335). Os links de conversa e de orçamento só para quem abre essas telas
+    (Comercial e Superadmin, papel real); o Financeiro vê os marcos sem eles."""
+    denied = _require_vendas()
+    if denied:
+        return denied
+    ficha = db.session.get(Client, client_id)
+    if ficha is None:
+        return json_error("Cliente não encontrada", 404)
+    marcos = linha_do_tempo_ops.linha_do_tempo(
+        ficha,
+        com_conversas=pode_conversas(current_user),
+        com_orcamentos=_has_role(RoleName.COMERCIAL, RoleName.SUPERADMIN),
+    )
+    return jsonify({"marcos": marcos})
+
+
 @api_bp.route("/clientes/<int:client_id>")
 @api_login_required
 def api_clientes_detail(client_id: int) -> Any:
@@ -97,6 +120,8 @@ def api_clientes_detail(client_id: int) -> Any:
             # Feature 312: a lista e a contagem são só dos vivos; o cancelado vê-se na página de
             # Cancelamentos, e aqui só explica o total (que soma o retido, feature 306).
             "event_count": len(events),
+            # Feature 334: de onde a cliente veio (o primeiro e o mais recente anúncio da Meta).
+            "origem": anuncio_ops.origem_da_ficha(client),
             "total_sales": float(total_sales),
             "cancelamentos": {
                 "quantidade": cancelamentos["quantidade"],

@@ -234,6 +234,42 @@ def _suppress_infinitepay() -> bool:
     return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
 
 
+def _suppress_whatsapp() -> bool:
+    """Decide se este processo está proibido de enviar pelo WhatsApp real (feature 325, XIV).
+
+    O `manto_local` é espelho da produção: as conversas e os telefones são de clientes de
+    verdade, e o `.env` do dono pode ter o token do número. Sem a trava, um verify ou um teste
+    local mandaria mensagem para cliente. Cobre tudo que escreve na Meta: texto, mídia, modelo e
+    "marcar como lida" (o tique azul também é efeito externo). Ler modelos e baixar mídia também
+    passam por ela — o local não fala com a Meta sem a liberação.
+
+    ``WHATSAPP_SUPPRESS_SEND=true`` trava em qualquer ambiente;
+    ``WHATSAPP_ALLOW_LOCAL_SEND=true`` libera o local (o teste com o número de teste da Meta,
+    quickstart §3). O núcleo relê a chave de ``current_app.config`` a cada chamada; ausente = travado.
+    """
+    if os.getenv("WHATSAPP_SUPPRESS_SEND", "").lower() == "true":
+        return True
+    if os.getenv("WHATSAPP_ALLOW_LOCAL_SEND", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
+def _suppress_push() -> bool:
+    """Decide se este processo está proibido de mandar aviso ao celular (feature 332, XIV).
+
+    O aviso sai para o serviço do Google/Apple/Mozilla e toca no celular de gente de verdade; o
+    `manto_local` tem os aparelhos registrados da equipe. ``WEB_PUSH_SUPPRESS=true`` trava em qualquer
+    ambiente; ``WEB_PUSH_ALLOW_LOCAL=true`` libera o local (teste com o próprio celular).
+    """
+    if os.getenv("WEB_PUSH_SUPPRESS", "").lower() == "true":
+        return True
+    if os.getenv("WEB_PUSH_ALLOW_LOCAL", "").lower() == "true":
+        return False
+    db_url = _db_url()
+    return "localhost" in db_url or "127.0.0.1" in db_url or db_url.startswith("sqlite")
+
+
 def _resolve_secret_key() -> str:
     """Resolve a SECRET_KEY de forma segura (feature 074).
 
@@ -445,6 +481,48 @@ class Config:
     # (*.onrender.com); sem a prova, quem chamasse direto trocava o cabeçalho a cada requisição e
     # escapava de todo limite — o de login inclusive. Mesmo valor nos dois serviços do Render.
     MANTO_PROXY_SECRET = os.getenv("MANTO_PROXY_SECRET", "").strip()
+
+    # WhatsApp pela Cloud API da Meta (feature 325 — Conversas). Os quatro primeiros são o
+    # mínimo para o módulo existir; vazios = webhook 404, envio recusado, menu oculto, aviso no
+    # log da subida (Princípio XIV). Segredos só por env (`render.yaml`, `sync: false`), nunca no
+    # `SiteSetting`, que vai para o backup e para o espelho. O WABA_ID só serve para listar modelos.
+    WHATSAPP_ACCESS_TOKEN = os.getenv("WHATSAPP_ACCESS_TOKEN", "").strip()
+    WHATSAPP_APP_SECRET = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+    WHATSAPP_VERIFY_TOKEN = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+    WHATSAPP_PHONE_NUMBER_ID = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "").strip()
+    WHATSAPP_WABA_ID = os.getenv("WHATSAPP_WABA_ID", "").strip()
+    # Versão fixa da Graph API (research R1): revisar uma vez por ano, nunca "a mais nova" solta.
+    WHATSAPP_GRAPH_VERSION = os.getenv("WHATSAPP_GRAPH_VERSION", "v26.0").strip()
+    WHATSAPP_GRAPH_BASE = os.getenv("WHATSAPP_GRAPH_BASE", "https://graph.facebook.com").rstrip("/")
+    WHATSAPP_SUPPRESS_SEND = _suppress_whatsapp()
+    # Costura do verify: processa o aviso na própria requisição em vez de numa thread.
+    WHATSAPP_AVISO_SINCRONO = os.getenv("WHATSAPP_AVISO_SINCRONO", "").lower() == "true"
+    # Intervalo da consulta periódica da tela (s): devolvido no payload, a tela obedece.
+    WHATSAPP_POLL_SEGUNDOS = int(os.getenv("WHATSAPP_POLL_SEGUNDOS", "5"))
+    # Instagram Direct pela Página do Facebook (feature 330). O app da Meta é o MESMO do WhatsApp:
+    # o aviso usa o WHATSAPP_APP_SECRET e o WHATSAPP_VERIFY_TOKEN. Aqui só o token da Página (ou de
+    # um usuário do sistema do portfólio com a Página atribuída) e os ids da Página e da conta.
+    # Vazios = canal desligado (webhook 404, envio recusado, filtro oculto) — Princípio XIV.
+    INSTAGRAM_ACCESS_TOKEN = os.getenv("INSTAGRAM_ACCESS_TOKEN", "").strip()
+    INSTAGRAM_PAGE_ID = os.getenv("INSTAGRAM_PAGE_ID", "").strip()
+    INSTAGRAM_ACCOUNT_ID = os.getenv("INSTAGRAM_ACCOUNT_ID", "").strip()
+    # Feature 334: a consulta da campanha do anúncio (Graph `/{ad_id}?fields=campaign`). Vazio usa o
+    # WHATSAPP_ACCESS_TOKEN (o usuário do sistema do portfólio, que precisa de `ads_read`); sem os dois,
+    # a consulta fica desligada e só o anúncio é registrado.
+    META_ANUNCIOS_TOKEN = os.getenv("META_ANUNCIOS_TOKEN", "").strip()
+    # Avisos no celular (feature 332, Web Push com VAPID). O par de chaves é da Plataforma, gerado
+    # por `flask webpush-chaves` e colado no painel; vazio = desligado (Princípio XIV). O contato
+    # vai no token VAPID para o serviço de avisos saber a quem reclamar.
+    WEB_PUSH_VAPID_PUBLICA = os.getenv("WEB_PUSH_VAPID_PUBLICA", "").strip()
+    WEB_PUSH_VAPID_PRIVADA = os.getenv("WEB_PUSH_VAPID_PRIVADA", "").strip()
+    WEB_PUSH_CONTATO = os.getenv("WEB_PUSH_CONTATO", "mailto:contato@mantoproducoes.com.br").strip()
+    WEB_PUSH_SUPPRESS = _suppress_push()
+    # Entrega na hora, sem a thread própria (para o verify, como o WHATSAPP_AVISO_SINCRONO).
+    WEB_PUSH_SINCRONO = os.getenv("WEB_PUSH_SINCRONO", "").lower() == "true"
+    # Pasta da mídia das conversas — irmã de `UPLOAD_FOLDER` pelo mesmo motivo da 205/261: foto,
+    # áudio e comprovante de cliente nunca viram URL de bucket público; só saem pelo endpoint com
+    # gate. Default em `create_app` (`instance/conversas_midia`).
+    CONVERSAS_MEDIA_FOLDER = os.getenv("CONVERSAS_MEDIA_FOLDER", "")
 
     # Token do agente auditor financeiro (feature 221). Sem valor configurado, os endpoints
     # `/api/audit-agent/*` respondem 404 para tudo — mesmo racional do webhook da InfinitePay.

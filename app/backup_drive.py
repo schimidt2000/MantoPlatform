@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 #: Subpastas de `instance/` que entram no pacote de mídia. `credentials` vai junto de propósito:
 #: é o que permite reerguer o backup do zero num desastre total.
-_MEDIA_SUBDIRS = ("uploads", "nfc_media", "virtual_videos", "credentials")
+_MEDIA_SUBDIRS = ("uploads", "nfc_media", "virtual_videos", "credentials", "conversas_midia")
 _KEEP_DB = 14      # 7 dias x 2 por dia
 _KEEP_MEDIA = 2    # ~6,5 GB no regime atual — o que cabe nos 15 GB da conta de serviço
 _SCOPES = ["https://www.googleapis.com/auth/drive"]

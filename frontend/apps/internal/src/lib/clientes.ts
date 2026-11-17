@@ -63,6 +63,24 @@ export interface ClientDetail extends ClientSummary {
   marketing_opt_in_at?: string | null;
   /** Feature 344: de onde veio o aceite ("Loja: <campanha>"). */
   marketing_opt_in_source?: string | null;
+  /** Feature 334: de onde a cliente veio. Ausente em backend velho. */
+  origem?: ClientOrigem;
+}
+
+/** Um anúncio da Meta na ficha (feature 334): o título que a cliente viu e a campanha. */
+export interface ClientAnuncio {
+  anuncio_id: string;
+  titulo: string | null;
+  campanha: string | null;
+  quando: string | null;
+}
+
+export interface ClientOrigem {
+  lead_origin: string | null;
+  /** O `utm_campaign` da ficha (a campanha do primeiro anúncio, quando foi ele que a trouxe). */
+  campanha: string | null;
+  primeiro: ClientAnuncio | null;
+  recente: ClientAnuncio | null;
 }
 
 /** Um mês do gráfico de novos clientes (origem agregada no servidor). */
@@ -73,6 +91,8 @@ export interface ClientsMonthMetric {
   kommo: number;
   /** Feature 344: fichas nascidas de venda da loja. Ausente em backend velho. */
   loja?: number;
+  /** Feature 333: a ficha criada pela conversa (opcional: o backend antigo não manda). */
+  conversa?: number;
   manual: number;
 }
 
@@ -112,6 +132,32 @@ export function useClientDetail(id: number) {
   return useQuery<ClientDetail>({
     queryKey: ["clientes-detail", id],
     queryFn: () => apiFetch<ClientDetail>(`/api/clientes/${id}`),
+    enabled: Number.isFinite(id),
+  });
+}
+
+/** Um marco da linha do tempo da ficha (feature 335). `quando` vem em ISO com o fuso. */
+export interface MarcoDaFicha {
+  tipo:
+    | "entrada"
+    | "contato"
+    | "anuncio"
+    | "orcamento"
+    | "formulario"
+    | "evento"
+    | "pagamento"
+    | "avaliacao";
+  quando: string;
+  titulo: string;
+  detalhe: string | null;
+  /** Só quando a pessoa abre a tela de destino (conversa e orçamento: Comercial e Superadmin). */
+  link: { tipo: "conversa" | "orcamento" | "evento"; id: number } | null;
+}
+
+export function useLinhaDoTempo(id: number) {
+  return useQuery<{ marcos: MarcoDaFicha[] }>({
+    queryKey: ["clientes-linha-do-tempo", id],
+    queryFn: () => apiFetch<{ marcos: MarcoDaFicha[] }>(`/api/clientes/${id}/linha-do-tempo`),
     enabled: Number.isFinite(id),
   });
 }

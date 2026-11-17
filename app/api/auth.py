@@ -46,7 +46,18 @@ def serialize_user(user: User) -> dict[str, Any]:
         "is_real_superadmin": is_real_superadmin,
         "impersonating": impersonate,
         "is_educamanto_responsavel": _is_educamanto_responsavel(user),
+        # Feature 325: o item "Conversas" do menu só existe com o papel E o módulo ligado
+        # (FR-015). Papel REAL, como o gate dos endpoints: o "Ver como" não abre a caixa.
+        "conversas_ligadas": _conversas_ligadas(user),
     }
+
+
+def _conversas_ligadas(user: User) -> bool:
+    from app.conversas.acesso import pode_conversas
+    from app.conversas.configuracao import canais_ligados
+
+    # Feature 330: o WhatsApp ou o Instagram ligado já abre a caixa.
+    return pode_conversas(user) and bool(canais_ligados())
 
 
 @api_bp.route("/auth/login", methods=["POST"])

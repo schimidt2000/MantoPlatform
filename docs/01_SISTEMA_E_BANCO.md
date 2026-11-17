@@ -544,12 +544,13 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) | 1:N `events` |
+| `clients` | `Client` | cadastro comercial; identidade = `phone` normalizado (`NOT NULL UNIQUE`, só dígitos com DDI). `source` ∈ `kommo_import` \| `manual` \| `whatsform_import` (feature 193) \| `conversa` (feature 333: a ficha criada
+pela conversa; balde próprio em `client_metrics`) | 1:N `events` |
 | `form_responses` | `FormResponse` | respostas dos formulários públicos de pré-contrato (`form_type` ∈ `comum` \| `corporativo`) **e** o histórico do WhatsForm importado na feature 193. **Feature 298**: encerramento em `closed_reason` (`desistiu` \| `repetido` \| `preenchido_errado` \| `teste` \| `outro`), `closed_note` (≤ 300, obrigatória em `outro`), `closed_by_id`, `closed_at` (UTC ingênuo, como `created_at`); índice parcial `ix_form_responses_sem_destino` (`created_at` onde `event_id IS NULL AND closed_at IS NULL`). Invariante: `closed_at IS NOT NULL ⇒ event_id IS NULL` | `client_id`, `event_id` (ambos indexados e nullable); `closed_by_id` (`users`, `SET NULL`); `client_link_source` (feature 266: `auto_phone` \| `manual` \| `NULL`, espelha `event_link_source`; 298: `evento` quando a cliente veio do evento ligado) |
 | `form_response_dismissed_events` | `FormResponseDismissedEvent` | **Feature 298**: sugestão "parece ser este evento" descartada — o par nunca volta (definitivo, decisão do dono). `UNIQUE(form_response_id, event_id)`; **sem backref** de propósito (as exclusões de evento e de formulário contam com o `ON DELETE CASCADE`) | `form_response_id` e `event_id` (`CASCADE`), `dismissed_by_id` (`SET NULL`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
-| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id` |
+| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte) |
 
 #### Estado do banco de leads (pós-feature 193)
 
@@ -599,6 +600,64 @@ Pontos que valem para quem for ler esses dados:
   WhatsForm (`Response`, `Time`, `Delivered to`) removidas e as chaves-sistema (`cpf`, `cnpj`,
   `endereco_contratante`, `endereco_empresa`) preservadas — então
   `formularios_ops.fill_client_from_response` continua funcionando nessas respostas.
+- **Conversas — WhatsApp** (feature 325, migration `e325a7c1d9f2`, aditiva). Horário: **UTC ingênuo** nas quatro
+  tabelas (a API serializa com `+00:00`). Campos e máquinas de estado em `specs/325-crm-whatsapp-fundacao/data-model.md`.
+  - `whatsapp_avisos`: o POST cru da Meta (`corpo` Text ≤ 256 KB), com `estado` `pendente` → `processando` →
+    `processado`/`descartado`, `tentativas`, `tentado_em` (resgate do processando parado) e `erro`.
+  - `conversas`: um contato num canal. `UNIQUE(canal, contato_id)` (`uq_conversas_canal_contato`). `contato_id` é o
+    `wa_id` como veio ou, sem ele, o BSUID. Também `contato_bsuid`, `telefone` (com o nono dígito, a forma de
+    `clients.phone`), `nome_perfil`, `client_id` → `clients` (SET NULL), `ultima_recebida_em` (base da janela de 24 h),
+    `ultima_mensagem_em`, `ultima_previa` e `nao_lidas` (da equipe).
+  - `conversa_mensagens`: `conversa_id` (CASCADE), `direcao`, `tipo`, `texto`, `externo_id` (wamid,
+    `uq_conversa_mensagens_externo_id`), `chave_envio` (`uq_conversa_mensagens_chave_envio`), `situacao`,
+    `erro_codigo`, `erro_motivo`, `autor_id` → `users` (SET NULL), `origem`
+    (`contato`/`plataforma`/`celular`/`outro`), `modelo_nome`, `resposta_a`, `dados` (item cru) e `momento`.
+  - `conversa_midias`: `mensagem_id` (CASCADE, UNIQUE), `externo_id` (id da mídia na Meta), `mime`, `tamanho`,
+    `nome_original`, `caminho` (relativo a `CONVERSAS_MEDIA_FOLDER`) e `estado` `pendente`/`guardada`/`falhou`.
+- **Conversas em equipe** (feature 328, migration `f328b2d4e6a1`, aditiva sobre `e325a7c1d9f2`; UTC ingênuo). Detalhe
+  em `specs/328-crm-equipe-na-caixa/data-model.md`.
+  - `conversas` ganha `responsavel_id` → `users` (SET NULL, index; nulo = fila livre), `assumida_em` (a vez do
+    responsável atual: é a identidade do aviso de transferência) e `aguardando_desde` (index; a primeira mensagem da
+    cliente ainda sem resposta; nulo = ninguém esperando).
+  - `conversa_notas`: `conversa_id` (CASCADE), `autor_id` → `users` (SET NULL), `texto` (1–2.000) e `created_at`. Só se
+    acrescenta.
+  - `respostas_rapidas`: `titulo` (80; único sem caixa, índice `uq_respostas_rapidas_titulo` em `lower(titulo)`),
+    `atalho` (30, opcional, minúsculas, sem "/" nem espaço; `uq_respostas_rapidas_atalho`), `texto` (≤ 4.096, pode ter
+    `{nome}`), `criado_por_id`/`alterado_por_id` → `users` (SET NULL) e horários.
+- **Instagram Direct** (feature 330, migration `a330c4e8f1b2`, aditiva sobre `f328b2d4e6a1`). Detalhe em
+  `specs/330-crm-instagram-direct/data-model.md`.
+  - `conversas` ganha `usuario` (o @usuário do Instagram, sem a arroba) e `perfil_em` (UTC, a última busca do
+    perfil). No canal `instagram`, `contato_id` é o IGSID e `telefone`/`client_id` ficam vazios.
+  - `conversa_mensagens.externo_id` e `resposta_a` vão para 255: o `mid` do Instagram passa de 128. O anexo n de
+    uma mensagem usa `"{mid}#{n}"`, e a reação usa `"reacao:{mid}:{ts}:{acao}"`. O eco de outro app tem
+    `origem = outro`.
+  - O aviso cru do Instagram mora na mesma `whatsapp_avisos` (`"object": "instagram"`).
+- **Avisos no celular** (feature 332, migration `b332d5f7a9c1`, aditiva sobre `a330c4e8f1b2`). Detalhe em
+  `specs/332-crm-avisos-no-celular/data-model.md`.
+  - `push_assinaturas`: um aparelho com os avisos ligados. `user_id` → `users` (CASCADE, indexado), `endpoint`
+    (Text, `uq_push_assinaturas_endpoint`: o mesmo navegador registrado de novo fica com quem registrou por
+    último), as chaves do aparelho `p256dh` (255) e `auth` (64), `navegador` (User-Agent, 255) e os horários
+    `created_at`/`ultimo_aviso_em`. Apagado quando o serviço de avisos responde 404/410.
+- **Orçamento pela conversa** (feature 333, migration `c333e1a5b7d9`, aditiva sobre `b332d5f7a9c1`). Detalhe em
+  `specs/333-crm-orcamento-na-conversa/data-model.md`.
+  - `orcamento_envios`: cada orçamento mandado pela conversa. `orcamento_id` e `conversa_id` (CASCADE, indexados),
+    `autor_id` (SET NULL), `chave_envio` (64, `uq_orcamento_envios_chave`: a chave do pedido; as partes usam
+    `{chave}:n` e `{chave}:pdf` em `conversa_mensagens`), `texto_mensagem_id` e `pdf_mensagem_id` (SET NULL) e
+    `created_at` (UTC).
+  - `conversas.ficha_manual` (Boolean, `server_default false`): a ficha (ou a falta dela, depois de "Remover
+    vínculo") foi escolhida à mão; a ligação automática pelo telefone não age.
+  - `orcamento_history.client_id` (SET NULL, indexado).
+- **Origem do anúncio** (feature 334, migration `d334b2c4e6f8`, aditiva sobre `c333e1a5b7d9`). Detalhe em
+  `specs/334-crm-origem-do-anuncio/data-model.md`.
+  - `conversa_anuncios`: cada contato pelo anúncio (ou publicação) da Meta, do `referral` do aviso. `conversa_id`
+    (CASCADE, indexado), `canal`, `chave` (255, `uq_conversa_anuncios_chave`: o wamid/mid ou
+    `ref:{igsid}:{timestamp}` na abertura do Instagram sem mensagem), `tipo` (`anuncio` \| `publicacao` \|
+    `outro`), `anuncio_id` (64, indexado), `titulo`, `link`, `momento` e `created_at` (UTC).
+  - `anuncios_meta`: um por anúncio (`anuncio_id` PK), o que a Graph respondeu (`nome`, `campanha_id`,
+    `campanha_nome`), `consultado_em` (vazio = na fila), `erro` e `definitivo` (a Meta disse que não existe: 404
+    ou código 803).
+  - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
+    `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
 
 ### 2.8 EducaManto
 
@@ -1229,7 +1288,12 @@ Schema (migration `c4d1e7b2a9f3`): `marketing_agent_runs`, `marketing_import_fil
 (única por plataforma+campanha+`period_start`+`period_end`), `marketing_account_metrics`
 (plataforma+dia), `marketing_ad_spend_batches` (plataforma+`month_ref`, 1:1 com
 `special_expenses`), `marketing_ad_spend_lines`; `marketing_posts.permalink`;
-`clients.lead_origin/utm_source/utm_medium/utm_campaign` (preenchidos pelo importador do Kommo).
+`clients.lead_origin/utm_source/utm_medium/utm_campaign` (preenchidos pelo importador do Kommo e, desde a feature
+334, pela conversa que veio de anúncio: `utm_source=meta`, `utm_medium=anuncio`, `utm_campaign` = campanha do
+primeiro anúncio). O lead do período conta pela data em que a ficha entrou na base, no horário de São Paulo:
+`kommo_created_at` (já de São Paulo) ou, na ficha criada na Plataforma, `created_at` convertido de UTC (a do Kommo
+sem data fica de fora). Cada campanha ganha `returns` e
+`return_events`: fichas que já estavam na base e voltaram por anúncio dela no período (334).
 
 Leitura para a tela: `GET /api/marketing/desempenho?weeks=4|12|26` ou `?start&end` (gate
 MARKETING/SUPERADMIN, `marketing_read.py`). `GET /api/gastos` passa a devolver `marketing_batch`
@@ -2050,6 +2114,162 @@ em toda passada) e `flask clicksign-webhook --listar | --registrar | --remover <
 sai de `PUBLIC_BASE_URL` + `/api/webhooks/clicksign` — Princípio XIV; grava `clicksign_webhook_id` e o
 segredo; recadastrar guarda o anterior 24 h; travado numa cópia local). Roteiro em `specs/317-contratos-clicksign/quickstart.md` §3.
 
+### 3.13.7 Conversas (WhatsApp e Instagram) — `whatsapp_webhook.py` / `instagram_webhook.py` / `conversas_read.py` / `conversas_write.py` / `conversas_equipe_write.py` (features 325, 328 e 330)
+
+A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`).
+
+- **Fluxo e invariantes**: `docs/04` §6, linha "Conversas".
+- **Contrato completo**: `specs/325-crm-whatsapp-fundacao/contracts/api.md`.
+- **Cliente HTTP** `app/integracoes/whatsapp_client.py`: sem Flask, `ConexaoMeta` por parâmetro, Graph `v26.0`,
+  `Authorization: Bearer`.
+- **Núcleo** `app/conversas/` (puro).
+- **Comando** `flask whatsapp-reprocessar [--aplicar]` (Shell do Render, `MANTO_SEM_THREADS=1`): sem `--aplicar`,
+  só conta.
+- **Thread** `_start_whatsapp_sweep` (atrás de `MANTO_SEM_THREADS`; sobe só com o módulo ligado; a cada 60 s).
+
+| Método | Rota | O que faz |
+|---|---|---|
+| `GET` | `/api/webhooks/whatsapp` | **Público.** Desafio da Meta: com `hub.mode=subscribe` e `hub.verify_token` = `WHATSAPP_VERIFY_TOKEN` (`compare_digest`) → 200 `text/plain` com o `hub.challenge`; senão, ou com o módulo desligado → **404**. `60/min`. |
+| `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
+| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. |
+| `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
+| `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
+| `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
+| `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
+| `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
+| `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
+| `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). |
+| `GET` | `/api/clientes/<id>/linha-do-tempo` | (335) `{marcos[{tipo, quando, titulo, detalhe, link}]}`, do mais novo para o mais antigo, até 300; `quando` em ISO com o fuso. |
+| `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
+| `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
+| `DELETE` | `/api/push/aparelhos` | (332) `{endpoint}` → 204; só apaga o aparelho da própria pessoa. |
+| `GET` | `/api/conversas/equipe` | (328) Para quem se pode transferir: `{equipe: [{id, nome}]}` — ativos, com acesso e papel COMERCIAL/SUPERADMIN, por nome. |
+| `POST` | `/api/conversas/<id>/responsavel` | (328) `{acao: assumir · transferir · devolver, responsavel_id?}` → 200 `{conversa}`. 409 `ja_assumida` (com o nome; também para quem perde a corrida do "Assumir") e `alterada` (corrida na transferência ou na devolução); 422 `fields.responsavel_id` (destino fora da equipe) e `fields.acao`; 404. Transferir avisa o destino no sino. |
+| `POST` | `/api/conversas/<id>/notas` | (328) `{texto}` → 201 `{nota}`. Vazio ou > 2.000 → 422 `fields.texto`. Nunca fala com a Meta. |
+| `GET`/`POST` | `/api/conversas/respostas-rapidas` | (328) Lista por título / cria `{titulo, atalho?, texto}` → 201. 422 por campo (vazio, longo, repetido, atalho com espaço). |
+| `PATCH`/`DELETE` | `/api/conversas/respostas-rapidas/<id>` | (328) Altera só os campos enviados → 200; exclui → 204; 404. |
+| `GET` | `/api/conversas/midia/<id>[/<nome>]` | O arquivo (`send_file`, `conditional`). Sem papel, inexistente ou não `guardada` → **404**. O `<nome>` só serve à extensão do visualizador. |
+| `GET` | `/api/conversas/modelos` | Modelos aprovados e suportados (só variáveis no corpo), com cache de 5 min por processo; falha → 503. |
+| `POST` | `/api/conversas/<id>/mensagens` | JSON `{texto, chave_envio}` ou multipart `arquivo`, `legenda`, `chave_envio`. 201 (nova) ou 200 (mesma chave), com `mensagem`. 409 `janela_fechada` / `envio_travado`; 503 `nao_configurado`; 422 `invalido` + `fields`. Falha da Meta = 201 com `situacao: "falhou"` e motivo. |
+| `POST` | `/api/conversas/<id>/modelo` | `{nome, idioma, variaveis[], chave_envio}`; vale com a janela fechada; 422 se o modelo não é aprovado ou o número de variáveis não confere. |
+| `POST` | `/api/conversas/<id>/lida` | Zera `nao_lidas` e marca a última recebida como lida na Meta (melhor esforço). 204. |
+
+`GET /api/auth/me` ganha `conversas_ligadas` (papel real COMERCIAL/SUPERADMIN **e** módulo ligado), que controla o
+item do menu.
+
+**Instagram Direct (feature 330, Fase 2b do plano).** Ligado **pela Página do Facebook** (mensageria do Instagram
+na Graph API, `graph.facebook.com/v26.0`), no mesmo app Meta do WhatsApp. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
+- **Núcleo**: `instagram_ops` (aviso → conversa, mensagem por anexo, eco, reação, visto, apagada, perfil depois do
+  commit) e `canais` (pré-condições, janela, tipos, envio e motivo). O `aviso_ops.processar_aviso` despacha pelo
+  `object`; o `envio_ops` desvia pelo canal da conversa (`_concluir` comum). Cliente `app/integracoes/instagram_client.py`
+  sobre o mesmo transporte (`whatsapp_client.requisitar`, agora público, e `WhatsappRecusou.subcode`).
+- **Lista**: `GET /api/conversas?canal=whatsapp|instagram` (outro → 422 `fields.canal`); a resposta ganha
+  `canais_ligados`, e `configurado` vale com qualquer canal. Cada cartão ganha `usuario` e `janela`
+  (`aberta`/`humana`/`fechada`).
+- **Envio no Instagram** (`POST /{INSTAGRAM_PAGE_ID}/messages`):
+  - a janela é de 24 h normal, até 7 dias com `MESSAGE_TAG`/`HUMAN_AGENT`, e depois 409 `janela_fechada`;
+  - o texto vai até 1.000 bytes;
+  - os arquivos aceitos são foto até 8 MB e vídeo, áudio e PDF até 25 MB, com upload direto (`filedata`);
+  - o áudio gravado (webm/ogg) vira m4a (`midia_ops.audio_para_m4a`);
+  - o modelo responde 409 `sem_modelos`, e a lida não chama a Meta;
+  - recusa da marca humana (código 10/200 com a tag) ou do roteamento (subcódigos de outro app no controle)
+    vira "não entregue" com o motivo próprio.
+- **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
+  bytes.
+
+**Linha do tempo e funil (feature 335, Fase 3c do plano).** Só leitura, sem tabela nova. Fluxo e invariantes em
+`docs/04` §6; contrato em `specs/335-crm-linha-do-tempo/contracts/api.md`.
+- **Funil** (`app/conversas/funil_ops.py`): a coorte são as conversas cujo primeiro contato — a menor data entre as
+  mensagens recebidas e os contatos por anúncio, numa agregação só (`UNION ALL` + `GROUP BY` + `HAVING`) — caiu no
+  período (datas de São Paulo convertidas para UTC). Cada conversa fica na etapa mais avançada que alcançou depois
+  do primeiro contato: orçamento (envio pela conversa ou orçamento ligado à ficha), formulário (`client_id`),
+  evento vivo (`EventClient`), pagamento (`event_payments` ou parcela recebida, no evento ou no principal do grupo)
+  e avaliação. Uma consulta por fato, em lote (`= ANY(:ids)`), com o máximo do momento por chave comparado ao
+  primeiro contato.
+- **Linha do tempo** (`app/clientes/linha_do_tempo_ops.py`): entrada, primeiro contato de cada conversa da ficha,
+  anúncios, orçamentos (um por orçamento, no primeiro envio), formulários, eventos vivos, pagamentos (a hora do PIX
+  quando há) e avaliações; os links de conversa e de orçamento só para quem abre essas telas.
+
+**Origem do anúncio (feature 334, Fase 3b do plano).** Nenhum endpoint novo. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/334-crm-origem-do-anuncio/contracts/api.md`.
+- **Captura** (`anuncio_ops`, dentro da transação do aviso, sem chamada externa): `messages[].referral` do WhatsApp
+  (`source_type` `ad` = anúncio, `post` = publicação) em `aviso_ops._gravar_recebida`; no Instagram, o
+  `referral` do item (a abertura `OPEN_THREAD`, que cria a conversa), da mensagem ou do botão, em
+  `instagram_ops`. Só `anuncio` entra na fila da consulta e vira origem.
+- **Campanha**: `anuncio_ops.consultar_pendentes()` depois do commit de cada aviso (por último, depois do celular e
+  das mídias) e `reconsultar()` na varredura, que refaz a falha depois de 24 h. `GET /{ad_id}?fields=name,campaign`
+  pelo `whatsapp_client.requisitar` (`meta_anuncios_client`); claim por linha (`FOR UPDATE SKIP LOCKED`), até 10
+  por vez. A resposta propaga o `utm_campaign` para as fichas que esse anúncio trouxe. Nunca levanta.
+- **Ficha**: `anuncio_ops.aplicar_na_ficha` na captura e sempre que a conversa ganha ficha (`ficha_ops.ligar`,
+  `ficha_para_envio`, `aviso_ops._vincular_cliente`); `ao_ganhar_ficha` dá o canal ("WhatsApp"/"Instagram") à
+  ficha criada agora sem anúncio.
+- **Leitura**: `GET /api/conversas/<id>` ganha `anuncio` (o contato mais recente por anúncio ou publicação: `tipo`,
+  `titulo`, `campanha`, `link`, `quando`; só no detalhe, a lista não muda); `GET /api/clientes/<id>` ganha `origem`
+  (`lead_origin`, `campanha`, `primeiro`, `recente`); `GET /api/marketing/desempenho` ganha `returns` e
+  `return_events` por campanha.
+
+**Orçamento e formulário pela conversa (feature 333, Fase 3a do plano).** O portão da Fase 3 é "um orçamento de
+verdade vai da conversa à venda sem copiar e colar". Fluxo e invariantes em `docs/04` §6; contrato em
+`specs/333-crm-orcamento-na-conversa/contracts/api.md`.
+- **Núcleo**: `costura_ops.enviar_orcamento` não fala com a Meta. Ordem:
+  - `envio_ops.conferir_envio` (canal, trava, janela) antes de tudo;
+  - a ficha (`ficha_ops.ficha_para_envio`) e o registro em `orcamento_envios`;
+  - cada parte da mensagem pronta por `envio_ops.enviar_texto` (`{chave}:n`; no Instagram, até 1.000 bytes,
+    quebradas entre parágrafos) e o PDF por `enviar_arquivo` (`{chave}:pdf`, gerado só se ainda não saiu, com o
+    nome de `quote_ops.nome_do_pdf`, o mesmo do download).
+  - A mesma chave refaz só o que faltou.
+- **Ficha**: `ficha_ops.ficha_pelo_telefone` é a regra da 325 (com e sem o nono dígito; com duas, a exata), agora
+  fonte única também da `_vincular_cliente`, que respeita a `ficha_manual`. No envio, sem ficha:
+  - no WhatsApp, a do telefone ou uma nova com origem `conversa`. O nome é o do orçamento só se ele ainda não tem
+    ficha; senão, o do perfil.
+  - no Instagram (ou com a ficha removida à mão), 422 `fields.cliente` até o vendedor escolher.
+- **Ficha nova**: com `phone_display` legível; a do WhatsApp guarda o wa_id como veio (E.164, sem o "55" do
+  `normalize_phone` em número estrangeiro); a do orçamento é gravada por `UPDATE … WHERE client_id IS NULL`.
+- **Orçamento**: `GET /api/orcamento/historico` ganha `enviado_em` e `cliente` por linha (um SELECT agrupado e o
+  `joinedload`); o detalhe ganha
+  `cliente` e `envios`; `GET /api/events/new/prefill` ganha `cliente` com o orçamento ligado.
+
+**Avisos no celular (feature 332, Fase 2c do plano).** Web Push padrão (Chrome, Edge, Firefox e Safari; no iPhone
+só com a Plataforma na Tela de Início, iOS 16.4+), **sem biblioteca de Web Push**: a cifra `aes128gcm` (RFC 8291) e
+o token VAPID ES256 (RFC 8292) moram em `app/push/webpush.py`, sobre o `cryptography` (fixado `==46.0.7` no
+`requirements.txt`, a mesma versão da 329) e o `requests`. O verify confere a cifra contra o vetor oficial do RFC
+8291 (apêndice A), byte a byte, e um serviço de avisos falso confere o token e decifra cada aviso. Fluxo e invariantes em `docs/04` §6;
+contrato em `specs/332-crm-avisos-no-celular/contracts/api.md`.
+- **Núcleo**: `app/push/push_ops.py` (registro, remoção, `despachar` numa thread própria e `entregar`) fica
+  embaixo; quem decide o quê e para quem é `conversas/celular_ops.py` (mensagem nova) e `equipe_ops` (alerta de
+  15 min e transferência), sempre **depois do commit**. Os processadores do aviso da Meta juntam num conjunto
+  `chegadas` as conversas com mensagem nova da cliente; depois do commit, perfil → celular → mídia. Uma thread por
+  rodada; os aparelhos são lidos e a conexão volta ao pool **antes** da rede, e o 410 e o `ultimo_aviso_em` entram
+  numa transação curta depois. Um aparelho com problema nunca corta a entrega dos outros.
+- **Registro**: só serviços de aviso conhecidos em https e chave do aparelho na curva P-256. Par VAPID que não
+  confere (pública que não é da privada) = desligado, com aviso na subida.
+- **O aviso**: `{titulo, corpo, link, tag}` cifrado (o corpo é a última mensagem da cliente, não a prévia da lista); `tag` `conversa-{id}` / `espera-{id}` / `transferida-{id}`
+  (avisos da mesma conversa se substituem); TTL de 1 dia; urgência `high` na mensagem; timeout (5, 10) s.
+- **Navegador**: `frontend/apps/internal/public/` (`manifest.webmanifest`, `sw.js`, ícones), servido na raiz pelo
+  `server.js` com `no-cache`. O service worker só mostra e abre o aviso: sem cache de página, de propósito.
+
+**Equipe na caixa (feature 328, Fase 2a do plano).** Fluxo e invariantes em `docs/04` §6; contrato em
+`specs/328-crm-equipe-na-caixa/contracts/api.md`.
+- **Núcleo**: `equipe_ops` (responsável, espera, alerta, notas) e `respostas_ops`. `equipe_ops` fica embaixo e nunca
+  importa `aviso_ops`/`envio_ops`; por isso `relogio.agora_utc` e `recusa.Recusa` são módulos próprios
+  (`EnvioRecusado` herda de `Recusa`).
+- **Sino**: `conversa.esperando` (severidade `urgent`, `dedupe_key = conversa.esperando:{id}:{epoch do início}`; para o
+  responsável da equipe, senão para COMERCIAL/SUPERADMIN pelo catálogo; apagado quando a espera acaba, por
+  `apagar_por_entidade(..., kind=)`) e `conversa.transferida` (`info`, só para o destino, `dedupe_key` com o epoch de
+  `assumida_em`). Os dois com entidade `("conversa", id)` e link `/conversas?c={id}`.
+- **Alerta**: `equipe_ops.alertar_esperas` na passada da `whatsapp-sweep` (60 s), depois dos avisos refeitos. Só das
+  9h às 21h de São Paulo (`HORARIO_DE_ALERTA`, constante), para esperas de mais de 15 min com a janela de 24 h aberta
+  e ainda sem aviso, das mais antigas, até 50 por passada. O título diz "há 16 min" ou, a partir de uma hora, "há 12 h".
+- **Espera**: aberta e encerrada por UPDATE condicional (`aguardando_desde`), na ordem das mensagens; reação não abre
+  nem encerra; o eco sem texto (áudio, foto) conta como resposta.
+- **Áudio gravado**: `POST /mensagens` aceita `audio/webm` (Chrome/Edge) e o converte para ogg com
+  `midia_ops.webm_para_ogg` (ffmpeg `-c:a copy`, arquivo temporário, 60 s; o binário vem de
+  `video_ops.caminho_do_ffmpeg()`), depois das pré-condições. Sem ffmpeg ou na falha → 422 `fields.arquivo` "Não foi
+  possível preparar o áudio. Envie o arquivo pelo clipe.". Áudio ogg com Opus (`OpusHead` na primeira página) sai com `voice: true` (nota de voz); o ogg/vorbis do clipe vai como
+  áudio comum.
+
 ### 3.14 Superfícies públicas (sem login)
 **Catálogo — item avulso × tema (fase 1, migration `c8f4d92e17ab`).** `catalog_items.figurino_sheet_id`
 guarda a ficha do item quando ele se contrata SOZINHO. INVARIANTE: item com elenco (um tema) tem
@@ -2361,6 +2581,16 @@ Gates por módulo (todos em `app/api/`):
 | `_require_cobrar()` (feature 317) | `contratos_write`: cobrar, ligar, desligar e descartar contrato da ClickSign; no detalhe, `contrato.pode_cobrar`/`pode_conferir` seguem `can_confirm` (zerado no cancelado) e, na Home, `contratos.pode_cobrar` o papel efetivo | `COMERCIAL`, `SUPERADMIN` (papel real) — FINANCEIRO leva **403** (vê a situação, não age: decisão do dono) |
 | papéis de `show_comercial` (feature 317) | `contratos_read`: `GET /api/contratos/a-conferir`; o bloco `contrato` do detalhe e `comercial.contratos` da Home vêm no mesmo `show_comercial` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` — CASTING e os demais: 403 / sem a chave |
 | HMAC do aviso (sem papel) | `POST /api/webhooks/clicksign` | público; vale só com `Content-Hmac` correto (404 nos demais) |
+| assinatura / token da Meta (sem papel) (feature 325) | `GET`/`POST /api/webhooks/whatsapp` | público; o GET vale só com `hub.verify_token` correto e o POST só com `X-Hub-Signature-256` correto; desligado → 404 |
+| `pode_conversas()` (`app/conversas/acesso.py`, papel **real**) (feature 325) | `conversas_read` (lista, conversa, modelos) e `conversas_write` (mensagens, modelo, lida) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais |
+| `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
+| assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
+| `pode_conversas()` (feature 335) | `conversas_funil` (`GET /api/conversas/funil`, `GET /api/conversas/funil/parados`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `_require_vendas()` (feature 335) | `clientes_read` (`GET /api/clientes/<id>/linha-do-tempo`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; os links de conversa e de orçamento só para `COMERCIAL`/`SUPERADMIN` (papel real) |
+| `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
+| `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
+| `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
+| `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
 | `_is_superadmin()` | dispensar/restaurar cargo, excluir ficha | `SUPERADMIN` |
 | `_can_edit_figurino()` | `figurino_write` | `FIGURINO`, `SUPERADMIN` |
 | `_can_edit_talent()` | `talents_read/write` | `CASTING`, `SUPERADMIN` |
@@ -2844,6 +3074,39 @@ preenchidos** na migração — os agentes semanais respondem 404 desde 28/08 (`
 de planilha aposentadas). `INFINITEPAY_API_KEY` (310) é opcional e também `sync: false`: ausente, a
 loja funciona com o link sem validade (`docs/05`). Rate limit em memória por worker e threads de
 background ×3 são trade-offs herdados, documentados acima.
+
+**Conversas / WhatsApp (feature 325)** — `sync: false` no `manto-backend`, vazios por padrão (= módulo desligado,
+aviso `[whatsapp] Conversas desligado: faltam …` na subida; `docs/05` 178):
+- os quatro mínimos: `WHATSAPP_ACCESS_TOKEN` (token de System User), `WHATSAPP_APP_SECRET` (assina o webhook),
+  `WHATSAPP_VERIFY_TOKEN` (desafio do GET) e `WHATSAPP_PHONE_NUMBER_ID`;
+- `WHATSAPP_WABA_ID`, só para os modelos.
+
+**Conversas / Instagram Direct (feature 330)** — `sync: false`, vazios por padrão (= canal desligado, aviso
+`[instagram] Direct desligado: faltam …` na subida; `docs/05` 186): `INSTAGRAM_ACCESS_TOKEN` (token da Página ou
+de usuário do sistema com a Página atribuída), `INSTAGRAM_PAGE_ID` (envio) e `INSTAGRAM_ACCOUNT_ID` (filtro do
+aviso). Usa também o `WHATSAPP_APP_SECRET` e o `WHATSAPP_VERIFY_TOKEN` (mesmo app) e a mesma trava.
+
+**Origem do anúncio (feature 334)** — `META_ANUNCIOS_TOKEN`, `sync: false`, vazio por padrão: a consulta da
+campanha usa então o `WHATSAPP_ACCESS_TOKEN`, que precisa de `ads_read` sobre a conta de anúncios da Manto
+(`docs/05` 194). Sem os dois, ou com a trava `WHATSAPP_SUPPRESS_SEND`, a consulta fica desligada e o anúncio
+espera na fila; o contato é registrado do mesmo jeito. Log na subida: `[anuncios] consulta da campanha ligada=…`.
+
+**Avisos no celular (feature 332)** — `WEB_PUSH_VAPID_PUBLICA` e `WEB_PUSH_VAPID_PRIVADA`, `sync: false`, vazias
+por padrão (= desligado, aviso `[push] Avisos no celular desligados: faltam …` na subida; `docs/05` 190). O par sai
+de `flask webpush-chaves`, que imprime só no terminal de quem roda; trocar o par obriga cada aparelho a ativar de
+novo. Com default real: `WEB_PUSH_CONTATO=mailto:contato@mantoproducoes.com.br` (vai no token VAPID). Trava:
+`_suppress_push()` derivada do host do banco (`WEB_PUSH_SUPPRESS=true` trava em qualquer ambiente;
+`WEB_PUSH_ALLOW_LOCAL=true` libera o local). `WEB_PUSH_SINCRONO=true` entrega sem a thread (só o verify). Par que
+não confere: aviso `[push] … a WEB_PUSH_VAPID_PUBLICA não é a da WEB_PUSH_VAPID_PRIVADA` e desligado.
+
+Com default real em `app/config.py`:
+- `WHATSAPP_GRAPH_VERSION=v26.0` (revisão anual) e `WHATSAPP_GRAPH_BASE`;
+- `WHATSAPP_POLL_SEGUNDOS=5`;
+- `CONVERSAS_MEDIA_FOLDER` = `instance/conversas_midia`, no disco persistente, irmã de `uploads` e incluída no
+  backup (`_MEDIA_SUBDIRS`).
+
+Trava: `_suppress_whatsapp()` (`WHATSAPP_SUPPRESS_SEND` / `WHATSAPP_ALLOW_LOCAL_SEND`). Banco local = nada sai para a
+Meta (envio, lida, modelos e download).
 
 ### 5.4 Dev local
 

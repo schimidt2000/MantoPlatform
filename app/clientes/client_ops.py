@@ -72,12 +72,17 @@ def quick_create_client(
     cpf: str | None = None,
     cnpj: str | None = None,
     address: str | None = None,
+    source: str = "manual",
+    phone_digits: str | None = None,
 ) -> tuple[Client, bool]:
     """Cria um cliente (nome + telefone) ou reaproveita o existente por telefone.
 
     `cpf`/`cnpj`/`address` são opcionais e só valem na CRIAÇÃO (feature 258): quando o telefone
     já pertence a alguém, o cliente existente volta **intocado** — sobrescrever documento de
     quem já está na base a partir de um cadastro rápido seria perda silenciosa de dado.
+    `source` (feature 333): `"conversa"` para a ficha criada pela conversa. `phone_digits` (333): o
+    telefone já em E.164 (o wa_id do WhatsApp), gravado como veio — o `normalize_phone` poria "55" na
+    frente de um número estrangeiro de 11 dígitos.
 
     Returns:
         Tupla (cliente, reused) — `reused=True` quando o telefone já pertencia a outro cliente.
@@ -85,7 +90,7 @@ def quick_create_client(
     clean_name = (name or "").strip()
     if not clean_name:
         raise ClientValidationError("name", "Informe o nome da cliente.")
-    phone = normalize_phone(phone_raw)
+    phone = phone_digits or normalize_phone(phone_raw)
     if not phone:
         raise ClientValidationError("phone", "Telefone inválido. Inclua DDD (e DDI se houver).")
 
@@ -96,7 +101,7 @@ def quick_create_client(
     client = Client(
         name=clean_name[:200],
         phone=phone,
-        source="manual",
+        source=source,
         phone_display=(phone_display or "").strip()[:30] or None,
         email=(email or "").strip()[:200] or None,
         company=(company or "").strip()[:200] or None,
@@ -227,11 +232,12 @@ def client_metrics() -> dict:
         "kommo_import": "kommo",
         # Feature 344: ficha nascida de uma venda da Loja de Interações Virtuais.
         CLIENT_SOURCE_LOJA: "loja",
+        "conversa": "conversa",  # feature 333: a ficha criada pela conversa
     }
     for month, source, count in rows:
         entry = by_month.setdefault(
             month,
-            {"month": month, "total": 0, "formulario": 0, "kommo": 0, "loja": 0, "manual": 0},
+            {"month": month, "total": 0, "formulario": 0, "kommo": 0, "loja": 0, "conversa": 0, "manual": 0},
         )
         entry["total"] += count
         entry[source_keys.get(source, "manual")] += count
