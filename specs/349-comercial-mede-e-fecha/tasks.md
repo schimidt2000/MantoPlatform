@@ -110,7 +110,7 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 - [X] T029 `verify_349.py` todo verde contra `manto_349`
 - [X] T030 `ruff check` nos Python tocados (`ruff format` só nos novos) e `cd frontend && npm run typecheck`
 - [X] T031 Telas no Browser pane (backend 5349, Vite 6349) em 390 px e no computador: Conversas, conversa aberta, calculadora, criar evento, funil; texto revisado pelo Princípio XV
-- [ ] T032 Docs: `docs/01` (inventário, §4.3 RBAC, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` §Conversas, `docs/05` (dívidas)
+- [X] T032 Docs: `docs/01` (inventário, §4.3 RBAC, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` §Conversas, `docs/05` (dívidas)
 
 ---
 

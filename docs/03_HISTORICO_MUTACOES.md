@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **349-comercial-mede-e-fecha** | *(na branch, sem merge — lote 348–351)* O comercial mede e fecha pela conversa: primeira resposta guardada (com o eco do celular "sem autor"), perdida com motivo, qualificada (decisão ou pontuação por regras), selos e recortes na lista, cotar sem sair, criar evento pela conversa (ponto único para o `conversa_id` da 348) e a régua de 2/5/9 dias no sino | 2026-11-17 | `a349c0e1f2a3` | (aqui) | ver Registro |
 | **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
@@ -462,6 +463,58 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 349 — O comercial mede e fecha pela conversa   (349-comercial-mede-e-fecha · 2026-11-17 · migration `a349c0e1f2a3`)
+
+> **Na branch `349-comercial-mede-e-fecha`, sem merge e sem push** (worktree `.claude/worktrees/349-comercial-mede-e-fecha-4ea0ce`,
+> saída de `20bf93c0`). Nível 1. Detalhe: `specs/349-comercial-mede-e-fecha/` (spec com o clarify de 17/11, plan,
+> research, data-model, contrato, quickstart, tasks, `verify_349.py`). Migration sobre `d334b2c4e6f8`; a 348, a 350
+> e a 351 encadeiam na mesma head e o reencadeamento fica para o lote de merge.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11, §8.2 e §8.4) concluiu "medir primeiro, escalar depois" e
+dividiu o trabalho em quatro features abertas ao mesmo tempo. A 349 é a do comercial: a família decide de 6 a 10 dias
+depois do orçamento e pede orçamento a vários fornecedores; responder em minutos é barato e pesa. O CRM (325–335)
+guardava a conversa, o orçamento enviado e o anúncio, mas não o tempo da primeira resposta, nem perda, nem
+qualificação; a lista não dizia de onde a cliente veio nem em que etapa estava; para cotar a vendedora saía da
+conversa; o evento nascia longe dela com o vendedor digitado; orçamento parado não lembrava ninguém.
+
+**O que mudou.** Treze colunas em `conversas` e cinco módulos novos em `app/conversas/`:
+- `primeira_resposta_ops`: a primeira mensagem da cliente e a primeira resposta da equipe (hora, autor, origem), por
+  UPDATE condicional nos mesmos pontos que abrem e encerram a espera da 328. O eco do celular/outro app entra **sem
+  autor** e a tela diz isso; o `failed` depois do aceite recalcula.
+- `venda_ops`: perdida com motivo de lista fechada (frase no "Outro"; marcar apaga o lembrete; mensagem nova não
+  reabre), decisão de qualificação, "Lembrar amanhã", o painel `GET …/venda` e o resumo da lista em lote.
+- `pontuacao_ops`: formulário +3, data do evento até 90 dias +2 (mais longe +1), orçamento +1, recompra +2; corte 3.
+  Hipótese inicial, a revisar a cada trimestre.
+- `parado_ops`: "orçamento parado" num SQL só (lista e régua); a régua de 2, 5 e 9 dias e o lembrete vencido no sino
+  (`conversa.orcamento_parado`, `conversa.lembrete`), das 9h às 21h, na varredura; nada escreve na conversa.
+- `fechamento_ops`: o que levar ao evento (último orçamento enviado, ficha, vendedor = quem atende) e o ponto único
+  `ligar_evento_a_conversa`, chamado pelo `POST /api/events` com `conversa_id` (422 antes do Google). É ali que a 348
+  grava `calendar_events.conversa_id`.
+Telas: selos e recortes (Esperando · Orçamento parado 2/5/9 · Anúncio) na lista; faixa da venda na conversa ("Criar
+evento", qualificação, perda, lembrete, 1ª resposta); "Fazer orçamento" no envio, com a calculadora que volta à
+conversa com o envio pronto; a criação de evento que traz a ficha e o vendedor; o funil com 1ª resposta, qualificadas,
+perdidas por motivo e "Lembrar amanhã" em "Pararam em". O `KebabMenu` ganhou o gatilho `grande` (44 px no celular).
+
+**Decisões tomadas no fluxo autônomo** (o dono pode trocar sem mudar o desenho): os sete motivos de perda, os pontos e
+o corte, a régua 2/5/9, "amanhã" às 9h, a mensagem nova que não reabre a perdida, as contagens do funil por coorte.
+
+**Verificação.** `verify_349.py` 18/18 contra o espelho **`manto_349`** (dump noturno de 17/11; o `manto_local` é
+compartilhado com 348–351), com os cenários de recusa 5 (motivo e frase), 13 (conversa inexistente na criação de
+evento) e 17 (Casting → 403) e a contagem de consultas da lista (10 por página). `ruff check` limpo; `npm run
+typecheck` limpo. Telas abertas em 390 px e no computador (backend 5349, Vite 6349): selos, recortes, faixa da venda,
+perda com erro no campo, qualificação, "Criar evento" com e sem ficha, calculadora com a faixa, volta com o envio
+pronto, funil.
+
+**Pegadinhas.**
+- O cookie de sessão de `localhost` é o mesmo em todas as portas: outra sessão logando em `localhost:<outra porta>`
+  derruba a sua no meio da conferência. Suba o Vite com `--host 127.0.0.1` e abra por `127.0.0.1`.
+- `Linha` do funil ganhou campos com padrão; o `_SQL_COORTE` devolve as colunas novas na ordem do dataclass.
+- O recorte `orcamento_parado` é texto SQL sobre a tabela `conversas` da consulta da lista (sem apelido); a régua usa o
+  mesmo SQL com apelido `c`.
+
+**Depende do CRM ligado**: a primeira resposta, a régua e o lembrete só ganham dado com as chaves `WHATSAPP_*` no
+Render (a varredura só sobe com o módulo ligado).
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 

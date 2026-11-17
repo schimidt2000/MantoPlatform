@@ -1,6 +1,6 @@
 # Feature 349 — O comercial mede e fecha pela conversa
 
-**Branch**: `349-comercial-mede-e-fecha` (da `main`, head `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Rascunho ·
+**Branch**: `349-comercial-mede-e-fecha` (da `main`, head `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Implementada na branch (verify 18/18; sem merge) ·
 **Migration**: `a349c0e1f2a3` (aditiva: colunas novas em `conversas`, com preenchimento das conversas que já existem) ·
 **Nível**: 1 (feature: migration, endpoints e telas) — constituição, Princípio VI
 
