@@ -294,6 +294,8 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
   const [objetivo, setObjetivo] = useState(post?.briefing_objetivo ?? "");
   const [mostrar, setMostrar] = useState(post?.briefing_mostrar ?? "");
   const [letreiro, setLetreiro] = useState(post?.briefing_letreiro ?? "");
+  // Feature 351 — o ângulo da peça; agrupa o funil por conceito.
+  const [conceito, setConceito] = useState(post?.conceito ?? "");
   const temasNaoLiberados =
     tipo === "anuncio"
       ? (options.data?.temas ?? []).filter(
@@ -320,6 +322,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
       briefing_objetivo: objetivo.trim() || null,
       briefing_mostrar: mostrar.trim() || null,
       briefing_letreiro: letreiro.trim() || null,
+      conceito: conceito.trim() || null,
     };
     if (isEdit) {
       update.mutate({ id: post.id, input }, { onSuccess: onSaved });
@@ -396,6 +399,15 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
               </select>
             </Field>
           </div>
+          <Field label="Conceito" error={fieldError(error, "conceito")}>
+            <Input
+              value={conceito}
+              maxLength={120}
+              onChange={(e) => setConceito(e.target.value)}
+              placeholder="Ex.: mãe que surpreende"
+              aria-label="Conceito da peça"
+            />
+          </Field>
           <Field label="Objetivo" error={fieldError(error, "briefing_objetivo")}>
             <Input value={objetivo} onChange={(e) => setObjetivo(e.target.value)} placeholder="Ex.: conversas de festa em Alphaville" aria-label="Objetivo do anúncio" />
           </Field>
@@ -414,19 +426,7 @@ function MarketingPostForm({ post, initialStatus, onSaved, onCancel }: Marketing
           <p className="text-[11px] text-muted">
             Use foto ou vídeo do acervo da Manto. Letreiro feito com IA por cima pode; personagem e fundo, nunca.
           </p>
-          {post?.anuncios && post.anuncios.length > 0 && (
-            <div className="rounded-md bg-panel px-3 py-2 text-sm">
-              <p className="font-medium text-ink">
-                {post.anuncios.length} anúncio(s) no ar com esta peça
-              </p>
-              {post.resultado && (
-                <p className="text-muted">
-                  R$ {formatBRL(Number(post.resultado.spend))} · {post.resultado.conversations} conversa(s)
-                  {post.resultado.custo_conversa ? ` · R$ ${formatBRL(Number(post.resultado.custo_conversa))} por conversa` : ""}
-                </p>
-              )}
-            </div>
-          )}
+          {post?.anuncios && post.anuncios.length > 0 && <ResultadoDaPeca post={post} />}
         </div>
       )}
 
@@ -570,6 +570,67 @@ export interface MarketingPostDialogProps {
  * acervo bruto no Drive e as duas pontes com o resto do sistema: o Tema do catálogo (`Combobox`
  * visual) e o espaço de Revisão de Mídia.
  */
+function plural(n: number, um: string, varios: string): string {
+  return `${n.toLocaleString("pt-BR")} ${n === 1 ? um : varios}`;
+}
+
+function dataCurta(iso: string): string {
+  const [, mes, dia] = iso.split("-");
+  return `${dia}/${mes}`;
+}
+
+/**
+ * Situação dos anúncios e o resultado da peça (feature 351).
+ *
+ * "No ar" vem do gasto na última leitura da plataforma — o anúncio pausado aparece como "sem gasto desde
+ * dd/mm" (antes, todo anúncio ligado aparecia "no ar"). O resultado real vem do CRM (conversas que chegaram
+ * pelo anúncio) e da venda atribuída; o gasto e as conversas informadas são os da plataforma.
+ */
+function ResultadoDaPeca({ post }: { post: MarketingPost }) {
+  const anuncios = post.anuncios ?? [];
+  const r = post.resultado;
+  const temSituacao = anuncios.some((a) => a.no_ar !== undefined);
+  const noAr = anuncios.filter((a) => a.no_ar).length;
+  return (
+    <div className="space-y-1.5 rounded-md bg-panel px-3 py-2 text-sm">
+      <p className="font-medium text-ink">
+        {temSituacao
+          ? `${plural(anuncios.length, "anúncio ligado", "anúncios ligados")} · ${noAr} no ar`
+          : plural(anuncios.length, "anúncio ligado a esta peça", "anúncios ligados a esta peça")}
+      </p>
+      {temSituacao && (
+        <ul className="space-y-0.5 text-xs text-muted">
+          {anuncios.map((a) => (
+            <li key={`${a.platform}-${a.ad_id}`} className="break-all">
+              {a.platform} {a.ad_id}:{" "}
+              {a.no_ar == null
+                ? "sem leitura"
+                : a.no_ar
+                  ? "no ar"
+                  : a.ultimo_gasto_em
+                    ? `sem gasto desde ${dataCurta(a.ultimo_gasto_em)}`
+                    : "sem gasto"}
+            </li>
+          ))}
+        </ul>
+      )}
+      {r && (
+        <p className="text-muted">
+          Plataforma: R$ {formatBRL(Number(r.spend))} · {plural(r.conversations, "conversa", "conversas")}
+          {r.custo_conversa ? ` · R$\u00a0${formatBRL(Number(r.custo_conversa))} por conversa` : ""}
+        </p>
+      )}
+      {r && r.conversas_reais !== undefined && (
+        <p className="text-ink">
+          Real: {plural(r.conversas_reais, "conversa", "conversas")} · {plural(r.orcamentos ?? 0, "orçamento", "orçamentos")}{" "}
+          · {plural(r.vendas ?? 0, "venda atribuída", "vendas atribuídas")}
+          {r.faturamento && Number(r.faturamento) > 0 ? ` (R$\u00a0${formatBRL(Number(r.faturamento))})` : ""}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function MarketingPostDialog({
   post,
   open,

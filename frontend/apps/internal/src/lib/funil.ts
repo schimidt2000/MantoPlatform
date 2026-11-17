@@ -9,7 +9,8 @@ import type { Canal } from "./conversas";
 
 export type EtapaDoFunil =
   "chegou" | "orcamento" | "formulario" | "evento" | "pagou" | "avaliou";
-export type DivisaoDoFunil = "vendedor" | "campanha" | "canal";
+// Feature 351: frente, anúncio, peça e conceito — pelo primeiro anúncio da conversa, sem dinheiro.
+export type DivisaoDoFunil = "vendedor" | "campanha" | "canal" | "frente" | "anuncio" | "peca" | "conceito";
 
 export interface EtapaContada {
   chave: EtapaDoFunil;

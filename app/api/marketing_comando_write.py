@@ -2,7 +2,8 @@
 
 Gates (função no início da view, Princípio XIII):
 
-* tetos e responsáveis (`PATCH /api/marketing/frentes`) — só `SUPERADMIN`;
+* tetos, meta e verba do mês e responsáveis (`PATCH /api/marketing/frentes`) e o calendário do ano
+  (`PATCH /api/marketing/calendario`, feature 351) — só `SUPERADMIN` real;
 * frente da campanha, licença dos temas e diário — `MARKETING` ou `SUPERADMIN`; liberar um tema
   licenciado é só `SUPERADMIN` (regra no `comando_ops.marcar_licenca`, 403 `so_superadmin`);
 * decidir proposta — só `SUPERADMIN` (decisão do dono, 16/11/2026), 403 para os outros.
@@ -37,14 +38,16 @@ def _corpo() -> dict[str, Any]:
 @api_bp.route("/marketing/frentes", methods=["PATCH"])
 @api_login_required
 def api_marketing_frentes_salvar() -> Any:
-    """Tetos por frente (`null` volta ao padrão) e responsáveis por foto/vídeo — só Superadmin."""
+    """Tetos (`null` volta ao padrão), meta e verba do mês e responsáveis por foto/vídeo — só Superadmin."""
     if not eh_superadmin(current_user):
-        return json_error("Só o Superadmin altera tetos e responsáveis.", 403)
+        return json_error("Só o Superadmin altera tetos, metas, verbas e responsáveis.", 403)
     corpo = _corpo()
     try:
         ops.salvar_frentes(
             current_user.id,
             tetos_novos=corpo.get("tetos"),
+            metas=corpo.get("metas"),
+            verbas=corpo.get("verbas"),
             resp_foto_id=corpo["resp_foto_id"] if "resp_foto_id" in corpo else ...,
             resp_video_id=corpo["resp_video_id"] if "resp_video_id" in corpo else ...,
         )
@@ -143,3 +146,17 @@ def api_marketing_diario_criar() -> Any:
     except ops.ComandoError as exc:
         return _erro(exc)
     return jsonify(ops.serialize_diario(entrada)), 201
+
+
+@api_bp.route("/marketing/calendario", methods=["PATCH"])
+@api_login_required
+def api_marketing_calendario_salvar() -> Any:
+    """Meta, verba e foco dos meses enviados de uma frente (feature 351) — só Superadmin real."""
+    if not eh_superadmin(current_user):
+        return json_error("Só o Superadmin altera o calendário do ano.", 403)
+    corpo = _corpo()
+    try:
+        ops.salvar_calendario(corpo.get("frente"), corpo.get("meses"), user_id=current_user.id)
+    except ops.ComandoError as exc:
+        return _erro(exc)
+    return jsonify(ops.calendario(eh_superadmin=True))

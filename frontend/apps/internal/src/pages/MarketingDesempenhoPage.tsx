@@ -17,6 +17,7 @@ import { LineSeriesChart } from "../components/charts/LineSeriesChart";
 import { BarListChart } from "../components/charts/BarListChart";
 import { FunnelChart } from "../components/charts/FunnelChart";
 import { PainelFrentes } from "../components/marketing/PainelFrentes";
+import { AtribuicaoPainel } from "../components/marketing/AtribuicaoPainel";
 
 const WEEK_OPTIONS: { value: DesempenhoWeeks; label: string }[] = [
   { value: 4, label: "4 semanas" },
@@ -80,7 +81,14 @@ function EstadoVazio() {
 function TabelaCampanhas({ campanhas }: { campanhas: DesempenhoCampaign[] }) {
   if (campanhas.length === 0) return <p className="text-sm text-muted">Nenhuma campanha com gasto no período.</p>;
   return (
-    <div className="-mx-4 overflow-x-auto px-4">
+    <>
+    {/* Feature 351: no celular (390 px) a tabela vira lista de cartões — nada rola de lado. */}
+    <ul className="divide-y divide-line md:hidden">
+      {campanhas.map((c) => (
+        <CartaoCampanha key={`${c.platform}-${c.campaign_name}`} c={c} />
+      ))}
+    </ul>
+    <div className="-mx-4 hidden overflow-x-auto px-4 md:block">
       <Table className="min-w-[840px]">
         <thead>
           <TableRow head>
@@ -122,13 +130,74 @@ function TabelaCampanhas({ campanhas }: { campanhas: DesempenhoCampaign[] }) {
         </tbody>
       </Table>
     </div>
+    </>
+  );
+}
+
+/** Par rótulo/valor dos cartões do celular. */
+function Dado({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <>
+      <dt className="text-muted">{rotulo}</dt>
+      <dd className="text-right tabular-nums text-ink">{valor}</dd>
+    </>
+  );
+}
+
+function CartaoCampanha({ c }: { c: DesempenhoCampaign }) {
+  return (
+    <li className="space-y-1 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 break-words text-sm font-medium text-ink">{c.campaign_name}</p>
+        <span className="shrink-0 text-sm tabular-nums text-ink">{brl(c.spend)}</span>
+      </div>
+      <p className="text-xs text-muted">{c.platform}</p>
+      <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 text-xs">
+        <Dado rotulo={`${num(c.clicks)} cliques`} valor={`CPC ${brl(c.cpc)}`} />
+        <Dado rotulo={`${num(c.leads)} leads`} valor={`${brl(c.cost_per_lead)} por lead`} />
+        <Dado rotulo={`${num(c.events)} eventos`} valor={`${brl(c.cost_per_event)} por evento`} />
+        {c.returns ? <Dado rotulo="Retornos" valor={`${num(c.returns)} (${num(c.return_events ?? 0)} eventos)`} /> : null}
+      </dl>
+    </li>
+  );
+}
+
+function CartaoPost({ p }: { p: DesempenhoPost }) {
+  const vinculo = LINK_LABEL[p.link_method];
+  return (
+    <li className="space-y-1 py-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="min-w-0 flex-1 break-words text-sm font-medium text-ink">
+          {p.marketing_post?.title ?? p.caption ?? p.platform_post_id}
+        </p>
+        <Badge tone={vinculo.tone}>{vinculo.texto.toUpperCase()}</Badge>
+      </div>
+      <p className="text-xs text-muted">
+        {dataCurta(p.published_at)} · {p.post_type ?? p.platform} · medido em {dataCurta(p.snapshot_date)}
+      </p>
+      <p className="text-xs text-ink">
+        {num(p.reach)} alcance · {num(p.likes)} curtidas · {num(p.comments)} coment. · {num(p.saves)} salvos ·{" "}
+        {num(p.shares)} compart.
+      </p>
+      {p.permalink && (
+        <a href={p.permalink} target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-xs text-accent hover:underline">
+          <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir post
+        </a>
+      )}
+    </li>
   );
 }
 
 function TabelaPosts({ posts }: { posts: DesempenhoPost[] }) {
   if (posts.length === 0) return <p className="text-sm text-muted">Nenhum post medido no período.</p>;
   return (
-    <div className="-mx-4 overflow-x-auto px-4">
+    <>
+    <ul className="divide-y divide-line md:hidden">
+      {posts.map((p) => (
+        <CartaoPost key={`${p.platform}-${p.platform_post_id}`} p={p} />
+      ))}
+    </ul>
+    <div className="-mx-4 hidden overflow-x-auto px-4 md:block">
       <Table className="min-w-[860px]">
         <thead>
           <TableRow head>
@@ -180,6 +249,7 @@ function TabelaPosts({ posts }: { posts: DesempenhoPost[] }) {
         </tbody>
       </Table>
     </div>
+    </>
   );
 }
 
@@ -231,10 +301,15 @@ function Conteudo({ data }: { data: DesempenhoResponse }) {
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <KpiTile label={manchete.label} value={manchete.value} hint={manchete.hint} />
+        {/* Feature 351: o divisor é quem veio de anúncio, não todo cliente novo (a indicação barateava). */}
         <KpiTile
-          label={`CAC de ${data.cac.month.slice(5)}/${data.cac.month.slice(0, 4)}`}
+          label={`Custo por cliente novo de anúncio · ${data.cac.month.slice(5)}/${data.cac.month.slice(0, 4)}`}
           value={brl(data.cac.value)}
-          hint={`${brl(data.cac.spend)} em anúncios ÷ ${data.cac.new_clients} cliente(s) novo(s)`}
+          hint={
+            data.cac.new_clients_ads !== undefined
+              ? `${brl(data.cac.spend)} em anúncios · ${data.cac.new_clients_ads} de ${data.cac.new_clients} clientes novos vieram de anúncio`
+              : `${brl(data.cac.spend)} em anúncios ÷ ${data.cac.new_clients} cliente(s) novo(s)`
+          }
         />
         <KpiTile label="Gasto no período" value={brl(gastoPeriodo)} hint={`${num(cliques)} cliques`} />
         <KpiTile
@@ -276,7 +351,18 @@ function Conteudo({ data }: { data: DesempenhoResponse }) {
 
       <details className="rounded-lg border border-line bg-panel px-4 py-2 text-sm">
         <summary className="cursor-pointer font-medium text-ink">Ver tabela semanal</summary>
-        <div className="-mx-4 mt-2 overflow-x-auto px-4">
+        <ul className="mt-2 divide-y divide-line md:hidden">
+          {semanas.map((w) => (
+            <li key={w.week_start} className="py-2 text-xs">
+              <p className="font-medium text-ink">Semana de {dataCurta(w.week_start)}</p>
+              <p className="text-ink">
+                {num(w.posts_published)} posts · {num(w.reach)} alcance · {num(w.followers)} seguidores · {brl(w.spend)} ·{" "}
+                {num(w.clicks)} cliques · {num(w.leads)} leads · {num(w.events)} eventos
+              </p>
+            </li>
+          ))}
+        </ul>
+        <div className="-mx-4 mt-2 hidden overflow-x-auto px-4 md:block">
           <Table className="min-w-[640px]">
             <thead>
               <TableRow head>
@@ -444,6 +530,7 @@ export function MarketingDesempenhoPage() {
           aria-busy={query.isPlaceholderData || undefined}
         >
           <PainelFrentes data={query.data} />
+          <AtribuicaoPainel params={params} />
           {query.data.empty ? <EstadoVazio /> : <Conteudo data={query.data} />}
         </motion.div>
       )}

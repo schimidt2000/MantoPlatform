@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **351-painel-atribuido** | *(branch, sem merge)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
 | **350-base-autorizada** | *(na branch, sem merge)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
 | **349-comercial-mede-e-fecha** | *(na branch, sem merge — lote 348–351)* O comercial mede e fecha pela conversa: primeira resposta guardada (com o eco do celular "sem autor"), perdida com motivo, qualificada (decisão ou pontuação por regras), selos e recortes na lista, cotar sem sair, criar evento pela conversa (ponto único para o `conversa_id` da 348) e a régua de 2/5/9 dias no sino | 2026-11-17 | `a349c0e1f2a3` | (aqui) | ver Registro |
 | **348-origem-completa** | *(na branch, sem merge)* Origem completa da venda: `ctwa_clid` e conjunto do anúncio da Meta; código do site ("Código do site: #XXXXX") que leva `gclid`/`gbraid`/`wbraid`/`utm_*` do clique até a conversa; conversa e contato de origem congelados no orçamento e no evento (nunca pela ficha); frente como campo do evento, escolhida na aba Comercial (quita a dívida 215); lead casado com a campanha pelo id | 2026-11-17 | `a348c0d1e2f3` | (aqui) | ver Registro |
@@ -432,13 +433,13 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 335, 334, 333, 332, 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 351 (funil por frente), 335, 334, 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 341, 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
-| Marketing e frequência | 204, 204b |
+| Marketing e frequência | 351, 345, 256, 204, 204b |
 | Catálogo e vitrine | 185b, 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 306, 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 309, 307, 305, 262, 214, 191 (orçamento), 190 |
@@ -466,6 +467,65 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 351 — Painel atribuído: quanto custa a venda que o anúncio trouxe   (351-painel-atribuido · 2026-11-17 · migration `a351b0c1d2e3`)
+
+> **Na branch `351-painel-atribuido`, sem merge e sem push** (worktree `.claude/worktrees/351-painel-atribuido-c643bc`,
+> saída de `20bf93c0`). Nível 1. Detalhe: `specs/351-painel-atribuido/` (spec, plan, research, data-model, contrato,
+> checklists, tasks, `verify_351.py`). Feita ao mesmo tempo que a 348 (origem completa), a 349 e a 350; as quatro
+> migrations descem de `d334b2c4e6f8` e são reencadeadas no lote de merge.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11, Artifact privado) concluiu "medir primeiro, escalar depois"
+e dividiu o trabalho em quatro features. Esta é a do painel (§8.1 da pesquisa): o custo por venda da 345 é o gasto da
+frente dividido por **todas** as vendas da frente (`comando_ops.py:353`), então a festa de indicação "barateia" o
+anúncio e a regra da casa (custo de marketing até 25% da margem mediana) não tinha número para ser aplicada.
+
+**O que mudou.**
+- **Venda atribuída numa função só** (`app/marketing/atribuicao_ops.atribuir_vendas`): contato pago = conversa do
+  anúncio (CRM), anúncio de origem/recente na ficha ou origem paga da ficha (`utm_source` Meta/Google; vale a entrada na
+  base). Regra: evento criado depois do contato, venda até 45 dias depois dele, de 01/06/2026 em diante; vale o último
+  contato. A venda vai para a frente da **campanha** do contato. Por frente: atribuído e **com desconto de 50%**
+  (premissa escrita na tela; é o que vai contra o teto), ao lado do misto, que fica.
+- **Funil com custo**: o funil da 335 divide também por frente, anúncio, peça e conceito (sem dinheiro no domínio das
+  conversas); o custo de cada grupo é somado no marketing (`GET /api/marketing/atribuicao`), com a lista das vendas
+  atribuídas (valor só para o Superadmin).
+- **Card**: campo `conceito`; resultado real (conversas do CRM, orçamentos, vendas atribuídas, faturamento); "no ar"
+  pelo gasto nos três últimos dias com leitura. Card de anúncio em Agendado/Publicado sem anúncio continua na fila da
+  rotina.
+- **Metas e calendário**: `marketing_frentes` ganha meta de vendas e verba do mês; `marketing_calendario` (frente ×
+  mês) com meta, verba e foco (60 linhas com o foco da pesquisa); o card mostra o mês corrente; a rotina lê tudo no
+  contexto da semana.
+- **Proposta**: valor em número (lido do texto quando é verba ou tem "R$"), frente, teto, verba e impacto no mês; soma
+  do aprovado no mês; aviso no sino (`marketing.proposta`) para cada Superadmin.
+- **Diário com teste**: alvo, métrica, dia da mudança, janela e controle; o servidor calcula antes, depois, variação,
+  efeito líquido e congela a linha de base; a execução da proposta já cria o teste.
+- **390 px**: campanhas, posts e semanas do Desempenho em cartões; Temas com 50 por página (página no endereço); Kanban
+  com filtros por frente, tipo e "Minhas peças" (na tela, para não quebrar o mover otimista).
+- **Custo por cliente novo** só com os clientes novos que vieram de anúncio.
+
+**Verificação.**
+- `verify_351.py`: **83/83** checagens (28 cenários) no espelho `manto_351` (dump de 17/11 02h + `a351b0c1d2e3`).
+  Antes do núcleo: 9 OK, 30 FALHA, 10 BLOQUEADO pelo motivo certo. Os cenários 15 (Marketing salva calendário/meta) e
+  26 (Comercial pede a atribuição) recusam com 403.
+- `verify_345.py`: 64/64 no mesmo espelho (a limpeza dele passou a apagar o aviso da proposta).
+- Migration com ida e volta; `ruff check` limpo nos arquivos tocados; `npm run typecheck` limpo nas três SPAs.
+- Telas abertas no Browser pane (backend 5351 e Vite 6351 da worktree, dados `Demo351`), em 390 × 844 e em tela larga:
+  Desempenho (sem rolagem lateral), calendário e metas (salvar), Decisões (proposta e diário com teste), Temas
+  (página 2 pelo endereço), Painel com filtros e o card com conceito, "no ar" e o resultado real, Funil do Comercial.
+
+**Pegadinhas.**
+1. A ficha que a 334 ligou a um anúncio também ganhou `utm_source=meta`: contada como origem paga, ela virava um
+   contato "mais novo" sem anúncio e a peça perdia a venda. A origem só conta na ficha **sem** anúncio de origem.
+2. O funil das conversas não tem dinheiro (invariante 39); o custo vem de fora dele, pela chave do grupo.
+3. O filtro do Kanban roda na tela: a mutação otimista de mover card escreve na chave exata da lista.
+4. Heredoc do Bash com aspas triplas não roda no Windows desta máquina; os scripts de edição foram por arquivo.
+
+**Quando a 348 entrar.** Em `atribuir_vendas`, o contato da conversa ligada ao evento (`conversa_id`) vence a busca
+pela ficha (dívida 218); `frente_venda_sql` passa a ler a coluna de frente do evento (a 351 só a importa). Nada mais
+muda nas telas.
+
+**Falta do dono.** Preencher meta e verba das frentes e o calendário; ligar o CRM (chaves `WHATSAPP_*`) para o funil e
+o resultado real da peça terem dado; decidir quando trocar a premissa de 50% por um teste (dívida 219).
 
 ### 350 — A base autorizada: a cliente diz sim (ou para), indica e lembra do aniversário   (350-base-autorizada · 2026-11-17 · migration `a350b1c2d3e4`)
 
