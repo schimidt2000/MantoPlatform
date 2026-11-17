@@ -1,4 +1,4 @@
-# Feature 345 — O sistema comanda o marketing: painel por frente, só autoral no anúncio, pedido de criativo e aprovação do dono
+# Feature 345 — O sistema comanda o marketing: painel por frente, só tema liberado no anúncio, pedido de criativo e aprovação
 
 **Branch**: `345-marketing-integrado` (da `main`, `68f232a7`) · **Created**: 2026-11-16 · **Status**: Rascunho ·
 **Migration**: uma, aditiva (marcação de licença no catálogo; campos novos no card de marketing; tabelas novas de
@@ -39,7 +39,9 @@ quer que nada mude na Meta ou no Google sem a aprovação dele.
 Duas regras de marca, ditas por ele:
 
 - "É expressamente proibido fazermos anúncio com coisas que remetam a Disney, Hello Kitty e coisas mais licenciadas no
-  geral". Só o autoral vai para anúncio.
+  geral". Logo depois ele ajustou: "Alguns licenciados podemos. Tipo Labubu pode... vamos vendo caso a caso". A regra
+  final é que vai para anúncio só o tema **liberado para anúncio**: o autoral, por padrão, e o licenciado que for
+  liberado um a um.
 - Nenhuma imagem gerada por IA. Um letreiro feito com IA por cima da foto real pode, "porque não distorce o
   personagem".
 
@@ -64,11 +66,15 @@ O dono pediu "vamos acelerar". As questões abaixo foram decididas sem pergunta,
   12 meses (venda − cachês − gastos do evento). O Superadmin pode trocar o valor de cada frente.
   - Os números de 16/11 dão como ponto de partida: festas ~R$ 575, corporativo ~R$ 1.070, social ~R$ 550 e EducaManto
     ~R$ 4.500. EducaManto e social têm só 2 vendas cada, então o valor é provisório.
-- Q: Quem aprova as propostas? → A: só quem estiver na lista de aprovadores de marketing, nas Configurações. O padrão é o
-  dono.
-  - Porquê: a Gabi e a Erika são Superadmin. Se o portão fosse "Superadmin", elas aprovariam o próprio gasto, e o dono
-    pediu o contrário.
-- Q: E o tema do catálogo que ainda não foi classificado? → A: conta como **não pode anunciar**.
+- Q: Quem aprova as propostas? → A: **Superadmin** (decisão do dono, 16/11: "Deixa que superadmin aprova sim. A Erika
+  eu vou tirar agora como superadmin"). A primeira versão desta spec previa uma lista própria de aprovadores; ela caiu.
+  - Porquê: o dono tira o Superadmin de quem só produz criativo; quem continua Superadmin é de confiança para gasto.
+- Q: Licença é uma marcação só? → A: **duas**, decisão do dono (16/11).
+  - A **origem**: autoral / licenciado / não classificado.
+  - O **liberado para anúncio**: sim / não / não decidido.
+  - O autoral nasce liberado ao ser confirmado. O licenciado nasce **não** liberado e pode ser liberado caso a caso. Só
+    o Superadmin libera um licenciado: o risco jurídico é dele.
+- Q: E o tema do catálogo que ainda não foi classificado? → A: conta como **não liberado**.
   - Porquê: o risco é jurídico, e na dúvida a peça não sai.
   - A rotina propõe a classificação em lote dos 476 temas, e a equipe confirma.
 - Q: A rotina pode criar anúncio sem aprovação? → A: pode criar **pausado**, porque anúncio pausado não gasta. Ativar,
@@ -112,13 +118,20 @@ eventos semeados.
 
 ---
 
-### História 2 — Só tema autoral pode virar anúncio (Prioridade: P1)
+### História 2 — Só tema liberado pode virar anúncio (Prioridade: P1)
 
-Cada tema do catálogo tem uma marcação de licença: **autoral**, **licenciado** ou **não classificado**.
+Cada tema do catálogo tem duas marcações:
 
-- A rotina propõe a classificação dos temas em lote, com o motivo de cada um ("personagem da Disney").
-- A Gabi ou o dono confirmam numa lista, de uma vez.
-- Pedido de criativo, card de anúncio e proposta de anúncio só aceitam tema autoral. O sistema recusa os outros no
+- a **origem**: autoral, licenciado ou não classificado;
+- o **liberado para anúncio**: sim, não ou não decidido.
+
+Como funciona:
+
+- A rotina propõe a origem dos temas em lote, com o motivo de cada um ("personagem da Disney").
+- A Gabi ou o dono confirmam numa lista, de uma vez. Autoral confirmado já sai liberado; licenciado confirmado sai não
+  liberado.
+- O Superadmin pode liberar um licenciado caso a caso (o Labubu, por exemplo).
+- Pedido de criativo, card de anúncio e proposta de anúncio só aceitam tema **liberado**. O sistema recusa os outros no
   servidor, não só na tela.
 
 **Por que esta prioridade**: é risco jurídico, e é a regra que tudo o mais respeita.
@@ -127,8 +140,10 @@ Cada tema do catálogo tem uma marcação de licença: **autoral**, **licenciado
 
 **Cenários de aceite**:
 
-1. **Dado** um tema "licenciado", **Quando** alguém tenta abrir um pedido de criativo ou um card de anúncio com ele,
-   **Então** o sistema recusa com a mensagem "Este tema é licenciado e não pode ir para anúncio".
+1. **Dado** um tema "licenciado" e não liberado, **Quando** alguém tenta abrir um pedido de criativo ou um card de
+   anúncio com ele, **Então** o sistema recusa com a mensagem "Este tema não está liberado para anúncio".
+1b. **Dado** um tema licenciado que o Superadmin liberou, **Quando** a rotina abre um pedido com ele, **Então** o
+   pedido é aceito. **E** se alguém do Marketing tenta liberar um licenciado, recebe 403.
 2. **Dado** um tema "não classificado", **Quando** a rotina tenta usá-lo, **Então** é recusado do mesmo jeito.
 3. **Dado** 30 temas com classificação proposta, **Quando** a Gabi confirma a lista, **Então** os 30 mudam numa ação
    só, e cada mudança fica registrada com quem confirmou.
@@ -144,7 +159,7 @@ traz o briefing:
 
 - a frente e o objetivo ("conversas de festa em Alphaville");
 - o formato (foto 4:5, story 9:16, vídeo de 15–30 s);
-- o que mostrar, com o tema autoral do catálogo;
+- o que mostrar, com um tema liberado do catálogo;
 - o texto do letreiro;
 - a data de entrega.
 
@@ -188,12 +203,12 @@ o resultado: executada, ou falhou com o motivo. Proposta sem resposta em 7 dias 
 **Por que esta prioridade**: é a condição do dono para tirar o Gerenciador da mão da equipe sem perder o controle do
 dinheiro.
 
-**Verificação**: cenários 12 a 14 do `verify_345.py`. Eles incluem um aprovador que não está na lista. Esse cenário
+**Verificação**: cenários 12 a 14 do `verify_345.py`. Eles incluem alguém do Marketing tentando aprovar. Esse cenário
 **deve falhar**.
 
 **Cenários de aceite**:
 
-1. **Dado** uma proposta pendente, **Quando** um Superadmin que não está na lista de aprovadores tenta aprovar, **Então**
+1. **Dado** uma proposta pendente, **Quando** alguém do Marketing (não Superadmin) tenta aprovar, **Então**
    recebe 403 e a proposta continua pendente.
 2. **Dado** uma proposta aprovada, **Quando** a rotina roda, **Então** ela a recebe na lista "a executar". Depois de
    executar, marca "executada" com a data, e a proposta não volta a aparecer.
@@ -236,7 +251,7 @@ diário no Desempenho.
 - **Proposta aprovada sobre um alvo que mudou** (o anúncio foi pausado à mão, por exemplo): a rotina não executa, marca
   "falhou: o anúncio já estava pausado" e registra no diário.
 - **Moeda diferente de BRL na leitura**: a linha é recusada com motivo, como já faz a 256 (`skipped_currency`).
-- **Dois aprovadores clicam juntos**: a primeira decisão vale. A segunda recebe 409 "já decidida".
+- **Dois Superadmins clicam juntos**: a primeira decisão vale. A segunda recebe 409 "já decidida".
 
 ## Requisitos *(obrigatório)*
 
@@ -266,12 +281,15 @@ diário no Desempenho.
 
 **Licença dos temas (H2)**
 
-- **FR-008**: Cada tema do catálogo DEVE ter a marcação **autoral | licenciado | não classificado** (padrão: não
-  classificado), com quem marcou e quando.
-- **FR-009**: Marketing e Superadmin DEVEM poder confirmar várias marcações numa ação só, a partir das sugestões da
-  rotina (sugestão + motivo).
+- **FR-008**: Cada tema do catálogo DEVE ter duas marcações, cada uma com quem marcou e quando:
+  - a **origem**: autoral | licenciado | não classificado (padrão: não classificado);
+  - o **liberado para anúncio**: sim | não | não decidido (padrão: não decidido).
+- **FR-009**: Marketing e Superadmin DEVEM poder confirmar várias origens numa ação só, a partir das sugestões da rotina
+  (sugestão + motivo). Confirmar "autoral" libera o tema; confirmar "licenciado" deixa não liberado.
+- **FR-009b**: Só o Superadmin DEVE poder pôr "liberado = sim" num tema licenciado (403 para o Marketing). Tirar a
+  liberação de qualquer tema é permitido a Marketing e Superadmin.
 - **FR-010**: O servidor DEVE recusar com 422 todo pedido de criativo, card de anúncio ou proposta de anúncio cujo tema
-  não seja autoral. Post orgânico não é afetado.
+  não esteja liberado. Post orgânico não é afetado.
 
 **Pedido de criativo (H3)**
 
@@ -297,8 +315,8 @@ diário no Desempenho.
   - o valor antes e depois;
   - o custo estimado por dia;
   - o motivo e a evidência.
-- **FR-016**: Só os usuários da lista de aprovadores de marketing DEVEM poder aprovar ou recusar. A decisão é única
-  (409 na segunda) e registra quem decidiu e quando.
+- **FR-016**: Só o Superadmin DEVE poder aprovar ou recusar (403 para Marketing). A decisão é única (409 na segunda) e
+  registra quem decidiu e quando.
 - **FR-017**: A rotina DEVE receber só as propostas aprovadas e ainda não executadas, e DEVE marcar cada uma como
   executada ou falhou (com motivo).
 - **FR-018**: Proposta pendente há mais de 7 dias DEVE expirar e não pode mais ser aprovada.
@@ -319,13 +337,13 @@ diário no Desempenho.
 ### Entidades *(se houver dados)*
 
 - **Frente de negócio**: lista fixa (corporativo, social, educamanto, festas, loja virtual) com teto editável, em
-  `SiteSetting` (singleton, `docs/00` §6 item 13). Também nas Configurações: a lista de aprovadores e as duas
-  responsáveis por criativo.
+  `SiteSetting` (singleton, `docs/00` §6 item 13). Também nas Configurações: as duas responsáveis por criativo.
 - **Desempenho por anúncio** (nova): uma linha por plataforma + anúncio + dia, com métricas e ids de campanha e conjunto.
   É única por (plataforma, anúncio, dia). Convive com `marketing_campaign_metrics` da 256, que segue sendo o resumo por
   campanha.
 - **Frente da campanha** (nova, pequena): correção manual por plataforma + id da campanha → frente.
-- **Licença do tema**: colunas novas em `CatalogItem` (licença, quem marcou e quando, sugestão e motivo da rotina).
+- **Licença do tema**: colunas novas em `CatalogItem`: origem, liberado para anúncio, quem marcou e quando, e a
+  sugestão da rotina com o motivo.
 - **Card de marketing** (`MarketingPost`, existente): ganha tipo, frente, formato, briefing (objetivo, o que mostrar,
   letreiro) e origem. Os vínculos com anúncios vão numa tabela própria (plataforma, id do anúncio).
 - **Proposta** (nova): tipo, plataforma, alvo, antes/depois, custo estimado, motivo, evidência, situação (pendente →
@@ -339,10 +357,11 @@ diário no Desempenho.
 - `PATCH /api/marketing/campanhas/<plataforma>/<id>/frente` — MARKETING, SUPERADMIN.
 - `GET|PATCH /api/marketing/frentes` (teto) — leitura MARKETING, SUPERADMIN; escrita SUPERADMIN.
 - `GET /api/marketing/temas-licenca` e `POST /api/marketing/temas-licenca/confirmar` — MARKETING, SUPERADMIN.
-- `POST|PATCH /api/marketing/posts` (alterado: campos novos + recusa de tema não autoral em card de anúncio) —
+  `PATCH /api/marketing/temas-licenca/<id>`: MARKETING, SUPERADMIN, mas liberar um licenciado é só SUPERADMIN (403).
+- `POST|PATCH /api/marketing/posts` (alterado: campos novos + recusa de tema não liberado em card de anúncio) —
   MARKETING, SUPERADMIN, como hoje.
-- `GET /api/marketing/propostas` — MARKETING, SUPERADMIN. `POST /api/marketing/propostas/<id>/decidir` — **só a
-  lista de aprovadores** (403 para os outros, Superadmin incluso).
+- `GET /api/marketing/propostas` — MARKETING, SUPERADMIN. `POST /api/marketing/propostas/<id>/decidir` — **só
+  SUPERADMIN** (403 para Marketing).
 - `GET|POST /api/marketing/diario` — MARKETING, SUPERADMIN.
 - Agente (`/api/marketing-agent/<token>/…`, molde da 256, 404 sem token): ingestão por anúncio, sugestões de licença,
   pedidos de criativo, cards prontos sem anúncio, vínculo de anúncio, propostas (criar / a executar / marcar) e diário
@@ -363,14 +382,14 @@ produção.
 | 3 | correção manual da frente de `Teste` → EDU | correção vence o nome nas leituras seguintes | não |
 | 4 | 3 vendas de festa semeadas + R$ 900 em FESTA; 1 satélite e 1 cortesia no meio | custo por venda R$ 300,00; satélite e cortesia fora; cliente novo contado | não |
 | 5 | frente com gasto e zero venda; plataforma Google sem leitura | estado "sem venda" e "sem conexão" no payload | não |
-| 6 | card de anúncio com tema licenciado e com tema não classificado | 422 nos dois | **sim** |
-| 7 | card de post orgânico com tema licenciado | 200 (regra só para anúncio) | não |
-| 8 | confirmação em lote de 3 sugestões | 3 temas mudam; autor e data gravados | não |
+| 6 | card de anúncio com tema licenciado não liberado e com tema não classificado | 422 nos dois | **sim** |
+| 7 | card de post orgânico com tema licenciado; card de anúncio com licenciado liberado pelo Superadmin | 200 nos dois | não |
+| 8 | confirmação em lote de 3 sugestões; Marketing tenta liberar um licenciado | autoral sai liberado, licenciado não; 403 na liberação | não / **sim** |
 | 9 | agente abre pedido de vídeo | card em Ideia, responsável = responsável por vídeo, briefing completo | não |
 | 10 | agente lista cards prontos sem anúncio e grava vínculo | some da lista; card mostra o vínculo | não |
 | 11 | métricas de anúncio vinculado | card soma gasto e conversas; custo por conversa certo | não |
-| 12 | Superadmin fora da lista de aprovadores tenta aprovar | 403; proposta segue pendente | **sim** |
-| 13 | aprovador aprova; segunda decisão concorrente | 200 e depois 409 "já decidida" | não / **sim** |
+| 12 | usuário MARKETING (não Superadmin) tenta aprovar | 403; proposta segue pendente | **sim** |
+| 13 | Superadmin aprova; segunda decisão concorrente | 200 e depois 409 "já decidida" | não / **sim** |
 | 14 | agente lista "a executar", marca executada; proposta de 8 dias | executada some da lista; a de 8 dias expira e não aprova | não |
 | 15 | execução gera diário; reavaliação vencida aparece e sai depois do resultado | ciclo do diário | não |
 | 16 | papel sem acesso (CASTING) chama desempenho, propostas e diário | 403 | **sim** |
@@ -388,7 +407,7 @@ Conferência de tela no Browser pane (skill `manto-conferir-tela`):
   ninguém exportar planilha.
 - **SC-002**: O dono responde "quanto custou cada venda de cada frente na semana?" olhando uma tela, em menos de 1
   minuto.
-- **SC-003**: Zero anúncio montado ou proposto com tema licenciado ou não classificado.
+- **SC-003**: Zero anúncio montado ou proposto com tema não liberado.
 - **SC-004**: 100% das mudanças de gasto feitas pela rotina na Meta ou no Google têm aprovação registrada **antes** da
   execução e entrada no diário.
 - **SC-005**: Em 4 semanas de uso, a Gabi não precisa abrir o Gerenciador de Anúncios para nenhuma tarefa de rotina.
@@ -414,7 +433,7 @@ Conferência de tela no Browser pane (skill `manto-conferir-tela`):
 - `docs/01`: §Agente de marketing, para os endpoints novos do agente e as tabelas novas; e §4.3, com as linhas de RBAC.
 - `docs/02`: `/marketing/desempenho`, o Kanban e a lista de licença dos temas.
 - `docs/03`: entrada no topo.
-- `docs/04`: §Marketing, para a regra da frente, o custo misto, o autoral-only e o ciclo de proposta.
+- `docs/04`: §Marketing, para a regra da frente, o custo misto, a regra do tema liberado e o ciclo de proposta.
 - `docs/05`: a dívida "custo por venda misto até a atribuição", e riscar a "rotina 256 parada" quando o token voltar ao
   Render.
 
@@ -429,7 +448,7 @@ Conferência de tela no Browser pane (skill `manto-conferir-tela`):
   - Sem o Google, a feature funciona só com a Meta.
 - **Responsáveis por criativo:** a responsável por foto é a Gabi (Gabriella) e a responsável por vídeo é a Erika. Os
   usuários já existem e são definidos nas Configurações.
-- **Aprovadores:** o único aprovador padrão é o dono.
+- **Aprovação:** Superadmin aprova. O dono tira o Superadmin da Erika (16/11).
 - **Classificação inicial dos temas:** a rotina sugere e uma pessoa confirma. A rotina nunca marca sozinha.
 - **Moeda e janelas:** BRL. As janelas e as datas de venda seguem as convenções da `skill financeiro` (venda pela
   `sale_date`; o líder do grupo representa o grupo).
