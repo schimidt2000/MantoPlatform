@@ -1,6 +1,7 @@
 # Feature 350 — A base autorizada: a cliente diz sim (ou para), indica e lembra do aniversário
 
-**Branch**: `350-base-autorizada` (da `main`) · **Created**: 2026-11-17 · **Status**: Rascunho ·
+**Branch**: `350-base-autorizada` (da `main`) · **Created**: 2026-11-17 · **Status**: Pronta na branch, sem
+merge nem push (`verify_350.py` 20/20 contra `manto_350`; converge sem lacunas) ·
 **Migration**: uma, aditiva (`a350…`, encadeada em `d334b2c4e6f8`; tabelas novas de consentimento,
 crianças, parceiros e pós-evento; colunas novas em `clients`) · **Nível**: 1 (feature) — constituição,
 Princípio VI

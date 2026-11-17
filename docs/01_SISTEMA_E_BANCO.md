@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
+> Última atualização: **2026-11-17** · **350-base-autorizada** (migration **`a350b1c2d3e4`**, aditiva,
+> **encadeada em `d334b2c4e6f8` na branch** — o reencadeamento com 348, 349 e 351 fica para o lote de
+> merge: consentimentos, crianças, parceiros e pós-evento, §2.7.1; rotas em §3.8; gates em §4.3).
+> Antes: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
 > head: contador de visitas, aceite de novidades, pixel, §2.10.0c; rotas novas em §3.13.4). Antes:
 > **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
 > head: `virtual_orders.payment_url` vira `text`, §2.10.0b). Antes: **2026-11-10** ·
@@ -658,6 +661,37 @@ Pontos que valem para quem for ler esses dados:
     ou código 803).
   - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
     `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
+
+### 2.7.1 Base autorizada — consentimentos, crianças, parceiros e pós-evento (feature 350)
+
+Migration **`a350b1c2d3e4`** (`down_revision = d334b2c4e6f8`), aditiva. **Relógio**: todo carimbo das
+tabelas abaixo e das colunas novas de `clients` é **horário de parede de São Paulo** (`now_sp()`), o
+mesmo do aceite da loja (344) — aceite e retirada se comparam (`docs/00` §6 item 2).
+
+- **`parceiros`** (`Parceiro`): `nome` (160), `tipo` (`buffet` | `assessoria` | `agencia` | `outro`,
+  `PARCEIRO_TIPOS`), `contato`, `telefone`, `email`, `comissao_percentual` (`Numeric(5,2)`, 0–100,
+  **declarada** — não paga nada; o repasse de um evento segue sendo o BV), `observacao`, `ativo`
+  (não se exclui: desativa-se), `criado_em`/`atualizado_em`.
+- **`clients`**: `marketing_opt_in_version` (versão do texto aceito), `marketing_opt_out_at` /
+  `marketing_opt_out_source` (última retirada), `indicado_por_id` (FK `clients`, `SET NULL`, nunca a
+  própria ficha) e `parceiro_id` (FK `parceiros`, `SET NULL`). **Com aceite ⇔
+  `marketing_opt_in_at` preenchido**: a retirada zera os três `opt_in_*` e grava os `opt_out_*`.
+- **`cliente_consentimentos`** (`ClienteConsentimento`, append-only): `client_id` (`CASCADE`), `tipo`
+  (`novidades` | `aniversario`), `acao` (`aceite` | `retirada`), `texto` (o texto **completo**
+  exibido), `versao`, `origem` (160), `referencia` (`conversa:<id>`, `mensagem:<id>`, `evento:<id>`,
+  `pedido:<id>`, `instagram:<mid>`), `registrado_por_id` (nulo = a própria cliente ou o sistema),
+  `registrado_em`. A retirada de aniversário **não** guarda nome nem data da criança.
+- **`cliente_criancas`** (`ClienteCrianca`): `client_id` (`CASCADE`), `primeiro_nome` (60),
+  `nascimento` (date, não futuro, até 17 anos), `aceite_em`, `aceite_versao`, `aceite_origem`,
+  `registrado_por_id`. A linha só existe com o aceite; remover = apagar a linha.
+- **`pos_eventos`** (`PosEvento`): um por evento (`UNIQUE(event_id)`, FK `CASCADE`), `client_id`
+  (`SET NULL`), `fotos_url`, `canal` (`copiado` | `conversa`), `mensagem_id` (FK `conversa_mensagens`,
+  `SET NULL`), `registrado_por_id`, `registrado_em`. Depois de `conversa`, uma cópia não rebaixa o
+  canal.
+
+Textos e versões dos dois aceites, origens e palavras de saída: `app/constants.py`
+(`CONSENTIMENTO_*`, `PALAVRAS_DE_SAIDA`, `VIRTUAL_ACEITE_TEXTO`). Núcleo: `app/clientes/`
+(`consentimento_ops`, `indicacao_ops`, `parceiro_ops`, `aniversario_ops`, `pos_evento_ops`).
 
 ### 2.8 EducaManto
 
@@ -1459,6 +1493,35 @@ tem cliente vinculada — nesse caso `client.id` é `null`. O núcleo continua e
 `client_ops.summarize_feedback`, que carrega evento+cliente com `joinedload` (evita N+1) e casa a
 tag pelas **duas** formas do JSON (escapada e literal) com `ESCAPE '!'` — o `LIKE` do PostgreSQL
 consome a barra invertida de `\uXXXX` como escape, e por isso o filtro por tag não funcionava.
+
+**Feature 350 — base autorizada** (`clientes_base_read.py` / `clientes_base_write.py`; contrato completo
+em `specs/350-base-autorizada/contracts/api.md`):
+
+- `GET /api/clientes/<id>` ganha `pode_prospectar`, `consentimentos` (`novidades`, `historico[]`,
+  `textos`, `origens` e — só Comercial/Superadmin — `criancas[]`), `indicado_por`, `indicacoes[]`,
+  `parceiro` e `flags.pode_editar_base`; `GET /api/clientes/` ganha `flags`.
+- `POST|DELETE /api/clientes/<id>/consentimentos/novidades` `{origem, referencia?}` — origem da lista
+  fechada (`Conversa`, `Resposta ao orçamento`, `Telefone`, `Pessoalmente`); idempotente.
+- `POST /api/clientes/<id>/criancas` `{primeiro_nome, nascimento, aceite: true, origem}` → 201;
+  `DELETE /api/clientes/<id>/criancas/<cid>` (criança de outra ficha → 404).
+- `PATCH /api/clientes/<id>/indicacao` `{indicado_por_id?, parceiro_id?}` — só as chaves enviadas.
+- `GET /api/clientes/aniversarios?dias=60` (1–120) — crianças com os **dois** aceites.
+- `GET /api/parceiros?inativos=1`, `POST /api/parceiros`, `PATCH /api/parceiros/<id>` (inclui `ativo`).
+- `GET /api/pos-evento` (últimos 7 dias até agora, sem satélite nem ensaio);
+  `GET /api/events/<id>/pos-evento?fotos_url=` (prévia; gera o token de avaliação na primeira
+  leitura); `POST /api/events/<id>/pos-evento` `{canal: copiado|conversa, fotos_url?}` — cancelado
+  409 `cancelado`; conversa: 503 `nao_configurado`, 409 `sem_conversa` / `janela_fechada` /
+  `envio_travado`, 502 `envio_falhou`. Envio por `envio_ops.enviar_texto` com chave
+  `pos-evento-<id>-<tentativa>`.
+- Público: `GET /api/avaliar/<token>` ganha `consentimento` (ausente sem contratante);
+  `POST /api/avaliar/<token>/consentimento` (10/h) `{novidades: aceitar|retirar|null, versao_novidades,
+  crianca?, versao_aniversario}` → 409 `sem_ficha` / `texto_mudou`, 410 cancelado.
+- `POST /api/conversas/<id>/modelo`: modelo de categoria `MARKETING` sem aceite na ficha da conversa →
+  **409 `sem_aceite`** (a Meta não é chamada). `cliente.aceite_novidades` na conversa.
+- Saída automática (sem endpoint): o aviso do WhatsApp com a mensagem inteira igual a uma palavra de
+  saída (`aviso_ops._gravar_recebida`; Instagram em `instagram_ops`) e o erro **131050** (status em
+  `_aplicar_status`, recusa síncrona em `envio_ops._registrar_falha`) retiram o aceite da ficha.
+- `POST /api/orcamento/calcular`: `quote.message` termina com o convite "Responda *QUERO*" (o PDF não).
 
 ### 3.9 Catálogo público (anônimo) — `catalogo_read.py`
 `GET /api/catalogo`, `/api/catalogo/categorias`, `/api/catalogo/categoria/<slug>`,
@@ -2588,6 +2651,12 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (feature 335) | `conversas_funil` (`GET /api/conversas/funil`, `GET /api/conversas/funil/parados`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
 | `_require_vendas()` (feature 335) | `clientes_read` (`GET /api/clientes/<id>/linha-do-tempo`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; os links de conversa e de orçamento só para `COMERCIAL`/`SUPERADMIN` (papel real) |
 | `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
+| `_negado()` de `clientes_base_write` (feature 350) | `POST`/`DELETE /api/clientes/<id>/consentimentos/novidades`, `POST /api/clientes/<id>/criancas`, `DELETE /api/clientes/<id>/criancas/<cid>`, `PATCH /api/clientes/<id>/indicacao`, `POST /api/parceiros`, `PATCH /api/parceiros/<id>`, `POST /api/events/<id>/pos-evento` | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais, o Financeiro inclusive |
+| `_negado(_EQUIPE_COMERCIAL)` de `clientes_base_read` (feature 350) | `GET /api/clientes/aniversarios`, `GET /api/pos-evento`, `GET /api/events/<id>/pos-evento` | `COMERCIAL`, `SUPERADMIN` → 403 (dado de criança: minimização, LGPD art. 14) |
+| `_negado(_LEITORES_DE_PARCEIRO)` de `clientes_base_read` (feature 350) | `GET /api/parceiros` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; `flags.pode_editar` só para Comercial/Superadmin |
+| `_require_vendas()` + `_pode_editar_base()` (feature 350) | `GET /api/clientes/<id>`: a chave `consentimentos.criancas` só sai para `COMERCIAL`/`SUPERADMIN` (ausente para o Financeiro); `flags.pode_editar_base` idem | gate de hoje (`COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`) |
+| token do evento + `10 per hour` (feature 350) | `POST /api/avaliar/<token>/consentimento` | público, como a avaliação; grava só na ficha contratante do evento (sem ficha → 409 `sem_ficha`) |
+| `pode_conversas()` + aceite (feature 350) | `POST /api/conversas/<id>/modelo` | gate de hoje; modelo `MARKETING` sem aceite na ficha → **409 `sem_aceite`** (o papel passa, o consentimento recusa) |
 | `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
 | `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |

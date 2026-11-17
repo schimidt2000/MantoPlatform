@@ -873,7 +873,7 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 210 | **P3** | `PrivacidadeLojaPage.tsx` | o aviso de privacidade é um rascunho operacional: não tem CNPJ nem e-mail do encarregado, e não passou por advogado; o resto do site (catálogo, formulários, portal) continua sem aviso nenhum | o dono informa CNPJ e e-mail do encarregado; advogado revisa; um aviso único do site, com a seção da loja apontando para ele |
-| 211 | **P3** | `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
+| ~~211~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 350** (botão na ficha e na conversa, "SAIR" e erro 131050 retiram sozinhos; histórico em `cliente_consentimentos`) — `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
@@ -888,6 +888,21 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 | 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
 | 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
 | 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |
+## Baixa da feature 350-base-autorizada (2026-11-17, branch)
+
+**Quitada.** 211 (a saída do aceite deixou de ser manual: botão na ficha e na conversa, "SAIR" e o erro 131050).
+**Criadas.** (218–223.) ⚠️ Números provisórios: a 348, a 349 e a 351 abriram no mesmo dia e podem ter usado os
+mesmos; renumerar no lote de merge se colidir.
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 218 | **P3** | `app/clientes/consentimento_ops.py` / textos em `app/constants.py` (`CONSENTIMENTO_*`) | **pontos para parecer jurídico (LGPD)**: aceite registrado pela equipe (telefone, pessoalmente) vale como prova?; quem abre o link de avaliação é tratado como a contratante (art. 14 §5º); pós-evento com pedido de indicação sem aceite prévio; "SAIR" deveria apagar também os aniversários?; prazo de guarda do dado da criança (proposta da pesquisa: 24–36 meses sem evento nem interação); comissão de parceiro "declarada" no orçamento/contrato | parecer do advogado; texto novo = versão nova (`*_VERSAO`) |
+| 219 | **P4** | `pos_evento_ops.enviar_pela_conversa` | o pós-evento pela conversa só sai como texto livre na janela de 24 h; no dia seguinte a janela costuma estar fechada e a equipe copia | modelo de utilidade aprovado na Meta para o pós-evento e envio por `enviar_modelo` |
+| 220 | **P4** | `aniversario_ops` / `/clientes/aniversarios` | o lembrete de aniversário não sai sozinho: a lista é só leitura (roteiro, item 14) | feature do disparo (8–10 semanas antes + reforço a 4), só para quem tem os dois aceites |
+| 221 | **P5** | `parceiros.comissao_percentual` | a comissão do parceiro é só declarada: não liga ao BV do acréscimo nem ao Financeiro | quando houver pagamento a parceiro, ligar `Parceiro` ↔ BV do evento |
+| 222 | **P5** | `clients.indicado_por_id` | "Indicado por" é preenchido à mão; a mensagem de "Indicar uma amiga" cita o nome, mas nada lê isso na primeira mensagem | código de indicação lido na conversa (feature 348, origem completa) |
+| 223 | **P5** | `consentimento_ops.retirar_se_pediu_para_parar` | "SAIR" numa conversa **sem ficha** não fica registrado: se a ficha (com aceite, por exemplo da loja) for ligada depois, o aceite continua | ao ligar a ficha (`ficha_ops.ligar`), procurar palavra de saída nas mensagens da conversa e retirar |
+
 ## Baixa da feature 325-crm-whatsapp-fundacao (2026-10-30)
 
 **Criada.** (178–182.) Nenhuma quitada.

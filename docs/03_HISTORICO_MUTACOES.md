@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **350-base-autorizada** | *(na branch, sem merge)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
 | **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
@@ -462,6 +463,74 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 350 — A base autorizada: a cliente diz sim (ou para), indica e lembra do aniversário   (350-base-autorizada · 2026-11-17 · migration `a350b1c2d3e4`)
+
+> **Na branch `350-base-autorizada`, sem merge e sem push** (worktree
+> `.claude/worktrees/350-base-autorizada-b58e5d`, saída de `20bf93c0`). Nível 1. Detalhe:
+> `specs/350-base-autorizada/` (spec, plan, research, data-model, contrato, checklists `requirements` e `lgpd`,
+> tasks, `verify_350.py`). Nasceu junto da 348, da 349 e da 351 (pesquisa "Máquina de vendas Manto", 17/11, §8.5);
+> as quatro migrations descem de `d334b2c4e6f8` e o reencadeamento fica para o lote de merge.
+
+**O pedido.** A pesquisa de 17/11 concluiu "medir primeiro, escalar depois" e estimou R$ 0,32 por mensagem para a
+base contra R$ 7 por conversa nova — mas nenhuma das 6.291 fichas tinha aceite, o único aceite gravado vinha da loja
+(344), sair era manual, o erro 131050 do WhatsApp não marcava a ficha, não existia "indicado por", parceiro nem
+aniversário, e o pedido de avaliação era um link copiado à mão (13% dos eventos com avaliação). Regra da pesquisa
+(§5.7): dois consentimentos separados, com data, texto e origem; sem aceite, nada de prospecção. Decisão do dono
+mantida: o "Avaliar no Google" continua só para nota 5.
+
+**O que mudou.**
+- **Dois consentimentos com prova**: histórico append-only `cliente_consentimentos` (texto completo, versão,
+  origem, referência, autor); estado em `clients.marketing_opt_in_*` + `marketing_opt_out_*`. Criança em
+  `cliente_criancas`, por criança, só com o aceite; remover apaga nome e data. Núcleo `app/clientes/consentimento_ops.py`.
+- **Saída automática**: a mensagem inteira igual a uma palavra de saída (SAIR, PARAR, STOP, "Parar promoções"…)
+  no WhatsApp e no Instagram, e o erro **131050** (status e recusa síncrona) retiram o aceite. "Vou sair às 15h"
+  não retira.
+- **Sem aceite, nada de prospecção**: modelo `MARKETING` pela conversa → 409 `sem_aceite`; a lista de
+  aniversários exige os dois aceites; a loja (344) só reaplica aceite posterior à retirada e passa a gravar o
+  histórico com o texto da caixinha (`VIRTUAL_ACEITE_TEXTO`).
+- **Onde pedir**: a mensagem do orçamento termina com "Responda *QUERO*" (o PDF não); o pós-evento leva ao link de
+  avaliação, que ganhou as duas caixas, "Não quero mais receber" e "Indicar uma amiga" (wa.me, nenhum dado da amiga).
+- **Pós-evento único** (`pos_evento_ops`, tabela `pos_eventos`): mensagem montada no servidor (agradecimento,
+  fotos, avaliação, indicação, convite, "SAIR"); copiar ou enviar pela conversa (texto livre, janela aberta, chave
+  por tentativa); lista `/clientes/pos-evento` dos últimos 7 dias. Substitui o "Pedir feedback da cliente" do evento
+  (`buildFeedbackMsg` saiu: uma fonte só para o texto).
+- **Indicação e parceiro**: `clients.indicado_por_id` e `parceiro_id`; tabela `parceiros` (tipo, comissão
+  **declarada**, ativo); telas `/clientes/parceiros` e o cartão "Indicação e parceiro" na ficha.
+- **Aniversários dos próximos 60 dias**: `/clientes/aniversarios`, só leitura; 29/02 cai em 28/02 no ano comum.
+- **RBAC**: escrita da base e dado de criança só Comercial e Superadmin; o Financeiro lê a ficha sem as crianças e
+  a lista de parceiros. Relógio: todos os carimbos novos em `now_sp()` (o mesmo do aceite da loja).
+
+**Por que assim.**
+- O texto inteiro vai ao histórico, com versão, porque o ônus da prova é de quem coleta (LGPD art. 8º §2º); a tela
+  pública manda a versão que exibiu e o servidor recusa outra (409 `texto_mudou`).
+- Comparar a mensagem **inteira**, nunca "contém", para não tirar o aceite de quem só disse que vai sair.
+- O pós-evento não exige aceite: é relacionamento com quem acabou de ser cliente e é o momento de pedir o aceite;
+  sempre termina com "SAIR". Nada dispara sozinho (CRM desligado; modelo fora da janela é outra decisão).
+- "SAIR" não apaga os aniversários (são consentimentos independentes), mas tira a criança da lista, que exige os dois.
+
+**Pegadinhas.**
+- `ConsentimentoErro`/`PosEventoErro` e os núcleos **não comitam**: o aviso do WhatsApp comita em
+  `processar_aviso`; o endpoint, depois do núcleo.
+- `Client.indicado_por` e `ClienteCrianca.cliente` não têm backref de propósito: com backref o ORM tentaria anular
+  FK `NOT NULL` ao excluir a ficha; quem apaga é o `ON DELETE CASCADE`/`SET NULL` do banco (cenário 19 do verify).
+- O Safari recusa copiar depois de uma espera: o diálogo copia a prévia já na tela e só então registra; se o
+  navegador recusar, o aviso fica dentro do diálogo e nada é marcado como copiado.
+- `DialogFooter` não quebra linha: com três botões, `className="flex-wrap"` (o "Fechar" saía da tela em 390 px).
+
+**Verificação.** `verify_350.py` **20/20** contra o espelho próprio `manto_350` (dump de 17/11 02h; o `manto_local`
+é compartilhado com 348/349/351), com dublê da Meta e disjuntor de rede: RBAC que deve falhar (cenário 4), saída por
+palavra (7) e por 131050 (8), marketing sem aceite (9), exclusão da ficha (19). Mutações conferidas: desligar a saída
+por palavra, o 131050, a guarda de marketing, o gate de escrita ou a regra da loja derruba o cenário certo. Migration
+aplicada, revertida e reaplicada. `ruff check` limpo nos arquivos tocados (os 5 E402 de `models.py` e o I001 de
+`app/api/__init__.py` já existiam); typecheck das três SPAs limpo. Telas abertas (backend 5350, Vite 6350/6351):
+ficha, conversa, Pós-evento (com dados reais do espelho), Aniversários, Parceiros e o menu do evento em 390 px;
+avaliação pública em 375 e 320 px, sem rolagem lateral.
+
+**Pontos para parecer jurídico (LGPD)**: aceite registrado pela equipe (telefone, pessoalmente) como prova; quem
+abre o link de avaliação tratado como a contratante (art. 14 §5º); pós-evento com pedido de indicação sem aceite
+prévio (legítimo interesse de cliente atual); se "SAIR" deveria apagar também os aniversários e o prazo de guarda
+do dado da criança; se a comissão de parceiro "declarada" precisa constar no orçamento/contrato.
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 

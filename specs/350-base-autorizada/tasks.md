@@ -114,8 +114,8 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 - [X] T033 `verify_350.py` verde de ponta a ponta contra `manto_350`
 - [X] T034 `ruff check` nos arquivos Python tocados; `ruff format` só nos novos; `cd frontend && npm run typecheck`
 - [X] T035 Telas abertas no Browser pane (backend 5350, Vite 6350): ficha, conversa, Pós-evento, Aniversários, Parceiros, diálogo do evento em 390 px; página pública em 375×812; textos pelo Princípio XV
-- [ ] T036 Docs: `docs/01` (endpoints, gates §4.3, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` (Clientes: consentimento; Conversas: saída automática), `docs/05` (dívida do opt-out manual riscada; o que fica), `docs/00` §6 item 2 (relógio)
-- [ ] T037 Commits por caminho (`feat(350):` / `docs(350):`), sem merge e sem push
+- [X] T036 Docs: `docs/01` (endpoints, gates §4.3, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` (Clientes: consentimento; Conversas: saída automática), `docs/05` (dívida do opt-out manual riscada; o que fica), `docs/00` §6 item 2 (relógio)
+- [X] T037 Commits por caminho (`feat(350):` / `docs(350):`), sem merge e sem push
 
 ---
 
