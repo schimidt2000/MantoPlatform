@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **190b-data-da-venda-um-dia-antes** | *(lote de 17/11)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
 | **351-painel-atribuido** | *(branch, sem merge)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
 | **350-base-autorizada** | *(na branch, sem merge)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
 | **349-comercial-mede-e-fecha** | *(na branch, sem merge — lote 348–351)* O comercial mede e fecha pela conversa: primeira resposta guardada (com o eco do celular "sem autor"), perdida com motivo, qualificada (decisão ou pontuação por regras), selos e recortes na lista, cotar sem sair, criar evento pela conversa (ponto único para o `conversa_id` da 348) e a régua de 2/5/9 dias no sino | 2026-11-17 | `a349c0e1f2a3` | (aqui) | ver Registro |
@@ -467,6 +468,21 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 190b — "Data da venda" um dia antes no detalhe do evento   (lote-1711 · 2026-11-17 · sem migration)
+
+> Nível 2, no lote de 17/11 com a 345b e as 348–351. Detalhe: `specs/190b-data-da-venda-um-dia-antes/spec.md`.
+
+**O pedido.** A 348 achou, conferindo a aba Comercial, a venda de 17/11 mostrada como 16/11. O dono pôs a
+correção no lote ("pode publicar 19h").
+
+**O que mudou.** `formatDay` (`components/EventDetail/parts.tsx`) formata a data pura (`AAAA-MM-DD`) pelo texto;
+data com hora segue pelo `Date`. Corrige também a data de emissão da nota e a data do gasto vinculado, que usam a
+mesma função.
+
+**Pegadinha.** É a armadilha 1 do `docs/00` §6 de novo: `formatarDataGasto` e `dataCurta` já faziam o certo, e o
+`formatDay` da 190 (julho) nunca foi revisto. Conferido com `node` no fuso de São Paulo: antes "16/11/2026", agora
+"17/11/2026"; data com hora igual ao que era.
 
 ### 351 — Painel atribuído: quanto custa a venda que o anúncio trouxe   (351-painel-atribuido · 2026-11-17 · migration `a351b0c1d2e3`)
 
