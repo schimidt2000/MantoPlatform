@@ -15,6 +15,7 @@ import { AvaliarPage } from "./pages/AvaliarPage";
 import { CampanhaVirtualPage } from "./pages/CampanhaVirtualPage";
 import { PedidoVirtualPage } from "./pages/PedidoVirtualPage";
 import { PrivacidadeLojaPage } from "./pages/PrivacidadeLojaPage";
+import { PrivacidadePage } from "./pages/PrivacidadePage";
 import { VitrineVirtualPage } from "./pages/VitrineVirtualPage";
 import { NfcPage } from "./pages/NfcPage";
 import { LojaLayout } from "./components/loja/LojaLayout";
@@ -36,9 +37,11 @@ const CATALOGO_BASENAME = import.meta.env.PROD ? "/catalogo" : undefined;
  *   enviados apontam para lá e o token não expira nunca (`app/cadastro/verify_ops.py`).
  * - `/nfc` (feature 255): URL GRAVADA nas tags NFC físicas das luminárias entregues às
  *   clientes — imutável e eterna; `/catalogo/nfc` não serve como endereço público.
+ * - `/privacidade` (feature 354): política de privacidade do atendimento, com a URL gravada no
+ *   cadastro do app da Meta — não renomear.
  */
 function isRootSurface(pathname: string): boolean {
-  return ["/cadastro", "/nfc"].some(
+  return ["/cadastro", "/nfc", "/privacidade"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -85,6 +88,9 @@ export function App() {
         </Route>
         {/* Tag NFC da luminária (feature 255): superfície de raiz, ver isRootSurface. */}
         <Route path="/nfc/:code" element={<NfcPage />} />
+        {/* Política de privacidade do atendimento (feature 354): superfície de raiz. Rota
+            literal, então ganha do `/:slug` de produto. */}
+        <Route path="/privacidade" element={<PrivacidadePage />} />
         <Route path="/:slug" element={<ProductDetailPage />} />
       </Routes>
       {/* A lista de desejos é da vitrine. Servida de `/cadastro` ou `/nfc`, sem o basename
