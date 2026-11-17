@@ -172,9 +172,18 @@ interface CaixaDeEnvioProps {
   conversa: ConversaResumo;
   onEnviarModelo: () => void;
   onJanelaFechou: () => void;
+  /** Feature 349: o orçamento recém-salvo pela calculadora aberta na conversa — o envio abre com ele escolhido. */
+  orcamentoInicial?: number | null;
+  onOrcamentoUsado?: () => void;
 }
 
-export function CaixaDeEnvio({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEnvioProps) {
+export function CaixaDeEnvio({
+  conversa,
+  onEnviarModelo,
+  onJanelaFechou,
+  orcamentoInicial = null,
+  onOrcamentoUsado,
+}: CaixaDeEnvioProps) {
   const [modo, setModo] = useState<Modo>("mensagem");
   return (
     <div className="border-t border-line bg-panel">
@@ -182,7 +191,13 @@ export function CaixaDeEnvio({ conversa, onEnviarModelo, onJanelaFechou }: Caixa
       {modo === "nota" ? (
         <CaixaDeNota conversaId={conversa.id} />
       ) : conversa.janela_aberta ? (
-        <CaixaDeMensagem conversa={conversa} onEnviarModelo={onEnviarModelo} onJanelaFechou={onJanelaFechou} />
+        <CaixaDeMensagem
+          conversa={conversa}
+          onEnviarModelo={onEnviarModelo}
+          onJanelaFechou={onJanelaFechou}
+          orcamentoInicial={orcamentoInicial}
+          onOrcamentoUsado={onOrcamentoUsado}
+        />
       ) : (
         <JanelaFechada
           onEnviarModelo={onEnviarModelo}
@@ -217,7 +232,13 @@ function useListaDeRespostas(texto: string) {
   return { painel, setPainel, buscaDoBotao, setBuscaDoBotao, ativo, setAtivo, respostas, filtradas, abrirPeloBotao, acompanharCampo };
 }
 
-function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEnvioProps) {
+function CaixaDeMensagem({
+  conversa,
+  onEnviarModelo,
+  onJanelaFechou,
+  orcamentoInicial = null,
+  onOrcamentoUsado,
+}: CaixaDeEnvioProps) {
   const [texto, setTexto] = useState("");
   const [arquivo, setArquivo] = useState<File | null>(null);
   const [erro, setErro] = useState<string | null>(null);
@@ -302,6 +323,16 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
 
   // Feature 333: o orçamento sai pelo diálogo; o formulário entra no campo, para conferir e enviar.
   const [orcamentoAberto, setOrcamentoAberto] = useState(false);
+  // Feature 349: a volta da calculadora abre o envio com o orçamento novo e tira o parâmetro do endereço (um
+  // recarregar não reabre o diálogo).
+  const [orcamentoDaVolta, setOrcamentoDaVolta] = useState<number | null>(null);
+  useEffect(() => {
+    if (!orcamentoInicial) return;
+    setOrcamentoDaVolta(orcamentoInicial);
+    setOrcamentoAberto(true);
+    onOrcamentoUsado?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- só quando chega um orçamento novo
+  }, [orcamentoInicial]);
   const [formularioAberto, setFormularioAberto] = useState(false);
   const inserirFormulario = (textoDoFormulario: string) => {
     setTexto((atual) => (atual.trim() ? `${atual.trimEnd()}\n\n${textoDoFormulario}` : textoDoFormulario));
@@ -519,7 +550,15 @@ function CaixaDeMensagem({ conversa, onEnviarModelo, onJanelaFechou }: CaixaDeEn
         </div>
       </form>
       <GerenciarRespostasDialog open={gerenciando} onOpenChange={setGerenciando} />
-      <EnviarOrcamentoDialog conversa={conversa} open={orcamentoAberto} onOpenChange={setOrcamentoAberto} />
+      <EnviarOrcamentoDialog
+        conversa={conversa}
+        open={orcamentoAberto}
+        onOpenChange={(aberto) => {
+          setOrcamentoAberto(aberto);
+          if (!aberto) setOrcamentoDaVolta(null);
+        }}
+        orcamentoInicial={orcamentoDaVolta}
+      />
       <EnviarFormularioDialog
         conversaId={conversa.id}
         open={formularioAberto}

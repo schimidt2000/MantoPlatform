@@ -464,6 +464,8 @@ def parados(
                 "qualificada": linha.qualificada,
                 "primeira_resposta_minutos": linha.minutos,
                 "primeira_resposta_sem_autor": linha.sem_autor,
+                # Há mensagem dela e nenhuma resposta (a conversa só com reação ou anúncio não entra).
+                "primeira_resposta_pendente": bool(linha.recebida_em and linha.resposta_em is None),
                 "lembrete_em": linha.lembrar_em.replace(tzinfo=UTC).isoformat() if linha.lembrar_em else None,
             }
             for linha in mostradas

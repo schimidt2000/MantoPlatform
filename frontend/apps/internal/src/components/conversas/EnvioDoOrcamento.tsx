@@ -1,6 +1,6 @@
-import { useDeferredValue, useEffect, useState } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Search } from "lucide-react";
+import { Calculator, Search } from "lucide-react";
 import { ApiRequestError } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import {
@@ -257,13 +257,44 @@ function trintaDiasAtras(): string {
   return d.toISOString().slice(0, 10);
 }
 
-function OrcamentosRecentes({ onEscolher }: { onEscolher: (o: OrcamentoParaEnvio) => void }) {
+/** O nome que a calculadora recebe: a ficha ou o perfil — nunca o telefone, que não é nome de cliente. */
+function nomeParaOrcamento(conversa: ConversaResumo): string {
+  return conversa.cliente?.nome ?? conversa.nome_perfil ?? "";
+}
+
+function OrcamentosRecentes({
+  conversa,
+  inicial,
+  onEscolher,
+}: {
+  conversa: ConversaResumo;
+  inicial: number | null;
+  onEscolher: (o: OrcamentoParaEnvio) => void;
+}) {
   const [busca, setBusca] = useState("");
   const termo = useDeferredValue(busca.trim());
   const historico = useOrcamentoHistorico({ q: termo, date_from: trintaDiasAtras() });
   const itens = (historico.data?.entries ?? []).slice(0, LIMITE_DOS_RECENTES);
+  // Feature 349: a volta da calculadora escolhe sozinha o orçamento que acabou de ser salvo (uma vez).
+  const escolheuInicial = useRef(false);
+  useEffect(() => {
+    if (!inicial || escolheuInicial.current) return;
+    const novo = historico.data?.entries.find((e) => e.id === inicial);
+    if (novo) {
+      escolheuInicial.current = true;
+      onEscolher(orcamentoDoHistorico(novo));
+    }
+  }, [inicial, historico.data, onEscolher]);
+  const paraCalculadora = new URLSearchParams({ conversa: String(conversa.id) });
+  if (nomeParaOrcamento(conversa)) paraCalculadora.set("cliente", nomeParaOrcamento(conversa));
   return (
     <div className="space-y-2">
+      <Button asChild variant="outline" className="w-full">
+        <Link to={`/orcamento?${paraCalculadora.toString()}`}>
+          <Calculator className="h-4 w-4" aria-hidden />
+          Fazer orçamento
+        </Link>
+      </Button>
       <BuscaDaLista
         id="busca-orcamento"
         valor={busca}
@@ -315,10 +346,13 @@ export function EnviarOrcamentoDialog({
   conversa,
   open,
   onOpenChange,
+  orcamentoInicial = null,
 }: {
   conversa: ConversaResumo;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Feature 349: o orçamento que a calculadora (aberta pela conversa) acabou de salvar. */
+  orcamentoInicial?: number | null;
 }) {
   const [escolhido, setEscolhido] = useState<OrcamentoParaEnvio | null>(null);
   useEffect(() => {
@@ -330,7 +364,9 @@ export function EnviarOrcamentoDialog({
         <DialogHeader>
           <DialogTitle>Enviar orçamento</DialogTitle>
           <DialogDescription>
-            {escolhido ? "Confira o orçamento antes de enviar." : "Escolha um dos orçamentos recentes do time."}
+            {escolhido
+              ? "Confira o orçamento antes de enviar."
+              : "Faça um orçamento novo ou escolha um dos recentes do time."}
           </DialogDescription>
         </DialogHeader>
         {!open ? null : escolhido ? (
@@ -342,7 +378,7 @@ export function EnviarOrcamentoDialog({
             onVoltar={() => setEscolhido(null)}
           />
         ) : (
-          <OrcamentosRecentes onEscolher={setEscolhido} />
+          <OrcamentosRecentes conversa={conversa} inicial={orcamentoInicial} onEscolher={setEscolhido} />
         )}
       </DialogContent>
     </Dialog>

@@ -61,8 +61,8 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 - [X] T013 [US4] `app/conversas/pontuacao_ops.py`: `contexto(linhas)` com etapa (`funil_ops._etapas`), sinais e pontos em lote
 - [X] T014 [US4] `app/conversas/venda_ops.py`: `resumos_da_lista(conversas)` (anúncio, etapa, qualificada, perdida, lembrete)
 - [X] T015 [US4] `app/conversas/leitura_ops.py` (`recorte`, `dias`) e `app/api/conversas_read.py` (validação 422 e `venda` por item)
-- [ ] T016 [P] [US4] `frontend/apps/internal/src/lib/conversas.ts`: tipos `VendaResumo`, `Venda`, `Recorte`; parâmetros da lista; hooks da venda
-- [ ] T017 [US4] `components/conversas/SelosDaVenda.tsx` (novo), `ListaDeConversas.tsx`, `FiltroDaLista.tsx` (recortes + dias) e `pages/ConversasPage.tsx` (endereço)
+- [X] T016 [P] [US4] `frontend/apps/internal/src/lib/conversas.ts`: tipos `VendaResumo`, `Venda`, `Recorte`; parâmetros da lista; hooks da venda
+- [X] T017 [US4] `components/conversas/SelosDaVenda.tsx` (novo), `ListaDeConversas.tsx`, `FiltroDaLista.tsx` (recortes + dias) e `pages/ConversasPage.tsx` (endereço)
 
 ---
 
@@ -72,7 +72,7 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 
 - [X] T018 [US3] `app/conversas/venda_ops.py`: `decidir_qualificacao` e `painel(conversa)` (o objeto `Venda` do contrato); `GET …/venda` e `POST …/qualificacao` em `app/api/conversas_venda.py`
 - [X] T019 [US3] Funil: qualificadas no total, por grupo e nos parados (`app/conversas/funil_ops.py`)
-- [ ] T020 [US3] `components/conversas/PainelDaVenda.tsx` (novo) e `PerdidaDialog.tsx` (novo) montados em `ConversaAberta.tsx`: etapa, 1ª resposta (com o caso sem autor), qualificação com sinais, perda, reabrir, erro e carregando
+- [X] T020 [US3] `components/conversas/PainelDaVenda.tsx` (novo) e `PerdidaDialog.tsx` (novo) montados em `ConversaAberta.tsx`: etapa, 1ª resposta (com o caso sem autor), qualificação com sinais, perda, reabrir, erro e carregando
 
 ---
 
@@ -80,8 +80,8 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 
 **Verificação**: tela (fluxo completo em 390 px).
 
-- [ ] T021 [US5] `pages/OrcamentoCalculadoraPage.tsx`: `conversa` e `cliente` no estado inicial, faixa de volta, "Gerar orçamento" volta para `/conversas?c=…&orcamento=…`
-- [ ] T022 [US5] `components/conversas/EnvioDoOrcamento.tsx` ("Fazer orçamento" e escolha automática do orçamento inicial), `CaixaDeEnvio.tsx`, `ConversaAberta.tsx` e `pages/ConversasPage.tsx` (parâmetro `orcamento` consumido)
+- [X] T021 [US5] `pages/OrcamentoCalculadoraPage.tsx`: `conversa` e `cliente` no estado inicial, faixa de volta, "Gerar orçamento" volta para `/conversas?c=…&orcamento=…`
+- [X] T022 [US5] `components/conversas/EnvioDoOrcamento.tsx` ("Fazer orçamento" e escolha automática do orçamento inicial), `CaixaDeEnvio.tsx`, `ConversaAberta.tsx` e `pages/ConversasPage.tsx` (parâmetro `orcamento` consumido)
 
 ---
 
@@ -91,7 +91,7 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 
 - [X] T023 [US6] `app/conversas/fechamento_ops.py`: `o_que_levar(conversa)` e o ponto único `ligar_evento_a_conversa(evento, conversa)`
 - [X] T024 [US6] `app/api/agenda_write.py`: `conversa_id` em `POST /api/events` (422 antes do Google; vínculo depois do núcleo)
-- [ ] T025 [US6] "Criar evento" no `PainelDaVenda.tsx` (sem ficha → "Ligar à ficha"); `pages/EventCreatePage.tsx` + `lib/eventCreate.ts` leem `conversa`, põem a ficha e o vendedor e mandam `conversa_id`
+- [X] T025 [US6] "Criar evento" no `PainelDaVenda.tsx` (sem ficha → "Ligar à ficha"); `pages/EventCreatePage.tsx` + `lib/eventCreate.ts` leem `conversa`, põem a ficha e o vendedor e mandam `conversa_id`
 
 ---
 
@@ -101,15 +101,15 @@ description: "Tasks da feature 349 — o comercial mede e fecha pela conversa"
 
 - [X] T026 [US7] `app/conversas/venda_ops.py`: `lembrar_amanha` e `cancelar_lembrete`; `POST`/`DELETE …/lembrete` em `app/api/conversas_venda.py`
 - [X] T027 [US7] `app/conversas/parado_ops.py`: `avisar_lembretes(agora_sp)` (vencidos + régua, 9h–21h, push depois do commit) e a rotina em `app/conversas/varredura.py`
-- [ ] T028 [US7] "Lembrar amanhã"/"Cancelar lembrete" no `PainelDaVenda.tsx` e na lista "Pararam em" de `pages/FunilPage.tsx`; cartões e colunas novas do funil em `FunilPage.tsx` + `lib/funil.ts`
+- [X] T028 [US7] "Lembrar amanhã"/"Cancelar lembrete" no `PainelDaVenda.tsx` e na lista "Pararam em" de `pages/FunilPage.tsx`; cartões e colunas novas do funil em `FunilPage.tsx` + `lib/funil.ts`
 
 ---
 
 ## Phase 10: Polimento e transversais
 
-- [ ] T029 `verify_349.py` todo verde contra `manto_349`
-- [ ] T030 `ruff check` nos Python tocados (`ruff format` só nos novos) e `cd frontend && npm run typecheck`
-- [ ] T031 Telas no Browser pane (backend 5349, Vite 6349) em 390 px e no computador: Conversas, conversa aberta, calculadora, criar evento, funil; texto revisado pelo Princípio XV
+- [X] T029 `verify_349.py` todo verde contra `manto_349`
+- [X] T030 `ruff check` nos Python tocados (`ruff format` só nos novos) e `cd frontend && npm run typecheck`
+- [X] T031 Telas no Browser pane (backend 5349, Vite 6349) em 390 px e no computador: Conversas, conversa aberta, calculadora, criar evento, funil; texto revisado pelo Princípio XV
 - [ ] T032 Docs: `docs/01` (inventário, §4.3 RBAC, schema), `docs/02` (telas), `docs/03` (entrada no topo + índice), `docs/04` §Conversas, `docs/05` (dívidas)
 
 ---

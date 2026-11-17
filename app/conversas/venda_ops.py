@@ -206,6 +206,8 @@ def resumos_da_lista(conversas: list[Conversa]) -> dict[int, dict[str, Any]]:
         c.id: {
             "anuncio": linhas[c.id].tem_anuncio,
             "etapa": K.ETAPAS_DO_FUNIL[linhas[c.id].etapa],
+            # O rótulo vem daqui (fonte única com o funil): a tela não tem cópia dos nomes das etapas.
+            "etapa_rotulo": K.ROTULO_DA_ETAPA[K.ETAPAS_DO_FUNIL[linhas[c.id].etapa]],
             "qualificada": linhas[c.id].qualificada,
             "perdida": _perda_curta(c),
             "lembrete_em": _iso_utc(c.lembrar_em),
