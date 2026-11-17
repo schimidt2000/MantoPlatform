@@ -21,8 +21,10 @@ from werkzeug.utils import secure_filename
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
 from app.constants import RoleName
+from app.gastos import parcela_ops
 from app.models import (
     EventRole,
+    GastoParcela,
     RecurringExpenseEntry,
     SalaryAdvance,
     SalaryPayment,
@@ -48,6 +50,31 @@ def _require_financeiro() -> Any:
     if not _has_role(RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         return json_error("Sem permissão", 403)
     return None
+
+
+def _auditar_parcela(parcela: GastoParcela, anterior: str, origem: str) -> None:
+    from app.utils import audit
+
+    gasto = parcela.gasto
+    audit(
+        "payment",
+        "special_expense",
+        gasto.id,
+        gasto.payee_name,
+        f"{origem} parcela {parcela.numero} de {len(gasto.parcelas)}: {anterior} → {parcela.payment_status}"
+        f" | {gasto.description} (API)",
+    )
+
+
+def _marcar_parcela(parcela_id: int | None, status: str) -> Any:
+    """Marca uma parcela de gasto (feature 353) e rederiva a situação do gasto."""
+    parcela = db.session.get(GastoParcela, parcela_id) if parcela_id else None
+    if parcela is None:
+        return json_error("Item não encontrado", 404)
+    anterior = parcela_ops.marcar_situacao(parcela, status)
+    _auditar_parcela(parcela, anterior, "Desembolso")
+    db.session.commit()
+    return jsonify({"status": status})
 
 
 @api_bp.route("/financeiro/pagamentos/set-status", methods=["POST"])
@@ -191,6 +218,11 @@ def api_set_payment_status() -> Any:
         db.session.commit()
         return jsonify({"status": gravado})
 
+    if item_type == parcela_ops.TIPO_ITEM_PLANILHA:
+        # Feature 353: a parcela de um gasto parcelado. Ramo próprio ANTES do cachê: tipo que não
+        # casa com nada cai no `EventRole` de mesmo id logo abaixo.
+        return _marcar_parcela(_to_int(item_id), status)
+
     role = EventRole.query.get(_to_int(item_id))
     if not role:
         return json_error("Item não encontrado", 400)
@@ -256,8 +288,9 @@ def api_bulk_payment_action() -> Any:
     salary_ids = body.get("salary_ids") or []
     expense_ids = body.get("expense_ids") or []
     commission_ids = body.get("commission_ids") or []
+    parcela_ids = body.get("parcela_ids") or []  # feature 353: parcelas de gasto, pelo id da parcela
 
-    if not role_ids and not salary_ids and not expense_ids and not commission_ids:
+    if not role_ids and not salary_ids and not expense_ids and not commission_ids and not parcela_ids:
         return jsonify({"changed": 0, "skipped": []})
 
     from app.utils import audit
@@ -265,6 +298,7 @@ def api_bulk_payment_action() -> Any:
     r_ids = [i for i in (_to_int(x) for x in role_ids) if i is not None]
     s_ids = [i for i in (_to_int(x) for x in salary_ids) if i is not None]
     g_ids = [i for i in (_to_int(x) for x in expense_ids) if i is not None]
+    p_ids = [i for i in (_to_int(x) for x in parcela_ids) if i is not None]
 
     changed = 0
     skipped: list[str] = []
@@ -280,8 +314,8 @@ def api_bulk_payment_action() -> Any:
             if sp:
                 db.session.delete(sp)
                 changed += 1
-        if g_ids:
-            skipped.append(f"{len(g_ids)} gasto(s) — exclua pelo módulo de Gastos")
+        if g_ids or p_ids:
+            skipped.append(f"{len(g_ids) + len(p_ids)} gasto(s) — exclua pelo módulo de Gastos")
         if commission_ids:
             skipped.append(f"{len(commission_ids)} comissão(ões) — gerencie na tela de Comissões")
         audit(
@@ -334,6 +368,12 @@ def api_bulk_payment_action() -> Any:
                     exp.payee_name,
                     f"Bulk desembolso gasto: {old} → {action} | {exp.description} (API)",
                 )
+        for pid in p_ids:
+            parcela = db.session.get(GastoParcela, pid)
+            if parcela:
+                anterior = parcela_ops.marcar_situacao(parcela, action)
+                _auditar_parcela(parcela, anterior, "Bulk desembolso")
+                changed += 1
         for cid in commission_ids:
             if _bulk_set_commission_period(cid, action):
                 changed += 1

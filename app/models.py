@@ -1292,6 +1292,14 @@ class SpecialExpense(db.Model):
         "Fornecedor", foreign_keys=[fornecedor_id], lazy=True,
         backref=db.backref("gastos", lazy=True, passive_deletes=True),
     )
+    # Parcelas do pagamento (feature 353). Com parcelas, `amount` é a soma delas e a Planilha de
+    # Pagamentos mostra uma linha por parcela, na data dela; a DRE segue a `expense_date`.
+    # `selectin`: a lista de Gastos Extras serializa todas sem uma consulta por gasto.
+    parcelas = db.relationship(
+        "GastoParcela", lazy="selectin", order_by="GastoParcela.numero",
+        cascade="all, delete-orphan", passive_deletes=True,
+        back_populates="gasto",
+    )
 
     @property
     def receipt_url(self):
@@ -1330,6 +1338,36 @@ class SpecialExpense(db.Model):
         (feature 306).
         """
         return self.disbursement_type == "cliente"
+
+
+class GastoParcela(db.Model):
+    """Uma parcela do pagamento de um gasto extra (feature 353).
+
+    Cada parcela tem a sua data e a sua situação de pagamento: é ela, e não o gasto inteiro, que a
+    Planilha de Pagamentos mostra e marca. O gasto guarda a soma em `amount` e a situação derivada
+    em `payment_status` (`parcela_ops.situacao_derivada`), para quem já lê esses campos. Parcela
+    paga ou "no banco" não muda pela edição do gasto.
+    """
+
+    __tablename__ = "gasto_parcelas"
+    __table_args__ = (
+        db.UniqueConstraint("special_expense_id", "numero", name="uq_gasto_parcelas_gasto_numero"),
+        db.CheckConstraint("valor > 0", name="ck_gasto_parcelas_valor_positivo"),
+        db.Index("ix_gasto_parcelas_data", "data"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    special_expense_id = db.Column(
+        db.Integer, db.ForeignKey("special_expenses.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    numero = db.Column(db.Integer, nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    valor = db.Column(db.Numeric(10, 2), nullable=False)
+    payment_status = db.Column(db.String(20), nullable=False, default="nao_pago", server_default="nao_pago")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    gasto = db.relationship("SpecialExpense", back_populates="parcelas")
 
 
 class Fornecedor(db.Model):

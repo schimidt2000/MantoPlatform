@@ -755,7 +755,8 @@ def _pagamentos_gastos_entre(start: date, end: date):
     """Os gastos extras da planilha com data em [start, end), ainda como query (correção 331).
 
     Só o que precisa de desembolso: aprovado, com tipo de desembolso, e nunca o já pago na criação
-    (feature 128).
+    (feature 128). O gasto parcelado (feature 353) fica fora: na planilha ele entra parcela a
+    parcela, cada uma na sua data (`parcela_ops.parcelas_da_planilha_entre`).
     """
     return (
         SpecialExpense.query
@@ -765,6 +766,7 @@ def _pagamentos_gastos_entre(start: date, end: date):
             SpecialExpense.paid_at_creation.is_(False),
             SpecialExpense.expense_date >= start,
             SpecialExpense.expense_date < end,
+            ~SpecialExpense.parcelas.any(),
         )
         .order_by(SpecialExpense.expense_date.asc())
     )

@@ -20,6 +20,8 @@ export const TYPE_LABELS: Record<PagamentoItemType, string> = {
   cache: "Cachê",
   salary: "Salário",
   expense: "Gasto",
+  // Feature 353: a parcela é um gasto para quem paga; "Parcela N de M" vem na linha de baixo.
+  expense_parcela: "Gasto",
   bv: "BV",
   commission: "Comissão",
   recurring: "Recorrente",
@@ -29,13 +31,14 @@ export const TYPE_BADGE_CLASS: Record<PagamentoItemType, string> = {
   cache: "bg-surface-2 text-muted",
   salary: "bg-gold-soft text-gold-ink",
   expense: "bg-blue-soft text-blue",
+  expense_parcela: "bg-blue-soft text-blue",
   bv: "bg-accent-soft text-accent",
   commission: "bg-green-soft text-green",
   recurring: "bg-gold-soft text-gold-ink",
 };
 
 /** Tipos elegíveis para seleção/ação em massa (mesmo escopo de `bulk_payment_action`). */
-export const SELECTABLE_TYPES: PagamentoItemType[] = ["cache", "salary", "expense", "commission"];
+export const SELECTABLE_TYPES: PagamentoItemType[] = ["cache", "salary", "expense", "expense_parcela", "commission"];
 
 export function isSelectable(item: PagamentoItem): boolean {
   return SELECTABLE_TYPES.includes(item.type);
@@ -49,6 +52,7 @@ export const STATUS_OPTIONS_BY_TYPE: Record<PagamentoItemType, PaymentStatus[]> 
   cache: ["nao_pago", "no_banco", "pago"],
   salary: ["nao_pago", "no_banco", "pago"],
   expense: ["nao_pago", "no_banco", "pago"],
+  expense_parcela: ["nao_pago", "no_banco", "pago"],
   bv: ["nao_pago", "no_banco", "pago"],
   commission: ["nao_pago", "no_banco", "pago"],
   recurring: ["nao_pago", "no_banco", "pago"],

@@ -5,6 +5,22 @@ import { BUCKET_TONE, matchesSearch, normalizeSearch, rawAmount, type BucketTone
 import { FORNECEDORES_KEY } from "./fornecedores";
 
 export type ExpenseStatus = "pendente" | "aprovado" | "rejeitado";
+
+/** Uma parcela do pagamento de um gasto (feature 353), com a situação dela na Planilha. */
+export interface GastoParcela {
+  id: number;
+  numero: number;
+  data: string;
+  valor: number;
+  payment_status: "nao_pago" | "no_banco" | "pago";
+}
+
+/** A parcela como vai ao servidor: `id` só nas que já existem (a edição atualiza no lugar). */
+export interface ParcelaInput {
+  id?: number;
+  data: string;
+  valor: number;
+}
 /** `cliente` = devolução à cliente: nasce só pelo cancelamento do evento (feature 306). */
 export type DisbursementType = "reembolso" | "fornecedor" | "cliente" | null;
 
@@ -37,6 +53,8 @@ export interface GastoExtra {
   paid_at_creation: boolean;
   /** Feature 352: o fornecedor do cadastro. Opcional: backend e bundle mudam em momentos diferentes. */
   fornecedor_id?: number | null;
+  /** Feature 353: parcelas do pagamento (`[]` no não parcelado). Opcional pelo mesmo motivo. */
+  parcelas?: GastoParcela[];
   event_id: number | null;
   event_title: string | null;
   created_by_name: string | null;
@@ -290,6 +308,8 @@ export interface CreateGastoInput {
   fornecedor_id?: number;
   paid_at_creation?: boolean;
   event_id?: number;
+  /** Feature 353: com parcelas, o valor do gasto é a soma delas (o servidor recalcula). */
+  parcelas?: ParcelaInput[];
   receipt: File;
 }
 
@@ -311,6 +331,8 @@ export function useCreateGasto() {
       if (input.fornecedor_id) form.set("fornecedor_id", String(input.fornecedor_id));
       if (input.paid_at_creation) form.set("paid_at_creation", "true");
       if (input.event_id) form.set("event_id", String(input.event_id));
+      // Multipart não leva lista: as parcelas vão como texto JSON.
+      if (input.parcelas?.length) form.set("parcelas", JSON.stringify(input.parcelas));
       form.set("receipt", input.receipt);
       return apiFetch<GastoExtra>("/api/gastos", { method: "POST", body: form });
     },
@@ -334,6 +356,8 @@ export interface UpdateGastoInput {
   supplier_name?: string;
   supplier_pix?: string;
   fornecedor_id?: number;
+  /** Feature 353: ausente = parcelas intocadas; `[]` = volta a um pagamento; lista = substitui. */
+  parcelas?: ParcelaInput[];
   event_id?: number | null;
   /** Aprova (ou reconsidera, se rejeitado) o gasto nesta mesma edição. */
   aprovar?: boolean;

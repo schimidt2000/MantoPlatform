@@ -319,6 +319,7 @@ export function PagamentosPage() {
         role_ids: selectedItems.filter((i) => i.type === "cache").map((i) => Number(i.id)),
         salary_ids: selectedItems.filter((i) => i.type === "salary").map((i) => Number(i.id)),
         expense_ids: selectedItems.filter((i) => i.type === "expense").map((i) => Number(i.id)),
+        parcela_ids: selectedItems.filter((i) => i.type === "expense_parcela").map((i) => Number(i.id)),
         commission_ids: selectedItems
           .filter((i) => i.type === "commission")
           .map((i) => String(i.id)),

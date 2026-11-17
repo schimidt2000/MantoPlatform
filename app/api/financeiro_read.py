@@ -707,6 +707,7 @@ def api_financeiro_pagamentos() -> Any:
         _pagamentos_query,
         _resync_pending_commissions,
     )
+    from app.gastos import parcela_ops
     from app.gastos.gastos_ops import ensure_recurring_entries
     from app.models import SalaryPayment
 
@@ -737,6 +738,8 @@ def api_financeiro_pagamentos() -> Any:
     expenses = _pagamentos_gastos_entre(m_start, m_end).all()
 
     items = _build_payment_items(roles, salary_payments, today, expenses, now_sp)
+    # Feature 353: o gasto parcelado entra parcela a parcela, cada uma na sua data.
+    items += parcela_ops.itens_da_planilha(parcela_ops.parcelas_da_planilha_entre(m_start, m_end).all(), today)
     items += _build_bv_items(_pagamentos_bvs_entre(m_start, m_end).all(), today, now_sp)
 
     prev_year, prev_month = (year - 1, 12) if mon == 1 else (year, mon - 1)
