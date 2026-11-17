@@ -23,6 +23,8 @@ import {
 import { useCurrentUser } from "../lib/useAuth";
 import { LinhaDoTempoDaFicha } from "../components/LinhaDoTempoDaFicha";
 import { SeloSituacao } from "../components/SeloSituacao";
+import { ConsentimentosCard } from "../components/clientes/ConsentimentosCard";
+import { IndicacaoCard } from "../components/clientes/IndicacaoCard";
 
 function formatDate(iso: string | null): string {
   if (!iso) return "";
@@ -173,8 +175,10 @@ export function ClientDetailPage() {
                     <dd className="text-ink">{query.data.company}</dd>
                   </>
                 )}
-                {/* Feature 344 (LGPD): a equipe só prospecta por WhatsApp/e-mail quem disse sim. */}
-                {query.data.marketing_opt_in_at !== undefined && (
+                {/* Feature 344 (LGPD): a equipe só prospecta por WhatsApp/e-mail quem disse sim.
+                    Desde a 350 o cartão Consentimentos mostra isso (com o histórico); a linha só
+                    fica para o backend velho, que ainda não manda `consentimentos`. */}
+                {query.data.marketing_opt_in_at !== undefined && !query.data.consentimentos && (
                   <>
                     <dt className="text-muted">Novidades</dt>
                     <dd className="text-ink">
@@ -198,6 +202,25 @@ export function ClientDetailPage() {
               </dl>
             </CardContent>
           </Card>
+
+          {query.data.consentimentos && (
+            <ConsentimentosCard
+              clientId={id}
+              nome={query.data.name}
+              consentimentos={query.data.consentimentos}
+              podeEditar={Boolean(query.data.flags?.pode_editar_base)}
+            />
+          )}
+
+          {query.data.indicacoes !== undefined && (
+            <IndicacaoCard
+              clientId={id}
+              indicadoPor={query.data.indicado_por ?? null}
+              indicacoes={query.data.indicacoes}
+              parceiro={query.data.parceiro ?? null}
+              podeEditar={Boolean(query.data.flags?.pode_editar_base)}
+            />
+          )}
 
           <Card>
             <CardHeader>

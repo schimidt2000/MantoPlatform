@@ -6,7 +6,11 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-28** · **322-o-que-o-casting-fecha**: em `/events/:id` (aba Produção),
+> Última atualização: **2026-11-17** · **350-base-autorizada**: cartões **Consentimentos** e **Indicação e
+> parceiro** na ficha (`/clientes/:id`), a faixa "Novidades" na conversa aberta, as telas `/clientes/pos-evento`,
+> `/clientes/aniversarios` e `/clientes/parceiros`, o diálogo "Pós-evento" no evento (no lugar de "Pedir feedback
+> da cliente") e, na avaliação pública, "Indicar uma amiga" e as duas autorizações.
+> Antes: **2026-10-28** · **322-o-que-o-casting-fecha**: em `/events/:id` (aba Produção),
 > o card do personagem mostra o que foi vendido sob o nome, e as vagas e talentos ganham
 > "adicionado pelo sistema" / "inserido pelo comercial"; em `/events/:id/edit`, a caixa Maquiagem
 > travada para quem não é superadmin.
@@ -1984,6 +1988,21 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   com a origem ("Loja: <campanha>") ou "Sem aceite registrado". É o que diz se a equipe pode mandar
   novidade por WhatsApp/e-mail (LGPD: consentimento). A ficha do comprador nasce na **venda** da loja,
   com nome, telefone, e-mail e a origem do acesso — nunca os dados de quem recebe.
+- **Consentimentos (feature 350)**: cartão na coluna da esquerda, depois de **Contato** (a linha "Novidades" da 344
+  só aparece com backend velho). "Novidades por WhatsApp e e-mail" com o selo **Autorizou** / **Sem aceite**, a
+  data e a origem (ou "Saiu em dd/mm · origem. Não prospectar."); **Registrar aceite** / **Retirar aceite** abrem
+  o diálogo com o texto exato e a versão, e a origem num rádio de quatro opções (Conversa, Resposta ao orçamento,
+  Telefone, Pessoalmente). **Aniversários autorizados**: primeiro nome e data de cada criança, **Inserir
+  aniversário** (nome, data, origem e a caixa "A responsável autorizou com este texto…", nunca pré-marcada; sem
+  ela o servidor aponta a caixa) e **Remover** com `ConfirmDialog` (apaga nome e data). **Ver histórico (N)**
+  abre, com movimento, cada aceite e retirada: data e hora (São Paulo), origem, autor ("A cliente" / "Sistema"
+  quando não há usuário), referência e o texto com a versão. O Financeiro vê o cartão sem os aniversários e sem
+  os botões.
+- **Indicação e parceiro (feature 350)**: cartão logo abaixo. **Indicado por** (link para a ficha, Combobox de
+  busca, "Remover"), **Indicou** (as fichas que esta indicou) e **Parceiro** (nome · tipo, "(inativo)" quando
+  for o caso; Combobox dos ativos com a comissão declarada). Selecionar já salva; erro apontado no campo.
+- **Atalhos (feature 350)**: no cabeçalho de `/clientes`, **Pós-evento ›** e **Aniversários ›** (Comercial e
+  Superadmin, pela `flags.pode_editar_base` da lista) e **Parceiros ›** (todos os papéis da tela).
 - **Linha do tempo (feature 335)**: o primeiro cartão da coluna da direita (no celular, depois do cadastro). Os
   marcos do mais novo para o mais antigo, com ícone, título, data e hora (São Paulo), uma linha de detalhe e o link
   ("Abrir conversa", "Ver orçamento", "Ver evento") quando a pessoa abre a tela; os 10 primeiros e "Mostrar
@@ -2013,6 +2032,37 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   cadastrado devolve a ficha existente com aviso "nada foi duplicado" + atalho para abri-la, e
   **não sobrescreve** nada dela. Cadastro real invalida lista, busca e métricas (aparece sem F5)
   e nasce com `source="manual"`, separado no gráfico por origem.
+
+#### `/clientes/pos-evento` — Pós-evento *(feature 350)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (`GET /api/pos-evento`; os demais recebem 403).
+- **Objetivo**: no dia seguinte à festa, preparar **uma** mensagem: agradecimento, link das fotos (se houver),
+  avaliação, indicação, convite para receber novidades e "responda SAIR". Nada sai sozinho.
+- **UX**: eventos dos últimos 7 dias até agora, do mais recente (sem ensaio e sem os dias satélites de um grupo);
+  cada linha com título (link para o evento), data · contratante, selo **Pendente** / **Copiado em dd/mm** /
+  **Enviado em dd/mm** e **Avaliação recebida**; o subtítulo conta os pendentes. **Preparar mensagem** / **Ver
+  mensagem** abre o diálogo do pós-evento (o mesmo do evento).
+- **Diálogo "Pós-evento"** (`PosEventoDialog`, também no menu **Ferramentas** do evento como "💬 Pós-evento
+  (avaliação e indicação)", no lugar do antigo "Pedir feedback da cliente"): campo **Link das fotos (opcional)**
+  — a prévia relê 400 ms depois de digitar e aponta o link inválido —, a mensagem montada pelo servidor,
+  **Copiar mensagem** (copia dentro do toque e só então registra; se o navegador recusar, o aviso aparece no
+  próprio diálogo: "Selecione o texto da mensagem e copie à mão") e **Enviar pela conversa** (só ativo com o CRM
+  ligado, a conversa da contratante e a janela de 24 h aberta; senão o motivo aparece embaixo da mensagem). O
+  rodapé quebra em duas linhas no celular.
+
+#### `/clientes/aniversarios` — Aniversários *(feature 350)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (dado de criança; `GET /api/clientes/aniversarios`).
+- **UX**: só leitura. Crianças com aniversário de hoje a 60 dias cuja responsável autorizou guardar o aniversário
+  **e** recebe novidades; cada linha: primeiro nome · "faz N anos", dia/mês, responsável e telefone (link para a
+  ficha) e o selo **Hoje** / **Amanhã** / **Em N dias** (dourado até 7 dias). Vazio: "Nenhum aniversário
+  autorizado nos próximos 60 dias." O envio do lembrete é outra feature.
+
+#### `/clientes/parceiros` — Parceiros *(feature 350)*
+- **Acesso**: leitura `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; criar, editar, desativar e reativar só Comercial e
+  Superadmin (`flags.pode_editar`).
+- **UX**: lista por nome com tipo · contato · telefone, selos **Comissão N%** (declarada) e **N clientes**;
+  "Mostrar inativos"; **Novo parceiro** / **Editar** abrem o diálogo (nome, tipo, comissão declarada em %,
+  contato, telefone, e-mail, observação) com o aviso de que a tela não paga ninguém (o repasse de um evento é o
+  BV); **Desativar** / **Reativar** sem apagar (as fichas ligadas mantêm o nome).
 
 #### `/clientes/avaliacoes` — Satisfação das Clientes *(refeita na feature 197)*
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
@@ -2340,6 +2390,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     que abre o mesmo diálogo com **Remover vínculo**. O diálogo busca a ficha pelo nome ou telefone ou cria uma
     (nome e telefone, com o telefone da conversa no WhatsApp). Telefone de ficha existente: "Esta ficha já
     existia e foi ligada à conversa.".
+  - **Aceite de novidades (feature 350)**: com ficha ligada, uma faixa logo abaixo do responsável — "Novidades:"
+    com o selo **Autorizou** / **Sem aceite** e **Registrar aceite** / **Retirar aceite** (o diálogo da ficha, com
+    a origem "Conversa" marcada e a referência da conversa). O "SAIR" da cliente retira sozinho. **Enviar
+    modelo** de categoria Marketing para ficha sem aceite volta com "Esta cliente não autorizou receber novidades.
+    Registre o aceite na ficha antes de enviar um modelo de marketing.".
   - **Caixa de mensagem**: **Enviar orçamento** e **Enviar formulário** ao lado de **Enviar modelo** (quebram
     em duas linhas no celular).
     - "Enviar orçamento": os orçamentos dos últimos 30 dias do time (até 50, com busca pela cliente ou pelo
@@ -2748,6 +2803,15 @@ Todas as telas são **mobile-first** (Princípio VIII).
   `/clientes/avaliacoes`.
 - **Feature 312**: link de evento cancelado (enviado antes do cancelamento) responde 410 e a página diz "Este evento
   foi cancelado — Não há avaliação a fazer. Qualquer dúvida, fale com a gente.", sem formulário, sem título nem data.
+- **Feature 350 — o pós-evento único**: depois de enviar a nota, a tela de agradecimento ganha, abaixo do
+  "⭐ Avaliar no Google" (que continua **só para nota 5**, decisão do dono de 17/11), o "Conhece alguém que vai
+  fazer festa?" com **💌 Indicar uma amiga** (abre o WhatsApp de quem avaliou com a mensagem pronta: o primeiro
+  nome de quem indica e o WhatsApp da Manto; nenhum dado da amiga passa pela Plataforma) e, quando o evento tem
+  ficha contratante, o bloco **"Quer ficar por perto?"**: a caixa de novidades (texto exato, desmarcada) ou, para
+  quem já recebe, "Você já recebe nossas novidades." com **Não quero mais receber**; e o aniversário — primeiro
+  nome, data e a caixa de autorização com o texto exato, separada e desmarcada — e **Salvar minhas escolhas**. O
+  erro aparece no campo ("Marque a caixa de autorização para a gente guardar o aniversário."); o que foi salvo
+  vai para a ficha com a origem "Pós-evento (página de avaliação)". Conferido em 375 e 320 px.
 
 ---
 

@@ -32,6 +32,8 @@ export type TipoMensagem =
 export interface ClienteDaConversa {
   id: number;
   nome: string;
+  /** Feature 350: a ficha aceita novidades? Ausente em backend velho. */
+  aceite_novidades?: boolean;
 }
 
 /** Pessoa da equipe (responsável, autor de nota, destino de transferência) — feature 328. */

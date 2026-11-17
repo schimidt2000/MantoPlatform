@@ -690,6 +690,9 @@ VIRTUAL_ORIGENS_APELIDOS = {
 # Versão do texto da caixinha "Quero receber novidades…" gravada com o aceite (LGPD, art. 8º §2º:
 # o ônus da prova é de quem coleta). Mudou o texto da tela? Muda a versão junto.
 VIRTUAL_ACEITE_VERSAO = "2026-11-16"
+# O texto daquela caixinha, igual ao rótulo de `CampanhaVirtualPage.tsx` (feature 350: o histórico de
+# consentimentos guarda o texto exibido). Mudou o rótulo? Muda os três juntos.
+VIRTUAL_ACEITE_TEXTO = "Quero receber novidades da Manto Produções por WhatsApp e e-mail"
 # Dias, contados da data de referência (chamada, prazo do vídeo, ou criação do pedido que não virou
 # venda), até as dicas sobre quem recebe serem apagadas (LGPD, art. 15/16).
 VIRTUAL_DICAS_RETENCAO_DIAS = 30
@@ -998,3 +1001,63 @@ PIX_ENTIDADE_PAGAMENTO = "event_payment"
 # Separador do perfil de cada personagem ("Cantor · show · com maquiagem"). Uma fonte só para o
 # que se grava (`calendar/routes._perfil_do_performer`) e o que se lê (`api/agenda_read._perfil_da_vaga`).
 SEPARADOR_PERFIL = " · "
+
+# ── Feature 350 — a base autorizada (LGPD) ────────────────────────────────────────────────────────
+# Dois consentimentos separados (LGPD art. 8º e 14 §1º): receber novidades e guardar o aniversário da
+# criança. O texto exibido vai inteiro para o histórico (`cliente_consentimentos`), com a versão —
+# mudou o texto? Muda a versão junto, senão a prova aponta para um texto que a pessoa não viu.
+CONSENTIMENTO_TIPO_NOVIDADES = "novidades"
+CONSENTIMENTO_TIPO_ANIVERSARIO = "aniversario"
+CONSENTIMENTO_ACAO_ACEITE = "aceite"
+CONSENTIMENTO_ACAO_RETIRADA = "retirada"
+CONSENTIMENTO_NOVIDADES_VERSAO = "2026-11-17"
+CONSENTIMENTO_NOVIDADES_TEXTO = (
+    "Quero receber novidades e lembretes da Manto Produções por WhatsApp e e-mail. "
+    "Posso parar quando quiser respondendo SAIR."
+)
+CONSENTIMENTO_ANIVERSARIO_VERSAO = "2026-11-17"
+CONSENTIMENTO_ANIVERSARIO_TEXTO = (
+    "Autorizo a Manto Produções a guardar o primeiro nome e a data de aniversário da minha criança "
+    "para me lembrar antes do próximo aniversário. Posso pedir para apagar quando quiser."
+)
+# Origens que a equipe escolhe (lista fechada: origem livre não prova nada) …
+CONSENTIMENTO_ORIGEM_CONVERSA = "Conversa"
+CONSENTIMENTO_ORIGEM_ORCAMENTO = "Resposta ao orçamento"
+CONSENTIMENTO_ORIGEM_TELEFONE = "Telefone"
+CONSENTIMENTO_ORIGEM_PESSOALMENTE = "Pessoalmente"
+CONSENTIMENTO_ORIGENS_EQUIPE = (
+    CONSENTIMENTO_ORIGEM_CONVERSA,
+    CONSENTIMENTO_ORIGEM_ORCAMENTO,
+    CONSENTIMENTO_ORIGEM_TELEFONE,
+    CONSENTIMENTO_ORIGEM_PESSOALMENTE,
+)
+# … e as que o sistema grava sozinho.
+CONSENTIMENTO_ORIGEM_POS_EVENTO = "Pós-evento (página de avaliação)"
+CONSENTIMENTO_ORIGEM_PEDIU_PARA_PARAR = "Conversa: pediu para parar"
+CONSENTIMENTO_ORIGEM_ERRO_WHATSAPP = "WhatsApp: pediu para não receber marketing"
+CONSENTIMENTO_ORIGEM_LOJA = "Loja: {campanha}"
+CONSENTIMENTO_ORIGEM_FICHA = "Removido na ficha pela equipe"
+# Mensagem INTEIRA, normalizada (sem acento, minúscula, sem pontuação nem emoji nas pontas), que vale
+# como pedido de saída. Comparar a mensagem inteira, nunca "contém": "vou sair às 15h" não é pedido.
+# "parar promocoes" é o botão de saída que a Meta põe nos modelos de marketing.
+PALAVRAS_DE_SAIDA = frozenset({
+    "sair", "parar", "pare", "stop", "descadastrar", "cancelar inscricao",
+    "nao quero mais receber", "nao quero receber", "parar promocoes",
+})
+# Erro da Meta: "o contato pediu para não receber mensagens de marketing" (constantes de conversas).
+ERRO_WHATSAPP_PEDIU_PARA_NAO_RECEBER = 131050
+CRIANCA_IDADE_MAXIMA = 17
+CRIANCA_NOME_MAXIMO = 60
+
+PARCEIRO_TIPOS = {
+    "buffet": "Buffet",
+    "assessoria": "Assessoria",
+    "agencia": "Agência",
+    "outro": "Outro",
+}
+
+POS_EVENTO_CANAL_COPIADO = "copiado"
+POS_EVENTO_CANAL_CONVERSA = "conversa"
+POS_EVENTO_DIAS = 7
+ANIVERSARIOS_DIAS_PADRAO = 60
+ANIVERSARIOS_DIAS_MAXIMO = 120

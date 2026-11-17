@@ -22,6 +22,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 
 from app import db
+from app.clientes import consentimento_ops
 from app.conversas import canais, equipe_ops, midia_ops
 from app.conversas import constantes as K
 from app.conversas.aviso_ops import agora_utc, atualizar_previa
@@ -163,6 +164,10 @@ def _registrar_falha(
         mensagem.erro_motivo = canais.motivo(exc, extras or {})
     else:
         mensagem.erro_motivo = K.motivo_do_erro(codigo)
+        # Feature 350: a recusa síncrona com 131050 também tira o aceite de novidades.
+        consentimento_ops.retirar_por_erro_do_whatsapp(
+            conversa or mensagem.conversa, codigo, f"mensagem:{mensagem.id}"
+        )
     logger.info("[whatsapp] envio %s falhou: %s", mensagem.id, exc)
 
 
@@ -488,6 +493,18 @@ def _valores_do_modelo(modelo: dict[str, Any], variaveis: list[Any] | None) -> l
     return valores
 
 
+def _exigir_aceite_para_marketing(conversa: Conversa, modelo: dict[str, Any]) -> None:
+    """Sem aceite de novidades, nada de prospecção (feature 350, FR-008).
+
+    Modelo de categoria MARKETING só sai para a conversa ligada a uma ficha com aceite; utilidade e
+    autenticação seguem livres (são serviço, não prospecção).
+    """
+    if (modelo.get("categoria") or "").upper() != K.CATEGORIA_MARKETING:
+        return
+    if not consentimento_ops.conversa_pode_receber_marketing(conversa):
+        raise EnvioRecusado("sem_aceite", K.TEXTO_SEM_ACEITE, 409)
+
+
 def enviar_modelo(
     conversa_id: int,
     nome: str | None,
@@ -506,6 +523,7 @@ def enviar_modelo(
         raise EnvioRecusado("sem_modelos", K.TEXTO_IG_SEM_MODELOS, 409)
     _pre_condicoes(cfg, conversa, exige_janela=False)
     modelo = _modelo_escolhido(cfg, nome, idioma)
+    _exigir_aceite_para_marketing(conversa, modelo)
     valores = _valores_do_modelo(modelo, variaveis)
     envio = _reservar(
         conversa, chave, K.TIPO_MODELO, _texto_final(modelo, valores), autor_id, modelo["nome"]

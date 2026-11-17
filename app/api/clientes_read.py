@@ -13,7 +13,7 @@ from flask_login import current_user
 from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.clientes import client_ops, linha_do_tempo_ops
+from app.clientes import client_ops, consentimento_ops, indicacao_ops, linha_do_tempo_ops
 from app.constants import RoleName
 from app.conversas import anuncio_ops
 from app.conversas.acesso import pode_conversas
@@ -29,6 +29,14 @@ def _require_vendas() -> Any:
     if not _has_role(RoleName.COMERCIAL, RoleName.FINANCEIRO, RoleName.SUPERADMIN):
         return json_error("Sem permissão", 403)
     return None
+
+
+def _pode_editar_base() -> bool:
+    """Feature 350: quem registra aceite, criança, indicação e parceiro (Comercial e Superadmin).
+
+    É também quem vê o dado da criança: o Financeiro lê a ficha sem a chave ``criancas``.
+    """
+    return _has_role(RoleName.COMERCIAL, RoleName.SUPERADMIN)
 
 
 def _client_summary(client) -> dict:
@@ -62,7 +70,14 @@ def api_clientes_list() -> Any:
         return denied
     clients, counts, total_clients = client_ops.list_clients(request.args.get("q") or "")
     items = [{**_client_summary(c), "event_count": counts.get(c.id, 0)} for c in clients]
-    return jsonify({"items": items, "total_clients": total_clients})
+    # Feature 350: a tela mostra os atalhos de Pós-evento e Aniversários só a quem pode abri-los.
+    return jsonify(
+        {
+            "items": items,
+            "total_clients": total_clients,
+            "flags": {"pode_editar_base": _pode_editar_base()},
+        }
+    )
 
 
 @api_bp.route("/clientes/<int:client_id>/linha-do-tempo")
@@ -108,6 +123,14 @@ def api_clientes_detail(client_id: int) -> Any:
                 client.marketing_opt_in_at.isoformat() if client.marketing_opt_in_at else None
             ),
             "marketing_opt_in_source": client.marketing_opt_in_source,
+            # Feature 350: os dois consentimentos (histórico com texto e versão), indicação e
+            # parceiro. Sem aceite de novidades, nada de prospecção (`pode_prospectar`).
+            "pode_prospectar": consentimento_ops.pode_prospectar(client),
+            "consentimentos": consentimento_ops.serializar(
+                client, com_criancas=_pode_editar_base()
+            ),
+            **indicacao_ops.serializar(client),
+            "flags": {"pode_editar_base": _pode_editar_base()},
             "events": [
                 {
                     "id": e.id,

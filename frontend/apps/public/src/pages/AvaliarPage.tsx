@@ -6,6 +6,8 @@ import { ApiRequestError } from "@manto/api-client";
 import { useFeedbackEvent, useSubmitFeedback } from "../lib/feedback";
 import { StarRating } from "../components/feedback/StarRating";
 import { TagChips } from "../components/feedback/TagChips";
+import { ConsentimentoCard } from "../components/feedback/ConsentimentoCard";
+import { IndicarAmiga } from "../components/feedback/IndicarAmiga";
 
 export function AvaliarPage() {
   const { token = "" } = useParams<{ token: string }>();
@@ -105,6 +107,13 @@ export function AvaliarPage() {
                   </a>
                 </Button>
               </motion.div>
+            )}
+            {/* Feature 350: o pós-evento único — indicação para todas, e as duas autorizações quando
+                há ficha onde gravar. O botão do Google acima continua só para nota 5 (decisão do
+                dono, 17/11). */}
+            <IndicarAmiga primeiroNome={feedbackEvent.data?.consentimento?.primeiro_nome ?? null} />
+            {feedbackEvent.data?.consentimento && (
+              <ConsentimentoCard token={token} consentimento={feedbackEvent.data.consentimento} />
             )}
           </CardContent>
         </Card>

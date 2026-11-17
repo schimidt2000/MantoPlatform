@@ -21,6 +21,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app import db
+from app.clientes import consentimento_ops
 from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops, primeira_resposta_ops
 from app.conversas import constantes as K
 from app.conversas.relogio import agora_utc
@@ -226,6 +227,10 @@ def _gravar_recebida(
     )
     if novas:
         _chegou_da_cliente(conversa, item, chegadas)
+        # Feature 350: "SAIR" (a mensagem inteira) também tira o aceite pelo Instagram.
+        consentimento_ops.retirar_se_pediu_para_parar(
+            conversa, mensagem.get("text"), f"instagram:{mid}"
+        )
     if isinstance(mensagem.get("referral"), dict):
         momento = _momento_ms(item.get("timestamp"))
         anuncio_ops.contato_do_instagram(conversa, str(mid), mensagem["referral"], momento)

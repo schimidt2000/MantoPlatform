@@ -17,6 +17,7 @@ import {
   type Nota,
 } from "../../lib/conversas";
 import { useCurrentUser } from "../../lib/useAuth";
+import { AceiteNaConversa } from "./AceiteNaConversa";
 import { CaixaDeEnvio } from "./CaixaDeEnvio";
 import { EnviarModeloDialog } from "./EnviarModeloDialog";
 import { FichaDaConversaDialog } from "./FichaDaConversaDialog";
@@ -226,6 +227,7 @@ export function ConversaAberta({
         usuarioId={usuario.data?.id ?? null}
         onPedirFicha={() => setFichaAberta(true)}
       />
+      <AceiteNaConversa conversa={conversa} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-3 py-3">
         {temMaisAntigas ? (

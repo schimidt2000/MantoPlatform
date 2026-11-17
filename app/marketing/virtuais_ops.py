@@ -2005,11 +2005,18 @@ def _cliente_da_venda(order: VirtualOrder, evento: CalendarEvent) -> Client | No
         if not cliente.utm_source and order.origem:
             cliente.utm_source = order.origem
 
-    if order.marketing_opt_in_at and (
-        cliente.marketing_opt_in_at is None or cliente.marketing_opt_in_at < order.marketing_opt_in_at
-    ):
-        cliente.marketing_opt_in_at = order.marketing_opt_in_at
-        cliente.marketing_opt_in_source = de_onde[:160]
+    if order.marketing_opt_in_at:
+        # Feature 350: o aceite vai ao histórico (texto e versão da caixinha da loja) e só vale se
+        # for posterior à última retirada — senão a venda devolveria o aceite de quem pediu para sair.
+        from app.clientes import consentimento_ops
+
+        consentimento_ops.aceite_da_loja(
+            cliente,
+            momento=order.marketing_opt_in_at,
+            versao=order.marketing_opt_in_version,
+            origem=de_onde,
+            pedido_id=order.id,
+        )
 
     ensure_event_client(evento, cliente.id)
     return cliente

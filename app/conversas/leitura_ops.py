@@ -94,7 +94,12 @@ def nome_da_conversa(conversa: Conversa) -> str:
 def _cliente(conversa: Conversa) -> dict[str, Any] | None:
     if conversa.cliente is None:
         return None
-    return {"id": conversa.cliente.id, "nome": conversa.cliente.name}
+    return {
+        "id": conversa.cliente.id,
+        "nome": conversa.cliente.name,
+        # Feature 350: o cabeçalho mostra se a ficha aceita novidades (e o botão de registrar).
+        "aceite_novidades": conversa.cliente.marketing_opt_in_at is not None,
+    }
 
 
 def serializar_pessoa(user: Any) -> dict[str, Any] | None:

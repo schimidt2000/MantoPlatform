@@ -396,6 +396,12 @@ TEXTO_IG_SEM_MODELOS = (
 TEXTO_IG_TIPO_NAO_ACEITO = "Tipo de arquivo não aceito pelo Instagram. Envie foto, vídeo, áudio ou PDF."
 TEXTO_IG_TEXTO_LONGO = "A mensagem passa do limite do Instagram. Encurte o texto (acentos e emojis contam mais)."
 TEXTO_POSTBACK = 'Tocou em "{titulo}".'
+# Feature 350: sem aceite de novidades, modelo de marketing não sai (a categoria vem da Meta).
+CATEGORIA_MARKETING = "MARKETING"
+TEXTO_SEM_ACEITE = (
+    "Esta cliente não autorizou receber novidades. "
+    "Registre o aceite na ficha antes de enviar um modelo de marketing."
+)
 # Anexos que trazem um link para abrir no Instagram (o efêmero não traz).
 ANEXOS_COM_LINK_IG = ("share", "ig_reel", "reel", "story_mention")
 # Motivos da recusa no Instagram (feature 330): pelo subcódigo, depois pelo código da Graph API.

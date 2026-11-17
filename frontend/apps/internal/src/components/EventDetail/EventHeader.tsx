@@ -19,8 +19,6 @@ import {
   buildCobrancaMsg,
   buildCobrancaReembolsoMsg,
   buildConfirmacaoMsg,
-  buildFeedbackMsg,
-  useFeedbackLink,
 } from "../../lib/eventDetail";
 import {
   useDeleteEvent,
@@ -35,6 +33,7 @@ import { AvisosDoEvento } from "./AvisosDoEvento";
 import { EditarMotivoDialog } from "./EditarMotivoDialog";
 import { ExcluirEventoDialog } from "./ExcluirEventoDialog";
 import { PedirCancelamentoDialog } from "./PedirCancelamentoDialog";
+import { PosEventoDialog } from "./PosEventoDialog";
 import { QuadroDoPedido } from "./QuadroDoPedido";
 import { DevolverAoGoogleDialog, SumiuDoGoogleBanner } from "./SumiuDoGoogleBanner";
 import { formatRange } from "./parts";
@@ -216,7 +215,7 @@ export function EventHeader({ data }: EventHeaderProps) {
   const remove = useDeleteEvent(event.id);
   const recusar = useRecusarPedido(event.id);
   const { data: usuario } = useCurrentUser();
-  const feedbackLink = useFeedbackLink(event.id);
+  const [posEventoOpen, setPosEventoOpen] = useState(false);
   const cobrarContrato = useCobrarContrato(event.id);
   // A devolução mora aqui, não no banner: o banner some no sucesso, e callback de `mutate` não
   // dispara em componente desmontado (TanStack Query 5).
@@ -354,18 +353,15 @@ export function EventHeader({ data }: EventHeaderProps) {
       label: event.confirmed ? "✓ Evento confirmado — desfazer" : "☐ Marcar evento como confirmado",
       onClick: () => confirm.mutate(),
     });
+    // Feature 350: o "Pedir feedback" virou o pós-evento único — uma mensagem com fotos,
+    // avaliação, indicação e o convite para receber novidades (copiar ou enviar pela conversa).
     items.push({
-      label: "💬 Pedir feedback da cliente",
-      disabled: data.feedback_link_pendente === false,
+      label: "💬 Pós-evento (avaliação e indicação)",
       title:
         data.feedback_link_pendente === false
-          ? "A cliente já enviou feedback para este evento"
-          : "Copiar link da página de avaliação deste evento",
-      onClick: () =>
-        feedbackLink.mutate(undefined, {
-          onSuccess: ({ url }) => copiar(buildFeedbackMsg(url), "Link de avaliação copiado."),
-          onError: () => anunciar("Não foi possível gerar o link."),
-        }),
+          ? "A cliente já avaliou; ainda é possível mandar fotos e o pedido de indicação"
+          : "Mensagem do dia seguinte: fotos, avaliação, indicação e novidades",
+      onClick: () => setPosEventoOpen(true),
     });
     }
   }
@@ -417,7 +413,6 @@ export function EventHeader({ data }: EventHeaderProps) {
   const pendente =
     sync.isPending ||
     confirm.isPending ||
-    feedbackLink.isPending ||
     remove.isPending ||
     cobrarContrato.isPending;
 
@@ -575,6 +570,12 @@ export function EventHeader({ data }: EventHeaderProps) {
         onOpenChange={(aberto) => {
           if (!devolver.isPending) setDevolverOpen(aberto);
         }}
+      />
+
+      <PosEventoDialog
+        eventId={posEventoOpen ? event.id : null}
+        onClose={() => setPosEventoOpen(false)}
+        onAviso={(mensagem) => anunciar(mensagem, 3000)}
       />
 
       <ExcluirEventoDialog
