@@ -15,6 +15,7 @@ import {
 import { MoneyInput } from "@manto/money";
 import { Modal } from "../components/Modal";
 import { CartaoFiltro } from "../components/CartaoFiltro";
+import { FornecedorCampo } from "../components/Gastos/FornecedorCampo";
 import { ListaDeGastos } from "../components/Gastos/GastoItemViews";
 import { GastosFiltros, type MudancaDeFiltro } from "../components/Gastos/GastosFiltros";
 import { hojeYmd } from "../lib/horaLocal";
@@ -63,6 +64,8 @@ interface GastoFormValues {
   reimburseUserId: number | "";
   supplierName: string;
   supplierPix: string;
+  /** Feature 352: o fornecedor escolhido na sugestão; digitar o nome zera. */
+  fornecedorId: number | null;
   eventDate: string;
   eventId: number | "";
 }
@@ -78,6 +81,7 @@ function emptyForm(categories: string[]): GastoFormValues {
     reimburseUserId: "",
     supplierName: "",
     supplierPix: "",
+    fornecedorId: null,
     eventDate: hojeYmd(),
     eventId: "",
   };
@@ -101,6 +105,7 @@ function formFromExpense(expense: GastoExtra): GastoFormValues {
       expense.disbursement_type === "fornecedor" || expense.disbursement_type === "cliente"
         ? expense.payee_pix
         : "",
+    fornecedorId: expense.disbursement_type === "fornecedor" ? (expense.fornecedor_id ?? null) : null,
     eventDate: expense.expense_date,
     eventId: expense.event_id ?? "",
   };
@@ -195,11 +200,24 @@ function DesembolsoFields({
       {values.disbursementType === "fornecedor" && (
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className={LABEL}>Nome do fornecedor</label>
-            <input
-              className={INPUT}
-              value={values.supplierName}
-              onChange={(e) => onChange({ supplierName: e.target.value })}
+            <label className={LABEL} htmlFor="gasto-fornecedor">
+              Nome do fornecedor
+            </label>
+            {/* Feature 352: escolher no cadastro preenche nome, PIX e categoria (todos editáveis). */}
+            <FornecedorCampo
+              id="gasto-fornecedor"
+              nome={values.supplierName}
+              fornecedorId={values.fornecedorId}
+              invalid={Boolean(fieldErrors.supplier_name)}
+              onDigitar={(texto) => onChange({ supplierName: texto, fornecedorId: null })}
+              onEscolher={(f) =>
+                onChange({
+                  supplierName: f.nome,
+                  supplierPix: f.pix ?? "",
+                  fornecedorId: f.id,
+                  ...(f.categoria_padrao ? { category: f.categoria_padrao } : {}),
+                })
+              }
             />
             {fieldErrors.supplier_name && <p className="mt-1 text-xs text-red">{fieldErrors.supplier_name}</p>}
           </div>
@@ -311,6 +329,8 @@ function GastoFormModal({
       values.disbursementType === "fornecedor" || values.disbursementType === "cliente"
         ? values.supplierPix
         : undefined,
+    fornecedor_id:
+      values.disbursementType === "fornecedor" && values.fornecedorId !== null ? values.fornecedorId : undefined,
     event_id: values.eventId === "" ? undefined : values.eventId,
   });
 
@@ -638,7 +658,16 @@ export function GastosExtrasPage() {
       <PageHeader
         title="Gastos Extras"
         subtitle={canManage ? "Gestão de gastos avulsos da empresa" : "Registre e acompanhe seus gastos avulsos"}
-        actions={<Button onClick={openCreate}>+ Novo gasto</Button>}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            {canManage && (
+              <Button asChild variant="outline">
+                <Link to="/gastos/fornecedores">Fornecedores</Link>
+              </Button>
+            )}
+            <Button onClick={openCreate}>+ Novo gasto</Button>
+          </div>
+        }
       />
 
       {query.isLoading && (

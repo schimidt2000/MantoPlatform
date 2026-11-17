@@ -13,6 +13,7 @@ import {
   Filter,
   FileText,
   GraduationCap,
+  Handshake,
   History,
   Home,
   LineChart,
@@ -438,6 +439,15 @@ const SECTIONS: NavSectionConfig[] = [
         href: "/gastos/recorrentes",
         icon: <Repeat />,
         isActive: (path) => path === "/gastos/recorrentes",
+        isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
+      },
+      {
+        // Feature 352: o cadastro que preenche o gasto extra; arrumar é do Financeiro.
+        key: "fornecedores",
+        label: "Fornecedores",
+        href: "/gastos/fornecedores",
+        icon: <Handshake />,
+        isActive: (path) => path === "/gastos/fornecedores",
         isVisible: (user) => hasRole(user, "FINANCEIRO", "SUPERADMIN"),
       },
       {
