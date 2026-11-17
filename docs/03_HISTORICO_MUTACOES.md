@@ -257,6 +257,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **256b-relatorio-de-marketing** | *(na branch, sem push)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
 | **190b-data-da-venda-um-dia-antes** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
 | **351-painel-atribuido** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
 | **350-base-autorizada** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
@@ -487,6 +488,21 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 256b — O relatório da rotina de marketing não saía   (256b-relatorio-de-marketing · 2026-11-17 · sem migration)
+
+> **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `2cff4499`). Nível 2. Detalhe:
+> `specs/256b-relatorio-de-marketing/spec.md`.
+
+**O pedido.** Na 1ª rodada de marketing em produção (17/11, logo depois do lote das 19h), a ingestão, os
+anúncios, as licenças e os pedidos de criativo gravaram, mas o `POST /report` respondeu 500 e o e-mail não saiu.
+
+**O que mudou.** `send_audit_report_email` (`app/email_service.py`) ganha o parâmetro `preheader`, com o texto do
+auditor financeiro como padrão; o endpoint do marketing já o mandava.
+
+**Pegadinha.** O defeito nasceu na 256 (21/08): o `report.py --send` do plano B chama o mesmo endpoint, e nenhum
+verify da 256 chamava o `/report`. O `verify_256b.py` cobre o envio com o `_send` dublado (7/7; na `main` quebra no
+cenário 1).
 
 ### 190b — "Data da venda" um dia antes no detalhe do evento   (lote-1711 · 2026-11-17 · sem migration)
 
