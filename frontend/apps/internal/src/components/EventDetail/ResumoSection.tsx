@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Pencil, TriangleAlert } from "lucide-react";
-import { Badge, Button, Card } from "@manto/ui";
+import { Badge, Button, Card, EnderecoNoMapa } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import type { EventoDetalhe } from "../../lib/agenda";
 import { useUpdateEventBasics, type EventBasicsInput } from "../../lib/eventInline";
@@ -244,7 +244,9 @@ function DadosLeitura({ data }: { data: EventoDetalhe }) {
       <DataRow label="Horário">
         {[formatTime(event.start_at), formatTime(event.end_at)].filter(Boolean).join(" — ") || "—"}
       </DataRow>
-      <DataRow label="Local">{event.location || "—"}</DataRow>
+      <DataRow label="Local">
+        {event.location?.trim() ? <EnderecoNoMapa endereco={event.location} /> : "—"}
+      </DataRow>
       {event.description && (
         <DataRow label="Descrição">
           <span className="text-muted">no painel “Resumo para WhatsApp”</span>

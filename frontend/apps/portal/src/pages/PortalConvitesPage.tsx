@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Card, CardContent, Skeleton } from "@manto/ui";
+import { Button, Card, CardContent, EnderecoNoMapa, Skeleton } from "@manto/ui";
 import { AntesDoEvento } from "../components/AntesDoEvento";
 import { AvisoEmConfirmacao } from "../components/AvisoEmConfirmacao";
 import { CacheLine } from "../components/CacheLine";
@@ -32,8 +32,12 @@ function InviteCard({ role }: { role: PortalRole }) {
           <p className="text-sm text-muted">
             {formatWeekday(role.start_at)}, {formatDateTimeRange(role.start_at, role.end_at)}
           </p>
-          {role.location && <p className="text-sm text-muted">{role.location}</p>}
           <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
+          {/* Alvo de 44px e mesma ordem da Agenda: o quando junto, o onde logo abaixo. */}
+          <EnderecoNoMapa
+            endereco={role.location}
+            className="flex min-h-[44px] items-center text-sm"
+          />
           <RoleLine role={role} />
         </div>
 

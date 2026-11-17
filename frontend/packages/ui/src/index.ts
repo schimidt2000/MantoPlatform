@@ -62,6 +62,10 @@ export { AvatarThumb } from "./components/avatar-thumb";
 export type { AvatarThumbProps, AvatarThumbShape, AvatarThumbSize } from "./components/avatar-thumb";
 export { Combobox } from "./components/combobox";
 export type { ComboboxProps, ComboboxOption } from "./components/combobox";
+export { EnderecoNoMapa } from "./components/endereco-no-mapa";
+export type { EnderecoNoMapaProps } from "./components/endereco-no-mapa";
+export { linksDeMapa } from "./lib/mapas";
+export type { AppDeMapa, OpcaoDeMapa } from "./lib/mapas";
 export { GoogleAddressInput } from "./components/google-address-input";
 export type {
   GoogleAddressInputProps,
