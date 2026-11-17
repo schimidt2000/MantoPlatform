@@ -218,6 +218,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **346-figurino-sem-evento-passado** | *(pronto na branch, sem push)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
 | **341b-chamadas-a-cada-15-min** | *(EM PRODUÇÃO 16/11 ~20h27)* Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
 | **310b-link-de-pagamento-longo** | *(EM PRODUÇÃO 11/11 ~03h40)* Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
@@ -432,6 +433,37 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 346 — O painel de Figurino da Home não lista evento que já passou   (346-figurino-sem-evento-passado · 2026-11-16 · sem migration)
+
+> **Pronto na branch, sem push.** Nível 2 (correção num domínio, sem migration). Detalhe:
+> `specs/346-figurino-sem-evento-passado/` (spec, `verify_346.py`).
+
+**O pedido.** O dono, com o print do painel "👗 Figurino" (131 pendentes, 50 urgentes, o primeiro de
+11/11): "Depois que passou o evento não faz mais sentido aparecer aqui como pendente."
+
+**Causa.** `compute_figurino_tasks` usava o corte comum dos painéis de operação, `dashboard_cutoff()`
+= `release_date` (01/06/2026). O painel juntava todo figurino não marcado desde junho, e o
+`getUrgency` da tela marca "URGENTE" tudo a 2 dias ou menos — inclusive o passado.
+
+**Decisão.** `corte_figurino(cutoff)` = o mais tarde entre o `release_date` e hoje 0h no `now_sp()`
+(`start_at` é parede de SP), aplicado a `pending`, `total` e `done`. Evento de hoje fica até o fim do
+dia, como nas confirmações (231). **Só o Figurino**: o Casting mantém a vaga de evento passado de
+propósito (308 — o pagamento depende da escala), e ensaio, dispensados e cancelados a avisar não
+mudam.
+
+**Verificação.** Espelho próprio `manto_346` (dump de 16/11 02h + `flask db upgrade` até
+`e344a1b2c3d4`; o `manto_local` está parado em 20/10 numa migration do CRM sem push).
+`verify_346.py` 4/7 antes (44 pendências de evento passado — o Chapeuzinho de 11/11 do print no
+topo) e 7/7 depois, com a fronteira por relógio fixo (às 23h59 de um dia D a vaga de D fica e a do
+dia anterior sai), o Casting ainda com passado e o "deve falhar" (CASTING recebe `figurino: null`).
+Tela aberta no espelho: "Figurino 85 pendentes, 5 urgentes", primeira linha de 17/11.
+
+**Pegadinha.** O `verify_308.py` tinha a regra antiga escrita no cenário 6 (figurino desde o
+`release_date`); agora esse cenário volta o relógio do painel ao `release_date`
+(`dashboard_service.now_sp`) para continuar provando o filtro 🟧/🟠. Com o dump de 16/11 ele **para na
+pré-condição** — "o espelho não tem figurino pendente em evento 🟧/🟠", nem desde 01/06 —, o que é dado
+(a consulta é SQL puro, sem o código da 346), não regressão.
 
 ### 344 — A loja conta as visitas e pede licença   (344-loja-visitas-e-privacidade · 2026-11-16 · migration `e344a1b2c3d4`)
 

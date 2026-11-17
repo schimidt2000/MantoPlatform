@@ -414,6 +414,11 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   "Abrir", e o card "Cargos dispensados" virou lista com **Restaurar** (antes só a contagem).
   Casting não vê os botões e o servidor recusa (403). Pendência de evento passado continua.
   Sem mudança de backend: tudo deriva do `GET /api/dashboard` existente.
+- **Correção 346**: o painel **Figurino** lista só evento de hoje 0h (SP) em diante
+  (`corte_figurino`): figurino de evento que já aconteceu não tem mais o que separar, e com o corte
+  de 01/06 o painel juntava meses de pendência marcada "URGENTE". O evento de hoje fica até o fim
+  do dia. O **Casting** continua com a pendência de evento passado (308: o pagamento depende da
+  escala).
 - **Painel "📈 Performance" (2026-08-20, `HomePerformance.tsx`)**: voltou à Home depois da
   migração (a API já calculava; a tela não desenhava). **Somente leitura e só para o superadmin
   real** — o gate é do servidor: `GET /api/dashboard` devolve `performance: null` para quem não

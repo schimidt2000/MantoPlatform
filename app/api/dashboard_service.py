@@ -5,7 +5,7 @@ As mesmas consultas de tarefas de casting/figurino/dispensados são usadas pela 
 não existirem em duas versões paralelas quando a Fundação (feature 144) migra a home.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from flask import current_app
@@ -135,10 +135,21 @@ def compute_unconfirmed_invites() -> list[EventRole]:
     return escalacoes_sem_confirmacao()
 
 
+def corte_figurino(cutoff: datetime) -> datetime:
+    """Corte do painel de Figurino: o mais tarde entre o `release_date` e hoje 0h em SP (346).
+
+    Diferente do Casting, que mantém a vaga de evento passado porque o pagamento depende da escala
+    (308), figurino de evento que já aconteceu não tem mais o que separar — com o corte de 01/06 o
+    painel juntava meses de pendência morta, toda marcada "URGENTE". O evento de HOJE fica até o
+    fim do dia, como nas confirmações (231). `start_at` é horário de parede de SP, daí `now_sp`.
+    """
+    return max(cutoff, datetime.combine(now_sp().date(), time.min))
+
+
 def compute_figurino_tasks(cutoff: datetime) -> dict[str, Any]:
     """Pendências e contagens de figurino (roles com talento, sem figurino, exceto extras e
-    compromisso interno)."""
-    f = _base_filters(cutoff)
+    compromisso interno), de hoje em diante (`corte_figurino`)."""
+    f = _base_filters(corte_figurino(cutoff))
     eventos = (
         f["exclude_ensaios"],
         f["future_events"],

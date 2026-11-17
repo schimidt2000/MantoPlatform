@@ -39,6 +39,7 @@ if not os.environ.get("DATABASE_URL"):
 from sqlalchemy import create_engine, text  # noqa: E402
 
 from app import create_app, db  # noqa: E402
+from app.api import dashboard_service  # noqa: E402
 from app.api.dashboard_service import dashboard_cutoff  # noqa: E402
 from app.constants import MARCADORES_COMPROMISSO_INTERNO, RoleName  # noqa: E402
 from app.models import Role, User  # noqa: E402
@@ -148,6 +149,7 @@ def preparar() -> None:
     _garante(estado["internas"], "o espelho não tem vaga pendente em evento 🟧/🟠 — nada a provar")
     _garante(estado["normais"], "o espelho não tem vaga pendente fora do laranja")
     estado["alvo"] = estado["normais"][0]
+    estado["corte"] = corte
     figurino = _no_banco(_SQL_FIGURINO, corte=corte)
     estado["figurino_internas"] = {rid for rid, titulo in figurino if _interno(titulo)}
     estado["figurino_normais"] = {rid for rid, titulo in figurino if not _interno(titulo)}
@@ -222,7 +224,14 @@ def cen_05_casting_sem_lista_de_dispensados() -> None:
 
 
 def cen_06_figurino() -> None:
-    pendentes = {t["role_id"] for t in _dashboard("superadmin")["figurino"]["pending"]}
+    # Desde a 346 o painel de figurino corta em hoje 0h (SP). O relógio do painel volta ao
+    # release_date para que o figurino de compromisso interno já passado continue sendo a prova.
+    original = dashboard_service.now_sp
+    dashboard_service.now_sp = lambda: estado["corte"]
+    try:
+        pendentes = {t["role_id"] for t in _dashboard("superadmin")["figurino"]["pending"]}
+    finally:
+        dashboard_service.now_sp = original
     vazou = pendentes & estado["figurino_internas"]
     _garante(not vazou, f"{len(vazou)} figurino(s) laranja na Home, ex.: {sorted(vazou)[:5]}")
     faltam = estado["figurino_normais"] - pendentes
