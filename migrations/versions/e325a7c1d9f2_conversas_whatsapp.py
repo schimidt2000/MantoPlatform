@@ -8,7 +8,7 @@ Aditiva: o código anterior não enxerga as tabelas. Rollback = reverter o merge
 derruba as quatro tabelas (e as conversas guardadas nelas).
 
 Revision ID: e325a7c1d9f2
-Revises: d323b5a1c0e7
+Revises: f345c0a1b2d3
 Create Date: 2026-10-30
 """
 
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "e325a7c1d9f2"
-down_revision = "d323b5a1c0e7"
+down_revision = "f345c0a1b2d3"
 branch_labels = None
 depends_on = None
 
