@@ -1,6 +1,6 @@
 # Feature 348 — Origem completa: de qual anúncio, clique ou conversa veio cada venda
 
-**Branch**: `348-origem-completa` (da `main`, `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Rascunho ·
+**Branch**: `348-origem-completa` (da `main`, `20bf93c0`) · **Created**: 2026-11-17 · **Status**: Pronta, sem merge e sem push (`verify_348.py` 16/16) ·
 **Migration**: uma, aditiva, revisão com prefixo `a348` sobre `d334b2c4e6f8` (colunas novas em conversa, anúncio,
 orçamento, evento e ficha; uma tabela nova de códigos do site; preenchimento retroativo do `ctwa_clid`) ·
 **Nível**: 1 (feature) — constituição, Princípio VI

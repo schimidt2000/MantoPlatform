@@ -877,6 +877,18 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
+## Baixa da feature 348-origem-completa (2026-11-17)
+
+**Quitada.** 215 (frente adivinhada pelo título). **Criadas.** (218–221.) Numeração tomada na branch; a 349, a 350
+e a 351 rodam em paralelo — o lote de merge renumera se colidir.
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 218 | **P4** | `origem_codigos` | o código do site que nunca ligou uma conversa fica para sempre (depois de 90 dias só deixa de valer). Não tem dado pessoal — só marcadores do clique, caminho e host —, e são dezenas por dia | expurgo dos não usados depois de 180 dias, junto da feature "conversões para o Google", que decide o que reenviar |
+| 219 | **P4** | aviso de privacidade do site (`PrivacidadeLojaPage.tsx` é só da loja) | o site guarda no navegador os marcadores de campanha (`gclid`, `utm_*`) e os manda ao servidor; nenhum aviso público diz isso. Somar à 210 | o dono revisa o texto do aviso do site com os marcadores (decisão dele, não de código) |
+| 220 | **P5** | `calendar_events.frente` / diálogo de criação do evento | a criação grava sozinha só a sugestão **certa**; o evento criado com venda e título sem palavra-chave fica "sugerida" até alguém abrir a aba Comercial (o painel da 345 lê como festas) | campo "Frente" no diálogo de criação, ou a 349 manda `frente` ao criar pela conversa |
+| 221 | **P5** | `origem_ops.acompanhar_orcamento` | desligar o orçamento leva a conversa junto quando a conversa e o contato do evento são **exatamente** os do orçamento — inclusive se a mesma ligação também tinha vindo pela criação na conversa (349) | guardar de onde veio a ligação (`conversa_via`) se o caso aparecer |
+
 ## Baixa da feature 345-marketing-integrado (2026-11-16)
 
 **Quitada.** Nenhuma. A 21 (token do agente fora do Render) continua: sem `MARKETING_AGENT_TOKEN` no `manto-backend`,
@@ -885,7 +897,7 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline) |
-| 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
+| ~~215~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 348** — `calendar_events.frente`, escolhida na aba Comercial; a regra do título virou sugestão (`calendar/frente_ops.py`), e a sugestão por exclusão nunca é gravada sozinha. Evento antigo sem frente segue pela regra (marcado "sugerida") | — |
 | 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
 | 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |
 ## Baixa da feature 325-crm-whatsapp-fundacao (2026-10-30)

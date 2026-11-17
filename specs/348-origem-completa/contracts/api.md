@@ -17,7 +17,9 @@ Corpo (JSON, todos opcionais, texto):
 }
 ```
 
-- **201** `{"codigo": "A7K2Q", "validade_dias": 90}`.
+- **201** `{"codigo": "A7K2Q", "linha": "Código do site: #A7K2Q", "validade_dias": 90}`. A `linha` é o texto que
+  vai no fim da mensagem pronta: o servidor é a fonte única dele (a lista de desejos usa a que veio aqui; o
+  formulário público, a do `codigo_ops.anexar_a_mensagem`).
 - **400** `{"error": {"message": "Nenhum marcador de campanha."}}` quando não há `gclid`, `gbraid`, `wbraid`,
   `fbclid`, `gad_campaignid`, `utm_id` nem `utm_*`.
 - Valores não-texto são ignorados; textos são cortados no tamanho da coluna.

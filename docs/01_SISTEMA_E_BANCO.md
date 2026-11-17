@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
+> Última atualização: **2026-11-17** · **348-origem-completa** (na branch, sem merge; migration **`a348c0d1e2f3`**
+> sobre `d334b2c4e6f8` — a 349, a 350 e a 351 encadeiam na mesma head e o reencadeamento é do lote de merge;
+> `origem_codigos`, conversa e contato de origem na venda, frente no evento, §2.7 "Origem completa"; rota nova
+> em §3.14; campos novos em §3.3). Antes: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
 > head: contador de visitas, aceite de novidades, pixel, §2.10.0c; rotas novas em §3.13.4). Antes:
 > **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
 > head: `virtual_orders.payment_url` vira `text`, §2.10.0b). Antes: **2026-11-10** ·
@@ -268,7 +271,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, **`educamanto_seller_commission`** (feature 338 — `Numeric(12,2)` nullable: a comissão do vendedor que entrou no preço pela calculadora EducaManto; só conta no EducaManto com responsável, vira a linha `source = vendedor_educamanto` do vendedor do evento e sai da base do responsável; campo de venda — `group_ops.SATELLITE_FIELDS_CLEARED`, some do satélite e passa na passagem), `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, **`educamanto_seller_commission`** (feature 338 — `Numeric(12,2)` nullable: a comissão do vendedor que entrou no preço pela calculadora EducaManto; só conta no EducaManto com responsável, vira a linha `source = vendedor_educamanto` do vendedor do evento e sai da base do responsável; campo de venda — `group_ops.SATELLITE_FIELDS_CLEARED`, some do satélite e passa na passagem), `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history`; feature 348: `conversa_id`→`conversas`, `origem_contato_id`→`conversa_anuncios`, `frente`→`marketing_frentes` (§2.7, "Origem completa") |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at`, **`perfil_vendido`** (String 200, nullable — feature 322: o tipo que o orçamento vendeu e o "show", ex. "Cantor · show" — "cantor" e "com maquiagem" NÃO são gravados, vêm das flags na leitura; gravado na criação do orçamento (pareado pelo nome) e no vínculo 273 só onde está vazio; NULL = vaga sem orçamento), **`criada_pelo_sistema`** e **`escalado_pelo_comercial`** (Boolean, nullable — feature 322: marcadores puros `True`\|`NULL`; o primeiro diz que a vaga nasceu de regra do sistema, o segundo que o talento ATUAL entrou pelo formulário do evento e sai quando o casting troca ou tira pelo card), **`teto_autorizado`** (Numeric 10,2), **`teto_autorizado_por`** e **`teto_autorizado_em`** (feature 339: o teto que o Superadmin autorizou acima do orçamento PARA A VAGA — gravado em `assign_role` só pelo Superadmin, com artista e cachê > 0; não muda quando a pessoa sai; recálculo de tipo e vínculo não o tocam; `teto_efetivo = max(cache_cap + parcela do carrinho, teto_autorizado, cache_value atual)` em `app/calendar/teto_ops.py`; autor NULL com valor = preenchimento da migration), **`sobrando_desde`** (feature 339: o título passou a pedir o personagem menos vezes e as vagas dele estavam ocupadas — limpa quando título e vagas batem, `titulo_ops.resolver_sobra`) | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users`, `teto_autorizado_por`→`users` (SET NULL) |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -550,7 +553,7 @@ pela conversa; balde próprio em `client_metrics`) | 1:N `events` |
 | `form_response_dismissed_events` | `FormResponseDismissedEvent` | **Feature 298**: sugestão "parece ser este evento" descartada — o par nunca volta (definitivo, decisão do dono). `UNIQUE(form_response_id, event_id)`; **sem backref** de propósito (as exclusões de evento e de formulário contam com o `ON DELETE CASCADE`) | `form_response_id` e `event_id` (`CASCADE`), `dismissed_by_id` (`SET NULL`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
-| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte) |
+| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte); `conversa_id` → `conversas` e `origem_contato_id` → `conversa_anuncios` (feature 348, `SET NULL`: a conversa do primeiro envio e o contato de origem congelado) |
 
 #### Estado do banco de leads (pós-feature 193)
 
@@ -658,6 +661,38 @@ Pontos que valem para quem for ler esses dados:
     ou código 803).
   - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
     `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
+- **Origem completa** (feature 348, migration `a348c0d1e2f3`, aditiva sobre `d334b2c4e6f8`). Detalhe em
+  `specs/348-origem-completa/data-model.md`.
+  - `origem_codigos` (nova): o clique de campanha que chegou ao site. `codigo` (8, `uq_origem_codigos_codigo`: 5
+    caracteres de `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), `gclid`/`gbraid`/`wbraid`/`fbclid` (512), `utm_source`,
+    `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` (200), `campanha_id` (80: `gad_campaignid` ou
+    `utm_id`), `pagina` (só o caminho), `procedencia` (só o host), `created_at` (UTC; vale 90 dias),
+    `conversa_id` (SET NULL, indexado: o primeiro uso, por `UPDATE … WHERE conversa_id IS NULL`), `usado_em`,
+    `form_response_id` (SET NULL). Nenhum dado pessoal.
+  - `conversa_anuncios` ganha `ctwa_clid` (512: o clique do anúncio de WhatsApp, do `referral`; retroativo na
+    migration) e `codigo_id` (SET NULL → `origem_codigos`), e o tipo `site` (chave `site:{codigo}`). Os tipos
+    `anuncio`, `publicacao` e `site` são os **contatos de origem** de uma venda.
+  - `anuncios_meta` ganha `conjunto_id` (64) e `conjunto_nome` (255).
+  - `orcamento_history` e `calendar_events` ganham `conversa_id` (SET NULL → `conversas`, indexado) e
+    `origem_contato_id` (SET NULL → `conversa_anuncios`): a conversa da venda e o contato de origem
+    **congelado** no momento em que ela foi ligada. `calendar_events.frente` (16, FK → `marketing_frentes.slug`):
+    a frente escolhida na venda; nula = ninguém escolheu.
+  - `clients.utm_campaign_id` (80): o id da campanha de origem.
+  - **Contrato para a 349 e a 351** (quem cria venda pela conversa e quem soma venda atribuída):
+    - ligar uma venda à conversa só por `app/conversas/origem_ops.py`: `ligar_orcamento(entry, conversa)`
+      (condicional: o primeiro envio vence), `ligar_evento(evento, conversa_id)` (levanta
+      `ConversaNaoEncontrada`) ou `POST /api/events` com `conversa_id` (§3.3). Nunca grave as colunas à mão e
+      **nunca ligue pela ficha**: a conversa é uma por telefone, e o contato congelado é o que separa as
+      vendas da cliente recorrente;
+    - o contato de origem é o `conversa_anuncios` mais recente da conversa, de tipo `anuncio`, `publicacao` ou
+      `site`, nos 90 dias anteriores à ligação (`origem_ops.contato_de_origem`). `conversa_id` preenchido e
+      `origem_contato_id` nulo = venda orgânica; os dois nulos = venda sem conversa;
+    - a frente do evento só por `app/calendar/frente_ops.py`: `frente_do_evento(evento)` (`frente`, `rotulo`,
+      `definida`, `sugestao`, `sugestao_certa`, `opcoes`; o satélite responde com o principal) ou
+      `frente_sql()` (`COALESCE(frente, regra de 16/11)`, filtre `group_leader_id IS NULL`).
+      `comando_ops.frente_venda_sql()` (345) devolve a mesma expressão;
+    - a origem legível da venda: `origem_ops.origem_da_venda(evento, user)`; o lead casa com a campanha por
+      `clients.utm_campaign_id`.
 
 ### 2.8 EducaManto
 
@@ -1069,6 +1104,20 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `comissao_vendedor_retido` no EducaManto com comissão do vendedor. `GET /api/financeiro/comissoes`
 > (`entries[].origem`) e `GET /api/financeiro/pagamentos` (`commission_lines[].origem`) dizem a fonte
 > da linha; `by_seller[].sale_count` conta eventos distintos.
+>
+> **Feature 348 — frente e origem da venda.** `PATCH /api/events/<id>/comercial` aceita `frente` (um slug de
+> `marketing_frentes`). **Chave ausente não mexe** (bundle antigo) e não é exigida; `null`/`""` não apagam a
+> gravada; fora da lista → 400 `fields.frente = "Selecione uma frente da lista."`; chave presente, venda > 0, sem
+> cortesia e nenhuma frente (nem no corpo nem gravada) → 400 `fields.frente = "Selecione a frente da venda."`.
+> Segue o gate e a regra do cancelado da porta (só o Superadmin corrige). `POST /api/events` aceita `frente`
+> (mesma validação; ausente grava só a sugestão **certa** pelo título) e `conversa_id` (inteiro de conversa
+> existente; senão 400 `fields.conversa_id = "Conversa não encontrada."`, **antes** do Google). Com
+> `conversa_id`, o evento grava a conversa e congela o contato de origem; sem ele, herda os dois do orçamento
+> (`orcamento_history_id`). `PATCH …/orcamento` leva junto a conversa do orçamento ao ligar, trocar e desligar,
+> sem apagar a ligação feita pela conversa. O detalhe ganha, dentro de `venda` (só `show_comercial`),
+> `venda.frente` (`frente_ops.frente_do_evento`) e `venda.origem` (`{conversa_id, conversa_nome, canal,
+> pode_abrir, contato: {tipo, titulo, anuncio_id, campanha, campanha_id, conjunto, codigo, quando} | null}` ou
+> `null`; `pode_abrir` = quem lê usa as Conversas). Contrato: `specs/348-origem-completa/contracts/`.
 >
 > **Feature 299 — valor da venda e cobrança do grupo.** `POST /api/events` e
 > `PATCH /api/events/<id>` aceitam `valor_a_definir` (não gravado): com ele, sem cortesia, a venda
@@ -2284,7 +2333,17 @@ O tipo do item não é coluna: `kind` = `"tema"` se tem elenco, senão `"avulso"
 e reenvia — feature 219) ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
 `GET|POST /api/avaliar/<token>` (feedback da cliente) ·
-`GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205).
+`GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205) ·
+`POST /api/origem/codigo` (feature 348, `origem_public.py`).
+
+**Feature 348 — o código do site.** `POST /api/origem/codigo` recebe os marcadores da URL (`gclid`, `gbraid`,
+`wbraid`, `fbclid`, `gad_campaignid`, `utm_id`, `utm_*`), `pagina` e `procedencia` (só texto; o resto é
+ignorado) e devolve **201** `{codigo, linha, validade_dias}` — a `linha` ("Código do site: #A7K2Q") é a fonte
+única do texto da mensagem; sem marcador → 400. `20 per hour` por endereço. O app público chama uma vez por
+clique novo (`lib/origem.ts`, fora da loja). `POST /api/formularios/<tipo>` aceita `origem_codigo`: código vivo
+(≤ 90 dias) põe a linha no fim da mensagem do `wa_link` e liga a resposta ao código; inválido ou ausente, a
+resposta de hoje. No aviso do WhatsApp, `#XXXXX` em qualquer mensagem de texto da cliente liga o código à
+conversa (o primeiro uso vence) e cria o contato de origem `site`.
 Admin dos formulários: `formularios_admin_read/write.py`
 (`/api/formularios/respostas*`, `/api/formularios/editor/*`). O `_response_summary` de
 `GET /api/formularios/respostas` e `…/respostas/search` inclui **`client_name`** (nome do cliente
@@ -2607,7 +2666,7 @@ Gates por módulo (todos em `app/api/`):
 | `require_marketing_access()` + `eh_superadmin()` (345) | `marketing_comando_read/write` | `MARKETING`, `SUPERADMIN`; tetos, decidir proposta e liberar licenciado: só `SUPERADMIN` (o "Ver como" não conta) |
 | `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções); desde a 344, `GET /api/virtuais/campanhas/<id>/funil` | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
-| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel | — |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel; `POST /api/origem/codigo` (348): anônimo, `20 per hour`, só marcadores da URL, caminho e host de procedência (sem IP nem dado pessoal) | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |

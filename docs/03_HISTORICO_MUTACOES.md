@@ -238,6 +238,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **348-origem-completa** | *(na branch, sem merge)* Origem completa da venda: `ctwa_clid` e conjunto do anúncio da Meta; código do site ("Código do site: #XXXXX") que leva `gclid`/`gbraid`/`wbraid`/`utm_*` do clique até a conversa; conversa e contato de origem congelados no orçamento e no evento (nunca pela ficha); frente como campo do evento, escolhida na aba Comercial (quita a dívida 215); lead casado com a campanha pelo id | 2026-11-17 | `a348c0d1e2f3` | (aqui) | ver Registro |
 | **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
@@ -462,6 +463,67 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 348 — De qual anúncio, clique ou conversa veio cada venda   (348-origem-completa · sem merge · migration `a348c0d1e2f3`)
+
+> **Na branch, sem merge e sem push** (worktree `.claude/worktrees/348-origem-completa-cade5a`, saída de `20bf93c0`).
+> Nível 1. Detalhe: `specs/348-origem-completa/` (spec, plan, research, data-model, contratos, tasks,
+> `verify_348.py`). A migration encadeia sobre `d334b2c4e6f8`, como a 349, a 350 e a 351, abertas no mesmo dia:
+> **reencadear no lote de merge**.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11) concluiu "medir primeiro, escalar depois" e dividiu o
+trabalho em quatro features (seção 8.5). Esta é a primeira: gravar a origem de cada venda. O caminho anúncio →
+conversa → orçamento → evento → receita parava no clique:
+- o aviso da Meta trazia o `ctwa_clid` e ninguém o lia;
+- o clique no Google saía do site para o `wa.me` e o `gclid` ficava para trás;
+- a conversa só chegava ao evento pela ficha, e a cliente recorrente misturava duas vendas;
+- a frente era adivinhada pelo título (dívida 215);
+- o lead casava com a campanha pelo nome.
+
+**O que mudou.**
+- **Meta**: `conversa_anuncios.ctwa_clid` (e retroativo na migration, da mensagem crua); a consulta pede
+  `adset{id,name}` (`anuncios_meta.conjunto_*`).
+- **Site e Google**: `origem_codigos` + `POST /api/origem/codigo` (público, 20/hora). O app público guarda os
+  marcadores do clique por 90 dias e põe "Código do site: #XXXXX" na mensagem pronta da lista de desejos e dos
+  formulários. O aviso lê o código em toda mensagem de texto (o primeiro uso vence) e cria o contato de origem
+  `site`; a ficha sem origem ganha "Site".
+- **Venda ↔ conversa** (`app/conversas/origem_ops.py`): `conversa_id` e `origem_contato_id` no orçamento (primeiro
+  envio pela conversa) e no evento (herda do orçamento, ou da criação com `conversa_id` — o contrato da 349). O
+  contato de origem é o mais recente da conversa em 90 dias, **congelado** na venda.
+- **Frente** (`app/calendar/frente_ops.py`): `calendar_events.frente`, escolhida na aba Comercial; a regra de 16/11
+  vira sugestão. `comando_ops.frente_venda_sql` devolve a mesma leitura (`COALESCE`).
+- **Desempenho**: `clients.utm_campaign_id`; campanha agrupada por id; lead e retorno casados por id.
+
+**Verificação.**
+- `verify_348.py`: 16/16 no `manto_348` (dump de 17/11 + `a348c0d1e2f3`), sem escape de rede. Antes do núcleo: 2/16,
+  falhando pelos motivos certos (rota 404, `NotImplementedError`, campanha partida em duas linhas, venda sem frente
+  aceita). Cinco cenários DEVEM falhar e falham (sem marcador, código usado/vencido, conversa inexistente, frente
+  ausente/inválida, Figurino no comercial).
+- O cenário 13 compara a frente Python × SQL em todos os eventos reais e a função nova × a regra de 16/11 em todos os
+  eventos sem frente: zero divergência (os números da 345 não mudam).
+- Migration com ida e volta. `ruff check` sem erro novo; `npm run typecheck` limpo.
+- Telas (backend 5348, Vite 6348/6349): catálogo com `gclid` (código guardado, rolagem 390 = 390), lista de desejos
+  (a mensagem termina com a linha do código), formulário em 390, visita sem marcador e loja `/v` (nada guardado);
+  aba Comercial em desktop e 390 (campo vazio com a sugestão, "Selecione a frente da venda." no campo com foco,
+  gravou `social`; "Origem da venda" com anúncio, campanha, conjunto e "Ver conversa").
+
+**Pegadinhas.**
+1. A conversa é **uma por telefone**: ligar a venda pela conversa sem congelar o contato repete o defeito da ficha.
+   O congelamento é a regra; a 351 lê as colunas.
+2. O código é lido em qualquer mensagem, não só na primeira: a cliente que volta por outro clique escreve na conversa
+   antiga.
+3. `window.open` depois de um `await` é bloqueado no Safari: por isso o código nasce no carregamento da página, e o
+   botão o lê do `localStorage` de forma síncrona.
+4. O texto da linha mora no servidor (`codigo_ops.linha_do_codigo`, devolvido pelo `POST`): a lista de desejos monta a
+   mensagem no navegador e usaria uma cópia.
+5. A migration não importa `app`: o retroativo do `ctwa_clid` roda em Python dentro dela; o `dados::json` do SQL
+   morreria na primeira mensagem corrompida. O verify importa a função da migration para testá-la.
+6. Achado fora do escopo: `formatDay` (`EventDetail/parts.tsx:31`) lê a data pura como meia-noite UTC e mostra a
+   "Data da venda" um dia antes no fuso de São Paulo (anterior à 348).
+
+**Depende do CRM ligado** (chaves `WHATSAPP_*` no Render): o `ctwa_clid`, a leitura do código, a ligação da venda à
+conversa e a origem na aba Comercial só acontecem com conversas chegando. O código do site já nasce e é guardado
+desde o deploy.
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 
