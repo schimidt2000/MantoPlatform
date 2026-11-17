@@ -4,7 +4,7 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-16** · Estado do repositório: pós-**deploy em lote de 16/11/2026 (~22h20)**, a
+> Última atualização: **2026-11-16** · Estado do repositório: pós-**deploy em lote de 16/11/2026 (~22h10)**, a
 > pedido do dono ("Bora fazer pushs, inclusive do CRM"), num push só, na ordem dos merges:
 > **346-figurino-sem-evento-passado** (`verify_346.py` 7/7), **345-marketing-integrado** (`verify_345.py` 64/64,
 > `verify_256.py` 12/12) e o **CRM próprio, 325 a 335** (um merge só da `335-crm-linha-do-tempo`, que contém as
@@ -238,8 +238,8 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h20, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
-| **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h20, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
+| **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
+| **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
 | **341b-chamadas-a-cada-15-min** | *(EM PRODUÇÃO 16/11 ~20h27)* Hotfix da 341: um horário de chamada a cada 15 min (10 de chamada + 5 de pausa do artista); `gerar_slots` pula o horário que encostaria em outro. Papai Noel ajustado em produção pelas funções do sistema (20 horários, 14h00–18h45; 40 vídeos). Quita a dívida 206 (verify_310 652/652) | 2026-11-12 | — | (aqui) | ver Registro |
 | **310b-link-de-pagamento-longo** | *(EM PRODUÇÃO 11/11 ~03h40)* Hotfix da 310: o link da InfinitePay passou de 500 caracteres (513 na campanha de teste, 504 no Papai Noel com um contato comum) e não cabia em `virtual_orders.payment_url`; a reserva respondia 500 e o pedido ficava sem botão de pagar. A coluna vira `text` | 2026-11-11 | `f310b2a4c6e8` | (aqui) | ver Registro |
@@ -256,13 +256,13 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 | **326-novo-evento-cliente-e-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Novo evento: o nome digitado na busca de cliente vai para o cadastro rápido, o telefone ganha máscara (`mascaraTelefone` em `@manto/ui`, também no "Nova cliente" de `/clientes`) e o orçamento se vincula pela própria tela — bloco "Orçamento" no topo, que preenche só o que a pessoa não alterou à mão, junta o elenco por nome e recusa o orçamento que já virou evento | 2026-10-30 | — | (aqui) | ver Registro |
 | **324-config-precos-legivel** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Configuração de Preços legível (só tela): oito seções com explicação, cartão "Como a calculadora monta o preço", atalhos, "Salvar" em barra fixa, chaves técnicas viram rótulos ("Boneco · Com show · sem maquiagem", "Van com carretinha (R$/km)"), "Remover"/"Tirar" na linha com `ConfirmDialog`. A tela é só do Superadmin — casting não vê | 2026-10-30 | — | (aqui) | ver Registro |
 | **239c-coordenador-pre-escalado-com-orcamento** | *(EM PRODUÇÃO 03/11 ~20h, lote)* Hotfix da 239: o "Coordenador específico" escolhido na criação era descartado quando o evento vinha do orçamento (evento 1432, Mickey 20/12, Miminha); agora ocupa a primeira vaga de Coordenador aberta, com o teto do orçamento, a marca do comercial e o convite | 2026-10-30 | — | (aqui) | ver Registro |
-| **335-crm-linha-do-tempo** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 334)* Linha do tempo da ficha e funil das conversas, Fase 3c do `docs/PLANO_CRM_PROPRIO.md`: a ficha ganha os marcos da cliente (entrada, contatos, anúncios, orçamentos, formulários, eventos, pagamentos, avaliações) e o Comercial ganha o Funil (quem chegou no período e até onde chegou, por vendedor, campanha e canal, com quem parou em cada etapa); só leitura, sem migration | 2026-11-06 | — | (aqui) | — |
-| **334-crm-origem-do-anuncio** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 333)* De qual anúncio veio cada cliente, Fase 3b do `docs/PLANO_CRM_PROPRIO.md`: o `referral` de quem clica no anúncio (WhatsApp e Instagram) vira contato na conversa; a campanha vem da Meta depois do commit (falta `ads_read`); a ficha guarda o primeiro e o mais recente anúncio e o orgânico ganha o canal; o Desempenho conta o lead da conversa e os retornos | 2026-11-04 | `d334b2c4e6f8` | (aqui) | — |
-| **333-crm-orcamento-na-conversa** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
-| **332-crm-avisos-no-celular** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
-| **330-crm-instagram-direct** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
-| **328-crm-equipe-na-caixa** | *(EM PRODUÇÃO 16/11 ~22h20, lote; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
-| **325-crm-whatsapp-fundacao** | *(EM PRODUÇÃO 16/11 ~22h20, lote; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
+| **335-crm-linha-do-tempo** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 334)* Linha do tempo da ficha e funil das conversas, Fase 3c do `docs/PLANO_CRM_PROPRIO.md`: a ficha ganha os marcos da cliente (entrada, contatos, anúncios, orçamentos, formulários, eventos, pagamentos, avaliações) e o Comercial ganha o Funil (quem chegou no período e até onde chegou, por vendedor, campanha e canal, com quem parou em cada etapa); só leitura, sem migration | 2026-11-06 | — | (aqui) | — |
+| **334-crm-origem-do-anuncio** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 333)* De qual anúncio veio cada cliente, Fase 3b do `docs/PLANO_CRM_PROPRIO.md`: o `referral` de quem clica no anúncio (WhatsApp e Instagram) vira contato na conversa; a campanha vem da Meta depois do commit (falta `ads_read`); a ficha guarda o primeiro e o mais recente anúncio e o orgânico ganha o canal; o Desempenho conta o lead da conversa e os retornos | 2026-11-04 | `d334b2c4e6f8` | (aqui) | — |
+| **333-crm-orcamento-na-conversa** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 332)* Orçamento e formulário pela conversa, Fase 3a do `docs/PLANO_CRM_PROPRIO.md`: a mensagem pronta (em partes no Instagram) e o PDF saem pela conversa, de dentro dela ou da tela do orçamento; o envio fica registrado e o orçamento ligado à ficha, que nasce na hora; ligar, trocar e remover a ficha à mão; o link do formulário no campo; "Criar evento" traz a cliente | 2026-11-03 | `c333e1a5b7d9` | (aqui) | — |
+| **332-crm-avisos-no-celular** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 330, desligado até as chaves `WEB_PUSH_VAPID_*`)* Avisos das Conversas no celular, Fase 2c do `docs/PLANO_CRM_PROPRIO.md`: Plataforma instalável (manifesto, service worker); toca a mensagem nova da cliente (WhatsApp e Instagram), o alerta de 15 min e a transferência, a qualquer hora; Web Push com cifra RFC 8291 e VAPID próprios (sobre o `cryptography`, fixado), provados pelo vetor oficial do RFC | 2026-11-03 | `b332d5f7a9c1` | (aqui) | — |
+| **330-crm-instagram-direct** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 328, desligado até as variáveis `INSTAGRAM_*`)* Instagram Direct na mesma caixa de Conversas, Fase 2b do `docs/PLANO_CRM_PROPRIO.md`: ligado pela Página do Facebook (decisão do dono), mesmo pipeline cru da 325, mensagem por anexo, eco de outro app, reação, visto, apagada, perfil; envio pela Página com a janela de 24 h e até 7 dias com a marca de resposta humana; áudio em m4a; filtro e ícone do canal | 2026-11-03 | `a330c4e8f1b2` | (aqui) | — |
+| **328-crm-equipe-na-caixa** | *(EM PRODUÇÃO 16/11 ~22h10, lote; sobre a 325, desligado até as variáveis `WHATSAPP_*`)* Conversas em equipe, Fase 2a do `docs/PLANO_CRM_PROPRIO.md`: fila livre (a primeira resposta fica com a conversa; assumir, transferir com aviso no sino, devolver), alerta de cliente esperando (15 min, 9h–21h de SP), notas internas, respostas rápidas da equipe e áudio gravado no navegador (webm → ogg, nota de voz) | 2026-11-03 | `f328b2d4e6a1` | (aqui) | — |
+| **325-crm-whatsapp-fundacao** | *(EM PRODUÇÃO 16/11 ~22h10, lote; desligado até as variáveis `WHATSAPP_*`)* Conversas, fundação do CRM próprio (Fase 1 do `docs/PLANO_CRM_PROPRIO.md`): webhook assinado da Cloud API com aviso cru e varredura, conversa/mensagem/mídia idempotentes, envio de texto/arquivo/modelo com janela de 24 h e trava local, eco da coexistência, tela `/conversas` (Comercial/Superadmin) | 2026-10-30 | `e325a7c1d9f2` | (aqui) | — |
 | **321-novidades-para-a-equipe** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Fluxo "novidades para a equipe": `scripts/novidades.py` lista o que entrou na `main` desde o marco `docs/novidades/ULTIMO_AVISO` (data de produção e ⚠ "desligada" lidos deste documento), `--rascunho` monta `docs/novidades/<dia>.md`, `--marcar` fecha a rodada; gancho `pre-push` lembra quantas mudanças estão sem aviso; skill `manto-novidades` escreve uma mensagem de WhatsApp por grupo (vendas, casting, ensaios, figurinos, redes sociais) que o dono cola à mão. Primeira rodada: 21 mudanças de 14/10 a 27/10 mais a 322 | 2026-10-28 | — | (aqui) | ver Registro |
 | **323-nota-pedida-ao-superadmin** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* A nota pedida chega ao Superadmin: ligar "Precisa de nota fiscal" pede a nota em qualquer porta (antes a edição não pedia), a venda guarda os dados da nota (documento do tomador, ISS retido + município, referência, observações), a Home do Superadmin ganha o painel urgente "Notas a emitir" com a discriminação pronta e "Inserir nota", e cada Superadmin recebe um e-mail por nota no formato da 319 | 2026-10-28 | `d323b5a1c0e7` | (aqui) | Registro |
 | **309b-visita-magica-30-minutos** | *(EM PRODUÇÃO 29/10 ~03h35, lote)* Hotfix da 309: a Visita Mágica no orçamento dizia "visita padrão, até 1h"; passa a "visita de até 30 minutos" e ganha "o que inclui" (texto da arte da campanha) em itálico sob o preço, na mensagem e no PDF — campo `detalhes` do produto, editável na tabela de preços; a tabela salva antes é corrigida ao carregar | 2026-10-28 | — | (aqui) | ver Registro |
@@ -465,7 +465,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)** (feita no worktree `C:\tmp\mp345`, saída de `68f232a7`). Nível 1. Detalhe:
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)** (feita no worktree `C:\tmp\mp345`, saída de `68f232a7`). Nível 1. Detalhe:
 > `specs/345-marketing-integrado/` (spec, plan, research, data-model, contrato, tasks, `verify_345.py`).
 
 **O pedido.** O dono abriu o "chat oficial de marketing" em 16/11. As ferramentas eram Tintim, Kommo, Meta Ads e Google
@@ -522,7 +522,7 @@ Oito rotas novas no agente da 256 (mesmo token). Telas novas `/marketing/decisoe
 6. A Google Ads API não tem mais developer token nem MCC desde 09/09/2026: basta o projeto Cloud no nível Explorer.
 ### 346 — O painel de Figurino da Home não lista evento que já passou   (346-figurino-sem-evento-passado · 2026-11-16 · sem migration)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**. Nível 2 (correção num domínio, sem migration). Detalhe:
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**. Nível 2 (correção num domínio, sem migration). Detalhe:
 > `specs/346-figurino-sem-evento-passado/` (spec, `verify_346.py`).
 
 **O pedido.** O dono, com o print do painel "👗 Figurino" (131 pendentes, 50 urgentes, o primeiro de
@@ -1147,7 +1147,7 @@ convite e aviso de conflito. Parâmetro `came_from_orcamento` removido.
 **Verificação.** `verify_239c.py` 7/7 (cenários 1–3 falham no código antigo); `verify_322.py` 29/29.
 ### 335 — Linha do tempo da ficha e funil das conversas   (335-crm-linha-do-tempo · 2026-11-06 · sem migration)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `335-crm-linha-do-tempo`, feita **sobre a `334-crm-origem-do-anuncio`** (325 → 328 → 330
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `335-crm-linha-do-tempo`, feita **sobre a `334-crm-origem-do-anuncio`** (325 → 328 → 330
 > → 332 → 333 → 334 → 335; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
 > `specs/335-crm-linha-do-tempo/`.
 
@@ -1208,7 +1208,7 @@ Conversas ligadas.
 
 ### 334 — De qual anúncio veio cada cliente   (334-crm-origem-do-anuncio · 2026-11-04 · migration `d334b2c4e6f8`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `334-crm-origem-do-anuncio`, feita **sobre a `333-crm-orcamento-na-conversa`** (325 → 328
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `334-crm-origem-do-anuncio`, feita **sobre a `333-crm-orcamento-na-conversa`** (325 → 328
 > → 330 → 332 → 333 → 334; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
 > `specs/334-crm-origem-do-anuncio/`.
 
@@ -1268,7 +1268,7 @@ um token próprio no `META_ANUNCIOS_TOKEN`) e conferir o log `[anuncios]` e a ca
 
 ### 333 — Orçamento e formulário pela conversa   (333-crm-orcamento-na-conversa · 2026-11-03 · migration `c333e1a5b7d9`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `333-crm-orcamento-na-conversa`, feita **sobre a `332-crm-avisos-no-celular`** (325 → 328
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `333-crm-orcamento-na-conversa`, feita **sobre a `332-crm-avisos-no-celular`** (325 → 328
 > → 330 → 332 → 333; nenhuma está na `main`, por decisão do dono). Nível 1. Detalhe:
 > `specs/333-crm-orcamento-na-conversa/`.
 
@@ -1346,7 +1346,7 @@ críticos, 0 altos, 4 médios e 14 baixos), fechados em T020–T036.
 
 ### 332 — Avisos das Conversas no celular   (332-crm-avisos-no-celular · 2026-11-03 · migration `b332d5f7a9c1`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `332-crm-avisos-no-celular`, feita **sobre a `330-crm-instagram-direct`** (325 → 328 →
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `332-crm-avisos-no-celular`, feita **sobre a `330-crm-instagram-direct`** (325 → 328 →
 > 330 → 332; nenhuma está na `main`, por decisão do dono). Mesmo publicado, fica desligado até as duas chaves
 > `WEB_PUSH_VAPID_*` (`docs/05` 190). Nível 1. Detalhe: `specs/332-crm-avisos-no-celular/`.
 
@@ -1431,7 +1431,7 @@ crítico, 0 altos, 7 médios e 9 baixos), fechados em T017–T033.
 
 ### 330 — Instagram Direct na caixa de Conversas   (330-crm-instagram-direct · 2026-11-03 · migration `a330c4e8f1b2`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `330-crm-instagram-direct`, feita **sobre a `328-crm-equipe-na-caixa`** (que fica sobre a
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `330-crm-instagram-direct`, feita **sobre a `328-crm-equipe-na-caixa`** (que fica sobre a
 > 325; nenhuma está na `main`, por decisão do dono). No merge, a ordem é 325 → 328 → 330. Mesmo publicado, o canal
 > segue desligado até as três variáveis `INSTAGRAM_*` (`docs/05` 186). Nível 1. Detalhe: `specs/330-crm-instagram-direct/`.
 
@@ -1522,7 +1522,7 @@ O T039 (ordem da checagem do tipo no WhatsApp) foi aceito com o motivo registrad
 
 ### 328 — Conversas em equipe: responsável, alerta de cliente esperando, notas, respostas rápidas e áudio   (328-crm-equipe-na-caixa · 2026-11-03 · migration `f328b2d4e6a1`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `328-crm-equipe-na-caixa`, feita **sobre a `325-crm-whatsapp-fundacao`** (que também não
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `328-crm-equipe-na-caixa`, feita **sobre a `325-crm-whatsapp-fundacao`** (que também não
 > está na `main`). O dono adiou a publicação (03/11: "Dá para continuar a implementação sem fazer o push?? Vou deixar
 > mais pra frente"). No merge, a 325 entra antes da 328. Mesmo publicado, o módulo segue desligado até as variáveis
 > `WHATSAPP_*` (`docs/05` 178). Nível 1. Detalhe: `specs/328-crm-equipe-na-caixa/`.
@@ -1603,7 +1603,7 @@ constituição, 1 alto, 8 médios e 10 baixos), fechados em T046–T065.
 
 ### 325 — Conversas: o WhatsApp da Manto dentro da Plataforma (fundação do CRM próprio)   (325-crm-whatsapp-fundacao · 2026-10-30 · migration `e325a7c1d9f2`)
 
-> **EM PRODUÇÃO desde 16/11/2026 ~22h20 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `325-crm-whatsapp-fundacao`, aguardando o dono pedir o push. Mesmo depois do deploy, o módulo
+> **EM PRODUÇÃO desde 16/11/2026 ~22h10 (deploy em lote)**, desligado até o dono preencher as chaves no Render — branch `325-crm-whatsapp-fundacao`, aguardando o dono pedir o push. Mesmo depois do deploy, o módulo
 > fica **desligado** até o dono criar o app na Meta e preencher as cinco variáveis `WHATSAPP_*` no Render
 > (`docs/05` 178; dívidas 178–182). Nível 1. Detalhe: `specs/325-crm-whatsapp-fundacao/`. Panorama e fases:
 > `docs/PLANO_CRM_PROPRIO.md`.
