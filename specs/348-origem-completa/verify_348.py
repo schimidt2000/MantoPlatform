@@ -607,6 +607,7 @@ def cen_04() -> None:
     _garante(
         re.fullmatch(f"[{ALFABETO}]{{5}}", codigo) is not None, f"formato do código {codigo!r}"
     )
+    _garante(r.get_json()["linha"] == f"Código do site: #{codigo}", f"linha {r.get_json()}")
     linha = _codigo(codigo)
     _garante(
         linha.gclid == f"{PREFIX}gclid-1" and linha.campanha_id == "777", f"marcadores {linha}"
