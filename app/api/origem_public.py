@@ -22,10 +22,20 @@ from app.conversas import constantes as K
 @api_bp.route("/origem/codigo", methods=["POST"])
 @limiter.limit("20 per hour")
 def api_origem_criar_codigo() -> Any:
-    """Cria o código curto de um clique de campanha. 201 ``{codigo, validade_dias}``; 400 sem marcador."""
+    """Cria o código curto de um clique de campanha. 400 sem marcador.
+
+    201 ``{codigo, linha, validade_dias}``: a ``linha`` é o texto que vai na mensagem pronta — o servidor é a
+    fonte só dele (o formulário público usa a mesma, por ``codigo_ops.anexar_a_mensagem``).
+    """
     corpo = request.get_json(silent=True)
     try:
         registro = codigo_ops.criar_codigo(corpo if isinstance(corpo, dict) else {})
     except codigo_ops.SemMarcador as exc:
         return json_error(str(exc), 400)
-    return jsonify({"codigo": registro.codigo, "validade_dias": K.VALIDADE_DO_CODIGO.days}), 201
+    return jsonify(
+        {
+            "codigo": registro.codigo,
+            "linha": codigo_ops.linha_do_codigo(registro.codigo),
+            "validade_dias": K.VALIDADE_DO_CODIGO.days,
+        }
+    ), 201

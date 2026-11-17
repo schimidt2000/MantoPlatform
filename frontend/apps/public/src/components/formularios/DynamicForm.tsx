@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button, Card, CardHeader, CardTitle, CardContent, Skeleton } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { MENSAGEM_DOC_INVALIDO, docValido } from "../../lib/documento";
+import { codigoDoSite } from "../../lib/origem";
 import {
   CEP_TARGET_KEYS,
   CHAVE_DOC_DA_NOTA,
@@ -41,6 +42,9 @@ function buildFormData(fields: FieldSchema[], values: Record<string, string>): F
       formData.append(field.key, values[field.key] ?? "");
     }
   }
+  // Feature 348: o código do clique de campanha; o servidor põe a linha no fim da mensagem do WhatsApp.
+  const codigo = codigoDoSite();
+  if (codigo) formData.append("origem_codigo", codigo);
   return formData;
 }
 

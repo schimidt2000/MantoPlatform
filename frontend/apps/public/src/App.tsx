@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { capturarOrigem } from "./lib/origem";
 import { CatalogGridPage } from "./pages/CatalogGridPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { CategoryDetailPage } from "./pages/CategoryDetailPage";
@@ -43,6 +45,11 @@ function isRootSurface(pathname: string): boolean {
 
 export function App() {
   const rootSurface = isRootSurface(window.location.pathname);
+  // Feature 348: o clique de campanha (`gclid`, `utm_*`) da visita, para o código do site ir na mensagem
+  // pronta do WhatsApp. Não espera nada e nunca quebra a página.
+  useEffect(() => {
+    capturarOrigem();
+  }, []);
 
   return (
     <BrowserRouter basename={rootSurface ? undefined : CATALOGO_BASENAME}>

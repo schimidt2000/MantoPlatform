@@ -4,7 +4,12 @@ import { Pencil } from "lucide-react";
 import { Badge, Button, ConfirmDialog } from "@manto/ui";
 import { ApiRequestError } from "@manto/api-client";
 import { MoneyInput } from "@manto/money";
-import type { EventoDetalhe, RelatorioOrcamento } from "../../lib/agenda";
+import type {
+  EventoDetalhe,
+  FrenteDaVenda,
+  OrigemDaVenda,
+  RelatorioOrcamento,
+} from "../../lib/agenda";
 import { useEventCreateOptions, useOrcamentoPrefill } from "../../lib/eventCreate";
 import {
   useSetEventClients,
@@ -169,6 +174,58 @@ function KpiGrid({ data }: { data: EventoDetalhe }) {
   );
 }
 
+/** Feature 348: a frente escolhida, ou a sugestão certa; a sugestão por exclusão não vem marcada. */
+function frenteInicial(frente: FrenteDaVenda): string | null {
+  if (frente.definida) return frente.frente;
+  return frente.sugestao_certa ? frente.sugestao : null;
+}
+
+function rotuloDaFrente(frente: FrenteDaVenda, slug: string): string {
+  return frente.opcoes.find((opcao) => opcao.slug === slug)?.rotulo ?? slug;
+}
+
+/** Feature 348: o contato que trouxe a venda, numa linha ("Anúncio da Meta: “…” · campanha"). */
+function descricaoDoContato(contato: NonNullable<OrigemDaVenda["contato"]>): string {
+  const titulo = contato.titulo ? `“${contato.titulo}”` : null;
+  const partes = (rotulo: string, ...resto: (string | null)[]) =>
+    [rotulo, ...resto.filter(Boolean)].join(" · ");
+  if (contato.tipo === "anuncio") {
+    return partes(`Anúncio da Meta${titulo ? `: ${titulo}` : ""}`, contato.campanha, contato.conjunto);
+  }
+  if (contato.tipo === "publicacao") return partes(`Publicação${titulo ? `: ${titulo}` : ""}`);
+  if (contato.tipo === "site") {
+    return partes(
+      `Site: ${contato.campanha ?? contato.titulo ?? "clique de campanha"}`,
+      contato.codigo ? `código #${contato.codigo}` : null,
+    );
+  }
+  return partes(titulo ?? "Contato registrado");
+}
+
+function OrigemDaVendaLinha({ origem }: { origem: OrigemDaVenda }) {
+  return (
+    <span className="flex flex-col gap-0.5">
+      <span>
+        {origem.contato ? descricaoDoContato(origem.contato) : "Conversa sem anúncio nos 90 dias anteriores"}
+      </span>
+      <span className="text-xs text-muted">
+        Conversa com {origem.conversa_nome}
+        {origem.pode_abrir && (
+          <>
+            {" · "}
+            <Link
+              to={`/conversas?c=${origem.conversa_id}`}
+              className="whitespace-nowrap font-semibold text-accent hover:underline"
+            >
+              Ver conversa
+            </Link>
+          </>
+        )}
+      </span>
+    </span>
+  );
+}
+
 /**
  * Formulário dos valores da venda, aberto no lugar da leitura (feature 215).
  *
@@ -213,6 +270,9 @@ function VendaForm({
     ...(venda.mostra_comissao_do_vendedor
       ? { educamanto_seller_commission: venda.educamanto_seller_commission ?? null }
       : {}),
+    // Feature 348: a frente só vai no corpo com o servidor novo (que manda o bloco). Vem selecionada a
+    // escolhida ou a sugestão certa; a sugestão por exclusão (festas) fica vazia, para alguém escolher.
+    ...(venda.frente ? { frente: frenteInicial(venda.frente) } : {}),
   }));
 
   // Feature 323: os dados da nota ficam fora de `form` — só vão no corpo com o chip ligado, e o
@@ -247,11 +307,14 @@ function VendaForm({
   const erroFinal = camposDoErro?.sale_value;
   const erroDoValor = erroBruto ?? erroFinal;
   const erroDoVendedor = camposDoErro?.educamanto_seller_commission;
+  const erroDaFrente = camposDoErro?.frente;
   const refBruto = useRef<HTMLInputElement>(null);
   const refComissaoVendedor = useRef<HTMLInputElement>(null);
+  const refFrente = useRef<HTMLSelectElement>(null);
   useEffect(() => {
     if (camposDoErro?.sale_value_gross) refBruto.current?.focus();
     else if (camposDoErro?.sale_value) refValor.current?.focus();
+    else if (camposDoErro?.frente) refFrente.current?.focus();
     else if (camposDoErro?.educamanto_seller_commission) refComissaoVendedor.current?.focus();
     else if (camposDoErro?.nota_tomador_doc) refDoc.current?.focus();
     else if (camposDoErro?.nota_municipio) refMunicipio.current?.focus();
@@ -303,6 +366,42 @@ function VendaForm({
         <p role="alert" className="text-sm text-red">
           {erroDoValor}
         </p>
+      )}
+
+      {/* Feature 348: a frente é da venda — o painel de marketing soma por ela. O título só sugere. */}
+      {venda.frente && (
+        <div>
+          <label className={LABEL_CLASS} htmlFor="venda-frente">
+            Frente
+          </label>
+          <select
+            id="venda-frente"
+            ref={refFrente}
+            className={`${INPUT_CLASS} ${erroDaFrente ? "border-red" : ""}`}
+            value={form.frente ?? ""}
+            onChange={(e) => set("frente", e.target.value || null)}
+          >
+            <option value="">— Selecionar —</option>
+            {venda.frente.opcoes.map((opcao) => (
+              <option key={opcao.slug} value={opcao.slug}>
+                {opcao.rotulo}
+              </option>
+            ))}
+          </select>
+          {erroDaFrente ? (
+            <p role="alert" className="mt-1 text-xs text-red">
+              {erroDaFrente}
+            </p>
+          ) : (
+            !form.frente &&
+            !venda.frente.sugestao_certa && (
+              <p className="mt-1 text-xs text-muted">
+                Sugestão pelo título: {rotuloDaFrente(venda.frente, venda.frente.sugestao)}. Selecione a
+                frente da venda.
+              </p>
+            )
+          )}
+        </div>
       )}
 
       {/* Feature 338: o valor que o vendedor inseriu na calculadora do EducaManto vira a comissão
@@ -1201,6 +1300,17 @@ function VendaPanel({ data }: { data: EventoDetalhe }) {
         )}
         {venda.sale_date && <DataRow label="Data da venda">{formatDay(venda.sale_date)}</DataRow>}
         {venda.seller && <DataRow label="Vendedor responsável">{venda.seller}</DataRow>}
+        {venda.frente && (
+          <DataRow label="Frente">
+            {venda.frente.rotulo}
+            {!venda.frente.definida && <span className="text-muted"> · sugerida pelo título</span>}
+          </DataRow>
+        )}
+        {venda.origem && (
+          <DataRow label="Origem da venda">
+            <OrigemDaVendaLinha origem={venda.origem} />
+          </DataRow>
+        )}
         {venda.commission_rate != null && (
           <DataRow label="Taxa de comissão">{venda.commission_rate}%</DataRow>
         )}
