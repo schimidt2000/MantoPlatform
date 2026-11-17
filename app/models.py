@@ -351,6 +351,18 @@ class CalendarEvent(db.Model):
     # Campo de venda: só no principal (`group_ops.SATELLITE_FIELDS_CLEARED`).
     educamanto_seller_commission = db.Column(db.Numeric(12, 2), nullable=True)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
+    # Feature 348 — de onde a venda veio. A conversa (do orçamento enviado por ela, ou da criação pela
+    # conversa) e o contato de origem CONGELADO no momento da ligação (`conversas/origem_ops`): a
+    # conversa é uma por telefone, e sem congelar a segunda festa da cliente herdaria o anúncio da
+    # primeira. Nunca se liga pela ficha. A frente é escolhida na aba Comercial; nula = ninguém
+    # escolheu e vale a sugestão pelo título (`calendar/frente_ops`, a única leitura).
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    origem_contato_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_anuncios.id", ondelete="SET NULL"), nullable=True
+    )
+    frente = db.Column(db.String(16), db.ForeignKey("marketing_frentes.slug"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
     invoice_due_date     = db.Column(db.Date, nullable=True)          # data prevista de emissão da NF (feature 065)
     # Dados da nota (feature 323): são da VENDA, não de cada nota — o cliente pede uma vez, por
@@ -1712,6 +1724,14 @@ class OrcamentoHistory(db.Model):
     client_id = db.Column(
         db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Feature 348: a conversa do primeiro envio e o contato de origem daquele momento, congelados
+    # (`conversas/origem_ops.ligar_orcamento`). O evento criado a partir do orçamento herda os dois.
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    origem_contato_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_anuncios.id", ondelete="SET NULL"), nullable=True
+    )
 
     user = db.relationship("User", lazy=True)
     cliente = db.relationship("Client", foreign_keys=[client_id], lazy=True)
@@ -2111,6 +2131,9 @@ class Client(db.Model):
     utm_source = db.Column(db.String(200), nullable=True)
     utm_medium = db.Column(db.String(200), nullable=True)
     utm_campaign = db.Column(db.String(200), nullable=True)
+    # Feature 348: o id da campanha de origem (do anúncio da Meta consultado, ou do `gad_campaignid`/
+    # `utm_id` do clique no site). O Desempenho casa o lead por ele: o nome muda, o id não.
+    utm_campaign_id = db.Column(db.String(80), nullable=True)
     # Feature 334: o anúncio da Meta que trouxe a cliente (o primeiro, nunca sobrescrito) e o mais
     # recente (a repescagem). UTC. A campanha de cada um está em `anuncios_meta`.
     anuncio_origem_id = db.Column(db.String(64), nullable=True)
@@ -4542,6 +4565,13 @@ class ConversaAnuncio(db.Model):
     link = db.Column(db.Text, nullable=True)
     momento = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False)
+    # Feature 348: o identificador do clique no anúncio de WhatsApp (`referral.ctwa_clid`) — é o que a
+    # Conversions API pede para devolver a venda à Meta. Só existe no aviso: o que não for guardado se
+    # perde. E, no tipo `site`, o código da mensagem pronta que trouxe o clique.
+    ctwa_clid = db.Column(db.String(512), nullable=True)
+    codigo_id = db.Column(
+        db.Integer, db.ForeignKey("origem_codigos.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class AnuncioMeta(db.Model):
@@ -4560,6 +4590,47 @@ class AnuncioMeta(db.Model):
     consultado_em = db.Column(db.DateTime, nullable=True)
     erro = db.Column(db.String(255), nullable=True)
     definitivo = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Feature 348: o conjunto de anúncios, na mesma consulta.
+    conjunto_id = db.Column(db.String(64), nullable=True)
+    conjunto_nome = db.Column(db.String(255), nullable=True)
+
+
+class OrigemCodigo(db.Model):
+    """Um clique de campanha que chegou ao site (feature 348).
+
+    O site público guarda os marcadores da URL (``gclid``/``gbraid``/``wbraid``, ``fbclid``,
+    ``utm_*``) e pede este código curto, que vai na mensagem pronta dos botões de WhatsApp ("Código do
+    site: #A7K2Q"). Quando a mensagem chega, o código liga o clique à conversa — é o único jeito de o
+    ``gclid`` encontrar o telefone, porque o clique sai do site para o ``wa.me``. Vale 90 dias e liga
+    uma conversa só (``UPDATE … WHERE conversa_id IS NULL``). UTC naive.
+    """
+
+    __tablename__ = "origem_codigos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(8), nullable=False, unique=True)
+    gclid = db.Column(db.String(512), nullable=True)
+    gbraid = db.Column(db.String(512), nullable=True)
+    wbraid = db.Column(db.String(512), nullable=True)
+    fbclid = db.Column(db.String(512), nullable=True)
+    utm_source = db.Column(db.String(200), nullable=True)
+    utm_medium = db.Column(db.String(200), nullable=True)
+    utm_campaign = db.Column(db.String(200), nullable=True)
+    utm_content = db.Column(db.String(200), nullable=True)
+    utm_term = db.Column(db.String(200), nullable=True)
+    # `gad_campaignid` (o Google acrescenta à URL final) ou, na falta, `utm_id`.
+    campanha_id = db.Column(db.String(80), nullable=True)
+    # Só o caminho (sem a query, que repete os marcadores) e só o host de quem mandou a visita.
+    pagina = db.Column(db.String(500), nullable=True)
+    procedencia = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False)
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    usado_em = db.Column(db.DateTime, nullable=True)
+    form_response_id = db.Column(
+        db.Integer, db.ForeignKey("form_responses.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class OrcamentoEnvio(db.Model):

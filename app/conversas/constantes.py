@@ -459,6 +459,35 @@ UTM_MEDIUM_DO_ANUNCIO = "anuncio"
 ANUNCIOS_POR_VEZ = 10
 RECONSULTA_DO_ANUNCIO = timedelta(hours=24)
 
+# ── Origem completa (feature 348) ───────────────────────────────────────────────────────────────
+# O clique que chegou pelo site (Google, link de campanha) e virou conversa pelo código da mensagem
+# pronta. É um contato de origem como o anúncio, com a chave `site:{codigo}`.
+CONTATO_SITE = "site"
+# Os tipos que dão origem a uma venda (o `outro` do Instagram não diz de onde a pessoa veio).
+CONTATOS_DE_ORIGEM = (CONTATO_ANUNCIO, CONTATO_PUBLICACAO, CONTATO_SITE)
+ORIGEM_DO_SITE = "Site"
+# Sem 0/O, 1/I/L: a cliente não digita o código, mas a equipe às vezes lê em voz alta. 31⁵ ≈ 28,6
+# milhões de códigos; a colisão é rara e o UNIQUE do banco decide (research R4).
+ALFABETO_DO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+TAMANHO_DO_CODIGO = 5
+TENTATIVAS_DO_CODIGO = 5
+# 90 dias: a janela máxima do Google para conversão offline; a mesma para o contato de origem da
+# venda (a festa fecha cedo, o corporativo demora).
+VALIDADE_DO_CODIGO = timedelta(days=90)
+JANELA_DA_ORIGEM = timedelta(days=90)
+# `#` + 5 do alfabeto, inteiro (sem letra colada dos lados). A validação de verdade é no banco.
+REGEX_DO_CODIGO = r"#([A-Za-z0-9]{5})(?![A-Za-z0-9])"
+LINHA_DO_CODIGO = "Código do site: #{codigo}"
+# O que a URL traz e o servidor guarda. `gad_campaignid` (o Google acrescenta) e `utm_id` viram o
+# id da campanha; os outros vão como vieram, cortados no tamanho da coluna.
+MARCADORES_DO_CLIQUE = ("gclid", "gbraid", "wbraid", "fbclid")
+MARCADORES_UTM = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term")
+MARCADORES_DA_CAMPANHA = ("gad_campaignid", "utm_id")
+# Sem `utm_source`, o clique com id do Google é "google"/"cpc": é o que o Desempenho reconhece.
+UTM_SOURCE_DO_GOOGLE = "google"
+UTM_MEDIUM_DO_CLIQUE = "cpc"
+TEXTO_SEM_MARCADOR = "Nenhum marcador de campanha."
+
 # ── Funil das conversas (feature 335) ───────────────────────────────────────────────────────────
 # As etapas em ordem: cada conversa fica na mais avançada que alcançou, e cada etapa conta quem
 # chegou nela ou além (o funil nunca cresce). As chaves vão na API; os rótulos, na tela.
