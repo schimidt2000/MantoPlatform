@@ -1,6 +1,6 @@
 # 345b — Google Ads na rotina de segunda e diário das mudanças aprovadas no chat
 
-**Branch**: `345b-google-na-rotina` · **Created**: 2026-11-17 · **Status**: Pronto na branch, sem push
+**Branch**: `345b-google-na-rotina` · **Created**: 2026-11-17 · **Status**: EM PRODUÇÃO desde 17/11/2026 ~19h05 (lote)
 (`verify_345b.py` 32/32; com o código da `main`, 22/30) · **Migration**: nenhuma
 
 ## O pedido

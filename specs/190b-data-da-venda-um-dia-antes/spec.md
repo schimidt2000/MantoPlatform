@@ -1,7 +1,7 @@
 # 190b — "Data da venda" um dia antes no detalhe do evento
 
 **Branch**: `lote-1711` (entra no lote de 17/11 com a 345b e as 348–351) · **Created**: 2026-11-17 ·
-**Status**: Pronto no lote · **Migration**: nenhuma
+**Status**: EM PRODUÇÃO desde 17/11/2026 ~19h05 (lote) · **Migration**: nenhuma
 
 ## O pedido
 
