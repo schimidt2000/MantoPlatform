@@ -248,8 +248,8 @@ quantos clientes novos o mês teve no total, para comparação.
   (`anuncio_origem_*`, `anuncio_recente_*`); (c) a origem paga gravada na ficha (`utm_source` da Meta ou do Google), com
   o momento = entrada na base.
 - **FR-003**: Uma venda conta como atribuída a um contato quando: o evento foi criado **depois** do contato; a data da
-  venda está entre o dia do contato e 45 dias depois; e a venda é de 01/06/2026 em diante. Entre vários contatos
-  válidos, vale o **mais recente**.
+  venda está entre o dia do contato e 45 dias depois (os dois dias inclusive); e a venda é de 01/06/2026 em diante.
+  Entre vários contatos válidos, vale o **mais recente**; no empate, conversa > ficha > origem da ficha.
 - **FR-004**: A frente da venda atribuída é a **frente da campanha** do contato (correção manual > prefixo do nome); o
   contato sem campanha conhecida vai para "sem frente". A frente **do evento** continua lida por uma só função
   (`frente_venda_sql`), que a 348 troca pela coluna.
@@ -258,8 +258,9 @@ quantos clientes novos o mês teve no total, para comparação.
 **Painel por frente**
 
 - **FR-006**: Cada frente DEVE mostrar, além do que mostra hoje: vendas atribuídas, faturamento atribuído, custo por
-  venda atribuída e custo por venda atribuída **com desconto de incrementalidade** (custo ÷ (vendas × 50%)), e o
-  estado contra o teto calculado com o custo com desconto.
+  venda atribuída (gasto da frente no período ÷ vendas atribuídas no período) e custo por venda atribuída **com
+  desconto de incrementalidade** (gasto ÷ (vendas atribuídas × 50%)), e o estado contra o teto calculado com o custo
+  com desconto. A venda é do período (data da venda); o contato que a trouxe pode ser anterior ao período.
 - **FR-007**: A tela DEVE escrever a premissa: "Desconto de 50%: metade das vendas atribuídas teria acontecido sem o
   anúncio. É premissa até existir teste." e a regra da atribuição (último contato pago, até 45 dias, só fato depois do
   contato).
@@ -271,7 +272,9 @@ quantos clientes novos o mês teve no total, para comparação.
 **Funil**
 
 - **FR-011**: O funil das conversas DEVE aceitar dividir também por **frente**, **anúncio**, **peça** e **conceito**,
-  pelo primeiro anúncio da conversa.
+  pelo primeiro anúncio da conversa. Grupos à parte, sempre por último: "Sem anúncio" (conversa sem anúncio), "Sem
+  frente" (campanha sem frente ou ainda sem resposta da Meta), "Sem peça" (anúncio sem card) e "Sem conceito" (card sem
+  conceito).
 - **FR-012**: No Desempenho (gate de Marketing), cada grupo do funil DEVE trazer o gasto do grupo no período e o custo
   por conversa, por orçamento enviado e por evento fechado. O gasto da frente no funil é só o da plataforma de onde as
   conversas vêm com origem (Meta), para não dividir gasto do Google por conversa da Meta.
@@ -305,8 +308,8 @@ quantos clientes novos o mês teve no total, para comparação.
 - **FR-022**: A proposta DEVE guardar o valor antes e o valor depois como número (verba por dia), aceitos da rotina ou
   lidos do texto quando o texto traz um valor em reais; e a frente (a enviada, ou a da campanha do alvo, ou a do card).
 - **FR-023**: A tela de Decisões DEVE mostrar, em cada proposta: frente, teto da frente, verba mensal da frente e o
-  **impacto no mês** (verba: (depois − antes) × 30; ativar: custo por dia × 30; pausar: −(antes ou custo por dia) × 30);
-  e no topo, o impacto somado das propostas aprovadas e executadas no mês.
+  **impacto no mês** (verba: (depois − antes) × 30; ativar: (depois ou custo por dia) × 30; pausar: −(antes ou custo por
+  dia) × 30; público: sem impacto); e no topo, o impacto somado das propostas aprovadas e executadas no mês.
 - **FR-024**: Ao nascer uma proposta, cada Superadmin ativo DEVE receber uma notificação no sino, com link para
   Marketing → Decisões; a mesma proposta nunca gera dois avisos para a mesma pessoa.
 
@@ -328,6 +331,9 @@ quantos clientes novos o mês teve no total, para comparação.
   card.
 - **FR-031**: O custo por cliente novo do mês DEVE dividir o gasto pelos clientes novos do mês **vindos de anúncio**
   (ficha com anúncio de origem ou origem paga) e mostrar o total de clientes novos ao lado.
+- **FR-032**: Todo bloco novo (vendas atribuídas, funil com custo, calendário, teste do diário) DEVE ter estado de
+  carregando, de erro ("Não foi possível carregar … Tente novamente.") e vazio no padrão da casa ("Nenhuma venda
+  atribuída no período.", "Nenhuma conversa com anúncio no período.").
 
 ### Entidades *(se houver dados)*
 
@@ -353,8 +359,8 @@ quantos clientes novos o mês teve no total, para comparação.
   SUPERADMIN real.
 - `GET /api/marketing/propostas` (existe; ganha frente, teto, impacto) — MARKETING, SUPERADMIN.
 - `GET|POST /api/marketing/diario` (existe; ganha o teste) — MARKETING, SUPERADMIN.
-- `GET /api/marketing/posts` (existe; ganha `tipo`, `frente`) e `POST|PATCH /api/marketing/posts` (ganha `conceito`) —
-  MARKETING, SUPERADMIN.
+- `GET /api/marketing/posts` (existe; o card ganha `conceito` e a situação de cada anúncio — o filtro do Kanban roda na
+  tela) e `POST|PATCH /api/marketing/posts` (ganha `conceito`) — MARKETING, SUPERADMIN.
 - `GET /api/marketing/temas-licenca` (existe; ganha `pagina`) — MARKETING, SUPERADMIN.
 - `GET /api/conversas/funil` (existe; ganha as divisões, sem dinheiro) — COMERCIAL, SUPERADMIN.
 - Agente (`/api/marketing-agent/<token>/…`): **sem mudança de rota**; o contexto e os pedidos ganham campos pelo núcleo.
