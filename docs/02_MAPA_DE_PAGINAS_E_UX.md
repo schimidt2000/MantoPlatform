@@ -2538,6 +2538,27 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   embaixo das ações. Na edição, o evento ligado aparece no seletor de vínculo mesmo quando é de
   outra data que a do gasto (antes, "Sem evento vinculado"). A multa ao elenco nasce aprovada, na categoria **"Multa de cancelamento"**, a pagar ao
   artista (fornecedor, com o nome e o PIX do cadastro), e se corrige aqui.
+- **Feature 352 — o fornecedor vem do cadastro.** Em "Pagamento a fornecedor", o nome é um `Combobox` em texto livre
+  (`components/Gastos/FornecedorCampo.tsx`) sobre os fornecedores ativos (`GET /api/gastos/fornecedores`, uma vez;
+  filtro local sem acento, também pelo PIX). Cada sugestão traz PIX · categoria; escolher preenche nome, chave PIX e
+  categoria, todos editáveis. Digitar desfaz a escolha. Abaixo do campo: "Fornecedor novo: ficará salvo para os
+  próximos gastos." ou "Já cadastrado: o gasto será salvo como “…”.". Para Financeiro/Superadmin, o cabeçalho ganha
+  o botão **Fornecedores**. O `Modal` deixou de fechar no Escape que o `Combobox` usa para fechar a lista.
+
+#### `/gastos/fornecedores` — Fornecedores *(feature 352)*
+- **Acesso**: `FINANCEIRO`, `SUPERADMIN` (item "Fornecedores" no grupo do Financeiro, depois de Gastos Recorrentes;
+  botão no cabeçalho de Gastos Extras). Outro papel que abra o endereço vê "O cadastro de fornecedores é gerenciado
+  pelo Financeiro." (decidido pelo `can_manage` do payload).
+- **UX**: largura `max-w-3xl`, nasce em 390 px. Busca por nome, PIX ou categoria e "Mostrar arquivados (N)" no
+  endereço (`?busca=&arquivados=1`, `replace`), com `useRestaurarRolagem`. Um cartão por fornecedor: nome, selo da
+  categoria, selo "Arquivado", PIX com `CopyButton`, "N gastos · R$ X aprovados · último em dd/mm/aaaa". Menu de
+  reticências: **Alterar** (nome, chave PIX, categoria padrão; avisa que o nome novo vale nos gastos já lançados e
+  que o PIX novo vale só para os próximos), **Juntar com outro fornecedor** (`Combobox` do fornecedor que fica, a
+  frase do efeito com o número de gastos e "não é possível desfazer", botão vermelho "Juntar fornecedores") e
+  **Arquivar/Reativar** (a linha mostra "Salvando…" e a confirmação fica escrita acima da lista). "+ Novo
+  fornecedor" no cabeçalho. Nome repetido volta no campo ("Já existe um fornecedor com este nome.").
+- **API**: `GET /api/gastos/fornecedores` · `POST /api/gastos/fornecedores` · `PATCH /api/gastos/fornecedores/<id>` ·
+  `POST /api/gastos/fornecedores/<id>/juntar` (`docs/01` §3.7).
 
 #### `/gastos/recorrentes` — Gastos Recorrentes *(refeita na feature 189)*
 - **Acesso**: `FINANCEIRO`, `SUPERADMIN`.

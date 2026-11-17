@@ -829,6 +829,14 @@ pendente (o re-export de `ensure_recurring_entries`).
 - Vencimento: dia do mês **clampado no último dia** (`_clamp_day`, `:417` — dia 31 num mês de 30 vira
   30) ou, para frequência semanal, a primeira ocorrência do dia da semana dentro do mês ∩ vigência
   (`_weekly_first_date`, `:423`).
+- **Fornecedores (feature 352, `fornecedor_ops.py`).** Todo gasto a fornecedor salvo por `create_expense`/
+  `edit_expense` liga a um `Fornecedor`: o id escolhido, senão o de mesmo `nome_normalizado` (sem acento,
+  minúsculas, pontuação vira espaço; `UNIQUE` no banco), senão um novo. Invariantes:
+  1. o gasto guarda o PIX do lançamento (`supplier_pix`, o que a Planilha paga); o cadastro só preenche e
+     **se completa** com o gasto (PIX/categoria vazios), nunca é substituído por ele;
+  2. `supplier_name` do gasto ligado = `fornecedores.nome` — renomear e juntar reescrevem o nome, nunca o PIX;
+  3. devolução (`cliente`) e **multa de cancelamento** (306, paga o artista) nunca ligam;
+  4. só Financeiro/Superadmin alteram, arquivam e juntam (juntar trava as duas linhas por id e apaga a origem).
 
 ⚠️ Usa `date.today()` em ~10 pontos, não `now_sp()`.
 
