@@ -15,6 +15,7 @@ from flask import jsonify, request
 from app import db, limiter
 from app.api import api_bp
 from app.api_utils import json_error
+from app.clientes import consentimento_ops
 from app.feedback.feedback_ops import ATTENTION_TAGS, POSITIVE_TAGS, tags_for_score
 from app.models import CalendarEvent, ClientFeedback, SiteSetting
 from app.notificacoes import notificacoes_ops
@@ -56,16 +57,50 @@ def api_feedback_event(token: str) -> Any:
     if event.is_cancelled:
         return json_error(AVALIACAO_DO_CANCELADO, 410)
 
-    return jsonify(
-        {
-            "event_title": event.title,
-            "event_date": event.start_at.strftime("%d/%m/%Y") if event.start_at else None,
-            "positive_tags": POSITIVE_TAGS,
-            "attention_tags": ATTENTION_TAGS,
-            # CTA pós-envio: a tela de agradecimento mostra este link quando score == 5.
-            "google_review_url": google_review_url(),
-        }
-    )
+    corpo = {
+        "event_title": event.title,
+        "event_date": event.start_at.strftime("%d/%m/%Y") if event.start_at else None,
+        "positive_tags": POSITIVE_TAGS,
+        "attention_tags": ATTENTION_TAGS,
+        # CTA pós-envio: a tela de agradecimento mostra este link quando score == 5.
+        "google_review_url": google_review_url(),
+    }
+    # Feature 350: as duas caixas de autorização, só quando há ficha contratante onde gravar.
+    if event.client is not None:
+        corpo["consentimento"] = consentimento_ops.bloco_publico(event.client)
+    return jsonify(corpo)
+
+
+@api_bp.route("/avaliar/<token>/consentimento", methods=["POST"])
+@limiter.limit("10 per hour")
+def api_feedback_consentimento(token: str) -> Any:
+    """A cliente aceita ou retira novidades e guarda o aniversário da criança (feature 350).
+
+    Público pelo token do evento, como a avaliação. Grava na ficha contratante com a origem
+    "Pós-evento (página de avaliação)" e autor nulo; a tela manda a versão do texto que exibiu.
+    """
+    event = _event_by_token(token)
+    if not event:
+        return json_error("Link não encontrado", 404)
+    if event.is_cancelled:
+        return json_error(AVALIACAO_DO_CANCELADO, 410)
+    if event.client is None:
+        return json_error(
+            "Não encontramos o cadastro deste evento. Fale com a gente pelo WhatsApp.",
+            409,
+            codigo="sem_ficha",
+        )
+    try:
+        consentimento_ops.aplicar_escolhas_publicas(
+            event.client, request.get_json(silent=True) or {}, referencia=f"evento:{event.id}"
+        )
+    except consentimento_ops.ConsentimentoErro as exc:
+        db.session.rollback()
+        campos = {exc.campo: exc.mensagem} if exc.campo else None
+        extras = {"codigo": exc.codigo} if exc.codigo else {}
+        return json_error(exc.mensagem, exc.status, fields=campos, **extras)
+    db.session.commit()
+    return jsonify({"recebe_novidades": consentimento_ops.pode_prospectar(event.client)})
 
 
 @api_bp.route("/avaliar/<token>", methods=["POST"])

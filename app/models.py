@@ -2122,6 +2122,20 @@ class Client(db.Model):
     # ("Loja: <campanha>"). Nulo = não há aceite registrado — não prospectar por WhatsApp/e-mail.
     marketing_opt_in_at = db.Column(db.DateTime, nullable=True)
     marketing_opt_in_source = db.Column(db.String(160), nullable=True)
+    # Feature 350: a versão do texto aceito e a última retirada. Os quatro carimbos do aceite são
+    # horário de parede de SP (`now_sp`), como o da loja (344) — aceite e retirada se comparam.
+    # Com aceite ⇔ `marketing_opt_in_at` preenchido: a retirada zera os três `opt_in_*` e grava os
+    # `opt_out_*`. A história completa está em `cliente_consentimentos` (`ClienteConsentimento`).
+    marketing_opt_in_version = db.Column(db.String(20), nullable=True)
+    marketing_opt_out_at = db.Column(db.DateTime, nullable=True)
+    marketing_opt_out_source = db.Column(db.String(160), nullable=True)
+    # Feature 350: quem indicou (outra ficha, nunca ela mesma) e o parceiro que trouxe a cliente.
+    indicado_por_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    parceiro_id = db.Column(
+        db.Integer, db.ForeignKey("parceiros.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -2130,6 +2144,10 @@ class Client(db.Model):
         "CalendarEvent", back_populates="client", lazy=True,
         foreign_keys="CalendarEvent.client_id",
     )
+    # Só o lado "muitos para um": sem backref, o ORM nunca tenta anular a FK das indicadas ao excluir
+    # a ficha (quem faz isso é o ON DELETE SET NULL do banco).
+    indicado_por = db.relationship("Client", remote_side=[id], foreign_keys=[indicado_por_id], lazy=True)
+    parceiro = db.relationship("Parceiro", foreign_keys=[parceiro_id], lazy=True)
 
     @property
     def event_count(self) -> int:
@@ -2145,6 +2163,116 @@ class Client(db.Model):
         if len(digits) <= 11:
             return "55" + digits
         return digits
+
+
+class Parceiro(db.Model):
+    """Buffet, assessoria ou agência que traz clientes, com a comissão declarada (feature 350).
+
+    A comissão é só **declarada** (a pesquisa de 17/11 recomenda nunca oculta): nada aqui paga
+    ninguém — o repasse de um evento continua sendo o BV do acréscimo. Não se exclui: desativa-se, e
+    as fichas ligadas mantêm o nome. Carimbos em horário de SP (`now_sp`).
+    """
+
+    __tablename__ = "parceiros"
+    __table_args__ = (db.Index("ix_parceiros_nome", "nome"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # chave de PARCEIRO_TIPOS
+    contato = db.Column(db.String(120), nullable=True)
+    telefone = db.Column(db.String(30), nullable=True)
+    email = db.Column(db.String(200), nullable=True)
+    comissao_percentual = db.Column(db.Numeric(5, 2), nullable=False, default=0, server_default="0")
+    observacao = db.Column(db.Text, nullable=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    criado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=now_sp, onupdate=now_sp)
+
+
+class ClienteConsentimento(db.Model):
+    """Histórico de aceites e retiradas de uma ficha (feature 350, LGPD art. 8º §2º).
+
+    Append-only: uma linha por aceite ou retirada, com o **texto completo** exibido, a versão, a
+    origem, a referência (``conversa:<id>``, ``mensagem:<id>``, ``evento:<id>``, ``pedido:<id>``) e
+    quem registrou (nulo = a própria cliente ou o sistema). Nunca recebe UPDATE. A retirada de
+    aniversário não leva o nome nem a data da criança — esses somem com a linha da criança.
+    """
+
+    __tablename__ = "cliente_consentimentos"
+    __table_args__ = (
+        db.Index("ix_cliente_consentimentos_client", "client_id", "registrado_em"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    tipo = db.Column(db.String(20), nullable=False)   # novidades | aniversario
+    acao = db.Column(db.String(10), nullable=False)   # aceite | retirada
+    texto = db.Column(db.Text, nullable=False)
+    versao = db.Column(db.String(20), nullable=False)
+    origem = db.Column(db.String(160), nullable=False)
+    referencia = db.Column(db.String(80), nullable=True)
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+
+    registrado_por = db.relationship("User", foreign_keys=[registrado_por_id], lazy=True)
+
+
+class ClienteCrianca(db.Model):
+    """Criança cuja responsável autorizou guardar o aniversário (feature 350, LGPD art. 14 §1º).
+
+    A linha só existe com o aceite (um por criança — irmãos são aceites separados). Remover apaga a
+    linha; o histórico guarda só a retirada. Primeiro nome e data, nada mais.
+    """
+
+    __tablename__ = "cliente_criancas"
+    __table_args__ = (db.Index("ix_cliente_criancas_client", "client_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    primeiro_nome = db.Column(db.String(60), nullable=False)
+    nascimento = db.Column(db.Date, nullable=False)
+    aceite_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+    aceite_versao = db.Column(db.String(20), nullable=False)
+    aceite_origem = db.Column(db.String(160), nullable=False)
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    cliente = db.relationship("Client", foreign_keys=[client_id], lazy=True)
+
+
+class PosEvento(db.Model):
+    """O pós-evento único de um evento: copiado ou enviado pela conversa (feature 350).
+
+    Um por evento (``UNIQUE(event_id)``). ``registrado_em`` é atualizado a cada cópia; depois de
+    enviado pela conversa, uma cópia não rebaixa o canal. Horário de SP (`now_sp`).
+    """
+
+    __tablename__ = "pos_eventos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
+    )
+    fotos_url = db.Column(db.String(500), nullable=True)
+    canal = db.Column(db.String(12), nullable=False)  # copiado | conversa
+    mensagem_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_mensagens.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
 
 
 class FormResponse(db.Model):
