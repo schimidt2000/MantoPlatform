@@ -806,6 +806,71 @@ FINDING_META_ATRASADA = "meta_atrasada"
 FINDING_SEM_ATRIBUICAO = "sem_atribuicao"
 FINDING_SEVERITIES = ["critico", "atencao", "info"]
 
+
+# ── Marketing integrado (feature 345) ───────────────────────────────────────
+# As frentes de negócio que o dono separou em 16/11/2026. A ordem é a do painel.
+MARKETING_FRENTES = {
+    "corporativo": "Corporativo",
+    "social": "Social (15 anos e casamento)",
+    "educamanto": "EducaManto",
+    "festas": "Festas",
+    "loja": "Loja virtual",
+}
+# Primeira palavra do nome da campanha → frente. Convenção vale igual na Meta e no Google; a
+# correção manual (`marketing_campanha_frentes`) vence o nome.
+MARKETING_FRENTE_PREFIXOS = {
+    "CORP": "corporativo",
+    "SOCIAL": "social",
+    "EDU": "educamanto",
+    "FESTA": "festas",
+    "LOJA": "loja",
+}
+# Formatos da peça pedida. O prefixo diz quem produz: foto/arte ou vídeo (responsáveis em
+# `SiteSetting.marketing_resp_foto_id` / `marketing_resp_video_id`).
+MARKETING_FORMATOS = {
+    "foto_1x1": "Foto 1:1",
+    "foto_4x5": "Foto 4:5 (feed)",
+    "foto_9x16": "Foto 9:16 (story)",
+    "video_9x16": "Vídeo 9:16 (reels/story)",
+    "video_1x1": "Vídeo 1:1",
+}
+MARKETING_POST_TIPOS = ["post", "anuncio"]
+MARKETING_POST_ORIGENS = ["pessoa", "rotina"]
+
+# Licença do tema do catálogo: a origem é um fato, o "liberado" é a decisão de anunciar. O dono
+# separou as duas em 16/11 ("Labubu pode... vamos vendo caso a caso").
+LICENCA_AUTORAL = "autoral"
+LICENCA_LICENCIADO = "licenciado"
+LICENCA_NAO_CLASSIFICADO = "nao_classificado"
+LICENCA_ORIGENS = [LICENCA_AUTORAL, LICENCA_LICENCIADO, LICENCA_NAO_CLASSIFICADO]
+LIBERADO_SIM = "sim"
+LIBERADO_NAO = "nao"
+LIBERADO_NAO_DECIDIDO = "nao_decidido"
+LIBERADO_VALORES = [LIBERADO_SIM, LIBERADO_NAO, LIBERADO_NAO_DECIDIDO]
+
+PROPOSTA_TIPOS = ["ativar", "pausar", "verba", "publico"]
+PROPOSTA_ALVOS = ["campanha", "conjunto", "anuncio"]
+PROPOSTA_PENDENTE = "pendente"
+PROPOSTA_APROVADA = "aprovada"
+PROPOSTA_RECUSADA = "recusada"
+PROPOSTA_EXPIRADA = "expirada"
+PROPOSTA_EXECUTADA = "executada"
+PROPOSTA_FALHOU = "falhou"
+PROPOSTA_SITUACOES = [
+    PROPOSTA_PENDENTE, PROPOSTA_APROVADA, PROPOSTA_RECUSADA,
+    PROPOSTA_EXPIRADA, PROPOSTA_EXECUTADA, PROPOSTA_FALHOU,
+]
+# Proposta parada há mais que isso perdeu o contexto (o número que a sustentava já mudou).
+PROPOSTA_VALIDADE_DIAS = 7
+
+DIARIO_VEREDITOS = ["funcionou", "nao_funcionou", "inconclusivo"]
+DIARIO_ORIGENS = ["proposta", "pessoa", "rotina"]
+DIARIO_REAVALIAR_DIAS = 14
+
+# Teto de custo por venda = esta fração da margem bruta mediana da frente (Clarification 3).
+TETO_FRACAO_MARGEM = Decimal("0.25")
+TETO_JANELA_DIAS = 365
+
 # Feature 302: local de saída padrão do evento. O literal já vivia em três lugares
 # (o diff de `save_logistics`, o e-mail de convite e o formulário interno, que pré-preenche o
 # campo com ele). Virou constante para o portal não acrescentar a quarta cópia — e para a

@@ -1006,6 +1006,13 @@ class SiteSetting(db.Model):
     # Feature 344: ID do Pixel da Meta da loja. Nulo = desligado — sem ele a loja não mostra aviso
     # de cookies nem carrega nada da Meta. O ID não é segredo (vai no HTML de quem aceita).
     meta_pixel_id = db.Column(db.String(30), nullable=True)
+    # Feature 345: quem recebe os pedidos de criativo da rotina — foto/arte e vídeo.
+    marketing_resp_foto_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    marketing_resp_video_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     # Marcador do último ciclo da varredura de reservas virtuais. Serve de "lock" de execução única
     # entre os workers do gunicorn — mesmo papel de `calendar_auto_sync_at` (FR-057a): dois
     # processos expirando a mesma reserva ao mesmo tempo é a corrida que o soft lock existe para
@@ -2454,8 +2461,25 @@ class CatalogItem(db.Model):
     figurino_sheet_id       = db.Column(
         db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
     )
+    # Feature 345: licença do tema para anúncio. A origem (autoral/licenciado) é um fato; o
+    # "liberado" é a decisão — licenciado pode ser liberado caso a caso pelo Superadmin. Só
+    # `liberado_anuncio == "sim"` vai para anúncio; "nao_decidido" vale como não (risco jurídico).
+    licenca_origem          = db.Column(
+        db.String(16), nullable=False, default="nao_classificado", server_default="nao_classificado"
+    )
+    liberado_anuncio        = db.Column(
+        db.String(12), nullable=False, default="nao_decidido", server_default="nao_decidido"
+    )
+    licenca_por_id          = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    licenca_em              = db.Column(db.DateTime, nullable=True)
+    # Sugestão da rotina semanal (nunca confirmada sozinha): uma pessoa confirma em lote.
+    licenca_sugestao        = db.Column(db.String(16), nullable=True)
+    licenca_sugestao_motivo = db.Column(db.Text, nullable=True)
 
     figurino_sheet = db.relationship("FigurinoSheet", lazy=True)
+    licenca_por    = db.relationship("User", foreign_keys=[licenca_por_id], lazy=True)
     categories = db.relationship("CatalogCategory", secondary=catalog_item_categories, lazy=True)
     images     = db.relationship(
         "CatalogItemImage", backref="item", lazy=True,
@@ -3094,6 +3118,16 @@ class MarketingPost(db.Model):
         db.Integer, db.ForeignKey("review_spaces.id", ondelete="SET NULL"),
         nullable=True, unique=True,
     )
+    # Feature 345: o card vira pedido de criativo. `tipo="anuncio"` só aceita tema liberado para
+    # anúncio; `origem="rotina"` marca o pedido aberto pela rotina semanal. Card antigo continua
+    # `post`/`pessoa` — nada muda para o que já existe.
+    tipo              = db.Column(db.String(10), nullable=False, default="post", server_default="post")
+    frente            = db.Column(db.String(16), nullable=True)
+    formato           = db.Column(db.String(16), nullable=True)
+    briefing_objetivo = db.Column(db.Text, nullable=True)
+    briefing_mostrar  = db.Column(db.Text, nullable=True)
+    briefing_letreiro = db.Column(db.Text, nullable=True)
+    origem            = db.Column(db.String(10), nullable=False, default="pessoa", server_default="pessoa")
 
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at       = db.Column(
@@ -3103,6 +3137,11 @@ class MarketingPost(db.Model):
     assignee     = db.relationship("User", lazy="joined", foreign_keys=[assignee_id])
     temas        = db.relationship("CatalogItem", secondary=marketing_post_temas, lazy="joined")
     review_space = db.relationship("ReviewSpace", lazy="joined")
+    # `selectin`: a lista do Kanban carrega os vínculos de todos os cards numa consulta só.
+    anuncios     = db.relationship(
+        "MarketingPostAnuncio", backref="post", lazy="selectin",
+        cascade="all, delete-orphan", order_by="MarketingPostAnuncio.id",
+    )
 
 
 class MarketingFrequencyGoal(db.Model):
@@ -3259,6 +3298,10 @@ class MarketingCampaignMetric(db.Model):
     results = db.Column(db.Integer, nullable=True)
     conversions = db.Column(db.Integer, nullable=True)
     result_type = db.Column(db.String(80), nullable=True)
+    # Feature 345: conversas iniciadas (Click-to-WhatsApp) e cadastros — o que o painel por frente
+    # mostra. "Clique" não entra no painel de propósito: foi a métrica que enganou em 2026.
+    conversations = db.Column(db.Integer, nullable=True)
+    leads = db.Column(db.Integer, nullable=True)
     run_id = db.Column(db.Integer, db.ForeignKey("marketing_agent_runs.id"), nullable=False)
 
 
@@ -3327,6 +3370,161 @@ class MarketingAdSpendLine(db.Model):
     amount = db.Column(db.Numeric(12, 2), nullable=False)
     clicks = db.Column(db.Integer, nullable=True)
     results = db.Column(db.Integer, nullable=True)
+
+
+# ── Marketing integrado (feature 345) ───────────────────────────────────────
+
+
+class MarketingFrente(db.Model):
+    """Uma frente de negócio e o teto de custo por venda dela (feature 345).
+
+    `teto_custo_venda` nulo = usa o padrão calculado (25% da margem bruta mediana da frente no
+    último ano, `comando_ops.teto_padrao`). As 5 linhas nascem na migration.
+    """
+
+    __tablename__ = "marketing_frentes"
+
+    slug = db.Column(db.String(16), primary_key=True)
+    teto_custo_venda = db.Column(db.Numeric(12, 2), nullable=True)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+
+class MarketingCampanhaFrente(db.Model):
+    """Correção manual da frente de uma campanha — vence o prefixo do nome (feature 345)."""
+
+    __tablename__ = "marketing_campanha_frentes"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "campaign_id", name="uq_marketing_campanha_frentes"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    campaign_id = db.Column(db.String(80), nullable=False)
+    frente = db.Column(db.String(16), nullable=False)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MarketingAdMetric(db.Model):
+    """Desempenho de um anúncio num dia (feature 345) — o que mede cada peça do criativo.
+
+    Upsert idempotente por (plataforma, anúncio, dia). O resumo por campanha continua em
+    `marketing_campaign_metrics` (é ele que alimenta o reembolso da 256 e o painel por frente).
+    """
+
+    __tablename__ = "marketing_ad_metrics"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "ad_id", "metric_date", name="uq_marketing_ad_metrics_day"),
+        db.Index("ix_marketing_ad_metrics_campaign", "platform", "campaign_id", "metric_date"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(20), nullable=False)
+    ad_id = db.Column(db.String(80), nullable=False)
+    ad_name = db.Column(db.String(300), nullable=True)
+    adset_id = db.Column(db.String(80), nullable=True)
+    campaign_id = db.Column(db.String(80), nullable=True)
+    campaign_name = db.Column(db.String(200), nullable=True)
+    metric_date = db.Column(db.Date, nullable=False)
+    spend = db.Column(db.Numeric(12, 2), nullable=False)
+    currency = db.Column(db.String(3), nullable=False, default="BRL", server_default="BRL")
+    impressions = db.Column(db.Integer, nullable=True)
+    reach = db.Column(db.Integer, nullable=True)
+    clicks = db.Column(db.Integer, nullable=True)
+    conversations = db.Column(db.Integer, nullable=True)
+    leads = db.Column(db.Integer, nullable=True)
+    results = db.Column(db.Integer, nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MarketingPostAnuncio(db.Model):
+    """Vínculo card de marketing ↔ anúncio montado a partir dele (feature 345).
+
+    `UNIQUE(platform, ad_id)`: um anúncio pertence a um card só — é o que permite somar o
+    resultado da peça sem contar duas vezes.
+    """
+
+    __tablename__ = "marketing_post_anuncios"
+    __table_args__ = (
+        db.UniqueConstraint("platform", "ad_id", name="uq_marketing_post_anuncios_ad"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    post_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_posts.id", ondelete="CASCADE"), nullable=False
+    )
+    platform = db.Column(db.String(20), nullable=False)
+    ad_id = db.Column(db.String(80), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+
+class MarketingProposta(db.Model):
+    """Mudança na Meta/Google que a rotina propõe e só o Superadmin aprova (feature 345).
+
+    Ciclo: `pendente` → `aprovada` | `recusada` | `expirada` (7 dias); `aprovada` → `executada` |
+    `falhou` (só o agente marca). A rotina executa apenas o que está `aprovada`.
+    """
+
+    __tablename__ = "marketing_propostas"
+    __table_args__ = (db.Index("ix_marketing_propostas_situacao", "situacao"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    tipo = db.Column(db.String(12), nullable=False)
+    platform = db.Column(db.String(20), nullable=False)
+    alvo_tipo = db.Column(db.String(10), nullable=False)
+    alvo_id = db.Column(db.String(80), nullable=False)
+    alvo_nome = db.Column(db.String(300), nullable=True)
+    valor_antes = db.Column(db.String(200), nullable=True)
+    valor_depois = db.Column(db.String(200), nullable=True)
+    custo_dia_estimado = db.Column(db.Numeric(12, 2), nullable=True)
+    motivo = db.Column(db.Text, nullable=False)
+    evidencia = db.Column(db.Text, nullable=True)
+    post_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_posts.id", ondelete="SET NULL"), nullable=True
+    )
+    situacao = db.Column(db.String(10), nullable=False, default="pendente", server_default="pendente")
+    criada_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    decidida_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decidida_em = db.Column(db.DateTime, nullable=True)
+    decisao_obs = db.Column(db.Text, nullable=True)
+    executada_em = db.Column(db.DateTime, nullable=True)
+    resultado_execucao = db.Column(db.Text, nullable=True)
+
+    decidida_por = db.relationship("User", foreign_keys=[decidida_por_id], lazy="joined")
+    post = db.relationship("MarketingPost", foreign_keys=[post_id], lazy="joined")
+
+
+class MarketingDiario(db.Model):
+    """Entrada do diário de decisões de marketing (feature 345).
+
+    "A reavaliar" = `reavaliar_em <= hoje (SP)` e `avaliado_em` nulo. Proposta executada gera
+    exatamente uma entrada (`proposta_id` único).
+    """
+
+    __tablename__ = "marketing_diario"
+
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    motivo = db.Column(db.Text, nullable=False)
+    evidencia = db.Column(db.Text, nullable=True)
+    resultado_esperado = db.Column(db.Text, nullable=True)
+    reavaliar_em = db.Column(db.Date, nullable=False)
+    resultado_observado = db.Column(db.Text, nullable=True)
+    veredito = db.Column(db.String(14), nullable=True)
+    avaliado_em = db.Column(db.DateTime, nullable=True)
+    origem = db.Column(db.String(10), nullable=False, default="pessoa", server_default="pessoa")
+    proposta_id = db.Column(
+        db.Integer, db.ForeignKey("marketing_propostas.id", ondelete="SET NULL"),
+        nullable=True, unique=True,
+    )
+    autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    autor = db.relationship("User", foreign_keys=[autor_id], lazy="joined")
+    proposta = db.relationship("MarketingProposta", foreign_keys=[proposta_id], lazy="joined")
 
 
 # ── Loja de Interações Virtuais (feature 205) ───────────────────────────────

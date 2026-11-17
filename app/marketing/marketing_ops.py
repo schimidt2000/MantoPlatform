@@ -18,18 +18,27 @@ Duas responsabilidades:
 from __future__ import annotations
 
 from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
+
+from sqlalchemy import func, tuple_
 
 from app import db
 from app.constants import (
+    LIBERADO_SIM,
+    MARKETING_FORMATOS,
+    MARKETING_FRENTES,
     MARKETING_MAX_INTERVAL_DAYS,
     MARKETING_PLATFORMS,
+    MARKETING_POST_ORIGENS,
+    MARKETING_POST_TIPOS,
     MARKETING_STATUS_IDEIA,
     MARKETING_STATUS_PUBLICADO,
     MARKETING_STATUSES,
 )
 from app.models import (
     CatalogItem,
+    MarketingAdMetric,
     MarketingFrequencyGoal,
     MarketingPost,
     ReviewSpace,
@@ -59,10 +68,14 @@ class MarketingValidationError(Exception):
     campo exato do formulário (Princípio V — falha de validação sempre tem feedback no campo).
     """
 
-    def __init__(self, field: str, message: str) -> None:
+    def __init__(self, field: str, message: str, *, codigo: str | None = None, status: int = 400) -> None:
         super().__init__(message)
         self.field = field
         self.message = message
+        # Feature 345: a regra do tema liberado responde 422 com `codigo` estável — o frontend
+        # decide pelo código, nunca pelo texto (Princípio XV).
+        self.codigo = codigo
+        self.status = status
 
 
 # ── Validações e conversões de entrada ───────────────────────────────────────
@@ -189,6 +202,44 @@ def _resolve_catalog_items(raw: Any) -> list[CatalogItem]:
     return items
 
 
+def _validate_choice(raw: Any, field: str, valid: Any, label: str) -> str | None:
+    """Valor opcional de uma lista fixa (frente, formato) — vazio vira `None`."""
+    if raw in (None, ""):
+        return None
+    value = str(raw).strip()
+    if value not in valid:
+        raise MarketingValidationError(field, f"{label} inválido.")
+    return value
+
+
+def _validate_tipo(raw: Any) -> str:
+    """Tipo do card (feature 345): post orgânico ou anúncio. Vazio = post."""
+    tipo = str(raw or "post").strip()
+    if tipo not in MARKETING_POST_TIPOS:
+        raise MarketingValidationError("tipo", "Tipo inválido (post ou anúncio).")
+    return tipo
+
+
+def _clean_text(raw: Any) -> str | None:
+    return (str(raw).strip() or None) if raw not in (None, "") else None
+
+
+def exigir_temas_liberados(temas: list[CatalogItem]) -> None:
+    """Card de anúncio só com tema liberado para anúncio (feature 345, FR-010).
+
+    "Não decidido" vale como não: o risco é jurídico (Disney, Hello Kitty…), e na dúvida a peça
+    não sai. Post orgânico não passa por aqui.
+    """
+    bloqueados = [t.name for t in temas if t.liberado_anuncio != LIBERADO_SIM]
+    if bloqueados:
+        raise MarketingValidationError(
+            "catalog_item_ids",
+            f"Este tema não está liberado para anúncio: {', '.join(bloqueados)}.",
+            codigo="tema_nao_liberado",
+            status=422,
+        )
+
+
 def _resolve_assignee(raw: Any) -> int | None:
     """Valida o responsável informado e devolve o id (ou `None` para desatribuir)."""
     if raw in (None, ""):
@@ -242,13 +293,24 @@ def create_post(
     notes: Any = None,
     assignee_id: Any = None,
     catalog_item_ids: Any = None,
+    tipo: Any = None,
+    frente: Any = None,
+    formato: Any = None,
+    briefing_objetivo: Any = None,
+    briefing_mostrar: Any = None,
+    briefing_letreiro: Any = None,
+    origem: str = "pessoa",
 ) -> MarketingPost:
-    """Cria uma postagem no planejamento.
+    """Cria uma postagem no planejamento (ou, na 345, um pedido de criativo/anúncio).
 
     Raises:
         MarketingValidationError: Título vazio, status/plataforma/data inválidos, link do Drive
-            fora de http(s), Tema(s) ou responsável inexistentes.
+            fora de http(s), Tema(s) ou responsável inexistentes; tema não liberado num anúncio (422).
     """
+    temas = _resolve_catalog_items(catalog_item_ids)
+    tipo_ok = _validate_tipo(tipo)
+    if tipo_ok == "anuncio":
+        exigir_temas_liberados(temas)
     post = MarketingPost(
         title=_clean_title(title),
         status=_validate_status(status) if status else MARKETING_STATUS_IDEIA,
@@ -259,7 +321,14 @@ def create_post(
         permalink=_validate_permalink(permalink),
         notes=(notes or "").strip() or None,
         assignee_id=_resolve_assignee(assignee_id),
-        temas=_resolve_catalog_items(catalog_item_ids),
+        temas=temas,
+        tipo=tipo_ok,
+        frente=_validate_choice(frente, "frente", MARKETING_FRENTES, "Frente"),
+        formato=_validate_choice(formato, "formato", MARKETING_FORMATOS, "Formato"),
+        briefing_objetivo=_clean_text(briefing_objetivo),
+        briefing_mostrar=_clean_text(briefing_mostrar),
+        briefing_letreiro=_clean_text(briefing_letreiro),
+        origem=origem if origem in MARKETING_POST_ORIGENS else "pessoa",
     )
     _autofill_publish_date(post)
     db.session.add(post)
@@ -293,13 +362,38 @@ def update_post(
     notes: Any = KEEP,
     assignee_id: Any = KEEP,
     catalog_item_ids: Any = KEEP,
+    tipo: Any = KEEP,
+    frente: Any = KEEP,
+    formato: Any = KEEP,
+    briefing_objetivo: Any = KEEP,
+    briefing_mostrar: Any = KEEP,
+    briefing_letreiro: Any = KEEP,
 ) -> MarketingPost:
     """Edita uma postagem. Só aplica os campos explicitamente enviados.
 
     Todo campo usa a sentinela `KEEP` (`...`) para "não alterar", porque `None`/lista vazia é um
     valor válido em quase todos eles (limpar prazo, desvincular todos os Temas, desatribuir
     responsável).
+
+    A regra do tema liberado (feature 345) é conferida ANTES de tocar no card: virar anúncio ou
+    trocar os temas de um anúncio com tema não liberado é recusado sem deixar a sessão suja.
     """
+    novo_tipo = post.tipo if tipo is KEEP else _validate_tipo(tipo)
+    novos_temas = post.temas if catalog_item_ids is KEEP else _resolve_catalog_items(catalog_item_ids)
+    if novo_tipo == "anuncio":
+        exigir_temas_liberados(list(novos_temas))
+    if tipo is not KEEP:
+        post.tipo = novo_tipo
+    if frente is not KEEP:
+        post.frente = _validate_choice(frente, "frente", MARKETING_FRENTES, "Frente")
+    if formato is not KEEP:
+        post.formato = _validate_choice(formato, "formato", MARKETING_FORMATOS, "Formato")
+    if briefing_objetivo is not KEEP:
+        post.briefing_objetivo = _clean_text(briefing_objetivo)
+    if briefing_mostrar is not KEEP:
+        post.briefing_mostrar = _clean_text(briefing_mostrar)
+    if briefing_letreiro is not KEEP:
+        post.briefing_letreiro = _clean_text(briefing_letreiro)
     if title is not KEEP:
         post.title = _clean_title(title)
     if status is not KEEP:
@@ -319,7 +413,7 @@ def update_post(
     if assignee_id is not KEEP:
         post.assignee_id = _resolve_assignee(assignee_id)
     if catalog_item_ids is not KEEP:
-        post.temas = _resolve_catalog_items(catalog_item_ids)
+        post.temas = list(novos_temas)
 
     _autofill_publish_date(post)
     audit("edit", "MarketingPost", post.id, post.title, "Postagem de marketing editada")
@@ -506,7 +600,10 @@ def goal_health(goal: MarketingFrequencyGoal, *, today: date | None = None) -> d
 
 
 def serialize_catalog_item(item: CatalogItem | None) -> dict[str, Any] | None:
-    """Tema do catálogo em JSON — nome e capa, o suficiente para a miniatura (Princípio X.2)."""
+    """Tema do catálogo em JSON — nome e capa, o suficiente para a miniatura (Princípio X.2).
+
+    Feature 345: leva também a licença, para o diálogo do card avisar antes de salvar um anúncio.
+    """
     if item is None:
         return None
     cover = item.cover_image
@@ -515,6 +612,8 @@ def serialize_catalog_item(item: CatalogItem | None) -> dict[str, Any] | None:
         "name": item.name,
         "cover_url": cover.url if cover else None,
         "is_active": bool(item.is_active),
+        "licenca_origem": item.licenca_origem,
+        "liberado_anuncio": item.liberado_anuncio,
     }
 
 
@@ -556,8 +655,51 @@ def serialize_review_space(space: ReviewSpace | None) -> dict[str, Any] | None:
     }
 
 
-def serialize_post(post: MarketingPost) -> dict[str, Any]:
-    """Postagem em JSON, com responsável, Temas do catálogo e espaço de revisão aninhados."""
+_RESULTADO_VAZIO = {"spend": "0.00", "conversations": 0, "impressions": 0, "clicks": 0, "custo_conversa": None}
+
+
+def resultados_por_post(posts: list[MarketingPost]) -> dict[int, dict[str, Any]]:
+    """Resultado somado dos anúncios de cada card (feature 345) — uma consulta para a lista toda."""
+    vinculos = {(a.platform, a.ad_id): p.id for p in posts for a in p.anuncios}
+    if not vinculos:
+        return {}
+    linhas = (
+        db.session.query(
+            MarketingAdMetric.platform, MarketingAdMetric.ad_id,
+            func.sum(MarketingAdMetric.spend), func.sum(MarketingAdMetric.conversations),
+            func.sum(MarketingAdMetric.impressions), func.sum(MarketingAdMetric.clicks),
+        )
+        .filter(tuple_(MarketingAdMetric.platform, MarketingAdMetric.ad_id).in_(list(vinculos)))
+        .group_by(MarketingAdMetric.platform, MarketingAdMetric.ad_id)
+        .all()
+    )
+    somas: dict[int, dict[str, Any]] = {}
+    for platform, ad_id, gasto, conversas, impressoes, cliques in linhas:
+        s = somas.setdefault(vinculos[(platform, ad_id)],
+                             {"spend": Decimal(0), "conversations": 0, "impressions": 0, "clicks": 0})
+        s["spend"] += Decimal(gasto or 0)
+        s["conversations"] += int(conversas or 0)
+        s["impressions"] += int(impressoes or 0)
+        s["clicks"] += int(cliques or 0)
+    centavo = Decimal("0.01")
+    return {
+        pid: {
+            **s,
+            "spend": str(s["spend"].quantize(centavo, rounding=ROUND_HALF_UP)),
+            "custo_conversa": str((s["spend"] / s["conversations"]).quantize(centavo, rounding=ROUND_HALF_UP))
+            if s["conversations"] else None,
+        }
+        for pid, s in somas.items()
+    }
+
+
+def serialize_post(post: MarketingPost, resultados: dict[int, dict[str, Any]] | None = None) -> dict[str, Any]:
+    """Postagem em JSON, com responsável, Temas do catálogo e espaço de revisão aninhados.
+
+    `resultados` (de `resultados_por_post`) evita uma consulta por card na lista; sem ele, o
+    resultado deste card é calculado na hora.
+    """
+    mapa = resultados if resultados is not None else resultados_por_post([post])
     return {
         "id": post.id,
         "title": post.title,
@@ -574,6 +716,15 @@ def serialize_post(post: MarketingPost) -> dict[str, Any]:
         "catalog_items": [serialize_catalog_item(item) for item in post.temas],
         "review_space_id": post.review_space_id,
         "review_space": serialize_review_space(post.review_space),
+        "tipo": post.tipo,
+        "frente": post.frente,
+        "formato": post.formato,
+        "briefing_objetivo": post.briefing_objetivo,
+        "briefing_mostrar": post.briefing_mostrar,
+        "briefing_letreiro": post.briefing_letreiro,
+        "origem": post.origem,
+        "anuncios": [{"platform": a.platform, "ad_id": a.ad_id} for a in post.anuncios],
+        "resultado": mapa.get(post.id, _RESULTADO_VAZIO) if post.anuncios else None,
         "created_at": post.created_at.isoformat() if post.created_at else None,
         "updated_at": post.updated_at.isoformat() if post.updated_at else None,
     }

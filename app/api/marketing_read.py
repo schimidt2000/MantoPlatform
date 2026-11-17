@@ -16,8 +16,14 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.constants import MARKETING_PLATFORMS, MARKETING_STATUSES, RoleName
-from app.marketing import desempenho_ops
+from app.constants import (
+    MARKETING_FORMATOS,
+    MARKETING_FRENTES,
+    MARKETING_PLATFORMS,
+    MARKETING_STATUSES,
+    RoleName,
+)
+from app.marketing import comando_ops, desempenho_ops
 from app.marketing import marketing_ops as ops
 from app.models import CatalogItem, MarketingFrequencyGoal, MarketingPost, User
 
@@ -62,11 +68,15 @@ def api_marketing_posts_list() -> Any:
         posts = ops.list_posts(status=status, assignee_id=assignee_id)
     except ops.MarketingValidationError as exc:
         return json_error(exc.message, 400, fields={exc.field: exc.message})
+    resultados = ops.resultados_por_post(posts)
     return jsonify(
         {
-            "items": [ops.serialize_post(post) for post in posts],
+            "items": [ops.serialize_post(post, resultados) for post in posts],
             "statuses": MARKETING_STATUSES,
             "plataformas": MARKETING_PLATFORMS,
+            # Feature 345: listas fixas do card de anúncio (o diálogo monta os `<select>` daqui).
+            "frentes": MARKETING_FRENTES,
+            "formatos": MARKETING_FORMATOS,
         }
     )
 
@@ -165,4 +175,6 @@ def api_marketing_desempenho() -> Any:
         # tem exatamente `weeks` pontos (a última, parcial).
         fim = date.today()
         inicio = fim - timedelta(days=fim.weekday()) - timedelta(days=(weeks - 1) * 7)
-    return jsonify(desempenho_ops.desempenho_summary(inicio, fim, weeks=weeks))
+    # Feature 345: o bloco por frente (custo por venda contra o teto) vem do `comando_ops`.
+    return jsonify({**desempenho_ops.desempenho_summary(inicio, fim, weeks=weeks),
+                    **comando_ops.painel_frentes(inicio, fim)})

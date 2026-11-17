@@ -15,7 +15,7 @@ histórico de métricas, rodadas/arquivos e o Gasto Extra de Marketing para reem
 
 import logging
 import os
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from flask import current_app, jsonify, request
@@ -24,8 +24,9 @@ from sqlalchemy import func
 from app import db
 from app.api import api_bp
 from app.api_utils import json_error
+from app.marketing import comando_ops, marketing_ops
 from app.marketing import desempenho_ops as ops
-from app.models import MarketingAgentRun, User
+from app.models import MarketingAgentRun, MarketingPost, User
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +87,132 @@ def api_marketing_agent_run(token: str) -> Any:
         db.session.rollback()
         return json_error(str(exc), 403)
     return jsonify(resultado)
+
+
+# ── Feature 345: o painel de comando ─────────────────────────────────────────
+#
+# A rotina semanal (skill `marketing-auditor`, conectores Meta/Google) lê o ERP por `GET /comando`,
+# grava desempenho por anúncio, sugere licenças, abre pedidos de criativo, registra propostas,
+# marca o que executou e escreve o resultado do diário. Nunca decide proposta: isso é do Superadmin.
+
+
+def _comando_erro(exc: comando_ops.ComandoError) -> Any:
+    db.session.rollback()
+    extra = {"codigo": exc.codigo} if exc.codigo else {}
+    return json_error(exc.message, exc.status, fields={exc.field: exc.message} if exc.field else None, **extra)
+
+
+def _corpo() -> dict[str, Any]:
+    dados = request.get_json(silent=True)
+    return dados if isinstance(dados, dict) else {}
+
+
+@api_bp.route("/marketing-agent/<token>/comando", methods=["GET"])
+def api_marketing_agent_comando(token: str) -> Any:
+    """Contexto da rodada: frentes, temas liberados, cards prontos, propostas e diário a reavaliar."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    try:
+        inicio = date.fromisoformat(request.args.get("start") or "")
+        fim = date.fromisoformat(request.args.get("end") or "")
+    except ValueError:
+        return json_error("Informe start e end em AAAA-MM-DD.", 400)
+    if inicio > fim:
+        return json_error("start depois de end.", 400)
+    return jsonify(comando_ops.contexto_comando(inicio, fim))
+
+
+@api_bp.route("/marketing-agent/<token>/anuncios", methods=["POST"])
+def api_marketing_agent_anuncios(token: str) -> Any:
+    """Desempenho por anúncio e dia (upsert idempotente)."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    try:
+        n = comando_ops.ingest_ad_metrics(_corpo().get("items"))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+    return jsonify({"upserted": n})
+
+
+@api_bp.route("/marketing-agent/<token>/licencas/sugestoes", methods=["POST"])
+def api_marketing_agent_sugestoes(token: str) -> Any:
+    """Sugestões de origem dos temas — uma pessoa confirma depois."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    try:
+        return jsonify(comando_ops.gravar_sugestoes(_corpo().get("items")))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+
+
+@api_bp.route("/marketing-agent/<token>/pedidos", methods=["POST"])
+def api_marketing_agent_pedidos(token: str) -> Any:
+    """Abre pedidos de criativo no Kanban (tema não liberado é recusado, item a item)."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    try:
+        return jsonify(comando_ops.criar_pedidos(_corpo().get("items")))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+
+
+@api_bp.route("/marketing-agent/<token>/posts/<int:post_id>/anuncios", methods=["POST"])
+def api_marketing_agent_vincular(token: str, post_id: int) -> Any:
+    """Liga ao card o anúncio montado (pausado) a partir dele."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    post = MarketingPost.query.get(post_id)
+    if post is None:
+        return json_error("Card não encontrado.", 404)
+    corpo = _corpo()
+    try:
+        comando_ops.vincular_anuncio(post, corpo.get("platform"), corpo.get("ad_id"))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+    except marketing_ops.MarketingValidationError as exc:
+        db.session.rollback()
+        return json_error(exc.message, exc.status, fields={exc.field: exc.message}, codigo=exc.codigo)
+    return jsonify({"ok": True})
+
+
+@api_bp.route("/marketing-agent/<token>/propostas", methods=["POST"])
+def api_marketing_agent_proposta(token: str) -> Any:
+    """Registra uma proposta de mudança (sempre pendente, até o Superadmin decidir)."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    try:
+        proposta = comando_ops.criar_proposta(_corpo())
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+    return jsonify({"id": proposta.id}), 201
+
+
+@api_bp.route("/marketing-agent/<token>/propostas/<int:proposta_id>/execucao", methods=["POST"])
+def api_marketing_agent_execucao(token: str, proposta_id: int) -> Any:
+    """Marca a proposta aprovada como executada (ou falhou); nasce a entrada do diário."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    corpo = _corpo()
+    try:
+        entrada = comando_ops.marcar_execucao(proposta_id, resultado=corpo.get("resultado"),
+                                              detalhe=corpo.get("detalhe"))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+    return jsonify({"ok": True, "diario_id": entrada.id})
+
+
+@api_bp.route("/marketing-agent/<token>/diario/<int:entrada_id>/resultado", methods=["POST"])
+def api_marketing_agent_diario(token: str, entrada_id: int) -> Any:
+    """Grava o resultado observado de uma decisão que chegou na data de reavaliar."""
+    if not _token_valido(token):
+        return _nao_encontrado()
+    corpo = _corpo()
+    try:
+        comando_ops.gravar_resultado(entrada_id, texto=corpo.get("resultado_observado"),
+                                     veredito=corpo.get("veredito"))
+    except comando_ops.ComandoError as exc:
+        return _comando_erro(exc)
+    return jsonify({"ok": True})
 
 
 @api_bp.route("/marketing-agent/<token>/report", methods=["POST"])

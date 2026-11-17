@@ -10,6 +10,7 @@ from typing import Any
 from flask import jsonify, request
 from flask_login import current_user
 
+from app import db
 from app.api import api_bp
 from app.api.marketing_read import load_goal, load_post, require_marketing_access
 from app.api_utils import api_login_required, json_error
@@ -28,7 +29,21 @@ POST_FIELDS = (
     "assignee_id",
     "catalog_item_ids",
     "permalink",
+    # Feature 345: o card vira pedido de criativo.
+    "tipo",
+    "frente",
+    "formato",
+    "briefing_objetivo",
+    "briefing_mostrar",
+    "briefing_letreiro",
 )
+
+
+def _erro(exc: ops.MarketingValidationError) -> Any:
+    """Erro de validação do card com o status e o código certos (422 `tema_nao_liberado`)."""
+    db.session.rollback()
+    extra = {"codigo": exc.codigo} if exc.codigo else {}
+    return json_error(exc.message, exc.status, fields={exc.field: exc.message}, **extra)
 GOAL_FIELDS = ("name", "target_interval_days", "catalog_item_id")
 
 
@@ -60,7 +75,7 @@ def api_marketing_post_create() -> Any:
     try:
         post = ops.create_post(**_create_kwargs(_json_body(), POST_FIELDS))
     except ops.MarketingValidationError as exc:
-        return json_error(exc.message, 400, fields={exc.field: exc.message})
+        return _erro(exc)
     return jsonify(ops.serialize_post(post)), 201
 
 
@@ -77,7 +92,7 @@ def api_marketing_post_update(post_id: int) -> Any:
     try:
         ops.update_post(post, **_patch_kwargs(_json_body(), POST_FIELDS))
     except ops.MarketingValidationError as exc:
-        return json_error(exc.message, 400, fields={exc.field: exc.message})
+        return _erro(exc)
     return jsonify(ops.serialize_post(post))
 
 
