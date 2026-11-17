@@ -78,6 +78,10 @@ KINDS_COM_CIENTE: frozenset[str] = frozenset({KIND_EVENTO_TIPO_SHOW, KIND_EVENTO
 # Feature 328: a cliente esperando resposta nas Conversas e a conversa transferida para alguém.
 KIND_CONVERSA_ESPERANDO = "conversa.esperando"
 KIND_CONVERSA_TRANSFERIDA = "conversa.transferida"
+# Feature 349: o "Lembrar amanhã" vencido (vai explícito para quem marcou) e a régua do orçamento parado
+# (2, 5 e 9 dias). Só sino e celular da equipe: nada sai para a cliente.
+KIND_CONVERSA_LEMBRETE = "conversa.lembrete"
+KIND_CONVERSA_ORCAMENTO_PARADO = "conversa.orcamento_parado"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -117,6 +121,9 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # responsável, o produtor manda só para ele. A transferência vai sempre explícita, para o destino.
     KIND_CONVERSA_ESPERANDO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
     KIND_CONVERSA_TRANSFERIDA: (),
+    # Feature 349: o lembrete é de quem marcou (explícito); a régua, de quem atende ou da equipe.
+    KIND_CONVERSA_LEMBRETE: (),
+    KIND_CONVERSA_ORCAMENTO_PARADO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")

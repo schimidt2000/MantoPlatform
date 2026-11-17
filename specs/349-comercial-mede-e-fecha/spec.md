@@ -227,6 +227,13 @@ equipe.
 - Responsável da conversa que não está entre os vendedores do evento: a criação abre com o vendedor padrão da tela
   (o usuário logado), e a vendedora escolhe.
 - Ficha da conversa removida depois do orçamento: "Criar evento" pede a ficha de novo.
+- Duas pessoas marcam perda (ou decidem a qualificação) quase juntas: vale a última gravação, com o nome dela; as duas
+  são decisões válidas, não há conflito a recusar.
+- "Lembrar amanhã" tocado depois da meia-noite: "amanhã" é o próximo dia do calendário de São Paulo, às 9h.
+- O painel da venda falha ao carregar: a conversa continua lendo e respondendo; a faixa mostra "Não foi possível
+  carregar a venda. Tente novamente." com o botão.
+- Recorte sem resultado: estado vazio no padrão da casa ("Nenhuma conversa esperando resposta.", "Nenhum orçamento
+  parado há 5 dias ou mais.", "Nenhuma conversa de anúncio encontrada.").
 
 ## Requisitos *(obrigatório)*
 

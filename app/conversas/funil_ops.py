@@ -11,9 +11,10 @@ Só leitura. Uma consulta para a coorte e uma por tipo de fato, em lote (nunca u
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from statistics import median
 from typing import Any
 
 from sqlalchemy import text
@@ -22,6 +23,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.constants import TZ_SP, now_sp
 from app.conversas import constantes as K
+from app.conversas import pontuacao_ops
 from app.conversas.leitura_ops import nome_da_conversa
 from app.conversas.recusa import campo
 from app.models import Conversa, User
@@ -44,7 +46,9 @@ WITH contatos AS (
     WHERE ca.tipo = :tipo_anuncio
     ORDER BY ca.conversa_id, ca.momento, ca.id
 )
-SELECT c.id, c.canal, c.client_id, c.responsavel_id, p.em, a.conversa_id IS NOT NULL, a.campanha_nome
+SELECT c.id, c.canal, c.client_id, c.responsavel_id, p.em, a.conversa_id IS NOT NULL, a.campanha_nome,
+       c.primeira_recebida_em, c.primeira_resposta_em, c.primeira_resposta_origem, c.perdida_motivo,
+       c.qualificacao, c.lembrar_em
 FROM primeiro p
 JOIN conversas c ON c.id = p.conversa_id
 LEFT JOIN anuncio a ON a.conversa_id = c.id
@@ -62,14 +66,38 @@ class Linha:
     primeiro: datetime  # UTC
     tem_anuncio: bool
     campanha: str | None
+    # Feature 349: o que a conversa guarda (UTC) — primeira resposta, perda, decisão de qualificação e lembrete.
+    recebida_em: datetime | None = None
+    resposta_em: datetime | None = None
+    resposta_origem: str | None = None
+    perdida_motivo: str | None = None
+    qualificacao: str | None = None
+    lembrar_em: datetime | None = None
     etapa: int = 0
     eventos: list[int] = field(default_factory=list)
+    qualificada: bool = False
 
     @property
     def chave_da_campanha(self) -> str:
         if not self.tem_anuncio:
             return K.SEM_ANUNCIO
         return self.campanha or K.CAMPANHA_DESCONHECIDA
+
+    @property
+    def minutos(self) -> int | None:
+        """Minutos da primeira mensagem à primeira resposta (feature 349), ou ``None``."""
+        if self.recebida_em is None or self.resposta_em is None:
+            return None
+        return max(0, int((self.resposta_em - self.recebida_em).total_seconds() // 60))
+
+    @property
+    def sem_autor(self) -> bool:
+        return self.resposta_em is not None and self.resposta_origem in (K.ORIGEM_CELULAR, K.ORIGEM_OUTRO)
+
+    @property
+    def perdida(self) -> bool:
+        """Perdida conta só se não fechou: a venda que fechou depois da perda é venda (FR-009)."""
+        return self.perdida_motivo is not None and self.etapa < K.ETAPAS_DO_FUNIL.index("evento")
 
 
 # ── Período ──────────────────────────────────────────────────────────────────────────────────────
@@ -223,9 +251,13 @@ def _linhas(
 ) -> tuple[date, date, list[Linha]]:
     de, ate = periodo(inicio, fim)
     conferir_filtros(canal, None)
-    linhas = _coorte(de, ate)
+    linhas = _filtrar(_coorte(de, ate), canal, None)
     _etapas(linhas)
-    return de, ate, _filtrar(linhas, canal, None)
+    # Feature 349: a qualificação (decisão da vendedora ou pontuação por regras), em lote.
+    pontos = pontuacao_ops.pontuar(linhas)
+    for linha in linhas:
+        linha.qualificada = pontuacao_ops.qualificada(linha.qualificacao, pontos[linha.id])
+    return de, ate, linhas
 
 
 # ── Saída ────────────────────────────────────────────────────────────────────────────────────────
@@ -238,6 +270,44 @@ def _porcento(parte: int, base: int) -> float | None:
 def _contar(linhas: list[Linha]) -> list[int]:
     """Quantas chegaram em cada etapa ou além."""
     return [sum(1 for linha in linhas if linha.etapa >= i) for i in range(len(K.ETAPAS_DO_FUNIL))]
+
+
+def _mediana(valores: list[int]) -> int | None:
+    return round(median(valores)) if valores else None
+
+
+def _primeira_resposta(linhas: list[Linha]) -> dict[str, Any]:
+    """Feature 349 (FR-006): o tempo da primeira resposta da coorte; a sem autor (celular) contada à parte."""
+    minutos = [linha.minutos for linha in linhas if linha.minutos is not None]
+    rapidas = sum(1 for m in minutos if m <= K.RESPOSTA_RAPIDA_MINUTOS)
+    return {
+        "respondidas": len(minutos),
+        "sem_resposta": sum(1 for linha in linhas if linha.recebida_em and linha.resposta_em is None),
+        "sem_autor": sum(1 for linha in linhas if linha.sem_autor),
+        "mediana_minutos": _mediana(minutos),
+        "ate_15_min": _porcento(rapidas, len(minutos)),
+    }
+
+
+def _motivos_de_perda(linhas: list[Linha]) -> list[dict[str, Any]]:
+    """As perdidas da coorte por motivo, na ordem da lista fechada (só os motivos que aparecem)."""
+    contagem = Counter(linha.perdida_motivo for linha in linhas if linha.perdida)
+    return [
+        {"codigo": m, "rotulo": K.ROTULO_DO_MOTIVO[m], "quantidade": contagem[m]}
+        for m in K.MOTIVOS_DE_PERDA
+        if contagem.get(m)
+    ]
+
+
+def _medidas_da_venda(linhas: list[Linha]) -> dict[str, Any]:
+    """Qualificadas, perdidas e a primeira resposta de um grupo (feature 349)."""
+    resposta = _primeira_resposta(linhas)
+    return {
+        "qualificadas": sum(1 for linha in linhas if linha.qualificada),
+        "perdidas": sum(1 for linha in linhas if linha.perdida),
+        "mediana_minutos": resposta["mediana_minutos"],
+        "ate_15_min": resposta["ate_15_min"],
+    }
 
 
 def _rotulo_da_campanha(chave: str) -> str:
@@ -280,6 +350,7 @@ def _grupos(linhas: list[Linha], dividir: str) -> list[dict[str, Any]]:
                 "rotulo": rotulo,
                 "quantidades": dict(zip(K.ETAPAS_DO_FUNIL, contagem, strict=True)),
                 "conversao": _porcento(contagem[3], contagem[0]),
+                **_medidas_da_venda(do_grupo),
             }
         )
     # Do grupo com mais conversas para o com menos; o "sem" vai por último.
@@ -336,6 +407,11 @@ def funil(
         "dividir": dividir,
         "grupos": _grupos(filtradas, dividir),
         "campanhas": _campanhas(linhas),
+        # Feature 349.
+        "primeira_resposta": _primeira_resposta(filtradas),
+        "qualificadas": sum(1 for linha in filtradas if linha.qualificada),
+        "perdidas": sum(1 for linha in filtradas if linha.perdida),
+        "motivos_de_perda": _motivos_de_perda(filtradas),
     }
 
 
@@ -381,6 +457,14 @@ def parados(
                 else None,
                 "primeiro_contato": linha.primeiro.replace(tzinfo=UTC).isoformat(),
                 "campanha": _rotulo_da_campanha(linha.chave_da_campanha),
+                # Feature 349: a perda aparece aqui (clarify de 17/11), com a qualificação, a 1ª resposta e o lembrete.
+                "perdida": {"motivo": linha.perdida_motivo, "rotulo": K.ROTULO_DO_MOTIVO[linha.perdida_motivo]}
+                if linha.perdida_motivo in K.ROTULO_DO_MOTIVO
+                else None,
+                "qualificada": linha.qualificada,
+                "primeira_resposta_minutos": linha.minutos,
+                "primeira_resposta_sem_autor": linha.sem_autor,
+                "lembrete_em": linha.lembrar_em.replace(tzinfo=UTC).isoformat() if linha.lembrar_em else None,
             }
             for linha in mostradas
             if linha.id in conversas

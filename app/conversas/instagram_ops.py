@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import or_
 
 from app import db
-from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops
+from app.conversas import anuncio_ops, aviso_ops, equipe_ops, midia_ops, primeira_resposta_ops
 from app.conversas import constantes as K
 from app.conversas.relogio import agora_utc
 from app.integracoes import instagram_client as ic
@@ -207,6 +207,7 @@ def _chegou_da_cliente(conversa: Conversa, item: dict[str, Any], chegadas: set[i
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
     equipe_ops.abrir_espera(conversa, momento)
+    primeira_resposta_ops.registrar_contato(conversa, momento)  # feature 349
     chegadas.add(conversa.id)
 
 
@@ -294,7 +295,10 @@ def _gravar_eco(item: dict[str, Any], mensagem: dict[str, Any]) -> tuple[int | N
         conversa, item, _partes(str(mid), mensagem), K.ENVIADA, K.ORIGEM_OUTRO
     )
     if novas:
-        equipe_ops.encerrar_espera(conversa, _momento_ms(item.get("timestamp")))
+        momento = _momento_ms(item.get("timestamp"))
+        equipe_ops.encerrar_espera(conversa, momento)
+        # Feature 349: o que saiu por outro app (Instagram, Kommo) é resposta sem autor.
+        primeira_resposta_ops.registrar_resposta(conversa, momento, None, K.ORIGEM_OUTRO)
     return conversa.id, midias
 
 
