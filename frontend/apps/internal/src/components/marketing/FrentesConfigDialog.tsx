@@ -7,6 +7,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  Input,
   type ComboboxOption,
 } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
@@ -27,42 +28,54 @@ function usuarioOptions(usuarios: MarketingAssigneeRef[]): ComboboxOption[] {
   }));
 }
 
+const CAMPO_DINHEIRO =
+  "h-10 w-full rounded-md border border-line bg-panel px-2 text-right text-sm text-ink tabular-nums";
+
+/** Valores editados por frente: `null` = vazio (teto volta ao padrão; meta e verba ficam sem número). */
+type PorFrente = Record<string, number | null>;
+
+function dinheiro(valores: PorFrente): Record<string, string | null> {
+  return Object.fromEntries(Object.entries(valores).map(([slug, v]) => [slug, v == null ? null : v.toFixed(2)]));
+}
+
 /**
- * Tetos de custo por venda de cada frente e quem recebe os pedidos de criativo (feature 345).
+ * Teto, meta e verba de cada frente e quem recebe os pedidos de criativo (features 345 e 351).
  *
- * Só o Superadmin abre (o servidor recusa os outros). Teto em branco = volta ao padrão calculado,
- * que aparece embaixo de cada campo com a base do cálculo — o dono vê de onde veio o número.
+ * Só o Superadmin salva (o servidor recusa os outros). Teto em branco = volta ao padrão calculado, que
+ * aparece embaixo com a base do cálculo. Meta e verba são o padrão do mês: o calendário do ano vence mês a
+ * mês. Em 390 px os três campos de cada frente ficam numa linha, com o rótulo em cima.
  */
 export function FrentesConfigDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const config = useFrentesConfig(open);
   const opcoes = useMarketingOptions(open);
   const salvar = useSalvarFrentes();
-  // `null` = "usar o padrão"; número = teto editado.
-  const [tetos, setTetos] = useState<Record<string, number | null>>({});
+  const [tetos, setTetos] = useState<PorFrente>({});
+  const [metas, setMetas] = useState<PorFrente>({});
+  const [verbas, setVerbas] = useState<PorFrente>({});
   const [foto, setFoto] = useState<string | null>(null);
   const [video, setVideo] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
 
   useEffect(() => {
     if (!config.data) return;
-    setTetos(
-      Object.fromEntries(
-        config.data.frentes.map((f) => [f.slug, f.teto_editado && f.teto ? Number(f.teto) : null]),
-      ),
-    );
+    const frentes = config.data.frentes;
+    setTetos(Object.fromEntries(frentes.map((f) => [f.slug, f.teto_editado && f.teto ? Number(f.teto) : null])));
+    setMetas(Object.fromEntries(frentes.map((f) => [f.slug, f.meta_vendas_mes ?? null])));
+    setVerbas(Object.fromEntries(frentes.map((f) => [f.slug, f.verba_mes ? Number(f.verba_mes) : null])));
     setFoto(config.data.responsaveis.foto ? String(config.data.responsaveis.foto.id) : null);
     setVideo(config.data.responsaveis.video ? String(config.data.responsaveis.video.id) : null);
   }, [config.data]);
 
-  const erro = salvar.error instanceof ApiRequestError ? salvar.error.message : salvar.error ? "Não foi possível salvar." : null;
+  const campos = salvar.error instanceof ApiRequestError ? salvar.error.fields ?? {} : {};
+  const erro = salvar.error instanceof ApiRequestError ? salvar.error.message : salvar.error ? "Não foi possível salvar. Tente novamente." : null;
 
   function enviar() {
     setSalvo(false);
     salvar.mutate(
       {
-        tetos: Object.fromEntries(
-          Object.entries(tetos).map(([slug, valor]) => [slug, valor == null ? null : valor.toFixed(2)]),
-        ),
+        tetos: dinheiro(tetos),
+        metas,
+        verbas: dinheiro(verbas),
         resp_foto_id: foto ? Number(foto) : null,
         resp_video_id: video ? Number(video) : null,
       },
@@ -74,36 +87,72 @@ export function FrentesConfigDialog({ open, onClose }: { open: boolean; onClose:
     <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
       <DialogContent open={open} className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Tetos e responsáveis</DialogTitle>
+          <DialogTitle>Metas, verba e tetos</DialogTitle>
           <DialogDescription>
-            O teto é o máximo que vale pagar em anúncio por venda fechada de cada frente. Em branco, o sistema usa 25% da
-            margem mediana do último ano.
+            Meta e verba valem para todo mês; o calendário do ano muda mês a mês. O teto é o máximo que vale pagar em
+            anúncio por venda fechada — em branco, 25% da margem mediana do último ano.
           </DialogDescription>
         </DialogHeader>
 
         {config.isLoading && <p className="text-sm text-muted">Carregando…</p>}
+        {config.isError && (
+          <p className="text-sm text-red" role="alert">
+            Não foi possível carregar as frentes. Tente novamente.
+          </p>
+        )}
 
         {config.data && (
           <div className="space-y-4">
-            <div className="space-y-3">
+            <div className="divide-y divide-line">
               {config.data.frentes.map((f) => (
-                <div key={f.slug} className="grid grid-cols-[1fr_auto] items-center gap-x-3 gap-y-0.5">
-                  <label htmlFor={`teto-${f.slug}`} className="text-sm font-medium text-ink">
-                    {f.nome}
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm text-muted">R$</span>
-                    <MoneyInput
-                      id={`teto-${f.slug}`}
-                      className="h-10 w-32 rounded-md border border-line bg-panel px-2 text-right text-sm text-ink tabular-nums"
-                      value={tetos[f.slug] ?? 0}
-                      onValueChange={(v) => setTetos((t) => ({ ...t, [f.slug]: v > 0 ? v : null }))}
-                    />
+                <fieldset key={f.slug} className="space-y-1.5 py-3 first:pt-0">
+                  <legend className="text-sm font-semibold text-ink">{f.nome}</legend>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="block text-[11px] font-medium text-muted">
+                      Meta/mês
+                      <Input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        placeholder="vendas"
+                        aria-label={`Meta de vendas por mês — ${f.nome}`}
+                        className="mt-0.5 h-10 text-right tabular-nums"
+                        value={metas[f.slug] ?? ""}
+                        aria-invalid={Boolean(campos[`metas.${f.slug}`])}
+                        onChange={(e) =>
+                          setMetas((m) => ({ ...m, [f.slug]: e.target.value === "" ? null : Number(e.target.value) }))
+                        }
+                      />
+                    </label>
+                    <label className="block text-[11px] font-medium text-muted">
+                      Verba/mês (R$)
+                      <MoneyInput
+                        className={`mt-0.5 ${CAMPO_DINHEIRO}`}
+                        value={verbas[f.slug] ?? 0}
+                        onValueChange={(v) => setVerbas((t) => ({ ...t, [f.slug]: v > 0 ? v : null }))}
+                      />
+                    </label>
+                    <label className="block text-[11px] font-medium text-muted">
+                      Teto/venda (R$)
+                      <MoneyInput
+                        className={`mt-0.5 ${CAMPO_DINHEIRO}`}
+                        value={tetos[f.slug] ?? 0}
+                        onValueChange={(v) => setTetos((t) => ({ ...t, [f.slug]: v > 0 ? v : null }))}
+                      />
+                    </label>
                   </div>
-                  <p className="col-span-2 text-[11px] text-muted">
-                    Padrão: {f.teto_padrao ? `R$ ${formatBRL(Number(f.teto_padrao))}` : "—"} · {f.base_teto}
+                  {[`metas.${f.slug}`, `verbas.${f.slug}`, `tetos.${f.slug}`].map(
+                    (chave) =>
+                      campos[chave] && (
+                        <p key={chave} className="text-xs text-red" role="alert">
+                          {campos[chave]}
+                        </p>
+                      ),
+                  )}
+                  <p className="text-[11px] text-muted">
+                    Teto padrão: {f.teto_padrao ? `R$ ${formatBRL(Number(f.teto_padrao))}` : "—"} · {f.base_teto}
                   </p>
-                </div>
+                </fieldset>
               ))}
             </div>
 
@@ -140,9 +189,9 @@ export function FrentesConfigDialog({ open, onClose }: { open: boolean; onClose:
                   {erro}
                 </span>
               )}
-              {salvo && !erro && <span className="mr-auto text-sm text-green">Salvo.</span>}
+              {salvo && !erro && <span className="mr-auto text-sm text-green">Metas, verba e tetos salvos.</span>}
               {!config.data.pode_editar && (
-                <span className="mr-auto text-sm text-muted">Só o Superadmin altera tetos e responsáveis.</span>
+                <span className="mr-auto text-sm text-muted">Só o Superadmin altera metas, verba, tetos e responsáveis.</span>
               )}
               <Button type="button" variant="outline" onClick={onClose}>
                 Fechar

@@ -126,7 +126,9 @@ export interface MarketingPost {
   briefing_mostrar?: string | null;
   briefing_letreiro?: string | null;
   origem?: "pessoa" | "rotina";
-  anuncios?: { platform: string; ad_id: string }[];
+  /** Feature 351: o ângulo da peça (agrupa o funil por conceito). */
+  conceito?: string | null;
+  anuncios?: MarketingPostAnuncio[];
   resultado?: MarketingPostResultado | null;
   created_at: string | null;
   updated_at: string | null;
@@ -159,6 +161,17 @@ export const LIBERADO_LABELS: Record<LiberadoAnuncio, string> = {
   nao_decidido: "Não decidido",
 };
 
+/**
+ * Anúncio ligado ao card. Feature 351: `no_ar` = gastou num dos últimos dias com leitura da plataforma
+ * (`null` = sem leitura); `ultimo_gasto_em` = o último dia com gasto.
+ */
+export interface MarketingPostAnuncio {
+  platform: string;
+  ad_id: string;
+  no_ar?: boolean | null;
+  ultimo_gasto_em?: string | null;
+}
+
 /** Resultado somado dos anúncios ligados ao card (dinheiro em string decimal). */
 export interface MarketingPostResultado {
   spend: string;
@@ -166,6 +179,15 @@ export interface MarketingPostResultado {
   impressions: number;
   clicks: number;
   custo_conversa: string | null;
+  // Feature 351 — o que a peça trouxe de verdade (CRM e venda atribuída). Opcionais.
+  custo_conversa_real?: string | null;
+  conversas_reais?: number;
+  orcamentos?: number;
+  eventos?: number;
+  vendas?: number;
+  faturamento?: string;
+  anuncios_no_ar?: number;
+  ultima_leitura?: string | null;
 }
 
 export type FrenteEstado = "ok" | "acima_do_teto" | "sem_venda" | "sem_gasto";
@@ -182,6 +204,37 @@ export interface DesempenhoFrente {
   custo_venda: string | null;
   teto: string | null;
   estado: FrenteEstado;
+  // Feature 351 — venda atribuída ao lado do misto, e o mês corrente contra a meta. Opcionais.
+  vendas_atribuidas?: number;
+  faturamento_atribuido?: string;
+  custo_venda_atribuida?: string | null;
+  custo_venda_atribuida_desconto?: string | null;
+  estado_atribuido?: FrenteEstado;
+  mes_corrente?: FrenteMesCorrente;
+}
+
+/** O mês corrente de uma frente: vendas (todas) e gasto até hoje contra a meta e a verba do mês. */
+export interface FrenteMesCorrente {
+  mes: number;
+  meta_vendas: number | null;
+  verba: string | null;
+  foco: string | null;
+  vendas: number;
+  gasto: string;
+}
+
+/** A regra da atribuição declarada na tela (feature 351). */
+export interface AtribuicaoRegra {
+  janela_dias: number;
+  /** Fração em string decimal ("0.50"). */
+  incrementalidade: string;
+  desde: string;
+  /** O período começa antes de `desde`: a atribuição cobre só parte dele. */
+  parcial: boolean;
+}
+
+export interface DesempenhoAtribuicao extends AtribuicaoRegra {
+  sem_frente: { vendas: number; faturamento: string };
 }
 
 export interface CampanhaSemFrente {
@@ -205,6 +258,9 @@ export interface FrentesConfig {
     teto_padrao: string | null;
     base_teto: string;
     teto_editado: boolean;
+    /** Feature 351: padrão do mês (o calendário vence mês a mês). */
+    meta_vendas_mes?: number | null;
+    verba_mes?: string | null;
   }[];
   responsaveis: { foto: MarketingAssigneeRef | null; video: MarketingAssigneeRef | null };
   pode_editar: boolean;
@@ -228,6 +284,11 @@ export interface TemasLicencaResponse {
   contagem: Record<LicencaOrigem, number>;
   com_sugestao: number;
   pode_liberar_licenciado: boolean;
+  /** Feature 351: paginação no servidor (50 por página). */
+  total?: number;
+  pagina?: number;
+  paginas?: number;
+  por_pagina?: number;
 }
 
 export type PropostaSituacao = "pendente" | "aprovada" | "recusada" | "expirada" | "executada" | "falhou";
@@ -254,12 +315,22 @@ export interface Proposta {
   executada_em: string | null;
   resultado_execucao: string | null;
   expira_em: string | null;
+  // Feature 351 — número, frente, teto e impacto no mês. Opcionais.
+  frente?: string | null;
+  frente_nome?: string | null;
+  valor_antes_num?: string | null;
+  valor_depois_num?: string | null;
+  impacto_mensal?: string | null;
+  teto?: string | null;
+  verba_mes?: string | null;
 }
 
 export interface PropostasResponse {
   items: Proposta[];
   pendentes: number;
   pode_decidir: boolean;
+  /** Feature 351: soma do impacto das aprovadas e executadas decididas no mês. */
+  impacto_aprovado_mes?: string;
 }
 
 export type DiarioVeredito = "funcionou" | "nao_funcionou" | "inconclusivo";
@@ -279,6 +350,40 @@ export interface DiarioEntrada {
   autor: MarketingAssigneeRef | null;
   criado_em: string | null;
   a_reavaliar: boolean;
+  /** Feature 351: o teste estruturado, calculado no servidor (`null` = entrada só de texto). */
+  teste?: DiarioTeste | null;
+}
+
+export type MetricaDoTeste = "conversas" | "custo_conversa" | "gasto" | "cliques" | "cadastros";
+export type AlvoTipo = "campanha" | "conjunto" | "anuncio";
+
+export const METRICA_LABELS: Record<MetricaDoTeste, string> = {
+  conversas: "Conversas",
+  custo_conversa: "Custo por conversa",
+  gasto: "Gasto",
+  cliques: "Cliques",
+  cadastros: "Cadastros",
+};
+
+export const ALVO_LABELS: Record<AlvoTipo, string> = {
+  campanha: "Campanha",
+  conjunto: "Conjunto",
+  anuncio: "Anúncio",
+};
+
+/** Valores em string decimal (4 casas); `null` = sem leitura no intervalo. */
+export interface DiarioTeste {
+  alvo: { platform: string; tipo: AlvoTipo; id: string; nome: string | null };
+  metrica: MetricaDoTeste;
+  mudou_em: string;
+  janela_dias: number;
+  linha_base: string | null;
+  antes: { de: string; ate: string; valor: string | null };
+  depois: { de: string; ate: string; valor: string | null };
+  variacao: number | null;
+  completo: boolean;
+  controle: { tipo: AlvoTipo; id: string; nome: string | null; antes: string | null; depois: string | null; variacao: number | null } | null;
+  efeito_liquido: number | null;
 }
 
 export interface DiarioResponse {
@@ -395,6 +500,7 @@ export interface SaveMarketingPostInput {
   briefing_objetivo?: string | null;
   briefing_mostrar?: string | null;
   briefing_letreiro?: string | null;
+  conceito?: string | null;
 }
 
 /**
@@ -612,6 +718,8 @@ export interface DesempenhoCac {
   month: string;
   spend: string;
   new_clients: number;
+  /** Feature 351: os clientes novos que vieram de anúncio — o divisor do custo. */
+  new_clients_ads?: number;
   value: string | null;
 }
 
@@ -642,6 +750,8 @@ export interface DesempenhoResponse {
   sem_frente?: CampanhaSemFrente[];
   plataformas?: PlataformaSituacao[];
   frente_opcoes?: { slug: string; nome: string }[];
+  /** Feature 351 — a regra da atribuição e as vendas atribuídas a campanha sem frente. */
+  atribuicao?: DesempenhoAtribuicao;
 }
 
 export type DesempenhoWeeks = 4 | 12 | 26;
@@ -688,6 +798,9 @@ export function useFrentesConfig(enabled = true) {
 export interface SalvarFrentesInput {
   /** slug → teto em string decimal; `null` volta ao padrão calculado. */
   tetos?: Record<string, string | null>;
+  /** Feature 351: meta de vendas e verba do mês por frente; `null` limpa. */
+  metas?: Record<string, number | null>;
+  verbas?: Record<string, string | null>;
   resp_foto_id?: number | null;
   resp_video_id?: number | null;
 }
@@ -720,6 +833,7 @@ export interface TemasLicencaFiltros {
   origem?: LicencaOrigem | "";
   liberado?: LiberadoAnuncio | "";
   sugestao?: boolean;
+  pagina?: number;
 }
 
 export function useTemasLicenca(filtros: TemasLicencaFiltros) {
@@ -728,6 +842,7 @@ export function useTemasLicenca(filtros: TemasLicencaFiltros) {
   if (filtros.origem) qs.set("origem", filtros.origem);
   if (filtros.liberado) qs.set("liberado", filtros.liberado);
   if (filtros.sugestao) qs.set("sugestao", "1");
+  if (filtros.pagina && filtros.pagina > 1) qs.set("pagina", String(filtros.pagina));
   return useQuery<TemasLicencaResponse>({
     queryKey: [...TEMAS_LICENCA_KEY, filtros],
     queryFn: () => apiFetch<TemasLicencaResponse>(`/api/marketing/temas-licenca?${qs.toString()}`),
@@ -797,6 +912,17 @@ export interface NovaEntradaDiario {
   evidencia?: string;
   resultado_esperado?: string;
   reavaliar_em?: string;
+  // Feature 351 — o teste estruturado (opcional).
+  alvo_platform?: string;
+  alvo_tipo?: AlvoTipo;
+  alvo_id?: string;
+  alvo_nome?: string;
+  metrica?: MetricaDoTeste;
+  mudou_em?: string;
+  janela_dias?: number;
+  controle_tipo?: AlvoTipo;
+  controle_id?: string;
+  controle_nome?: string;
 }
 
 export function useCriarEntradaDiario() {
@@ -807,3 +933,122 @@ export function useCriarEntradaDiario() {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: DIARIO_KEY }),
   });
 }
+
+// ── Feature 351: venda atribuída, funil com custo e calendário do ano ───────
+
+export type DivisaoAtribuicao = "frente" | "anuncio" | "peca" | "conceito";
+
+export const DIVISAO_ATRIBUICAO_LABELS: Record<DivisaoAtribuicao, string> = {
+  frente: "Frente",
+  anuncio: "Anúncio",
+  peca: "Peça",
+  conceito: "Conceito",
+};
+
+export interface AtribuicaoVenda {
+  event_id: number;
+  titulo: string;
+  sale_date: string;
+  /** `null` para quem não é Superadmin (o servidor decide). */
+  valor: string | null;
+  frente_venda: string;
+  frente: string | null;
+  frente_nome: string | null;
+  contato: {
+    fonte: "conversa" | "ficha" | "utm";
+    em: string;
+    platform: string | null;
+    campanha: string | null;
+    anuncio_id: string | null;
+    anuncio: string | null;
+  };
+}
+
+export interface FunilComCustoGrupo {
+  chave: string;
+  rotulo: string;
+  quantidades: Record<"chegou" | "orcamento" | "formulario" | "evento" | "pagou" | "avaliou", number>;
+  conversao: number | null;
+  gasto: string | null;
+  custo_conversa: string | null;
+  custo_orcamento: string | null;
+  custo_evento: string | null;
+}
+
+export interface AtribuicaoResponse {
+  periodo: { start: string; end: string };
+  regra: AtribuicaoRegra;
+  vendas: AtribuicaoVenda[];
+  vendas_total: number;
+  funil: { dividir: DivisaoAtribuicao; total: number; grupos: FunilComCustoGrupo[] };
+  pode_ver_valor: boolean;
+}
+
+/** Vendas atribuídas e funil com custo do mesmo período do Desempenho. */
+export function useAtribuicao(params: DesempenhoParams, dividir: DivisaoAtribuicao) {
+  return useQuery<AtribuicaoResponse>({
+    queryKey: ["marketing", "atribuicao", params, dividir],
+    queryFn: () =>
+      apiFetch<AtribuicaoResponse>(`/api/marketing/atribuicao?${desempenhoQuery(params)}&dividir=${dividir}`),
+    placeholderData: keepPreviousData,
+  });
+}
+
+export interface CalendarioMes {
+  mes: number;
+  meta_vendas: number | null;
+  verba: string | null;
+  foco: string | null;
+}
+
+export interface CalendarioFrente {
+  slug: string;
+  nome: string;
+  meta_vendas_mes: number | null;
+  verba_mes: string | null;
+  meses: CalendarioMes[];
+}
+
+export interface CalendarioResponse {
+  frentes: CalendarioFrente[];
+  mes_corrente: number;
+  pode_editar: boolean;
+}
+
+const CALENDARIO_KEY = ["marketing", "calendario"] as const;
+
+export function useCalendario(enabled = true) {
+  return useQuery<CalendarioResponse>({
+    queryKey: CALENDARIO_KEY,
+    queryFn: () => apiFetch<CalendarioResponse>("/api/marketing/calendario"),
+    enabled,
+  });
+}
+
+export function useSalvarCalendario() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { frente: string; meses: CalendarioMes[] }) =>
+      apiFetch<CalendarioResponse>("/api/marketing/calendario", { method: "PATCH", body: JSON.stringify(input) }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(CALENDARIO_KEY, data);
+      // A meta e a verba do mês aparecem no card de cada frente.
+      void queryClient.invalidateQueries({ queryKey: ["marketing", "desempenho"] });
+    },
+  });
+}
+
+export const NOMES_DOS_MESES = [
+  "Janeiro",
+  "Fevereiro",
+  "Março",
+  "Abril",
+  "Maio",
+  "Junho",
+  "Julho",
+  "Agosto",
+  "Setembro",
+  "Outubro",
+  "Novembro",
+  "Dezembro",
+] as const;

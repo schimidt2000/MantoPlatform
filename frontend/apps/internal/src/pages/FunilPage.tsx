@@ -32,6 +32,11 @@ const DIVISOES: { valor: DivisaoDoFunil; rotulo: string }[] = [
   { valor: "vendedor", rotulo: "Vendedor" },
   { valor: "campanha", rotulo: "Campanha" },
   { valor: "canal", rotulo: "Canal" },
+  // Feature 351: pelo primeiro anúncio da conversa. O custo de cada grupo fica no Desempenho (Marketing).
+  { valor: "frente", rotulo: "Frente" },
+  { valor: "anuncio", rotulo: "Anúncio" },
+  { valor: "peca", rotulo: "Peça" },
+  { valor: "conceito", rotulo: "Conceito" },
 ];
 
 function porcento(valor: number | null): string {
@@ -400,7 +405,7 @@ export function FunilPage() {
                     (d) => d.valor === dividir,
                   )?.rotulo.toLowerCase()}
                 </CardTitle>
-                <div className="flex gap-1 rounded-lg border border-line bg-panel p-1">
+                <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-panel p-1">
                   {DIVISOES.map((opcao) => (
                     <Button
                       key={opcao.valor}

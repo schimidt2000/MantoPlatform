@@ -4,6 +4,7 @@ import {
   CalendarX,
   FileText,
   FileX,
+  Megaphone,
   Music,
   Star,
   UserMinus,
@@ -30,6 +31,8 @@ const ICONE_POR_KIND: Record<string, LucideIcon> = {
   // Feature 339 — o evento virou (ou deixou de ser) SHOW, e a vaga que o título deixou de pedir.
   "evento.tipo_show": Music,
   "evento.vaga_sobrando": UserMinus,
+  // Feature 351 — a rotina de marketing propôs uma mudança na Meta/Google.
+  "marketing.proposta": Megaphone,
 };
 
 interface NotificacaoItemProps {

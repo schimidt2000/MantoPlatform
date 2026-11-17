@@ -56,6 +56,8 @@ interface KanbanCardProps {
   /** Coluna sob o ponteiro durante o arraste — só para o realce; `null` encerra o arraste. */
   onDragOver: (status: MarketingStatus | null) => void;
   onDraggingChange: (postId: number | null) => void;
+  /** Feature 351: nome da frente pelo slug (vem da própria lista, `frentes`). */
+  nomeDaFrente?: string;
 }
 
 /**
@@ -76,6 +78,7 @@ function KanbanCard({
   boardRef,
   onDragOver,
   onDraggingChange,
+  nomeDaFrente,
 }: KanbanCardProps) {
   const reduceMotion = useReducedMotion();
   const move = useMoveMarketingPost();
@@ -176,6 +179,7 @@ function KanbanCard({
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {/* Feature 345: o card de anúncio e o pedido aberto pela rotina se reconhecem de relance. */}
           {post.tipo === "anuncio" && <Badge tone="gold">Anúncio</Badge>}
+          {nomeDaFrente && <Badge tone="neutral">{nomeDaFrente}</Badge>}
           {post.origem === "rotina" && <Badge tone="blue">Pedido da rotina</Badge>}
           {post.platform && <Badge tone="accent">{post.platform.toUpperCase()}</Badge>}
           <DeadlineBadge deadline={post.deadline_date} />
@@ -248,6 +252,8 @@ export interface MarketingKanbanProps {
   onOpenPost: (post: MarketingPost) => void;
   /** Abre o Dialog de criação já com a coluna clicada pré-selecionada. */
   onCreateInColumn: (status: MarketingStatus) => void;
+  /** Feature 351: slug → nome da frente, para o selo no card. */
+  frentes?: Record<string, string>;
 }
 
 /**
@@ -260,7 +266,7 @@ export interface MarketingKanbanProps {
  * A rolagem horizontal fica **dentro** do quadro (`overflow-x-auto`), nunca na página — por isso o
  * arraste é limitado ao próprio quadro (`dragConstraints`): fora dele o card seria recortado.
  */
-export function MarketingKanban({ posts, onOpenPost, onCreateInColumn }: MarketingKanbanProps) {
+export function MarketingKanban({ posts, onOpenPost, onCreateInColumn, frentes }: MarketingKanbanProps) {
   const boardRef = useRef<HTMLDivElement>(null);
   const [dragOver, setDragOver] = useState<MarketingStatus | null>(null);
   const [draggingId, setDraggingId] = useState<number | null>(null);
@@ -322,6 +328,7 @@ export function MarketingKanban({ posts, onOpenPost, onCreateInColumn }: Marketi
                       boardRef={boardRef}
                       onDragOver={setDragOver}
                       onDraggingChange={setDraggingId}
+                      nomeDaFrente={post.frente ? frentes?.[post.frente] : undefined}
                     />
                   ))}
                 </AnimatePresence>
