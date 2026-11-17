@@ -351,6 +351,18 @@ class CalendarEvent(db.Model):
     # Campo de venda: só no principal (`group_ops.SATELLITE_FIELDS_CLEARED`).
     educamanto_seller_commission = db.Column(db.Numeric(12, 2), nullable=True)
     orcamento_history_id = db.Column(db.Integer, db.ForeignKey("orcamento_history.id"), nullable=True)
+    # Feature 348 — de onde a venda veio. A conversa (do orçamento enviado por ela, ou da criação pela
+    # conversa) e o contato de origem CONGELADO no momento da ligação (`conversas/origem_ops`): a
+    # conversa é uma por telefone, e sem congelar a segunda festa da cliente herdaria o anúncio da
+    # primeira. Nunca se liga pela ficha. A frente é escolhida na aba Comercial; nula = ninguém
+    # escolheu e vale a sugestão pelo título (`calendar/frente_ops`, a única leitura).
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    origem_contato_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_anuncios.id", ondelete="SET NULL"), nullable=True
+    )
+    frente = db.Column(db.String(16), db.ForeignKey("marketing_frentes.slug"), nullable=True)
     invoice_file         = db.Column(db.String(255), nullable=True)   # filename em uploads/invoices/
     invoice_due_date     = db.Column(db.Date, nullable=True)          # data prevista de emissão da NF (feature 065)
     # Dados da nota (feature 323): são da VENDA, não de cada nota — o cliente pede uma vez, por
@@ -1712,6 +1724,14 @@ class OrcamentoHistory(db.Model):
     client_id = db.Column(
         db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    # Feature 348: a conversa do primeiro envio e o contato de origem daquele momento, congelados
+    # (`conversas/origem_ops.ligar_orcamento`). O evento criado a partir do orçamento herda os dois.
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    origem_contato_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_anuncios.id", ondelete="SET NULL"), nullable=True
+    )
 
     user = db.relationship("User", lazy=True)
     cliente = db.relationship("Client", foreign_keys=[client_id], lazy=True)
@@ -2111,6 +2131,9 @@ class Client(db.Model):
     utm_source = db.Column(db.String(200), nullable=True)
     utm_medium = db.Column(db.String(200), nullable=True)
     utm_campaign = db.Column(db.String(200), nullable=True)
+    # Feature 348: o id da campanha de origem (do anúncio da Meta consultado, ou do `gad_campaignid`/
+    # `utm_id` do clique no site). O Desempenho casa o lead por ele: o nome muda, o id não.
+    utm_campaign_id = db.Column(db.String(80), nullable=True)
     # Feature 334: o anúncio da Meta que trouxe a cliente (o primeiro, nunca sobrescrito) e o mais
     # recente (a repescagem). UTC. A campanha de cada um está em `anuncios_meta`.
     anuncio_origem_id = db.Column(db.String(64), nullable=True)
@@ -2122,6 +2145,20 @@ class Client(db.Model):
     # ("Loja: <campanha>"). Nulo = não há aceite registrado — não prospectar por WhatsApp/e-mail.
     marketing_opt_in_at = db.Column(db.DateTime, nullable=True)
     marketing_opt_in_source = db.Column(db.String(160), nullable=True)
+    # Feature 350: a versão do texto aceito e a última retirada. Os quatro carimbos do aceite são
+    # horário de parede de SP (`now_sp`), como o da loja (344) — aceite e retirada se comparam.
+    # Com aceite ⇔ `marketing_opt_in_at` preenchido: a retirada zera os três `opt_in_*` e grava os
+    # `opt_out_*`. A história completa está em `cliente_consentimentos` (`ClienteConsentimento`).
+    marketing_opt_in_version = db.Column(db.String(20), nullable=True)
+    marketing_opt_out_at = db.Column(db.DateTime, nullable=True)
+    marketing_opt_out_source = db.Column(db.String(160), nullable=True)
+    # Feature 350: quem indicou (outra ficha, nunca ela mesma) e o parceiro que trouxe a cliente.
+    indicado_por_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    parceiro_id = db.Column(
+        db.Integer, db.ForeignKey("parceiros.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -2130,6 +2167,10 @@ class Client(db.Model):
         "CalendarEvent", back_populates="client", lazy=True,
         foreign_keys="CalendarEvent.client_id",
     )
+    # Só o lado "muitos para um": sem backref, o ORM nunca tenta anular a FK das indicadas ao excluir
+    # a ficha (quem faz isso é o ON DELETE SET NULL do banco).
+    indicado_por = db.relationship("Client", remote_side=[id], foreign_keys=[indicado_por_id], lazy=True)
+    parceiro = db.relationship("Parceiro", foreign_keys=[parceiro_id], lazy=True)
 
     @property
     def event_count(self) -> int:
@@ -2145,6 +2186,116 @@ class Client(db.Model):
         if len(digits) <= 11:
             return "55" + digits
         return digits
+
+
+class Parceiro(db.Model):
+    """Buffet, assessoria ou agência que traz clientes, com a comissão declarada (feature 350).
+
+    A comissão é só **declarada** (a pesquisa de 17/11 recomenda nunca oculta): nada aqui paga
+    ninguém — o repasse de um evento continua sendo o BV do acréscimo. Não se exclui: desativa-se, e
+    as fichas ligadas mantêm o nome. Carimbos em horário de SP (`now_sp`).
+    """
+
+    __tablename__ = "parceiros"
+    __table_args__ = (db.Index("ix_parceiros_nome", "nome"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(160), nullable=False)
+    tipo = db.Column(db.String(20), nullable=False)  # chave de PARCEIRO_TIPOS
+    contato = db.Column(db.String(120), nullable=True)
+    telefone = db.Column(db.String(30), nullable=True)
+    email = db.Column(db.String(200), nullable=True)
+    comissao_percentual = db.Column(db.Numeric(5, 2), nullable=False, default=0, server_default="0")
+    observacao = db.Column(db.Text, nullable=True)
+    ativo = db.Column(db.Boolean, nullable=False, default=True, server_default="1")
+    criado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+    atualizado_em = db.Column(db.DateTime, nullable=False, default=now_sp, onupdate=now_sp)
+
+
+class ClienteConsentimento(db.Model):
+    """Histórico de aceites e retiradas de uma ficha (feature 350, LGPD art. 8º §2º).
+
+    Append-only: uma linha por aceite ou retirada, com o **texto completo** exibido, a versão, a
+    origem, a referência (``conversa:<id>``, ``mensagem:<id>``, ``evento:<id>``, ``pedido:<id>``) e
+    quem registrou (nulo = a própria cliente ou o sistema). Nunca recebe UPDATE. A retirada de
+    aniversário não leva o nome nem a data da criança — esses somem com a linha da criança.
+    """
+
+    __tablename__ = "cliente_consentimentos"
+    __table_args__ = (
+        db.Index("ix_cliente_consentimentos_client", "client_id", "registrado_em"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    tipo = db.Column(db.String(20), nullable=False)   # novidades | aniversario
+    acao = db.Column(db.String(10), nullable=False)   # aceite | retirada
+    texto = db.Column(db.Text, nullable=False)
+    versao = db.Column(db.String(20), nullable=False)
+    origem = db.Column(db.String(160), nullable=False)
+    referencia = db.Column(db.String(80), nullable=True)
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+
+    registrado_por = db.relationship("User", foreign_keys=[registrado_por_id], lazy=True)
+
+
+class ClienteCrianca(db.Model):
+    """Criança cuja responsável autorizou guardar o aniversário (feature 350, LGPD art. 14 §1º).
+
+    A linha só existe com o aceite (um por criança — irmãos são aceites separados). Remover apaga a
+    linha; o histórico guarda só a retirada. Primeiro nome e data, nada mais.
+    """
+
+    __tablename__ = "cliente_criancas"
+    __table_args__ = (db.Index("ix_cliente_criancas_client", "client_id"),)
+
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="CASCADE"), nullable=False
+    )
+    primeiro_nome = db.Column(db.String(60), nullable=False)
+    nascimento = db.Column(db.Date, nullable=False)
+    aceite_em = db.Column(db.DateTime, nullable=False, default=now_sp)
+    aceite_versao = db.Column(db.String(20), nullable=False)
+    aceite_origem = db.Column(db.String(160), nullable=False)
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+    cliente = db.relationship("Client", foreign_keys=[client_id], lazy=True)
+
+
+class PosEvento(db.Model):
+    """O pós-evento único de um evento: copiado ou enviado pela conversa (feature 350).
+
+    Um por evento (``UNIQUE(event_id)``). ``registrado_em`` é atualizado a cada cópia; depois de
+    enviado pela conversa, uma cópia não rebaixa o canal. Horário de SP (`now_sp`).
+    """
+
+    __tablename__ = "pos_eventos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    event_id = db.Column(
+        db.Integer, db.ForeignKey("calendar_events.id", ondelete="CASCADE"),
+        nullable=False, unique=True,
+    )
+    client_id = db.Column(
+        db.Integer, db.ForeignKey("clients.id", ondelete="SET NULL"), nullable=True
+    )
+    fotos_url = db.Column(db.String(500), nullable=True)
+    canal = db.Column(db.String(12), nullable=False)  # copiado | conversa
+    mensagem_id = db.Column(
+        db.Integer, db.ForeignKey("conversa_mensagens.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    registrado_em = db.Column(db.DateTime, nullable=False, default=now_sp)
 
 
 class FormResponse(db.Model):
@@ -3141,6 +3292,9 @@ class MarketingPost(db.Model):
     briefing_mostrar  = db.Column(db.Text, nullable=True)
     briefing_letreiro = db.Column(db.Text, nullable=True)
     origem            = db.Column(db.String(10), nullable=False, default="pessoa", server_default="pessoa")
+    # Feature 351: o ângulo da peça ("mãe que surpreende", "bastidores"). É por ele que o funil
+    # compara custo por conversa entre ideias, não entre arquivos.
+    conceito          = db.Column(db.String(120), nullable=True)
 
     created_at       = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at       = db.Column(
@@ -3399,6 +3553,36 @@ class MarketingFrente(db.Model):
 
     slug = db.Column(db.String(16), primary_key=True)
     teto_custo_venda = db.Column(db.Numeric(12, 2), nullable=True)
+    # Feature 351: o padrão do mês (o calendário vence mês a mês). Meta = todas as vendas da
+    # frente no mês; verba = gasto em anúncio da frente no mês.
+    meta_vendas_mes = db.Column(db.Integer, nullable=True)
+    verba_mes = db.Column(db.Numeric(12, 2), nullable=True)
+    updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_at = db.Column(db.DateTime, nullable=True)
+
+
+class MarketingCalendario(db.Model):
+    """O calendário do ano por frente: meta, verba e foco de cada mês (feature 351).
+
+    Era prosa na skill da rotina; virou dado para a rotina ler no contexto da semana e para a
+    tela mostrar o mês corrente. `meta_vendas`/`verba` nulos = vale o padrão da frente. As 60
+    linhas (5 frentes × 12 meses) nascem na migration.
+    """
+
+    __tablename__ = "marketing_calendario"
+    __table_args__ = (
+        db.UniqueConstraint("frente", "mes", name="uq_marketing_calendario_frente_mes"),
+        db.CheckConstraint("mes BETWEEN 1 AND 12", name="ck_marketing_calendario_mes"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    frente = db.Column(
+        db.String(16), db.ForeignKey("marketing_frentes.slug", ondelete="CASCADE"), nullable=False
+    )
+    mes = db.Column(db.SmallInteger, nullable=False)
+    meta_vendas = db.Column(db.Integer, nullable=True)
+    verba = db.Column(db.Numeric(12, 2), nullable=True)
+    foco = db.Column(db.Text, nullable=True)
     updated_by_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     updated_at = db.Column(db.DateTime, nullable=True)
 
@@ -3491,6 +3675,11 @@ class MarketingProposta(db.Model):
     valor_antes = db.Column(db.String(200), nullable=True)
     valor_depois = db.Column(db.String(200), nullable=True)
     custo_dia_estimado = db.Column(db.Numeric(12, 2), nullable=True)
+    # Feature 351: o valor em número (verba por dia) para somar o impacto do mês, e a frente
+    # para mostrar o teto ao lado. O texto continua sendo o que a rotina escreveu.
+    frente = db.Column(db.String(16), nullable=True)
+    valor_antes_num = db.Column(db.Numeric(12, 2), nullable=True)
+    valor_depois_num = db.Column(db.Numeric(12, 2), nullable=True)
     motivo = db.Column(db.Text, nullable=False)
     evidencia = db.Column(db.Text, nullable=True)
     post_id = db.Column(
@@ -3535,6 +3724,20 @@ class MarketingDiario(db.Model):
     )
     autor_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     criado_em = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Feature 351: o teste estruturado. Com alvo + métrica, o servidor calcula o antes e o
+    # depois na leitura; a linha de base é congelada na criação (o número que justificou a
+    # mudança não pode andar depois). O controle é um alvo que ficou igual no mesmo período.
+    alvo_platform = db.Column(db.String(20), nullable=True)
+    alvo_tipo = db.Column(db.String(10), nullable=True)
+    alvo_id = db.Column(db.String(80), nullable=True)
+    alvo_nome = db.Column(db.String(300), nullable=True)
+    metrica = db.Column(db.String(20), nullable=True)
+    mudou_em = db.Column(db.Date, nullable=True)
+    janela_dias = db.Column(db.SmallInteger, nullable=True)
+    linha_base = db.Column(db.Numeric(14, 4), nullable=True)
+    controle_tipo = db.Column(db.String(10), nullable=True)
+    controle_id = db.Column(db.String(80), nullable=True)
+    controle_nome = db.Column(db.String(300), nullable=True)
 
     autor = db.relationship("User", foreign_keys=[autor_id], lazy="joined")
     proposta = db.relationship("MarketingProposta", foreign_keys=[proposta_id], lazy="joined")
@@ -4491,11 +4694,40 @@ class Conversa(db.Model):
     # perfil (UTC). Sem nome e com o carimbo de mais de 24 h, o perfil é buscado de novo.
     usuario = db.Column(db.String(64), nullable=True)
     perfil_em = db.Column(db.DateTime, nullable=True)
+    # Feature 349 — o tempo da primeira resposta (UTC). A primeira mensagem da cliente (sem reação) só anda
+    # para trás; a primeira resposta é a primeira da equipe depois dela. Guardadas, e não derivadas na
+    # leitura, para o funil de um ano não varrer as mensagens. O eco do celular/outro app entra SEM autor
+    # (coexistência): a origem diz de onde veio e a tela mostra o caso, em vez de esconder.
+    primeira_recebida_em = db.Column(db.DateTime, nullable=True)
+    primeira_resposta_em = db.Column(db.DateTime, nullable=True)
+    primeira_resposta_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    primeira_resposta_origem = db.Column(db.String(12), nullable=True)
+    # Perda com motivo (no molde do encerramento de formulário, 298): `perdida_em` define "perdida";
+    # reabrir apaga as quatro. Mensagem nova da cliente NÃO reabre (clarify de 17/11).
+    perdida_em = db.Column(db.DateTime, nullable=True)
+    perdida_motivo = db.Column(db.String(30), nullable=True)
+    perdida_nota = db.Column(db.String(300), nullable=True)
+    perdida_por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # A decisão da vendedora sobre a qualificação; nula = segue a pontuação por regras (calculada na leitura).
+    qualificacao = db.Column(db.String(20), nullable=True)
+    qualificacao_em = db.Column(db.DateTime, nullable=True)
+    qualificacao_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    # "Lembrar amanhã": um por conversa; a varredura avisa no sino quando vence e apaga.
+    lembrar_em = db.Column(db.DateTime, nullable=True, index=True)
+    lembrar_para_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     cliente = db.relationship("Client", lazy=True, backref=db.backref("conversas", lazy=True))
     responsavel = db.relationship("User", lazy=True, foreign_keys=[responsavel_id])
+    primeira_resposta_por = db.relationship("User", lazy=True, foreign_keys=[primeira_resposta_por_id])
+    perdida_por = db.relationship("User", lazy=True, foreign_keys=[perdida_por_id])
+    qualificacao_por = db.relationship("User", lazy=True, foreign_keys=[qualificacao_por_id])
+    lembrar_para = db.relationship("User", lazy=True, foreign_keys=[lembrar_para_id])
 
 
 class PushAssinatura(db.Model):
@@ -4542,6 +4774,13 @@ class ConversaAnuncio(db.Model):
     link = db.Column(db.Text, nullable=True)
     momento = db.Column(db.DateTime, nullable=False)
     created_at = db.Column(db.DateTime, nullable=False)
+    # Feature 348: o identificador do clique no anúncio de WhatsApp (`referral.ctwa_clid`) — é o que a
+    # Conversions API pede para devolver a venda à Meta. Só existe no aviso: o que não for guardado se
+    # perde. E, no tipo `site`, o código da mensagem pronta que trouxe o clique.
+    ctwa_clid = db.Column(db.String(512), nullable=True)
+    codigo_id = db.Column(
+        db.Integer, db.ForeignKey("origem_codigos.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class AnuncioMeta(db.Model):
@@ -4560,6 +4799,47 @@ class AnuncioMeta(db.Model):
     consultado_em = db.Column(db.DateTime, nullable=True)
     erro = db.Column(db.String(255), nullable=True)
     definitivo = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # Feature 348: o conjunto de anúncios, na mesma consulta.
+    conjunto_id = db.Column(db.String(64), nullable=True)
+    conjunto_nome = db.Column(db.String(255), nullable=True)
+
+
+class OrigemCodigo(db.Model):
+    """Um clique de campanha que chegou ao site (feature 348).
+
+    O site público guarda os marcadores da URL (``gclid``/``gbraid``/``wbraid``, ``fbclid``,
+    ``utm_*``) e pede este código curto, que vai na mensagem pronta dos botões de WhatsApp ("Código do
+    site: #A7K2Q"). Quando a mensagem chega, o código liga o clique à conversa — é o único jeito de o
+    ``gclid`` encontrar o telefone, porque o clique sai do site para o ``wa.me``. Vale 90 dias e liga
+    uma conversa só (``UPDATE … WHERE conversa_id IS NULL``). UTC naive.
+    """
+
+    __tablename__ = "origem_codigos"
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(8), nullable=False, unique=True)
+    gclid = db.Column(db.String(512), nullable=True)
+    gbraid = db.Column(db.String(512), nullable=True)
+    wbraid = db.Column(db.String(512), nullable=True)
+    fbclid = db.Column(db.String(512), nullable=True)
+    utm_source = db.Column(db.String(200), nullable=True)
+    utm_medium = db.Column(db.String(200), nullable=True)
+    utm_campaign = db.Column(db.String(200), nullable=True)
+    utm_content = db.Column(db.String(200), nullable=True)
+    utm_term = db.Column(db.String(200), nullable=True)
+    # `gad_campaignid` (o Google acrescenta à URL final) ou, na falta, `utm_id`.
+    campanha_id = db.Column(db.String(80), nullable=True)
+    # Só o caminho (sem a query, que repete os marcadores) e só o host de quem mandou a visita.
+    pagina = db.Column(db.String(500), nullable=True)
+    procedencia = db.Column(db.String(200), nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False)
+    conversa_id = db.Column(
+        db.Integer, db.ForeignKey("conversas.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    usado_em = db.Column(db.DateTime, nullable=True)
+    form_response_id = db.Column(
+        db.Integer, db.ForeignKey("form_responses.id", ondelete="SET NULL"), nullable=True
+    )
 
 
 class OrcamentoEnvio(db.Model):

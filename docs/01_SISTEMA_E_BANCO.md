@@ -7,7 +7,14 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
+> Última atualização: **2026-11-17** · **350-base-autorizada** (migration **`a350b1c2d3e4`**, aditiva,
+> **encadeada em `d334b2c4e6f8` na branch** — o reencadeamento com 348, 349 e 351 fica para o lote de
+> merge: consentimentos, crianças, parceiros e pós-evento, §2.7.1; rotas em §3.8; gates em §4.3).
+> Antes: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
+> Última atualização: **2026-11-17** · **348-origem-completa** (na branch, sem merge; migration **`a348c0d1e2f3`**
+> sobre `d334b2c4e6f8` — a 349, a 350 e a 351 encadeiam na mesma head e o reencadeamento é do lote de merge;
+> `origem_codigos`, conversa e contato de origem na venda, frente no evento, §2.7 "Origem completa"; rota nova
+> em §3.14; campos novos em §3.3). Antes: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
 > head: contador de visitas, aceite de novidades, pixel, §2.10.0c; rotas novas em §3.13.4). Antes:
 > **2026-11-11** · **310b-link-de-pagamento-longo** (migration **`f310b2a4c6e8`** —
 > head: `virtual_orders.payment_url` vira `text`, §2.10.0b). Antes: **2026-11-10** ·
@@ -268,7 +275,7 @@ cada feature. Confira com `grep -c __tablename__ app/models.py`.*
 
 | Tabela | Model | Destaques | FKs |
 |---|---|---|---|
-| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, **`educamanto_seller_commission`** (feature 338 — `Numeric(12,2)` nullable: a comissão do vendedor que entrou no preço pela calculadora EducaManto; só conta no EducaManto com responsável, vira a linha `source = vendedor_educamanto` do vendedor do evento e sai da base do responsável; campo de venda — `group_ops.SATELLITE_FIELDS_CLEARED`, some do satélite e passa na passagem), `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history` |
+| `calendar_events` | `CalendarEvent` | `google_event_id` (unique), `google_html_link`, `title`, `start_at`/`end_at`, `event_type` (`SHOW`/`CORP`/`R&I`/`ENSAIO`…), `source` (`google_calendar`\|`platform`), `sale_value`, `sale_value_gross`, `sale_date`, `with_invoice`, `is_cortesia_permuta`, `commission_rate`, `confirmed_at`, `feedback_token` (unique), `needs_rehearsal`, `group_name`, `makeup_time`/`makeup_location`, `departure_time`/`departure_location`, `travel_time_minutes`, `travel_distance_km`, `is_outside_sp`, `payment_method`, `payment_installments`, `payment_due_date`, `transport_value`, `acrescimo_value`, **`educamanto_seller_commission`** (feature 338 — `Numeric(12,2)` nullable: a comissão do vendedor que entrou no preço pela calculadora EducaManto; só conta no EducaManto com responsável, vira a linha `source = vendedor_educamanto` do vendedor do evento e sai da base do responsável; campo de venda — `group_ops.SATELLITE_FIELDS_CLEARED`, some do satélite e passa na passagem), `invoice_file`, `invoice_due_date`, **`cancelled_at`/`cancellation_reason`** (feature 224 — preenchido = evento cancelado: sai da agenda e das métricas de venda e de casting, mas o registro fica porque é a ele que a devolução ao cliente se refere; desde a **306** o retido (pago − devolvido do grupo) entra na DRE, no Comercial e na comissão pelo mês do cancelamento (`cancel_ops.resumo_cancelado`), e o cancelado não se exclui; índice parcial `ix_calendar_events_cancelled_at`), **`deletion_requested_at`/`deletion_request_reason`** (pedido de cancelamento do Comercial aguardando o Superadmin), **`deletion_request_scope`** (feature 315 — `String(16)`, `todos`\|`so_este_dia`; nulo = pedido de antes da 315 ou pelo caminho velho, lido como "todos") e **`deletion_request_refund`** (feature 315 — `Text` JSON `{"devolucao": {modo, valor, nome, pix}, "venda_nova"}`, valores em texto decimal; nulo na venda virtual, no caminho velho e nos pedidos de antes) — só `app/calendar/solicitacao_ops.py` escreve as cinco: pedir e recusar por `UPDATE` condicional (claim), o cancelamento as zera em `ao_cancelar` e a exclusão as leva com a linha, **`google_missing_since`** (feature 303 — `DateTime` nullable, horário de parede de São Paulo como `cancelled_at`: quando o sync percebeu que o evento sumiu do Google Agenda e o manteve porque tinha dinheiro preso; `NULL` = não marcado; "marcado" = preenchida **e** `cancelled_at` nulo; só `sumico_ops.marcar`/`desmarcar` escrevem; não muda venda, comissão nem escala; índice parcial `ix_calendar_events_google_missing_since`) | `seller_id`→`users`, `client_id`→`clients`, `confirmed_by_id`→`users`, `cancelled_by_id`→`users`, `deletion_requested_by_id`→`users`, `parent_event_id`→`calendar_events` (ensaios), `group_leader_id`→`calendar_events` (agrupamento comercial), `orcamento_history_id`→`orcamento_history`; feature 348: `conversa_id`→`conversas`, `origem_contato_id`→`conversa_anuncios`, `frente`→`marketing_frentes` (§2.7, "Origem completa") |
 | `event_roles` | `EventRole` | `character_name`, `role_type` (`character`\|`extra`), `cache_value`, `cache_cap`, **`cache_cap_note`** (Text, nullable — feature 239: a conta do teto EM VALORES, ex. "Ator cara-limpa: base 2h R$ 300 + noturno R$ 50 = R$ 350"; só sai pela API para superadmin), `travel_cache`, **`does_transport`** (Boolean, nullable — feature 239: marcador puro "leva o carrinho de transporte fora de SP", mesma semântica `True`\|`NULL` de `needs_makeup`/`is_singer`; não guarda valor), `payment_status`, `invite_status` (`pending`\|`accepted`\|`rejected`), `figurino_done_at`, `event_changed_at`, `needs_makeup`, `is_singer`, `dismissed_at`, **`perfil_vendido`** (String 200, nullable — feature 322: o tipo que o orçamento vendeu e o "show", ex. "Cantor · show" — "cantor" e "com maquiagem" NÃO são gravados, vêm das flags na leitura; gravado na criação do orçamento (pareado pelo nome) e no vínculo 273 só onde está vazio; NULL = vaga sem orçamento), **`criada_pelo_sistema`** e **`escalado_pelo_comercial`** (Boolean, nullable — feature 322: marcadores puros `True`\|`NULL`; o primeiro diz que a vaga nasceu de regra do sistema, o segundo que o talento ATUAL entrou pelo formulário do evento e sai quando o casting troca ou tira pelo card), **`teto_autorizado`** (Numeric 10,2), **`teto_autorizado_por`** e **`teto_autorizado_em`** (feature 339: o teto que o Superadmin autorizou acima do orçamento PARA A VAGA — gravado em `assign_role` só pelo Superadmin, com artista e cachê > 0; não muda quando a pessoa sai; recálculo de tipo e vínculo não o tocam; `teto_efetivo = max(cache_cap + parcela do carrinho, teto_autorizado, cache_value atual)` em `app/calendar/teto_ops.py`; autor NULL com valor = preenchimento da migration), **`sobrando_desde`** (feature 339: o título passou a pedir o personagem menos vezes e as vagas dele estavam ocupadas — limpa quando título e vagas batem, `titulo_ops.resolver_sobra`) | `event_id`→`calendar_events`, `talent_id`→`talents`, `figurino_sheet_id`→`figurino_sheets`, `dismissed_by`→`users`, `teto_autorizado_por`→`users` (SET NULL) |
 | `event_observations` | `EventObservation` | observações de evento (texto/foto) | `event_id` |
 | `event_contracts` | `EventContract` | arquivo + flag assinado | `event_id` |
@@ -550,7 +557,7 @@ pela conversa; balde próprio em `client_metrics`) | 1:N `events` |
 | `form_response_dismissed_events` | `FormResponseDismissedEvent` | **Feature 298**: sugestão "parece ser este evento" descartada — o par nunca volta (definitivo, decisão do dono). `UNIQUE(form_response_id, event_id)`; **sem backref** de propósito (as exclusões de evento e de formulário contam com o `ON DELETE CASCADE`) | `form_response_id` e `event_id` (`CASCADE`), `dismissed_by_id` (`SET NULL`) |
 | `form_field_definitions` | `FormFieldDefinition` | editor de campos dos formulários (ordem, tipo, obrigatoriedade) | — |
 | `client_feedbacks` | `ClientFeedback` | avaliação pública da cliente via `feedback_token` do evento | `event_id` |
-| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte) |
+| `orcamento_history` | `OrcamentoHistory` | histórico da calculadora de orçamento (vira `calendar_events.orcamento_history_id`) | `user_id`; `client_id` → `clients` (feature 333, `SET NULL`: a ficha do primeiro envio pela conversa, nunca trocada por envio seguinte); `conversa_id` → `conversas` e `origem_contato_id` → `conversa_anuncios` (feature 348, `SET NULL`: a conversa do primeiro envio e o contato de origem congelado) |
 
 #### Estado do banco de leads (pós-feature 193)
 
@@ -658,6 +665,80 @@ Pontos que valem para quem for ler esses dados:
     ou código 803).
   - `clients.anuncio_origem_id`/`anuncio_origem_em` (o primeiro anúncio, nunca sobrescrito) e
     `anuncio_recente_id`/`anuncio_recente_em` (o mais recente, a repescagem). UTC.
+- **O comercial mede e fecha** (feature 349, migration `a349c0e1f2a3`, aditiva sobre `d334b2c4e6f8`; as features 348,
+  350 e 351 encadeiam na mesma head e são reencadeadas no lote de merge). Só em `conversas`, todas anuláveis, UTC.
+  Detalhe em `specs/349-comercial-mede-e-fecha/data-model.md`.
+  - Primeira resposta: `primeira_recebida_em` (a mensagem da cliente mais antiga, sem reação; só anda para trás),
+    `primeira_resposta_em`, `primeira_resposta_por_id` → `users` (SET NULL; nulo no eco do celular/outro app) e
+    `primeira_resposta_origem` (`plataforma` \| `celular` \| `outro`). A migration preenche as conversas que já existem.
+  - Perda: `perdida_em` (define "perdida"), `perdida_motivo` (30, lista fechada `MOTIVOS_DE_PERDA`), `perdida_nota`
+    (300) e `perdida_por_id` → `users` (SET NULL).
+  - Qualificação: `qualificacao` (`qualificada` \| `nao_qualificada`; nulo = segue a pontuação por regras, calculada
+    na leitura), `qualificacao_em` e `qualificacao_por_id` → `users` (SET NULL).
+  - Lembrete: `lembrar_em` (index `ix_conversas_lembrar_em`) e `lembrar_para_id` → `users` (SET NULL).
+- **Origem completa** (feature 348, migration `a348c0d1e2f3`, aditiva sobre `d334b2c4e6f8`). Detalhe em
+  `specs/348-origem-completa/data-model.md`.
+  - `origem_codigos` (nova): o clique de campanha que chegou ao site. `codigo` (8, `uq_origem_codigos_codigo`: 5
+    caracteres de `ABCDEFGHJKMNPQRSTUVWXYZ23456789`), `gclid`/`gbraid`/`wbraid`/`fbclid` (512), `utm_source`,
+    `utm_medium`, `utm_campaign`, `utm_content`, `utm_term` (200), `campanha_id` (80: `gad_campaignid` ou
+    `utm_id`), `pagina` (só o caminho), `procedencia` (só o host), `created_at` (UTC; vale 90 dias),
+    `conversa_id` (SET NULL, indexado: o primeiro uso, por `UPDATE … WHERE conversa_id IS NULL`), `usado_em`,
+    `form_response_id` (SET NULL). Nenhum dado pessoal.
+  - `conversa_anuncios` ganha `ctwa_clid` (512: o clique do anúncio de WhatsApp, do `referral`; retroativo na
+    migration) e `codigo_id` (SET NULL → `origem_codigos`), e o tipo `site` (chave `site:{codigo}`). Os tipos
+    `anuncio`, `publicacao` e `site` são os **contatos de origem** de uma venda.
+  - `anuncios_meta` ganha `conjunto_id` (64) e `conjunto_nome` (255).
+  - `orcamento_history` e `calendar_events` ganham `conversa_id` (SET NULL → `conversas`, indexado) e
+    `origem_contato_id` (SET NULL → `conversa_anuncios`): a conversa da venda e o contato de origem
+    **congelado** no momento em que ela foi ligada. `calendar_events.frente` (16, FK → `marketing_frentes.slug`):
+    a frente escolhida na venda; nula = ninguém escolheu.
+  - `clients.utm_campaign_id` (80): o id da campanha de origem.
+  - **Contrato para a 349 e a 351** (quem cria venda pela conversa e quem soma venda atribuída):
+    - ligar uma venda à conversa só por `app/conversas/origem_ops.py`: `ligar_orcamento(entry, conversa)`
+      (condicional: o primeiro envio vence), `ligar_evento(evento, conversa_id)` (levanta
+      `ConversaNaoEncontrada`) ou `POST /api/events` com `conversa_id` (§3.3). Nunca grave as colunas à mão e
+      **nunca ligue pela ficha**: a conversa é uma por telefone, e o contato congelado é o que separa as
+      vendas da cliente recorrente;
+    - o contato de origem é o `conversa_anuncios` mais recente da conversa, de tipo `anuncio`, `publicacao` ou
+      `site`, nos 90 dias anteriores à ligação (`origem_ops.contato_de_origem`). `conversa_id` preenchido e
+      `origem_contato_id` nulo = venda orgânica; os dois nulos = venda sem conversa;
+    - a frente do evento só por `app/calendar/frente_ops.py`: `frente_do_evento(evento)` (`frente`, `rotulo`,
+      `definida`, `sugestao`, `sugestao_certa`, `opcoes`; o satélite responde com o principal) ou
+      `frente_sql()` (`COALESCE(frente, regra de 16/11)`, filtre `group_leader_id IS NULL`).
+      `comando_ops.frente_venda_sql()` (345) devolve a mesma expressão;
+    - a origem legível da venda: `origem_ops.origem_da_venda(evento, user)`; o lead casa com a campanha por
+      `clients.utm_campaign_id`.
+
+### 2.7.1 Base autorizada — consentimentos, crianças, parceiros e pós-evento (feature 350)
+
+Migration **`a350b1c2d3e4`** (`down_revision = d334b2c4e6f8`), aditiva. **Relógio**: todo carimbo das
+tabelas abaixo e das colunas novas de `clients` é **horário de parede de São Paulo** (`now_sp()`), o
+mesmo do aceite da loja (344) — aceite e retirada se comparam (`docs/00` §6 item 2).
+
+- **`parceiros`** (`Parceiro`): `nome` (160), `tipo` (`buffet` | `assessoria` | `agencia` | `outro`,
+  `PARCEIRO_TIPOS`), `contato`, `telefone`, `email`, `comissao_percentual` (`Numeric(5,2)`, 0–100,
+  **declarada** — não paga nada; o repasse de um evento segue sendo o BV), `observacao`, `ativo`
+  (não se exclui: desativa-se), `criado_em`/`atualizado_em`.
+- **`clients`**: `marketing_opt_in_version` (versão do texto aceito), `marketing_opt_out_at` /
+  `marketing_opt_out_source` (última retirada), `indicado_por_id` (FK `clients`, `SET NULL`, nunca a
+  própria ficha) e `parceiro_id` (FK `parceiros`, `SET NULL`). **Com aceite ⇔
+  `marketing_opt_in_at` preenchido**: a retirada zera os três `opt_in_*` e grava os `opt_out_*`.
+- **`cliente_consentimentos`** (`ClienteConsentimento`, append-only): `client_id` (`CASCADE`), `tipo`
+  (`novidades` | `aniversario`), `acao` (`aceite` | `retirada`), `texto` (o texto **completo**
+  exibido), `versao`, `origem` (160), `referencia` (`conversa:<id>`, `mensagem:<id>`, `evento:<id>`,
+  `pedido:<id>`, `instagram:<mid>`), `registrado_por_id` (nulo = a própria cliente ou o sistema),
+  `registrado_em`. A retirada de aniversário **não** guarda nome nem data da criança.
+- **`cliente_criancas`** (`ClienteCrianca`): `client_id` (`CASCADE`), `primeiro_nome` (60),
+  `nascimento` (date, não futuro, até 17 anos), `aceite_em`, `aceite_versao`, `aceite_origem`,
+  `registrado_por_id`. A linha só existe com o aceite; remover = apagar a linha.
+- **`pos_eventos`** (`PosEvento`): um por evento (`UNIQUE(event_id)`, FK `CASCADE`), `client_id`
+  (`SET NULL`), `fotos_url`, `canal` (`copiado` | `conversa`), `mensagem_id` (FK `conversa_mensagens`,
+  `SET NULL`), `registrado_por_id`, `registrado_em`. Depois de `conversa`, uma cópia não rebaixa o
+  canal.
+
+Textos e versões dos dois aceites, origens e palavras de saída: `app/constants.py`
+(`CONSENTIMENTO_*`, `PALAVRAS_DE_SAIDA`, `VIRTUAL_ACEITE_TEXTO`). Núcleo: `app/clientes/`
+(`consentimento_ops`, `indicacao_ops`, `parceiro_ops`, `aniversario_ops`, `pos_evento_ops`).
 
 ### 2.8 EducaManto
 
@@ -962,7 +1043,7 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 | PATCH | `/api/events/<id>/devolucao` *(feature 306 — "Alterar devolução" do cancelado; só Superadmin real; responde `{ok, resumo}`)* |
 | PATCH | `/api/events/<id>/motivo-cancelamento` *(feature 306b — "Editar motivo" do cancelado; Superadmin ou Comercial pelo papel real; corpo `{motivo}`; o texto vale para os dias do grupo cancelados com o mesmo motivo e troca o antigo no `EventLog` e no `AuditLog` `event_cancelled`; 409 `nao_cancelado`, 400 `fields.motivo`; responde `{ok, motivo, eventos}`)* |
 | POST | `/api/events/<id>/multas` *(feature 306 — multa ao elenco depois do ato; só Superadmin real; responde `{ok, resumo, gastos}`)* |
-| POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` |
+| POST | `/api/events`, `/api/events/<id>/confirm`, `/api/events/<id>/observations`, `/api/events/<id>/sync`, `/api/events/<id>/roles`, `/api/events/<id>/invoices`, `/api/events/<id>/contracts`, `/api/events/<id>/payments`, `/api/events/<id>/reimbursements` *(feature 349: `POST /api/events` aceita `conversa_id` opcional — conversa inexistente ou não inteiro → **400** `fields.conversa_id` (a validação da 348, junto com os outros campos; era 422 na branch da 349), **antes do Google**; depois do núcleo, `fechamento_ops.ligar_evento_a_conversa` põe a ficha da conversa entre as clientes (Contratante se não houver nenhuma, senão Outros) e apaga a perda, numa transação curta. É ali que a 348 grava `calendar_events.conversa_id`)* |
 | POST | `/api/roles/<id>/assign`, `/api/roles/<id>/invite`, `/api/roles/<id>/figurino-done`, `/api/roles/<id>/dismiss`, `/api/roles/<id>/restore` |
 | POST | `/api/roles/<id>/payment-status`, `/api/roles/<id>/figurino-sheet` *(feature 192)* |
 | POST\|DELETE | `/api/roles/<id>/transporte` *(feature 239 — marca/desmarca o carrinho de transporte; `POST` recusa com 400 só quando `event.is_outside_sp` é `False` — desconhecido vira `True` ao marcar (hotfix 239b); `DELETE` não tem essa guarda para permitir limpar marcação de evento que deixou de ser fora de SP)* |
@@ -1069,6 +1150,20 @@ o frontend sempre usa `credentials:"include"` via `apiFetch`. Erros seguem o env
 > `comissao_vendedor_retido` no EducaManto com comissão do vendedor. `GET /api/financeiro/comissoes`
 > (`entries[].origem`) e `GET /api/financeiro/pagamentos` (`commission_lines[].origem`) dizem a fonte
 > da linha; `by_seller[].sale_count` conta eventos distintos.
+>
+> **Feature 348 — frente e origem da venda.** `PATCH /api/events/<id>/comercial` aceita `frente` (um slug de
+> `marketing_frentes`). **Chave ausente não mexe** (bundle antigo) e não é exigida; `null`/`""` não apagam a
+> gravada; fora da lista → 400 `fields.frente = "Selecione uma frente da lista."`; chave presente, venda > 0, sem
+> cortesia e nenhuma frente (nem no corpo nem gravada) → 400 `fields.frente = "Selecione a frente da venda."`.
+> Segue o gate e a regra do cancelado da porta (só o Superadmin corrige). `POST /api/events` aceita `frente`
+> (mesma validação; ausente grava só a sugestão **certa** pelo título) e `conversa_id` (inteiro de conversa
+> existente; senão 400 `fields.conversa_id = "Conversa não encontrada."`, **antes** do Google). Com
+> `conversa_id`, o evento grava a conversa e congela o contato de origem; sem ele, herda os dois do orçamento
+> (`orcamento_history_id`). `PATCH …/orcamento` leva junto a conversa do orçamento ao ligar, trocar e desligar,
+> sem apagar a ligação feita pela conversa. O detalhe ganha, dentro de `venda` (só `show_comercial`),
+> `venda.frente` (`frente_ops.frente_do_evento`) e `venda.origem` (`{conversa_id, conversa_nome, canal,
+> pode_abrir, contato: {tipo, titulo, anuncio_id, campanha, campanha_id, conjunto, codigo, quando} | null}` ou
+> `null`; `pode_abrir` = quem lê usa as Conversas). Contrato: `specs/348-origem-completa/contracts/`.
 >
 > **Feature 299 — valor da venda e cobrança do grupo.** `POST /api/events` e
 > `PATCH /api/events/<id>` aceitam `valor_a_definir` (não gravado): com ele, sem cortesia, a venda
@@ -1314,6 +1409,16 @@ Contrato completo: `specs/345-marketing-integrado/contracts/api-345.md`.
 - `POST …/propostas/<id>/execucao` — só de `aprovada`; gera o diário.
 - `POST …/diario/<id>/resultado`.
 - O `POST …/run` da 256 aceita `conversations` e `leads` em `campaign_metrics`.
+- **345b**: o `POST …/run` aceita `diario` (lista opcional de `{titulo, motivo, evidencia?,
+  resultado_esperado?, reavaliar_em?}`), para as mudanças que o dono aprovou no chat. Cada item vira
+  `marketing_diario` com `origem = "rotina"` e autor = titular do cartão; a resposta traz `diario: [ids]`.
+  Tudo é validado antes de a rodada escrever (item inválido → 400 com `fields["diario[i].campo"]`, nada
+  gravado) e o `run_id` repetido não duplica.
+- **Google Ads (345b)**: sem conector MCP. `scripts/marketing/google_ads.py` fala com a API REST (OAuth "App
+  para computador" do projeto Cloud `manto-marketing`, conta `4115580695`, token em `~/.google-ads/`, fora do
+  repositório): `coletar` devolve `campaign_metrics` e `items` prontos, com a conversão do Google ("Contato por
+  Whatsapp" = toque no botão) em `results` e **nunca** em `conversations`; `ler`/`pausar`/`ativar`/`verba` vão
+  em ensaio (`validateOnly`) sem `--aplicar`.
 
 **Tela** (`marketing_comando_read.py` / `_write.py`):
 
@@ -1344,6 +1449,46 @@ anúncio.
   - `marketing_post_anuncios` — única por plataforma + anúncio;
   - `marketing_propostas`;
   - `marketing_diario` — `proposta_id` único.
+
+#### Painel atribuído (feature 351) — `app/marketing/atribuicao_ops.py`
+
+Contrato completo: `specs/351-painel-atribuido/contracts/api-351.md`. A regra da venda atribuída mora numa função
+só (`atribuir_vendas`); a frente do evento continua em `comando_ops.frente_venda_sql` (a 348 troca pela coluna).
+
+| Rota | Papéis |
+|---|---|
+| `GET /api/marketing/atribuicao?weeks\|start&end&dividir=frente\|anuncio\|peca\|conceito` | MARKETING, SUPERADMIN; o `valor` de cada venda só para SUPERADMIN real (`pode_ver_valor`) |
+| `GET /api/marketing/calendario` | MARKETING, SUPERADMIN |
+| `PATCH /api/marketing/calendario` | **só SUPERADMIN** real (403) |
+
+Campos novos nos endpoints de antes (todos opcionais no React):
+- `GET /api/marketing/desempenho`: cada frente ganha `vendas_atribuidas`, `faturamento_atribuido`,
+  `custo_venda_atribuida`, `custo_venda_atribuida_desconto`, `estado_atribuido` e `mes_corrente`; a resposta ganha
+  `atribuicao` (regra, `parcial`, `sem_frente`); `cac` ganha `new_clients_ads` e `value` passa a ser gasto ÷ clientes
+  novos **de anúncio**.
+- `GET|PATCH /api/marketing/frentes`: `meta_vendas_mes`, `verba_mes` (escrita: `metas`, `verbas`, só SUPERADMIN).
+- `GET /api/marketing/propostas`: `frente`, `frente_nome`, `valor_*_num`, `impacto_mensal`, `teto`, `verba_mes`; a
+  resposta ganha `impacto_aprovado_mes`.
+- `GET|POST /api/marketing/diario`: o teste (`alvo_*`, `metrica`, `mudou_em`, `janela_dias`, `linha_base`,
+  `controle_*`) e, na leitura, `teste` com o antes e o depois.
+- `GET|POST|PATCH /api/marketing/posts`: `conceito`; cada anúncio ganha `no_ar`/`ultimo_gasto_em`; `resultado` ganha
+  `conversas_reais`, `orcamentos`, `eventos`, `vendas`, `faturamento`, `custo_conversa_real`, `anuncios_no_ar`,
+  `ultima_leitura`.
+- `GET /api/marketing/temas-licenca`: `?pagina=` e `total`, `pagina`, `paginas`, `por_pagina` (50).
+- `GET /api/conversas/funil`: `dividir` aceita também `frente`, `anuncio`, `peca`, `conceito` — sem dinheiro.
+- Agente (rotas sem mudança): `…/comando` ganha `calendario`, `metas_do_mes` e `atribuicao`; `…/pedidos` aceita
+  `conceito`; `…/propostas` aceita `frente`, `valor_antes_num`, `valor_depois_num` (ou lê o número do texto); a
+  execução leva o alvo e a métrica para o diário; a fila `cards_prontos_sem_anuncio` inclui Agendado e Publicado.
+- Sino: `notifications.kind = marketing.proposta` para cada SUPERADMIN ativo, na transação da proposta.
+
+**Schema** (migration `a351b0c1d2e3`, aditiva, sobre `d334b2c4e6f8`):
+- `marketing_frentes`: `meta_vendas_mes`, `verba_mes`;
+- `marketing_calendario` (nova): frente × mês (`UNIQUE(frente, mes)`, `CHECK mes 1–12`), `meta_vendas`, `verba`,
+  `foco`; 60 linhas semeadas com o foco da pesquisa de 17/11;
+- `marketing_posts.conceito`;
+- `marketing_propostas`: `frente`, `valor_antes_num`, `valor_depois_num`;
+- `marketing_diario`: `alvo_platform`, `alvo_tipo`, `alvo_id`, `alvo_nome`, `metrica`, `mudou_em`, `janela_dias`,
+  `linha_base`, `controle_tipo`, `controle_id`, `controle_nome`.
 
 Núcleo de negócio de comissões: `app/financeiro/comissoes_ops.py`
 (`resolve_month`, `get_month_entries`, `get_month_summary_by_seller`, `get_month_kpis`,
@@ -1459,6 +1604,35 @@ tem cliente vinculada — nesse caso `client.id` é `null`. O núcleo continua e
 `client_ops.summarize_feedback`, que carrega evento+cliente com `joinedload` (evita N+1) e casa a
 tag pelas **duas** formas do JSON (escapada e literal) com `ESCAPE '!'` — o `LIKE` do PostgreSQL
 consome a barra invertida de `\uXXXX` como escape, e por isso o filtro por tag não funcionava.
+
+**Feature 350 — base autorizada** (`clientes_base_read.py` / `clientes_base_write.py`; contrato completo
+em `specs/350-base-autorizada/contracts/api.md`):
+
+- `GET /api/clientes/<id>` ganha `pode_prospectar`, `consentimentos` (`novidades`, `historico[]`,
+  `textos`, `origens` e — só Comercial/Superadmin — `criancas[]`), `indicado_por`, `indicacoes[]`,
+  `parceiro` e `flags.pode_editar_base`; `GET /api/clientes/` ganha `flags`.
+- `POST|DELETE /api/clientes/<id>/consentimentos/novidades` `{origem, referencia?}` — origem da lista
+  fechada (`Conversa`, `Resposta ao orçamento`, `Telefone`, `Pessoalmente`); idempotente.
+- `POST /api/clientes/<id>/criancas` `{primeiro_nome, nascimento, aceite: true, origem}` → 201;
+  `DELETE /api/clientes/<id>/criancas/<cid>` (criança de outra ficha → 404).
+- `PATCH /api/clientes/<id>/indicacao` `{indicado_por_id?, parceiro_id?}` — só as chaves enviadas.
+- `GET /api/clientes/aniversarios?dias=60` (1–120) — crianças com os **dois** aceites.
+- `GET /api/parceiros?inativos=1`, `POST /api/parceiros`, `PATCH /api/parceiros/<id>` (inclui `ativo`).
+- `GET /api/pos-evento` (últimos 7 dias até agora, sem satélite nem ensaio);
+  `GET /api/events/<id>/pos-evento?fotos_url=` (prévia; gera o token de avaliação na primeira
+  leitura); `POST /api/events/<id>/pos-evento` `{canal: copiado|conversa, fotos_url?}` — cancelado
+  409 `cancelado`; conversa: 503 `nao_configurado`, 409 `sem_conversa` / `janela_fechada` /
+  `envio_travado`, 502 `envio_falhou`. Envio por `envio_ops.enviar_texto` com chave
+  `pos-evento-<id>-<tentativa>`.
+- Público: `GET /api/avaliar/<token>` ganha `consentimento` (ausente sem contratante);
+  `POST /api/avaliar/<token>/consentimento` (10/h) `{novidades: aceitar|retirar|null, versao_novidades,
+  crianca?, versao_aniversario}` → 409 `sem_ficha` / `texto_mudou`, 410 cancelado.
+- `POST /api/conversas/<id>/modelo`: modelo de categoria `MARKETING` sem aceite na ficha da conversa →
+  **409 `sem_aceite`** (a Meta não é chamada). `cliente.aceite_novidades` na conversa.
+- Saída automática (sem endpoint): o aviso do WhatsApp com a mensagem inteira igual a uma palavra de
+  saída (`aviso_ops._gravar_recebida`; Instagram em `instagram_ops`) e o erro **131050** (status em
+  `_aplicar_status`, recusa síncrona em `envio_ops._registrar_falha`) retiram o aceite da ficha.
+- `POST /api/orcamento/calcular`: `quote.message` termina com o convite "Responda *QUERO*" (o PDF não).
 
 ### 3.9 Catálogo público (anônimo) — `catalogo_read.py`
 `GET /api/catalogo`, `/api/catalogo/categorias`, `/api/catalogo/categoria/<slug>`,
@@ -2131,15 +2305,21 @@ A Plataforma recebe e envia WhatsApp pela Cloud API da Meta (Fase 1 do `docs/PLA
 |---|---|---|
 | `GET` | `/api/webhooks/whatsapp` | **Público.** Desafio da Meta: com `hub.mode=subscribe` e `hub.verify_token` = `WHATSAPP_VERIFY_TOKEN` (`compare_digest`) → 200 `text/plain` com o `hub.challenge`; senão, ou com o módulo desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/whatsapp` | **Público, assinado.** `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 do corpo bruto com `WHATSAPP_APP_SECRET`; inválido, sem assinatura ou desligado → **404**; corpo > 256 KB → 413. Válido → grava `whatsapp_avisos` e responde **200** sempre; processa fora da requisição (`WHATSAPP_AVISO_SINCRONO` = na hora, costura do verify). `300/min`. |
-| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. |
+| `GET` | `/api/conversas` | Lista: `busca` (≥ 2 caracteres; nome de perfil, ficha ou telefone), `antes` (cursor ISO), `filtro` (328: `todas` · `minhas` · `sem_responsavel`; outro → 422 `fields.filtro`). Devolve `configurado`, `envio_travado`, `poll_segundos`, `conversas[]` e `proximo`. Cada conversa traz `responsavel` (`{id, nome}` ou `null`), `responsavel_ativo` e `aguardando_desde`. (349) `recorte` (`esperando` · `orcamento_parado` · `anuncio`; outro → 422 `fields.recorte`) e `dias` (2 · 5 · 9, padrão 2; outro → 422 `fields.dias`); cada conversa ganha `venda` `{anuncio, etapa, etapa_rotulo, qualificada, perdida{motivo, rotulo}\|null, lembrete_em}`, em lote. |
 | `GET` | `/api/conversas/<id>` | Conversa e as 50 últimas mensagens (`antes=<mensagem_id>` pagina para trás), mais `tem_mais` e `notas` (328: as 200 mais recentes, em ordem). Não zera as não lidas. |
 | `GET` | `/api/webhooks/instagram` | (330) **Público.** Desafio da Meta com o `WHATSAPP_VERIFY_TOKEN` (o app é o mesmo); senão, ou com o Instagram desligado → **404**. `60/min`. |
 | `POST` | `/api/webhooks/instagram` | (330) **Público, assinado** com o `WHATSAPP_APP_SECRET`. Inválido ou desligado → **404**; > 256 KB → 413. Grava na mesma fila crua e responde 200. `300/min`. |
 | `POST` | `/api/conversas/<id>/orcamento` | (333) `{orcamento_id, chave_envio, cliente?, somente_pdf?}` (`somente_pdf`: o reenvio do PDF recusado, sem a mensagem) → 201 (novo) ou 200 (a mesma chave), com `envio`, `mensagens` (as partes do texto e o PDF) e `conversa`. 404 conversa/orçamento; 422 `fields.orcamento` (sem a mensagem pronta), `fields.cliente`/`nome`/`telefone` (a ficha), `fields.chave_envio`; 409/503 do envio comum, **antes** de criar ficha ou registro. |
 | `POST`/`DELETE` | `/api/conversas/<id>/ficha` | (333) Liga à ficha (`{client_id}`) ou cria (`{nome, telefone}`) → 200 `{conversa, reaproveitada}`; remove o vínculo sem apagar → 200 `{conversa}`. As duas marcam `ficha_manual`. |
 | `GET` | `/api/conversas/<id>/formularios` | (333) Os formulários públicos (`comum` Pré-contrato, `corporativo`) com o link curto (`PLATFORM_BASE_URL/f/<slug>`) e o texto pronto. |
-| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`; 351: também `frente`\|`anuncio`\|`peca`\|`conceito`, pelo primeiro anúncio da conversa, sem dinheiro) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. |
 | `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). |
+| `GET` | `/api/conversas/funil` | (335) `?inicio&fim` (datas de São Paulo; padrão o mês corrente; até 366 dias), `canal`, `campanha` (o nome, `__sem_anuncio__` ou `__desconhecida__`), `dividir` (`vendedor`\|`campanha`\|`canal`) → `{periodo, total, etapas[{chave, rotulo, quantidade, sobre_chegou, passagem}], dividir, grupos[{chave, rotulo, quantidades, conversao}], campanhas[{valor, rotulo, quantidade}]}`; 422 com `fields`. (349) Ganha `primeira_resposta {respondidas, sem_resposta, sem_autor, mediana_minutos, ate_15_min}`, `qualificadas`, `perdidas` e `motivos_de_perda[{codigo, rotulo, quantidade}]`; cada grupo ganha `qualificadas`, `perdidas`, `mediana_minutos` e `ate_15_min`. |
+| `GET` | `/api/conversas/funil/parados` | (335) os mesmos filtros + `etapa` → `{etapa, rotulo, total, conversas[{id, nome, canal, vendedor, primeiro_contato, campanha}]}` (até 200, do primeiro contato mais novo para o mais antigo). (349) Cada conversa ganha `perdida`, `qualificada`, `primeira_resposta_minutos`, `primeira_resposta_sem_autor`, `primeira_resposta_pendente` e `lembrete_em`; a perdida continua na lista, com o motivo. |
+| `GET` | `/api/conversas/<id>/venda` | (349) O painel da venda: `etapa`, `anuncio`, `primeira_resposta` (com `autor` nulo e `origem` no eco), `perda`, `qualificacao` (`qualificada`, `pela` regra\|decisao, `pontos`, `corte`, `sinais[]`, quem decidiu), `lembrete`, `parado` (`orcamento_em`, `dias`), `fechamento` (`orcamento_id`, `cliente`, `vendedor`) e `motivos_de_perda[{codigo, rotulo, pede_frase}]`. 404. |
+| `POST`/`DELETE` | `/api/conversas/<id>/perdida` | (349) `{motivo, frase?}` (motivo da lista; frase obrigatória no `outro`, até 300) → 200 `{venda}`; 422 `fields.motivo`/`frase`. Marcar apaga o lembrete. `DELETE` reabre (idempotente). |
+| `POST` | `/api/conversas/<id>/qualificacao` | (349) `{decisao: qualificada \| nao_qualificada \| null}` → 200 `{venda}`; `null` volta para a regra; 422 `fields.decisao`. |
+| `POST`/`DELETE` | `/api/conversas/<id>/lembrete` | (349) "Lembrar amanhã" (9h de São Paulo do próximo dia, para quem tocou; um por conversa) / cancelar → 200 `{venda}`. Nada sai para a cliente. |
 | `GET` | `/api/clientes/<id>/linha-do-tempo` | (335) `{marcos[{tipo, quando, titulo, detalhe, link}]}`, do mais novo para o mais antigo, até 300; `quando` em ISO com o fuso. |
 | `GET` | `/api/push/chave` | (332) `{ligado, chave_publica}`; sem o par VAPID, `ligado: false` e chave `null`. |
 | `POST` | `/api/push/aparelhos` | (332) O `PushSubscription.toJSON()` do navegador → 201 `{ok}` (upsert pelo `endpoint`, da pessoa logada). Endpoint fora dos serviços de aviso conhecidos, sem https ou chaves de tamanho errado → 422 `fields.aparelho`; sem o par → 503 `nao_configurado`. Funciona com o envio travado. |
@@ -2178,6 +2358,22 @@ contrato em `specs/330-crm-instagram-direct/contracts/api.md`.
     vira "não entregue" com o motivo próprio.
 - **Mídia recebida**: o link do anexo vem no `dados` da mensagem e é baixado sem token; o MIME sai da assinatura dos
   bytes.
+
+**O comercial mede e fecha (feature 349).** Rotas novas em `app/api/conversas_venda.py`. Fluxo e invariantes em
+`docs/04` §6; contrato em `specs/349-comercial-mede-e-fecha/contracts/api.md`.
+- **Primeira resposta** (`primeira_resposta_ops`): UPDATE condicional nos pontos que já abrem e encerram a espera da 328
+  — `aviso_ops._gravar_recebida`/`instagram_ops._chegou_da_cliente` (primeira mensagem), `equipe_ops.resposta_da_equipe`
+  (Plataforma, com autor), `aviso_ops._gravar_eco` (celular) e `instagram_ops._gravar_eco` (outro app), sem autor. O
+  `failed` depois do aceite recalcula pelas mensagens.
+- **Pontuação** (`pontuacao_ops`, só leitura e em lote): formulário +3, data do evento até 90 dias +2 (mais longe +1),
+  orçamento +1, recompra +2; corte 3. Constantes em `app/conversas/constantes.py`.
+- **Lista** (`venda_ops.resumos_da_lista`): reusa `funil_ops._etapas` e a pontuação para a página inteira — ~10 consultas
+  por página de 50, nunca uma por conversa. O recorte `orcamento_parado` é o mesmo SQL da régua (`parado_ops`).
+- **Lembrete e régua** (`parado_ops.avisar_lembretes`, última rotina da `whatsapp-sweep`): sino `conversa.lembrete`
+  (quem marcou; sem acesso, quem atende ou a equipe) e `conversa.orcamento_parado` (degraus 2/5/9 dias, `dedupe_key =
+  conversa.orcamento_parado:{id}:{epoch do orçamento}:{degrau}`, só o degrau atual, até o 10º dia), das 9h às 21h;
+  push com a tag `lembrete-{id}` depois do commit. Nada escreve na conversa.
+- **Criar evento**: `POST /api/events` aceita `conversa_id` (abaixo) e o ponto único `fechamento_ops.ligar_evento_a_conversa`.
 
 **Linha do tempo e funil (feature 335, Fase 3c do plano).** Só leitura, sem tabela nova. Fluxo e invariantes em
 `docs/04` §6; contrato em `specs/335-crm-linha-do-tempo/contracts/api.md`.
@@ -2284,7 +2480,17 @@ O tipo do item não é coluna: `kind` = `"tema"` se tem elenco, senão `"avulso"
 e reenvia — feature 219) ·
 `GET /api/formularios/<form_type>/schema` · `POST /api/formularios/<form_type>` ·
 `GET|POST /api/avaliar/<token>` (feedback da cliente) ·
-`GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205).
+`GET /api/virtuais/campanhas/<slug>` e `.../horarios` (feature 205) ·
+`POST /api/origem/codigo` (feature 348, `origem_public.py`).
+
+**Feature 348 — o código do site.** `POST /api/origem/codigo` recebe os marcadores da URL (`gclid`, `gbraid`,
+`wbraid`, `fbclid`, `gad_campaignid`, `utm_id`, `utm_*`), `pagina` e `procedencia` (só texto; o resto é
+ignorado) e devolve **201** `{codigo, linha, validade_dias}` — a `linha` ("Código do site: #A7K2Q") é a fonte
+única do texto da mensagem; sem marcador → 400. `20 per hour` por endereço. O app público chama uma vez por
+clique novo (`lib/origem.ts`, fora da loja). `POST /api/formularios/<tipo>` aceita `origem_codigo`: código vivo
+(≤ 90 dias) põe a linha no fim da mensagem do `wa_link` e liga a resposta ao código; inválido ou ausente, a
+resposta de hoje. No aviso do WhatsApp, `#XXXXX` em qualquer mensagem de texto da cliente liga o código à
+conversa (o primeiro uso vence) e cria o contato de origem `site`.
 Admin dos formulários: `formularios_admin_read/write.py`
 (`/api/formularios/respostas*`, `/api/formularios/editor/*`). O `_response_summary` de
 `GET /api/formularios/respostas` e `…/respostas/search` inclui **`client_name`** (nome do cliente
@@ -2586,8 +2792,16 @@ Gates por módulo (todos em `app/api/`):
 | `pode_conversas()` (feature 325) | `GET /api/conversas/midia/<id>` | `COMERCIAL`, `SUPERADMIN` → **404** nos demais (não confirma existência) |
 | assinatura do app Meta (sem papel) (feature 330) | `GET`/`POST /api/webhooks/instagram` | público; o GET vale só com o `WHATSAPP_VERIFY_TOKEN` e o POST só com o `X-Hub-Signature-256` do `WHATSAPP_APP_SECRET`; Instagram desligado → 404 |
 | `pode_conversas()` (feature 335) | `conversas_funil` (`GET /api/conversas/funil`, `GET /api/conversas/funil/parados`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `pode_conversas()` (feature 349) | `conversas_venda` (`GET /api/conversas/<id>/venda`, `POST`/`DELETE …/perdida`, `POST …/qualificacao`, `POST`/`DELETE …/lembrete`); `recorte`/`dias` e `venda` em `GET /api/conversas`; campos novos do funil | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais |
+| `_can_create_event()` (feature 349) | `conversa_id` em `POST /api/events` | o gate de sempre (`COMERCIAL`, `SUPERADMIN`); a conversa só precisa existir (400 `fields.conversa_id`, pela validação da 348) |
 | `_require_vendas()` (feature 335) | `clientes_read` (`GET /api/clientes/<id>/linha-do-tempo`) | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; os links de conversa e de orçamento só para `COMERCIAL`/`SUPERADMIN` (papel real) |
 | `pode_conversas()` / `_require_vendas()` / `require_marketing_access` (feature 334) | `conversas_read` (`anuncio` em `GET /api/conversas/<id>`), `clientes_read` (`origem` em `GET /api/clientes/<id>`), `marketing_read` (`returns` em `GET /api/marketing/desempenho`) | os gates de antes, sem mudança: campos novos em endpoints que já existiam |
+| `_negado()` de `clientes_base_write` (feature 350) | `POST`/`DELETE /api/clientes/<id>/consentimentos/novidades`, `POST /api/clientes/<id>/criancas`, `DELETE /api/clientes/<id>/criancas/<cid>`, `PATCH /api/clientes/<id>/indicacao`, `POST /api/parceiros`, `PATCH /api/parceiros/<id>`, `POST /api/events/<id>/pos-evento` | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais, o Financeiro inclusive |
+| `_negado(_EQUIPE_COMERCIAL)` de `clientes_base_read` (feature 350) | `GET /api/clientes/aniversarios`, `GET /api/pos-evento`, `GET /api/events/<id>/pos-evento` | `COMERCIAL`, `SUPERADMIN` → 403 (dado de criança: minimização, LGPD art. 14) |
+| `_negado(_LEITORES_DE_PARCEIRO)` de `clientes_base_read` (feature 350) | `GET /api/parceiros` | `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; `flags.pode_editar` só para Comercial/Superadmin |
+| `_require_vendas()` + `_pode_editar_base()` (feature 350) | `GET /api/clientes/<id>`: a chave `consentimentos.criancas` só sai para `COMERCIAL`/`SUPERADMIN` (ausente para o Financeiro); `flags.pode_editar_base` idem | gate de hoje (`COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`) |
+| token do evento + `10 per hour` (feature 350) | `POST /api/avaliar/<token>/consentimento` | público, como a avaliação; grava só na ficha contratante do evento (sem ficha → 409 `sem_ficha`) |
+| `pode_conversas()` + aceite (feature 350) | `POST /api/conversas/<id>/modelo` | gate de hoje; modelo `MARKETING` sem aceite na ficha → **409 `sem_aceite`** (o papel passa, o consentimento recusa) |
 | `pode_conversas()` (feature 333) | `conversas_costura` (`POST /api/conversas/<id>/orcamento`, `POST`/`DELETE /api/conversas/<id>/ficha`, `GET /api/conversas/<id>/formularios`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; o orçamento de qualquer colega pode ser mandado (o histórico é do time, 301), e o registro guarda quem mandou |
 | `pode_conversas()` (feature 332) | `push` (`GET /api/push/chave`, `POST`/`DELETE /api/push/aparelhos`) | `COMERCIAL`, `SUPERADMIN` (papel real) → 403 nos demais; no envio, só os aparelhos de quem ainda é da equipe (`e_da_equipe`) |
 | `pode_conversas()` (feature 328) | `conversas_read` (`GET /api/conversas/equipe`) e `conversas_equipe_write` (responsável, notas, respostas rápidas) | `COMERCIAL`, `SUPERADMIN` → 403 nos demais; o destino da transferência também precisa ser ativo, com acesso e um desses papéis (422) |
@@ -2605,9 +2819,10 @@ Gates por módulo (todos em `app/api/`):
 | `require_3d_access()` | `impressoes3d_read/write` | `ARTISTA_3D`, `SUPERADMIN` |
 | `require_marketing_access()` | `marketing_read/write` | `MARKETING`, `SUPERADMIN` |
 | `require_marketing_access()` + `eh_superadmin()` (345) | `marketing_comando_read/write` | `MARKETING`, `SUPERADMIN`; tetos, decidir proposta e liberar licenciado: só `SUPERADMIN` (o "Ver como" não conta) |
+| `require_marketing_access()` + `eh_superadmin()` (351) | `GET /api/marketing/atribuicao`, `GET\|PATCH /api/marketing/calendario`, `PATCH /api/marketing/frentes` (`metas`, `verbas`) | `MARKETING`, `SUPERADMIN`; valor de cada venda atribuída, calendário, meta e verba: só `SUPERADMIN` real (403) |
 | `require_virtuais_access()` | `virtuais_read/write`: campanhas, horários, devoluções e, desde a 310, `GET /api/virtuais/pagamentos-a-conferir`, `PATCH /api/virtuais/pagamentos-a-conferir/<tipo>/<id>` e `POST /api/virtuais/pedidos/<id>/cancelar` (a ação mora na Fila de Produção, mas o gate é o das devoluções); desde a 344, `GET /api/virtuais/campanhas/<id>/funil` | `COMERCIAL`, `SUPERADMIN` |
 | `require_producao_access()` | `virtuais_read/write`: Fila de Produção de Mídia (`/api/virtuais/producao*`) | `COMERCIAL`, `CASTING`, `SUPERADMIN` |
-| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel | — |
+| — (público, por token) | `POST /api/virtuais/pedidos/<token>/retorno` (310): token não adivinhável, `order_nsu` precisa conferir, `20 per minute`; `POST /api/virtuais/pedidos/<token>/abandonar` (310): token + `client_token` da aba que criou a reserva, `20 per minute`, 409 havendo sinal de pagamento; o `429` do mesmo telefone só devolve `existing_order_token` para a mesma origem (aparelho e rede); `POST /api/webhooks/infinitepay/<token>`: segredo no path (atual ou anterior por 24 h), `60 per minute`; a mesma rota no serviço `manto-avisos` (340), com a mesma regra de segredo e 60/min por IP, e `GET /health`, `/health/banco` ali, públicos e sem dado. `PATCH /api/admin/settings` com o interruptor e o segredo segue em `_require_superadmin()` (desde a 344 também o `meta_pixel_id`); `POST /api/virtuais/campanhas/<slug>/visita` (344): anônimo, só campanha publicada, `30 per minute`, sem IP gravado; `GET /api/virtuais/rastreamento` (344): público, só o ID do pixel; `POST /api/origem/codigo` (348): anônimo, `20 per hour`, só marcadores da URL, caminho e host de procedência (sem IP nem dado pessoal) | — |
 | `_CAN_ENSAIO` (`app/calendar/routes.py:50`) | criar/editar/excluir ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `_CAN_ENSAIO_MATERIAL` (`app/calendar/routes.py:3627`) | materiais de ensaio | `ENSAIO`, `CASTING`, `SUPERADMIN` |
 | `portal_api_login_required` ⚠️ **exceção declarada à regra do decorator** | todos os `app/api/portal_*.py` | **nenhum papel** — o Portal do Artista não tem papéis. O modelo é "é o dono do recurso": o decorator só confere a sessão de talento (401 sem ela), e cada consulta parte do `talent_id` da sessão, nunca de um id vindo do cliente. Cada módulo declara isso no topo; `portal_figurino.py` era o único dos cinco sem a declaração e a ganhou na **302**. Onde o recurso é de outra pessoa, o portal recusa — a ficha de figurino de evento em que o talento não está escalado devolve **403**, e não o 404 que o Princípio XIII pediria (decisão registrada na 302, `docs/05`) |

@@ -41,7 +41,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.constants import RoleName, now_sp
-from app.models import ClientFeedback, EventRole, FormResponse, Notification, Role, User
+from app.models import (
+    ClientFeedback,
+    EventRole,
+    FormResponse,
+    MarketingProposta,
+    Notification,
+    Role,
+    User,
+)
 from app.money import format_brl
 
 if TYPE_CHECKING:
@@ -78,6 +86,14 @@ KINDS_COM_CIENTE: frozenset[str] = frozenset({KIND_EVENTO_TIPO_SHOW, KIND_EVENTO
 # Feature 328: a cliente esperando resposta nas Conversas e a conversa transferida para alguém.
 KIND_CONVERSA_ESPERANDO = "conversa.esperando"
 KIND_CONVERSA_TRANSFERIDA = "conversa.transferida"
+# Feature 351: a rotina de marketing propôs uma mudança na Meta/Google — quem decide fica sabendo na hora,
+# sem esperar o e-mail da rodada.
+KIND_MARKETING_PROPOSTA = "marketing.proposta"
+
+# Feature 349: o "Lembrar amanhã" vencido (vai explícito para quem marcou) e a régua do orçamento parado
+# (2, 5 e 9 dias). Só sino e celular da equipe: nada sai para a cliente.
+KIND_CONVERSA_LEMBRETE = "conversa.lembrete"
+KIND_CONVERSA_ORCAMENTO_PARADO = "conversa.orcamento_parado"
 
 #: Quem é avisado de cada fato. Nenhum `kind` endereça "todo mundo": a decisão 5 da 266 vale para a
 #: caixa — aviso que vira ruído deixa de avisar.
@@ -117,6 +133,12 @@ DESTINATARIOS_POR_KIND: dict[str, tuple[str, ...]] = {
     # responsável, o produtor manda só para ele. A transferência vai sempre explícita, para o destino.
     KIND_CONVERSA_ESPERANDO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
     KIND_CONVERSA_TRANSFERIDA: (),
+    # Feature 351: só o Superadmin decide proposta (`eh_superadmin` em `marketing_comando_write.py`).
+    KIND_MARKETING_PROPOSTA: (RoleName.SUPERADMIN,),
+
+    # Feature 349: o lembrete é de quem marcou (explícito); a régua, de quem atende ou da equipe.
+    KIND_CONVERSA_LEMBRETE: (),
+    KIND_CONVERSA_ORCAMENTO_PARADO: (RoleName.COMERCIAL, RoleName.SUPERADMIN),
 }
 
 SEVERIDADES = ("info", "urgent")
@@ -864,3 +886,31 @@ def notificar_virtual_atencao(*, titulo: str, corpo: str, dedupe_key: str,
     )
     db.session.commit()
     return gravadas
+
+
+#: O verbo da proposta no título do aviso (feature 351) — o mesmo da tela de Decisões.
+_VERBO_DA_PROPOSTA = {
+    "ativar": "Ativar",
+    "pausar": "Pausar",
+    "verba": "Mudar verba",
+    "publico": "Mudar público",
+}
+
+
+def notificar_proposta_marketing(proposta: MarketingProposta) -> int:
+    """A rotina de marketing propôs uma mudança → SUPERADMIN (feature 351). Regime A, sem commit.
+
+    Roda na transação que grava a proposta: proposta sem aviso não existe, e a chave por proposta impede
+    o aviso repetido. O texto diz o que muda e por quê; a decisão é na tela de Decisões.
+    """
+    _garante_id(proposta)
+    alvo = proposta.alvo_nome or proposta.alvo_id
+    verbo = _VERBO_DA_PROPOSTA.get(proposta.tipo, proposta.tipo)
+    return emitir(
+        KIND_MARKETING_PROPOSTA,
+        title=f"Proposta de marketing — {verbo}: {alvo}",
+        body=f"{proposta.platform} · {proposta.motivo}",
+        link_path="/marketing/decisoes",
+        entidade=("marketing_proposta", proposta.id),
+        dedupe_key=f"{KIND_MARKETING_PROPOSTA}:{proposta.id}",
+    )

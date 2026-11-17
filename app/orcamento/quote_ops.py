@@ -97,6 +97,14 @@ def bv_que_acompanha(bv: Any, venda: Any, total: Any) -> Decimal:
 #: (prefill, evento) segue o caminho de antes — o que foi cotado não muda (020). A noite dos dias será a versão 3.
 VERSAO_CONTA = 2
 
+#: Feature 350: todo orçamento convida a receber novidades. Quem responde QUERO tem o aceite registrado
+#: pela vendedora (origem "Resposta ao orçamento"); o sistema não grava nada sozinho. Fica depois do
+#: fecho, sem tocar a frase de deslocamento (texto assinado pelo dono). O PDF não leva.
+CONVITE_PARA_NOVIDADES = (
+    "\n\n💌 Quer receber nossas novidades por WhatsApp e e-mail? Responda *QUERO*. "
+    "Se um dia quiser parar, é só responder SAIR."
+)
+
 #: O PIX à vista padrão, em %: o mesmo fator do EducaManto. Arredondado porque `(1 − 0,95) × 100` em float dá
 #: 5,000000000000004 — e o negociado de exatamente 5% (o caso mais comum) perderia o "já está aplicado".
 PIX_PCT_PADRAO = round((1 - AVISTA_FATOR) * 100, 6)
@@ -966,6 +974,7 @@ def calculate_quote(payload: dict[str, Any]) -> dict[str, Any]:
         f"3️⃣ *Cartão de Crédito:* Parcelamento disponível (taxas da operadora repassadas ao cliente).\n\n"
         f"✨ Podemos seguir com a reserva da sua data? "
         f"Aguardamos sua confirmação para enviarmos o link do contrato digital."
+        f"{CONVITE_PARA_NOVIDADES}"
     )
 
     if personalizado:

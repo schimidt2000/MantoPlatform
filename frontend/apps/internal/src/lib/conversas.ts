@@ -32,6 +32,8 @@ export type TipoMensagem =
 export interface ClienteDaConversa {
   id: number;
   nome: string;
+  /** Feature 350: a ficha aceita novidades? Ausente em backend velho. */
+  aceite_novidades?: boolean;
 }
 
 /** Pessoa da equipe (responsável, autor de nota, destino de transferência) — feature 328. */
@@ -70,6 +72,70 @@ export interface ConversaResumo {
   janela?: Janela;
   /** Feature 333: a ficha (ou a falta dela) foi escolhida à mão; a ligação automática não age. */
   ficha_manual?: boolean;
+  /** Feature 349: os selos da lista (só no item de `GET /api/conversas`; ausente em backend velho). */
+  venda?: VendaResumo | null;
+}
+
+/** Feature 349 — a régua do funil (335), do primeiro contato à avaliação. */
+export type EtapaDaVenda = "chegou" | "orcamento" | "formulario" | "evento" | "pagou" | "avaliou";
+/** Os recortes da lista e os dias do orçamento parado (a régua de 2, 5 e 9 dias). */
+export type RecorteDaLista = "esperando" | "orcamento_parado" | "anuncio";
+export type DiasDoParado = 2 | 5 | 9;
+export const DIAS_DO_PARADO: DiasDoParado[] = [2, 5, 9];
+
+export interface PerdaCurta {
+  motivo: string;
+  rotulo: string;
+}
+
+export interface VendaResumo {
+  anuncio: boolean;
+  etapa: EtapaDaVenda;
+  etapa_rotulo?: string;
+  qualificada: boolean;
+  perdida: PerdaCurta | null;
+  lembrete_em: string | null;
+}
+
+export interface SinalDaPontuacao {
+  chave: string;
+  rotulo: string;
+  pontos: number;
+}
+
+export interface MotivoDePerda {
+  codigo: string;
+  rotulo: string;
+  pede_frase: boolean;
+}
+
+/** O painel da venda da conversa aberta (`GET /api/conversas/<id>/venda`). */
+export interface Venda {
+  conversa_id: number;
+  etapa: { chave: EtapaDaVenda; rotulo: string };
+  anuncio: boolean;
+  primeira_resposta: {
+    recebida_em: string | null;
+    resposta_em: string | null;
+    minutos: number | null;
+    autor: Pessoa | null;
+    origem: Origem | null;
+  };
+  perda: (PerdaCurta & { frase: string | null; em: string | null; por: Pessoa | null }) | null;
+  qualificacao: {
+    qualificada: boolean;
+    pela: "regra" | "decisao";
+    decisao: "qualificada" | "nao_qualificada" | null;
+    decidida_por: Pessoa | null;
+    decidida_em: string | null;
+    pontos: number;
+    corte: number;
+    sinais: SinalDaPontuacao[];
+  };
+  lembrete: { em: string | null; para: Pessoa | null } | null;
+  parado: { orcamento_em: string | null; dias: number } | null;
+  fechamento: { orcamento_id: number | null; cliente: ClienteDaConversa | null; vendedor: Pessoa | null };
+  motivos_de_perda: MotivoDePerda[];
 }
 
 export interface Nota {
@@ -156,19 +222,33 @@ export function intervaloDaLista(lista: ListaDeConversas | undefined): number {
   return Math.max(2, lista?.poll_segundos ?? POLL_PADRAO_S) * 1000;
 }
 
-function parametrosDaLista(busca: string, filtro: FiltroDaLista, canal: Canal | null): URLSearchParams {
+function parametrosDaLista(
+  busca: string,
+  filtro: FiltroDaLista,
+  canal: Canal | null,
+  recorte: RecorteDaLista | null = null,
+  dias: DiasDoParado = 2,
+): URLSearchParams {
   const params = new URLSearchParams();
   if (busca) params.set("busca", busca);
   if (filtro !== "todas") params.set("filtro", filtro);
   if (canal) params.set("canal", canal);
+  if (recorte) params.set("recorte", recorte);
+  if (recorte === "orcamento_parado") params.set("dias", String(dias));
   return params;
 }
 
-export function useConversas(busca: string, filtro: FiltroDaLista = "todas", canal: Canal | null = null) {
+export function useConversas(
+  busca: string,
+  filtro: FiltroDaLista = "todas",
+  canal: Canal | null = null,
+  recorte: RecorteDaLista | null = null,
+  dias: DiasDoParado = 2,
+) {
   return useQuery<ListaDeConversas>({
-    queryKey: [...CHAVE, "lista", busca, filtro, canal],
+    queryKey: [...CHAVE, "lista", busca, filtro, canal, recorte, dias],
     queryFn: () => {
-      const params = parametrosDaLista(busca, filtro, canal).toString();
+      const params = parametrosDaLista(busca, filtro, canal, recorte, dias).toString();
       return apiFetch<ListaDeConversas>(`/api/conversas${params ? `?${params}` : ""}`);
     },
     refetchInterval: (query) => intervaloDaLista(query.state.data),
@@ -213,11 +293,13 @@ export function useConversasAnteriores(
   filtro: FiltroDaLista,
   canal: Canal | null,
   cursorInicial: string | null,
+  recorte: RecorteDaLista | null = null,
+  dias: DiasDoParado = 2,
 ) {
   return useInfiniteQuery({
-    queryKey: [...CHAVE, "lista-anteriores", busca, filtro, canal, cursorInicial],
+    queryKey: [...CHAVE, "lista-anteriores", busca, filtro, canal, recorte, dias, cursorInicial],
     queryFn: ({ pageParam }) => {
-      const params = parametrosDaLista(busca, filtro, canal);
+      const params = parametrosDaLista(busca, filtro, canal, recorte, dias);
       params.set("antes", pageParam);
       return apiFetch<ListaDeConversas>(`/api/conversas?${params.toString()}`);
     },
@@ -653,4 +735,83 @@ export function useFormulariosDaConversa(conversaId: number, ativo: boolean) {
 export function precisaEscolherFicha(conversa: ConversaResumo): boolean {
   if (conversa.cliente) return false;
   return conversa.canal === "instagram" || Boolean(conversa.ficha_manual) || !conversa.telefone;
+}
+
+// ── Feature 349: a venda na conversa ──────────────────────────────────────────────────────────────
+
+/** O painel da venda. Sem polling curto: muda por ação da equipe (invalidada por ela) ou por fato raro. */
+export function useVendaDaConversa(id: number | null) {
+  return useQuery<Venda>({
+    queryKey: [...CHAVE, "venda", id],
+    queryFn: () => apiFetch<Venda>(`/api/conversas/${id}/venda`),
+    enabled: id !== null,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Grava o painel devolvido pela escrita e atualiza a lista e o funil (selos e "Pararam em"). */
+function useAposVenda(conversaId: number) {
+  const queryClient = useQueryClient();
+  return (resposta: { venda: Venda }) => {
+    queryClient.setQueryData([...CHAVE, "venda", conversaId], resposta.venda);
+    void queryClient.invalidateQueries({ queryKey: [...CHAVE, "lista"] });
+    void queryClient.invalidateQueries({ queryKey: ["conversas-funil"] });
+    void queryClient.invalidateQueries({ queryKey: ["conversas-funil-parados"] });
+  };
+}
+
+function useEscritaDaVenda<T>(conversaId: number, caminho: string, metodo: "POST" | "DELETE") {
+  const depois = useAposVenda(conversaId);
+  return useMutation({
+    mutationFn: (corpo: T) =>
+      apiFetch<{ venda: Venda }>(`/api/conversas/${conversaId}/${caminho}`, {
+        method: metodo,
+        body: metodo === "POST" ? JSON.stringify(corpo ?? {}) : undefined,
+      }),
+    onSuccess: depois,
+  });
+}
+
+export function useMarcarPerdida(conversaId: number) {
+  return useEscritaDaVenda<{ motivo: string; frase?: string }>(conversaId, "perdida", "POST");
+}
+
+export function useReabrirConversa(conversaId: number) {
+  return useEscritaDaVenda<void>(conversaId, "perdida", "DELETE");
+}
+
+export function useDecidirQualificacao(conversaId: number) {
+  return useEscritaDaVenda<{ decisao: "qualificada" | "nao_qualificada" | null }>(
+    conversaId,
+    "qualificacao",
+    "POST",
+  );
+}
+
+export function useLembrarAmanha(conversaId: number) {
+  return useEscritaDaVenda<void>(conversaId, "lembrete", "POST");
+}
+
+export function useCancelarLembrete(conversaId: number) {
+  return useEscritaDaVenda<void>(conversaId, "lembrete", "DELETE");
+}
+
+/** "12 min", "3 h", "2 d" — o tempo da primeira resposta. */
+export function duracaoCurta(minutos: number): string {
+  if (minutos < 60) return `${minutos} min`;
+  if (minutos < 48 * 60) return `${Math.floor(minutos / 60)} h`;
+  return `${Math.floor(minutos / (24 * 60))} d`;
+}
+
+/** "amanhã às 09:00", "hoje às 09:00" ou "18/11 às 09:00" — o lembrete, no horário de São Paulo. */
+export function quandoDoLembrete(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const dia = diaDaMensagem(iso);
+  const hoje = diaEmSaoPaulo(new Date());
+  const amanha = diaEmSaoPaulo(new Date(Date.now() + 86_400_000));
+  const prefixo = dia === hoje ? "hoje" : dia === amanha ? "amanhã" : FORMATO_DIA.format(new Date(iso));
+  return `${prefixo} às ${horaDaMensagem(iso)}`;
 }

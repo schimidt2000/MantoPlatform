@@ -11,7 +11,7 @@ espera; o status ``failed`` que chega depois do aceite a reabre. A rotina ``aler
 varredura do WhatsApp e avisa quem atende depois de 15 min, só das 9h às 21h de São Paulo (R4).
 
 Camada de baixo do domínio: importa modelos, constantes, ``acesso``, ``leitura_ops``, ``relogio``,
-``recusa`` e ``notificacoes_ops`` — **nunca** ``aviso_ops`` nem ``envio_ops``, que importam este
+``recusa``, ``primeira_resposta_ops`` (349) e ``notificacoes_ops`` — **nunca** ``aviso_ops`` nem ``envio_ops``, que importam este
 módulo (o import de volta fecharia um ciclo). Puro: sem ``flask.request`` nem ``current_user``.
 """
 
@@ -27,6 +27,7 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.constants import TZ_SP, now_sp
 from app.conversas import constantes as K
+from app.conversas import primeira_resposta_ops
 from app.conversas.acesso import PAPEIS_DE_CONVERSAS, e_da_equipe, responsavel_ativo
 from app.conversas.leitura_ops import nome_da_conversa
 from app.conversas.recusa import Recusa, campo
@@ -95,6 +96,8 @@ def resposta_da_equipe(conversa: Conversa, autor_id: int, momento: datetime) -> 
         )
         db.session.expire(conversa, ["responsavel_id", "assumida_em", "responsavel"])
     encerrar_espera(conversa, momento)
+    # Feature 349: a primeira resposta guarda o autor (só o envio aceito chega aqui).
+    primeira_resposta_ops.registrar_resposta(conversa, momento, autor_id, K.ORIGEM_PLATAFORMA)
 
 
 def definir_responsavel(

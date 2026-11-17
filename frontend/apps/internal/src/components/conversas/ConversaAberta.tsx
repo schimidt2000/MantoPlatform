@@ -17,6 +17,7 @@ import {
   type Nota,
 } from "../../lib/conversas";
 import { useCurrentUser } from "../../lib/useAuth";
+import { AceiteNaConversa } from "./AceiteNaConversa";
 import { CaixaDeEnvio } from "./CaixaDeEnvio";
 import { EnviarModeloDialog } from "./EnviarModeloDialog";
 import { FichaDaConversaDialog } from "./FichaDaConversaDialog";
@@ -24,6 +25,7 @@ import { IconeDoCanal } from "./IconeDoCanal";
 import { Mensagem } from "./Mensagem";
 import { NotaInterna } from "./NotaInterna";
 import { OrigemDaConversa } from "./OrigemDaConversa";
+import { PainelDaVenda } from "./PainelDaVenda";
 import { ResponsavelDaConversa } from "./ResponsavelDaConversa";
 
 /**
@@ -61,6 +63,9 @@ interface ConversaAbertaProps {
   conversaId: number;
   intervaloMs: number;
   onVoltar: () => void;
+  /** Feature 349: o orçamento que a calculadora acabou de salvar — o envio abre pronto com ele. */
+  orcamentoInicial?: number | null;
+  onOrcamentoUsado?: () => void;
 }
 
 /** O que o cabeçalho diz da janela: no Instagram há a faixa de 24 h a 7 dias (feature 330). */
@@ -85,7 +90,13 @@ function semRepetir(listas: MensagemTipo[][]): MensagemTipo[] {
   return listas.flat().filter((m) => (vistas.has(m.id) ? false : (vistas.add(m.id), true)));
 }
 
-export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAbertaProps) {
+export function ConversaAberta({
+  conversaId,
+  intervaloMs,
+  onVoltar,
+  orcamentoInicial = null,
+  onOrcamentoUsado,
+}: ConversaAbertaProps) {
   const dados = useConversa(conversaId, intervaloMs);
   const usuario = useCurrentUser();
   const marcarLida = useMarcarLida();
@@ -211,6 +222,12 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
       <FichaDaConversaDialog conversa={conversa} open={fichaAberta} onOpenChange={setFichaAberta} />
       {dados.data.anuncio ? <OrigemDaConversa anuncio={dados.data.anuncio} /> : null}
       <ResponsavelDaConversa conversa={conversa} usuarioId={usuario.data?.id ?? null} />
+      <PainelDaVenda
+        conversa={conversa}
+        usuarioId={usuario.data?.id ?? null}
+        onPedirFicha={() => setFichaAberta(true)}
+      />
+      <AceiteNaConversa conversa={conversa} />
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-surface px-3 py-3">
         {temMaisAntigas ? (
@@ -262,6 +279,8 @@ export function ConversaAberta({ conversaId, intervaloMs, onVoltar }: ConversaAb
         conversa={conversa}
         onEnviarModelo={() => setModeloAberto(true)}
         onJanelaFechou={() => void queryClient.invalidateQueries({ queryKey: ["conversas", "aberta", conversaId] })}
+        orcamentoInicial={orcamentoInicial}
+        onOrcamentoUsado={onOrcamentoUsado}
       />
       <EnviarModeloDialog
         conversaId={conversa.id}

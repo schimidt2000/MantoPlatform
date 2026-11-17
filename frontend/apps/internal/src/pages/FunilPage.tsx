@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { BellRing } from "lucide-react";
 import {
+  Badge,
   Button,
   Card,
   CardContent,
@@ -14,12 +16,13 @@ import {
   cn,
 } from "@manto/ui";
 import { IconeDoCanal } from "../components/conversas/IconeDoCanal";
-import type { Canal } from "../lib/conversas";
+import { duracaoCurta, quandoDoLembrete, useLembrarAmanha, type Canal } from "../lib/conversas";
 import {
   PRESETS_DO_PERIODO,
   datasDoPreset,
   useFunil,
   useParados,
+  type ConversaParada,
   type DivisaoDoFunil,
   type EtapaContada,
   type EtapaDoFunil,
@@ -32,6 +35,11 @@ const DIVISOES: { valor: DivisaoDoFunil; rotulo: string }[] = [
   { valor: "vendedor", rotulo: "Vendedor" },
   { valor: "campanha", rotulo: "Campanha" },
   { valor: "canal", rotulo: "Canal" },
+  // Feature 351: pelo primeiro anúncio da conversa. O custo de cada grupo fica no Desempenho (Marketing).
+  { valor: "frente", rotulo: "Frente" },
+  { valor: "anuncio", rotulo: "Anúncio" },
+  { valor: "peca", rotulo: "Peça" },
+  { valor: "conceito", rotulo: "Conceito" },
 ];
 
 function porcento(valor: number | null): string {
@@ -112,7 +120,7 @@ function TabelaDaDivisao({ funil }: { funil: Funil }) {
   if (funil.grupos.length === 0) return null;
   return (
     <div className="-mx-4 overflow-x-auto px-4">
-      <Table className="min-w-[640px]">
+      <Table className="min-w-[960px]">
         <thead>
           <TableRow head>
             <TableCell as="th">
@@ -125,6 +133,18 @@ function TabelaDaDivisao({ funil }: { funil: Funil }) {
             ))}
             <TableCell as="th" align="right">
               Conversão
+            </TableCell>
+            <TableCell as="th" align="right">
+              Qualificadas
+            </TableCell>
+            <TableCell as="th" align="right">
+              Perdidas
+            </TableCell>
+            <TableCell as="th" align="right">
+              1ª resposta
+            </TableCell>
+            <TableCell as="th" align="right">
+              Até 15 min
             </TableCell>
           </TableRow>
         </thead>
@@ -146,10 +166,134 @@ function TabelaDaDivisao({ funil }: { funil: Funil }) {
               <TableCell align="right" className="tabular-nums">
                 {porcento(grupo.conversao)}
               </TableCell>
+              <TableCell align="right" className="tabular-nums">
+                {grupo.qualificadas ?? "—"}
+              </TableCell>
+              <TableCell align="right" className="tabular-nums">
+                {grupo.perdidas ?? "—"}
+              </TableCell>
+              <TableCell align="right" className="tabular-nums">
+                {grupo.mediana_minutos != null ? duracaoCurta(grupo.mediana_minutos) : "—"}
+              </TableCell>
+              <TableCell align="right" className="tabular-nums">
+                {porcento(grupo.ate_15_min ?? null)}
+              </TableCell>
             </TableRow>
           ))}
         </tbody>
       </Table>
+    </div>
+  );
+}
+
+/** "1ª resposta em 12 min" ou "… pelo celular (sem autor)" ou "Sem resposta" (feature 349). */
+function respostaDaParada(conversa: ConversaParada): string | null {
+  if (conversa.primeira_resposta_minutos == null) return conversa.primeira_resposta_pendente ? "Sem resposta" : null;
+  const tempo = `1ª resposta em ${duracaoCurta(conversa.primeira_resposta_minutos)}`;
+  return conversa.primeira_resposta_sem_autor ? `${tempo} (sem autor)` : tempo;
+}
+
+/** Uma conversa que parou na etapa: selos da venda, a primeira resposta e o "Lembrar amanhã" (feature 349). */
+function LinhaParada({ conversa }: { conversa: ConversaParada }) {
+  const lembrar = useLembrarAmanha(conversa.id);
+  const resposta = respostaDaParada(conversa);
+  const lembrete = lembrar.data?.venda.lembrete?.em ?? conversa.lembrete_em ?? null;
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
+      <div className="min-w-0">
+        <p className="flex min-w-0 flex-wrap items-center gap-1.5 font-medium text-ink">
+          <IconeDoCanal canal={conversa.canal} />
+          <span className="truncate">{conversa.nome}</span>
+          {conversa.perdida ? <Badge tone="red">Perdida: {conversa.perdida.rotulo}</Badge> : null}
+          {!conversa.perdida && conversa.qualificada ? <Badge tone="gold">Qualificada</Badge> : null}
+        </p>
+        <p className="text-xs text-muted">
+          Chegou em {diaDoContato(conversa.primeiro_contato)} · {conversa.vendedor ?? "Sem responsável"} ·{" "}
+          {conversa.campanha}
+          {resposta ? ` · ${resposta}` : ""}
+        </p>
+        {lembrar.isError ? (
+          <p role="alert" className="text-xs text-red">
+            Não foi possível marcar o lembrete. Tente novamente.
+          </p>
+        ) : null}
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {lembrete ? (
+          <span className="inline-flex items-center gap-1 text-xs text-muted">
+            <BellRing className="h-3.5 w-3.5" aria-hidden />
+            Lembrete {quandoDoLembrete(lembrete)}
+          </span>
+        ) : conversa.perdida ? null : (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-11 md:h-9"
+            loading={lembrar.isPending}
+            onClick={() => lembrar.mutate(undefined)}
+          >
+            Lembrar amanhã
+          </Button>
+        )}
+        <Button asChild variant="outline" size="sm" className="h-11 md:h-9">
+          <Link to={`/conversas?c=${conversa.id}`}>Abrir conversa</Link>
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+/** Feature 349: primeira resposta, qualificadas e perdidas da coorte, em três cartões. */
+function MedidasDaVenda({ funil }: { funil: Funil }) {
+  const pr = funil.primeira_resposta;
+  if (!pr) return null;
+  const motivos = funil.motivos_de_perda ?? [];
+  return (
+    <div className="grid gap-3 sm:grid-cols-3">
+      <Card>
+        <CardContent className="space-y-1 py-4">
+          <p className="text-xs font-medium text-muted">1ª resposta (mediana)</p>
+          <p className="text-2xl font-semibold tabular-nums text-ink">
+            {pr.mediana_minutos != null ? duracaoCurta(pr.mediana_minutos) : "—"}
+          </p>
+          <p className="text-xs text-muted">
+            {porcento(pr.ate_15_min)} em até 15 min · {pr.sem_resposta} sem resposta
+          </p>
+          {pr.sem_autor ? (
+            <p className="text-xs text-muted">
+              {pr.sem_autor} {pr.sem_autor === 1 ? "respondida" : "respondidas"} pelo celular, sem autor
+            </p>
+          ) : null}
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="space-y-1 py-4">
+          <p className="text-xs font-medium text-muted">Qualificadas</p>
+          <p className="text-2xl font-semibold tabular-nums text-ink">{funil.qualificadas ?? 0}</p>
+          <p className="text-xs text-muted">
+            {porcento(funil.total ? (100 * (funil.qualificadas ?? 0)) / funil.total : null)} das que chegaram
+          </p>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardContent className="space-y-1 py-4">
+          <p className="text-xs font-medium text-muted">Perdidas</p>
+          <p className="text-2xl font-semibold tabular-nums text-ink">{funil.perdidas ?? 0}</p>
+          {motivos.length ? (
+            <ul className="space-y-0.5 text-xs text-muted">
+              {motivos.map((m) => (
+                <li key={m.codigo} className="flex justify-between gap-2">
+                  <span>{m.rotulo}</span>
+                  <span className="tabular-nums">{m.quantidade}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted">Nenhuma perda registrada no período.</p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -184,32 +328,7 @@ function QuemParou({
           <>
             <ul className="divide-y divide-line">
               {dados.conversas.map((conversa) => (
-                <li
-                  key={conversa.id}
-                  className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="flex min-w-0 items-center gap-1.5 font-medium text-ink">
-                      <IconeDoCanal canal={conversa.canal} />
-                      <span className="truncate">{conversa.nome}</span>
-                    </p>
-                    <p className="text-xs text-muted">
-                      Chegou em {diaDoContato(conversa.primeiro_contato)} ·{" "}
-                      {conversa.vendedor ?? "Sem responsável"} ·{" "}
-                      {conversa.campanha}
-                    </p>
-                  </div>
-                  <Button
-                    asChild
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                  >
-                    <Link to={`/conversas?c=${conversa.id}`}>
-                      Abrir conversa
-                    </Link>
-                  </Button>
-                </li>
+                <LinhaParada key={conversa.id} conversa={conversa} />
               ))}
             </ul>
             {dados.total > dados.conversas.length && (
@@ -390,6 +509,8 @@ export function FunilPage() {
               </CardContent>
             </Card>
 
+            <MedidasDaVenda funil={funil} />
+
             {etapa && <QuemParou filtros={filtros} etapa={etapa} />}
 
             <Card>
@@ -400,7 +521,7 @@ export function FunilPage() {
                     (d) => d.valor === dividir,
                   )?.rotulo.toLowerCase()}
                 </CardTitle>
-                <div className="flex gap-1 rounded-lg border border-line bg-panel p-1">
+                <div className="flex flex-wrap gap-1 rounded-lg border border-line bg-panel p-1">
                   {DIVISOES.map((opcao) => (
                     <Button
                       key={opcao.valor}

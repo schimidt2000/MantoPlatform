@@ -873,9 +873,35 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
 | 210 | **P3** | `PrivacidadeLojaPage.tsx` | o aviso de privacidade é um rascunho operacional: não tem CNPJ nem e-mail do encarregado, e não passou por advogado; o resto do site (catálogo, formulários, portal) continua sem aviso nenhum | o dono informa CNPJ e e-mail do encarregado; advogado revisa; um aviso único do site, com a seção da loja apontando para ele |
-| 211 | **P3** | `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
+| ~~211~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 350** (botão na ficha e na conversa, "SAIR" e erro 131050 retiram sozinhos; histórico em `cliente_consentimentos`) — `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
+
+## Baixa da feature 351-painel-atribuido (2026-11-17, branch)
+
+**Quitada em parte.** A **214** (custo por venda misto): o painel mostra, ao lado do misto, o custo por venda
+**atribuída** e o mesmo com o desconto de 50% (`atribuicao_ops`). Falta o que a 214 pede de origem: `ctwa_clid`,
+código do site e `conversa_id` no evento (348), e a devolução às plataformas (features seguintes). **Criadas.**
+(231–235; renumeradas no lote de 17/11, que juntou a 348, a 349 e a 350.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 231 | **P2** | `atribuicao_ops.atribuir_vendas` | sem `conversa_id` no evento (348), a venda é ligada ao contato pago **pela ficha**: cliente que volta por anúncio e fecha um evento que já vinha negociando por indicação conta como atribuída, e a ficha com duas conversas mistura as duas | quando a 348 entrar: o contato da conversa ligada ao evento vence a busca pela ficha — trocar só dentro de `atribuir_vendas` |
+| 232 | **P2** | `constants.INCREMENTALIDADE_PREMISSA` | o desconto de 50% é premissa da pesquisa de 17/11, não medida da Manto; o estado "dentro/acima do teto" depende dele | rodar o teste de liga e desliga em blocos (o diário estruturado já registra) e trocar a constante pelo número medido, por frente |
+| 233 | **P3** | `atribuicao_ops._toques_da_origem` | a ficha marcada só pela origem (Tintim/Kommo) não tem a data do contato: vale a entrada na base, então a ficha antiga que voltou por anúncio não atribui (conservador de propósito) | gravar a data da primeira mensagem do Tintim (`dte_fst_msg` do CSV) na ficha, ou esperar o CRM no ar |
+| 234 | **P3** | `marketing_ops._situacao_dos_anuncios` | "no ar" é derivado do gasto (3 últimos dias com leitura): anúncio ligado sem gasto por falta de entrega aparece como "sem gasto desde"; o sistema não guarda a situação do anúncio na Meta | a rotina mandar `effective_status` junto do `/anuncios` (rota do agente) e o card preferir esse dado |
+| 235 | **P4** | `pages/MarketingPainelPage.tsx` / `MarketingKanban.tsx` | em 390 px as colunas do Kanban (264 px) ainda rolam dentro do quadro; os filtros ajudam, mas a visão "minhas peças" não é uma lista | uma visão em lista no celular (por situação, só as colunas com card) |
+
+## Baixa da feature 348-origem-completa (2026-11-17)
+
+**Quitada.** 215 (frente adivinhada pelo título). **Criadas.** (218–221; mantidas no lote de 17/11.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 218 | **P4** | `origem_codigos` | o código do site que nunca ligou uma conversa fica para sempre (depois de 90 dias só deixa de valer). Não tem dado pessoal — só marcadores do clique, caminho e host —, e são dezenas por dia | expurgo dos não usados depois de 180 dias, junto da feature "conversões para o Google", que decide o que reenviar |
+| 219 | **P4** | aviso de privacidade do site (`PrivacidadeLojaPage.tsx` é só da loja) | o site guarda no navegador os marcadores de campanha (`gclid`, `utm_*`) e os manda ao servidor; nenhum aviso público diz isso. Somar à 210 | o dono revisa o texto do aviso do site com os marcadores (decisão dele, não de código) |
+| 220 | **P5** | `calendar_events.frente` / diálogo de criação do evento | a criação grava sozinha só a sugestão **certa**; o evento criado com venda e título sem palavra-chave fica "sugerida" até alguém abrir a aba Comercial (o painel da 345 lê como festas) | campo "Frente" no diálogo de criação, ou a 349 manda `frente` ao criar pela conversa |
+| 221 | **P5** | `origem_ops.acompanhar_orcamento` | desligar o orçamento leva a conversa junto quando a conversa e o contato do evento são **exatamente** os do orçamento — inclusive se a mesma ligação também tinha vindo pela criação na conversa (349) | guardar de onde veio a ligação (`conversa_via`) se o caso aparecer |
 
 ## Baixa da feature 345-marketing-integrado (2026-11-16)
 
@@ -884,10 +910,30 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
-| 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline) |
-| 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
+| 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline). **Em parte na 351**: o atribuído e o com desconto aparecem ao lado do misto (ver 231–232) |
+| ~~215~~ | ~~P3~~ | ✅ **RESOLVIDO na feature 348** — `calendar_events.frente`, escolhida na aba Comercial; a regra do título virou sugestão (`calendar/frente_ops.py`), e a sugestão por exclusão nunca é gravada sozinha. Evento antigo sem frente segue pela regra (marcado "sugerida") | — |
 | 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
 | 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |
+## Baixa da feature 350-base-autorizada (2026-11-17, branch)
+
+**Quitada.** 211 (a saída do aceite deixou de ser manual: botão na ficha e na conversa, "SAIR" e o erro 131050).
+**Criadas.** (225–230; renumeradas no lote de 17/11.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 225 | **P3** | `app/clientes/consentimento_ops.py` / textos em `app/constants.py` (`CONSENTIMENTO_*`) | **pontos para parecer jurídico (LGPD)**: aceite registrado pela equipe (telefone, pessoalmente) vale como prova?; quem abre o link de avaliação é tratado como a contratante (art. 14 §5º); pós-evento com pedido de indicação sem aceite prévio; "SAIR" deveria apagar também os aniversários?; prazo de guarda do dado da criança (proposta da pesquisa: 24–36 meses sem evento nem interação); comissão de parceiro "declarada" no orçamento/contrato | parecer do advogado; texto novo = versão nova (`*_VERSAO`) |
+| 226 | **P4** | `pos_evento_ops.enviar_pela_conversa` | o pós-evento pela conversa só sai como texto livre na janela de 24 h; no dia seguinte a janela costuma estar fechada e a equipe copia | modelo de utilidade aprovado na Meta para o pós-evento e envio por `enviar_modelo` |
+| 227 | **P4** | `aniversario_ops` / `/clientes/aniversarios` | o lembrete de aniversário não sai sozinho: a lista é só leitura (roteiro, item 14) | feature do disparo (8–10 semanas antes + reforço a 4), só para quem tem os dois aceites |
+| 228 | **P5** | `parceiros.comissao_percentual` | a comissão do parceiro é só declarada: não liga ao BV do acréscimo nem ao Financeiro | quando houver pagamento a parceiro, ligar `Parceiro` ↔ BV do evento |
+| 229 | **P5** | `clients.indicado_por_id` | "Indicado por" é preenchido à mão; a mensagem de "Indicar uma amiga" cita o nome, mas nada lê isso na primeira mensagem | código de indicação lido na conversa (feature 348, origem completa) |
+| 230 | **P5** | `consentimento_ops.retirar_se_pediu_para_parar` | "SAIR" numa conversa **sem ficha** não fica registrado: se a ficha (com aceite, por exemplo da loja) for ligada depois, o aceite continua | ao ligar a ficha (`ficha_ops.ligar`), procurar palavra de saída nas mensagens da conversa e retirar |
+
+
+## Baixa da correção 345b-google-na-rotina (2026-11-17)
+
+**Quitada em parte.** A 21: o `MARKETING_AGENT_TOKEN` está no `manto-backend` desde 17/11 (o `/api/marketing-agent/*`
+respondeu 200 com o token local). O `AUDIT_AGENT_TOKEN` não foi conferido e a linha 21 segue por ele. **Criada.**
+Nenhuma. O que a 345b não resolve já está registrado: a conversa vinda do Google só existe com a 348 (214).
 ## Baixa da feature 325-crm-whatsapp-fundacao (2026-10-30)
 
 **Criada.** (178–182.) Nenhuma quitada.
@@ -914,4 +960,7 @@ a rotina da 345 também responde 404. **Criadas.** (214–217.)
 | 195 | **P5** | `app/conversas/anuncio_ops.py` (`_consultar_um`) | o anúncio apagado na Meta costuma voltar com o código 100/33, o mesmo de "sem acesso": não vira definitivo e é perguntado de novo uma vez por dia, para sempre (poucos por dia) | quando houver `ads_read` confirmado, tratar o 100/33 como definitivo depois de N dias sem resposta |
 | 196 | **P5** | `app/conversas/leitura_ops.py` (`listar_conversas`) | a abertura do Instagram pelo anúncio sem mensagem (334) cria a conversa sem `ultima_mensagem_em`: ela vai para o fim da primeira página (`NULLS LAST`), mas o cursor das páginas seguintes (`ultima_mensagem_em < cursor`) a deixa de fora até a cliente escrever | decidir se a conversa vazia aparece (cursor que aceite o NULL) ou some (filtrar o NULL na lista) |
 | 197 | **P5** | `app/clientes/linha_do_tempo_ops.py` × `app/conversas/funil_ops.py` (feature 335) | a parcela marcada como recebida (`event_installments.received`) leva a conversa a "Pagou" no funil, mas não vira marco na ficha: a parcela não guarda quando foi recebida, e o marco precisa de data | guardar `received_at` na parcela (migration) e pôr o marco "Parcela recebida" |
-| 198 | **P5** | `app/conversas/funil_ops.py` (feature 335) | o tempo de resposta do funil (meta de 2 s para um trimestre, SC-004) só foi medido com a coorte do verify; a agregação do primeiro contato varre todas as mensagens recebidas | medir com o volume da virada; se pesar, guardar o primeiro contato na conversa |
+| 198 | **P5** | `app/conversas/funil_ops.py` (feature 335) | o tempo de resposta do funil (meta de 2 s para um trimestre, SC-004) só foi medido com a coorte do verify; a agregação do primeiro contato varre todas as mensagens recebidas | medir com o volume da virada; se pesar, guardar o primeiro contato na conversa (a 349 já guarda `conversas.primeira_recebida_em`, mas a coorte ainda soma o contato pelo anúncio sem mensagem) |
+| 222 | **P4** | `app/conversas/constantes.py` (`PONTOS_DA_REGRA`, `CORTE_DA_QUALIFICADA`) (feature 349) | a pontuação da "qualificada" é hipótese (pesquisa §6.5): os pontos e o corte 3 não foram validados contra a taxa de fechamento por sinal, e "dentro da área" (o "fora de SP" do `form_snapshot`) ficou de fora para a lista não ler JSON | depois de um trimestre com o CRM ligado: tabela de fechamento por sinal (6 a 12 meses), ajustar pontos/corte; se o "fora de SP" separar, extrair para coluna do orçamento |
+| 223 | **P5** | `app/conversas/funil_ops.py` (`_primeira_resposta`) (feature 349) | o tempo da primeira resposta é corrido: a mensagem das 23h respondida às 9h conta 10 h. A mediana suaviza, mas o "até 15 min" e a comparação entre vendedores misturam o horário de atendimento com a velocidade | se o dono quiser, medir só dentro do horário de atendimento (9h–21h de São Paulo, o mesmo do alerta) |
+| 224 | **P5** | `app/conversas/parado_ops.py` (feature 349) | a régua e o lembrete rodam na varredura das conversas, que só sobe com o CRM ligado; e o aviso no celular deles nunca chegou a um aparelho real (mesmo caso da 191) | conferir no primeiro dia com as chaves `WHATSAPP_*` no Render: um orçamento de teste com 2 dias deve tocar o sino de quem atende às 9h |

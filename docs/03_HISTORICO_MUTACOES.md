@@ -4,7 +4,26 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-16** · Estado do repositório: pós-**deploy em lote de 16/11/2026 (~22h10)**, a
+> Última atualização: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~19h05)**, a
+> pedido do dono ("pode publicar 19h"), num push só, na ordem dos merges: **345b-google-na-rotina**
+> (`verify_345b.py` 32/32), **348-origem-completa** (`verify_348` 16/16), **349-comercial-mede-e-fecha**
+> (`verify_349` 18/18), **350-base-autorizada** (`verify_350` 20/20), **351-painel-atribuido** (`verify_351` 83/83) e o
+> hotfix **190b-data-da-venda-um-dia-antes**. As quatro migrations nasceram todas sobre `d334b2c4e6f8` e foram
+> **encadeadas em fila**: `d334b2c4e6f8` → `a348c0d1e2f3` → `a349c0e1f2a3` → `a350b1c2d3e4` → `a351b0c1d2e3` (head).
+> Ensaio de `flask db upgrade && python seed.py` num banco descartável do dump de 17/11 02h; regressões `verify_345`
+> 64/64, `325` 22/22, `328` 24/24, `330` 29/29, `332` 17/17, `333` 15/15, `334` 12/12, `335` 9/9, `339` 37/37,
+> `342` 19/19, `344` 57/57, `256` 12/12; typecheck das três SPAs limpo; telas abertas no lote (detalhe do evento com a
+> data da venda, Painel e Desempenho de marketing por frente). **O lote achou dois defeitos de integração**, que as
+> branches separadas não viam: (1) a coluna `calendar_events.frente` da 348 fazia o `GROUP BY "frente"` do resumo por
+> frente (`comando_ops`) agrupar pela coluna e quebrar (GroupingError no Desempenho e na rotina) — o apelido virou
+> `frente_da_venda`; (2) a 350 recusa modelo de marketing sem aceite, e os verifies 325/328 mandavam um modelo de
+> marketing — o dublê passou a utilidade. Conflitos resolvidos: imports de `aviso_ops`/`instagram_ops` (348 + 349 +
+> 350), o `Linha` do funil (349 × 351: os campos da 351 vêm antes, porque o `_SQL_POR_ANUNCIO` só traz até eles),
+> `montar_entrada` do diário (345b × 351: a linha de base da 351 entra no montar, a gravação fica com quem chama) e
+> os docs; a conversa inexistente no `POST /api/events` sai **400** pela validação da 348 (era 422 na 349). Dívidas
+> renumeradas: 348 mantém 218–221; 349 → 222–224; 350 → 225–230; 351 → 231–235. A troca de `atribuir_vendas` para
+> o `conversa_id` da 348 ficou para depois (dívida 231): sem o CRM ligado não há conversa ligada a evento. Antes:
+> **2026-11-16** · Estado do repositório: pós-**deploy em lote de 16/11/2026 (~22h10)**, a
 > pedido do dono ("Bora fazer pushs, inclusive do CRM"), num push só, na ordem dos merges:
 > **346-figurino-sem-evento-passado** (`verify_346.py` 7/7), **345-marketing-integrado** (`verify_345.py` 64/64,
 > `verify_256.py` 12/12) e o **CRM próprio, 325 a 335** (um merge só da `335-crm-linha-do-tempo`, que contém as
@@ -238,6 +257,12 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **190b-data-da-venda-um-dia-antes** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
+| **351-painel-atribuido** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
+| **350-base-autorizada** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* A base autorizada: dois consentimentos com prova (novidades e aniversário da criança, histórico com texto, versão e origem), saída automática por "SAIR" e pelo erro 131050, modelo de marketing recusado sem aceite, pós-evento único (copiar ou enviar pela conversa), indicação, parceiros com comissão declarada e aniversários dos próximos 60 dias | 2026-11-17 | `a350b1c2d3e4` | (aqui) | 467 |
+| **349-comercial-mede-e-fecha** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* O comercial mede e fecha pela conversa: primeira resposta guardada (com o eco do celular "sem autor"), perdida com motivo, qualificada (decisão ou pontuação por regras), selos e recortes na lista, cotar sem sair, criar evento pela conversa (ponto único para o `conversa_id` da 348) e a régua de 2/5/9 dias no sino | 2026-11-17 | `a349c0e1f2a3` | (aqui) | ver Registro |
+| **348-origem-completa** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Origem completa da venda: `ctwa_clid` e conjunto do anúncio da Meta; código do site ("Código do site: #XXXXX") que leva `gclid`/`gbraid`/`wbraid`/`utm_*` do clique até a conversa; conversa e contato de origem congelados no orçamento e no evento (nunca pela ficha); frente como campo do evento, escolhida na aba Comercial (quita a dívida 215); lead casado com a campanha pelo id | 2026-11-17 | `a348c0d1e2f3` | (aqui) | ver Registro |
+| **345b-google-na-rotina** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 345: o Google Ads entra na rotina de segunda pela API REST (`scripts/marketing/google_ads.py`, sem MCP), com a conversão do Google ("toque no botão") em `results`, nunca em `conversations`; o `POST /run` aceita `diario` para as mudanças aprovadas no chat; o Desempenho usa o relógio de SP (`date.today()` virava o dia às 21h); skill com a sazonalidade e as regras de parada da pesquisa de 17/11 | 2026-11-17 | — | (aqui) | ver Registro |
 | **345-marketing-integrado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O sistema comanda o marketing: custo por venda por frente contra o teto, licença dupla dos temas (origem + liberado para anúncio; 422 no anúncio com tema não liberado), card do Kanban como pedido de criativo com vínculo e resultado do anúncio, propostas que só o Superadmin aprova, diário de decisões; rotina semanal pelos conectores Meta/Google | 2026-11-16 | `f345c0a1b2d3` | (aqui) | ver Registro |
 | **346-figurino-sem-evento-passado** | *(EM PRODUÇÃO 16/11 ~22h10, lote)* O painel Figurino da Home deixa de listar evento que já passou: corte de hoje 0h (SP) em vez do `release_date` (01/06); o Casting continua com o passado (308) | 2026-11-16 | `—` | (aqui) | ver Registro |
 | **344-loja-visitas-e-privacidade** | *(EM PRODUÇÃO 16/11 ~20h27)* A loja conta as visitas por origem (sem cookie) e mostra visitas, reservas e vendas na campanha, com os links por canal; aviso de privacidade, "Seu nome" e a caixinha de novidades (consentimento gravado); o comprador vira ficha no CRM na venda; as dicas de quem recebe somem em 30 dias; Pixel da Meta pronto para ligar, com aviso de cookies | 2026-11-16 | `e344a1b2c3d4` | (aqui) | ver Registro |
@@ -428,13 +453,13 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Assunto | Features |
 |---|---|
-| Conversas / WhatsApp / Instagram / CRM próprio | 335, 334, 333, 332, 330, 328, 325 |
+| Conversas / WhatsApp / Instagram / CRM próprio | 351 (funil por frente), 335, 334, 333, 332, 330, 328, 325 |
 | Agenda / evento / formulário de evento | 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 341, 340, 310, 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Agenda / evento / formulário de evento | 312, 299b, 306b, 306, 303, 299, 298, 233, 231, 215, 210, 208, 192, 184 |
 | Loja de Interações Virtuais | 304, 205, 205b, 205c, 205d, 205e, 205f |
 | Impressões e Acervo 3D | 265, 261, 255, 213, 202, 201, 200 |
-| Marketing e frequência | 204, 204b |
+| Marketing e frequência | 351, 345, 256, 204, 204b |
 | Catálogo e vitrine | 185b, 211, 209, 186, 185 |
 | Financeiro, comissões e pagamentos | 306, 299, 230, 228, 226, 210c, 199, 194, 189, 187 |
 | Orçamento e EducaManto | 309, 307, 305, 262, 214, 191 (orçamento), 190 |
@@ -462,6 +487,307 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 190b — "Data da venda" um dia antes no detalhe do evento   (lote-1711 · 2026-11-17 · sem migration)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)**. Nível 2, no lote com a 345b e as 348–351. Detalhe: `specs/190b-data-da-venda-um-dia-antes/spec.md`.
+
+**O pedido.** A 348 achou, conferindo a aba Comercial, a venda de 17/11 mostrada como 16/11. O dono pôs a
+correção no lote ("pode publicar 19h").
+
+**O que mudou.** `formatDay` (`components/EventDetail/parts.tsx`) formata a data pura (`AAAA-MM-DD`) pelo texto;
+data com hora segue pelo `Date`. Corrige também a data de emissão da nota e a data do gasto vinculado, que usam a
+mesma função.
+
+**Pegadinha.** É a armadilha 1 do `docs/00` §6 de novo: `formatarDataGasto` e `dataCurta` já faziam o certo, e o
+`formatDay` da 190 (julho) nunca foi revisto. Conferido com `node` no fuso de São Paulo: antes "16/11/2026", agora
+"17/11/2026"; data com hora igual ao que era.
+
+### 351 — Painel atribuído: quanto custa a venda que o anúncio trouxe   (351-painel-atribuido · 2026-11-17 · migration `a351b0c1d2e3`)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)** (feita na branch `351-painel-atribuido`, worktree `.claude/worktrees/351-painel-atribuido-c643bc`,
+> saída de `20bf93c0`). Nível 1. Detalhe: `specs/351-painel-atribuido/` (spec, plan, research, data-model, contrato,
+> checklists, tasks, `verify_351.py`). Feita ao mesmo tempo que a 348 (origem completa), a 349 e a 350; as quatro
+> migrations descem de `d334b2c4e6f8` e são reencadeadas no lote de merge.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11, Artifact privado) concluiu "medir primeiro, escalar depois"
+e dividiu o trabalho em quatro features. Esta é a do painel (§8.1 da pesquisa): o custo por venda da 345 é o gasto da
+frente dividido por **todas** as vendas da frente (`comando_ops.py:353`), então a festa de indicação "barateia" o
+anúncio e a regra da casa (custo de marketing até 25% da margem mediana) não tinha número para ser aplicada.
+
+**O que mudou.**
+- **Venda atribuída numa função só** (`app/marketing/atribuicao_ops.atribuir_vendas`): contato pago = conversa do
+  anúncio (CRM), anúncio de origem/recente na ficha ou origem paga da ficha (`utm_source` Meta/Google; vale a entrada na
+  base). Regra: evento criado depois do contato, venda até 45 dias depois dele, de 01/06/2026 em diante; vale o último
+  contato. A venda vai para a frente da **campanha** do contato. Por frente: atribuído e **com desconto de 50%**
+  (premissa escrita na tela; é o que vai contra o teto), ao lado do misto, que fica.
+- **Funil com custo**: o funil da 335 divide também por frente, anúncio, peça e conceito (sem dinheiro no domínio das
+  conversas); o custo de cada grupo é somado no marketing (`GET /api/marketing/atribuicao`), com a lista das vendas
+  atribuídas (valor só para o Superadmin).
+- **Card**: campo `conceito`; resultado real (conversas do CRM, orçamentos, vendas atribuídas, faturamento); "no ar"
+  pelo gasto nos três últimos dias com leitura. Card de anúncio em Agendado/Publicado sem anúncio continua na fila da
+  rotina.
+- **Metas e calendário**: `marketing_frentes` ganha meta de vendas e verba do mês; `marketing_calendario` (frente ×
+  mês) com meta, verba e foco (60 linhas com o foco da pesquisa); o card mostra o mês corrente; a rotina lê tudo no
+  contexto da semana.
+- **Proposta**: valor em número (lido do texto quando é verba ou tem "R$"), frente, teto, verba e impacto no mês; soma
+  do aprovado no mês; aviso no sino (`marketing.proposta`) para cada Superadmin.
+- **Diário com teste**: alvo, métrica, dia da mudança, janela e controle; o servidor calcula antes, depois, variação,
+  efeito líquido e congela a linha de base; a execução da proposta já cria o teste.
+- **390 px**: campanhas, posts e semanas do Desempenho em cartões; Temas com 50 por página (página no endereço); Kanban
+  com filtros por frente, tipo e "Minhas peças" (na tela, para não quebrar o mover otimista).
+- **Custo por cliente novo** só com os clientes novos que vieram de anúncio.
+
+**Verificação.**
+- `verify_351.py`: **83/83** checagens (28 cenários) no espelho `manto_351` (dump de 17/11 02h + `a351b0c1d2e3`).
+  Antes do núcleo: 9 OK, 30 FALHA, 10 BLOQUEADO pelo motivo certo. Os cenários 15 (Marketing salva calendário/meta) e
+  26 (Comercial pede a atribuição) recusam com 403.
+- `verify_345.py`: 64/64 no mesmo espelho (a limpeza dele passou a apagar o aviso da proposta).
+- Migration com ida e volta; `ruff check` limpo nos arquivos tocados; `npm run typecheck` limpo nas três SPAs.
+- Telas abertas no Browser pane (backend 5351 e Vite 6351 da worktree, dados `Demo351`), em 390 × 844 e em tela larga:
+  Desempenho (sem rolagem lateral), calendário e metas (salvar), Decisões (proposta e diário com teste), Temas
+  (página 2 pelo endereço), Painel com filtros e o card com conceito, "no ar" e o resultado real, Funil do Comercial.
+
+**Pegadinhas.**
+1. A ficha que a 334 ligou a um anúncio também ganhou `utm_source=meta`: contada como origem paga, ela virava um
+   contato "mais novo" sem anúncio e a peça perdia a venda. A origem só conta na ficha **sem** anúncio de origem.
+2. O funil das conversas não tem dinheiro (invariante 39); o custo vem de fora dele, pela chave do grupo.
+3. O filtro do Kanban roda na tela: a mutação otimista de mover card escreve na chave exata da lista.
+4. Heredoc do Bash com aspas triplas não roda no Windows desta máquina; os scripts de edição foram por arquivo.
+
+**Quando a 348 entrar.** Em `atribuir_vendas`, o contato da conversa ligada ao evento (`conversa_id`) vence a busca
+pela ficha (dívida 231); `frente_venda_sql` passa a ler a coluna de frente do evento (a 351 só a importa). Nada mais
+muda nas telas.
+
+**Falta do dono.** Preencher meta e verba das frentes e o calendário; ligar o CRM (chaves `WHATSAPP_*`) para o funil e
+o resultado real da peça terem dado; decidir quando trocar a premissa de 50% por um teste (dívida 232).
+
+### 350 — A base autorizada: a cliente diz sim (ou para), indica e lembra do aniversário   (350-base-autorizada · 2026-11-17 · migration `a350b1c2d3e4`)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)** (feita na branch `350-base-autorizada`, worktree
+> `.claude/worktrees/350-base-autorizada-b58e5d`, saída de `20bf93c0`). Nível 1. Detalhe:
+> `specs/350-base-autorizada/` (spec, plan, research, data-model, contrato, checklists `requirements` e `lgpd`,
+> tasks, `verify_350.py`). Nasceu junto da 348, da 349 e da 351 (pesquisa "Máquina de vendas Manto", 17/11, §8.5);
+> as quatro migrations descem de `d334b2c4e6f8` e o reencadeamento fica para o lote de merge.
+
+**O pedido.** A pesquisa de 17/11 concluiu "medir primeiro, escalar depois" e estimou R$ 0,32 por mensagem para a
+base contra R$ 7 por conversa nova — mas nenhuma das 6.291 fichas tinha aceite, o único aceite gravado vinha da loja
+(344), sair era manual, o erro 131050 do WhatsApp não marcava a ficha, não existia "indicado por", parceiro nem
+aniversário, e o pedido de avaliação era um link copiado à mão (13% dos eventos com avaliação). Regra da pesquisa
+(§5.7): dois consentimentos separados, com data, texto e origem; sem aceite, nada de prospecção. Decisão do dono
+mantida: o "Avaliar no Google" continua só para nota 5.
+
+**O que mudou.**
+- **Dois consentimentos com prova**: histórico append-only `cliente_consentimentos` (texto completo, versão,
+  origem, referência, autor); estado em `clients.marketing_opt_in_*` + `marketing_opt_out_*`. Criança em
+  `cliente_criancas`, por criança, só com o aceite; remover apaga nome e data. Núcleo `app/clientes/consentimento_ops.py`.
+- **Saída automática**: a mensagem inteira igual a uma palavra de saída (SAIR, PARAR, STOP, "Parar promoções"…)
+  no WhatsApp e no Instagram, e o erro **131050** (status e recusa síncrona) retiram o aceite. "Vou sair às 15h"
+  não retira.
+- **Sem aceite, nada de prospecção**: modelo `MARKETING` pela conversa → 409 `sem_aceite`; a lista de
+  aniversários exige os dois aceites; a loja (344) só reaplica aceite posterior à retirada e passa a gravar o
+  histórico com o texto da caixinha (`VIRTUAL_ACEITE_TEXTO`).
+- **Onde pedir**: a mensagem do orçamento termina com "Responda *QUERO*" (o PDF não); o pós-evento leva ao link de
+  avaliação, que ganhou as duas caixas, "Não quero mais receber" e "Indicar uma amiga" (wa.me, nenhum dado da amiga).
+- **Pós-evento único** (`pos_evento_ops`, tabela `pos_eventos`): mensagem montada no servidor (agradecimento,
+  fotos, avaliação, indicação, convite, "SAIR"); copiar ou enviar pela conversa (texto livre, janela aberta, chave
+  por tentativa); lista `/clientes/pos-evento` dos últimos 7 dias. Substitui o "Pedir feedback da cliente" do evento
+  (`buildFeedbackMsg` saiu: uma fonte só para o texto).
+- **Indicação e parceiro**: `clients.indicado_por_id` e `parceiro_id`; tabela `parceiros` (tipo, comissão
+  **declarada**, ativo); telas `/clientes/parceiros` e o cartão "Indicação e parceiro" na ficha.
+- **Aniversários dos próximos 60 dias**: `/clientes/aniversarios`, só leitura; 29/02 cai em 28/02 no ano comum.
+- **RBAC**: escrita da base e dado de criança só Comercial e Superadmin; o Financeiro lê a ficha sem as crianças e
+  a lista de parceiros. Relógio: todos os carimbos novos em `now_sp()` (o mesmo do aceite da loja).
+
+**Por que assim.**
+- O texto inteiro vai ao histórico, com versão, porque o ônus da prova é de quem coleta (LGPD art. 8º §2º); a tela
+  pública manda a versão que exibiu e o servidor recusa outra (409 `texto_mudou`).
+- Comparar a mensagem **inteira**, nunca "contém", para não tirar o aceite de quem só disse que vai sair.
+- O pós-evento não exige aceite: é relacionamento com quem acabou de ser cliente e é o momento de pedir o aceite;
+  sempre termina com "SAIR". Nada dispara sozinho (CRM desligado; modelo fora da janela é outra decisão).
+- "SAIR" não apaga os aniversários (são consentimentos independentes), mas tira a criança da lista, que exige os dois.
+
+**Pegadinhas.**
+- `ConsentimentoErro`/`PosEventoErro` e os núcleos **não comitam**: o aviso do WhatsApp comita em
+  `processar_aviso`; o endpoint, depois do núcleo.
+- `Client.indicado_por` e `ClienteCrianca.cliente` não têm backref de propósito: com backref o ORM tentaria anular
+  FK `NOT NULL` ao excluir a ficha; quem apaga é o `ON DELETE CASCADE`/`SET NULL` do banco (cenário 19 do verify).
+- O Safari recusa copiar depois de uma espera: o diálogo copia a prévia já na tela e só então registra; se o
+  navegador recusar, o aviso fica dentro do diálogo e nada é marcado como copiado.
+- `DialogFooter` não quebra linha: com três botões, `className="flex-wrap"` (o "Fechar" saía da tela em 390 px).
+
+**Verificação.** `verify_350.py` **20/20** contra o espelho próprio `manto_350` (dump de 17/11 02h; o `manto_local`
+é compartilhado com 348/349/351), com dublê da Meta e disjuntor de rede: RBAC que deve falhar (cenário 4), saída por
+palavra (7) e por 131050 (8), marketing sem aceite (9), exclusão da ficha (19). Mutações conferidas: desligar a saída
+por palavra, o 131050, a guarda de marketing, o gate de escrita ou a regra da loja derruba o cenário certo. Migration
+aplicada, revertida e reaplicada. `ruff check` limpo nos arquivos tocados (os 5 E402 de `models.py` e o I001 de
+`app/api/__init__.py` já existiam); typecheck das três SPAs limpo. Telas abertas (backend 5350, Vite 6350/6351):
+ficha, conversa, Pós-evento (com dados reais do espelho), Aniversários, Parceiros e o menu do evento em 390 px;
+avaliação pública em 375 e 320 px, sem rolagem lateral.
+
+**Pontos para parecer jurídico (LGPD)**: aceite registrado pela equipe (telefone, pessoalmente) como prova; quem
+abre o link de avaliação tratado como a contratante (art. 14 §5º); pós-evento com pedido de indicação sem aceite
+prévio (legítimo interesse de cliente atual); se "SAIR" deveria apagar também os aniversários e o prazo de guarda
+do dado da criança; se a comissão de parceiro "declarada" precisa constar no orçamento/contrato.
+
+### 349 — O comercial mede e fecha pela conversa   (349-comercial-mede-e-fecha · 2026-11-17 · migration `a349c0e1f2a3`)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)** (feita na branch `349-comercial-mede-e-fecha`, worktree `.claude/worktrees/349-comercial-mede-e-fecha-4ea0ce`,
+> saída de `20bf93c0`). Nível 1. Detalhe: `specs/349-comercial-mede-e-fecha/` (spec com o clarify de 17/11, plan,
+> research, data-model, contrato, quickstart, tasks, `verify_349.py`). Migration sobre `d334b2c4e6f8`; a 348, a 350
+> e a 351 encadeiam na mesma head e o reencadeamento fica para o lote de merge.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11, §8.2 e §8.4) concluiu "medir primeiro, escalar depois" e
+dividiu o trabalho em quatro features abertas ao mesmo tempo. A 349 é a do comercial: a família decide de 6 a 10 dias
+depois do orçamento e pede orçamento a vários fornecedores; responder em minutos é barato e pesa. O CRM (325–335)
+guardava a conversa, o orçamento enviado e o anúncio, mas não o tempo da primeira resposta, nem perda, nem
+qualificação; a lista não dizia de onde a cliente veio nem em que etapa estava; para cotar a vendedora saía da
+conversa; o evento nascia longe dela com o vendedor digitado; orçamento parado não lembrava ninguém.
+
+**O que mudou.** Treze colunas em `conversas` e cinco módulos novos em `app/conversas/`:
+- `primeira_resposta_ops`: a primeira mensagem da cliente e a primeira resposta da equipe (hora, autor, origem), por
+  UPDATE condicional nos mesmos pontos que abrem e encerram a espera da 328. O eco do celular/outro app entra **sem
+  autor** e a tela diz isso; o `failed` depois do aceite recalcula.
+- `venda_ops`: perdida com motivo de lista fechada (frase no "Outro"; marcar apaga o lembrete; mensagem nova não
+  reabre), decisão de qualificação, "Lembrar amanhã", o painel `GET …/venda` e o resumo da lista em lote.
+- `pontuacao_ops`: formulário +3, data do evento até 90 dias +2 (mais longe +1), orçamento +1, recompra +2; corte 3.
+  Hipótese inicial, a revisar a cada trimestre.
+- `parado_ops`: "orçamento parado" num SQL só (lista e régua); a régua de 2, 5 e 9 dias e o lembrete vencido no sino
+  (`conversa.orcamento_parado`, `conversa.lembrete`), das 9h às 21h, na varredura; nada escreve na conversa.
+- `fechamento_ops`: o que levar ao evento (último orçamento enviado, ficha, vendedor = quem atende) e o ponto único
+  `ligar_evento_a_conversa`, chamado pelo `POST /api/events` com `conversa_id` (422 antes do Google). É ali que a 348
+  grava `calendar_events.conversa_id`.
+Telas: selos e recortes (Esperando · Orçamento parado 2/5/9 · Anúncio) na lista; faixa da venda na conversa ("Criar
+evento", qualificação, perda, lembrete, 1ª resposta); "Fazer orçamento" no envio, com a calculadora que volta à
+conversa com o envio pronto; a criação de evento que traz a ficha e o vendedor; o funil com 1ª resposta, qualificadas,
+perdidas por motivo e "Lembrar amanhã" em "Pararam em". O `KebabMenu` ganhou o gatilho `grande` (44 px no celular).
+
+**Decisões tomadas no fluxo autônomo** (o dono pode trocar sem mudar o desenho): os sete motivos de perda, os pontos e
+o corte, a régua 2/5/9, "amanhã" às 9h, a mensagem nova que não reabre a perdida, as contagens do funil por coorte.
+
+**Verificação.** `verify_349.py` 18/18 contra o espelho **`manto_349`** (dump noturno de 17/11; o `manto_local` é
+compartilhado com 348–351), com os cenários de recusa 5 (motivo e frase), 13 (conversa inexistente na criação de
+evento) e 17 (Casting → 403) e a contagem de consultas da lista (10 por página). `ruff check` limpo; `npm run
+typecheck` limpo. Telas abertas em 390 px e no computador (backend 5349, Vite 6349): selos, recortes, faixa da venda,
+perda com erro no campo, qualificação, "Criar evento" com e sem ficha, calculadora com a faixa, volta com o envio
+pronto, funil.
+
+**Pegadinhas.**
+- O cookie de sessão de `localhost` é o mesmo em todas as portas: outra sessão logando em `localhost:<outra porta>`
+  derruba a sua no meio da conferência. Suba o Vite com `--host 127.0.0.1` e abra por `127.0.0.1`.
+- `Linha` do funil ganhou campos com padrão; o `_SQL_COORTE` devolve as colunas novas na ordem do dataclass.
+- O recorte `orcamento_parado` é texto SQL sobre a tabela `conversas` da consulta da lista (sem apelido); a régua usa o
+  mesmo SQL com apelido `c`.
+
+**Depende do CRM ligado**: a primeira resposta, a régua e o lembrete só ganham dado com as chaves `WHATSAPP_*` no
+Render (a varredura só sobe com o módulo ligado).
+
+### 348 — De qual anúncio, clique ou conversa veio cada venda   (348-origem-completa · sem merge · migration `a348c0d1e2f3`)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)** (feita no worktree `.claude/worktrees/348-origem-completa-cade5a`, saída de `20bf93c0`).
+> Nível 1. Detalhe: `specs/348-origem-completa/` (spec, plan, research, data-model, contratos, tasks,
+> `verify_348.py`). A migration encadeia sobre `d334b2c4e6f8`, como a 349, a 350 e a 351, abertas no mesmo dia:
+> **reencadear no lote de merge**.
+
+**O pedido.** A pesquisa "Máquina de vendas Manto" (17/11) concluiu "medir primeiro, escalar depois" e dividiu o
+trabalho em quatro features (seção 8.5). Esta é a primeira: gravar a origem de cada venda. O caminho anúncio →
+conversa → orçamento → evento → receita parava no clique:
+- o aviso da Meta trazia o `ctwa_clid` e ninguém o lia;
+- o clique no Google saía do site para o `wa.me` e o `gclid` ficava para trás;
+- a conversa só chegava ao evento pela ficha, e a cliente recorrente misturava duas vendas;
+- a frente era adivinhada pelo título (dívida 215);
+- o lead casava com a campanha pelo nome.
+
+**O que mudou.**
+- **Meta**: `conversa_anuncios.ctwa_clid` (e retroativo na migration, da mensagem crua); a consulta pede
+  `adset{id,name}` (`anuncios_meta.conjunto_*`).
+- **Site e Google**: `origem_codigos` + `POST /api/origem/codigo` (público, 20/hora). O app público guarda os
+  marcadores do clique por 90 dias e põe "Código do site: #XXXXX" na mensagem pronta da lista de desejos e dos
+  formulários. O aviso lê o código em toda mensagem de texto (o primeiro uso vence) e cria o contato de origem
+  `site`; a ficha sem origem ganha "Site".
+- **Venda ↔ conversa** (`app/conversas/origem_ops.py`): `conversa_id` e `origem_contato_id` no orçamento (primeiro
+  envio pela conversa) e no evento (herda do orçamento, ou da criação com `conversa_id` — o contrato da 349). O
+  contato de origem é o mais recente da conversa em 90 dias, **congelado** na venda.
+- **Frente** (`app/calendar/frente_ops.py`): `calendar_events.frente`, escolhida na aba Comercial; a regra de 16/11
+  vira sugestão. `comando_ops.frente_venda_sql` devolve a mesma leitura (`COALESCE`).
+- **Desempenho**: `clients.utm_campaign_id`; campanha agrupada por id; lead e retorno casados por id.
+
+**Verificação.**
+- `verify_348.py`: 16/16 no `manto_348` (dump de 17/11 + `a348c0d1e2f3`), sem escape de rede. Antes do núcleo: 2/16,
+  falhando pelos motivos certos (rota 404, `NotImplementedError`, campanha partida em duas linhas, venda sem frente
+  aceita). Cinco cenários DEVEM falhar e falham (sem marcador, código usado/vencido, conversa inexistente, frente
+  ausente/inválida, Figurino no comercial).
+- O cenário 13 compara a frente Python × SQL em todos os eventos reais e a função nova × a regra de 16/11 em todos os
+  eventos sem frente: zero divergência (os números da 345 não mudam).
+- Migration com ida e volta. `ruff check` sem erro novo; `npm run typecheck` limpo.
+- Telas (backend 5348, Vite 6348/6349): catálogo com `gclid` (código guardado, rolagem 390 = 390), lista de desejos
+  (a mensagem termina com a linha do código), formulário em 390, visita sem marcador e loja `/v` (nada guardado);
+  aba Comercial em desktop e 390 (campo vazio com a sugestão, "Selecione a frente da venda." no campo com foco,
+  gravou `social`; "Origem da venda" com anúncio, campanha, conjunto e "Ver conversa").
+
+**Pegadinhas.**
+1. A conversa é **uma por telefone**: ligar a venda pela conversa sem congelar o contato repete o defeito da ficha.
+   O congelamento é a regra; a 351 lê as colunas.
+2. O código é lido em qualquer mensagem, não só na primeira: a cliente que volta por outro clique escreve na conversa
+   antiga.
+3. `window.open` depois de um `await` é bloqueado no Safari: por isso o código nasce no carregamento da página, e o
+   botão o lê do `localStorage` de forma síncrona.
+4. O texto da linha mora no servidor (`codigo_ops.linha_do_codigo`, devolvido pelo `POST`): a lista de desejos monta a
+   mensagem no navegador e usaria uma cópia.
+5. A migration não importa `app`: o retroativo do `ctwa_clid` roda em Python dentro dela; o `dados::json` do SQL
+   morreria na primeira mensagem corrompida. O verify importa a função da migration para testá-la.
+6. Achado fora do escopo: `formatDay` (`EventDetail/parts.tsx:31`) lê a data pura como meia-noite UTC e mostra a
+   "Data da venda" um dia antes no fuso de São Paulo (anterior à 348).
+
+**Depende do CRM ligado** (chaves `WHATSAPP_*` no Render): o `ctwa_clid`, a leitura do código, a ligação da venda à
+conversa e a origem na aba Comercial só acontecem com conversas chegando. O código do site já nasce e é guardado
+desde o deploy.
+
+### 345b — Google Ads na rotina e diário das mudanças aprovadas no chat   (345b-google-na-rotina · 2026-11-17 · sem migration)
+
+> **EM PRODUÇÃO desde 17/11/2026 ~19h05 (deploy em lote)** (feita no worktree `C:\tmp\mp345b`, saída de `20bf93c0`). Nível 2. Detalhe: `specs/345b-google-na-rotina/`.
+
+**O pedido.** "Siga com a 345b", depois da análise do Google Ads e da pesquisa "Máquina de vendas Manto" (17/11). A 345
+entrou em produção esperando o conector MCP `google-ads`, que não foi instalado: o MCP oficial só lê e pede `gcloud`.
+O acesso ficou pela API REST, com o OAuth do próprio dono. E as mudanças de 17/11 no Google (PMAX e Concorrentes
+pausados; as duas Pesquisas limpas, só busca, região "presença", teto de R$ 3 no clique, 19 negativos) foram feitas no
+chat, fora do diário.
+
+**O que mudou.**
+- `scripts/marketing/google_ads.py` (novo): `login`, `coletar`, `ler`, `pausar`, `ativar`, `verba`, `gaql`.
+  - Mudança sem `--aplicar` vai como ensaio (`validateOnly`).
+  - Verba compartilhada entre campanhas é recusada.
+  - Os conversores são puros, sem rede, e o verify os chama direto.
+  - `config.py` ganha `GOOGLE_ADS_CUSTOMER_ID` e `GOOGLE_ADS_DIR`.
+- `POST …/run` aceita `diario`:
+  - novo `comando_ops.montar_entrada`, que valida e monta sem gravar;
+  - `criar_entrada` passa a usá-lo;
+  - `desempenho_ops._montar_diario` valida todos os itens antes da primeira escrita da rodada.
+- `app/api/marketing_read.py`: `date.today()` → `comando_ops.hoje_sp()`.
+- Skill `marketing-auditor`:
+  - Google pelo script, nos passos 2, 4 e 5;
+  - passo 6 novo, "mudanças aprovadas no chat → diário";
+  - sazonalidade refeita com a pesquisa: escola planeja em jun–ago e fecha fornecedor em out–dez; empresa pede proposta de ago a nov;
+  - regras de parada: sem aumento de verba com menos de 80% das conversas com origem; PMax só com 30 conversas qualificadas por mês vindas do Google.
+  - A verba do mês (R$ 4.000 jan–jul; R$ 2.500–3.000 ago–dez) não mudou: é decisão do dono.
+- Textos:
+  - estado vazio e subtítulo do Desempenho sem "exports";
+  - README dos scripts com Render no lugar de Railway e o caminho do Google.
+
+**Verificação.**
+- `verify_345b.py`: 32/32 no `manto_345b`, cópia do `manto_lote` em `d334b2c4e6f8`.
+- O mesmo verify com o código da `main`: 22/30. Falham os cenários 1–3 (o `diario` era ignorado e a rodada com item ruim gravava) e o 5 (`end` = 17/11/2026, o dia do servidor, em vez do domingo de SP).
+- `ruff check` limpo e `npm run typecheck` limpo.
+- Desempenho aberto em 375 px (backend e Vite da worktree em 5345/6345), sem erro no console.
+- Leitura real do Google pelo script novo:
+  - `ler` da campanha Amplo;
+  - `coletar` de 10 a 16/11: 28 linhas de campanha, 63 de anúncio, R$ 508,50;
+  - ensaio de `pausar` na Institucional, que respondeu "nada mudou".
+
+**Pegadinhas.**
+1. `comando_ops` importa `desempenho_ops` no topo. Por isso o `_montar_diario` importa `comando_ops` dentro da função.
+2. Data no verify: 08/03/2031 é sábado. O cenário do relógio usa domingo 09/03 às 22h30 (SP), que já é segunda em UTC.
+3. A conversão do Google é toque no botão do WhatsApp. Somada como `conversations`, ela faria o Google parecer 10× melhor que a Meta (7.393 "conversões" e nenhuma conversa rastreada no Tintim).
 
 ### 345 — O sistema comanda o marketing   (345-marketing-integrado · 2026-11-16 · migration `f345c0a1b2d3`)
 

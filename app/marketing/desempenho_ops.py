@@ -39,6 +39,7 @@ from app.models import (
     MarketingAdSpendBatch,
     MarketingAgentRun,
     MarketingCampaignMetric,
+    MarketingDiario,
     MarketingImportFile,
     MarketingPost,
     MarketingPostMetric,
@@ -307,6 +308,8 @@ def attributed_clients(window_start: datetime, window_end: datetime) -> list[dic
             "utm_source": cliente.utm_source,
             "utm_medium": cliente.utm_medium,
             "utm_campaign": cliente.utm_campaign,
+            # Feature 348: o id da campanha de origem — é por ele que o lead casa com a campanha.
+            "utm_campaign_id": cliente.utm_campaign_id,
             "events": _serialize_events(eventos),
         })
     return saida
@@ -320,18 +323,21 @@ def retornos_por_campanha(window_start: datetime, window_end: datetime) -> list[
     `momento` (UTC) só compara com o `created_at` do evento, também UTC.
     """
     momento_sp = _sp_no_banco(ConversaAnuncio.momento)
+    # Feature 348: a campanha é a mesma pelo id (o nome pode ter mudado entre dois anúncios dela).
+    campanha_chave = func.coalesce(AnuncioMeta.campanha_id, AnuncioMeta.campanha_nome)
     linhas = (
-        db.session.query(Conversa.client_id, AnuncioMeta.campanha_nome, func.min(ConversaAnuncio.momento))
+        db.session.query(Conversa.client_id, func.max(AnuncioMeta.campanha_nome),
+                         func.max(AnuncioMeta.campanha_id), func.min(ConversaAnuncio.momento))
         .join(Conversa, Conversa.id == ConversaAnuncio.conversa_id)
         .join(AnuncioMeta, AnuncioMeta.anuncio_id == ConversaAnuncio.anuncio_id)
         .filter(ConversaAnuncio.tipo == CONTATO_ANUNCIO, Conversa.client_id.isnot(None),
                 AnuncioMeta.campanha_nome.isnot(None),
                 momento_sp >= window_start, momento_sp < window_end)
-        .group_by(Conversa.client_id, AnuncioMeta.campanha_nome)
+        .group_by(Conversa.client_id, campanha_chave)
         .all()
     )
     saida = []
-    for client_id, campanha, momento in linhas:
+    for client_id, campanha, campanha_id, momento in linhas:
         cliente = db.session.get(Client, client_id)
         entrada = _entrada(cliente) if cliente is not None else None
         dia = _sp(momento).date()
@@ -342,6 +348,7 @@ def retornos_por_campanha(window_start: datetime, window_end: datetime) -> list[
             "returned_at": dia.isoformat(),
             "utm_source": UTM_SOURCE_DO_ANUNCIO,
             "utm_campaign": campanha,
+            "utm_campaign_id": campanha_id,
             "events": _serialize_events(_eventos_do_cliente(client_id, CalendarEvent.created_at >= momento)),
         })
     return saida
@@ -387,7 +394,7 @@ def _validate_payload(payload: dict[str, Any]) -> tuple[datetime, datetime]:
         raise IngestValidationError("Campos obrigatórios ausentes", faltando)
     if payload["mode"] not in ("prod", "local"):
         raise IngestValidationError("mode inválido", {"mode": "prod | local"})
-    for lista in ("files", "post_metrics", "campaign_metrics", "account_metrics", "findings"):
+    for lista in ("files", "post_metrics", "campaign_metrics", "account_metrics", "findings", "diario"):
         if not isinstance(payload.get(lista, []), list):
             raise IngestValidationError(f"{lista} deve ser lista", {lista: "lista"})
     return _parse_window(payload["window"])
@@ -504,6 +511,24 @@ def _apply_run_totals(run: MarketingAgentRun, arquivos: dict[str, int], upserted
     run.findings_json = json.dumps(payload.get("findings", []), ensure_ascii=False)
 
 
+def _montar_diario(itens: list[Any], *, autor_id: int) -> list[MarketingDiario]:
+    """Mudanças que o dono aprovou no chat e a rotina aplicou na Meta/Google (345b).
+
+    Viram entradas do diário com `origem = "rotina"` e autor = titular do cartão (quem aprova no
+    chat). Tudo é validado antes de a rodada escrever: um item inválido derruba o `/run` inteiro.
+    """
+    # Import local: `comando_ops` importa este módulo no topo.
+    from app.marketing import comando_ops
+
+    entradas = []
+    for i, item in enumerate(itens):
+        try:
+            entradas.append(comando_ops.montar_entrada(item, autor_id=autor_id, origem="rotina"))
+        except comando_ops.ComandoError as exc:
+            raise IngestValidationError(exc.message, {f"diario[{i}].{exc.field or 'item'}": exc.message}) from None
+    return entradas
+
+
 def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     """Ingestão idempotente de uma rodada (ver contracts/agent-endpoints.md, `POST /run`).
 
@@ -519,6 +544,7 @@ def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     existente = MarketingAgentRun.query.filter_by(run_id=str(payload["run_id"])[:40]).first()
     if existente is not None and existente.result_json:
         return {**json.loads(existente.result_json), "replayed": True}
+    entradas = _montar_diario(payload.get("diario") or [], autor_id=titular.id)
 
     run = MarketingAgentRun(run_id=str(payload["run_id"])[:40], mode=payload["mode"],
                             window_start=inicio, window_end=fim, executed_at=datetime.utcnow())
@@ -529,9 +555,12 @@ def ingest_run(payload: dict[str, Any], *, development: bool) -> dict[str, Any]:
     post_links = link_post_metrics()
     ad_spend, findings_server = sync_ad_spend(run, card_holder=titular)
     _apply_run_totals(run, arquivos, upserted, payload)
+    db.session.add_all(entradas)
+    db.session.flush()
     resultado = {
         "run_id": run.run_id, "replayed": False, "files": arquivos, "upserted": upserted,
         "post_links": post_links, "ad_spend": ad_spend, "findings_server": findings_server,
+        "diario": [e.id for e in entradas],
     }
     run.result_json = json.dumps(resultado, ensure_ascii=False)
     db.session.commit()
@@ -897,26 +926,42 @@ def _weekly_series(inicio: date, fim: date, fotos, campanhas, conta, clientes) -
 
 
 def _campaign_table(campanhas, clientes, retornos=()) -> list[dict[str, Any]]:
+    """A tabela por campanha. Feature 348: a campanha é a mesma pelo **id** (renomear não parte a linha; vale o
+    nome mais recente) e o lead casa pelo id quando a ficha o tem; sem id (Kommo, formulário), pelo nome."""
     grupos: dict[tuple[str, str], dict[str, Any]] = {}
+    ultimo_dia: dict[tuple[str, str], date] = {}
     for ln in campanhas:
-        g = grupos.setdefault((ln.platform, ln.campaign_name), {
-            "platform": ln.platform, "campaign_name": ln.campaign_name, "spend": Decimal(0),
-            "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "returns": 0, "return_events": 0,
-            "currency": ln.currency})
+        chave = (ln.platform, ln.campaign_id)
+        g = grupos.setdefault(chave, {
+            "platform": ln.platform, "campaign_id": ln.campaign_id, "campaign_name": ln.campaign_name,
+            "spend": Decimal(0), "impressions": 0, "clicks": 0, "leads": 0, "events": 0, "returns": 0,
+            "return_events": 0, "currency": ln.currency})
+        if chave not in ultimo_dia or ln.period_end >= ultimo_dia[chave]:
+            ultimo_dia[chave] = ln.period_end
+            g["campaign_name"] = ln.campaign_name
         g["spend"] += ln.spend
         g["impressions"] += ln.impressions or 0
         g["clicks"] += ln.clicks or 0
     por_slug: dict[str, list[dict[str, Any]]] = {}
+    por_id: dict[str, list[dict[str, Any]]] = {}
     for g in grupos.values():
         por_slug.setdefault(normalize_campaign_name(g["campaign_name"]), []).append(g)
+        por_id.setdefault(str(g["campaign_id"]), []).append(g)
+
+    def _grupo(item: dict[str, Any]) -> dict[str, Any] | None:
+        candidatos = por_id.get(str(item.get("utm_campaign_id") or ""), [])
+        if not candidatos:
+            candidatos = por_slug.get(normalize_campaign_name(item["utm_campaign"]), [])
+        return pick_campaign_group(candidatos, item.get("utm_source"))
+
     for cl in clientes:
-        g = pick_campaign_group(por_slug.get(normalize_campaign_name(cl["utm_campaign"]), []), cl.get("utm_source"))
+        g = _grupo(cl)
         if g is not None:
             g["leads"] += 1
             g["events"] += len(cl["events"])
     # Feature 334: a repescagem. O retorno não entra no custo por lead: a ficha já estava na base.
     for rt in retornos:
-        g = pick_campaign_group(por_slug.get(normalize_campaign_name(rt["utm_campaign"]), []), rt.get("utm_source"))
+        g = _grupo(rt)
         if g is not None:
             g["returns"] += 1
             g["return_events"] += len(rt["events"])
@@ -932,15 +977,17 @@ def _campaign_table(campanhas, clientes, retornos=()) -> list[dict[str, Any]]:
 
 
 def _cac(fim: date) -> dict[str, Any]:
-    from app.clientes.client_ops import client_metrics
+    """Custo por cliente novo do mês (feature 351): o gasto em anúncio ÷ os clientes novos que VIERAM de
+    anúncio. Antes dividia por todos os clientes novos, de qualquer origem — a indicação barateava o anúncio.
+    O total segue no payload, para a tela mostrar "N de M"."""
+    from app.marketing import atribuicao_ops  # tardio: atribuicao_ops importa este módulo
 
     mes = month_ref(fim)
-    primeiro = fim.replace(day=1)
-    gasto = sum((ln.spend for ln in _effective_campaign_rows(primeiro, last_day_of_month(fim)) if ln.currency == "BRL"), Decimal(0))
-    novos = next((m for m in client_metrics()["new_by_month"] if m["month"] == mes), None)
-    total = novos["total"] if novos else 0
-    return {"month": mes, "spend": _q2(gasto), "new_clients": total,
-            "value": _q2(gasto / total) if total else None}
+    primeiro, ultimo = fim.replace(day=1), last_day_of_month(fim)
+    gasto = sum((ln.spend for ln in _effective_campaign_rows(primeiro, ultimo) if ln.currency == "BRL"), Decimal(0))
+    total, de_anuncio = atribuicao_ops.clientes_novos(primeiro, ultimo)
+    return {"month": mes, "spend": _q2(gasto), "new_clients": total, "new_clients_ads": de_anuncio,
+            "value": _q2(gasto / de_anuncio) if de_anuncio else None}
 
 
 def _runs_table(limite: int = 20) -> list[dict[str, Any]]:

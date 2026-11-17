@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { KanbanSquare, Table2 } from "lucide-react";
 import {
@@ -27,6 +27,7 @@ import {
 } from "../lib/marketing";
 import { MarketingKanban } from "../components/MarketingKanban";
 import { MarketingPostDialog } from "../components/MarketingPostDialog";
+import { useCurrentUser } from "../lib/useAuth";
 
 type ViewMode = "kanban" | "tabela";
 
@@ -36,6 +37,27 @@ const VIEW_MODE_KEY = "manto_marketing_painel_view";
 function loadViewMode(): ViewMode {
   const saved = window.localStorage.getItem(VIEW_MODE_KEY);
   return saved === "tabela" ? "tabela" : "kanban";
+}
+
+const SELECT = "h-9 rounded-md border border-line bg-panel px-2 text-sm text-ink";
+
+interface FiltrosDoPainel {
+  frente: string;
+  tipo: string;
+  minhas: boolean;
+}
+
+/**
+ * Filtro do Kanban (feature 351), feito NA TELA sobre a lista inteira: a mutação otimista de mover card
+ * escreve na chave exata da lista (`POSTS_KEY`), e uma chave por filtro faria o card "voltar" ao soltar.
+ */
+function filtrar(posts: MarketingPost[], f: FiltrosDoPainel, userId: number | null): MarketingPost[] {
+  return posts.filter(
+    (p) =>
+      (!f.frente || p.frente === f.frente) &&
+      (!f.tipo || (p.tipo ?? "post") === f.tipo) &&
+      (!f.minhas || (userId != null && p.assignee_id === userId)),
+  );
 }
 
 const VIEW_OPTIONS: { value: ViewMode; label: string; icon: typeof Table2 }[] = [
@@ -160,6 +182,27 @@ export function MarketingPainelPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [initialStatus, setInitialStatus] = useState<MarketingStatus | undefined>(undefined);
   const query = useMarketingPosts();
+  const eu = useCurrentUser();
+  // Feature 351: os filtros moram no endereço (feature 320), sempre com `replace`.
+  const [busca, setBusca] = useSearchParams();
+  const location = useLocation();
+  const filtros: FiltrosDoPainel = {
+    frente: busca.get("frente") ?? "",
+    tipo: busca.get("tipo") ?? "",
+    minhas: busca.get("minhas") === "1",
+  };
+
+  function setFiltro(chave: keyof FiltrosDoPainel, valor: string | null) {
+    setBusca(
+      (atual) => {
+        const proximo = new URLSearchParams(atual);
+        if (valor) proximo.set(chave, valor);
+        else proximo.delete(chave);
+        return proximo;
+      },
+      { replace: true, state: location.state },
+    );
+  }
 
   function setViewMode(mode: ViewMode) {
     setViewModeState(mode);
@@ -183,7 +226,10 @@ export function MarketingPainelPage() {
   // revisão altera o post pela API, e uma cópia congelada seguiria oferecendo "Criar Espaço de
   // Revisão" mesmo depois de o espaço existir.
   const editing = posts.find((post) => post.id === editingId) ?? null;
-  const publicados = posts.filter((post) => post.status === "publicado").length;
+  const visiveis = filtrar(posts, filtros, eu.data?.id ?? null);
+  const filtrando = Boolean(filtros.frente || filtros.tipo || filtros.minhas);
+  const publicados = visiveis.filter((post) => post.status === "publicado").length;
+  const frentes = query.data?.frentes ?? {};
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 p-4 sm:p-6">
@@ -234,8 +280,39 @@ export function MarketingPainelPage() {
         </div>
         {query.data && (
           <span className="text-xs text-muted">
-            {posts.length} postagem(ns) · {publicados} publicada(s)
+            {filtrando ? `${visiveis.length} de ${posts.length}` : posts.length} postagem(ns) · {publicados} publicada(s)
           </span>
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros do painel">
+        {/* 5 frentes e 2 tipos: `<select>` nativo (Princípio XII, abaixo de 10 itens). */}
+        <select aria-label="Filtrar por frente" className={SELECT} value={filtros.frente} onChange={(e) => setFiltro("frente", e.target.value || null)}>
+          <option value="">Todas as frentes</option>
+          {Object.entries(frentes).map(([slug, nome]) => (
+            <option key={slug} value={slug}>
+              {nome}
+            </option>
+          ))}
+        </select>
+        <select aria-label="Filtrar por tipo" className={SELECT} value={filtros.tipo} onChange={(e) => setFiltro("tipo", e.target.value || null)}>
+          <option value="">Posts e anúncios</option>
+          <option value="post">Só posts</option>
+          <option value="anuncio">Só anúncios</option>
+        </select>
+        <Button
+          type="button"
+          size="sm"
+          variant={filtros.minhas ? "default" : "outline"}
+          aria-pressed={filtros.minhas}
+          onClick={() => setFiltro("minhas", filtros.minhas ? null : "1")}
+        >
+          Minhas peças
+        </Button>
+        {filtrando && (
+          <Button type="button" size="sm" variant="ghost" onClick={() => setBusca(new URLSearchParams(), { replace: true, state: location.state })}>
+            Limpar filtros
+          </Button>
         )}
       </div>
 
@@ -258,7 +335,11 @@ export function MarketingPainelPage() {
         </p>
       )}
 
-      {query.data && posts.length > 0 && (
+      {query.data && posts.length > 0 && visiveis.length === 0 && (
+        <p className="text-sm text-muted">Nenhuma peça com esses filtros.</p>
+      )}
+
+      {query.data && visiveis.length > 0 && (
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={viewMode}
@@ -269,12 +350,13 @@ export function MarketingPainelPage() {
           >
             {viewMode === "kanban" ? (
               <MarketingKanban
-                posts={posts}
+                posts={visiveis}
+                frentes={frentes}
                 onOpenPost={openPost}
                 onCreateInColumn={(status) => openCreate(status)}
               />
             ) : (
-              <PostsTable posts={posts} onOpenPost={openPost} />
+              <PostsTable posts={visiveis} onOpenPost={openPost} />
             )}
           </motion.div>
         </AnimatePresence>

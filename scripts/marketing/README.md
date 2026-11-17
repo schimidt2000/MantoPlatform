@@ -1,5 +1,13 @@
 # Auditor de marketing semanal (feature 256)
 
+> **Desde a 345/345b a rodada lê a Meta pelo conector do Claude e o Google pela API REST
+> (`google_ads.py`)** — skill `.claude/skills/marketing-auditor`. Os CSVs abaixo são o plano B, se o
+> conector da Meta faltar.
+>
+> Google: `google_ads.py login` uma vez (OAuth do dono; cliente em `~/.google-ads/client_secret.json`,
+> token em `~/.google-ads/token.json`, fora do repositório). Depois, `coletar` (leitura) e
+> `ler`/`pausar`/`ativar`/`verba` (ensaio por padrão; `--aplicar` para valer).
+
 Rotina que roda toda **segunda-feira às 06:30** na máquina do dono (Claude Code, assinatura —
 zero API), no molde do auditor financeiro (`scripts/auditor/`, feature 221). Ela lê os exports
 da Meta e do Google Ads salvos na pasta de entrada, grava o histórico no ERP, mantém o
@@ -53,6 +61,6 @@ cria gasto em produção. A memória local de teste e a de produção são arqui
 
 ## Segredos
 
-`.marketing-agent-token` (raiz) = env `MARKETING_AGENT_TOKEN` no Railway. Sem o env em produção
+`.marketing-agent-token` (raiz) = env `MARKETING_AGENT_TOKEN` no Render (serviço `manto-backend`). Sem o env em produção
 os endpoints respondem 404 e a rotina não funciona — é o interruptor geral. Nunca copie o token
 para relatório, `resumo.md` ou chat.

@@ -6,12 +6,15 @@ import { cn } from "@manto/ui";
 import { ConversaAberta } from "../components/conversas/ConversaAberta";
 import { ListaDeConversas } from "../components/conversas/ListaDeConversas";
 import {
+  DIAS_DO_PARADO,
   intervaloDaLista,
   useConversas,
   useConversasAnteriores,
   type Canal,
   type ConversaResumo,
+  type DiasDoParado,
   type FiltroDaLista,
+  type RecorteDaLista,
 } from "../lib/conversas";
 
 /**
@@ -33,6 +36,16 @@ function canalDoEndereco(valor: string | null): Canal | null {
   return valor === "whatsapp" || valor === "instagram" ? valor : null;
 }
 
+const RECORTES: RecorteDaLista[] = ["esperando", "orcamento_parado", "anuncio"];
+
+function recorteDoEndereco(valor: string | null): RecorteDaLista | null {
+  return RECORTES.find((r) => r === valor) ?? null;
+}
+
+function diasDoEndereco(valor: string | null): DiasDoParado {
+  return DIAS_DO_PARADO.find((d) => String(d) === valor) ?? 2;
+}
+
 /** Topo (com polling) + páginas antigas, sem repetir a conversa que subiu para o topo. */
 function juntarPaginas(topo: ConversaResumo[] | undefined, antigas: ConversaResumo[][]): ConversaResumo[] | undefined {
   if (!topo) return undefined;
@@ -49,8 +62,13 @@ export function ConversasPage() {
   const filtro = filtroDoEndereco(params.get("filtro"));
   const [cursorDaLista, setCursorDaLista] = useState<string | null>(null);
   const canal = canalDoEndereco(params.get("canal"));
-  const lista = useConversas(buscaEfetiva, filtro, canal);
-  const anteriores = useConversasAnteriores(buscaEfetiva, filtro, canal, cursorDaLista);
+  // Feature 349: o recorte da venda e os dias do orçamento parado; o orçamento que a calculadora acabou de salvar
+  // (`?orcamento=`) abre o envio pronto na conversa e sai do endereço.
+  const recorte = recorteDoEndereco(params.get("recorte"));
+  const dias = diasDoEndereco(params.get("dias"));
+  const orcamentoNovo = Number(params.get("orcamento")) || null;
+  const lista = useConversas(buscaEfetiva, filtro, canal, recorte, dias);
+  const anteriores = useConversasAnteriores(buscaEfetiva, filtro, canal, cursorDaLista, recorte, dias);
 
   useEffect(() => {
     const espera = setTimeout(() => {
@@ -101,6 +119,31 @@ export function ConversasPage() {
     );
   };
 
+  const trocarParametro = (nome: string, valor: string | null) => {
+    setCursorDaLista(null);
+    setParams(
+      (atuais) => {
+        const novos = new URLSearchParams(atuais);
+        if (valor) novos.set(nome, valor);
+        else novos.delete(nome);
+        return novos;
+      },
+      { replace: true },
+    );
+  };
+
+  const filtrarRecorte = (valor: RecorteDaLista | null) => trocarParametro("recorte", valor);
+  const filtrarDias = (valor: DiasDoParado) => trocarParametro("dias", valor === 2 ? null : String(valor));
+  const orcamentoUsado = () =>
+    setParams(
+      (atuais) => {
+        const novos = new URLSearchParams(atuais);
+        novos.delete("orcamento");
+        return novos;
+      },
+      { replace: true },
+    );
+
   const selecionar = (id: number | null) =>
     setParams(
       (atuais) => {
@@ -147,6 +190,10 @@ export function ConversasPage() {
             canal={canal}
             onCanal={filtrarCanal}
             canaisLigados={lista.data?.canais_ligados ?? []}
+            recorte={recorte}
+            onRecorte={filtrarRecorte}
+            dias={dias}
+            onDias={filtrarDias}
             conversas={conversas}
             carregando={lista.isLoading}
             falhou={lista.isError}
@@ -179,6 +226,8 @@ export function ConversasPage() {
                 conversaId={selecionada}
                 intervaloMs={intervaloDaLista(lista.data)}
                 onVoltar={() => selecionar(null)}
+                orcamentoInicial={orcamentoNovo}
+                onOrcamentoUsado={orcamentoUsado}
               />
             ) : (
               <div className="flex h-full items-center justify-center p-6 text-center text-sm text-muted">

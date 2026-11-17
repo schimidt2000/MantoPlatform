@@ -92,14 +92,6 @@ export function useDeleteMaterial(eventId: number) {
   );
 }
 
-/** Gera (na primeira vez) e devolve o link público de avaliação da cliente. */
-export function useFeedbackLink(eventId: number) {
-  return useMutation<{ url: string }, Error, void>({
-    mutationFn: () =>
-      apiFetch<{ url: string }>(`/api/events/${eventId}/feedback-link`, { method: "POST" }),
-  });
-}
-
 // ── Ensaios: agendamento e presença (restaurado na 206) ─────────────────────────
 
 export interface CreateEnsaioInput {
@@ -288,19 +280,6 @@ export function buildCobrancaReembolsoMsg(m: EventMensagens): string {
     ...m.reembolso_lines.map((linha) => `• ${linha}`),
     "",
     "Poderia, por gentileza, providenciar o reembolso? Qualquer dúvida estou à disposição!",
-  ].join("\n");
-}
-
-/** Mensagem com o link público de avaliação da cliente. */
-export function buildFeedbackMsg(url: string): string {
-  return [
-    "Olá! Como vai?",
-    "Obrigado por contar com a Manto para um momento tão mágico e especial!",
-    "Se puder, deixe uma avaliação no link abaixo. Seu feedback faz toda a diferença! 💙",
-    "",
-    `👉 ${url}`,
-    "",
-    "Até a próxima!",
   ].join("\n");
 }
 

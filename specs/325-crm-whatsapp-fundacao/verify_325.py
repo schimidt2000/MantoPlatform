@@ -182,7 +182,9 @@ class MetaFalsa:
                 "name": "retomar_orcamento",
                 "language": "pt_BR",
                 "status": "APPROVED",
-                "category": "MARKETING",
+                # UTILITY desde o lote de 17/11: a 350 recusa modelo de marketing para ficha sem aceite
+                # (coberto no verify_350); aqui o que se testa é o envio do modelo e a janela.
+                "category": "UTILITY",
                 "components": [{"type": "BODY", "text": "Oi, {{1}}! Ainda pensando na festa?"}],
             },
             {

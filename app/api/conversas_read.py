@@ -16,15 +16,19 @@ from flask_login import current_user
 from app import db
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.conversas import anuncio_ops, envio_ops, equipe_ops, leitura_ops, midia_ops
+from app.conversas import anuncio_ops, envio_ops, equipe_ops, leitura_ops, midia_ops, venda_ops
 from app.conversas.acesso import pode_conversas
 from app.conversas.configuracao import canais_ligados, cfg_whatsapp
 from app.conversas.constantes import (
     CANAIS,
+    DEGRAUS_DA_REGUA,
     FILTRO_TODAS,
     FILTROS_DA_LISTA,
+    RECORTES_DA_LISTA,
     TEXTO_CANAL_INVALIDO,
+    TEXTO_DIAS_INVALIDOS,
     TEXTO_FILTRO_INVALIDO,
+    TEXTO_RECORTE_INVALIDO,
 )
 from app.integracoes import whatsapp_client as wc
 from app.models import Conversa, ConversaMidia
@@ -49,11 +53,25 @@ def api_conversas_lista() -> Any:
     canal = request.args.get("canal") or None
     if canal is not None and canal not in CANAIS:
         return json_error(TEXTO_CANAL_INVALIDO, 422, fields={"canal": TEXTO_CANAL_INVALIDO})
+    # Feature 349: o recorte da lista e, no orçamento parado, os dias da régua.
+    recorte = request.args.get("recorte") or None
+    if recorte is not None and recorte not in RECORTES_DA_LISTA:
+        return json_error(TEXTO_RECORTE_INVALIDO, 422, fields={"recorte": TEXTO_RECORTE_INVALIDO})
+    dias = request.args.get("dias", type=int) if request.args.get("dias") else DEGRAUS_DA_REGUA[0]
+    if dias not in DEGRAUS_DA_REGUA:
+        return json_error(TEXTO_DIAS_INVALIDOS, 422, fields={"dias": TEXTO_DIAS_INVALIDOS})
     cfg = cfg_whatsapp()
     ligados = canais_ligados()
     conversas, proximo = leitura_ops.listar_conversas(
-        request.args.get("busca"), request.args.get("antes"), filtro, current_user.id, canal
+        request.args.get("busca"),
+        request.args.get("antes"),
+        filtro,
+        current_user.id,
+        canal,
+        recorte=recorte,
+        dias=dias,
     )
+    resumos = venda_ops.resumos_da_lista(conversas)
     return jsonify(
         {
             # Feature 330: qualquer canal ligado basta para a caixa existir.
@@ -61,7 +79,9 @@ def api_conversas_lista() -> Any:
             "canais_ligados": ligados,
             "envio_travado": cfg.travado,
             "poll_segundos": cfg.poll_segundos,
-            "conversas": [leitura_ops.serializar_conversa(c) for c in conversas],
+            "conversas": [
+                {**leitura_ops.serializar_conversa(c), "venda": resumos.get(c.id)} for c in conversas
+            ],
             "proximo": proximo,
         }
     )

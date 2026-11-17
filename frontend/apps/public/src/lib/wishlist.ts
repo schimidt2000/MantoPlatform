@@ -5,6 +5,7 @@
  * 100% client-side — não existe conta de cliente na parte pública do catálogo, então a lista
  * fica só no navegador da pessoa (sobrevive a fechar a aba, não sincroniza entre aparelhos).
  */
+import { linhaDoCodigo } from "./origem";
 
 const STORAGE_KEY = "manto_catalogo_wishlist";
 
@@ -84,6 +85,9 @@ function buildMessage(): string {
   for (const item of list) {
     lines.push(`• ${item.name} — ${baseUrl}${itemUrl(item)}`);
   }
+  // Feature 348: a visita que veio de um anúncio leva o código do site, que liga o clique à conversa.
+  const codigo = linhaDoCodigo();
+  if (codigo) lines.push("", codigo);
   return lines.join("\n");
 }
 

@@ -25,6 +25,8 @@ from app.api import formularios_write as _formularios_write  # noqa: E402,F401
 from app.api import feedback_write as _feedback_write  # noqa: E402,F401
 from app.api import clientes_read as _clientes_read  # noqa: E402,F401
 from app.api import clientes_write as _clientes_write  # noqa: E402,F401
+from app.api import clientes_base_read as _clientes_base_read  # noqa: E402,F401
+from app.api import clientes_base_write as _clientes_base_write  # noqa: E402,F401
 from app.api import rh_read as _rh_read  # noqa: E402,F401
 from app.api import admin_users_read as _admin_users_read  # noqa: E402,F401
 from app.api import admin_users_write as _admin_users_write  # noqa: E402,F401
@@ -81,3 +83,5 @@ from app.api import instagram_webhook as _instagram_webhook  # noqa: E402,F401
 from app.api import push as _push  # noqa: E402,F401
 from app.api import conversas_costura as _conversas_costura  # noqa: E402,F401
 from app.api import conversas_funil as _conversas_funil  # noqa: E402,F401
+from app.api import conversas_venda as _conversas_venda  # noqa: E402,F401
+from app.api import origem_public as _origem_public  # noqa: E402,F401

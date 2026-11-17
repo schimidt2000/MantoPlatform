@@ -8,6 +8,7 @@ import { Button, PageHeader, Skeleton, formatShortDate } from "@manto/ui";
 import { formatBRL } from "@manto/money";
 import { ApiRequestError } from "@manto/api-client";
 import { useCurrentUser } from "../lib/useAuth";
+import { useVendaDaConversa } from "../lib/conversas";
 import {
   eventSchema,
   DEFAULT_EVENT_FORM_VALUES,
@@ -211,6 +212,10 @@ export function EventCreatePage() {
   // é o de quem cria evento (`_CAN_CREATE`: COMERCIAL e SUPERADMIN), o mesmo do `POST /api/events`.
   const formResponseIdParam = searchParams.get("form_response_id");
   const formResponseId = formResponseIdParam ? Number(formResponseIdParam) : null;
+  // Feature 349: "Criar evento" na conversa — a ficha, o vendedor (quem atende) e o vínculo vêm dela. O RBAC das
+  // Conversas é o mesmo de quem cria evento (Comercial e Superadmin).
+  const conversaId = Number(searchParams.get("conversa")) || null;
+  const vendaDaConversa = useVendaDaConversa(conversaId);
 
   const currentUser = useCurrentUser();
   const options = useEventCreateOptions();
@@ -391,13 +396,30 @@ export function EventCreatePage() {
       },
     });
 
-  // Default do vendedor: o próprio usuário, se ele estiver na lista de vendedores.
+  // Default do vendedor: o próprio usuário, se ele estiver na lista de vendedores. Vindo da conversa (feature 349),
+  // é quem atende a conversa — se estiver na lista; senão fica o padrão e a vendedora escolhe.
+  const vendedorDaConversa = vendaDaConversa.data?.fechamento.vendedor ?? null;
   useEffect(() => {
     if (!options.data || !currentUser.data) return;
+    if (vendedorDaConversa && options.data.sellers.some((s) => s.id === vendedorDaConversa.id)) {
+      setValue("seller_id", String(vendedorDaConversa.id));
+      return;
+    }
     const isSeller = options.data.sellers.some((s) => s.id === currentUser.data!.id);
     if (isSeller) setValue("seller_id", String(currentUser.data.id));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [options.data, currentUser.data]);
+  }, [options.data, currentUser.data, vendedorDaConversa?.id]);
+
+  // Feature 349: a ficha da conversa entra como Contratante (sem repetir a que o orçamento já trouxe).
+  const fichaDaConversa = vendaDaConversa.data?.fechamento.cliente ?? null;
+  useEffect(() => {
+    if (!fichaDaConversa) return;
+    setClients((atuais) =>
+      atuais.some((c) => c.client_id === fichaDaConversa.id)
+        ? atuais
+        : [...atuais, { client_id: fichaDaConversa.id, name: fichaDaConversa.nome, relation: "Contratante" }],
+    );
+  }, [fichaDaConversa?.id, fichaDaConversa?.nome]);
 
   const selectDuracao = (dur: "1" | "2" | "3" | "4") => {
     setDuracao(dur);
@@ -577,6 +599,7 @@ export function EventCreatePage() {
         coordinator_talent_id: coordinatorTalentId,
         clients: clients.map(({ client_id, relation }) => ({ client_id, relation })),
         form_response_id: formResponse?.id ?? null,
+        conversa_id: conversaId,
         observations: observations
           .filter((o): o is ObservationInput & { obs_type: "text" | "link" } =>
             o.obs_type === "text" || o.obs_type === "link",
@@ -588,6 +611,8 @@ export function EventCreatePage() {
         onSuccess: (result) => {
           const eventId = result.event.id;
           setCreatedEventId(eventId);
+          // A conversa de origem muda de etapa (e perde o "Perdida"): a lista e o painel releem.
+          if (conversaId) void queryClient.invalidateQueries({ queryKey: ["conversas"] });
 
           const pending: PendingAttachment[] = [
             ...paymentProofs.map((proof, i) => ({

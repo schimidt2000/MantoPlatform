@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { AvatarThumb, Badge, Button, Card, Input, PageHeader, Skeleton } from "@manto/ui";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
@@ -39,7 +39,8 @@ function LinhaTema({
   const podeLiberar = tema.licenca_origem !== "nao_classificado" && (tema.licenca_origem === "autoral" || podeLiberarLicenciado);
 
   return (
-    <li className="flex flex-wrap items-center gap-3 py-2.5">
+    <li className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:gap-3">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
       {tema.licenca_sugestao ? (
         <input
           type="checkbox"
@@ -66,6 +67,8 @@ function LinhaTema({
           </p>
         )}
       </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 pl-7 sm:pl-0">
       <select
         aria-label={`Origem de ${tema.name}`}
         className={SELECT}
@@ -103,6 +106,7 @@ function LinhaTema({
           </Button>
         )
       )}
+      </div>
     </li>
   );
 }
@@ -122,22 +126,36 @@ export function MarketingTemasPage() {
     origem: (params.get("origem") ?? "") as LicencaOrigem | "",
     liberado: (params.get("liberado") ?? "") as LiberadoAnuncio | "",
     sugestao: params.get("sugestao") === "1",
+    pagina: Math.max(1, Number(params.get("pagina")) || 1),
   };
   const query = useTemasLicenca(filtros);
   const confirmar = useConfirmarSugestoes();
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [aviso, setAviso] = useState<string | null>(null);
 
+  // Feature 351: a página mora no endereço com os filtros; mudar um filtro volta à página 1.
   function setFiltro(chave: string, valor: string | null) {
     setParams(
       (atual) => {
         const proximo = new URLSearchParams(atual);
         if (valor) proximo.set(chave, valor);
         else proximo.delete(chave);
+        if (chave !== "pagina") proximo.delete("pagina");
         return proximo;
       },
       { replace: true, state: location.state },
     );
+    setSelecionados(new Set());
+  }
+
+  const paginas = query.data?.paginas ?? 1;
+  const pagina = query.data?.pagina ?? filtros.pagina;
+  const topoDaLista = useRef<HTMLDivElement>(null);
+
+  // Trocar de página com o botão do rodapé leva ao topo da lista nova (senão a pessoa cai no fim dela).
+  function irParaPagina(numero: number) {
+    setFiltro("pagina", String(numero));
+    topoDaLista.current?.scrollIntoView({ block: "start" });
   }
 
   const itens = query.data?.items ?? [];
@@ -210,7 +228,7 @@ export function MarketingTemasPage() {
           <p className="mr-auto text-sm text-ink">
             {selecionados.size > 0
               ? `${selecionados.size} selecionado(s) para confirmar a sugestão.`
-              : `${comSugestao.length} tema(s) nesta lista com sugestão da rotina.`}
+              : `${comSugestao.length} tema(s) nesta página com sugestão da rotina.`}
           </p>
           <Button
             type="button"
@@ -219,7 +237,7 @@ export function MarketingTemasPage() {
             disabled={confirmar.isPending}
             onClick={() => confirmarSelecionados(comSugestao.map((t) => t.id))}
           >
-            Confirmar todas as sugestões da lista
+            Confirmar as sugestões desta página
           </Button>
           <Button
             type="button"
@@ -238,6 +256,7 @@ export function MarketingTemasPage() {
         </p>
       )}
 
+      <div ref={topoDaLista} className="scroll-mt-20" />
       {query.isLoading && <Skeleton className="h-64 w-full" />}
       {query.isError && (
         <p className="rounded-md bg-red-soft px-4 py-3 text-sm text-red" role="alert">
@@ -269,6 +288,31 @@ export function MarketingTemasPage() {
             </ul>
           )}
         </Card>
+      )}
+      {query.data && paginas > 1 && (
+        <nav className="mt-3 flex items-center justify-between gap-2" aria-label="Páginas dos temas">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pagina <= 1 || query.isFetching}
+            onClick={() => irParaPagina(pagina - 1)}
+          >
+            Anterior
+          </Button>
+          <span className="text-sm text-muted">
+            Página {pagina} de {paginas} · {(query.data.total ?? 0).toLocaleString("pt-BR")} temas
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={pagina >= paginas || query.isFetching}
+            onClick={() => irParaPagina(pagina + 1)}
+          >
+            Próxima
+          </Button>
+        </nav>
       )}
     </div>
   );

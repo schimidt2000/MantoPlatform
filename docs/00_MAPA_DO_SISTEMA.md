@@ -217,7 +217,10 @@ As que quebram em silêncio. Leia esta seção inteira uma vez.
 2. **Terceiro relógio.** As tabelas `virtual_*` (feature 205) usam `now_sp()`
    (`app/constants.py:114`) até em `created_at`. Comparar `VirtualOrder.created_at` com
    `CalendarEvent.created_at` mistura relógios com 3h de diferença. `notifications.created_at`
-   (feature 272) também é `now_sp()` — comparar com `audit_logs.created_at` (UTC) erra 3 h.
+   (feature 272) também é `now_sp()` — comparar com `audit_logs.created_at` (UTC) erra 3 h. Desde a 350,
+   também o aceite e a retirada da ficha (`clients.marketing_opt_in_at`/`_out_at`, que a 344 já gravava em
+   SP), `cliente_consentimentos`, `cliente_criancas`, `parceiros` e `pos_eventos` — ao lado do
+   `clients.created_at`, que segue UTC.
 3. **`date.today()`/`utcnow()` em código de negócio é bug latente**: produção roda em UTC, então
    depois das 21h de Brasília o dia já virou. O relógio canônico é `now_sp()`.
 4. **Dinheiro é `Numeric(12,2)`/`Decimal`**, `ROUND_HALF_UP` em 2 casas. JSON trafega reais decimais.

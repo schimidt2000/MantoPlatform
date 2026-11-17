@@ -27,9 +27,19 @@ export function formatDateTime(iso: string | null): string {
   });
 }
 
-/** Só a data em pt-BR ("05/07/2026"). */
+/**
+ * Só a data em pt-BR ("05/07/2026").
+ *
+ * Data pura ("2026-11-17": data da venda, da nota, do gasto) sai pelo texto: `new Date` a lê como
+ * meia-noite UTC, que em São Paulo ainda é o dia anterior — a venda de 17/11 aparecia em 16/11 (190b).
+ * Data com hora segue pelo `Date`, no fuso de quem olha.
+ */
 export function formatDay(iso: string | null): string {
   if (!iso) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [ano, mes, dia] = iso.split("-");
+    return `${dia}/${mes}/${ano}`;
+  }
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 

@@ -6,7 +6,11 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-10-28** · **322-o-que-o-casting-fecha**: em `/events/:id` (aba Produção),
+> Última atualização: **2026-11-17** · **350-base-autorizada**: cartões **Consentimentos** e **Indicação e
+> parceiro** na ficha (`/clientes/:id`), a faixa "Novidades" na conversa aberta, as telas `/clientes/pos-evento`,
+> `/clientes/aniversarios` e `/clientes/parceiros`, o diálogo "Pós-evento" no evento (no lugar de "Pedir feedback
+> da cliente") e, na avaliação pública, "Indicar uma amiga" e as duas autorizações.
+> Antes: **2026-10-28** · **322-o-que-o-casting-fecha**: em `/events/:id` (aba Produção),
 > o card do personagem mostra o que foi vendido sob o nome, e as vagas e talentos ganham
 > "adicionado pelo sistema" / "inserido pelo comercial"; em `/events/:id/edit`, a caixa Maquiagem
 > travada para quem não é superadmin.
@@ -546,6 +550,10 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   `extra_por_horas` do servidor (acima disso os valores zeram e a tela pede "acima de 24 h, digite o valor"; orçamento de antes: a régua de sempre).
   O quadro do BV mostra o BV já com o desconto (`valores_final`) quando a venda é o total do orçamento; venda digitada
   à mão → "calculado ao salvar". O vínculo 273 da aba Comercial mostra o mesmo BV com desconto.
+- **Vinda da conversa** (feature 349, `?conversa=<id>`): lê o painel da venda (`GET /api/conversas/<id>/venda`), põe a
+  ficha da conversa como Contratante (sem repetir a do orçamento) e o vendedor = quem atende a conversa, se estiver
+  na lista de vendedores (senão o padrão de sempre); manda `conversa_id` no `POST /api/events` e, salvo, relê as
+  Conversas (a etapa e a perda mudam).
 - **API**: `GET /api/events/new/options`, `/prefill` · `POST /api/events` (+ endpoints de
   `contracts`, `payments`, `invoices`, `observations`, `reimbursements`).
 - **Vínculos entre módulos**: Catálogo → Elenco (auto-vínculo da Ficha de Figurino) ·
@@ -795,6 +803,17 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
     nome) ao lado de "Comissão" — que passa a mostrar só a comissão do evento, com o nome de **quem
     a recebe** (no EducaManto, o responsável) em vez do vendedor do evento. Só no card Comercial: a
     edição completa, a criação e o Jinja não têm o campo.
+  - **Feature 348 na aba Comercial — frente e origem da venda**: o formulário da venda ganha **"Frente"**
+    (seletor com as cinco frentes do marketing, logo abaixo dos valores). A frente escolhida, ou a sugestão
+    **certa** pelo título (`(EDU`/EducaManto, tipo CORP, "15 anos"/"casamento"…, loja), vem selecionada; a
+    sugestão **por exclusão** (festas) fica vazia, com "Sugestão pelo título: Festas. Selecione a frente da
+    venda.", e salvar a venda sem escolher dá "Selecione a frente da venda." no campo, com o foco nele. A
+    leitura ganha as linhas **"Frente"** ("Festas · sugerida pelo título" quando ninguém escolheu) e
+    **"Origem da venda"** quando a venda tem conversa: o contato que a trouxe ("Anúncio da Meta: “título” ·
+    campanha · conjunto", "Publicação: …", "Site: campanha · código #XXXXX" ou "Conversa sem anúncio nos 90
+    dias anteriores") e, embaixo, "Conversa com <nome>" e **"Ver conversa"** (para quem usa as Conversas:
+    Comercial e Superadmin; o Financeiro lê sem o link). Conferida em desktop e 390 px. A edição completa e a
+    criação não têm o campo (a criação grava sozinha só a sugestão certa).
   - **Feature 299 na aba Comercial**: o valor vazio ou zero aparece como "A definir" (nunca
     "R$ 0,00"), o simbólico com a marca "valor simbólico" e, no outro evento de um grupo, "no evento
     principal" com o link. O `PATCH /comercial` recusa o valor novo entre R$ 0,01 e R$ 0,99, com o
@@ -1606,6 +1625,25 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Botão "Tetos e responsáveis" (`FrentesConfigDialog`): só o Superadmin salva.
   - Aparece também quando ainda não há rodada (vendas sem gasto).
   - A rotina passou a ler pelos conectores (skill `marketing-auditor`); o CSV ficou como plano B.
+- **Feature 351 — painel atribuído**:
+  - O card da frente põe em destaque o **custo por venda atribuída, com desconto** (o que vai contra o teto), e logo
+    abaixo o atribuído (gasto ÷ vendas que um anúncio da frente trouxe) e o misto (gasto ÷ todas as vendas). O selo
+    passa a ser o do atribuído ("Sem venda atribuída" quando nenhuma).
+  - Acima dos cards, a regra e a premissa escritas: último contato pago até 45 dias antes da venda, evento criado
+    depois do contato, desconto de 50% "até existir teste". Aviso em âmbar quando o período começa antes de
+    01/06/2026, e a linha "N vendas vieram de campanha sem frente".
+  - No pé do card, o **mês corrente**: "27 de 60 vendas da meta", "R$ 960,00 de R$ 2.500,00 em anúncio" e o foco do
+    mês do calendário.
+  - Botões "Calendário do ano" (`CalendarioDialog`: uma frente por vez, 12 meses empilhados com meta, verba e foco,
+    abre no mês corrente) e "Metas, verba e tetos" (`FrentesConfigDialog`, que ganhou meta e verba ao lado do teto).
+    Só o Superadmin salva.
+  - Bloco novo `AtribuicaoPainel`: **Funil com custo** (Frente · Anúncio · Peça · Conceito, divisão em `?dividir=`;
+    cada grupo com conversas, orçamentos, eventos, gasto e custo por etapa) e **Vendas atribuídas** (evento, data da
+    venda, frente, de onde veio o contato; o valor só para o Superadmin; 10 primeiras e "Mostrar todas").
+  - Tile "Custo por cliente novo de anúncio": gasto ÷ clientes novos que vieram de anúncio, com "N de M clientes
+    novos vieram de anúncio".
+  - Em 390 px, campanhas, posts e a tabela semanal viram cartões; a página não rola de lado (conferido em 390 × 844).
+  - **API nova**: `GET /api/marketing/atribuicao`, `GET|PATCH /api/marketing/calendario`.
 
 #### `/marketing/decisoes` — Decisões de marketing *(feature 345)*
 - **Acesso**: `MARKETING`, `SUPERADMIN`. Aprovar e recusar: só `SUPERADMIN`. Os outros veem "Só o Superadmin aprova
@@ -1622,6 +1660,13 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Diário: selo "A reavaliar" ou o veredito, e "Nova entrada".
   - Datas no horário de SP.
   - Conferida em 390 px (o dono aprova pelo celular): cards empilhados, sem rolagem lateral.
+  - **Feature 351**: cada proposta mostra frente, teto por venda, verba do mês e **impacto no mês** (com sinal: a pausa
+    é negativa); o topo soma o "Aprovado neste mês". A observação ocupa a linha inteira em 390 px. A proposta nova
+    avisa cada Superadmin no sino (ícone de megafone, link para esta tela).
+  - **Feature 351**: "Nova entrada" ganha "Medir esta mudança (opcional)" — plataforma, alvo (campanha, conjunto ou
+    anúncio) e id, métrica, janela (3 a 28 dias), dia da mudança e controle. A entrada com teste mostra antes → depois
+    com a variação, o controle, o efeito líquido em pontos e a linha de base; "em andamento" enquanto a leitura não
+    cobre a janela.
 - **API**: `GET /api/marketing/propostas`, `POST …/<id>/decidir`, `GET|POST /api/marketing/diario`.
 
 #### `/marketing/temas` — Temas e licença *(feature 345)*
@@ -1633,14 +1678,23 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - Busca e filtros no endereço: origem, liberado, "só com sugestão".
   - Cada linha mostra a miniatura, a sugestão da rotina com o motivo, o `<select>` de origem, o selo do liberado e
     o botão Liberar/Tirar do anúncio.
-  - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar todas as sugestões da lista". Autoral
+  - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar as sugestões desta página". Autoral
     confirmado sai liberado; licenciado sai não liberado.
+  - **Feature 351**: 50 temas por página, com a página no endereço (`?pagina=`); filtro novo volta à página 1;
+    "Anterior/Próxima" levam ao topo da lista. Em 390 px o nome fica em cima e as ações embaixo.
 - **Card do Kanban** (`MarketingPostDialog`):
   - Alterna entre "Post orgânico" e "Anúncio". O anúncio abre frente, formato e briefing (objetivo, o que mostrar,
     letreiro), com a regra de imagem escrita no próprio pedido.
   - Tema não liberado aparece em vermelho antes de salvar, e o 422 cai no campo.
   - O card de anúncio mostra o resultado da peça.
   - No Kanban, selos "Anúncio" e "Pedido da rotina".
+  - **Feature 351**: campo **Conceito** (o ângulo da peça, até 120 caracteres). O bloco do resultado diz "N anúncios
+    ligados · M no ar", e cada anúncio "no ar", "sem gasto desde dd/mm" ou "sem leitura" (antes, todo anúncio ligado
+    aparecia "no ar"); a linha "Plataforma" (gasto e conversas informadas) e a linha "Real" (conversas do CRM,
+    orçamentos, vendas atribuídas e o faturamento delas).
+  - **Feature 351, `/marketing/painel`**: filtros "Todas as frentes", "Posts e anúncios / Só posts / Só anúncios" e
+    "Minhas peças" no endereço (`?frente&tipo&minhas=1`), aplicados na tela; contagem "N de M postagens"; selo da
+    frente no card. As colunas do Kanban continuam rolando dentro do quadro (dívida no `docs/05`).
 
 #### `/virtuais/campanhas` — Interações Virtuais (feature 205, US1)
 - **Acesso**: `COMERCIAL`, `SUPERADMIN` (gate de servidor `require_virtuais_access()`).
@@ -1969,6 +2023,21 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   com a origem ("Loja: <campanha>") ou "Sem aceite registrado". É o que diz se a equipe pode mandar
   novidade por WhatsApp/e-mail (LGPD: consentimento). A ficha do comprador nasce na **venda** da loja,
   com nome, telefone, e-mail e a origem do acesso — nunca os dados de quem recebe.
+- **Consentimentos (feature 350)**: cartão na coluna da esquerda, depois de **Contato** (a linha "Novidades" da 344
+  só aparece com backend velho). "Novidades por WhatsApp e e-mail" com o selo **Autorizou** / **Sem aceite**, a
+  data e a origem (ou "Saiu em dd/mm · origem. Não prospectar."); **Registrar aceite** / **Retirar aceite** abrem
+  o diálogo com o texto exato e a versão, e a origem num rádio de quatro opções (Conversa, Resposta ao orçamento,
+  Telefone, Pessoalmente). **Aniversários autorizados**: primeiro nome e data de cada criança, **Inserir
+  aniversário** (nome, data, origem e a caixa "A responsável autorizou com este texto…", nunca pré-marcada; sem
+  ela o servidor aponta a caixa) e **Remover** com `ConfirmDialog` (apaga nome e data). **Ver histórico (N)**
+  abre, com movimento, cada aceite e retirada: data e hora (São Paulo), origem, autor ("A cliente" / "Sistema"
+  quando não há usuário), referência e o texto com a versão. O Financeiro vê o cartão sem os aniversários e sem
+  os botões.
+- **Indicação e parceiro (feature 350)**: cartão logo abaixo. **Indicado por** (link para a ficha, Combobox de
+  busca, "Remover"), **Indicou** (as fichas que esta indicou) e **Parceiro** (nome · tipo, "(inativo)" quando
+  for o caso; Combobox dos ativos com a comissão declarada). Selecionar já salva; erro apontado no campo.
+- **Atalhos (feature 350)**: no cabeçalho de `/clientes`, **Pós-evento ›** e **Aniversários ›** (Comercial e
+  Superadmin, pela `flags.pode_editar_base` da lista) e **Parceiros ›** (todos os papéis da tela).
 - **Linha do tempo (feature 335)**: o primeiro cartão da coluna da direita (no celular, depois do cadastro). Os
   marcos do mais novo para o mais antigo, com ícone, título, data e hora (São Paulo), uma linha de detalhe e o link
   ("Abrir conversa", "Ver orçamento", "Ver evento") quando a pessoa abre a tela; os 10 primeiros e "Mostrar
@@ -1998,6 +2067,37 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   cadastrado devolve a ficha existente com aviso "nada foi duplicado" + atalho para abri-la, e
   **não sobrescreve** nada dela. Cadastro real invalida lista, busca e métricas (aparece sem F5)
   e nasce com `source="manual"`, separado no gráfico por origem.
+
+#### `/clientes/pos-evento` — Pós-evento *(feature 350)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (`GET /api/pos-evento`; os demais recebem 403).
+- **Objetivo**: no dia seguinte à festa, preparar **uma** mensagem: agradecimento, link das fotos (se houver),
+  avaliação, indicação, convite para receber novidades e "responda SAIR". Nada sai sozinho.
+- **UX**: eventos dos últimos 7 dias até agora, do mais recente (sem ensaio e sem os dias satélites de um grupo);
+  cada linha com título (link para o evento), data · contratante, selo **Pendente** / **Copiado em dd/mm** /
+  **Enviado em dd/mm** e **Avaliação recebida**; o subtítulo conta os pendentes. **Preparar mensagem** / **Ver
+  mensagem** abre o diálogo do pós-evento (o mesmo do evento).
+- **Diálogo "Pós-evento"** (`PosEventoDialog`, também no menu **Ferramentas** do evento como "💬 Pós-evento
+  (avaliação e indicação)", no lugar do antigo "Pedir feedback da cliente"): campo **Link das fotos (opcional)**
+  — a prévia relê 400 ms depois de digitar e aponta o link inválido —, a mensagem montada pelo servidor,
+  **Copiar mensagem** (copia dentro do toque e só então registra; se o navegador recusar, o aviso aparece no
+  próprio diálogo: "Selecione o texto da mensagem e copie à mão") e **Enviar pela conversa** (só ativo com o CRM
+  ligado, a conversa da contratante e a janela de 24 h aberta; senão o motivo aparece embaixo da mensagem). O
+  rodapé quebra em duas linhas no celular.
+
+#### `/clientes/aniversarios` — Aniversários *(feature 350)*
+- **Acesso**: `COMERCIAL`, `SUPERADMIN` (dado de criança; `GET /api/clientes/aniversarios`).
+- **UX**: só leitura. Crianças com aniversário de hoje a 60 dias cuja responsável autorizou guardar o aniversário
+  **e** recebe novidades; cada linha: primeiro nome · "faz N anos", dia/mês, responsável e telefone (link para a
+  ficha) e o selo **Hoje** / **Amanhã** / **Em N dias** (dourado até 7 dias). Vazio: "Nenhum aniversário
+  autorizado nos próximos 60 dias." O envio do lembrete é outra feature.
+
+#### `/clientes/parceiros` — Parceiros *(feature 350)*
+- **Acesso**: leitura `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN`; criar, editar, desativar e reativar só Comercial e
+  Superadmin (`flags.pode_editar`).
+- **UX**: lista por nome com tipo · contato · telefone, selos **Comissão N%** (declarada) e **N clientes**;
+  "Mostrar inativos"; **Novo parceiro** / **Editar** abrem o diálogo (nome, tipo, comissão declarada em %,
+  contato, telefone, e-mail, observação) com o aviso de que a tela não paga ninguém (o repasse de um evento é o
+  BV); **Desativar** / **Reativar** sem apagar (as fichas ligadas mantêm o nome).
 
 #### `/clientes/avaliacoes` — Satisfação das Clientes *(refeita na feature 197)*
 - **Acesso**: `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (`_require_vendas()`).
@@ -2218,7 +2318,16 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   até 200). A tabela **Por vendedor / campanha / canal** repete as etapas, com a conversão até o evento. Sem
   conversa no período: "Nenhuma conversa nova neste período…". No celular a barra ocupa uma linha inteira (o
   trilho é igual em todas as etapas) e a tabela rola dentro do bloco.
+- **Feature 351**: a divisão ganha **Frente, Anúncio, Peça e Conceito** (pelo primeiro anúncio da conversa; grupos
+  "Sem anúncio", "Sem frente", "Sem peça", "Sem conceito" no fim). Os sete botões quebram linha no celular. Aqui não
+  há dinheiro: o custo de cada grupo fica no Desempenho (Marketing).
 - **API**: `GET /api/conversas/funil` e `GET /api/conversas/funil/parados`.
+- **Feature 349**: três cartões sob as etapas — **1ª resposta (mediana)** ("52% em até 15 min · 5 sem resposta" e
+  "6 respondidas pelo celular, sem autor"), **Qualificadas** (% das que chegaram) e **Perdidas** (por motivo; sem
+  perda, "Nenhuma perda registrada no período."). A tabela ganha Qualificadas, Perdidas, 1ª resposta e Até 15 min. Em
+  **Pararam em**, cada conversa mostra o selo "Perdida: <motivo>" ou "Qualificada", "1ª resposta em 12 min" (ou "(sem
+  autor)", ou "Sem resposta") e **Lembrar amanhã** (vira "Lembrete amanhã às 09:00"); a perdida não tem o botão.
+- **API**: `GET /api/conversas/funil` e `GET /api/conversas/funil/parados`; o lembrete é `POST /api/conversas/<id>/lembrete`.
 
 #### `/conversas` — Conversas (WhatsApp e Instagram) *(features 325, 328, 330 e 332)*
 - **Acesso**: `COMERCIAL`, `SUPERADMIN`. O item "Conversas" no menu Comercial só existe com o papel **real** e o
@@ -2263,6 +2372,25 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - **Gravar áudio**: com o campo vazio, o botão Enviar vira o microfone. Gravando: ponto vermelho, tempo correndo,
     "Cancelar" e Enviar; para sozinha em 5 minutos. Sem permissão: "Não foi possível usar o microfone. Libere o acesso
     nas configurações do navegador.". Se o envio falhar, o áudio fica anexado para tentar de novo.
+- **A venda na conversa** (feature 349):
+  - **Lista**: os recortes **Esperando · Orçamento parado · Anúncio** (chips de 44 px numa linha só em 390 px; o nome
+    inteiro no `aria-label`; `?recorte=` e, no orçamento parado, "Sem retorno há 2 dias · 5 dias · 9 dias", `?dias=`),
+    combináveis com Todas/Minhas/Sem responsável e o canal. Em cada linha, os selos **Anúncio**, a etapa (Orçamento
+    enviado, Formulário, Evento fechado, Pagou, Avaliou — "Chegou" não ganha selo), **Qualificada**, **Perdida:
+    <motivo>** e o sininho do lembrete. Vazias por recorte: "Nenhuma conversa esperando resposta.", "Nenhum orçamento
+    parado há N dias ou mais.", "Nenhuma conversa de anúncio encontrada.".
+  - **Faixa da venda** (sob o responsável): a etapa, "Anúncio", o selo de qualificação ("Qualificada · 3 pts", toque
+    abre **Qualificação** com os sinais e "Qualificada" / "Não qualificada" / "Usar a regra") ou "Perdida: <motivo>",
+    **Criar evento** e o menu ⋮ (44 px) com "Lembrar amanhã"/"Cancelar lembrete", "Qualificação…" e "Marcar como
+    perdida"/"Reabrir conversa". Linha de baixo: a frase da perda, "1ª resposta em 12 min, por Ana" (ou "pelo celular
+    (sem autor)", "por outro app (sem autor)", "Sem resposta ainda"), "Orçamento sem retorno há 6 dias" e "Lembrete
+    amanhã às 09:00". Falha ao carregar: "Não foi possível carregar a venda. Tente novamente." — a conversa continua.
+  - **Marcar como perdida** (diálogo): "Motivo" (a lista vem do servidor) e "Em uma frase" (opcional; obrigatória no
+    "Outro", com o erro no campo).
+  - **Criar evento**: sem ficha abre "Ligar à ficha"; com ficha vai a `/events/new?conversa=<id>&orcamento_id=<último
+    enviado>`.
+  - **Enviar orçamento** ganhou **Fazer orçamento** (abre a calculadora com o nome e a conversa); a volta
+    (`?orcamento=<id>`) abre o envio com o orçamento recém-salvo escolhido e sai do endereço.
 - **Instagram Direct** (feature 330):
   - **Lista**: ícone do canal ao lado do nome (balão verde no WhatsApp, marca do Instagram); "@usuário" no lugar
     do telefone; com os dois canais ligados, o filtro "Todos · WhatsApp · Instagram" (`?canal=`). Sem nome de
@@ -2301,6 +2429,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
     que abre o mesmo diálogo com **Remover vínculo**. O diálogo busca a ficha pelo nome ou telefone ou cria uma
     (nome e telefone, com o telefone da conversa no WhatsApp). Telefone de ficha existente: "Esta ficha já
     existia e foi ligada à conversa.".
+  - **Aceite de novidades (feature 350)**: com ficha ligada, uma faixa logo abaixo do responsável — "Novidades:"
+    com o selo **Autorizou** / **Sem aceite** e **Registrar aceite** / **Retirar aceite** (o diálogo da ficha, com
+    a origem "Conversa" marcada e a referência da conversa). O "SAIR" da cliente retira sozinho. **Enviar
+    modelo** de categoria Marketing para ficha sem aceite volta com "Esta cliente não autorizou receber novidades.
+    Registre o aceite na ficha antes de enviar um modelo de marketing.".
   - **Caixa de mensagem**: **Enviar orçamento** e **Enviar formulário** ao lado de **Enviar modelo** (quebram
     em duas linhas no celular).
     - "Enviar orçamento": os orçamentos dos últimos 30 dias do time (até 50, com busca pela cliente ou pelo
@@ -2579,7 +2712,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 
 | Rota | Tela | Acesso | Destaques |
 |---|---|---|---|
-| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com um modo fora de SP ativo já dispara o cálculo. **Deslocamento em duas etapas** (feature 262, no lugar da checkbox "Evento Fora de São Paulo"): "Evento em São Paulo" (padrão) × "Evento fora de São Paulo"; marcando fora, o painel dourado abre com a escolha "Por nossa conta" (padrão) × "Por conta da cliente" — no modo cliente o painel vira "Adicionais — Fora de SP", esconde tipo de transporte/carretinha/nº de carros (km e colaboradores ficam) e o veículo sai da conta. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190; snapshot antigo fora de SP reabre como "por nossa conta"). **Feature 307 — data especial pela data**: sob o campo Data, com a data vazia, a dica "Em 24/12 e 25/12 a tabela especial entra pela data" (dias lidos da tabela); quando o resultado volta com `quote.data_especial`, um aviso dourado (`AnimatePresence` + `motion.div`, `useReducedMotion`) diz "🎄 Data especial — Véspera e Natal: markup 3,34× e cachês próprios…" e, **só na faixa `natal`**, orienta a usar o item "Ajudante do Noel" e não somar o acréscimo "Outro" (outra faixa mostra só rótulo e markup; com "Personalizar valores" ligado o aviso lembra que o valor digitado vence); o painel de resultado mostra "🎄 Valores da data especial: …"; o botão vira **"Recalculando…"** e fica desabilitado do momento em que o payload muda até o resultado novo chegar (`calcPendente` + contador `seq` que descarta resposta antiga) e também após erro de cálculo (aí com o rótulo normal) — antes ele salvava o `result` da data anterior durante o debounce. **Feature 309 — produtos de tabela**: card **"Produtos de tabela"** (`ProdutosCard`) no topo da coluna direita, antes de Equipe, só quando `settings.produtos` chega no `/opcoes` (backend velho = sem card): `Combobox` de `@manto/ui` com os produtos ativos (descrição = preço normal + descrição ao cliente, ícone 🎅) + "Adicionar" (pode repetir); cada exemplar vira uma `ProdutoLinha` ("📦 Visita Mágica — Papai Noel (visita padrão, até 1h) — preço de tabela R$ 2.500,00", "Inclui: Papai Noel · Coordenador · Maquiador", selo "estimativa" em dourado quando a faixa não tem preço, selo "inativo" num orçamento recalculado) lida de `quote.produtos` — enquanto a resposta não volta a linha diz "calculando…" em vez de chutar o preço; o estado `produtos` entra em `INITIAL_STATE`/`resetAll`/payload/rehydrate (só a chave; o preço é resolvido de novo). Abaixo da Data, `quote.avisos` em bloco `role="alert"` com borda dourada cheia ("Para a Visita Mágica use o produto…", "preço ESTIMADO… Confira antes de enviar"), com a mesma regra de vida do aviso da 307 (some enquanto o recálculo não voltou). No painel de resultado, com só produto (servidor devolve só `show_1h`) o tile único se chama **"Preço de tabela"**; as `ProdutoLinha`s aparecem junto da nota da data especial. O contador de coordenadores mostra "N incluído(s) no produto" (`quote.coordenadores_inclusos`) e não desce abaixo deles. **Janela de deploy**: com produto selecionado e `quote.produtos` ausente (backend velho) o botão fica desabilitado com o aviso "O servidor não aplicou o produto — recarregue a página" **Feature 313**: bloco **"Desconto negociado"** no fim de "Ajustes Finos" — "Desconto (%)" **ou** "fechar [duração] por (R$)" (o valor final de uma duração; as outras levam o mesmo %); quem foi digitado por último manda, só ele vai no payload, e o outro aparece como leitura do resultado ("Fecha 2h por R$ X" / "= N% de desconto, aplicado também nas outras durações"); "Sem desconto" zera. As durações do seletor são as que o resultado mostra (só produto = "Preço de tabela"; a extra quando existe); se a duração escolhida sai do orçamento, o servidor diz quais ficaram, o seletor troca e o valor digitado **é zerado com aviso** (não vira desconto sobre outra coluna). Erros do desconto ao lado do bloco. O personalizado diz que o desconto incide também nele. O card **Resultado**: o cheio riscado, o final, "PIX à vista" e, com BV, "BV a repassar" (e "BV no PIX" quando difere), esmaecido com "Recalculando…"/"Corrija os campos para recalcular." fora do resultado vivo; 4 colunas só do `lg` em diante. O editor de acréscimos: a linha que vira BV nasce com "%" marcado, e a ajuda diz a ordem da conta (R$ uma vez; o BV sobre o valor com os acréscimos; acompanha o desconto). "Recalcular" reabre o desconto como foi digitado (orçamento de antes: sem desconto). No celular a grade ganhou `[&>*]:min-w-0` — a tabela da Equipe esticava a página a 737px em 375. |
+| `/orcamento` | Calculadora de Orçamento | `COMERCIAL`, `SUPERADMIN` | layout clássico de duas colunas assimétrico (1/3 dados do evento + segurança de agenda, 2/3 equipe/ajustes/resultado); **cálculo 100% reativo** — sem botão "Calcular", qualquer alteração recalcula (debounce ~400ms); alerta "Já na agenda neste dia" abaixo da Data (evita venda em dobro de personagem); painel "Personalizar valores" (valor final ou multiplicador, por duração); contador de itens no link "Histórico de Orçamentos"; campo **Local/Endereço do evento** com **`GoogleAddressInput`** e botão **"Calcular km (Maps)"** ao lado de *Km (ida)*, que preenche a distância pela Distance Matrix (feature 195 — antes o KM aqui era 100% manual); escolher uma sugestão do Google com um modo fora de SP ativo já dispara o cálculo. **Deslocamento em duas etapas** (feature 262, no lugar da checkbox "Evento Fora de São Paulo"): "Evento em São Paulo" (padrão) × "Evento fora de São Paulo"; marcando fora, o painel dourado abre com a escolha "Por nossa conta" (padrão) × "Por conta da cliente" — no modo cliente o painel vira "Adicionais — Fora de SP", esconde tipo de transporte/carretinha/nº de carros (km e colaboradores ficam) e o veículo sai da conta. Salvar no histórico, "Ver memória de cálculo"; lê `?recalcular_id=` para reabrir um orçamento salvo com os campos preenchidos (feature 191, sobre a base da feature 190; snapshot antigo fora de SP reabre como "por nossa conta"). **Feature 307 — data especial pela data**: sob o campo Data, com a data vazia, a dica "Em 24/12 e 25/12 a tabela especial entra pela data" (dias lidos da tabela); quando o resultado volta com `quote.data_especial`, um aviso dourado (`AnimatePresence` + `motion.div`, `useReducedMotion`) diz "🎄 Data especial — Véspera e Natal: markup 3,34× e cachês próprios…" e, **só na faixa `natal`**, orienta a usar o item "Ajudante do Noel" e não somar o acréscimo "Outro" (outra faixa mostra só rótulo e markup; com "Personalizar valores" ligado o aviso lembra que o valor digitado vence); o painel de resultado mostra "🎄 Valores da data especial: …"; o botão vira **"Recalculando…"** e fica desabilitado do momento em que o payload muda até o resultado novo chegar (`calcPendente` + contador `seq` que descarta resposta antiga) e também após erro de cálculo (aí com o rótulo normal) — antes ele salvava o `result` da data anterior durante o debounce. **Feature 309 — produtos de tabela**: card **"Produtos de tabela"** (`ProdutosCard`) no topo da coluna direita, antes de Equipe, só quando `settings.produtos` chega no `/opcoes` (backend velho = sem card): `Combobox` de `@manto/ui` com os produtos ativos (descrição = preço normal + descrição ao cliente, ícone 🎅) + "Adicionar" (pode repetir); cada exemplar vira uma `ProdutoLinha` ("📦 Visita Mágica — Papai Noel (visita padrão, até 1h) — preço de tabela R$ 2.500,00", "Inclui: Papai Noel · Coordenador · Maquiador", selo "estimativa" em dourado quando a faixa não tem preço, selo "inativo" num orçamento recalculado) lida de `quote.produtos` — enquanto a resposta não volta a linha diz "calculando…" em vez de chutar o preço; o estado `produtos` entra em `INITIAL_STATE`/`resetAll`/payload/rehydrate (só a chave; o preço é resolvido de novo). Abaixo da Data, `quote.avisos` em bloco `role="alert"` com borda dourada cheia ("Para a Visita Mágica use o produto…", "preço ESTIMADO… Confira antes de enviar"), com a mesma regra de vida do aviso da 307 (some enquanto o recálculo não voltou). No painel de resultado, com só produto (servidor devolve só `show_1h`) o tile único se chama **"Preço de tabela"**; as `ProdutoLinha`s aparecem junto da nota da data especial. O contador de coordenadores mostra "N incluído(s) no produto" (`quote.coordenadores_inclusos`) e não desce abaixo deles. **Janela de deploy**: com produto selecionado e `quote.produtos` ausente (backend velho) o botão fica desabilitado com o aviso "O servidor não aplicou o produto — recarregue a página" **Feature 313**: bloco **"Desconto negociado"** no fim de "Ajustes Finos" — "Desconto (%)" **ou** "fechar [duração] por (R$)" (o valor final de uma duração; as outras levam o mesmo %); quem foi digitado por último manda, só ele vai no payload, e o outro aparece como leitura do resultado ("Fecha 2h por R$ X" / "= N% de desconto, aplicado também nas outras durações"); "Sem desconto" zera. As durações do seletor são as que o resultado mostra (só produto = "Preço de tabela"; a extra quando existe); se a duração escolhida sai do orçamento, o servidor diz quais ficaram, o seletor troca e o valor digitado **é zerado com aviso** (não vira desconto sobre outra coluna). Erros do desconto ao lado do bloco. O personalizado diz que o desconto incide também nele. O card **Resultado**: o cheio riscado, o final, "PIX à vista" e, com BV, "BV a repassar" (e "BV no PIX" quando difere), esmaecido com "Recalculando…"/"Corrija os campos para recalcular." fora do resultado vivo; 4 colunas só do `lg` em diante. O editor de acréscimos: a linha que vira BV nasce com "%" marcado, e a ajuda diz a ordem da conta (R$ uma vez; o BV sobre o valor com os acréscimos; acompanha o desconto). "Recalcular" reabre o desconto como foi digitado (orçamento de antes: sem desconto). No celular a grade ganhou `[&>*]:min-w-0` — a tabela da Equipe esticava a página a 737px em 375. **Feature 349 (cotar sem sair)**: lê `?conversa=<id>&cliente=<nome>` no estado inicial (o nome entra no primeiro cálculo, sem requisição a mais), mostra a faixa "Orçamento para a conversa com <nome>. Ao gerar, ele volta pronto para enviar." com **Voltar para a conversa**, e "Gerar Orçamento" volta a `/conversas?c=<id>&orcamento=<novo>` em vez de abrir o resultado. |
 | `/events/cancelamentos` | Cancelamentos (feature 315; era "Exclusões e cancelamentos") | `SUPERADMIN`, `FINANCEIRO` (feature 312; menu em Sistema para o Superadmin e em Financeiro para o Financeiro, com o mesmo nome) | *(312)* filtros na URL — mês do cancelamento (o campo só grava o mês completo: no Firefox e no Safari de desktop ele é texto) e situação da devolução (a devolver, no banco, devolvida, sem; o satélite do "todos" conta só as devoluções do próprio dia) — e **Buscar** (título ou motivo, na lista carregada); total retido no cabeçalho ("nos N listados" sem mês); colunas Evento (+motivo, "dia cortado da venda de DD/MM", "a venda passou para DD/MM"), Data do evento, Cancelado em (+por quem), Venda, Pago ("pago no grupo R$ X · venda no 1º dia" com link no dia cortado), Devoluções, Retido, Comissão, BV, Imposto; motivo e autor só para quem tem o Comercial (no "Ver como" somem); vazio "Nenhum cancelamento com estes filtros" + "Limpar filtros"; erro com a mensagem do servidor, com os filtros de pé (e a lista anterior fica na tela enquanto a nova carrega). *(315)* "Aguardando decisão": evento, data, venda, pedido por, "Motivo e devolução combinada" (com "Só este dia da venda" quando é o caso; motivo, autor e devolução pelo corte por papel — no "Ver como Casting" somem) e "Decidir" leva ao evento. *(306)* fila com os pedidos de cancelamento do Comercial aguardando decisão e o histórico de eventos cancelados, com, por cancelado, todas as devoluções (valor, estado — a devolver, no banco, devolvido —, quem recebe e, para quem vê o financeiro, o PIX) e "pago R$ X · retido R$ Y" (feature 306; sem devolução, "nada a devolver"); no satélite do "todos", "dinheiro no 1º dia do grupo" com link (sem repetir a devolução nem o pago do grupo) e "no 1º dia" na coluna Venda; no dia cortado, só as devoluções dele e "pago no grupo". É a **porta principal** de um evento cancelado — ele sai da agenda de propósito (feature 224); Comissões, a ficha da cliente e o sino também levam a ele. Declarada **antes** de `/events/:id` no `App.tsx`, senão `:id` casaria com "cancelamentos" |
 | `/orcamento/:id` | Orçamento gerado | `COMERCIAL`, `SUPERADMIN` | destino de "Gerar Orçamento" e de "Abrir orçamento" no histórico (hotfix 210, sucessora de `orcamento/resultado.html`): mensagem de WhatsApp copiável, resumo por duração, detalhamento do transporte quando fora de SP (no modo "deslocamento por conta da cliente" o tile "Veículo" some e aparece a nota "van/carro não incluído" — feature 262), memória de cálculo e envio do PDF por e-mail; **feature 307**: nota "🎄 Valores da data especial: <rótulo>" junto da nota de NF quando o quote congelado tem `data_especial`, e a mesma nota em itálico na mensagem e no PDF; **feature 309**: uma `ProdutoLinha` por `quote.produtos` (preço congelado) e os `quote.avisos` em bloco dourado no "Resumo de valores", tile único "Preço de tabela" quando só há produto, memória com a linha `produto` (fundo próprio `bg-blue-soft`, depois de "= Após markup") e "= Após produtos", mensagem com o bloco "🎅 *Visita Mágica — …* (descrição): *R$ X*" e PIX único. **Feature 266**: ganhou **Criar evento** (`/events/new?orcamento_id=`) como única ação sólida da barra — esta é a tela onde o "sim" da cliente chega, e converter exigia voltar ao histórico e reencontrar a linha. Rota declarada **depois** de `/orcamento/historico` e `/orcamento/configuracoes` — `:id` casaria com elas **Feature 313**: a mensagem (e o PDF) dizem "de R$ X por R$ Y" e "desconto de N% aplicado" por duração e, com 5% ou mais, que o PIX é "o mesmo valor"; o **Resumo de valores** mostra o cheio riscado, o PIX por duração e — só com desconto, fora da mensagem — o BV a repassar (e no PIX). Orçamento de antes: só o total, como era. **Feature 333**: **Enviar na conversa** (só com as Conversas
 ligadas) abre a busca da conversa (nome, telefone ou @usuário), a mesma conferência da conversa e, depois,
@@ -2666,6 +2799,12 @@ Todas as telas são **mobile-first** (Princípio VIII).
 - **UX**: lista persistida em **`localStorage`** (degrada sem quebrar em modo privado/cota);
   revisar itens e **enviar por WhatsApp** (`api.whatsapp.com/send?phone=...&text=...`), com o
   número vindo de `SiteSetting` no payload do catálogo.
+- **Feature 348 — código do site**: a visita que chegou com marcador de campanha (`gclid`, `gbraid`,
+  `wbraid`, `fbclid`, `gad_campaignid`, `utm_*`) leva, no fim da mensagem, uma linha em branco e
+  "Código do site: #XXXXX". O app público guarda os marcadores no `localStorage` (`manto_origem`, 90 dias) no
+  primeiro carregamento de qualquer página da vitrine (menos a loja `/v`) e pede o código sem esperar; visita
+  sem marcador, storage bloqueado ou servidor fora do ar = a mensagem de sempre. Nada visual muda; conferida em
+  390 px.
 
 #### `/cadastro` e `/cadastro/enviado` — Cadastro de Talento
 > **Endereço canônico na RAIZ do domínio** (hotfix cadastro-raiz), nos hosts `app.` e `portal.` —
@@ -2692,6 +2831,9 @@ Todas as telas são **mobile-first** (Princípio VIII).
 - **UX**: formulários de pré-contrato com **schema dinâmico** vindo do servidor
   (`FormFieldDefinition`, editável em `/formularios`). Resposta vira `FormResponse` e dispara
   mensagem para o WhatsApp configurado.
+- **Feature 348**: com o código do site guardado no navegador (ver lista de desejos), o envio leva
+  `origem_codigo` e a mensagem pronta do WhatsApp termina com "Código do site: #XXXXX"; a resposta fica ligada
+  ao clique. Sem código, nada muda.
 
 - **Feature 342** (na branch, sem merge): seção "Nota fiscal" no fim dos dois formulários. A caixa "Preciso de nota fiscal" abre "CNPJ ou CPF de quem vai receber a nota" e "E-mail para receber a nota" (já preenchidos com o que a cliente digitou acima), "A empresa retém o ISS da nota?" (só com CNPJ) e "Precisa que algo apareça na nota?". Documento errado avisa ao sair do campo. No interno, o bloco **Dados da nota** ganhou o quadro "A cliente informou no formulário", "E-mail para envio da nota" e "Município do evento" sempre visível (abre com a sugestão do endereço); com a venda sem nota e o formulário pedindo, a tela avisa "A cliente pediu nota fiscal no formulário.". O painel "Notas a emitir" mostra o e-mail da nota e o município. No **Editor de campos**, "Quando aparece" (Sempre / Só quando «campo» for «resposta»), e a lista mostra a condição de cada campo.
 
@@ -2700,6 +2842,15 @@ Todas as telas são **mobile-first** (Princípio VIII).
   `/clientes/avaliacoes`.
 - **Feature 312**: link de evento cancelado (enviado antes do cancelamento) responde 410 e a página diz "Este evento
   foi cancelado — Não há avaliação a fazer. Qualquer dúvida, fale com a gente.", sem formulário, sem título nem data.
+- **Feature 350 — o pós-evento único**: depois de enviar a nota, a tela de agradecimento ganha, abaixo do
+  "⭐ Avaliar no Google" (que continua **só para nota 5**, decisão do dono de 17/11), o "Conhece alguém que vai
+  fazer festa?" com **💌 Indicar uma amiga** (abre o WhatsApp de quem avaliou com a mensagem pronta: o primeiro
+  nome de quem indica e o WhatsApp da Manto; nenhum dado da amiga passa pela Plataforma) e, quando o evento tem
+  ficha contratante, o bloco **"Quer ficar por perto?"**: a caixa de novidades (texto exato, desmarcada) ou, para
+  quem já recebe, "Você já recebe nossas novidades." com **Não quero mais receber**; e o aniversário — primeiro
+  nome, data e a caixa de autorização com o texto exato, separada e desmarcada — e **Salvar minhas escolhas**. O
+  erro aparece no campo ("Marque a caixa de autorização para a gente guardar o aniversário."); o que foi salvo
+  vai para a ficha com a origem "Pós-evento (página de avaliação)". Conferido em 375 e 320 px.
 
 ---
 

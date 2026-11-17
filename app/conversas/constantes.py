@@ -396,6 +396,12 @@ TEXTO_IG_SEM_MODELOS = (
 TEXTO_IG_TIPO_NAO_ACEITO = "Tipo de arquivo não aceito pelo Instagram. Envie foto, vídeo, áudio ou PDF."
 TEXTO_IG_TEXTO_LONGO = "A mensagem passa do limite do Instagram. Encurte o texto (acentos e emojis contam mais)."
 TEXTO_POSTBACK = 'Tocou em "{titulo}".'
+# Feature 350: sem aceite de novidades, modelo de marketing não sai (a categoria vem da Meta).
+CATEGORIA_MARKETING = "MARKETING"
+TEXTO_SEM_ACEITE = (
+    "Esta cliente não autorizou receber novidades. "
+    "Registre o aceite na ficha antes de enviar um modelo de marketing."
+)
 # Anexos que trazem um link para abrir no Instagram (o efêmero não traz).
 ANEXOS_COM_LINK_IG = ("share", "ig_reel", "reel", "story_mention")
 # Motivos da recusa no Instagram (feature 330): pelo subcódigo, depois pelo código da Graph API.
@@ -459,6 +465,35 @@ UTM_MEDIUM_DO_ANUNCIO = "anuncio"
 ANUNCIOS_POR_VEZ = 10
 RECONSULTA_DO_ANUNCIO = timedelta(hours=24)
 
+# ── Origem completa (feature 348) ───────────────────────────────────────────────────────────────
+# O clique que chegou pelo site (Google, link de campanha) e virou conversa pelo código da mensagem
+# pronta. É um contato de origem como o anúncio, com a chave `site:{codigo}`.
+CONTATO_SITE = "site"
+# Os tipos que dão origem a uma venda (o `outro` do Instagram não diz de onde a pessoa veio).
+CONTATOS_DE_ORIGEM = (CONTATO_ANUNCIO, CONTATO_PUBLICACAO, CONTATO_SITE)
+ORIGEM_DO_SITE = "Site"
+# Sem 0/O, 1/I/L: a cliente não digita o código, mas a equipe às vezes lê em voz alta. 31⁵ ≈ 28,6
+# milhões de códigos; a colisão é rara e o UNIQUE do banco decide (research R4).
+ALFABETO_DO_CODIGO = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+TAMANHO_DO_CODIGO = 5
+TENTATIVAS_DO_CODIGO = 5
+# 90 dias: a janela máxima do Google para conversão offline; a mesma para o contato de origem da
+# venda (a festa fecha cedo, o corporativo demora).
+VALIDADE_DO_CODIGO = timedelta(days=90)
+JANELA_DA_ORIGEM = timedelta(days=90)
+# `#` + 5 do alfabeto, inteiro (sem letra colada dos lados). A validação de verdade é no banco.
+REGEX_DO_CODIGO = r"#([A-Za-z0-9]{5})(?![A-Za-z0-9])"
+LINHA_DO_CODIGO = "Código do site: #{codigo}"
+# O que a URL traz e o servidor guarda. `gad_campaignid` (o Google acrescenta) e `utm_id` viram o
+# id da campanha; os outros vão como vieram, cortados no tamanho da coluna.
+MARCADORES_DO_CLIQUE = ("gclid", "gbraid", "wbraid", "fbclid")
+MARCADORES_UTM = ("utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term")
+MARCADORES_DA_CAMPANHA = ("gad_campaignid", "utm_id")
+# Sem `utm_source`, o clique com id do Google é "google"/"cpc": é o que o Desempenho reconhece.
+UTM_SOURCE_DO_GOOGLE = "google"
+UTM_MEDIUM_DO_CLIQUE = "cpc"
+TEXTO_SEM_MARCADOR = "Nenhum marcador de campanha."
+
 # ── Funil das conversas (feature 335) ───────────────────────────────────────────────────────────
 # As etapas em ordem: cada conversa fica na mais avançada que alcançou, e cada etapa conta quem
 # chegou nela ou além (o funil nunca cresce). As chaves vão na API; os rótulos, na tela.
@@ -471,7 +506,17 @@ ROTULO_DA_ETAPA = {
     "pagou": "Pagou",
     "avaliou": "Avaliou",
 }
-DIVISOES_DO_FUNIL = ("vendedor", "campanha", "canal")
+DIVISOES_DO_FUNIL = ("vendedor", "campanha", "canal", "frente", "anuncio", "peca", "conceito")
+# Feature 351: frente, anúncio, peça (card do Kanban) e conceito, sempre pelo primeiro anúncio da
+# conversa. O anúncio que chega pela conversa (referral) é sempre da Meta.
+PLATAFORMA_DO_ANUNCIO = "Meta Ads"
+SEM_FRENTE = "__sem_frente__"
+SEM_PECA = "__sem_peca__"
+SEM_CONCEITO = "__sem_conceito__"
+TEXTO_SEM_FRENTE = "Sem frente"
+TEXTO_SEM_PECA = "Sem peça"
+TEXTO_SEM_CONCEITO = "Sem conceito"
+TEXTO_ANUNCIO_SEM_NOME = "Anúncio {id}"
 ROTULO_DO_CANAL = {CANAL_WHATSAPP: "WhatsApp", CANAL_INSTAGRAM: "Instagram"}
 # Valores especiais do filtro e da divisão por campanha (o nome da campanha nunca começa com "__").
 SEM_ANUNCIO = "__sem_anuncio__"
@@ -484,7 +529,7 @@ PARADOS_POR_VEZ = 200
 TEXTO_PERIODO_INVALIDO = "Informe a data no formato AAAA-MM-DD."
 TEXTO_PERIODO_INVERTIDO = "Escolha uma data inicial anterior à final."
 TEXTO_PERIODO_LONGO = "Escolha um período de até um ano."
-TEXTO_DIVISAO_INVALIDA = "Escolha dividir por vendedor, campanha ou canal."
+TEXTO_DIVISAO_INVALIDA = "Escolha dividir por vendedor, campanha, canal, frente, anúncio, peça ou conceito."
 TEXTO_ETAPA_INVALIDA = "Escolha uma das etapas do funil."
 
 # ── Linha do tempo da ficha (feature 335) ───────────────────────────────────────────────────────
@@ -507,3 +552,86 @@ ORIGEM_DA_FICHA_LEGIVEL = {
     "manual": "Cadastrada à mão",
     "whatsform_import": "Veio do formulário",
 }
+
+# ── O comercial mede e fecha (feature 349) ──────────────────────────────────────────────────────
+# Motivo da perda: lista fechada, na ordem da tela. As chaves vão para o banco e a API; os rótulos são
+# a ÚNICA fonte do texto (a API manda a lista pronta, como os motivos de encerramento do formulário, 298).
+MOTIVO_PRECO = "preco"
+MOTIVO_OUTRA_EMPRESA = "outra_empresa"
+MOTIVO_SEM_DATA = "sem_data"
+MOTIVO_DESISTIU = "desistiu"
+MOTIVO_SEM_RESPOSTA = "sem_resposta"
+MOTIVO_FORA_DA_AREA = "fora_da_area"
+MOTIVO_OUTRO = "outro"  # exige frase
+MOTIVOS_DE_PERDA = (
+    MOTIVO_PRECO,
+    MOTIVO_OUTRA_EMPRESA,
+    MOTIVO_SEM_DATA,
+    MOTIVO_DESISTIU,
+    MOTIVO_SEM_RESPOSTA,
+    MOTIVO_FORA_DA_AREA,
+    MOTIVO_OUTRO,
+)
+ROTULO_DO_MOTIVO = {
+    MOTIVO_PRECO: "Achou caro",
+    MOTIVO_OUTRA_EMPRESA: "Fechou com outra empresa",
+    MOTIVO_SEM_DATA: "Sem data ou elenco na data",
+    MOTIVO_DESISTIU: "Desistiu ou adiou a festa",
+    MOTIVO_SEM_RESPOSTA: "Parou de responder",
+    MOTIVO_FORA_DA_AREA: "Fora da área atendida",
+    MOTIVO_OUTRO: "Outro",
+}
+PERDA_NOTA_MAXIMA = 300
+TEXTO_MOTIVO_INVALIDO = "Selecione um dos motivos."
+TEXTO_FRASE_OBRIGATORIA = "Informe em uma frase por que a conversa foi perdida."
+TEXTO_FRASE_LONGA = f"Use no máximo {PERDA_NOTA_MAXIMA} caracteres."
+
+# Qualificação: a decisão da vendedora vale sobre a regra; nulo = segue a pontuação.
+QUALIFICACAO_QUALIFICADA = "qualificada"
+QUALIFICACAO_NAO = "nao_qualificada"
+DECISOES_DE_QUALIFICACAO = (QUALIFICACAO_QUALIFICADA, QUALIFICACAO_NAO)
+TEXTO_DECISAO_INVALIDA = "Selecione qualificada, não qualificada ou usar a regra."
+# A pontuação por regras (pesquisa §6.5): hipótese inicial, revista a cada trimestre com a taxa de
+# fechamento por sinal. Trocar um número aqui muda a tela e o funil juntos.
+SINAL_FORMULARIO = "formulario"
+SINAL_DATA_PROXIMA = "data_proxima"
+SINAL_DATA_DISTANTE = "data_distante"
+SINAL_ORCAMENTO = "orcamento"
+SINAL_RECOMPRA = "recompra"
+PONTOS_DA_REGRA = {
+    SINAL_FORMULARIO: 3,
+    SINAL_DATA_PROXIMA: 2,
+    SINAL_DATA_DISTANTE: 1,
+    SINAL_ORCAMENTO: 1,
+    SINAL_RECOMPRA: 2,
+}
+DIAS_DA_DATA_PROXIMA = 90
+CORTE_DA_QUALIFICADA = 3
+ROTULO_DO_SINAL = {
+    SINAL_FORMULARIO: "Formulário preenchido",
+    SINAL_DATA_PROXIMA: f"Data do evento em até {DIAS_DA_DATA_PROXIMA} dias",
+    SINAL_DATA_DISTANTE: f"Data do evento a mais de {DIAS_DA_DATA_PROXIMA} dias",
+    SINAL_ORCAMENTO: "Orçamento enviado",
+    SINAL_RECOMPRA: "Já fechou evento antes",
+}
+
+# Recortes da lista (combináveis com Todas/Minhas/Sem responsável e o canal).
+RECORTE_ESPERANDO = "esperando"
+RECORTE_ORCAMENTO_PARADO = "orcamento_parado"
+RECORTE_ANUNCIO = "anuncio"
+RECORTES_DA_LISTA = (RECORTE_ESPERANDO, RECORTE_ORCAMENTO_PARADO, RECORTE_ANUNCIO)
+TEXTO_RECORTE_INVALIDO = "Recorte desconhecido."
+TEXTO_DIAS_INVALIDOS = "Escolha 2, 5 ou 9 dias."
+# A régua do orçamento parado cobre a janela de decisão da família (6 a 10 dias, pesquisa §8.4): avisa
+# no 2º, no 5º e no 9º dia, e acaba no 10º. O filtro da lista usa os mesmos degraus.
+DEGRAUS_DA_REGUA = (2, 5, 9)
+FIM_DA_REGUA_DIAS = 10
+# "Lembrar amanhã" vence às 9h de São Paulo do próximo dia do calendário.
+HORA_DO_LEMBRETE = 9
+# O "até 15 min" do funil: o mesmo limite do alerta de espera (328).
+RESPOSTA_RAPIDA_MINUTOS = 15
+
+TITULO_LEMBRETE = "Lembrete: retomar a conversa com {nome}."
+TITULO_ORCAMENTO_PARADO = "Orçamento para {nome} sem retorno há {dias} dias."
+CORPO_ORCAMENTO_PARADO = "Retome a conversa ou marque como perdida."
+TEXTO_CONVERSA_PARA_EVENTO = "Conversa não encontrada."

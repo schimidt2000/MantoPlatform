@@ -21,7 +21,8 @@ from sqlalchemy import text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app import db
-from app.conversas import anuncio_ops, celular_ops, equipe_ops
+from app.clientes import consentimento_ops
+from app.conversas import anuncio_ops, celular_ops, codigo_ops, equipe_ops, primeira_resposta_ops
 from app.conversas import constantes as K
 from app.conversas.configuracao import CfgWhatsapp
 from app.conversas.ficha_ops import ficha_pelo_telefone
@@ -377,11 +378,20 @@ def _gravar_recebida(
     if isinstance(mensagem.get("referral"), dict):
         # A cliente veio de um anúncio "clique para o WhatsApp" (feature 334).
         anuncio_ops.contato_do_whatsapp(conversa, str(mensagem["id"]), mensagem["referral"], momento)
+    if tipo == K.TIPO_TEXTO and texto:
+        # O "Código do site: #XXXXX" da mensagem pronta (feature 348): liga o clique no Google à conversa.
+        # Em qualquer mensagem, não só na primeira — a conversa é uma por telefone, e a cliente que volta
+        # por outro clique escreve numa conversa antiga.
+        codigo_ops.ler_na_mensagem(conversa, texto, momento)
+    if tipo in (K.TIPO_TEXTO, K.TIPO_INTERATIVA):
+        # Feature 350: "SAIR" (a mensagem inteira) ou o botão "Parar promoções" tira o aceite.
+        consentimento_ops.retirar_se_pediu_para_parar(conversa, texto, f"mensagem:{mensagem_id}")
     conversa.nao_lidas = (conversa.nao_lidas or 0) + 1
     if conversa.ultima_recebida_em is None or momento > conversa.ultima_recebida_em:
         conversa.ultima_recebida_em = momento
     if tipo != K.TIPO_REACAO:  # o 👍 da cliente não é pergunta esperando resposta (nem toca)
         equipe_ops.abrir_espera(conversa, momento)
+        primeira_resposta_ops.registrar_contato(conversa, momento)  # feature 349
         chegadas.add(conversa.id)
     atualizar_previa(conversa, tipo, texto, momento)
     return _criar_midia(mensagem_id, mensagem) if tipo in K.TIPOS_COM_MIDIA else None
@@ -425,9 +435,14 @@ def _aplicar_status(status: dict[str, Any]) -> None:
             mensagem.situacao = K.SITUACAO_FALHOU
             mensagem.erro_codigo = codigo
             mensagem.erro_motivo = K.motivo_do_erro(codigo)
+            # Feature 350: 131050 = a pessoa pediu à Meta para não receber marketing.
+            consentimento_ops.retirar_por_erro_do_whatsapp(
+                mensagem.conversa, codigo, f"mensagem:{mensagem.id}"
+            )
             # A resposta que não chegou não conta: a espera volta (feature 328).
             db.session.flush()
             equipe_ops.recalcular_espera(mensagem.conversa)
+            primeira_resposta_ops.recalcular(mensagem.conversa)  # feature 349
         return
     nova = K.ORDEM_DA_SITUACAO[situacao]
     if atual is not None and nova > atual:
@@ -484,4 +499,6 @@ def _gravar_eco(eco: dict[str, Any]) -> int | None:
     # (feature 328). Apagar ou editar pelo celular não é resposta.
     if (eco.get("type") or "") not in ("revoke", "edit") and tipo != K.TIPO_REACAO:
         equipe_ops.encerrar_espera(conversa, momento)
+        # Feature 349: resposta sem autor, pelo celular (a tela mostra o caso, não esconde).
+        primeira_resposta_ops.registrar_resposta(conversa, momento, None, K.ORIGEM_CELULAR)
     return _criar_midia(mensagem_id, eco) if tipo in K.TIPOS_COM_MIDIA else None

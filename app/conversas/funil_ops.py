@@ -11,9 +11,10 @@ Só leitura. Uma consulta para a coorte e uma por tipo de fato, em lote (nunca u
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
+from statistics import median
 from typing import Any
 
 from sqlalchemy import text
@@ -22,9 +23,10 @@ from sqlalchemy.orm import joinedload
 from app import db
 from app.constants import TZ_SP, now_sp
 from app.conversas import constantes as K
+from app.conversas import pontuacao_ops
 from app.conversas.leitura_ops import nome_da_conversa
 from app.conversas.recusa import campo
-from app.models import Conversa, User
+from app.models import AnuncioMeta, Conversa, MarketingPost, MarketingPostAnuncio, User
 
 _SEM_RESPONSAVEL = "__sem_responsavel__"
 
@@ -39,12 +41,15 @@ WITH contatos AS (
     SELECT conversa_id, MIN(momento) AS em FROM contatos GROUP BY conversa_id
     HAVING MIN(momento) >= :ini AND MIN(momento) < :fim
 ), anuncio AS (
-    SELECT DISTINCT ON (ca.conversa_id) ca.conversa_id, am.campanha_nome
+    SELECT DISTINCT ON (ca.conversa_id) ca.conversa_id, am.campanha_nome, ca.anuncio_id, am.campanha_id
     FROM conversa_anuncios ca LEFT JOIN anuncios_meta am ON am.anuncio_id = ca.anuncio_id
     WHERE ca.tipo = :tipo_anuncio
     ORDER BY ca.conversa_id, ca.momento, ca.id
 )
-SELECT c.id, c.canal, c.client_id, c.responsavel_id, p.em, a.conversa_id IS NOT NULL, a.campanha_nome
+SELECT c.id, c.canal, c.client_id, c.responsavel_id, p.em, a.conversa_id IS NOT NULL, a.campanha_nome,
+       a.anuncio_id, a.campanha_id,
+       c.primeira_recebida_em, c.primeira_resposta_em, c.primeira_resposta_origem, c.perdida_motivo,
+       c.qualificacao, c.lembrar_em
 FROM primeiro p
 JOIN conversas c ON c.id = p.conversa_id
 LEFT JOIN anuncio a ON a.conversa_id = c.id
@@ -62,14 +67,42 @@ class Linha:
     primeiro: datetime  # UTC
     tem_anuncio: bool
     campanha: str | None
+    # A ordem dos campos é a do SELECT (``Linha(*linha)``): os da 351 vêm antes dos da 349 porque o
+    # `_SQL_POR_ANUNCIO` só traz até o `campanha_id` e o resto fica no padrão.
+    anuncio_id: str | None = None  # feature 351: o primeiro anúncio e a campanha dele, por id
+    campanha_id: str | None = None
+    # Feature 349: o que a conversa guarda (UTC) — primeira resposta, perda, decisão de qualificação e lembrete.
+    recebida_em: datetime | None = None
+    resposta_em: datetime | None = None
+    resposta_origem: str | None = None
+    perdida_motivo: str | None = None
+    qualificacao: str | None = None
+    lembrar_em: datetime | None = None
     etapa: int = 0
     eventos: list[int] = field(default_factory=list)
+    qualificada: bool = False
 
     @property
     def chave_da_campanha(self) -> str:
         if not self.tem_anuncio:
             return K.SEM_ANUNCIO
         return self.campanha or K.CAMPANHA_DESCONHECIDA
+
+    @property
+    def minutos(self) -> int | None:
+        """Minutos da primeira mensagem à primeira resposta (feature 349), ou ``None``."""
+        if self.recebida_em is None or self.resposta_em is None:
+            return None
+        return max(0, int((self.resposta_em - self.recebida_em).total_seconds() // 60))
+
+    @property
+    def sem_autor(self) -> bool:
+        return self.resposta_em is not None and self.resposta_origem in (K.ORIGEM_CELULAR, K.ORIGEM_OUTRO)
+
+    @property
+    def perdida(self) -> bool:
+        """Perdida conta só se não fechou: a venda que fechou depois da perda é venda (FR-009)."""
+        return self.perdida_motivo is not None and self.etapa < K.ETAPAS_DO_FUNIL.index("evento")
 
 
 # ── Período ──────────────────────────────────────────────────────────────────────────────────────
@@ -223,9 +256,13 @@ def _linhas(
 ) -> tuple[date, date, list[Linha]]:
     de, ate = periodo(inicio, fim)
     conferir_filtros(canal, None)
-    linhas = _coorte(de, ate)
+    linhas = _filtrar(_coorte(de, ate), canal, None)
     _etapas(linhas)
-    return de, ate, _filtrar(linhas, canal, None)
+    # Feature 349: a qualificação (decisão da vendedora ou pontuação por regras), em lote.
+    pontos = pontuacao_ops.pontuar(linhas)
+    for linha in linhas:
+        linha.qualificada = pontuacao_ops.qualificada(linha.qualificacao, pontos[linha.id])
+    return de, ate, linhas
 
 
 # ── Saída ────────────────────────────────────────────────────────────────────────────────────────
@@ -240,6 +277,44 @@ def _contar(linhas: list[Linha]) -> list[int]:
     return [sum(1 for linha in linhas if linha.etapa >= i) for i in range(len(K.ETAPAS_DO_FUNIL))]
 
 
+def _mediana(valores: list[int]) -> int | None:
+    return round(median(valores)) if valores else None
+
+
+def _primeira_resposta(linhas: list[Linha]) -> dict[str, Any]:
+    """Feature 349 (FR-006): o tempo da primeira resposta da coorte; a sem autor (celular) contada à parte."""
+    minutos = [linha.minutos for linha in linhas if linha.minutos is not None]
+    rapidas = sum(1 for m in minutos if m <= K.RESPOSTA_RAPIDA_MINUTOS)
+    return {
+        "respondidas": len(minutos),
+        "sem_resposta": sum(1 for linha in linhas if linha.recebida_em and linha.resposta_em is None),
+        "sem_autor": sum(1 for linha in linhas if linha.sem_autor),
+        "mediana_minutos": _mediana(minutos),
+        "ate_15_min": _porcento(rapidas, len(minutos)),
+    }
+
+
+def _motivos_de_perda(linhas: list[Linha]) -> list[dict[str, Any]]:
+    """As perdidas da coorte por motivo, na ordem da lista fechada (só os motivos que aparecem)."""
+    contagem = Counter(linha.perdida_motivo for linha in linhas if linha.perdida)
+    return [
+        {"codigo": m, "rotulo": K.ROTULO_DO_MOTIVO[m], "quantidade": contagem[m]}
+        for m in K.MOTIVOS_DE_PERDA
+        if contagem.get(m)
+    ]
+
+
+def _medidas_da_venda(linhas: list[Linha]) -> dict[str, Any]:
+    """Qualificadas, perdidas e a primeira resposta de um grupo (feature 349)."""
+    resposta = _primeira_resposta(linhas)
+    return {
+        "qualificadas": sum(1 for linha in linhas if linha.qualificada),
+        "perdidas": sum(1 for linha in linhas if linha.perdida),
+        "mediana_minutos": resposta["mediana_minutos"],
+        "ate_15_min": resposta["ate_15_min"],
+    }
+
+
 def _rotulo_da_campanha(chave: str) -> str:
     if chave == K.SEM_ANUNCIO:
         return K.TEXTO_SEM_ANUNCIO
@@ -248,38 +323,124 @@ def _rotulo_da_campanha(chave: str) -> str:
     return chave
 
 
+_ROTULOS_DO_SEM = {
+    K.SEM_ANUNCIO: K.TEXTO_SEM_ANUNCIO,
+    K.CAMPANHA_DESCONHECIDA: K.TEXTO_CAMPANHA_DESCONHECIDA,
+    K.SEM_FRENTE: K.TEXTO_SEM_FRENTE,
+    K.SEM_PECA: K.TEXTO_SEM_PECA,
+    K.SEM_CONCEITO: K.TEXTO_SEM_CONCEITO,
+    _SEM_RESPONSAVEL: K.TEXTO_SEM_RESPONSAVEL,
+}
+
+
+def _por_vendedor(linhas: list[Linha]) -> tuple[dict[int, str], dict[str, str]]:
+    chaves = {
+        linha.id: str(linha.responsavel_id) if linha.responsavel_id else _SEM_RESPONSAVEL
+        for linha in linhas
+    }
+    ids = [int(c) for c in set(chaves.values()) if c != _SEM_RESPONSAVEL]
+    nomes = {str(u.id): u.name for u in User.query.filter(User.id.in_(ids)).all()} if ids else {}
+    return chaves, {c: nomes.get(c, K.TEXTO_SEM_RESPONSAVEL) for c in chaves.values()}
+
+
+def _por_frente(linhas: list[Linha]) -> tuple[dict[int, str], dict[str, str]]:
+    """A frente da campanha do primeiro anúncio (feature 351) — a mesma regra do painel (correção
+    manual > prefixo). Import tardio: o núcleo do marketing importa o domínio das conversas."""
+    from app.constants import MARKETING_FRENTES
+    from app.marketing import comando_ops
+
+    correcoes = comando_ops.correcoes_de_frente()
+    chaves = {}
+    for linha in linhas:
+        if not linha.tem_anuncio:
+            chaves[linha.id] = K.SEM_ANUNCIO
+            continue
+        frente = comando_ops.frente_da_campanha(
+            K.PLATAFORMA_DO_ANUNCIO, linha.campanha_id or "", linha.campanha, correcoes
+        )
+        chaves[linha.id] = frente or K.SEM_FRENTE
+    return chaves, dict(MARKETING_FRENTES)
+
+
+def _por_anuncio(linhas: list[Linha]) -> tuple[dict[int, str], dict[str, str]]:
+    chaves = {
+        linha.id: (linha.anuncio_id or K.CAMPANHA_DESCONHECIDA) if linha.tem_anuncio else K.SEM_ANUNCIO
+        for linha in linhas
+    }
+    ids = [c for c in set(chaves.values()) if not c.startswith("__")]
+    nomes = dict(
+        db.session.query(AnuncioMeta.anuncio_id, AnuncioMeta.nome)
+        .filter(AnuncioMeta.anuncio_id.in_(ids), AnuncioMeta.nome.isnot(None))
+        .all()
+    ) if ids else {}  # fmt: skip
+    return chaves, {i: nomes.get(i) or K.TEXTO_ANUNCIO_SEM_NOME.format(id=i) for i in ids}
+
+
+def pecas_dos_anuncios(anuncio_ids: set[str]) -> dict[str, tuple[int, str, str | None]]:
+    """``{anúncio: (card, título, conceito)}`` dos anúncios da Meta ligados a um card (feature 351)."""
+    if not anuncio_ids:
+        return {}
+    linhas = (
+        db.session.query(MarketingPostAnuncio.ad_id, MarketingPost.id, MarketingPost.title, MarketingPost.conceito)
+        .join(MarketingPost, MarketingPost.id == MarketingPostAnuncio.post_id)
+        .filter(MarketingPostAnuncio.platform == K.PLATAFORMA_DO_ANUNCIO, MarketingPostAnuncio.ad_id.in_(anuncio_ids))
+        .all()
+    )
+    return {ad: (pid, titulo, conceito) for ad, pid, titulo, conceito in linhas}
+
+
+def _por_peca(linhas: list[Linha], dividir: str) -> tuple[dict[int, str], dict[str, str]]:
+    """Peça (card) ou conceito do card do primeiro anúncio da conversa (feature 351)."""
+    pecas = pecas_dos_anuncios({linha.anuncio_id for linha in linhas if linha.anuncio_id})
+    sem = K.SEM_PECA if dividir == "peca" else K.SEM_CONCEITO
+    chaves, rotulos = {}, {}
+    for linha in linhas:
+        peca = pecas.get(linha.anuncio_id or "")
+        if not linha.tem_anuncio:
+            chaves[linha.id] = K.SEM_ANUNCIO
+        elif peca is None:
+            chaves[linha.id] = sem
+        elif dividir == "peca":
+            chaves[linha.id] = str(peca[0])
+            rotulos[str(peca[0])] = peca[1]
+        else:
+            chaves[linha.id] = peca[2] or K.SEM_CONCEITO
+            rotulos[chaves[linha.id]] = peca[2] or K.TEXTO_SEM_CONCEITO
+    return chaves, rotulos
+
+
+def _divisao(linhas: list[Linha], dividir: str) -> tuple[dict[int, str], dict[str, str]]:
+    """``(chave do grupo de cada conversa, rótulo de cada chave)`` — os ``__sem…`` vêm de ``_ROTULOS_DO_SEM``."""
+    if dividir == "vendedor":
+        return _por_vendedor(linhas)
+    if dividir == "campanha":
+        chaves = {linha.id: linha.chave_da_campanha for linha in linhas}
+        return chaves, {c: c for c in chaves.values()}
+    if dividir == "frente":
+        return _por_frente(linhas)
+    if dividir == "anuncio":
+        return _por_anuncio(linhas)
+    if dividir in ("peca", "conceito"):
+        return _por_peca(linhas, dividir)
+    return {linha.id: linha.canal for linha in linhas}, dict(K.ROTULO_DO_CANAL)
+
+
 def _grupos(linhas: list[Linha], dividir: str) -> list[dict[str, Any]]:
+    chaves, rotulos = _divisao(linhas, dividir)
     por_chave: dict[str, list[Linha]] = defaultdict(list)
     for linha in linhas:
-        if dividir == "vendedor":
-            chave = str(linha.responsavel_id) if linha.responsavel_id else _SEM_RESPONSAVEL
-        elif dividir == "campanha":
-            chave = linha.chave_da_campanha
-        else:
-            chave = linha.canal
-        por_chave[chave].append(linha)
-    nomes: dict[str, str] = {}
-    if dividir == "vendedor":
-        ids = [int(c) for c in por_chave if c != _SEM_RESPONSAVEL]
-        nomes = (
-            {str(u.id): u.name for u in User.query.filter(User.id.in_(ids)).all()} if ids else {}
-        )
-        nomes[_SEM_RESPONSAVEL] = K.TEXTO_SEM_RESPONSAVEL
+        por_chave[chaves[linha.id]].append(linha)
     grupos = []
     for chave, do_grupo in por_chave.items():
         contagem = _contar(do_grupo)
-        if dividir == "vendedor":
-            rotulo = nomes.get(chave, K.TEXTO_SEM_RESPONSAVEL)
-        elif dividir == "campanha":
-            rotulo = _rotulo_da_campanha(chave)
-        else:
-            rotulo = K.ROTULO_DO_CANAL.get(chave, chave)
+        rotulo = _ROTULOS_DO_SEM.get(chave) or rotulos.get(chave) or chave
         grupos.append(
             {
                 "chave": chave,
                 "rotulo": rotulo,
                 "quantidades": dict(zip(K.ETAPAS_DO_FUNIL, contagem, strict=True)),
                 "conversao": _porcento(contagem[3], contagem[0]),
+                **_medidas_da_venda(do_grupo),
             }
         )
     # Do grupo com mais conversas para o com menos; o "sem" vai por último.
@@ -336,6 +497,11 @@ def funil(
         "dividir": dividir,
         "grupos": _grupos(filtradas, dividir),
         "campanhas": _campanhas(linhas),
+        # Feature 349.
+        "primeira_resposta": _primeira_resposta(filtradas),
+        "qualificadas": sum(1 for linha in filtradas if linha.qualificada),
+        "perdidas": sum(1 for linha in filtradas if linha.perdida),
+        "motivos_de_perda": _motivos_de_perda(filtradas),
     }
 
 
@@ -381,8 +547,73 @@ def parados(
                 else None,
                 "primeiro_contato": linha.primeiro.replace(tzinfo=UTC).isoformat(),
                 "campanha": _rotulo_da_campanha(linha.chave_da_campanha),
+                # Feature 349: a perda aparece aqui (clarify de 17/11), com a qualificação, a 1ª resposta e o lembrete.
+                "perdida": {"motivo": linha.perdida_motivo, "rotulo": K.ROTULO_DO_MOTIVO[linha.perdida_motivo]}
+                if linha.perdida_motivo in K.ROTULO_DO_MOTIVO
+                else None,
+                "qualificada": linha.qualificada,
+                "primeira_resposta_minutos": linha.minutos,
+                "primeira_resposta_sem_autor": linha.sem_autor,
+                # Há mensagem dela e nenhuma resposta (a conversa só com reação ou anúncio não entra).
+                "primeira_resposta_pendente": bool(linha.recebida_em and linha.resposta_em is None),
+                "lembrete_em": linha.lembrar_em.replace(tzinfo=UTC).isoformat() if linha.lembrar_em else None,
             }
             for linha in mostradas
             if linha.id in conversas
         ],
     }
+
+
+# ── Resultado real da peça (feature 351) ───────────────────────────────────────────────────────
+
+# As conversas cujo PRIMEIRO anúncio está no conjunto (a mesma regra da coorte), com o primeiro contato delas.
+# O filtro por anúncio vem antes dos contatos: só as mensagens dessas conversas são lidas.
+_SQL_POR_ANUNCIO = """
+WITH anuncio AS (
+    SELECT DISTINCT ON (ca.conversa_id) ca.conversa_id, am.campanha_nome, ca.anuncio_id, am.campanha_id
+    FROM conversa_anuncios ca LEFT JOIN anuncios_meta am ON am.anuncio_id = ca.anuncio_id
+    WHERE ca.tipo = :tipo_anuncio
+    ORDER BY ca.conversa_id, ca.momento, ca.id
+), escolhidas AS (
+    SELECT * FROM anuncio WHERE anuncio_id = ANY(:ids)
+), contatos AS (
+    SELECT conversa_id, momento FROM conversa_mensagens
+    WHERE direcao = :recebida AND conversa_id IN (SELECT conversa_id FROM escolhidas)
+    UNION ALL
+    SELECT conversa_id, momento FROM conversa_anuncios WHERE conversa_id IN (SELECT conversa_id FROM escolhidas)
+), primeiro AS (
+    SELECT conversa_id, MIN(momento) AS em FROM contatos GROUP BY conversa_id
+)
+SELECT c.id, c.canal, c.client_id, c.responsavel_id, p.em, true, e.campanha_nome, e.anuncio_id, e.campanha_id
+FROM escolhidas e
+JOIN conversas c ON c.id = e.conversa_id
+JOIN primeiro p ON p.conversa_id = c.id
+"""
+
+_ETAPA_DO_ORCAMENTO = K.ETAPAS_DO_FUNIL.index("orcamento")
+_ETAPA_DO_EVENTO = K.ETAPAS_DO_FUNIL.index("evento")
+
+
+def etapas_por_anuncio(anuncio_ids: set[str]) -> dict[str, dict[str, int]]:
+    """``{anúncio: {conversas_reais, orcamentos, eventos}}`` de todas as conversas que chegaram por ele.
+
+    Sem período: é o resultado da peça desde que ela existe. Mesma regra do funil (só fato depois do primeiro
+    contato), pelas mesmas consultas em lote.
+    """
+    if not anuncio_ids:
+        return {}
+    linhas = [
+        Linha(*linha)
+        for linha in db.session.execute(
+            text(_SQL_POR_ANUNCIO),
+            {"tipo_anuncio": K.CONTATO_ANUNCIO, "recebida": K.RECEBIDA, "ids": sorted(anuncio_ids)},
+        ).fetchall()
+    ]
+    _etapas(linhas)
+    saida: dict[str, dict[str, int]] = {}
+    for linha in linhas:
+        s = saida.setdefault(linha.anuncio_id or "", {"conversas_reais": 0, "orcamentos": 0, "eventos": 0})
+        s["conversas_reais"] += 1
+        s["orcamentos"] += int(linha.etapa >= _ETAPA_DO_ORCAMENTO)
+        s["eventos"] += int(linha.etapa >= _ETAPA_DO_EVENTO)
+    return saida

@@ -1189,6 +1189,10 @@ def _build_create_event_data(body: dict) -> dict:
         "payment_installments": body.get("payment_installments"),
         "payment_due_date": date.fromisoformat(payment_due_raw) if payment_due_raw else None,
         "orcamento_history_id": body.get("orcamento_history_id"),
+        # Feature 348: a frente da venda e a conversa de onde ela veio (contrato da 349). Validadas em
+        # `_erros_da_origem`, antes do Google.
+        "frente": body.get("frente"),
+        "conversa_id": body.get("conversa_id"),
         "duracao": str(body.get("duracao") or "1"),
         # Feature 305: sem a chave, a criação deduz a duração do BV pelo valor ou pela agenda — o
         # "1h" acima existe para os cachês e esconderia que ninguém escolheu.
@@ -1266,6 +1270,48 @@ def _recusa_do_bv_da_criacao(data: dict) -> Any:
     return json_error(MENSAGEM_PIX, 400, fields=erros) if erros else None
 
 
+def _erros_da_origem(data: dict) -> dict[str, str]:
+    """Feature 348 — a frente e a conversa da criação, validadas antes do Google (nada nasce órfão).
+
+    Normaliza ``data["frente"]`` (vazio vira ``None``). A conversa só é conferida: quem grava é o núcleo
+    (`origem_ops.ao_criar_evento`).
+    """
+    from app.calendar import frente_ops
+    from app.conversas import origem_ops
+
+    erros: dict[str, str] = {}
+    try:
+        data["frente"] = frente_ops.validar(data.get("frente"))
+    except frente_ops.FrenteInvalida as exc:
+        erros["frente"] = str(exc)
+    if data.get("conversa_id") is not None:
+        try:
+            origem_ops.conversa_ou_erro(data["conversa_id"])
+        except origem_ops.ConversaNaoEncontrada as exc:
+            erros["conversa_id"] = str(exc)
+    return erros
+
+
+def _erros_da_frente_na_venda(data: dict, event: CalendarEvent) -> dict[str, str]:
+    """Feature 348 — a frente na aba Comercial, só quando o corpo traz a chave (o bundle antigo não traz).
+
+    Frente fora da lista é recusada; venda de verdade sem frente nenhuma (nem no corpo nem gravada) também:
+    é o que impede o social sem a palavra certa de cair em festas. ``None`` no corpo não apaga a gravada.
+    """
+    if "frente" not in data:
+        return {}
+    from app.calendar import frente_ops
+
+    try:
+        data["frente"] = frente_ops.validar(data["frente"])
+    except frente_ops.FrenteInvalida as exc:
+        return {"frente": str(exc)}
+    cortesia = bool(data.get("is_cortesia_permuta"))
+    if frente_ops.falta_na_venda(data["frente"] or event.frente, data.get("sale_value"), cortesia):
+        return {"frente": frente_ops.TEXTO_FRENTE_OBRIGATORIA}
+    return {}
+
+
 @api_bp.route("/events", methods=["POST"])
 @api_login_required
 def api_create_event() -> Any:
@@ -1296,9 +1342,19 @@ def api_create_event() -> Any:
 
     data["nota"], erros_nota = _dados_da_nota(body)
     erros_nota = erros_nota or _erro_de_documento_da_nota(None, data, data["nota"])
-    errors = {**_validate_event_core(data), **erros_nota}
+    errors = {**_validate_event_core(data), **erros_nota, **_erros_da_origem(data)}
     if errors:
         return json_error("Corrija os campos destacados", 400, fields=errors)
+
+    # Feature 349: a conversa de origem ("Criar evento" na conversa) é conferida antes do Google — a recusa não
+    # deixa evento órfão na Agenda. O vínculo é gravado depois do núcleo, num ponto único (`fechamento_ops`).
+    from app.conversas import fechamento_ops
+    from app.conversas.recusa import Recusa
+
+    try:
+        conversa_de_origem = fechamento_ops.conversa_para_evento(body.get("conversa_id"))
+    except Recusa as exc:
+        return json_error(exc.mensagem, exc.status, fields=exc.fields, codigo=exc.codigo)
 
     # Prefixo "(TIPO)" do título: a normalização virou `build_gc_title` em `event_ops`
     # (feature 239), para a criação e as duas telas de edição usarem a MESMA regra — o sync do
@@ -1366,6 +1422,14 @@ def api_create_event() -> Any:
             "[agenda] formulário %s ganhou destino durante a criação; evento Google %s órfão",
             data.get("form_response_id"), created.get("id"))
         return json_error(exc.message, 409)
+
+    if conversa_de_origem is not None:
+        # O núcleo já comitou o evento: o vínculo com a conversa vem numa transação curta logo depois (a ficha da
+        # conversa entre as clientes e a perda apagada; a 348 grava `conversa_id` no mesmo ponto).
+        from app import db
+
+        fechamento_ops.ligar_evento_a_conversa(event, conversa_de_origem)
+        db.session.commit()
 
     impersonate = session.get("impersonate_role")
     result = serialize_event_detail(event, current_user, impersonate)
@@ -1659,6 +1723,9 @@ def api_update_event_comercial(event_id: int) -> Any:
     # antigo (sem o campo) salva o card sem apagar o valor.
     if CAMPO_COMISSAO_DO_VENDEDOR in body:
         data[CAMPO_COMISSAO_DO_VENDEDOR] = body.get(CAMPO_COMISSAO_DO_VENDEDOR)
+    # Feature 348: a frente segue a mesma regra — só entra (e só é exigida) quando o corpo a traz.
+    if "frente" in body:
+        data["frente"] = body.get("frente")
 
     # Hotfix 215b: taxa só o Superadmin; vendedor já gravado só Financeiro/Superadmin trocam.
     negado = _erro_de_taxa_ou_vendedor(event, data)
@@ -1673,6 +1740,7 @@ def api_update_event_comercial(event_id: int) -> Any:
         **erros_do_valor_na_aba_comercial(data, event),
         **erros_da_comissao_do_vendedor(data, event, SiteSetting.query.get(1)),
         **erros_nota,
+        **_erros_da_frente_na_venda(data, event),
     }
     if erros:
         return json_error("Corrija os campos destacados", 400, fields=erros)

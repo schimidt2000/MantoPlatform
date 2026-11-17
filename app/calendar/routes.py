@@ -4165,6 +4165,13 @@ def _create_event_core(
 
     _create_client_links(event, data.get("client_pairs") or [])
     _link_form_response(data.get("form_response_id"), event.id)
+    # Feature 348: a frente da venda (a escolhida, ou só a sugestão certa) e a conversa de onde ela veio
+    # (a informada pela 349, ou a do orçamento) — nunca pela ficha. A regra mora nos dois módulos.
+    from app.calendar import frente_ops
+    from app.conversas import origem_ops
+
+    frente_ops.gravar_na_criacao(event, data.get("frente"))
+    origem_ops.ao_criar_evento(event, data.get("conversa_id"))
     # Feature 323: depois dos vínculos — o documento informado completa o cliente contratante.
     from app.calendar import pedido_de_nota_ops
 

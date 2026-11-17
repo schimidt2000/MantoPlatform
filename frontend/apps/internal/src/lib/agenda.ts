@@ -354,6 +354,38 @@ export interface EventAcrescimo {
   bv_pix?: string | null;
 }
 
+/**
+ * Feature 348 — a frente da venda (`frente_ops.frente_do_evento`). `definida` = alguém escolheu; sem isso,
+ * vale a sugestão pelo título, e `sugestao_certa` diz se ela é certa (o resto cai em festas por exclusão).
+ */
+export interface FrenteDaVenda {
+  frente: string;
+  rotulo: string;
+  definida: boolean;
+  sugestao: string;
+  sugestao_certa: boolean;
+  opcoes: { slug: string; rotulo: string }[];
+}
+
+/** Feature 348 — de onde a venda veio (`origem_ops.origem_da_venda`); `contato` nulo = sem anúncio. */
+export interface OrigemDaVenda {
+  conversa_id: number;
+  conversa_nome: string;
+  canal: string;
+  /** Quem lê usa as Conversas (o Financeiro vê o bloco comercial, mas não as conversas). */
+  pode_abrir: boolean;
+  contato: {
+    tipo: "anuncio" | "publicacao" | "site" | string;
+    titulo: string | null;
+    anuncio_id: string | null;
+    campanha: string | null;
+    campanha_id: string | null;
+    conjunto: string | null;
+    codigo: string | null;
+    quando: string | null;
+  } | null;
+}
+
 /** Feature 305 (B9) — o orçamento tem BV e a venda foi digitada sem ele. */
 export interface BvDoOrcamentoPendente {
   /** O BV proposto em reais (o do orçamento, na proporção da venda); nulo sem duração identificada. */
@@ -687,6 +719,9 @@ export interface EventoDetalhe {
      */
     educamanto_seller_commission?: number | null;
     mostra_comissao_do_vendedor?: boolean;
+    /** Feature 348 — opcionais (servidor antigo não manda): a frente e de onde a venda veio. */
+    frente?: FrenteDaVenda;
+    origem?: OrigemDaVenda | null;
     payment_method: string | null;
     payment_installments: number | null;
     payment_due_date: string | null;

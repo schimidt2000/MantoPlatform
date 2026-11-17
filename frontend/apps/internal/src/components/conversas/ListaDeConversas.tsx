@@ -8,11 +8,14 @@ import {
   tempoDeEspera,
   type Canal,
   type ConversaResumo,
+  type DiasDoParado,
   type FiltroDaLista as Filtro,
+  type RecorteDaLista,
 } from "../../lib/conversas";
 import { AvisosNoCelular } from "./AvisosNoCelular";
-import { FiltroDaLista, FiltroDoCanal } from "./FiltroDaLista";
+import { FiltroDaLista, FiltroDoCanal, FiltroDoRecorte } from "./FiltroDaLista";
 import { IconeDoCanal } from "./IconeDoCanal";
+import { SelosDaVenda } from "./SelosDaVenda";
 
 /**
  * A lista de conversas (feature 325, FR-013): da última mensagem para trás, com a busca por nome
@@ -32,6 +35,11 @@ interface ListaDeConversasProps {
   onCanal: (valor: Canal | null) => void;
   /** Feature 330: o filtro de canal só aparece com mais de um canal ligado. */
   canaisLigados: Canal[];
+  /** Feature 349: o recorte da venda e os dias do orçamento parado. */
+  recorte: RecorteDaLista | null;
+  onRecorte: (valor: RecorteDaLista | null) => void;
+  dias: DiasDoParado;
+  onDias: (dias: DiasDoParado) => void;
   conversas: ConversaResumo[] | undefined;
   carregando: boolean;
   falhou: boolean;
@@ -126,6 +134,7 @@ function ItemDaLista({
           ) : null}
         </span>
         <LinhaDaEquipe conversa={conversa} agora={agora} />
+        <SelosDaVenda venda={conversa.venda} />
       </span>
     </button>
   );
@@ -139,6 +148,10 @@ export function ListaDeConversas({
   canal,
   onCanal,
   canaisLigados,
+  recorte,
+  onRecorte,
+  dias,
+  onDias,
   conversas,
   carregando,
   falhou,
@@ -173,6 +186,7 @@ export function ListaDeConversas({
         </div>
         <FiltroDaLista valor={filtro} onMudar={onFiltro} />
         {canaisLigados.length > 1 ? <FiltroDoCanal valor={canal} onMudar={onCanal} /> : null}
+        <FiltroDoRecorte valor={recorte} onMudar={onRecorte} dias={dias} onDias={onDias} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {carregando ? (
@@ -192,11 +206,17 @@ export function ListaDeConversas({
           </div>
         ) : !conversas?.length ? (
           <p className="p-6 text-center text-sm text-muted">
-            {filtro === "minhas"
-              ? "Nenhuma conversa sua encontrada."
-              : filtro === "sem_responsavel"
-                ? "Nenhuma conversa sem responsável encontrada."
-                : "Nenhuma conversa encontrada."}
+            {recorte === "esperando"
+              ? "Nenhuma conversa esperando resposta."
+              : recorte === "orcamento_parado"
+                ? `Nenhum orçamento parado há ${dias} dias ou mais.`
+                : recorte === "anuncio"
+                  ? "Nenhuma conversa de anúncio encontrada."
+                  : filtro === "minhas"
+                    ? "Nenhuma conversa sua encontrada."
+                    : filtro === "sem_responsavel"
+                      ? "Nenhuma conversa sem responsável encontrada."
+                      : "Nenhuma conversa encontrada."}
           </p>
         ) : (
           <>

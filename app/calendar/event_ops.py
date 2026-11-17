@@ -1451,7 +1451,7 @@ def update_event_comercial(
         data: Valores já convertidos (`sale_value`, `sale_value_gross`, `transport_value`,
             `with_invoice`, `is_cortesia_permuta`, `seller_id`, `sale_date`, `commission_rate`,
             `payment_method`, `payment_installments`, `payment_due_date` e, só quando o corpo a
-            trouxe, `educamanto_seller_commission` — feature 338).
+            trouxe, `educamanto_seller_commission` — feature 338 — e `frente` — feature 348).
         actor_name: Nome de quem editou, para o `EventLog`.
         tz: Fuso usado no carimbo do log.
         dados_nota: Os dados da nota (`pedido_de_nota_ops.DadosDaNota`); `None` não mexe (323).
@@ -1515,6 +1515,9 @@ def update_event_comercial(
     event.payment_method = data.get("payment_method")
     event.payment_installments = data.get("payment_installments")
     event.payment_due_date = data.get("payment_due_date")
+    # Feature 348: a frente da venda, escolhida no card (a view já validou). Vazia não apaga a escolhida.
+    if data.get("frente"):
+        event.frente = data["frente"]
     # Feature 323: o chip ligado aqui pede a nota; no cancelado, só os dados mudam.
     pedido_de_nota_ops.gravar_dados_da_nota(event, dados_nota)
     pedido_de_nota_ops.completar_documento_do_cliente(event, dados_nota)
