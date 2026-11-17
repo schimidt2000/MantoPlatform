@@ -521,11 +521,11 @@ anúncio e a regra da casa (custo de marketing até 25% da margem mediana) não 
 4. Heredoc do Bash com aspas triplas não roda no Windows desta máquina; os scripts de edição foram por arquivo.
 
 **Quando a 348 entrar.** Em `atribuir_vendas`, o contato da conversa ligada ao evento (`conversa_id`) vence a busca
-pela ficha (dívida 218); `frente_venda_sql` passa a ler a coluna de frente do evento (a 351 só a importa). Nada mais
+pela ficha (dívida 231); `frente_venda_sql` passa a ler a coluna de frente do evento (a 351 só a importa). Nada mais
 muda nas telas.
 
 **Falta do dono.** Preencher meta e verba das frentes e o calendário; ligar o CRM (chaves `WHATSAPP_*`) para o funil e
-o resultado real da peça terem dado; decidir quando trocar a premissa de 50% por um teste (dívida 219).
+o resultado real da peça terem dado; decidir quando trocar a premissa de 50% por um teste (dívida 232).
 
 ### 350 — A base autorizada: a cliente diz sim (ou para), indica e lembra do aniversário   (350-base-autorizada · 2026-11-17 · migration `a350b1c2d3e4`)
 

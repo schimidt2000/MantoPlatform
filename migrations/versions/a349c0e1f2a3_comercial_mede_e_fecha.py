@@ -9,7 +9,7 @@ régua da gravação viva (`primeira_resposta_ops`): recebida sem reação; envi
 textos "apagada/editada pelo celular", a partir da primeira mensagem. O ``downgrade`` derruba as colunas.
 
 Revision ID: a349c0e1f2a3
-Revises: d334b2c4e6f8
+Revises: a348c0d1e2f3 (reencadeada no lote de 17/11: 348 → 349 → 350 → 351)
 Create Date: 2026-11-17
 """
 
@@ -17,7 +17,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "a349c0e1f2a3"
-down_revision = "d334b2c4e6f8"
+down_revision = "a348c0d1e2f3"
 branch_labels = None
 depends_on = None
 

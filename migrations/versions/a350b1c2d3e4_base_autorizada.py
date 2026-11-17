@@ -10,11 +10,11 @@ Aditiva:
 O ``downgrade`` derruba as tabelas e as colunas (o histórico, as crianças, os parceiros e os registros
 do pós-evento se perdem; o aceite atual em ``marketing_opt_in_*`` fica).
 
-Encadeada em ``d334b2c4e6f8`` como a 348, a 349 e a 351, que nasceram juntas; o reencadeamento fica
-para o lote de merge.
+Nasceu encadeada em ``d334b2c4e6f8``, como a 348, a 349 e a 351; no lote de 17/11 foi reencadeada na
+fila 348 → 349 → 350 → 351.
 
 Revision ID: a350b1c2d3e4
-Revises: d334b2c4e6f8
+Revises: a349c0e1f2a3
 Create Date: 2026-11-17
 """
 
@@ -22,7 +22,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "a350b1c2d3e4"
-down_revision = "d334b2c4e6f8"
+down_revision = "a349c0e1f2a3"
 branch_labels = None
 depends_on = None
 

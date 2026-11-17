@@ -8,11 +8,11 @@ Aditiva:
 - `marketing_propostas`: `frente`, `valor_antes_num`, `valor_depois_num`;
 - `marketing_diario`: alvo, métrica, dia da mudança, janela, linha de base e controle.
 
-Nenhum dado existente muda. A 348, a 349 e a 350 encadeiam na mesma head (`d334b2c4e6f8`): o reencadeamento é
-feito no lote de merge.
+Nenhum dado existente muda. Nasceu na head `d334b2c4e6f8`, como a 348, a 349 e a 350; no lote de 17/11 foi
+reencadeada na fila 348 → 349 → 350 → 351.
 
 Revision ID: a351b0c1d2e3
-Revises: d334b2c4e6f8
+Revises: a350b1c2d3e4
 Create Date: 2026-11-17
 """
 
@@ -20,7 +20,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "a351b0c1d2e3"
-down_revision = "d334b2c4e6f8"
+down_revision = "a350b1c2d3e4"
 branch_labels = None
 depends_on = None
 
