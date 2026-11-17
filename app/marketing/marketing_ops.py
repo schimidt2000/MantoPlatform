@@ -17,7 +17,7 @@ Duas responsabilidades:
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
@@ -25,6 +25,8 @@ from sqlalchemy import func, tuple_
 
 from app import db
 from app.constants import (
+    ANUNCIO_NO_AR_DIAS,
+    CONCEITO_MAX,
     LIBERADO_SIM,
     MARKETING_FORMATOS,
     MARKETING_FRENTES,
@@ -224,6 +226,16 @@ def _clean_text(raw: Any) -> str | None:
     return (str(raw).strip() or None) if raw not in (None, "") else None
 
 
+def _clean_conceito(raw: Any) -> str | None:
+    """Conceito da peça (feature 351): texto curto — é rótulo de grupo no funil, não descrição."""
+    texto = _clean_text(raw)
+    if texto is not None and len(texto) > CONCEITO_MAX:
+        raise MarketingValidationError(
+            "conceito", f"Use até {CONCEITO_MAX} caracteres no conceito."
+        )
+    return texto
+
+
 def exigir_temas_liberados(temas: list[CatalogItem]) -> None:
     """Card de anúncio só com tema liberado para anúncio (feature 345, FR-010).
 
@@ -300,6 +312,7 @@ def create_post(
     briefing_mostrar: Any = None,
     briefing_letreiro: Any = None,
     origem: str = "pessoa",
+    conceito: Any = None,
 ) -> MarketingPost:
     """Cria uma postagem no planejamento (ou, na 345, um pedido de criativo/anúncio).
 
@@ -329,6 +342,7 @@ def create_post(
         briefing_mostrar=_clean_text(briefing_mostrar),
         briefing_letreiro=_clean_text(briefing_letreiro),
         origem=origem if origem in MARKETING_POST_ORIGENS else "pessoa",
+        conceito=_clean_conceito(conceito),
     )
     _autofill_publish_date(post)
     db.session.add(post)
@@ -368,6 +382,7 @@ def update_post(
     briefing_objetivo: Any = KEEP,
     briefing_mostrar: Any = KEEP,
     briefing_letreiro: Any = KEEP,
+    conceito: Any = KEEP,
 ) -> MarketingPost:
     """Edita uma postagem. Só aplica os campos explicitamente enviados.
 
@@ -394,6 +409,8 @@ def update_post(
         post.briefing_mostrar = _clean_text(briefing_mostrar)
     if briefing_letreiro is not KEEP:
         post.briefing_letreiro = _clean_text(briefing_letreiro)
+    if conceito is not KEEP:
+        post.conceito = _clean_conceito(conceito)
     if title is not KEEP:
         post.title = _clean_title(title)
     if status is not KEEP:
@@ -656,10 +673,79 @@ def serialize_review_space(space: ReviewSpace | None) -> dict[str, Any] | None:
 
 
 _RESULTADO_VAZIO = {"spend": "0.00", "conversations": 0, "impressions": 0, "clicks": 0, "custo_conversa": None}
+# Chave interna do mapa de resultados: a situação de cada anúncio, que `serialize_post` põe no
+# vínculo (`anuncios[]`) e tira do `resultado`.
+_SITUACAO = "_situacao_anuncios"
+_PLATAFORMA_CRM = "Meta Ads"
+
+
+def _situacao_dos_anuncios(vinculos: dict[tuple[str, str], int]) -> dict[tuple[str, str], dict[str, Any]]:
+    """"No ar" de cada anúncio (feature 351): gastou num dos últimos dias com leitura da plataforma.
+
+    O sistema não guarda a situação do anúncio na Meta (a rota do agente não muda nesta feature);
+    o gasto é o fato. Sem leitura nenhuma da plataforma, `no_ar` fica `None` ("sem leitura").
+    """
+    plataformas = {plat for plat, _ in vinculos}
+    leitura = dict(
+        db.session.query(MarketingAdMetric.platform, func.max(MarketingAdMetric.metric_date))
+        .filter(MarketingAdMetric.platform.in_(plataformas))
+        .group_by(MarketingAdMetric.platform)
+        .all()
+    )
+    ultimo_gasto = {
+        (plat, ad): dia
+        for plat, ad, dia in db.session.query(
+            MarketingAdMetric.platform, MarketingAdMetric.ad_id, func.max(MarketingAdMetric.metric_date)
+        )
+        .filter(tuple_(MarketingAdMetric.platform, MarketingAdMetric.ad_id).in_(list(vinculos)), MarketingAdMetric.spend > 0)
+        .group_by(MarketingAdMetric.platform, MarketingAdMetric.ad_id)
+        .all()
+    }
+    saida = {}
+    for chave in vinculos:
+        ultima, gasto = leitura.get(chave[0]), ultimo_gasto.get(chave)
+        no_ar = None if ultima is None else bool(gasto and gasto > ultima - timedelta(days=ANUNCIO_NO_AR_DIAS))
+        saida[chave] = {
+            "no_ar": no_ar,
+            "ultimo_gasto_em": gasto.isoformat() if gasto else None,
+            "leitura": ultima.isoformat() if ultima else None,
+        }
+    return saida
+
+
+def _resultado_real(vinculos: dict[tuple[str, str], int]) -> dict[int, dict[str, Any]]:
+    """O que a peça trouxe de verdade (feature 351): conversas do CRM, orçamentos, vendas atribuídas.
+
+    Conversa = primeiro anúncio da conversa é do card (`funil_ops.etapas_por_anuncio`); venda = o
+    contato pago que a trouxe é de um anúncio do card (`atribuicao_ops`, a regra única). Import tardio:
+    `atribuicao_ops` importa `comando_ops`, que importa este módulo.
+    """
+    from app.conversas import funil_ops
+    from app.marketing import atribuicao_ops
+
+    ids = {ad for plat, ad in vinculos if plat == _PLATAFORMA_CRM}
+    etapas = funil_ops.etapas_por_anuncio(ids)
+    vendas = atribuicao_ops.vendas_por_anuncio(ids)
+    saida: dict[int, dict[str, Any]] = {}
+    for (plat, ad), pid in vinculos.items():
+        s = saida.setdefault(
+            pid, {"conversas_reais": 0, "orcamentos": 0, "eventos": 0, "vendas": 0, "faturamento": Decimal(0)}
+        )
+        if plat != _PLATAFORMA_CRM:
+            continue
+        for campo, valor in etapas.get(ad, {}).items():
+            s[campo] += valor
+        s["vendas"] += vendas.get(ad, {}).get("vendas", 0)
+        s["faturamento"] += vendas.get(ad, {}).get("faturamento", Decimal(0))
+    return saida
 
 
 def resultados_por_post(posts: list[MarketingPost]) -> dict[int, dict[str, Any]]:
-    """Resultado somado dos anúncios de cada card (feature 345) — uma consulta para a lista toda."""
+    """Resultado somado dos anúncios de cada card (feature 345) — uma consulta para a lista toda.
+
+    Feature 351: soma também o resultado real (conversas, orçamentos, vendas atribuídas) e diz se cada
+    anúncio está no ar.
+    """
     vinculos = {(a.platform, a.ad_id): p.id for p in posts for a in p.anuncios}
     if not vinculos:
         return {}
@@ -673,24 +759,52 @@ def resultados_por_post(posts: list[MarketingPost]) -> dict[int, dict[str, Any]]
         .group_by(MarketingAdMetric.platform, MarketingAdMetric.ad_id)
         .all()
     )
-    somas: dict[int, dict[str, Any]] = {}
+    somas: dict[int, dict[str, Any]] = {
+        pid: {"spend": Decimal(0), "conversations": 0, "impressions": 0, "clicks": 0} for pid in set(vinculos.values())
+    }
     for platform, ad_id, gasto, conversas, impressoes, cliques in linhas:
-        s = somas.setdefault(vinculos[(platform, ad_id)],
-                             {"spend": Decimal(0), "conversations": 0, "impressions": 0, "clicks": 0})
+        s = somas[vinculos[(platform, ad_id)]]
         s["spend"] += Decimal(gasto or 0)
         s["conversations"] += int(conversas or 0)
         s["impressions"] += int(impressoes or 0)
         s["clicks"] += int(cliques or 0)
+    return _montar_resultados(somas, _resultado_real(vinculos), _situacao_dos_anuncios(vinculos), vinculos)
+
+
+def _montar_resultados(
+    somas: dict[int, dict[str, Any]],
+    reais: dict[int, dict[str, Any]],
+    situacao: dict[tuple[str, str], dict[str, Any]],
+    vinculos: dict[tuple[str, str], int],
+) -> dict[int, dict[str, Any]]:
     centavo = Decimal("0.01")
-    return {
-        pid: {
+    saida = {}
+    for pid, s in somas.items():
+        real = reais.get(pid, {})
+        por_anuncio = {ad: situacao[(plat, ad)] for (plat, ad), dono in vinculos.items() if dono == pid}
+        leituras = [v["leitura"] for v in por_anuncio.values() if v["leitura"]]
+        saida[pid] = {
             **s,
             "spend": str(s["spend"].quantize(centavo, rounding=ROUND_HALF_UP)),
-            "custo_conversa": str((s["spend"] / s["conversations"]).quantize(centavo, rounding=ROUND_HALF_UP))
-            if s["conversations"] else None,
+            # O de sempre (345): conversas que a plataforma informa. O real (351) vem do CRM.
+            "custo_conversa": _custo(s["spend"], s["conversations"]),
+            "custo_conversa_real": _custo(s["spend"], real.get("conversas_reais", 0)),
+            "conversas_reais": real.get("conversas_reais", 0),
+            "orcamentos": real.get("orcamentos", 0),
+            "eventos": real.get("eventos", 0),
+            "vendas": real.get("vendas", 0),
+            "faturamento": str(Decimal(real.get("faturamento", 0)).quantize(centavo, rounding=ROUND_HALF_UP)),
+            "anuncios_no_ar": sum(1 for v in por_anuncio.values() if v["no_ar"]),
+            "ultima_leitura": max(leituras) if leituras else None,
+            _SITUACAO: por_anuncio,
         }
-        for pid, s in somas.items()
-    }
+    return saida
+
+
+def _custo(gasto: Decimal, quantidade: int) -> str | None:
+    if not quantidade or gasto <= 0:
+        return None
+    return str((gasto / quantidade).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def serialize_post(post: MarketingPost, resultados: dict[int, dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -700,6 +814,9 @@ def serialize_post(post: MarketingPost, resultados: dict[int, dict[str, Any]] | 
     resultado deste card é calculado na hora.
     """
     mapa = resultados if resultados is not None else resultados_por_post([post])
+    resultado = dict(mapa.get(post.id, _RESULTADO_VAZIO)) if post.anuncios else None
+    situacao = resultado.pop(_SITUACAO, {}) if resultado else {}
+    sem_leitura = {"no_ar": None, "ultimo_gasto_em": None}
     return {
         "id": post.id,
         "title": post.title,
@@ -723,8 +840,16 @@ def serialize_post(post: MarketingPost, resultados: dict[int, dict[str, Any]] | 
         "briefing_mostrar": post.briefing_mostrar,
         "briefing_letreiro": post.briefing_letreiro,
         "origem": post.origem,
-        "anuncios": [{"platform": a.platform, "ad_id": a.ad_id} for a in post.anuncios],
-        "resultado": mapa.get(post.id, _RESULTADO_VAZIO) if post.anuncios else None,
+        "conceito": post.conceito,
+        "anuncios": [
+            {
+                "platform": a.platform,
+                "ad_id": a.ad_id,
+                **{k: v for k, v in situacao.get(a.ad_id, sem_leitura).items() if k != "leitura"},
+            }
+            for a in post.anuncios
+        ],
+        "resultado": resultado,
         "created_at": post.created_at.isoformat() if post.created_at else None,
         "updated_at": post.updated_at.isoformat() if post.updated_at else None,
     }

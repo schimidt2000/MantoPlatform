@@ -471,7 +471,17 @@ ROTULO_DA_ETAPA = {
     "pagou": "Pagou",
     "avaliou": "Avaliou",
 }
-DIVISOES_DO_FUNIL = ("vendedor", "campanha", "canal")
+DIVISOES_DO_FUNIL = ("vendedor", "campanha", "canal", "frente", "anuncio", "peca", "conceito")
+# Feature 351: frente, anúncio, peça (card do Kanban) e conceito, sempre pelo primeiro anúncio da
+# conversa. O anúncio que chega pela conversa (referral) é sempre da Meta.
+PLATAFORMA_DO_ANUNCIO = "Meta Ads"
+SEM_FRENTE = "__sem_frente__"
+SEM_PECA = "__sem_peca__"
+SEM_CONCEITO = "__sem_conceito__"
+TEXTO_SEM_FRENTE = "Sem frente"
+TEXTO_SEM_PECA = "Sem peça"
+TEXTO_SEM_CONCEITO = "Sem conceito"
+TEXTO_ANUNCIO_SEM_NOME = "Anúncio {id}"
 ROTULO_DO_CANAL = {CANAL_WHATSAPP: "WhatsApp", CANAL_INSTAGRAM: "Instagram"}
 # Valores especiais do filtro e da divisão por campanha (o nome da campanha nunca começa com "__").
 SEM_ANUNCIO = "__sem_anuncio__"
@@ -484,7 +494,7 @@ PARADOS_POR_VEZ = 200
 TEXTO_PERIODO_INVALIDO = "Informe a data no formato AAAA-MM-DD."
 TEXTO_PERIODO_INVERTIDO = "Escolha uma data inicial anterior à final."
 TEXTO_PERIODO_LONGO = "Escolha um período de até um ano."
-TEXTO_DIVISAO_INVALIDA = "Escolha dividir por vendedor, campanha ou canal."
+TEXTO_DIVISAO_INVALIDA = "Escolha dividir por vendedor, campanha, canal, frente, anúncio, peça ou conceito."
 TEXTO_ETAPA_INVALIDA = "Escolha uma das etapas do funil."
 
 # ── Linha do tempo da ficha (feature 335) ───────────────────────────────────────────────────────

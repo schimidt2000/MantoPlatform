@@ -932,15 +932,17 @@ def _campaign_table(campanhas, clientes, retornos=()) -> list[dict[str, Any]]:
 
 
 def _cac(fim: date) -> dict[str, Any]:
-    from app.clientes.client_ops import client_metrics
+    """Custo por cliente novo do mês (feature 351): o gasto em anúncio ÷ os clientes novos que VIERAM de
+    anúncio. Antes dividia por todos os clientes novos, de qualquer origem — a indicação barateava o anúncio.
+    O total segue no payload, para a tela mostrar "N de M"."""
+    from app.marketing import atribuicao_ops  # tardio: atribuicao_ops importa este módulo
 
     mes = month_ref(fim)
-    primeiro = fim.replace(day=1)
-    gasto = sum((ln.spend for ln in _effective_campaign_rows(primeiro, last_day_of_month(fim)) if ln.currency == "BRL"), Decimal(0))
-    novos = next((m for m in client_metrics()["new_by_month"] if m["month"] == mes), None)
-    total = novos["total"] if novos else 0
-    return {"month": mes, "spend": _q2(gasto), "new_clients": total,
-            "value": _q2(gasto / total) if total else None}
+    primeiro, ultimo = fim.replace(day=1), last_day_of_month(fim)
+    gasto = sum((ln.spend for ln in _effective_campaign_rows(primeiro, ultimo) if ln.currency == "BRL"), Decimal(0))
+    total, de_anuncio = atribuicao_ops.clientes_novos(primeiro, ultimo)
+    return {"month": mes, "spend": _q2(gasto), "new_clients": total, "new_clients_ads": de_anuncio,
+            "value": _q2(gasto / de_anuncio) if de_anuncio else None}
 
 
 def _runs_table(limite: int = 20) -> list[dict[str, Any]]:

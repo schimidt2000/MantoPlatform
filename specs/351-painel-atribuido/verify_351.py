@@ -158,7 +158,9 @@ with app.app_context():
 limiter.enabled = False
 
 # Fotografia do que os cenários 14/15 alteram (restaurada na limpeza).
-FRENTES_ANTES = _db("select slug, teto_custo_venda, meta_vendas_mes, verba_mes from marketing_frentes")
+FRENTES_ANTES = _db(
+    "select slug, teto_custo_venda, meta_vendas_mes, verba_mes from marketing_frentes"
+)
 CALENDARIO_ANTES = _db("select frente, mes, meta_vendas, verba, foco from marketing_calendario")
 
 
@@ -289,8 +291,24 @@ def semear() -> None:
     # Teste do diário: A5 (alvo) 10 → 15 conversas; A6 (controle) 10 → 11, em torno de 15/03.
     for dia in range(8, 22):
         antes = dia < 15
-        linhas.append((A5, ID_FESTA, f"2031-03-{dia:02d}", "10.00", (10 if dia == 8 else 0) if antes else (15 if dia == 15 else 0)))
-        linhas.append((A6, ID_FESTA, f"2031-03-{dia:02d}", "10.00", (10 if dia == 8 else 0) if antes else (11 if dia == 15 else 0)))
+        linhas.append(
+            (
+                A5,
+                ID_FESTA,
+                f"2031-03-{dia:02d}",
+                "10.00",
+                (10 if dia == 8 else 0) if antes else (15 if dia == 15 else 0),
+            )
+        )
+        linhas.append(
+            (
+                A6,
+                ID_FESTA,
+                f"2031-03-{dia:02d}",
+                "10.00",
+                (10 if dia == 8 else 0) if antes else (11 if dia == 15 else 0),
+            )
+        )
     for ad, camp, dia, gasto, conv in linhas:
         _exec(
             "insert into marketing_ad_metrics (platform, ad_id, campaign_id, adset_id, metric_date, spend,"
@@ -303,7 +321,9 @@ def semear() -> None:
         )
 
     sa = USER_IDS["sa"]
-    k1 = novo_cliente("K1", criado="2031-03-03 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-03-03 13:00")
+    k1 = novo_cliente(
+        "K1", criado="2031-03-03 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-03-03 13:00"
+    )
     nova_conversa("V1", k1, [(A1, "2031-03-03 13:00")])
     _exec(
         "insert into orcamento_history (user_id, created_at, has_show, client_id, client_name)"
@@ -312,15 +332,25 @@ def semear() -> None:
         c=k1,
         n=f"{PREFIXO} K1",
     )
-    novo_evento("E1", cliente=k1, criado="2031-03-05 12:00", venda="3000.00", data_venda="2031-03-08")
+    novo_evento(
+        "E1", cliente=k1, criado="2031-03-05 12:00", venda="3000.00", data_venda="2031-03-08"
+    )
 
-    k2 = novo_cliente("K2", criado="2031-03-10 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-03-10 13:00")
+    k2 = novo_cliente(
+        "K2", criado="2031-03-10 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-03-10 13:00"
+    )
     nova_conversa("V2", k2, [(A1, "2031-03-10 13:00")])
-    novo_evento("E2", cliente=k2, criado="2031-03-09 12:00", venda="2000.00", data_venda="2031-03-12")
+    novo_evento(
+        "E2", cliente=k2, criado="2031-03-09 12:00", venda="2000.00", data_venda="2031-03-12"
+    )
 
-    k3 = novo_cliente("K3", criado="2031-01-20 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-01-20 13:00")
+    k3 = novo_cliente(
+        "K3", criado="2031-01-20 13:00", anuncio_origem_id=A1, anuncio_origem_em="2031-01-20 13:00"
+    )
     nova_conversa("V3", k3, [(A1, "2031-01-20 13:00")])
-    novo_evento("E3", cliente=k3, criado="2031-01-25 12:00", venda="2500.00", data_venda="2031-03-07")
+    novo_evento(
+        "E3", cliente=k3, criado="2031-01-25 12:00", venda="2500.00", data_venda="2031-03-07"
+    )
 
     k4 = novo_cliente(
         "K4",
@@ -331,18 +361,38 @@ def semear() -> None:
         anuncio_recente_em="2031-03-06 13:00",
     )
     nova_conversa("V4", k4, [(A1, "2031-03-02 13:00"), (A2, "2031-03-06 13:00")])
-    novo_evento("E4", cliente=k4, criado="2031-03-07 12:00", venda="5000.00", data_venda="2031-03-09")
-
-    k5 = novo_cliente("K5", criado="2031-03-01 15:00", utm_source="meta", utm_medium="ctwa", utm_campaign=CAMP_FESTA)
-    novo_evento("E5", cliente=k5, criado="2031-03-04 12:00", venda="1500.00", data_venda="2031-03-06")
-    k6 = novo_cliente(
-        "K6", criado="2031-03-01 15:00", source="kommo_import", utm_source="meta", kommo_created_at="2030-01-01 10:00"
+    novo_evento(
+        "E4", cliente=k4, criado="2031-03-07 12:00", venda="5000.00", data_venda="2031-03-09"
     )
-    novo_evento("E6", cliente=k6, criado="2031-03-04 12:00", venda="1800.00", data_venda="2031-03-06")
 
-    k7 = novo_cliente("K7", criado="2031-03-11 13:00", anuncio_origem_id=A4, anuncio_origem_em="2031-03-11 13:00")
+    k5 = novo_cliente(
+        "K5",
+        criado="2031-03-01 15:00",
+        utm_source="meta",
+        utm_medium="ctwa",
+        utm_campaign=CAMP_FESTA,
+    )
+    novo_evento(
+        "E5", cliente=k5, criado="2031-03-04 12:00", venda="1500.00", data_venda="2031-03-06"
+    )
+    k6 = novo_cliente(
+        "K6",
+        criado="2031-03-01 15:00",
+        source="kommo_import",
+        utm_source="meta",
+        kommo_created_at="2030-01-01 10:00",
+    )
+    novo_evento(
+        "E6", cliente=k6, criado="2031-03-04 12:00", venda="1800.00", data_venda="2031-03-06"
+    )
+
+    k7 = novo_cliente(
+        "K7", criado="2031-03-11 13:00", anuncio_origem_id=A4, anuncio_origem_em="2031-03-11 13:00"
+    )
     nova_conversa("V7", k7, [(A4, "2031-03-11 13:00")])
-    novo_evento("E7", cliente=k7, criado="2031-03-12 12:00", venda="3500.00", data_venda="2031-03-14")
+    novo_evento(
+        "E7", cliente=k7, criado="2031-03-12 12:00", venda="3500.00", data_venda="2031-03-14"
+    )
     novo_cliente("K8", criado="2031-03-15 15:00")
 
     for nome, status, conceito, anuncios in (
@@ -401,7 +451,10 @@ def venda_da_lista(dados: dict, evento: str) -> dict | None:
 
 
 def grupo(dados: dict, chave: str) -> dict | None:
-    return next((g for g in (dados.get("funil") or dados).get("grupos", []) if g.get("chave") == chave), None)
+    return next(
+        (g for g in (dados.get("funil") or dados).get("grupos", []) if g.get("chave") == chave),
+        None,
+    )
 
 
 # ── Cenários ────────────────────────────────────────────────────────────────────────────────
@@ -410,13 +463,29 @@ def c1():
     f = frente(desempenho(), "festas")
     if "vendas_atribuidas" not in f:
         raise Bloqueado("desempenho ainda sem vendas_atribuidas")
-    check("1.1 festas: 2 vendas atribuídas (E1 por conversa, E5 por origem)", f["vendas_atribuidas"] == 2, str(f))
+    check(
+        "1.1 festas: 2 vendas atribuídas (E1 por conversa, E5 por origem)",
+        f["vendas_atribuidas"] == 2,
+        str(f),
+    )
     check("1.2 festas: misto conta as 7 vendas da frente", f["vendas"] == 7, str(f["vendas"]))
-    check("1.3 custo atribuído = 1000 ÷ 2", f.get("custo_venda_atribuida") == "500.00", str(f.get("custo_venda_atribuida")))
-    check("1.4 faturamento atribuído = 4500", f.get("faturamento_atribuido") == "4500.00", str(f.get("faturamento_atribuido")))
+    check(
+        "1.3 custo atribuído = 1000 ÷ 2",
+        f.get("custo_venda_atribuida") == "500.00",
+        str(f.get("custo_venda_atribuida")),
+    )
+    check(
+        "1.4 faturamento atribuído = 4500",
+        f.get("faturamento_atribuido") == "4500.00",
+        str(f.get("faturamento_atribuido")),
+    )
     dados = atribuicao_ok()
     v1 = venda_da_lista(dados, "E1")
-    check("1.5 E1 na lista, contato pela conversa do anúncio A1", bool(v1) and v1["contato"]["fonte"] == "conversa" and v1["contato"]["anuncio_id"] == A1, str(v1))
+    check(
+        "1.5 E1 na lista, contato pela conversa do anúncio A1",
+        bool(v1) and v1["contato"]["fonte"] == "conversa" and v1["contato"]["anuncio_id"] == A1,
+        str(v1),
+    )
 
 
 @cenario("2 evento criado antes do contato não é atribuído")
@@ -435,17 +504,33 @@ def c3():
 def c4():
     dados = atribuicao_ok()
     v4 = venda_da_lista(dados, "E4")
-    check("4.1 E4 atribuída a Corporativo (A2, o último)", bool(v4) and v4["frente"] == "corporativo" and v4["contato"]["anuncio_id"] == A2, str(v4))
-    check("4.2 a frente do evento continua Festas", bool(v4) and v4["frente_venda"] == "festas", str(v4))
+    check(
+        "4.1 E4 atribuída a Corporativo (A2, o último)",
+        bool(v4) and v4["frente"] == "corporativo" and v4["contato"]["anuncio_id"] == A2,
+        str(v4),
+    )
+    check(
+        "4.2 a frente do evento continua Festas",
+        bool(v4) and v4["frente_venda"] == "festas",
+        str(v4),
+    )
     f = frente(desempenho(), "corporativo")
-    check("4.3 corporativo: 1 atribuída, custo 300", f["vendas_atribuidas"] == 1 and f["custo_venda_atribuida"] == "300.00", str(f))
+    check(
+        "4.3 corporativo: 1 atribuída, custo 300",
+        f["vendas_atribuidas"] == 1 and f["custo_venda_atribuida"] == "300.00",
+        str(f),
+    )
 
 
 @cenario("5 origem da ficha: nova atribui, antiga não")
 def c5():
     dados = atribuicao_ok()
     v5 = venda_da_lista(dados, "E5")
-    check("5.1 E5 (ficha nova com utm meta) atribuída a Festas", bool(v5) and v5["frente"] == "festas" and v5["contato"]["fonte"] == "utm", str(v5))
+    check(
+        "5.1 E5 (ficha nova com utm meta) atribuída a Festas",
+        bool(v5) and v5["frente"] == "festas" and v5["contato"]["fonte"] == "utm",
+        str(v5),
+    )
     check("5.2 E6 (ficha antiga do Kommo) fora da lista", venda_da_lista(dados, "E6") is None)
 
 
@@ -456,11 +541,23 @@ def c6():
     if at is None:
         raise Bloqueado("desempenho ainda sem o bloco atribuicao")
     check("6.1 período de maio/2026 marcado como parcial", at.get("parcial") is True, str(at))
-    check("6.2 regra declarada: 45 dias, 0,50", at.get("janela_dias") == 45 and at.get("incrementalidade") == "0.50", str(at))
+    check(
+        "6.2 regra declarada: 45 dias, 0,50",
+        at.get("janela_dias") == 45 and at.get("incrementalidade") == "0.50",
+        str(at),
+    )
     f = frente(desempenho(), "festas")
-    check("6.3 com desconto = 1000 ÷ (2 × 0,5)", f.get("custo_venda_atribuida_desconto") == "1000.00", str(f.get("custo_venda_atribuida_desconto")))
+    check(
+        "6.3 com desconto = 1000 ÷ (2 × 0,5)",
+        f.get("custo_venda_atribuida_desconto") == "1000.00",
+        str(f.get("custo_venda_atribuida_desconto")),
+    )
     sem = desempenho().get("atribuicao", {}).get("sem_frente", {})
-    check("6.4 E7 (campanha sem frente) no bloco sem frente", sem.get("vendas") == 1 and sem.get("faturamento") == "3500.00", str(sem))
+    check(
+        "6.4 E7 (campanha sem frente) no bloco sem frente",
+        sem.get("vendas") == 1 and sem.get("faturamento") == "3500.00",
+        str(sem),
+    )
 
 
 @cenario("7 funil por frente e por anúncio, com custo")
@@ -468,35 +565,76 @@ def c7():
     dados = atribuicao_ok(dividir="frente")
     g = grupo(dados, "festas")
     check("7.1 festas: 3 conversas chegaram", bool(g) and g["quantidades"]["chegou"] == 3, str(g))
-    check("7.2 festas: 2 com orçamento, 2 com evento", bool(g) and g["quantidades"]["orcamento"] == 2 and g["quantidades"]["evento"] == 2, str(g))
-    check("7.3 gasto só da Meta (600) e custos", bool(g) and g.get("gasto") == "600.00" and g.get("custo_conversa") == "200.00" and g.get("custo_evento") == "300.00", str(g))
-    check("7.4 conversa de campanha sem frente no grupo próprio", grupo(dados, "__sem_frente__") is not None, str((dados.get("funil") or {}).get("grupos")))
+    check(
+        "7.2 festas: 2 com orçamento, 2 com evento",
+        bool(g) and g["quantidades"]["orcamento"] == 2 and g["quantidades"]["evento"] == 2,
+        str(g),
+    )
+    check(
+        "7.3 gasto só da Meta (600) e custos",
+        bool(g)
+        and g.get("gasto") == "600.00"
+        and g.get("custo_conversa") == "200.00"
+        and g.get("custo_evento") == "300.00",
+        str(g),
+    )
+    check(
+        "7.4 conversa de campanha sem frente no grupo próprio",
+        grupo(dados, "__sem_frente__") is not None,
+        str((dados.get("funil") or {}).get("grupos")),
+    )
     por_anuncio = atribuicao_ok(dividir="anuncio")
     ga = grupo(por_anuncio, A1)
-    check("7.5 anúncio A1: 3 conversas, gasto 210, 70 por conversa", bool(ga) and ga["quantidades"]["chegou"] == 3 and ga.get("gasto") == "210.00" and ga.get("custo_conversa") == "70.00", str(ga))
+    check(
+        "7.5 anúncio A1: 3 conversas, gasto 210, 70 por conversa",
+        bool(ga)
+        and ga["quantidades"]["chegou"] == 3
+        and ga.get("gasto") == "210.00"
+        and ga.get("custo_conversa") == "70.00",
+        str(ga),
+    )
 
 
 @cenario("8 funil do Comercial dividido por frente: sem dinheiro")
 def c8():
     login("com")
     r = client.get(f"/api/conversas/funil?inicio={INI}&fim={FIM}&dividir=frente")
-    check("8.1 Comercial divide por frente (200)", r.status_code == 200, f"{r.status_code} {r.get_data(as_text=True)[:200]}")
+    check(
+        "8.1 Comercial divide por frente (200)",
+        r.status_code == 200,
+        f"{r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     corpo = r.get_data(as_text=True)
-    check("8.2 nenhuma chave de dinheiro no payload", "gasto" not in corpo and "custo_" not in corpo)
+    check(
+        "8.2 nenhuma chave de dinheiro no payload", "gasto" not in corpo and "custo_" not in corpo
+    )
     d = r.get_json() or {}
     g = next((x for x in d.get("grupos", []) if x.get("chave") == "festas"), None)
-    check("8.3 grupo festas com as 3 conversas", bool(g) and g["quantidades"]["chegou"] == 3, str(d.get("grupos")))
+    check(
+        "8.3 grupo festas com as 3 conversas",
+        bool(g) and g["quantidades"]["chegou"] == 3,
+        str(d.get("grupos")),
+    )
 
 
 @cenario("9 funil por peça e por conceito")
 def c9():
     por_peca = atribuicao_ok(dividir="peca")
     g = grupo(por_peca, str(POSTS["P1"]))
-    check("9.1 peça P1 com as 3 conversas do A1", bool(g) and g["quantidades"]["chegou"] == 3, str(g))
-    check("9.2 conversa de anúncio sem card em 'sem peça'", grupo(por_peca, "__sem_peca__") is not None)
+    check(
+        "9.1 peça P1 com as 3 conversas do A1", bool(g) and g["quantidades"]["chegou"] == 3, str(g)
+    )
+    check(
+        "9.2 conversa de anúncio sem card em 'sem peça'",
+        grupo(por_peca, "__sem_peca__") is not None,
+    )
     por_conceito = atribuicao_ok(dividir="conceito")
     gc = grupo(por_conceito, CONCEITO)
-    check("9.3 conceito da P1 com 3 conversas e gasto dos anúncios da peça (310)", bool(gc) and gc["quantidades"]["chegou"] == 3 and gc.get("gasto") == "310.00", str(gc))
+    check(
+        "9.3 conceito da P1 com 3 conversas e gasto dos anúncios da peça (310)",
+        bool(gc) and gc["quantidades"]["chegou"] == 3 and gc.get("gasto") == "310.00",
+        str(gc),
+    )
 
 
 def post(nome: str) -> dict:
@@ -513,8 +651,16 @@ def c10():
     if "conversas_reais" not in res:
         raise Bloqueado("card ainda sem conversas_reais")
     check("10.1 conversas reais = 4 (V1, V2, V3, V4)", res["conversas_reais"] == 4, str(res))
-    check("10.2 orçamentos = 3 e eventos = 3", res.get("orcamentos") == 3 and res.get("eventos") == 3, str(res))
-    check("10.3 vendas atribuídas = 1 (E1), faturamento 3000", res.get("vendas") == 1 and res.get("faturamento") == "3000.00", str(res))
+    check(
+        "10.2 orçamentos = 3 e eventos = 3",
+        res.get("orcamentos") == 3 and res.get("eventos") == 3,
+        str(res),
+    )
+    check(
+        "10.3 vendas atribuídas = 1 (E1), faturamento 3000",
+        res.get("vendas") == 1 and res.get("faturamento") == "3000.00",
+        str(res),
+    )
 
 
 @cenario("11 'no ar' pelo gasto da última leitura")
@@ -524,8 +670,16 @@ def c11():
     if "no_ar" not in por_ad.get(A1, {}):
         raise Bloqueado("anúncio do card ainda sem no_ar")
     check("11.1 A1 gastou na última leitura: no ar", por_ad[A1]["no_ar"] is True, str(por_ad[A1]))
-    check("11.2 A3 sem gasto desde 02/03: não está no ar", por_ad[A3]["no_ar"] is False and por_ad[A3]["ultimo_gasto_em"] == "2031-03-02", str(por_ad[A3]))
-    check("11.3 card conta 1 anúncio no ar", (p.get("resultado") or {}).get("anuncios_no_ar") == 1, str(p.get("resultado")))
+    check(
+        "11.2 A3 sem gasto desde 02/03: não está no ar",
+        por_ad[A3]["no_ar"] is False and por_ad[A3]["ultimo_gasto_em"] == "2031-03-02",
+        str(por_ad[A3]),
+    )
+    check(
+        "11.3 card conta 1 anúncio no ar",
+        (p.get("resultado") or {}).get("anuncios_no_ar") == 1,
+        str(p.get("resultado")),
+    )
 
 
 @cenario("12 card de anúncio em Agendado segue na fila da rotina")
@@ -539,32 +693,76 @@ def c12():
 @cenario("13 conceito salvo no card")
 def c13():
     login("mkt")
-    r = client.patch(f"/api/marketing/posts/{POSTS['P3']}", json={"conceito": "  Bastidores V351  "})
-    check("13.1 PATCH com conceito (200)", r.status_code == 200, f"{r.status_code} {r.get_data(as_text=True)[:200]}")
+    r = client.patch(
+        f"/api/marketing/posts/{POSTS['P3']}", json={"conceito": "  Bastidores V351  "}
+    )
+    check(
+        "13.1 PATCH com conceito (200)",
+        r.status_code == 200,
+        f"{r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     gravado = _db("select conceito from marketing_posts where id=:i", i=POSTS["P3"])[0][0]
-    check("13.2 conceito gravado e aparado (conexão separada)", gravado == "Bastidores V351", repr(gravado))
+    check(
+        "13.2 conceito gravado e aparado (conexão separada)",
+        gravado == "Bastidores V351",
+        repr(gravado),
+    )
     r2 = client.patch(f"/api/marketing/posts/{POSTS['P3']}", json={"conceito": "x" * 121})
     campos = ((r2.get_json(silent=True) or {}).get("error") or {}).get("fields") or {}
-    check("13.3 conceito longo recusado no campo (400)", r2.status_code == 400 and "conceito" in campos, f"{r2.status_code} {campos}")
+    check(
+        "13.3 conceito longo recusado no campo (400)",
+        r2.status_code == 400 and "conceito" in campos,
+        f"{r2.status_code} {campos}",
+    )
 
 
 @cenario("14 meta, verba e calendário salvos pelo Superadmin")
 def c14():
     login("sa")
-    r = client.patch("/api/marketing/frentes", json={"metas": {"festas": 45}, "verbas": {"festas": "2000.00"}})
-    check("14.1 PATCH frentes com meta e verba (200)", r.status_code == 200, f"{r.status_code} {r.get_data(as_text=True)[:200]}")
+    r = client.patch(
+        "/api/marketing/frentes", json={"metas": {"festas": 45}, "verbas": {"festas": "2000.00"}}
+    )
+    check(
+        "14.1 PATCH frentes com meta e verba (200)",
+        r.status_code == 200,
+        f"{r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
     linha = _db("select meta_vendas_mes, verba_mes from marketing_frentes where slug='festas'")[0]
-    check("14.2 meta 45 e verba 2000 gravadas", linha[0] == 45 and linha[1] == Decimal("2000.00"), str(linha))
+    check(
+        "14.2 meta 45 e verba 2000 gravadas",
+        linha[0] == 45 and linha[1] == Decimal("2000.00"),
+        str(linha),
+    )
     r2 = client.patch(
         "/api/marketing/calendario",
-        json={"frente": "festas", "meses": [{"mes": MES_ATUAL, "meta_vendas": 50, "verba": "3000.00", "foco": f"Foco {PREFIXO}"}]},
+        json={
+            "frente": "festas",
+            "meses": [
+                {"mes": MES_ATUAL, "meta_vendas": 50, "verba": "3000.00", "foco": f"Foco {PREFIXO}"}
+            ],
+        },
     )
     precisa(r2, "PATCH /api/marketing/calendario")
-    check("14.3 PATCH calendário (200)", r2.status_code == 200, f"{r2.status_code} {r2.get_data(as_text=True)[:200]}")
-    cal = _db("select meta_vendas, verba, foco from marketing_calendario where frente='festas' and mes=:m", m=MES_ATUAL)[0]
-    check("14.4 mês corrente gravado (conexão separada)", cal[0] == 50 and cal[1] == Decimal("3000.00") and cal[2] == f"Foco {PREFIXO}", str(cal))
+    check(
+        "14.3 PATCH calendário (200)",
+        r2.status_code == 200,
+        f"{r2.status_code} {r2.get_data(as_text=True)[:200]}",
+    )
+    cal = _db(
+        "select meta_vendas, verba, foco from marketing_calendario where frente='festas' and mes=:m",
+        m=MES_ATUAL,
+    )[0]
+    check(
+        "14.4 mês corrente gravado (conexão separada)",
+        cal[0] == 50 and cal[1] == Decimal("3000.00") and cal[2] == f"Foco {PREFIXO}",
+        str(cal),
+    )
     mc = frente(desempenho(), "festas").get("mes_corrente") or {}
-    check("14.5 card do mês: a meta do mês vence a padrão", mc.get("meta_vendas") == 50 and mc.get("verba") == "3000.00", str(mc))
+    check(
+        "14.5 card do mês: a meta do mês vence a padrão",
+        mc.get("meta_vendas") == 50 and mc.get("verba") == "3000.00",
+        str(mc),
+    )
     from app.marketing import comando_ops
 
     with app.app_context():
@@ -575,12 +773,17 @@ def c14():
 @cenario("15 Marketing tenta salvar calendário e meta (DEVE FALHAR)")
 def c15():
     login("mkt")
-    r = client.patch("/api/marketing/calendario", json={"frente": "festas", "meses": [{"mes": 1, "meta_vendas": 1}]})
+    r = client.patch(
+        "/api/marketing/calendario",
+        json={"frente": "festas", "meses": [{"mes": 1, "meta_vendas": 1}]},
+    )
     precisa(r, "PATCH /api/marketing/calendario")
     check("15.1 calendário recusado (403)", r.status_code == 403, str(r.status_code))
     r2 = client.patch("/api/marketing/frentes", json={"metas": {"festas": 1}})
     check("15.2 meta recusada (403)", r2.status_code == 403, str(r2.status_code))
-    linha = _db("select meta_vendas from marketing_calendario where frente='festas' and mes=1")[0][0]
+    linha = _db("select meta_vendas from marketing_calendario where frente='festas' and mes=1")[0][
+        0
+    ]
     check("15.3 nada gravado", linha != 1, str(linha))
 
 
@@ -591,16 +794,26 @@ def c16():
     cal = d.get("calendario")
     if cal is None:
         raise Bloqueado("contexto ainda sem calendario")
-    check("16.1 calendário com 5 frentes × 12 meses", len(cal) == 5 and all(len(f["meses"]) == 12 for f in cal), str(len(cal)))
+    check(
+        "16.1 calendário com 5 frentes × 12 meses",
+        len(cal) == 5 and all(len(f["meses"]) == 12 for f in cal),
+        str(len(cal)),
+    )
     metas = d.get("metas_do_mes") or {}
-    check("16.2 metas do mês: festas 50", (metas.get("festas") or {}).get("meta_vendas") == 50, str(metas.get("festas")))
+    check(
+        "16.2 metas do mês: festas 50",
+        (metas.get("festas") or {}).get("meta_vendas") == 50,
+        str(metas.get("festas")),
+    )
 
 
 PROPOSTAS: dict[str, int] = {}
 
 
 def agente_proposta(nome: str, corpo: dict) -> int:
-    r = client.post(f"/api/marketing-agent/{TOKEN}/propostas", json={"motivo": f"{PREFIXO} {nome}", **corpo})
+    r = client.post(
+        f"/api/marketing-agent/{TOKEN}/propostas", json={"motivo": f"{PREFIXO} {nome}", **corpo}
+    )
     if r.status_code != 201:
         raise AssertionError(f"proposta {nome}: {r.status_code} {r.get_data(as_text=True)[:200]}")
     PROPOSTAS[nome] = r.get_json()["id"]
@@ -632,18 +845,31 @@ def c17():
             "valor_depois": "R$ 45,00/dia",
         },
     )
-    linha = _db("select valor_antes_num, valor_depois_num, frente from marketing_propostas where id=:i", i=pid)[0]
-    check("17.1 números lidos do texto (30 → 45)", linha[0] == Decimal("30.00") and linha[1] == Decimal("45.00"), str(linha))
+    linha = _db(
+        "select valor_antes_num, valor_depois_num, frente from marketing_propostas where id=:i",
+        i=pid,
+    )[0]
+    check(
+        "17.1 números lidos do texto (30 → 45)",
+        linha[0] == Decimal("30.00") and linha[1] == Decimal("45.00"),
+        str(linha),
+    )
     item = proposta_item(propostas(), "verba")
     if "impacto_mensal" not in item:
         raise Bloqueado("proposta ainda sem impacto_mensal")
-    check("17.2 impacto mensal = (45 − 30) × 30 = 450", item["impacto_mensal"] == "450.00", str(item.get("impacto_mensal")))
+    check(
+        "17.2 impacto mensal = (45 − 30) × 30 = 450",
+        item["impacto_mensal"] == "450.00",
+        str(item.get("impacto_mensal")),
+    )
     login("sa")
     client.post(f"/api/marketing/propostas/{pid}/decidir", json={"decisao": "aprovar"})
     depois = propostas().get("impacto_aprovado_mes")
     check(
         "17.3 aprovada entra na soma do mês (+450)",
-        antes is not None and depois is not None and Decimal(depois) - Decimal(antes) == Decimal("450.00"),
+        antes is not None
+        and depois is not None
+        and Decimal(depois) - Decimal(antes) == Decimal("450.00"),
         f"{antes} → {depois}",
     )
 
@@ -652,23 +878,52 @@ def c17():
 def c18():
     agente_proposta(
         "pausa",
-        {"tipo": "pausar", "platform": "Meta Ads", "alvo_tipo": "campanha", "alvo_id": ID_CORP, "alvo_nome": CAMP_CORP, "valor_antes": "R$ 10,00/dia"},
+        {
+            "tipo": "pausar",
+            "platform": "Meta Ads",
+            "alvo_tipo": "campanha",
+            "alvo_id": ID_CORP,
+            "alvo_nome": CAMP_CORP,
+            "valor_antes": "R$ 10,00/dia",
+        },
     )
     agente_proposta(
         "ativar",
-        {"tipo": "ativar", "platform": "Meta Ads", "alvo_tipo": "anuncio", "alvo_id": A1, "custo_dia_estimado": "20.00"},
+        {
+            "tipo": "ativar",
+            "platform": "Meta Ads",
+            "alvo_tipo": "anuncio",
+            "alvo_id": A1,
+            "custo_dia_estimado": "20.00",
+        },
     )
     dados = propostas()
     pausa, ativar, verba = (proposta_item(dados, n) for n in ("pausa", "ativar", "verba"))
-    check("18.1 campanha CORP → frente corporativo", pausa.get("frente") == "corporativo", str(pausa.get("frente")))
-    check("18.2 pausa: impacto −300", pausa.get("impacto_mensal") == "-300.00", str(pausa.get("impacto_mensal")))
-    check("18.3 anúncio A1 → campanha FESTA → festas; ativar 20/dia → 600", ativar.get("frente") == "festas" and ativar.get("impacto_mensal") == "600.00", str(ativar))
+    check(
+        "18.1 campanha CORP → frente corporativo",
+        pausa.get("frente") == "corporativo",
+        str(pausa.get("frente")),
+    )
+    check(
+        "18.2 pausa: impacto −300",
+        pausa.get("impacto_mensal") == "-300.00",
+        str(pausa.get("impacto_mensal")),
+    )
+    check(
+        "18.3 anúncio A1 → campanha FESTA → festas; ativar 20/dia → 600",
+        ativar.get("frente") == "festas" and ativar.get("impacto_mensal") == "600.00",
+        str(ativar),
+    )
     with app.app_context():
         from app.marketing import comando_ops
 
         teto = comando_ops.tetos()["festas"]["teto"]
     esperado = comando_ops.q2(teto) if teto is not None else None
-    check("18.4 teto da frente na proposta", verba.get("teto") == esperado, f"{verba.get('teto')} × {esperado}")
+    check(
+        "18.4 teto da frente na proposta",
+        verba.get("teto") == esperado,
+        f"{verba.get('teto')} × {esperado}",
+    )
 
 
 @cenario("19 sino da proposta, sem duplicar")
@@ -683,9 +938,21 @@ def c19():
         " where r.name=:r and u.is_active and u.has_access",
         r=RoleName.SUPERADMIN,
     )[0][0]
-    check("19.1 uma notificação por Superadmin ativo", n == superadmins and n > 0, f"{n} × {superadmins}")
-    meu = _db("select link_path from notifications where dedupe_key=:k and user_id=:u", k=chave, u=USER_IDS["sa"])
-    check("19.2 link leva a Marketing → Decisões", bool(meu) and meu[0][0] == "/marketing/decisoes", str(meu))
+    check(
+        "19.1 uma notificação por Superadmin ativo",
+        n == superadmins and n > 0,
+        f"{n} × {superadmins}",
+    )
+    meu = _db(
+        "select link_path from notifications where dedupe_key=:k and user_id=:u",
+        k=chave,
+        u=USER_IDS["sa"],
+    )
+    check(
+        "19.2 link leva a Marketing → Decisões",
+        bool(meu) and meu[0][0] == "/marketing/decisoes",
+        str(meu),
+    )
     from app.models import MarketingProposta
     from app.notificacoes import notificacoes_ops
 
@@ -694,7 +961,11 @@ def c19():
         db.session.commit()
     n2 = _db("select count(*) from notifications where dedupe_key=:k", k=chave)[0][0]
     check("19.3 repetir o aviso não duplica", n2 == n, f"{n} → {n2}")
-    nm = _db("select count(*) from notifications where dedupe_key=:k and user_id=:u", k=chave, u=USER_IDS["mkt"])[0][0]
+    nm = _db(
+        "select count(*) from notifications where dedupe_key=:k and user_id=:u",
+        k=chave,
+        u=USER_IDS["mkt"],
+    )[0][0]
     check("19.4 Marketing (não decide) não recebe", nm == 0, str(nm))
 
 
@@ -703,11 +974,15 @@ DIARIO: dict[str, int] = {}
 
 def nova_entrada(nome: str, **extra) -> dict:
     login("mkt")
-    r = client.post("/api/marketing/diario", json={"titulo": f"{PREFIXO} {nome}", "motivo": "teste", **extra})
+    r = client.post(
+        "/api/marketing/diario", json={"titulo": f"{PREFIXO} {nome}", "motivo": "teste", **extra}
+    )
     if r.status_code not in (200, 201):
         raise AssertionError(f"diário {r.status_code} {r.get_data(as_text=True)[:200]}")
     corpo = r.get_json() or {}
-    DIARIO[nome] = corpo.get("id") or _id("select id from marketing_diario where titulo=:t", t=f"{PREFIXO} {nome}")
+    DIARIO[nome] = corpo.get("id") or _id(
+        "select id from marketing_diario where titulo=:t", t=f"{PREFIXO} {nome}"
+    )
     login("mkt")
     lista = client.get("/api/marketing/diario").get_json() or {}
     return next(e for e in lista.get("items", []) if e["id"] == DIARIO[nome])
@@ -729,8 +1004,16 @@ def c20():
     t = e.get("teste")
     if t is None:
         raise Bloqueado("diário ainda sem teste")
-    check("20.1 antes 10, depois 15", Decimal(t["antes"]["valor"]) == 10 and Decimal(t["depois"]["valor"]) == 15, str(t))
-    check("20.2 variação +50%, controle +10%, efeito líquido +40", t["variacao"] == 50.0 and t["controle"]["variacao"] == 10.0 and t["efeito_liquido"] == 40.0, str(t))
+    check(
+        "20.1 antes 10, depois 15",
+        Decimal(t["antes"]["valor"]) == 10 and Decimal(t["depois"]["valor"]) == 15,
+        str(t),
+    )
+    check(
+        "20.2 variação +50%, controle +10%, efeito líquido +40",
+        t["variacao"] == 50.0 and t["controle"]["variacao"] == 10.0 and t["efeito_liquido"] == 40.0,
+        str(t),
+    )
     check("20.3 janela completa (leitura até 21/03)", t["completo"] is True, str(t["completo"]))
     base = _db("select linha_base from marketing_diario where id=:i", i=DIARIO["teste"])[0][0]
     check("20.4 linha de base congelada = 10 (conexão separada)", base == Decimal("10"), str(base))
@@ -738,16 +1021,30 @@ def c20():
 
 @cenario("21 diário com a janela do depois em andamento")
 def c21():
-    e = nova_entrada("andamento", alvo_platform="Meta Ads", alvo_tipo="anuncio", alvo_id=A5, metrica="gasto", mudou_em="2031-03-20")
+    e = nova_entrada(
+        "andamento",
+        alvo_platform="Meta Ads",
+        alvo_tipo="anuncio",
+        alvo_id=A5,
+        metrica="gasto",
+        mudou_em="2031-03-20",
+    )
     t = e.get("teste")
     if t is None:
         raise Bloqueado("diário ainda sem teste")
     check("21.1 completo = false", t["completo"] is False, str(t))
     check("21.2 janela padrão de 7 dias", t["janela_dias"] == 7, str(t["janela_dias"]))
     login("mkt")
-    r = client.post("/api/marketing/diario", json={"titulo": f"{PREFIXO} ruim", "motivo": "x", "alvo_id": A5, "metrica": "likes"})
+    r = client.post(
+        "/api/marketing/diario",
+        json={"titulo": f"{PREFIXO} ruim", "motivo": "x", "alvo_id": A5, "metrica": "likes"},
+    )
     campos = ((r.get_json(silent=True) or {}).get("error") or {}).get("fields") or {}
-    check("21.3 métrica inválida recusada no campo", r.status_code == 400 and "metrica" in campos, f"{r.status_code} {campos}")
+    check(
+        "21.3 métrica inválida recusada no campo",
+        r.status_code == 400 and "metrica" in campos,
+        f"{r.status_code} {campos}",
+    )
 
 
 @cenario("22 proposta executada → diário herda alvo e métrica")
@@ -755,9 +1052,19 @@ def c22():
     pid = PROPOSTAS.get("verba")
     if pid is None:
         raise Bloqueado("sem a proposta do cenário 17")
-    r = client.post(f"/api/marketing-agent/{TOKEN}/propostas/{pid}/execucao", json={"resultado": "executada", "detalhe": "ok"})
-    check("22.1 execução registrada (200)", r.status_code == 200, f"{r.status_code} {r.get_data(as_text=True)[:200]}")
-    linha = _db("select alvo_tipo, alvo_id, metrica, alvo_platform from marketing_diario where proposta_id=:p", p=pid)
+    r = client.post(
+        f"/api/marketing-agent/{TOKEN}/propostas/{pid}/execucao",
+        json={"resultado": "executada", "detalhe": "ok"},
+    )
+    check(
+        "22.1 execução registrada (200)",
+        r.status_code == 200,
+        f"{r.status_code} {r.get_data(as_text=True)[:200]}",
+    )
+    linha = _db(
+        "select alvo_tipo, alvo_id, metrica, alvo_platform from marketing_diario where proposta_id=:p",
+        p=pid,
+    )
     check(
         "22.2 entrada com alvo da proposta e custo por conversa",
         bool(linha) and tuple(linha[0]) == ("campanha", ID_FESTA, "custo_conversa", "Meta Ads"),
@@ -770,8 +1077,19 @@ def c23():
     login("mkt")
     itens = client.get("/api/marketing/posts").get_json().get("items", [])
     p1 = next((p for p in itens if p["id"] == POSTS["P1"]), None)
-    check("23.1 P1 na lista com as chaves do filtro", bool(p1) and p1.get("frente") == "festas" and p1.get("tipo") == "anuncio" and p1.get("assignee_id") == USER_IDS["mkt"], str(p1)[:200])
-    check("23.2 conceito no payload", bool(p1) and p1.get("conceito") == CONCEITO, str((p1 or {}).get("conceito")))
+    check(
+        "23.1 P1 na lista com as chaves do filtro",
+        bool(p1)
+        and p1.get("frente") == "festas"
+        and p1.get("tipo") == "anuncio"
+        and p1.get("assignee_id") == USER_IDS["mkt"],
+        str(p1)[:200],
+    )
+    check(
+        "23.2 conceito no payload",
+        bool(p1) and p1.get("conceito") == CONCEITO,
+        str((p1 or {}).get("conceito")),
+    )
 
 
 @cenario("24 Temas paginado")
@@ -783,9 +1101,15 @@ def c24():
     ativos = _db("select count(*) from catalog_items where is_active")[0][0]
     check("24.1 total = temas ativos", d["total"] == ativos, f"{d['total']} × {ativos}")
     check("24.2 até 50 por página", len(d["items"]) == min(50, ativos), str(len(d["items"])))
-    check("24.3 número de páginas", d["paginas"] == max(1, math.ceil(ativos / 50)), str(d["paginas"]))
+    check(
+        "24.3 número de páginas", d["paginas"] == max(1, math.ceil(ativos / 50)), str(d["paginas"])
+    )
     ultima = client.get("/api/marketing/temas-licenca?pagina=999").get_json() or {}
-    check("24.4 página além da última volta a última", ultima.get("pagina") == d["paginas"], str(ultima.get("pagina")))
+    check(
+        "24.4 página além da última volta a última",
+        ultima.get("pagina") == d["paginas"],
+        str(ultima.get("pagina")),
+    )
 
 
 @cenario("25 custo por cliente novo vindo de anúncio")
@@ -793,7 +1117,11 @@ def c25():
     cac = desempenho().get("cac") or {}
     if "new_clients_ads" not in cac:
         raise Bloqueado("cac ainda sem new_clients_ads")
-    check("25.1 6 clientes novos em março/2031, 5 de anúncio", cac["new_clients"] == 6 and cac["new_clients_ads"] == 5, str(cac))
+    check(
+        "25.1 6 clientes novos em março/2031, 5 de anúncio",
+        cac["new_clients"] == 6 and cac["new_clients_ads"] == 5,
+        str(cac),
+    )
     check("25.2 custo = 1400 ÷ 5", cac.get("value") == "280.00", str(cac.get("value")))
 
 
@@ -810,36 +1138,74 @@ def c27():
     mkt_dados = atribuicao_ok("mkt")
     mkt = venda_da_lista(mkt_dados, "E1")
     check("27.1 Superadmin vê o valor", bool(sa) and sa.get("valor") == "3000.00", str(sa))
-    check("27.2 Marketing vê a venda sem o valor", bool(mkt) and mkt.get("valor") is None and mkt_dados.get("pode_ver_valor") is False, str(mkt))
+    check(
+        "27.2 Marketing vê a venda sem o valor",
+        bool(mkt) and mkt.get("valor") is None and mkt_dados.get("pode_ver_valor") is False,
+        str(mkt),
+    )
 
 
 def limpar() -> None:
     with _engine.begin() as conn:
         ids_prop = list(PROPOSTAS.values())
         if ids_prop:
-            conn.execute(text("delete from marketing_diario where proposta_id = any(:i)"), {"i": ids_prop})
+            conn.execute(
+                text("delete from marketing_diario where proposta_id = any(:i)"), {"i": ids_prop}
+            )
             conn.execute(
                 text("delete from notifications where dedupe_key = any(:k)"),
                 {"k": [f"marketing.proposta:{i}" for i in ids_prop]},
             )
-        conn.execute(text("delete from marketing_diario where titulo like :p"), {"p": f"{PREFIXO}%"})
-        conn.execute(text("delete from marketing_propostas where motivo like :p"), {"p": f"{PREFIXO}%"})
+        conn.execute(
+            text("delete from marketing_diario where titulo like :p"), {"p": f"{PREFIXO}%"}
+        )
+        conn.execute(
+            text("delete from marketing_propostas where motivo like :p"), {"p": f"{PREFIXO}%"}
+        )
         if POSTS:
-            conn.execute(text("delete from marketing_post_anuncios where post_id = any(:i)"), {"i": list(POSTS.values())})
-            conn.execute(text("delete from marketing_posts where id = any(:i)"), {"i": list(POSTS.values())})
-        conn.execute(text("delete from marketing_ad_metrics where ad_id like :p"), {"p": f"a351{RUN}%"})
-        conn.execute(text("delete from marketing_campaign_metrics where campaign_id like :p"), {"p": f"c351%{RUN}"})
+            conn.execute(
+                text("delete from marketing_post_anuncios where post_id = any(:i)"),
+                {"i": list(POSTS.values())},
+            )
+            conn.execute(
+                text("delete from marketing_posts where id = any(:i)"), {"i": list(POSTS.values())}
+            )
+        conn.execute(
+            text("delete from marketing_ad_metrics where ad_id like :p"), {"p": f"a351{RUN}%"}
+        )
+        conn.execute(
+            text("delete from marketing_campaign_metrics where campaign_id like :p"),
+            {"p": f"c351%{RUN}"},
+        )
         conn.execute(text("delete from marketing_agent_runs where run_id=:r"), {"r": f"v351-{RUN}"})
-        conn.execute(text("delete from anuncios_meta where anuncio_id like :p"), {"p": f"a351{RUN}%"})
+        conn.execute(
+            text("delete from anuncios_meta where anuncio_id like :p"), {"p": f"a351{RUN}%"}
+        )
         if CONVERSAS:
-            conn.execute(text("delete from conversa_anuncios where conversa_id = any(:i)"), {"i": list(CONVERSAS.values())})
-            conn.execute(text("delete from conversas where id = any(:i)"), {"i": list(CONVERSAS.values())})
+            conn.execute(
+                text("delete from conversa_anuncios where conversa_id = any(:i)"),
+                {"i": list(CONVERSAS.values())},
+            )
+            conn.execute(
+                text("delete from conversas where id = any(:i)"), {"i": list(CONVERSAS.values())}
+            )
         if EVENTOS:
-            conn.execute(text("delete from event_clients where event_id = any(:i)"), {"i": list(EVENTOS.values())})
-            conn.execute(text("delete from calendar_events where id = any(:i)"), {"i": list(EVENTOS.values())})
+            conn.execute(
+                text("delete from event_clients where event_id = any(:i)"),
+                {"i": list(EVENTOS.values())},
+            )
+            conn.execute(
+                text("delete from calendar_events where id = any(:i)"),
+                {"i": list(EVENTOS.values())},
+            )
         if CLIENTES:
-            conn.execute(text("delete from orcamento_history where client_id = any(:i)"), {"i": list(CLIENTES.values())})
-            conn.execute(text("delete from clients where id = any(:i)"), {"i": list(CLIENTES.values())})
+            conn.execute(
+                text("delete from orcamento_history where client_id = any(:i)"),
+                {"i": list(CLIENTES.values())},
+            )
+            conn.execute(
+                text("delete from clients where id = any(:i)"), {"i": list(CLIENTES.values())}
+            )
         for slug, teto, meta, verba in FRENTES_ANTES:
             conn.execute(
                 text(
@@ -855,9 +1221,19 @@ def limpar() -> None:
                     " updated_by_id = case when updated_by_id = any(:u) then null else updated_by_id end"
                     " where frente=:fr and mes=:mes"
                 ),
-                {"m": meta, "v": verba, "f": foco, "fr": fr, "mes": mes, "u": list(USER_IDS.values())},
+                {
+                    "m": meta,
+                    "v": verba,
+                    "f": foco,
+                    "fr": fr,
+                    "mes": mes,
+                    "u": list(USER_IDS.values()),
+                },
             )
-        conn.execute(text("delete from notifications where user_id = any(:u)"), {"u": list(USER_IDS.values())})
+        conn.execute(
+            text("delete from notifications where user_id = any(:u)"),
+            {"u": list(USER_IDS.values())},
+        )
     with app.app_context():
         db.session.rollback()
         for uid in USER_IDS.values():
@@ -871,14 +1247,46 @@ def limpar() -> None:
 
 try:
     semear()
-    for fn in (c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, c16, c17, c18, c19, c20, c21, c22, c23, c24, c25, c26, c27):
+    for fn in (
+        c1,
+        c2,
+        c3,
+        c4,
+        c5,
+        c6,
+        c7,
+        c8,
+        c9,
+        c10,
+        c11,
+        c12,
+        c13,
+        c14,
+        c15,
+        c16,
+        c17,
+        c18,
+        c19,
+        c20,
+        c21,
+        c22,
+        c23,
+        c24,
+        c25,
+        c26,
+        c27,
+    ):
         fn()
 finally:
     try:
         limpar()
         sobra = _db("select count(*) from clients where name like :p", p=f"{PREFIXO}%")[0][0]
-        sobra += _db("select count(*) from users where email like :p", p=f"verify351-%-{RUN}@%")[0][0]
-        sobra += _db("select count(*) from marketing_posts where title like :p", p=f"{PREFIXO}%")[0][0]
+        sobra += _db("select count(*) from users where email like :p", p=f"verify351-%-{RUN}@%")[0][
+            0
+        ]
+        sobra += _db("select count(*) from marketing_posts where title like :p", p=f"{PREFIXO}%")[
+            0
+        ][0]
         check("28.1 limpeza sem resto", sobra == 0, str(sobra))
     except Exception as exc:  # noqa: BLE001 — a falha da limpeza é resultado do verify
         check("28.1 limpeza sem resto", False, f"{type(exc).__name__}: {exc}"[:200])

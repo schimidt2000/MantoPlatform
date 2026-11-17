@@ -36,6 +36,8 @@ POST_FIELDS = (
     "briefing_objetivo",
     "briefing_mostrar",
     "briefing_letreiro",
+    # Feature 351: o ângulo da peça, que agrupa o funil.
+    "conceito",
 )
 
 

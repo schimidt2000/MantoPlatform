@@ -872,6 +872,14 @@ def limpar() -> None:
                 {"p": f"{PREFIXO}%", "ids": PROPOSTAS or [0]},
             )
         if tem("marketing_propostas"):
+            # Feature 351: a proposta nasce com aviso no sino de cada Superadmin — sai junto.
+            conn.execute(
+                text(
+                    "delete from notifications where kind = 'marketing.proposta' and entity_id in"
+                    " (select id from marketing_propostas where motivo like :p)"
+                ),
+                {"p": f"{PREFIXO}%"},
+            )
             conn.execute(
                 text("delete from marketing_propostas where motivo like :p"), {"p": f"{PREFIXO}%"}
             )
