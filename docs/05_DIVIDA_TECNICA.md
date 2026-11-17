@@ -871,3 +871,15 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 211 | **P3** | `Client.marketing_opt_in_at` | retirar o aceite é manual: quem pede no WhatsApp para parar precisa ter a data zerada por alguém, e não há botão para isso na ficha (o direito de revogar é da LGPD, art. 8º §5º) | "Retirar aceite" na ficha do cliente, ou o descadastro do CRM próprio (fases 325–335) gravando aqui |
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
+
+## Baixa da feature 345-marketing-integrado (2026-11-16)
+
+**Quitada.** Nenhuma. A 21 (token do agente fora do Render) continua: sem `MARKETING_AGENT_TOKEN` no `manto-backend`,
+a rotina da 345 também responde 404. **Criadas.** (214–217.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 214 | **P2** | `comando_ops.resumo_frentes` | o custo por venda é **misto**: o gasto da frente ÷ todas as vendas da frente, inclusive as que vieram por indicação ou pelo orgânico. Ele subestima o custo real do anúncio | atribuição venda → anúncio: o CRM próprio no ar (325–335) + `ctwa_clid` no `referral` + link com código para o Google; depois, a devolução da venda à Meta (Conversions API) e ao Google (conversão offline) |
+| 215 | **P3** | `comando_ops.frente_venda_sql` | a frente social sai por palavra no título (`15 anos`, `casamento`…); evento social sem essas palavras cai em festas | campo "frente" no evento (ou um `event_type` SOCIAL) quando o comercial puder marcar na venda |
+| 216 | **P3** | skill `marketing-auditor` (passo 7) | montar o anúncio pausado depende de a rotina achar o arquivo aprovado (Revisão de mídia ou Drive). Sem ele, a peça fica no relatório como "falta o arquivo" | dar ao agente a leitura do material aprovado do espaço de revisão (URL assinada) |
+| 217 | **P4** | `marketing_campaign_metrics` × `marketing_ad_metrics` | o gasto mora em dois níveis (campanha para o painel e o reembolso; anúncio para a peça) e pode divergir se uma leitura falhar no meio | achado na rodada quando a soma dos anúncios ≠ campanha no mesmo dia |

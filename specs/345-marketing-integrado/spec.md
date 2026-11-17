@@ -1,6 +1,6 @@
 # Feature 345 — O sistema comanda o marketing: painel por frente, só tema liberado no anúncio, pedido de criativo e aprovação
 
-**Branch**: `345-marketing-integrado` (da `main`, `68f232a7`) · **Created**: 2026-11-16 · **Status**: Rascunho ·
+**Branch**: `345-marketing-integrado` (da `main`, `68f232a7`) · **Created**: 2026-11-16 · **Status**: Pronta, sem push (`verify_345.py` 64/64) ·
 **Migration**: uma, aditiva (marcação de licença no catálogo; campos novos no card de marketing; tabelas novas de
 desempenho por anúncio, propostas e diário de decisões; teto por frente nas configurações) ·
 **Nível**: 1 (feature) — constituição, Princípio VI
