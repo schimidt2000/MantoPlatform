@@ -254,7 +254,7 @@ História 1.
   retirada.
 - **FR-006**: A mensagem recebida cujo texto inteiro, normalizado (sem acento, sem pontuação nas pontas,
   sem diferença de maiúscula), for uma das palavras de saída (SAIR, PARAR, PARE, STOP, CANCELAR
-  INSCRIÇÃO, DESCADASTRAR, NÃO QUERO MAIS RECEBER, PARAR PROMOÇÕES) DEVE retirar o aceite de novidades da
+  INSCRIÇÃO, DESCADASTRAR, NÃO QUERO MAIS RECEBER, NÃO QUERO RECEBER, PARAR PROMOÇÕES) DEVE retirar o aceite de novidades da
   ficha ligada à conversa (WhatsApp e Instagram).
 - **FR-007**: O erro 131050 do WhatsApp — no aviso de status ou na recusa síncrona do envio — DEVE retirar
   o aceite de novidades da ficha ligada.
@@ -353,7 +353,8 @@ chamada (dublê em memória + disjuntor de rede, molde do `verify_325`). Login s
 | 16 | aniversários | janela de 60 dias, filtro de dois aceites, 29/02 | não |
 | 17 | orçamento | mensagem termina com o convite; deslocamento intacto | não |
 | 18 | loja (344) | aceite do pedido vai ao histórico; aceite anterior à retirada não volta | não |
-| 19 | limpeza | fichas, eventos, conversas e usuários `v350-` apagados (`roles.clear()` antes) | — |
+| 19 | exclusão da ficha | histórico e crianças vão junto; a indicada fica sem `indicado_por_id` (convergência T038) | não |
+| 20 | limpeza | fichas, eventos, conversas e usuários `v350-` apagados (`roles.clear()` antes) | — |
 
 Conferência de tela: ficha do cliente (cartão Consentimentos, Indicação), cabeçalho da conversa,
 Clientes › Pós-evento / Aniversários / Parceiros, diálogo do pós-evento no evento — internas em 390 px;

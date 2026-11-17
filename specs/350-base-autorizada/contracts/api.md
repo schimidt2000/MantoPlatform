@@ -76,10 +76,13 @@ Chave nova (ausente quando o evento não tem contratante):
 "consentimento": {
   "primeiro_nome": "Ana",
   "recebe_novidades": false,
-  "textos": {"novidades": {"texto": "…", "versao": "…"}, "aniversario": {"texto": "…", "versao": "…"}},
-  "mensagem_indicacao": "Oi! Fiz uma festa com a Manto Produções … indicação da Ana: https://wa.me/5511970570577"
+  "textos": {"novidades": {"texto": "…", "versao": "…"}, "aniversario": {"texto": "…", "versao": "…"}}
 }
 ```
+
+A mensagem de "Indicar uma amiga" não vem da API: o React a monta (`IndicarAmiga.tsx`) com o
+`primeiro_nome` e o WhatsApp da Manto de `lib/lojaTema.ts` (`WHATSAPP_LOJA`, a fonte única do
+número no app público). Aparece mesmo sem o bloco `consentimento` (convergência T039).
 
 ### `POST /api/avaliar/<token>/consentimento` — público, `10 per hour`
 

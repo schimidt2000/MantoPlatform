@@ -1,6 +1,6 @@
 """Verificação da feature 350 — a base autorizada.
 
-Os 19 cenários da tabela da spec (seção "Verificação"). A Meta NUNCA é chamada: as funções de
+Os 20 cenários da tabela da spec (seção "Verificação"). A Meta NUNCA é chamada: as funções de
 `app.integracoes.whatsapp_client` viram um dublê em memória (`MetaFalsa`, molde do `verify_325`), e um
 disjuntor de rede derruba qualquer conexão de saída que não seja o Postgres local — instalado ANTES de
 importar o app.
@@ -101,12 +101,14 @@ TEL = {
     "bia": "5511987350002",
     "cris": "5511987350003",
     "loja": "5511987350004",
+    "dani": "5511987350005",
 }
 NOMES = {
     "ana": "Ana v350-Teste",
     "bia": "Bia v350-Teste",
     "cris": "Cris v350-Teste",
     "loja": "Lu v350-Loja",
+    "dani": "Dani v350-Exclui",
 }
 FOTOS = "https://fotos.exemplo.com/v350-album"
 MANTER = "--manter" in sys.argv
@@ -1055,6 +1057,43 @@ def cen_18_loja() -> None:
     _garante(ultima.origem == f"Loja: {PREFIX}Natal", f"origem: {ultima.origem}")
 
 
+def cen_19_exclusao_da_ficha() -> None:
+    """LGPD: excluir a ficha leva o histórico e as crianças; quem ela indicou só perde o vínculo."""
+    dani = estado["cli_dani"]
+    _aceitar("dani")
+    _espera(
+        _chamar(
+            "com",
+            "post",
+            _url_cli("dani", "/criancas"),
+            {
+                "primeiro_nome": "Dudu",
+                "nascimento": _daqui(40, 2),
+                "aceite": True,
+                "origem": "Telefone",
+            },
+        ),
+        201,
+        "criança da Dani",
+    )
+    _espera(
+        _chamar("com", "patch", _url_cli("cris", "/indicacao"), {"indicado_por_id": dani}),
+        200,
+        "Cris indicada pela Dani",
+    )
+    _garante(
+        _um("SELECT count(*) AS n FROM cliente_consentimentos WHERE client_id=:i", i=dani).n == 2,
+        "pré-condição: aceite e aniversário no histórico",
+    )
+    r = _chamar("fin", "delete", _url_cli("dani"))
+    _garante(r.status_code == 204, f"exclusão: {r.status_code} {r.get_data(as_text=True)[:200]}")
+    _garante(_um("SELECT count(*) AS n FROM clients WHERE id=:i", i=dani).n == 0, "ficha ficou")
+    for tabela in ("cliente_consentimentos", "cliente_criancas"):
+        sobra = _um(f"SELECT count(*) AS n FROM {tabela} WHERE client_id=:i", i=dani).n
+        _garante(sobra == 0, f"{tabela} ficou com {sobra} linha(s) da ficha excluída")
+    _garante(_ficha("cris").indicado_por_id is None, "a indicada ficou apontando para a excluída")
+
+
 CENARIOS = [
     ("1 esquema", cen_01_esquema),
     ("2 aceite pela ficha", cen_02_aceite_pela_ficha),
@@ -1074,6 +1113,7 @@ CENARIOS = [
     ("16 aniversários", cen_16_aniversarios),
     ("17 orçamento", cen_17_orcamento),
     ("18 loja (344)", cen_18_loja),
+    ("19 exclusão da ficha", cen_19_exclusao_da_ficha),
 ]
 
 
@@ -1094,11 +1134,11 @@ def main() -> int:
                 sobra = _um(
                     "SELECT count(*) AS n FROM clients WHERE phone IN " + str(tuple(TEL.values()))
                 )
-                resultados.append(("19 limpeza", sobra.n == 0, f"{sobra.n} fichas sobraram"))
-                print(f"  {'OK   ' if sobra.n == 0 else 'FALHA'}  19 limpeza")
+                resultados.append(("20 limpeza", sobra.n == 0, f"{sobra.n} fichas sobraram"))
+                print(f"  {'OK   ' if sobra.n == 0 else 'FALHA'}  20 limpeza")
             except Exception as exc:  # noqa: BLE001 — a limpeza não pode esconder o resultado
-                resultados.append(("19 limpeza", False, str(exc)))
-                print(f"  FALHA  19 limpeza: {exc}")
+                resultados.append(("20 limpeza", False, str(exc)))
+                print(f"  FALHA  20 limpeza: {exc}")
     _garante_sem_escape()
     falhas = [r for r in resultados if not r[1]]
     print(f"\n{len(resultados) - len(falhas)}/{len(resultados)} cenários OK")

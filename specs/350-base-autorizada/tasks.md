@@ -133,3 +133,11 @@ espelho próprio `manto_350`, escrito na fase Foundational, antes do núcleo.
 
 - **MVP**: Setup + Foundational + US1 + US2 (a base passa a ser autorizável e a saída é automática).
 - **Incremental**: US3 (pós-evento) entrega o pedido de aceite; US4–US6 completam a base.
+
+---
+
+## Phase 10: Convergence
+
+- [X] T038 Acrescentar ao `specs/350-base-autorizada/verify_350.py` o cenário da exclusão da ficha (o histórico e as crianças vão junto; a indicada fica com `indicado_por_id` nulo) per Spec §Casos de borda "Ficha excluída" (partial)
+- [X] T039 Corrigir `specs/350-base-autorizada/contracts/api.md`: a mensagem de "Indicar uma amiga" é montada no React (`IndicarAmiga.tsx`, `WHATSAPP_LOJA`), não vem em `mensagem_indicacao` per plan: contracts/api.md §avaliar (contradicts)
+- [X] T040 Registrar no FR-006 de `specs/350-base-autorizada/spec.md` a variante "NÃO QUERO RECEBER", que `PALAVRAS_DE_SAIDA` já aceita per FR-006 (unrequested)
