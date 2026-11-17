@@ -254,13 +254,16 @@ def vendas_por_frente(inicio: date, fim: date) -> dict[str, dict[str, Any]]:
     novo = case((and_(CalendarEvent.client_id.isnot(None), ~tem_anterior), 1), else_=0)
     linhas = (
         db.session.query(
-            frente_venda_sql().label("frente"),
+            # O apelido não pode ser "frente": desde a 348 `calendar_events.frente` é coluna, e no GROUP BY
+            # o Postgres resolve o nome pela coluna de entrada antes do apelido — agruparia pela coluna e
+            # recusaria o título dentro da expressão (GroupingError, achado no lote de 17/11).
+            frente_venda_sql().label("frente_da_venda"),
             func.count(CalendarEvent.id),
             func.sum(CalendarEvent.sale_value),
             func.sum(novo),
         )
         .filter(CalendarEvent.sale_date >= inicio, CalendarEvent.sale_date <= fim, *_filtro_venda())
-        .group_by("frente")
+        .group_by("frente_da_venda")
         .all()
     )
     return {

@@ -172,7 +172,8 @@ class MetaFalsa:
                 "name": "retomar_orcamento",
                 "language": "pt_BR",
                 "status": "APPROVED",
-                "category": "MARKETING",
+                # UTILITY desde o lote de 17/11: modelo de marketing sem aceite é recusado pela 350.
+                "category": "UTILITY",
                 "components": [{"type": "BODY", "text": "Oi, {{1}}! Ainda pensando na festa?"}],
             }
         ]

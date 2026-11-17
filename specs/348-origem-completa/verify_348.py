@@ -1211,7 +1211,11 @@ def main() -> int:
     with app.app_context():
         _garante(app.config.get("MAIL_SUPPRESS_SEND") is True, "MAIL_SUPPRESS_SEND desligado")
         banco = db.session.execute(text("SELECT current_database()")).scalar()
-        _garante(banco == "manto_348", f"o verify só roda no espelho manto_348 (veio {banco})")
+        # O espelho da branch (`manto_348`) ou o do lote de merge (`manto_lote*`): nunca o manto_local nem produção.
+        _garante(
+            banco == "manto_348" or banco.startswith("manto_lote"),
+            f"o verify só roda num espelho descartável (veio {banco})",
+        )
         limpar()
         preparar()
     print("Feature 348 — Origem completa, contra manto_348")

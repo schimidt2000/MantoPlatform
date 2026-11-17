@@ -839,14 +839,17 @@ def cen_13() -> None:
         "/api/events",
         _corpo_do_evento(999_999_999, estado["ficha"][12], None),
     )
+    # Lote de 17/11: a validação da 348 (`_erros_da_origem`) recusa a conversa junto com os outros campos do
+    # formulário (400 + `fields`), antes da conferência da 349 e antes do Google. O que importa é a recusa com o
+    # campo marcado e nada criado.
     _garante(
-        r.status_code == 422 and "conversa_id" in (_erro(r).get("fields") or {}),
+        r.status_code == 400 and "conversa_id" in (_erro(r).get("fields") or {}),
         f"conversa inexistente → {r.status_code}",
     )
     r = _chamar(
         estado["ana"], "post", "/api/events", _corpo_do_evento("abc", estado["ficha"][12], None)
     )
-    _garante(r.status_code == 422, f"conversa_id texto → {r.status_code}")
+    _garante(r.status_code == 400, f"conversa_id texto → {r.status_code}")
     depois = _no_banco("SELECT count(*) FROM calendar_events WHERE title LIKE :p", p=f"{PREFIX}%")[
         0
     ]

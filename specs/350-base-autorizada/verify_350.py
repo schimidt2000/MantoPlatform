@@ -446,7 +446,8 @@ def limpar() -> None:
 
 def cen_01_esquema() -> None:
     versao = _um("SELECT version_num FROM alembic_version")
-    _garante(versao.version_num == "a350b1c2d3e4", f"head = {versao.version_num}")
+    # No lote de 17/11 a 351 encadeia depois da 350: a head pode ser a dela.
+    _garante(versao.version_num in {"a350b1c2d3e4", "a351b0c1d2e3"}, f"head = {versao.version_num}")
     for tabela in ("parceiros", "cliente_consentimentos", "cliente_criancas", "pos_eventos"):
         _garante(_um("SELECT to_regclass(:t) AS r", t=tabela).r is not None, f"{tabela} não existe")
     colunas = {

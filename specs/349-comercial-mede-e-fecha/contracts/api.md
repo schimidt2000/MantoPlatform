@@ -93,7 +93,7 @@ Cada conversa ganha: `perdida` (`{motivo, rotulo}` | null), `qualificada` (bool)
 ### `POST /api/events` (feature 152)
 
 - Campo novo opcional `conversa_id` (int). Gate de sempre (`_can_create_event`). Conversa inexistente ou valor não
-  inteiro → **422** `fields.conversa_id = "Conversa não encontrada."`, **antes** do Google (nada criado).
+  inteiro → **400** `fields.conversa_id` (no lote de 17/11 a validação da 348 recusa junto com os outros campos; era 422 aqui), **antes** do Google (nada criado).
 - Depois do núcleo: `fechamento_ops.ligar_evento_a_conversa(evento, conversa)` — a ficha da conversa entre as clientes
   do evento (Contratante, se ainda não estiver) e a perda apagada. Ponto único em que a 348 grava a coluna
   `calendar_events.conversa_id`.
