@@ -1278,16 +1278,23 @@ def send_figurino_pedido_setor_email(producao, users: list) -> int:
 
 # ── Helper interno ─────────────────────────────────────────────────────────────
 
-def send_audit_report_email(subject: str, content_html: str, users: list) -> int:
-    """Envia o relatório semanal do agente auditor financeiro (feature 221).
+def send_audit_report_email(
+    subject: str,
+    content_html: str,
+    users: list,
+    preheader: str = "Relatório semanal da auditoria financeira.",
+) -> int:
+    """Envia o relatório semanal de um agente auditor (financeiro, feature 221; marketing, 256).
 
     O corpo já chega montado pelo auditor (tabelas de achados, sumário); aqui ele só ganha a
-    moldura padrão dos e-mails da plataforma.
+    moldura padrão dos e-mails da plataforma. O `preheader` existe porque o auditor de marketing
+    sempre o mandou: sem o parâmetro, o `POST /report` dele quebrava com 500 antes de enviar (256b).
 
     Args:
         subject: Assunto do e-mail.
         content_html: HTML interno do relatório (vai dentro de ``_html_wrap``).
         users: Usuários internos destinatários (já validados pelo endpoint).
+        preheader: Linha de prévia da caixa de entrada.
 
     Returns:
         Quantidade de e-mails efetivamente enviados.
@@ -1296,7 +1303,7 @@ def send_audit_report_email(subject: str, content_html: str, users: list) -> int
     for user in users:
         if not user.email:
             continue
-        html = _html_wrap(content_html, preheader="Relatório semanal da auditoria financeira.")
+        html = _html_wrap(content_html, preheader=preheader)
         if _send(to=user.email, subject=subject, html=html):
             sent += 1
     return sent
