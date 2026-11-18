@@ -260,6 +260,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **353-gasto-extra-parcelado** | Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
 | **347-endereco-abre-no-mapa** | *(na branch, aguardando merge)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
 | **256b-relatorio-de-marketing** | *(na branch, sem push)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
@@ -494,6 +495,48 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 353 — Gasto extra parcelado: um gasto, várias datas de pagamento   (353-gasto-extra-parcelado · 2026-11-17 · migration `f353a1b2c3d4`)
+
+> **Na branch, sem push** (saída da `352-fornecedores-gastos-extras`, que também não está na `main`: as duas mexem na
+> mesma tela e sobem juntas). Nível 1. Detalhe: `specs/353-gasto-extra-parcelado/`.
+
+**O pedido.** "Vou colocar um gasto para o Adão, só que esse gasto ele pode ser parcelado. Então, uma parte tem que
+pagar no dia 20, outra parte no dia 30. Seria interessante eu já poder cadastrar num único gasto extra. [...] E o
+comprovante não precisa ser para cada um deles não, pode ser para o gasto extra como um todo." Decisões do dono
+(17/11): a DRE fica inteira no mês da "Data do gasto"; o total é a soma das parcelas; parcela paga trava.
+
+**O que mudou.**
+- Tabela `gasto_parcelas` (data, valor > 0, situação própria; CASCADE com o gasto; `UNIQUE(gasto, numero)`). Núcleo
+  `app/gastos/parcela_ops.py`.
+- `POST/PATCH /api/gastos` aceitam `parcelas` (ausente = intocadas; `[]` = volta a um pagamento; lista = substitui).
+  `amount` = soma; `payment_status` do gasto derivado das parcelas.
+- Planilha de Pagamentos: o parcelado sai do item `expense` e entra como itens `expense_parcela` (id = parcela), na data
+  de cada uma, no mês e nos atrasados (331). Set-status com ramo próprio antes do `else` (que cai no cachê de mesmo
+  id) e `parcela_ids` no lote.
+- Tela: "Pagar em parcelas" no formulário (valor somente leitura com a soma; parcela paga desligada), bloco de parcelas
+  na lista, tipo novo na Planilha (selecionável).
+- Não parcelam: sem desembolso, devolução, multa, "já pago no cadastro" e o reembolso do auditor de marketing — os três
+  últimos módulos reescrevem o valor do gasto e quebrariam a soma.
+
+**Verificação.**
+- `verify_353.py` 11/11 no `manto_352` (dump de 17/11 + f352 + f353), primeiro rodado falhando (1/11, só a limpeza).
+  Mutação (trava da parcela paga e filtro do parcelado desligados) derruba os cenários 3, 7 e 9.
+- Regressão: `verify_352` 11/11; `verify_331` 8/10 — os mesmos 2 falham com o código da `main` no mesmo banco (o
+  dump não tem cachê de mês anterior em aberto): é dado, não a 353.
+- `npm run typecheck` limpo; `ruff check` limpo nos tocados (o I001 de `app/financeiro/routes.py` já existia).
+- Telas: formulário em 375 px como Figurino (duas parcelas, total R$ 1.200,00, gasto criado pela tela); lista com as
+  parcelas; Planilha em desktop como Financeiro ("Parcela 1 de 2" marcada Paga pelo seletor; o gasto segue "A pagar");
+  edição com a parcela paga travada.
+
+**Pegadinhas.**
+1. Tipo desconhecido no set-status da Planilha cai no `EventRole` de mesmo id: o tipo novo precisa do ramo antes do
+   `else`. O lote é um array de inteiros por tipo (o React faz `Number(id)`); id composto em texto viraria NaN e sumiria
+   em silêncio.
+2. Renumerar parcelas troca `numero` de linhas existentes: duas passadas (negativos + flush) por causa do `UNIQUE`.
+3. A página Jinja de pagamentos tem cópia própria do filtro e mostraria o parcelado inteiro; não é servida em produção.
+4. Na publicação: `f353a1b2c3d4` vem depois de `f352a1b2c3d4`; o reencadeamento com a migration da 348 (ver a 352) passa
+   a ser na `f352`.
 
 ### 352 — Fornecedores cadastrados nos gastos extras   (352-fornecedores-gastos-extras · 2026-11-17 · migration `f352a1b2c3d4`)
 

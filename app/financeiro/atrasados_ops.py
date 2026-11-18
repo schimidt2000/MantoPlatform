@@ -21,7 +21,8 @@ from __future__ import annotations
 from datetime import date, datetime
 
 from app.constants import DIA_DO_REPASSE, PLANILHA_ATRASADOS_DESDE
-from app.models import EventAcrescimo, EventRole, SalaryPayment, SpecialExpense
+from app.gastos import parcela_ops
+from app.models import EventAcrescimo, EventRole, GastoParcela, SalaryPayment, SpecialExpense
 
 STATUS_EM_ABERTO = ("nao_pago", "no_banco")
 
@@ -89,6 +90,13 @@ def _do_evento_e_dos_gastos(
     )
     itens = _build_payment_items(caches_em_aberto_anteriores(ate), [], hoje, gastos, agora)
     itens += _build_bv_items(bvs, hoje, agora)
+    # Feature 353: a parcela de gasto em aberto, pelo mês da data dela.
+    parcelas = (
+        parcela_ops.parcelas_da_planilha_entre(desde, ate)
+        .filter(GastoParcela.payment_status.in_(STATUS_EM_ABERTO))
+        .all()
+    )
+    itens += parcela_ops.itens_da_planilha(parcelas, hoje)
     return [(mes_de(item["date"]), item) for item in itens]
 
 

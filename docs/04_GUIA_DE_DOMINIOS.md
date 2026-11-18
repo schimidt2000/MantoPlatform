@@ -640,6 +640,13 @@ agregadas por vendedor e contas recorrentes. Duas sutilezas: gastos com `paid_at
 **nunca** entram (`:1139`); lançamento recorrente com status `registrado` (débito automático /
 assinatura) nunca vira pendência (`:1075-1081`).
 
+**Gasto parcelado (feature 353).** O gasto com parcelas sai do item `expense` (`_pagamentos_gastos_entre` filtra
+`~parcelas.any()`) e entra como um item `expense_parcela` por parcela, pela **data da parcela**
+(`parcela_ops.parcelas_da_planilha_entre`/`itens_da_planilha`, na API e nos atrasados). A DRE continua somando o gasto
+inteiro pela `expense_date` (decisão do dono, 17/11): a parcela muda o caixa, não a competência. A situação do gasto é
+derivada das parcelas. ⚠️ A página Jinja de pagamentos (não servida em produção) tem cópia própria do filtro e mostra o
+parcelado inteiro.
+
 **O mês de cada item e o que ficou para trás (correção 331).** Cada item pertence a um mês da
 planilha: cachê e BV pelo mês do evento, salário e conta recorrente pelo `month_ref`, gasto pela
 `expense_date`, comissão pelo mês do **repasse** (o ciclo de outubro é o item de 05/11). Na API, o
@@ -837,6 +844,12 @@ pendente (o re-export de `ensure_recurring_entries`).
   2. `supplier_name` do gasto ligado = `fornecedores.nome` — renomear e juntar reescrevem o nome, nunca o PIX;
   3. devolução (`cliente`) e **multa de cancelamento** (306, paga o artista) nunca ligam;
   4. só Financeiro/Superadmin alteram, arquivam e juntam (juntar trava as duas linhas por id e apaga a origem).
+- **Parcelas (feature 353, `parcela_ops.py`).** Gasto com desembolso pode ter 2 a 24 parcelas (`gasto_parcelas`).
+  Invariantes: `amount` = soma; `expense_date` = competência (DRE e custo do evento); `payment_status` do gasto =
+  derivado (`pago` se todas, `no_banco` se nenhuma falta e alguma no banco, senão `nao_pago`); parcela paga/no banco não
+  muda nem sai na edição; não parcelam devolução e multa (o `cancel_ops` reescreve o valor delas), "já pago no cadastro"
+  e o reembolso do auditor de marketing (ele reescreve o valor do pendente). A renumeração passa por números negativos
+  e um flush: trocar 1↔2 de uma vez esbarraria no `UNIQUE(special_expense_id, numero)`.
 
 ⚠️ Usa `date.today()` em ~10 pontos, não `now_sp()`.
 

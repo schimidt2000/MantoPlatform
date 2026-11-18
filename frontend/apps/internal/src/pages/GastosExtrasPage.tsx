@@ -16,6 +16,7 @@ import { MoneyInput } from "@manto/money";
 import { Modal } from "../components/Modal";
 import { CartaoFiltro } from "../components/CartaoFiltro";
 import { FornecedorCampo } from "../components/Gastos/FornecedorCampo";
+import { ParcelasCampo, novaLinha, somaDasLinhas, type ParcelaLinha } from "../components/Gastos/ParcelasCampo";
 import { ListaDeGastos } from "../components/Gastos/GastoItemViews";
 import { GastosFiltros, type MudancaDeFiltro } from "../components/Gastos/GastosFiltros";
 import { hojeYmd } from "../lib/horaLocal";
@@ -66,8 +67,28 @@ interface GastoFormValues {
   supplierPix: string;
   /** Feature 352: o fornecedor escolhido na sugestão; digitar o nome zera. */
   fornecedorId: number | null;
+  /** Feature 353: "Pagar em parcelas" e as linhas (guardadas mesmo desligado, para religar). */
+  parcelado: boolean;
+  parcelas: ParcelaLinha[];
   eventDate: string;
   eventId: number | "";
+}
+
+/** Erros de parcela (`parcelas`, `parcelas.N.data|valor`) aparecem no próprio bloco das parcelas. */
+function temLugar(campo: string): boolean {
+  return CAMPOS_COM_LUGAR.has(campo) || campo.startsWith("parcelas");
+}
+
+/**
+ * Feature 353: só parcela o que tem pagamento a fazer e cujo valor nenhum outro módulo reescreve —
+ * a mesma regra de `parcela_ops.exigir_parcelavel` (devolução e multa nascem do cancelamento).
+ */
+function podeParcelar(values: GastoFormValues): boolean {
+  return (
+    (values.disbursementType === "reembolso" || values.disbursementType === "fornecedor") &&
+    values.category !== "Devolução a cliente" &&
+    values.category !== "Multa de cancelamento"
+  );
 }
 
 function emptyForm(categories: string[]): GastoFormValues {
@@ -82,6 +103,8 @@ function emptyForm(categories: string[]): GastoFormValues {
     supplierName: "",
     supplierPix: "",
     fornecedorId: null,
+    parcelado: false,
+    parcelas: [],
     eventDate: hojeYmd(),
     eventId: "",
   };
@@ -106,6 +129,14 @@ function formFromExpense(expense: GastoExtra): GastoFormValues {
         ? expense.payee_pix
         : "",
     fornecedorId: expense.disbursement_type === "fornecedor" ? (expense.fornecedor_id ?? null) : null,
+    parcelado: (expense.parcelas?.length ?? 0) > 0,
+    parcelas: (expense.parcelas ?? []).map((p) => ({
+      chave: `p${p.id}`,
+      id: p.id,
+      data: p.data,
+      valor: p.valor,
+      status: p.payment_status,
+    })),
     eventDate: expense.expense_date,
     eventId: expense.event_id ?? "",
   };
@@ -314,10 +345,19 @@ function GastoFormModal({
 
   const patch = (p: Partial<GastoFormValues>) => setValues((v) => ({ ...v, ...p }));
 
+  // Feature 353: parcelado só com pagamento a fazer (o servidor recusa o resto do mesmo jeito).
+  const usaParcelas = values.parcelado && podeParcelar(values);
+  const eraParcelado = mode === "edit" && (expense?.parcelas?.length ?? 0) > 0;
   const buildPayload = () => ({
     description: values.description,
     category: values.category,
-    amount: values.amount,
+    amount: usaParcelas ? somaDasLinhas(values.parcelas) : values.amount,
+    // Ausente = intocadas; `[]` = o gasto que era parcelado volta a um pagamento.
+    parcelas: usaParcelas
+      ? values.parcelas.map((l) => ({ id: l.id, data: l.data, valor: l.valor }))
+      : eraParcelado
+        ? []
+        : undefined,
     expense_date: values.expenseDate,
     disbursement_type: values.disbursementType,
     reimburse_user_id: values.reimburseUserId === "" ? undefined : values.reimburseUserId,
@@ -375,7 +415,7 @@ function GastoFormModal({
   const erroDoServidor = (create.error ?? update.error) as Error | null;
   // Toda recusa do servidor aparece: no campo que a tela tem, ou no rodapé quando a chave não tem
   // lugar (Constituição V — o 409 `devolucao_travada` vinha só com `fields` e sumia calado).
-  const semLugar = Object.keys(fieldErrors).some((k) => !CAMPOS_COM_LUGAR.has(k));
+  const semLugar = Object.keys(fieldErrors).some((k) => !temLugar(k));
   const genericError =
     (create.isError || update.isError) && (semLugar || !Object.keys(fieldErrors).length)
       ? erroDoServidor?.message || "Não foi possível salvar o gasto."
@@ -434,10 +474,11 @@ function GastoFormModal({
             <label className={LABEL}>Valor (R$)</label>
             <MoneyInput
               className={INPUT}
-              value={values.amount}
-              disabled={travado}
+              value={usaParcelas ? somaDasLinhas(values.parcelas) : values.amount}
+              disabled={travado || usaParcelas}
               onValueChange={(amount) => patch({ amount })}
             />
+            {usaParcelas && <p className="mt-1 text-xs text-muted">Soma das parcelas.</p>}
             {fieldErrors.amount && <p className="mt-1 text-xs text-red">{fieldErrors.amount}</p>}
           </div>
         </div>
@@ -457,6 +498,24 @@ function GastoFormModal({
           )}
         </div>
         <DesembolsoFields values={values} onChange={patch} fieldErrors={fieldErrors} />
+        {podeParcelar(values) && (
+          <ParcelasCampo
+            ativo={values.parcelado}
+            linhas={values.parcelas}
+            fieldErrors={fieldErrors}
+            onAtivar={(ativo) =>
+              patch({
+                parcelado: ativo,
+                // Ao ligar a primeira vez: a 1ª parcela com a data e o valor do gasto, a 2ª vazia.
+                parcelas:
+                  ativo && values.parcelas.length === 0
+                    ? [novaLinha(values.expenseDate, values.amount), novaLinha()]
+                    : values.parcelas,
+              })
+            }
+            onLinhas={(parcelas) => patch({ parcelas })}
+          />
+        )}
         <EventoFields
           values={values}
           onChange={patch}

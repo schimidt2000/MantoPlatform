@@ -54,6 +54,17 @@ def _expense_dict(e, batches: dict[int, object] | None = None) -> dict:
         "paid_at_creation": e.paid_at_creation,
         # Feature 352: o fornecedor do cadastro (só no desembolso "fornecedor").
         "fornecedor_id": e.fornecedor_id,
+        # Feature 353: as parcelas do pagamento (`[]` no gasto não parcelado).
+        "parcelas": [
+            {
+                "id": p.id,
+                "numero": p.numero,
+                "data": p.data.isoformat(),
+                "valor": _num(p.valor),
+                "payment_status": p.payment_status,
+            }
+            for p in e.parcelas
+        ],
         "event_id": e.event_id,
         "event_title": e.event.title if e.event else None,
         # Feature 306: a devolução de cancelado fica travada (só o "Alterar devolução" a muda).

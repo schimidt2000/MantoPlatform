@@ -25,7 +25,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.constants import RoleName
 from app.email_service import send_async, send_new_expense_alert_email
-from app.gastos import fornecedor_ops
+from app.gastos import fornecedor_ops, parcela_ops
 from app.models import (
     AuditLog,
     CalendarEvent,
@@ -402,6 +402,37 @@ def _aplicar_fornecedor(parsed: dict, ator: User) -> dict:
     return {**parsed, "fornecedor_id": fornecedor.id, "supplier_name": fornecedor.nome}
 
 
+def _ler_parcelas(data: dict) -> tuple[bool, list[parcela_ops.ItemParcela]]:
+    """Feature 353: (o campo `parcelas` veio?, as parcelas validadas). Veio vazio = desligar."""
+    try:
+        itens = parcela_ops.ler_itens(data.get("parcelas"))
+        if itens is None:
+            return False, []
+        return True, (parcela_ops.validar_itens(itens) if itens else [])
+    except parcela_ops.ParcelaValidationError as exc:
+        raise GastoValidationError(exc.field, exc.message) from None
+
+
+def _parcelas_no_gasto(acao, *args) -> None:
+    """Chama uma ação de `parcela_ops` traduzindo a recusa para o erro de validação do gasto."""
+    try:
+        acao(*args)
+    except parcela_ops.ParcelaValidationError as exc:
+        raise GastoValidationError(exc.field, exc.message) from None
+
+
+def _retrato_parcelas(expense: SpecialExpense) -> list[tuple]:
+    return [(p.id, p.data, Decimal(p.valor)) for p in expense.parcelas]
+
+
+def _centavos(valor: object) -> Decimal | None:
+    """O valor do corpo em centavos exatos, para comparar com a soma das parcelas."""
+    try:
+        return Decimal(str(valor)).quantize(Decimal("0.01")) if valor is not None else None
+    except (ArithmeticError, ValueError):
+        return None
+
+
 def create_expense(
     creator: User,
     data: dict,
@@ -431,6 +462,10 @@ def create_expense(
         GastoValidationError: descrição/valor ausente, comprovante ausente ou desembolso
             incompleto (funcionário não selecionado / fornecedor sem nome).
     """
+    # Feature 353: parcelado, o valor é a soma das parcelas (o que veio no campo é ignorado).
+    _, parcelas = _ler_parcelas(data)
+    if parcelas:
+        data = {**data, "amount": parcela_ops.soma(parcelas)}
     parsed = _validate_expense_data({**data, "receipt_path": receipt_path}, require_receipt=require_receipt)
     # Feature 306: devolução ligada a evento cancelado só nasce pelo cancelamento (pela categoria
     # já normalizada, depois da trava do evento).
@@ -438,9 +473,13 @@ def create_expense(
         _travar_eventos(event_id)
         if _evento_cancelado(event_id):
             raise GastoLockedError("event_id", event_id)
-    parsed = _aplicar_fornecedor(parsed, creator)
     disbursement_type = parsed["disbursement_type"]
     paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
+    if parcelas:
+        _parcelas_no_gasto(
+            parcela_ops.exigir_parcelavel, disbursement_type, parsed["category"], paid_at_creation, None
+        )
+    parsed = _aplicar_fornecedor(parsed, creator)
 
     expense = SpecialExpense(
         description=parsed["description"],
@@ -462,9 +501,12 @@ def create_expense(
     )
     db.session.add(expense)
     db.session.flush()
+    if parcelas:
+        _parcelas_no_gasto(parcela_ops.gravar_parcelas, expense, parcelas)
     _log(
         creator, "gasto", expense.id, expense.description, "create",
-        f"Gasto registrado: R$ {parsed['amount']:.2f} ({parsed['category']})",
+        f"Gasto registrado: R$ {parsed['amount']:.2f} ({parsed['category']})"
+        + (f" em {len(parcelas)} parcelas" if parcelas else ""),
     )
     db.session.commit()
 
@@ -615,9 +657,23 @@ def edit_expense(
             "Gasto rejeitado só pode ser editado reconsiderando a aprovação."
         )
 
+    # Feature 353: `parcelas` ausente = intocadas (bundle antigo; o valor tem de ser a soma);
+    # `[]` = volta a um pagamento só; lista = vira o conjunto (a paga trava).
+    veio, parcelas = _ler_parcelas(data)
+    manter_parcelas = not veio and bool(expense.parcelas)
+    if parcelas:
+        data = {**data, "amount": parcela_ops.soma(parcelas)}
+    elif manter_parcelas and _centavos(data.get("amount")) != parcela_ops.soma(expense.parcelas):
+        raise GastoValidationError("amount", parcela_ops.MSG_SOMA)
     parsed = _validate_expense_data(data, require_receipt=False, tipo_atual=expense.disbursement_type)
     expense, parsed = _conferir_trava_na_edicao(expense, parsed, event_id, aprovar)
+    if parcelas or manter_parcelas:
+        _parcelas_no_gasto(
+            parcela_ops.exigir_parcelavel,
+            parsed["disbursement_type"], parsed["category"], expense.paid_at_creation, expense.id,
+        )
     parsed = _aplicar_fornecedor(parsed, actor)
+    parcelas_antes = _retrato_parcelas(expense)
     changed = (
         expense.description != parsed["description"]
         or expense.category != parsed["category"]
@@ -641,6 +697,11 @@ def edit_expense(
     expense.supplier_pix = parsed["supplier_pix"]
     expense.fornecedor_id = parsed["fornecedor_id"]
     expense.event_id = event_id
+    if parcelas:
+        _parcelas_no_gasto(parcela_ops.gravar_parcelas, expense, parcelas)
+    elif veio and expense.parcelas:
+        _parcelas_no_gasto(parcela_ops.desligar_parcelas, expense)
+    changed = changed or _retrato_parcelas(expense) != parcelas_antes
 
     if aprovar:
         expense.status = "aprovado"

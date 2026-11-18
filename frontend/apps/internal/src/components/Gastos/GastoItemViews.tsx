@@ -16,6 +16,7 @@ import {
   useRejectGasto,
   type GastoExtra,
   type GastoMarketingBatch,
+  type GastoParcela,
 } from "../../lib/gastos";
 
 /**
@@ -85,6 +86,36 @@ function MarketingBatchDetail({ batch }: { batch: GastoMarketingBatch }) {
         Reportado pelas plataformas: {brl(Number(batch.reported_total))}
         {batch.run_id && ` · rodada ${batch.run_id}`}
       </p>
+    </div>
+  );
+}
+
+const SITUACAO_DA_PARCELA: Record<GastoParcela["payment_status"], { rotulo: string; classe: string }> = {
+  nao_pago: { rotulo: "A pagar", classe: "text-red" },
+  no_banco: { rotulo: "No banco", classe: "text-blue" },
+  pago: { rotulo: "Paga", classe: "text-green" },
+};
+
+/**
+ * As parcelas do pagamento (feature 353): data, valor e a situação de cada uma na Planilha. O
+ * selo do gasto já resume ("A pagar" enquanto falta alguma); aqui se vê qual.
+ */
+function ParcelasDoGasto({ parcelas }: { parcelas: GastoParcela[] }) {
+  return (
+    <div className="mt-2 rounded-md border border-line bg-surface px-3 py-2 text-xs">
+      <p className="font-medium text-ink">{parcelas.length} parcelas</p>
+      <ul className="mt-1 space-y-0.5">
+        {parcelas.map((p) => (
+          <li key={p.id} className="flex flex-wrap justify-between gap-x-3">
+            <span className="tabular-nums text-muted">
+              {formatDate(p.data)} · <span className="text-ink">{brl(p.valor)}</span>
+            </span>
+            <span className={SITUACAO_DA_PARCELA[p.payment_status]?.classe ?? "text-muted"}>
+              {SITUACAO_DA_PARCELA[p.payment_status]?.rotulo ?? p.payment_status}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -311,6 +342,7 @@ function GastoRow({ expense, canManage, onEdit }: ItemProps) {
             <p className="text-xs text-muted">por {expense.created_by_name}</p>
           )}
           {expense.marketing_batch && <MarketingBatchDetail batch={expense.marketing_batch} />}
+          {expense.parcelas && expense.parcelas.length > 0 && <ParcelasDoGasto parcelas={expense.parcelas} />}
         </td>
         <td className="whitespace-nowrap px-2 py-2 text-right tabular-nums">{brl(expense.amount)}</td>
         <td className="px-2 py-2">
@@ -362,6 +394,7 @@ function GastoCard({ expense, canManage, onEdit }: ItemProps) {
       </div>
       {expense.notes && <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{expense.notes}</p>}
       {expense.marketing_batch && <MarketingBatchDetail batch={expense.marketing_batch} />}
+      {expense.parcelas && expense.parcelas.length > 0 && <ParcelasDoGasto parcelas={expense.parcelas} />}
       <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
         <dt className="text-muted">Desembolso</dt>
         <dd className="min-w-0 [overflow-wrap:anywhere]">

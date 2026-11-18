@@ -396,6 +396,8 @@ export function invalidarFinanceiro(queryClient: ReturnType<typeof useQueryClien
   queryClient.invalidateQueries({ queryKey: ["financeiro-comissoes"] });
   queryClient.invalidateQueries({ queryKey: ["financeiro-dashboard"] });
   queryClient.invalidateQueries({ queryKey: ["gastos-recorrentes"] });
+  // Feature 353: marcar uma parcela muda a situação do gasto na tela de Gastos Extras.
+  queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
 }
 
 /** Gera e baixa um CSV do resumo por vendedor do mês selecionado (feature 187) — client-side,
@@ -424,7 +426,15 @@ export function exportComissoesCsv(rows: CommissionMonthSummaryRow[], month: str
   URL.revokeObjectURL(url);
 }
 
-export type PagamentoItemType = "cache" | "salary" | "expense" | "bv" | "commission" | "recurring";
+/** `expense_parcela` (feature 353): uma parcela de gasto extra parcelado; o id é o da parcela. */
+export type PagamentoItemType =
+  | "cache"
+  | "salary"
+  | "expense"
+  | "expense_parcela"
+  | "bv"
+  | "commission"
+  | "recurring";
 export type PaymentStatus = "nao_pago" | "pago" | "no_banco";
 
 export interface SalaryAdvanceItem {
@@ -545,6 +555,8 @@ export interface BulkPaymentActionInput {
   role_ids: number[];
   salary_ids: number[];
   expense_ids: number[];
+  /** Feature 353: ids das parcelas de gasto (inteiros, como os outros arrays). */
+  parcela_ids: number[];
   commission_ids: string[];
   month: string;
 }

@@ -90,6 +90,8 @@ def api_gastos_create() -> Any:
         "supplier_pix": form.get("supplier_pix", ""),
         "fornecedor_id": form.get("fornecedor_id") or None,
         "paid_at_creation": form.get("paid_at_creation") in ("true", "1", "on"),
+        # Feature 353: texto JSON `[{"data", "valor"}]` (o multipart não leva lista).
+        "parcelas": form.get("parcelas"),
     }
     event_raw = (form.get("event_id") or "").strip()
     event_id = int(event_raw) if event_raw.isdigit() and CalendarEvent.query.get(int(event_raw)) else None
@@ -164,6 +166,8 @@ def api_gastos_editar(expense_id: int) -> Any:
         "supplier_name": body.get("supplier_name", ""),
         "supplier_pix": body.get("supplier_pix", ""),
         "fornecedor_id": body.get("fornecedor_id"),
+        # Feature 353: ausente = parcelas intocadas; `[]` = desliga; lista = substitui.
+        "parcelas": body.get("parcelas"),
     }
     event_raw = body.get("event_id")
     event_id = int(event_raw) if event_raw and CalendarEvent.query.get(int(event_raw)) else None
