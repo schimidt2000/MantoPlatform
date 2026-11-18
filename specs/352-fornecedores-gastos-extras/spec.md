@@ -1,6 +1,6 @@
 # Feature 352 — Fornecedores cadastrados nos gastos extras: digitar três letras preenche nome, PIX e categoria
 
-**Branch**: `352-fornecedores-gastos-extras` (da `main`) · **Created**: 2026-11-17 · **Status**: Implementada (verify 11/11 no `manto_352`; sem push) ·
+**Branch**: `352-fornecedores-gastos-extras` (da `main`) · **Created**: 2026-11-17 · **Status**: Em produção (17/11 ~23h; verify 11/11) ·
 **Migration**: `f352a1b2c3d4` (aditiva — tabela nova e coluna nova; reescreve o nome do fornecedor nos
 gastos antigos ligados, por isso é ensaiada em banco descartável com dump fresco) · **Nível**: 1
 (feature: migration, endpoint novo, tela nova) — constituição, Princípio VI

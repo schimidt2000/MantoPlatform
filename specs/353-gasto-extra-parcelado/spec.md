@@ -1,7 +1,7 @@
 # Feature 353 — Gasto extra parcelado: um gasto, várias datas de pagamento
 
 **Branch**: `353-gasto-extra-parcelado` (da `352-fornecedores-gastos-extras`, que ainda não está na `main`: as
-duas mexem na mesma tela e sobem juntas) · **Created**: 2026-11-17 · **Status**: Implementada (verify 11/11 no `manto_352`; sem push) · **Migration**:
+duas mexem na mesma tela e sobem juntas) · **Created**: 2026-11-17 · **Status**: Em produção (17/11 ~23h; verify 11/11) · **Migration**:
 `f353a1b2c3d4` (aditiva — tabela nova das parcelas) · **Nível**: 1 (feature: migration, tela e Planilha de
 Pagamentos) — constituição, Princípio VI
 

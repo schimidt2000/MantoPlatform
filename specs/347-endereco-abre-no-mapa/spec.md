@@ -1,6 +1,6 @@
 # Feature 347 — Tocar no endereço do evento e escolher o app de mapas
 
-**Branch**: `347-endereco-abre-no-mapa` (da `main`) · **Created**: 2026-11-17 · **Status**: Rascunho ·
+**Branch**: `347-endereco-abre-no-mapa` (da `main`) · **Created**: 2026-11-17 · **Status**: Em produção (17/11 ~23h; verify 7/7) ·
 **Migration**: nenhuma · **Nível**: 1 (feature) — toca dois domínios (Agenda no app interno e Portal
 do Artista), constituição, Princípio VI
 
