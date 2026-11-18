@@ -3,6 +3,10 @@
 Reusa, sem duplicar, o núcleo já extraído em `app/gastos/gastos_ops.py` — os endpoints aqui só
 validam RBAC, parseiam o corpo JSON/multipart e serializam. RBAC replicado como função,
 paridade com `app/gastos/routes.py`.
+
+RBAC (feature 352): cadastrar, alterar e juntar fornecedores — Financeiro/Superadmin
+(`_require_financeiro()` no início da view; papel real, o "Ver como" não conta). Quem lança gasto
+cadastra fornecedor pelo próprio gasto (`POST /api/gastos`, gate inalterado).
 """
 
 from datetime import date
@@ -12,11 +16,18 @@ from typing import Any
 from flask import current_app, jsonify, request
 from flask_login import current_user
 
+from app import db
 from app.api import api_bp
-from app.api.gastos_read import _entry_dict, _expense_dict, _recurring_dict
+from app.api.gastos_read import _entry_dict, _expense_dict, _fornecedor_dict, _recurring_dict
 from app.api_utils import api_login_required, json_error
-from app.gastos import gastos_ops
-from app.models import CalendarEvent, RecurringExpense, RecurringExpenseEntry, SpecialExpense
+from app.gastos import fornecedor_ops, gastos_ops
+from app.models import (
+    CalendarEvent,
+    Fornecedor,
+    RecurringExpense,
+    RecurringExpenseEntry,
+    SpecialExpense,
+)
 
 
 def _travada(exc: gastos_ops.GastoLockedError) -> Any:
@@ -77,6 +88,7 @@ def api_gastos_create() -> Any:
         "reimburse_user_id": int(reimburse_raw) if reimburse_raw.isdigit() else None,
         "supplier_name": form.get("supplier_name", ""),
         "supplier_pix": form.get("supplier_pix", ""),
+        "fornecedor_id": form.get("fornecedor_id") or None,
         "paid_at_creation": form.get("paid_at_creation") in ("true", "1", "on"),
     }
     event_raw = (form.get("event_id") or "").strip()
@@ -151,6 +163,7 @@ def api_gastos_editar(expense_id: int) -> Any:
         "reimburse_user_id": body.get("reimburse_user_id"),
         "supplier_name": body.get("supplier_name", ""),
         "supplier_pix": body.get("supplier_pix", ""),
+        "fornecedor_id": body.get("fornecedor_id"),
     }
     event_raw = body.get("event_id")
     event_id = int(event_raw) if event_raw and CalendarEvent.query.get(int(event_raw)) else None
@@ -165,6 +178,59 @@ def api_gastos_editar(expense_id: int) -> Any:
     except gastos_ops.GastoStateError as exc:
         return json_error(str(exc), 409)
     return jsonify(_expense_dict(expense))
+
+
+def _recusa_do_fornecedor(exc: fornecedor_ops.FornecedorValidationError) -> Any:
+    return json_error(exc.message, 400, fields={exc.field: exc.message})
+
+
+@api_bp.route("/gastos/fornecedores", methods=["POST"])
+@api_login_required
+def api_fornecedores_cadastrar() -> Any:
+    """Cadastra um fornecedor pela tela "Fornecedores". FINANCEIRO/SUPERADMIN (feature 352)."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
+    try:
+        fornecedor = fornecedor_ops.cadastrar(request.get_json(silent=True) or {}, current_user)
+    except fornecedor_ops.FornecedorValidationError as exc:
+        return _recusa_do_fornecedor(exc)
+    return jsonify(_fornecedor_dict(fornecedor, None)), 201
+
+
+@api_bp.route("/gastos/fornecedores/<int:fornecedor_id>", methods=["PATCH"])
+@api_login_required
+def api_fornecedores_alterar(fornecedor_id: int) -> Any:
+    """Altera nome, PIX, categoria padrão ou situação (arquivar/reativar). FINANCEIRO/SUPERADMIN."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
+    fornecedor = db.session.get(Fornecedor, fornecedor_id)
+    if fornecedor is None:
+        return json_error("Fornecedor não encontrado", 404)
+    try:
+        fornecedor = fornecedor_ops.alterar(fornecedor, request.get_json(silent=True) or {}, current_user)
+    except fornecedor_ops.FornecedorValidationError as exc:
+        return _recusa_do_fornecedor(exc)
+    return jsonify(_fornecedor_dict(fornecedor, None))
+
+
+@api_bp.route("/gastos/fornecedores/<int:fornecedor_id>/juntar", methods=["POST"])
+@api_login_required
+def api_fornecedores_juntar(fornecedor_id: int) -> Any:
+    """Junta este fornecedor (que deixa de existir) no `destino_id`. FINANCEIRO/SUPERADMIN."""
+    denied = _require_financeiro()
+    if denied:
+        return denied
+    origem = db.session.get(Fornecedor, fornecedor_id)
+    if origem is None:
+        return json_error("Fornecedor não encontrado", 404)
+    body = request.get_json(silent=True) or {}
+    try:
+        destino, movidos = fornecedor_ops.juntar(origem, body.get("destino_id"), current_user)
+    except fornecedor_ops.FornecedorValidationError as exc:
+        return _recusa_do_fornecedor(exc)
+    return jsonify({"fornecedor": _fornecedor_dict(destino, None), "gastos_movidos": movidos})
 
 
 @api_bp.route("/gastos/<int:expense_id>", methods=["DELETE"])

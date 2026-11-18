@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
 import { BUCKET_TONE, matchesSearch, normalizeSearch, rawAmount, type BucketTone } from "./pagamentos";
+import { FORNECEDORES_KEY } from "./fornecedores";
 
 export type ExpenseStatus = "pendente" | "aprovado" | "rejeitado";
 /** `cliente` = devolução à cliente: nasce só pelo cancelamento do evento (feature 306). */
@@ -34,6 +35,8 @@ export interface GastoExtra {
   payee_pix: string;
   payment_status: string;
   paid_at_creation: boolean;
+  /** Feature 352: o fornecedor do cadastro. Opcional: backend e bundle mudam em momentos diferentes. */
+  fornecedor_id?: number | null;
   event_id: number | null;
   event_title: string | null;
   created_by_name: string | null;
@@ -283,6 +286,8 @@ export interface CreateGastoInput {
   reimburse_user_id?: number;
   supplier_name?: string;
   supplier_pix?: string;
+  /** Feature 352: o fornecedor escolhido na sugestão; sem ele o servidor liga pelo nome ou cadastra. */
+  fornecedor_id?: number;
   paid_at_creation?: boolean;
   event_id?: number;
   receipt: File;
@@ -303,12 +308,17 @@ export function useCreateGasto() {
       if (input.reimburse_user_id) form.set("reimburse_user_id", String(input.reimburse_user_id));
       if (input.supplier_name) form.set("supplier_name", input.supplier_name);
       if (input.supplier_pix) form.set("supplier_pix", input.supplier_pix);
+      if (input.fornecedor_id) form.set("fornecedor_id", String(input.fornecedor_id));
       if (input.paid_at_creation) form.set("paid_at_creation", "true");
       if (input.event_id) form.set("event_id", String(input.event_id));
       form.set("receipt", input.receipt);
       return apiFetch<GastoExtra>("/api/gastos", { method: "POST", body: form });
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["gastos-extras"] }),
+    // O gasto pode ter cadastrado um fornecedor novo (feature 352): as sugestões releem.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
+      void queryClient.invalidateQueries({ queryKey: FORNECEDORES_KEY });
+    },
   });
 }
 
@@ -323,6 +333,7 @@ export interface UpdateGastoInput {
   reimburse_user_id?: number;
   supplier_name?: string;
   supplier_pix?: string;
+  fornecedor_id?: number;
   event_id?: number | null;
   /** Aprova (ou reconsidera, se rejeitado) o gasto nesta mesma edição. */
   aprovar?: boolean;
@@ -337,7 +348,10 @@ export function useUpdateGasto() {
         method: "PATCH",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["gastos-extras"] }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["gastos-extras"] });
+      void queryClient.invalidateQueries({ queryKey: FORNECEDORES_KEY });
+    },
   });
 }
 

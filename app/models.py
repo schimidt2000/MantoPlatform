@@ -1261,6 +1261,14 @@ class SpecialExpense(db.Model):
     # (feature 128).
     paid_at_creation  = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Fornecedor do cadastro (feature 352), só no desembolso "fornecedor". O gasto continua guardando
+    # `supplier_name`/`supplier_pix`: o PIX é aquele para o qual se pagou, e a Planilha de
+    # Pagamentos, a DRE e o auditor leem daqui. Renomear ou juntar no cadastro reescreve só o nome.
+    # SET NULL: o fornecedor que deixa de existir nunca leva o lançamento junto.
+    fornecedor_id     = db.Column(
+        db.Integer, db.ForeignKey("fornecedores.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
     # Vínculo opcional a um evento: gasto aprovado entra como custo do evento vivo
     # (lucro = venda − cachês − gastos extras aprovados dos dias vivos); a devolução e a multa de
     # um dia cancelado ficam fora do lucro do contrato (feature 306)
@@ -1291,6 +1299,10 @@ class SpecialExpense(db.Model):
     figurino_producao = db.relationship(
         "FigurinoProducao", foreign_keys=[figurino_producao_id], lazy=True,
         backref=db.backref("gastos", lazy=True, order_by="SpecialExpense.expense_date"),
+    )
+    fornecedor = db.relationship(
+        "Fornecedor", foreign_keys=[fornecedor_id], lazy=True,
+        backref=db.backref("gastos", lazy=True, passive_deletes=True),
     )
 
     @property
@@ -1330,6 +1342,32 @@ class SpecialExpense(db.Model):
         (feature 306).
         """
         return self.disbursement_type == "cliente"
+
+
+class Fornecedor(db.Model):
+    """Fornecedor do cadastro usado no preenchimento dos gastos extras (feature 352).
+
+    Nasce de três jeitos: pela importação dos gastos antigos (migration `f352a1b2c3d4`, sem
+    `criado_por`), pelo próprio gasto quando o nome digitado não existe, ou pela tela do Financeiro.
+    ``nome_normalizado`` (sem acento, minúsculas, pontuação vira espaço — `fornecedor_ops.
+    normalizar_nome`) é ÚNICO: é o banco, não a tela, que impede "ADAO" e "Adão" de virarem dois.
+    O PIX daqui só PREENCHE o gasto; o gasto guarda o seu (`SpecialExpense.supplier_pix`).
+    """
+
+    __tablename__ = "fornecedores"
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(200), nullable=False)
+    nome_normalizado = db.Column(db.String(200), nullable=False, unique=True)
+    pix = db.Column(db.String(120), nullable=True)
+    categoria_padrao = db.Column(db.String(30), nullable=True)
+    # Arquivado some das sugestões; o gasto que digitar o nome dele ainda liga (não nasce duplicado).
+    ativo = db.Column(db.Boolean, nullable=False, default=True, server_default="true")
+    criado_por_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    criado_por = db.relationship("User", foreign_keys=[criado_por_id], lazy=True)
 
 
 class RecurringExpense(db.Model):

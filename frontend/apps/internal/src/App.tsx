@@ -53,6 +53,7 @@ import { EducaMantoMusicalFormPage } from "./pages/EducaMantoMusicalFormPage";
 import { EducaMantoHistoricoPage } from "./pages/EducaMantoHistoricoPage";
 import { GastosExtrasPage } from "./pages/GastosExtrasPage";
 import { GastosRecorrentesPage } from "./pages/GastosRecorrentesPage";
+import { FornecedoresPage } from "./pages/FornecedoresPage";
 import { OrcamentoCalculadoraPage } from "./pages/OrcamentoCalculadoraPage";
 import { OrcamentoConfigPrecosPage } from "./pages/OrcamentoConfigPrecosPage";
 import { OrcamentoHistoricoPage } from "./pages/OrcamentoHistoricoPage";
@@ -153,6 +154,7 @@ export function App() {
             <Route path="/funil" element={<FunilPage />} />
             <Route path="/gastos" element={<GastosExtrasPage />} />
             <Route path="/gastos/recorrentes" element={<GastosRecorrentesPage />} />
+            <Route path="/gastos/fornecedores" element={<FornecedoresPage />} />
             <Route path="/orcamento" element={<OrcamentoCalculadoraPage />} />
             <Route path="/orcamento/historico" element={<OrcamentoHistoricoPage />} />
             <Route path="/orcamento/configuracoes" element={<OrcamentoConfigPrecosPage />} />

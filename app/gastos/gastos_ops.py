@@ -25,6 +25,7 @@ from werkzeug.utils import secure_filename
 from app import db
 from app.constants import RoleName
 from app.email_service import send_async, send_new_expense_alert_email
+from app.gastos import fornecedor_ops
 from app.models import (
     AuditLog,
     CalendarEvent,
@@ -339,6 +340,7 @@ def _validate_expense_data(data: dict, *, require_receipt: bool, tipo_atual: str
     reimburse_user_id = None
     supplier_name = None
     supplier_pix = None
+    fornecedor_id = None
     if disbursement_type == "reembolso":
         reimburse_user_id = data.get("reimburse_user_id")
         if not reimburse_user_id:
@@ -348,6 +350,7 @@ def _validate_expense_data(data: dict, *, require_receipt: bool, tipo_atual: str
     elif disbursement_type == "fornecedor":
         supplier_name = (data.get("supplier_name") or "").strip()
         supplier_pix = (data.get("supplier_pix") or "").strip() or None
+        fornecedor_id = data.get("fornecedor_id")
         if not supplier_name:
             raise GastoValidationError("supplier_name", "Informe o nome do fornecedor.")
     elif disbursement_type == "cliente":
@@ -373,7 +376,30 @@ def _validate_expense_data(data: dict, *, require_receipt: bool, tipo_atual: str
         "reimburse_user_id": reimburse_user_id,
         "supplier_name": supplier_name,
         "supplier_pix": supplier_pix,
+        # Só o pedido (o id escolhido na tela); `_aplicar_fornecedor` decide o vínculo de fato.
+        "fornecedor_id": fornecedor_id,
     }
+
+
+def _aplicar_fornecedor(parsed: dict, ator: User) -> dict:
+    """Feature 352: liga o gasto a fornecedor ao cadastro (o escolhido, o de mesmo nome ou um novo)
+    e grava no gasto o nome como está no cadastro. Outro desembolso não tem fornecedor.
+
+    O PIX fica o digitado: é para ele que se paga; o cadastro só se completa com ele. A multa de
+    cancelamento (306) também é desembolso "fornecedor", mas quem recebe é o artista da escala:
+    nunca vira fornecedor do cadastro.
+    """
+    if (
+        parsed["disbursement_type"] != fornecedor_ops.DESEMBOLSO_FORNECEDOR
+        or parsed["category"] == SpecialExpense.CATEGORY_MULTA_CANCELAMENTO
+    ):
+        return {**parsed, "fornecedor_id": None}
+    fornecedor = fornecedor_ops.resolver_para_gasto(
+        parsed["fornecedor_id"], parsed["supplier_name"], parsed["supplier_pix"], parsed["category"], ator
+    )
+    if fornecedor is None:
+        return {**parsed, "fornecedor_id": None}
+    return {**parsed, "fornecedor_id": fornecedor.id, "supplier_name": fornecedor.nome}
 
 
 def create_expense(
@@ -412,6 +438,7 @@ def create_expense(
         _travar_eventos(event_id)
         if _evento_cancelado(event_id):
             raise GastoLockedError("event_id", event_id)
+    parsed = _aplicar_fornecedor(parsed, creator)
     disbursement_type = parsed["disbursement_type"]
     paid_at_creation = bool(disbursement_type) and bool(data.get("paid_at_creation"))
 
@@ -428,6 +455,7 @@ def create_expense(
         reimburse_user_id=parsed["reimburse_user_id"],
         supplier_name=parsed["supplier_name"],
         supplier_pix=parsed["supplier_pix"],
+        fornecedor_id=parsed["fornecedor_id"],
         payment_status="pago" if paid_at_creation else "nao_pago",
         paid_at_creation=paid_at_creation,
         event_id=event_id,
@@ -589,6 +617,7 @@ def edit_expense(
 
     parsed = _validate_expense_data(data, require_receipt=False, tipo_atual=expense.disbursement_type)
     expense, parsed = _conferir_trava_na_edicao(expense, parsed, event_id, aprovar)
+    parsed = _aplicar_fornecedor(parsed, actor)
     changed = (
         expense.description != parsed["description"]
         or expense.category != parsed["category"]
@@ -598,6 +627,7 @@ def edit_expense(
         or expense.reimburse_user_id != parsed["reimburse_user_id"]
         or expense.supplier_name != parsed["supplier_name"]
         or expense.supplier_pix != parsed["supplier_pix"]
+        or expense.fornecedor_id != parsed["fornecedor_id"]
         or expense.event_id != event_id
     )
 
@@ -609,6 +639,7 @@ def edit_expense(
     expense.reimburse_user_id = parsed["reimburse_user_id"]
     expense.supplier_name = parsed["supplier_name"]
     expense.supplier_pix = parsed["supplier_pix"]
+    expense.fornecedor_id = parsed["fornecedor_id"]
     expense.event_id = event_id
 
     if aprovar:

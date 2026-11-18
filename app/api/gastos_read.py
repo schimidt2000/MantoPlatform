@@ -2,6 +2,10 @@
 
 Reusa, sem duplicar, o núcleo já extraído em `app/gastos/gastos_ops.py` — os endpoints aqui só
 validam RBAC e serializam. RBAC replicado como função, paridade com `app/gastos/routes.py`.
+
+RBAC (feature 352): `GET /api/gastos/fornecedores` — qualquer usuário logado (é quem lança gasto e
+precisa das sugestões); Financeiro/Superadmin recebem também os arquivados e os totais. O gate é o
+papel real (`gastos_ops.is_financeiro`): o "Ver como" não muda esta lista.
 """
 
 from datetime import date
@@ -13,9 +17,9 @@ from flask_login import current_user
 
 from app.api import api_bp
 from app.api_utils import api_login_required, json_error
-from app.gastos import gastos_ops
+from app.gastos import fornecedor_ops, gastos_ops
 from app.marketing import desempenho_ops
-from app.models import RecurringExpense, SpecialExpense, User
+from app.models import Fornecedor, RecurringExpense, SpecialExpense, User
 
 
 def _require_financeiro() -> Any:
@@ -48,6 +52,8 @@ def _expense_dict(e, batches: dict[int, object] | None = None) -> dict:
         "payee_pix": e.payee_pix,
         "payment_status": e.payment_status,
         "paid_at_creation": e.paid_at_creation,
+        # Feature 352: o fornecedor do cadastro (só no desembolso "fornecedor").
+        "fornecedor_id": e.fornecedor_id,
         "event_id": e.event_id,
         "event_title": e.event.title if e.event else None,
         # Feature 306: a devolução de cancelado fica travada (só o "Alterar devolução" a muda).
@@ -97,6 +103,34 @@ def api_gastos_eventos() -> Any:
         label = f"{hora} · {e.title}" if hora else (e.title or f"Evento #{e.id}")
         out.append({"id": e.id, "label": label})
     return jsonify({"events": out})
+
+
+def _fornecedor_dict(f: Fornecedor, totais: fornecedor_ops.Totais | None) -> dict:
+    """Fornecedor do cadastro (feature 352). Os totais vão `null` para quem não gerencia e nas
+    respostas de escrita (a tela relê a lista)."""
+    return {
+        "id": f.id,
+        "nome": f.nome,
+        "pix": f.pix,
+        "categoria_padrao": f.categoria_padrao,
+        "ativo": f.ativo,
+        "gastos": totais.gastos if totais else None,
+        "total_aprovado": float(totais.total_aprovado) if totais else None,
+        "ultimo_gasto": totais.ultimo_gasto.isoformat() if totais and totais.ultimo_gasto else None,
+    }
+
+
+@api_bp.route("/gastos/fornecedores")
+@api_login_required
+def api_gastos_fornecedores() -> Any:
+    """Fornecedores para o preenchimento do gasto; com arquivados e totais para quem gerencia."""
+    can_manage = gastos_ops.is_financeiro(current_user)
+    lista = fornecedor_ops.listar(apenas_ativos=not can_manage, com_totais=can_manage)
+    return jsonify({
+        "fornecedores": [_fornecedor_dict(f, totais) for f, totais in lista],
+        "categorias": list(fornecedor_ops.CATEGORIAS_DO_FORNECEDOR),
+        "can_manage": can_manage,
+    })
 
 
 @api_bp.route("/gastos/funcionarios")

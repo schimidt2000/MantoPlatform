@@ -260,6 +260,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **352-fornecedores-gastos-extras** | Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
 | **347-endereco-abre-no-mapa** | *(na branch, aguardando merge)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
 | **256b-relatorio-de-marketing** | *(na branch, sem push)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
 | **354-politica-de-privacidade** | *(EM PRODUÇÃO 17/11 ~21h05)* Política de privacidade do atendimento em `/privacidade` (superfície de raiz da vitrine): o que a conversa do WhatsApp e do Instagram guarda, quem vê, com quem divide, por quanto tempo e os direitos; é a URL que o app "Manto Plataforma" da Meta exige para publicar | 2026-11-17 | — | (aqui) | ver Registro |
@@ -494,6 +495,51 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 352 — Fornecedores cadastrados nos gastos extras   (352-fornecedores-gastos-extras · 2026-11-17 · migration `f352a1b2c3d4`)
+
+> **Na branch, sem push** (saída de `20bf93c0`). Nível 1. Detalhe: `specs/352-fornecedores-gastos-extras/` (spec,
+> plan, research, data-model, contrato, tasks, `verify_352.py`).
+
+**O pedido.** "Quando vou fazer 1 gasto extra, já tem meio que um banco de fornecedores que sempre faço. Seria legal se
+tivesse um auto preenchimento com um banco de fornecedores cadastráveis." Em produção (17/11) eram 83 gastos a
+fornecedor com 65 grafias: "ADAO", "ADÃO", "ADÃO LIMA da SILVA"; "Thunder Print 3D" e "THUNDER PRINT"; "Will", "Will
+Coordenador" e "William Castro". O dono decidiu: qualquer pessoa cadastra pelo próprio gasto, só Financeiro e
+Superadmin arrumam; o cadastro nasce do histórico ("o que estiver parecido você julga e já junta e arruma"); escolher
+preenche nome, PIX e categoria.
+
+**O que mudou.**
+- Tabela `fornecedores` (`nome_normalizado` único: sem acento, minúsculas, pontuação vira espaço) e
+  `special_expenses.fornecedor_id` (SET NULL). Núcleo `app/gastos/fornecedor_ops.py`.
+- O gasto a fornecedor liga pelo id escolhido, senão pelo nome normalizado, senão cadastra (SAVEPOINT; a corrida cai no
+  `UNIQUE` e liga ao que o outro criou). Ligar completa PIX e categoria vazios do cadastro, nunca substitui. O gasto
+  passa a ter o nome como está no cadastro; o PIX fica o digitado (é para ele que a Planilha de Pagamentos paga).
+- A multa de cancelamento (306) é desembolso "fornecedor", mas paga o artista: nunca liga nem cadastra. A devolução
+  (`cliente`) também fica de fora.
+- Campo do gasto: `Combobox` em texto livre (`FornecedorCampo`), lista dos ativos filtrada no navegador; avisos
+  "Fornecedor novo: ficará salvo…" e "Já cadastrado: o gasto será salvo como …".
+- Tela `/gastos/fornecedores` (Financeiro/Superadmin): busca, arquivados, totais (gastos, aprovado, último), alterar
+  (renomear reescreve o nome dos gastos ligados, nunca o PIX), arquivar/reativar, juntar (trava por id, apaga a origem).
+- Migration: união de grupos (mesma chave PIX normalizada OU mesmo nome normalizado), com uma tabela de 20 nomes
+  arrumados decidida sobre os dados de 17/11 (só nomes; PIX e documento fora do repositório). Resultado no dump de 17/11:
+  **41 fornecedores**, os 83 gastos ligados, nenhuma chave PIX de gasto alterada.
+
+**Verificação.**
+- `verify_352.py` 11/11 no `manto_352` (dump de produção de 17/11). Antes do núcleo, 2/11 (importação e limpeza) e os
+  outros falhando pelo motivo certo. Mutação (completar e renomear desligados) derruba os cenários 4, 6 e 7.
+- Ensaio da migration no dump fresco com `flask db upgrade && python seed.py`.
+- `npm run typecheck` limpo; `ruff check` limpo nos tocados (os E402 de `models.py` já existiam).
+- Telas abertas: gasto em 375 px como Figurino (sugestão, preenchimento, os dois avisos), Fornecedores em 375 px e em
+  desktop claro como Financeiro (juntar com o texto do efeito, nome repetido no campo), edição de gasto antigo já ligado.
+
+**Pegadinhas.**
+1. O `Modal` do app interno fechava no Escape que o `Combobox` usa para fechar a lista, e o formulário inteiro sumia com
+   o que foi digitado. Agora ignora Escape já tratado (`defaultPrevented`). Nenhum `Modal` tinha `Combobox` antes.
+2. O alocador de número deu 348, que já era de outra sessão (branches 348–351 em `.claude/worktrees/`, banco
+   `manto_348`). Renumerada para 352 sem tocar em nada delas. O verify roda no `manto_352`, porque o `manto_local` é
+   compartilhado e para em 30/09.
+3. **Na publicação**: a migration da 348 (`a348c0d1e2f3`) também nasce sobre `d334b2c4e6f8`. A segunda a entrar na
+   `main` reencadeia `down_revision` (head único).
+4. O downgrade derruba tabela e coluna, mas as grafias antigas reescritas nos gastos não voltam (só nos dumps noturnos).
 ### 347 — Tocar no endereço do evento e escolher o app de mapas   (347-endereco-abre-no-mapa · 2026-11-17 · sem migration)
 
 > **Na branch, aguardando o pedido de merge do dono.** Nível 1 (toca dois domínios: Agenda e Portal do

@@ -22,7 +22,9 @@ export function Modal({ open, onClose, title, children, maxWidth = "max-w-lg" }:
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      // Escape que um campo já tratou (o `Combobox` fechando a lista marca `preventDefault`) não
+      // fecha o modal: fecharia o formulário inteiro e perderia o que foi digitado (feature 352).
+      if (e.key === "Escape" && !e.defaultPrevented) onClose();
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
