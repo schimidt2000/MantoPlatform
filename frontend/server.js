@@ -324,6 +324,15 @@ const CADASTRO_PREFIX = "/cadastro";
  */
 const NFC_PREFIX = "/nfc";
 
+/**
+ * Política de privacidade do atendimento (feature 354): `/privacidade` na raiz do domínio, pelo
+ * mesmo arranjo do `/cadastro` (bundle da vitrine sem reescrever `req.url`).
+ *
+ * A URL está gravada no cadastro do app "Manto Plataforma" na Meta, que só recebe mensagem de
+ * verdade com a política publicada. Renomear o prefixo despublica o CRM sem sintoma aqui.
+ */
+const PRIVACIDADE_PREFIX = "/privacidade";
+
 /** Rotas Jinja remanescentes, casadas por regex para não sombrear rotas do React Router. */
 const BACKEND_PATTERNS = [
   /^\/figurinos\/\d+\/print(?:[/?]|$)/,
@@ -765,6 +774,17 @@ const server = http.createServer((req, res) => {
   // Página pública das tags NFC (ver NFC_PREFIX) — mesmo arranjo do cadastro: o bundle da
   // vitrine cai no fallback de SPA e o roteador detecta a superfície de raiz pela URL.
   if (req.url && matchesPrefix(req.url, NFC_PREFIX)) {
+    return handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
+  }
+
+  // Política de privacidade do atendimento (ver PRIVACIDADE_PREFIX) — mesmo arranjo do cadastro.
+  // Antes do bloco do host do portal pelo mesmo motivo dele. No host da loja, `/privacidade`
+  // segue indo para o aviso da loja (`/catalogo/v/privacidade`, bloco do ALO_HOSTS abaixo).
+  if (
+    req.url &&
+    matchesPrefix(req.url, PRIVACIDADE_PREFIX) &&
+    !ALO_HOSTS.has((req.headers.host ?? "").split(":")[0].toLowerCase())
+  ) {
     return handler(req, res, { public: PUBLIC_DIST, ...SERVE_OPTIONS });
   }
 
