@@ -11,7 +11,7 @@ O ``downgrade`` derruba a coluna e a tabela; os nomes reescritos nos gastos anti
 (a grafia original sobrevive só nos dumps noturnos).
 
 Revision ID: f352a1b2c3d4
-Revises: d334b2c4e6f8
+Revises: a351b0c1d2e3
 Create Date: 2026-11-17
 """
 
@@ -25,7 +25,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision = "f352a1b2c3d4"
-down_revision = "d334b2c4e6f8"
+down_revision = "a351b0c1d2e3"
 branch_labels = None
 depends_on = None
 
