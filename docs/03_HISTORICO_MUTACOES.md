@@ -260,6 +260,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **347-endereco-abre-no-mapa** | *(na branch, aguardando merge)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
 | **256b-relatorio-de-marketing** | *(na branch, sem push)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
 | **354-politica-de-privacidade** | *(EM PRODUÇÃO 17/11 ~21h05)* Política de privacidade do atendimento em `/privacidade` (superfície de raiz da vitrine): o que a conversa do WhatsApp e do Instagram guarda, quem vê, com quem divide, por quanto tempo e os direitos; é a URL que o app "Manto Plataforma" da Meta exige para publicar | 2026-11-17 | — | (aqui) | ver Registro |
 | **190b-data-da-venda-um-dia-antes** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
@@ -493,6 +494,55 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 347 — Tocar no endereço do evento e escolher o app de mapas   (347-endereco-abre-no-mapa · 2026-11-17 · sem migration)
+
+> **Na branch, aguardando o pedido de merge do dono.** Nível 1 (toca dois domínios: Agenda e Portal do
+> Artista). Detalhe: `specs/347-endereco-abre-no-mapa/` (spec, plan, research, data-model, contrato,
+> quickstart, checklists, tasks, `verify_347.py`). Só `frontend/` muda: o deploy é só do `manto-frontend`,
+> sem queda.
+
+**O pedido.** "O endereço deve ser clicável e aparecer com qual app você quer abrir aquele endereço: Google
+Maps, Apple Mapas, Waze. […] Tanto na página do app quanto do portal." O endereço era texto puro. No celular
+com o sistema na Tela de Início, abrir no mapa exigia selecionar, copiar, trocar de app e colar.
+
+**O que mudou.**
+- `@manto/ui` ganha `linksDeMapa(endereco)`, função pura em `lib/mapas.ts`, e `EnderecoNoMapa`, que é o
+  gatilho com ícone de local mais o `Dialog` "Abrir endereço" com as três opções de 44px.
+- Os links são **universais HTTPS**, nunca esquema próprio: com o app instalado, o celular entrega o link ao
+  app; sem o app, abre o site. Eles **mostram o local**, não a rota, porque um texto como "Buffet Encantado"
+  iria direto ao primeiro resultado sem a pessoa ver o pino.
+- Os links abrem com `target="_blank"` de propósito. É o contrário do arquivo do sistema (`docs/00` §5): aqui
+  o objetivo é sair para outro app, como o link do WhatsApp já faz.
+- **App interno**: cabeçalho (o ícone substitui o "•") e "Local" de *Dados do evento*.
+- **Portal**: o endereço sai do fim da linha da data para uma linha própria depois do "hoje"/"em 3 dias", em
+  Próximos eventos e Convites.
+
+**Verificação.**
+- `verify_347.py` 7/7 no `manto_347` (dump de 17/11 02h). Antes do núcleo: 2/7, com `mapas.ts` ausente e a
+  peça sem export.
+- O verify transpila `mapas.ts` com o `esbuild` do `frontend/node_modules` e confere as URLs exatas:
+  acento; "&", "#" e "/" codificados; pontas aparadas; vazio dá nenhuma opção.
+- O cenário "deve falhar" reprova um montador sem `encodeURIComponent`.
+- Também confere a peça nas quatro telas e, lendo o banco, que o detalhe do evento e a agenda do portal
+  entregam `location`.
+- Typecheck das três SPAs limpo.
+- Telas abertas:
+  - app interno em 390px (tema escuro) e tela larga (tema claro);
+  - escolha com os três `href`/`target` conferidos;
+  - toque no Waze fecha a escolha e a página fica no evento;
+  - evento sem endereço sem nada tocável;
+  - portal a 320/375/430px sem rolagem lateral e todo alvo ≥ 44px.
+
+**Pegadinhas.**
+1. O `manto_local` está com `alembic_version` = `d334b2c4e6f8` (head), mas **sem** a coluna
+   `site_settings.meta_pixel_id` da 344. As migrations do CRM rodaram nele antes de serem reencadeadas sobre a
+   344, então a `e344a1b2c3d4` nunca rodou ali. Todo endpoint que lê `SiteSetting` quebra contra ele. Por isso
+   o banco desta feature foi o `manto_347`.
+2. No Browser pane oculto, a animação de saída do `Dialog` congela: o `data-state` vai a `closed`, mas o nó
+   não desmonta e o foco não volta ao gatilho. A volta do foco ao endereço (FR-011) é o que o Radix faz ao
+   desmontar; ela **não foi vista** no pane e fica para conferir num celular ou navegador visível.
+3. O endereço vindo do formulário do WhatsApp chega como está (ex.: "Rua X *Número:* 300 *Complemento:* …").
+   A busca no app de mapas recebe esse texto inteiro; limpar o endereço gravado ficou fora de escopo.
 ### 256b — O relatório da rotina de marketing não saía   (256b-relatorio-de-marketing · 2026-11-17 · sem migration)
 
 > **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `2cff4499`). Nível 2. Detalhe:

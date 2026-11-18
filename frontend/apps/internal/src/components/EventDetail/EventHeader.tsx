@@ -8,6 +8,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  EnderecoNoMapa,
 } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
 import { formatBRL } from "@manto/money";
@@ -424,7 +425,8 @@ export function EventHeader({ data }: EventHeaderProps) {
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted">
             {event.event_type && <Badge tone={typeInfo.tone}>{typeInfo.label}</Badge>}
             <span className="tabular-nums">{formatRange(event.start_at, event.end_at)}</span>
-            {event.location && <span>• {event.location}</span>}
+            {/* O ícone de local faz o papel do "•" de antes; sem endereço, não desenha nada. */}
+            <EnderecoNoMapa endereco={event.location} />
             {event.confirmed && (
               <Badge tone="green">
                 ✓ Confirmado{event.confirmed_by ? ` por ${event.confirmed_by}` : ""}

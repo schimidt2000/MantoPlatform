@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { MailQuestion, Shirt } from "lucide-react";
-import { Card, CardContent, Button, Skeleton } from "@manto/ui";
+import { Card, CardContent, Button, EnderecoNoMapa, Skeleton } from "@manto/ui";
 import { CacheLine } from "../components/CacheLine";
 import { formatDateTimeRange, formatRelativeDay, formatWeekday } from "../lib/format";
 import { useAckEventChange, useAgenda, type PortalRole } from "../lib/portalAgenda";
@@ -30,9 +30,15 @@ function RoleCard({ role }: { role: PortalRole }) {
                 decorativo, não para dado operacional. */}
             <p className="text-sm text-muted">
               {formatWeekday(role.start_at)}, {formatDateTimeRange(role.start_at, role.end_at)}
-              {role.location ? ` · ${role.location}` : ""}
             </p>
             <p className="text-sm font-medium text-accent">{formatRelativeDay(role.start_at)}</p>
+            {/* Linha própria, e não mais "· endereço" no fim da data: um botão no meio da frase
+                não tem alvo de 44px, e é no caminho para o evento que o artista toca nele. Vem
+                depois do "hoje"/"em 3 dias" para o quando ficar junto e o onde logo abaixo. */}
+            <EnderecoNoMapa
+              endereco={role.location}
+              className="flex min-h-[44px] items-center text-sm"
+            />
             <RoleLine role={role} />
             {/* Quem decide se a linha existe é o servidor: só o coordenador que aceitou recebe o
                 nome. Aqui só se desenha o que veio. */}
