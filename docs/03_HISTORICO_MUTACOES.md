@@ -4,7 +4,7 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~23h)**, a
+> Última atualização: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
 > pedido do dono ("bora fazer os pushs"), num push só, na ordem dos merges: **256b-relatorio-de-marketing**
 > (`verify_256b` 7/7), **347-endereco-abre-no-mapa** (`verify_347` 7/7), **352-fornecedores-gastos-extras**
 > (`verify_352` 11/11) e **353-gasto-extra-parcelado** (`verify_353` 11/11), no banco descartável `manto_lote`
@@ -267,10 +267,10 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~23h, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
-| **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~23h, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
-| **347-endereco-abre-no-mapa** | *(EM PRODUÇÃO 17/11 ~23h, lote)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
-| **256b-relatorio-de-marketing** | *(EM PRODUÇÃO 17/11 ~23h, lote)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
+| **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
+| **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
+| **347-endereco-abre-no-mapa** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
+| **256b-relatorio-de-marketing** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Hotfix da 256: o `POST /report` do agente de marketing dava 500 antes de enviar (`send_audit_report_email` não aceitava `preheader`, que o endpoint manda desde 21/08); achado na 1ª rodada em produção | 2026-11-17 | — | aqui | Registro |
 | **354-politica-de-privacidade** | *(EM PRODUÇÃO 17/11 ~21h05)* Política de privacidade do atendimento em `/privacidade` (superfície de raiz da vitrine): o que a conversa do WhatsApp e do Instagram guarda, quem vê, com quem divide, por quanto tempo e os direitos; é a URL que o app "Manto Plataforma" da Meta exige para publicar | 2026-11-17 | — | (aqui) | ver Registro |
 | **190b-data-da-venda-um-dia-antes** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* Hotfix da 190: a "Data da venda" do detalhe do evento aparecia um dia antes (`formatDay` lia a data pura como meia-noite UTC); data pura passa a sair pelo texto, o que corrige também a data da nota e a do gasto vinculado | 2026-11-17 | — | aqui | Registro |
 | **351-painel-atribuido** | *(EM PRODUÇÃO 17/11 ~19h05, lote)* O painel de marketing mostra quanto custa a venda que o anúncio trouxe: custo por venda atribuída (último contato pago até 45 dias, só fato depois do contato, desde jun/2026) e com desconto de 50% ao lado do misto; funil por frente, anúncio, peça e conceito com custo; resultado real do card e "no ar" pelo gasto; meta, verba e calendário do ano por frente; proposta com número, teto, impacto e sino; diário com teste estruturado; telas de marketing em 390 px | 2026-11-17 | `a351b0c1d2e3` | (aqui) | ver Registro |
@@ -505,7 +505,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 353 — Gasto extra parcelado: um gasto, várias datas de pagamento   (353-gasto-extra-parcelado · 2026-11-17 · migration `f353a1b2c3d4`)
 
-> **EM PRODUÇÃO desde 17/11/2026 ~23h** (lote com 256b, 347, 352 e 353). Nasceu sobre a `352-fornecedores-gastos-extras` (as duas mexem na
+> **EM PRODUÇÃO desde 17/11/2026 ~22h52** (lote com 256b, 347, 352 e 353). Nasceu sobre a `352-fornecedores-gastos-extras` (as duas mexem na
 > mesma tela e subiram juntas). Nível 1. Detalhe: `specs/353-gasto-extra-parcelado/`.
 
 **O pedido.** "Vou colocar um gasto para o Adão, só que esse gasto ele pode ser parcelado. Então, uma parte tem que
@@ -547,7 +547,7 @@ comprovante não precisa ser para cada um deles não, pode ser para o gasto extr
 
 ### 352 — Fornecedores cadastrados nos gastos extras   (352-fornecedores-gastos-extras · 2026-11-17 · migration `f352a1b2c3d4`)
 
-> **EM PRODUÇÃO desde 17/11/2026 ~23h** (lote com 256b, 347, 352 e 353). Migration reencadeada sobre
+> **EM PRODUÇÃO desde 17/11/2026 ~22h52** (lote com 256b, 347, 352 e 353). Migration reencadeada sobre
 > `a351b0c1d2e3` no lote. Nível 1. Detalhe: `specs/352-fornecedores-gastos-extras/` (spec,
 > plan, research, data-model, contrato, tasks, `verify_352.py`).
 
@@ -593,7 +593,7 @@ preenche nome, PIX e categoria.
 4. O downgrade derruba tabela e coluna, mas as grafias antigas reescritas nos gastos não voltam (só nos dumps noturnos).
 ### 347 — Tocar no endereço do evento e escolher o app de mapas   (347-endereco-abre-no-mapa · 2026-11-17 · sem migration)
 
-> **EM PRODUÇÃO desde 17/11/2026 ~23h** (lote com 256b, 347, 352 e 353). Nível 1 (toca dois domínios: Agenda e Portal do
+> **EM PRODUÇÃO desde 17/11/2026 ~22h52** (lote com 256b, 347, 352 e 353). Nível 1 (toca dois domínios: Agenda e Portal do
 > Artista). Detalhe: `specs/347-endereco-abre-no-mapa/` (spec, plan, research, data-model, contrato,
 > quickstart, checklists, tasks, `verify_347.py`). Só `frontend/` muda: o deploy é só do `manto-frontend`,
 > sem queda.
@@ -642,7 +642,7 @@ com o sistema na Tela de Início, abrir no mapa exigia selecionar, copiar, troca
    A busca no app de mapas recebe esse texto inteiro; limpar o endereço gravado ficou fora de escopo.
 ### 256b — O relatório da rotina de marketing não saía   (256b-relatorio-de-marketing · 2026-11-17 · sem migration)
 
-> **EM PRODUÇÃO desde 17/11/2026 ~23h** (lote com 256b, 347, 352 e 353). Nível 2. Detalhe:
+> **EM PRODUÇÃO desde 17/11/2026 ~22h52** (lote com 256b, 347, 352 e 353). Nível 2. Detalhe:
 > `specs/256b-relatorio-de-marketing/spec.md`.
 
 **O pedido.** Na 1ª rodada de marketing em produção (17/11, logo depois do lote das 19h), a ingestão, os

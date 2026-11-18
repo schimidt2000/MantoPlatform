@@ -1,6 +1,6 @@
 # 256b — O relatório da rotina de marketing não saía (500 no `POST /report`)
 
-**Branch**: `256b-relatorio-de-marketing` · **Created**: 2026-11-17 · **Status**: Em produção (17/11 ~23h)
+**Branch**: `256b-relatorio-de-marketing` · **Created**: 2026-11-17 · **Status**: Em produção (17/11 ~22h52)
 (`verify_256b.py` 7/7; com o código da `main`, quebra no cenário 1) · **Migration**: nenhuma
 
 ## O pedido
