@@ -1,6 +1,6 @@
 # 354 — Política de privacidade do atendimento (`/privacidade`)
 
-**Branch**: `354-politica-de-privacidade` · **Created**: 2026-11-17 · **Status**: em andamento ·
+**Branch**: `354-politica-de-privacidade` · **Created**: 2026-11-17 · **Status**: EM PRODUÇÃO desde 17/11/2026 ~21h05 ·
 **Migration**: nenhuma
 
 ## O pedido
