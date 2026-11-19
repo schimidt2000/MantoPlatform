@@ -268,6 +268,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **356-cache-nao-se-perde** | *(pronto, sem push)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
@@ -504,6 +505,54 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 356 — O cachê do elenco não some nem muda por fora do card do Casting   (356-cache-nao-se-perde · 2026-11-19 · sem migration)
+
+> **Pronto na branch, sem push** (worktree `C:\tmp\mp356`, base `551dad44`). Nível 2, Agenda. Toca o
+> backend: publicar junto de outro deploy, à noite. Detalhe: `specs/356-cache-nao-se-perde/spec.md`.
+
+**O pedido.** O dono, em 19/11, sobre o evento 1516: o 850 que ele "já tinha posto" não estava lá, o log
+"não mostra direito" e "não é a primeira vez".
+
+**O que a investigação achou** (produção, só leitura):
+
+* O log está certo: o 850 nunca chegou ao servidor antes de 19/11 10:56. A linha "Limite da vaga …
+  autorizado em R$ 850,00" desse dia prova que o teto nunca tinha sido 850.
+* Em 745 vagas desde outubro, o último cachê logado bate com o gravado.
+* A causa provável é o card: cada um tem o próprio "Salvar", e trocar de aba apagava o que foi digitado.
+* No caminho apareceram duas brechas sem vítima:
+  1. O "Editar tudo" da Comercial gravava `null` no cachê de todo o elenco, porque ela não recebe o
+     cachê na leitura. O verify no código antigo comprova.
+  2. Quem via o cachê no formulário passava do teto sem deixar log.
+* O "Atribuído em" do card era regravado a cada "Salvar".
+
+**O que mudou.**
+
+* **Formulário completo.**
+  * `_reconcile_characters` só mexe no cachê com `pode_ver_cache` (a `show_casting` da leitura).
+  * Quando muda, passa por `casting_ops.aplicar_cache_do_formulario`: limite e teto autorizado do card,
+    mais a linha "Atualizou cachê … (formulário completo)" no log.
+  * A tela esconde o campo de quem não vê o cachê e só manda `cache_value` do campo alterado.
+* **Card do Casting.**
+  * Rascunho no `localStorage` (`lib/rascunhoDoCasting.ts`), válido só contra o valor do servidor de
+    quando a digitação começou.
+  * Avisos "Alteração não salva" no card e na seção, e `beforeunload`.
+  * O campo intocado acompanha o servidor.
+* **"Atribuído em".** `assign_role` só regrava `assigned_at` quando a pessoa muda (ou a vaga tem pessoa
+  sem data). Isso também conserta o prazo de avaliação do portal (085), que contava desta data.
+
+**Pegadinhas.**
+
+* (1) A `show_casting` segue o "Ver como". O Superadmin vendo como Comercial também devolve `null`, e
+  por isso a regra usa a flag, não o papel real (cenário 3).
+* (2) Vazio não é "zerar". O bundle antigo em cache manda `cache_value` sempre: `null` de quem não vê, e
+  o valor gravado de quem vê. O servidor ignora `null` e o valor igual, então o bundle velho fica
+  protegido sem depender da tela nova.
+* (3) O `BrowserRouter` não aceita `useBlocker`, então a saída dentro do app não pergunta. O rascunho
+  guardado é o que impede a perda (dívida 241).
+* (4) O Postgres local estava parado (de novo). O verify rodou num cluster temporário do scratchpad,
+  porta 5435, com o dump de 19/11 02h. Esse dump já tinha a 352 e a 353, em produção desde 17/11.
+* (5) Achado de passagem: todo "Salvar" do card põe a vaga em "A pagar" (dívida 238).
 
 ### 341c — Horário indisponível à mão, que continua aparecendo na loja   (341c-horario-indisponivel · 2026-11-19 · sem migration)
 

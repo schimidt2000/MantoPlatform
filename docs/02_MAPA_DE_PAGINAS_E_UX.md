@@ -1017,6 +1017,19 @@ quebrado, que custou várias rodadas de investigação em cima do servidor.
   comercial" — as duas em minúsculas, `text-xs`, cor de texto secundário, sem selo (`MarcaDeOrigem`
   em `CastingSection.tsx`). A vaga de Maquiador agora existe sempre que há personagem com
   maquiagem (criação, edição e vínculo de orçamento), então "Falta maquiador" aponta para uma vaga real.
+- **Alteração não salva no card (hotfix 356)**:
+  - **Rascunho.** O talento e o cachê digitados e não salvos ficam guardados por vaga
+    (`lib/rascunhoDoCasting.ts`, `localStorage`) e voltam quando o card remonta: troca de aba, outra
+    tela, app reaberto. O rascunho é descartado se o servidor mudou a vaga desde então, e vence em 7
+    dias.
+  - **Avisos.** O card sujo ganha a borda dourada e a linha "Alteração não salva." com "Descartar"
+    (volta ao salvo). No topo do painel Casting aparece "N vagas com alteração não salva. Use o Salvar
+    de cada card.", e fechar ou recarregar a aba pede confirmação.
+  - **Campo intocado.** O campo que a pessoa não alterou acompanha o valor novo do servidor.
+  - **"Atribuído em".** Mostra o dia em que a pessoa entrou na vaga: não muda mais a cada "Salvar".
+  - **"Editar tudo".** O formulário completo (`EventEditPage`) não mostra o campo de cachê a quem não
+    tem Casting (`ElencoBlock cacheOculto`). O cachê de cada vaga só vai no PATCH se foi alterado no
+    formulário.
 - **API**: `GET /api/events/<id>` (payload único da tela) · `POST /api/roles/<id>/payment-status`
   · `POST /api/roles/<id>/figurino-sheet` · `POST|DELETE /api/roles/<id>/figurino-done` ·
   `POST /api/events/<id>/travel-estimate` · `POST /api/events/<id>/materials` ·
