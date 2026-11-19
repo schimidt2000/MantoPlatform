@@ -3,6 +3,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useParams } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { assetUrl } from "@manto/api-client";
+import { AnuncioPapaiNoel } from "../components/nfc/AnuncioPapaiNoel";
 import {
   aberturaJaVista,
   marcarAberturaVista,
@@ -472,6 +473,10 @@ export function NfcPage() {
             </motion.a>
           )}
         </div>
+
+        {/* Feature 355: o Papai Noel da loja até 06/12, depois dos destinos de sempre — a
+            mensagem especial continua o primeiro botão. Mesmo cartão para qualquer código. */}
+        <AnuncioPapaiNoel entrada={enter(atraso(6))} />
       </>
     );
   } else if (cenaVisivel === "mensagem" && videoDelivery) {
