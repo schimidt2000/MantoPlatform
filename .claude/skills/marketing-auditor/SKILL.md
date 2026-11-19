@@ -176,15 +176,25 @@ número e a `evidencia`. Critérios:
     out–dez; open house em ago–out. Anda por prospecção, não por mídia.
   - Social (15 anos, casamento): vende com 6–12 meses de antecedência.
 
-**11. Pedidos de criativo** (1 a 3 por semana). Use `agente.py POST /pedidos`. Cada pedido leva:
-- `tipo: "anuncio"`, `frente`, `formato` (`foto_4x5`, `foto_9x16`, `video_9x16`…);
-- `briefing_objetivo`, `briefing_mostrar`, `briefing_letreiro` e `deadline_date`;
-- `catalog_item_ids` só de `temas_liberados`.
+**11. Pedidos de criativo** (1 a 3 por semana). Quem escreve o pedido é o agente
+**`diretor-criativo`** (`.claude/agents/diretor-criativo.md`), nunca você direto.
+1. Decida **o quê** pelos números:
+   - a frente que está abaixo do teto e tem espaço para crescer;
+   - o formato e o conceito com menor custo por conversa;
+   - o que está faltando (sem peça no ar, peça cansada).
+2. Chame o agente com a frente, o formato, o objetivo da peça, a verba por dia, o melhor e o pior
+   conceito da semana (com custo por conversa) e a janela de datas. Ele lê o `/comando` e o
+   `criativo_dados.py` sozinho:
+   - os temas e as fotos reais do catálogo;
+   - as próximas festas da agenda onde dá para captar.
+   Ele devolve o JSON pronto.
+3. Confira antes de gravar: tema só de `temas_liberados` em `catalog_item_ids`, nenhum nome de cliente
+   ou endereço e nenhum pedido igual a um aberto. Grave com `agente.py POST /pedidos`.
+   - O `platform` do card é a rede social (`Instagram`), não "Meta Ads".
+4. Se o pedido depende de liberar um tema (a primeira linha de `notes` diz "Depende de: …"), o
+   relatório lista o tema para o Superadmin liberar em Marketing › Temas.
 
-O servidor escolhe a responsável pelo formato (foto/arte ou vídeo). Peça o que os números dizem
-que funciona:
-- o formato e o tema da peça com menor custo por conversa;
-- a frente que está abaixo do teto e tem espaço para crescer.
+O servidor escolhe a responsável pelo formato: foto/arte para a Gabi, vídeo para a Erika.
 
 **12. Relatório.**
 1. Monte o HTML: a manchete por frente (custo por venda × teto), o que foi executado, as propostas

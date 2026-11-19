@@ -59,8 +59,25 @@ cd scripts\marketing
 servidor recusa `mode=local` fora de `FLASK_ENV=development`, então uma rodada de teste nunca
 cria gasto em produção. A memória local de teste e a de produção são arquivos separados.
 
+## Pedidos de peça (feature 357)
+
+Quem escreve o pedido de foto ou vídeo é o agente `diretor-criativo` (`.claude/agents/diretor-criativo.md`).
+Ele usa o `criativo_dados.py`, que lê a produção **só em leitura** e imprime JSON com três coisas:
+- os temas que não são licenciados, com a situação de cada um e as fotos reais do catálogo;
+- os personagens mais pedidos nos últimos 120 dias;
+- as próximas festas (data, hora, cidade, personagens e se há Foto/Vídeo escalado), sem nome de
+  cliente nem endereço.
+
+```powershell
+..\..\.venv\Scripts\python.exe criativo_dados.py --dias 21
+```
+
 ## Segredos
 
 `.marketing-agent-token` (raiz) = env `MARKETING_AGENT_TOKEN` no Render (serviço `manto-backend`). Sem o env em produção
 os endpoints respondem 404 e a rotina não funciona — é o interruptor geral. Nunca copie o token
 para relatório, `resumo.md` ou chat.
+
+`.railway-db-url` (raiz; o nome é da época do Railway, o banco hoje é o do Render) é a URL de **leitura**
+da produção que o `criativo_dados.py` usa (ou `MANTO_DB_LEITURA`). Ele abre a sessão com
+`default_transaction_read_only = on`.

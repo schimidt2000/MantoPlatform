@@ -1,0 +1,54 @@
+# 357 — Diretor criativo: o pedido de peça sai concreto
+
+**Branch**: `357-diretor-criativo` · **Created**: 2026-11-19 · **Status**: Pronto na branch, sem push ·
+**Migration**: nenhuma · Nível 2 (harness: agente, skill e script de leitura; nenhum código do app muda)
+
+## O pedido
+
+O dono, em 19/11, sobre os dois pedidos de peça abertos pela 1ª rodada de marketing (cards 68 e 69, 17/11):
+"ficou muito genérico. Quero que tenha um agente especializado em criar essas narrativas para que os
+pedidos sejam mais concretos".
+
+O texto de 17/11 dizia "crianças rindo com personagem autoral — fada, palhaço, robô de LED ou show de
+luz". Não dizia qual tema, qual foto, qual festa, qual momento, quantos segundos nem qual texto. Havia
+uma razão: nenhum tema estava (nem está) liberado para anúncio.
+
+## O que muda
+
+1. **`.claude/agents/diretor-criativo.md`** (novo). É o agente que escreve o pedido de peça. Ele traz:
+   - o teste do pedido pronto e quem compra em cada frente;
+   - as regras: só tema liberado, sem IA, autorização de imagem de criança, música só da Meta, nada que
+     a vendedora não cumpra;
+   - a ordem do material: festa da agenda, depois a foto do catálogo, depois o Drive;
+   - a estrutura por formato (foto 4:5/9:16; vídeo com roteiro por segundo e lista de takes);
+   - os textos exatos (letreiro, texto principal, título, mensagem pronta do WhatsApp), a medida com
+     a variação A/B e o JSON no formato do `POST /pedidos`.
+
+   Ele só lê. Quem grava é a rotina (CLAUDE.md §8: subagente não edita).
+2. **`scripts/marketing/criativo_dados.py`** (novo). Lê a produção só em leitura (`.railway-db-url`,
+   `default_transaction_read_only`) e traz:
+   - os temas não licenciados, com a situação, a página e as fotos do catálogo;
+   - os personagens mais pedidos em 120 dias;
+   - as próximas festas: data, hora, cidade, personagens e se há Foto/Vídeo escalado. Não leva nome de
+     cliente, rua, número nem CEP.
+3. **Skill `marketing-auditor`, passo 11**: a rotina decide o quê (frente, formato, conceito pelos
+   números) e o agente escreve o pedido. Antes de gravar, a rotina confere o tema, a privacidade e se o
+   pedido não é repetido. O `platform` do card é a rede social. O que "Depende de: liberar <tema>" vai
+   para o relatório.
+4. **`scripts/marketing/README.md`**: seção "Pedidos de peça" e a URL de leitura em "Segredos".
+5. **Cards 68 e 69 reescritos em produção** com o texto do agente, na sessão do dono.
+
+## Verificação
+
+- O `criativo_dados.py` rodou contra a produção em 19/11. Trouxe 446 temas não licenciados (0
+  liberados), os personagens mais pedidos e as festas de 21 dias. O campo "cidade" sai sem rua, número
+  nem CEP (conferido na lista inteira). `ruff check` e `ruff format` limpos.
+- O agente rodou com os dados de 19/11 e devolveu os pedidos que substituem os cards 68 e 69, no
+  formato do `POST /pedidos`, mais a lista de temas para liberar.
+- Não há verify Python: nenhum comportamento do app muda.
+
+## Fora de escopo
+
+- Endpoint para a rotina editar um pedido já aberto. Hoje a edição é pela tela, por uma pessoa.
+- Ler o Drive "Temas Manto Produções" direto. O agente aponta a pasta e quem abre é a equipe.
+- Liberar temas para anúncio: é decisão do Superadmin em Marketing › Temas.

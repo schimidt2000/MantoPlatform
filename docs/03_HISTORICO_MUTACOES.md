@@ -268,6 +268,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, foto do catálogo ou festa da agenda, roteiro por segundo, textos prontos, medida A/B) e `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
@@ -504,6 +505,34 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 357 — Diretor criativo: o pedido de peça sai concreto   (357-diretor-criativo · 2026-11-19 · sem migration)
+
+> **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `551dad44`). Nível 2 (harness). Detalhe:
+> `specs/357-diretor-criativo/spec.md`.
+
+**O pedido.** "O pedido de peça para a campanha de festas para as meninas ficou muito genérico. Quero que tenha
+um agente especializado em criar essas narrativas para que os pedidos sejam mais concretos" (dono, 19/11, sobre
+os cards 68 e 69 abertos pela 1ª rodada de marketing em 17/11).
+
+**O que mudou.**
+- **Agente `.claude/agents/diretor-criativo.md`.** Escreve o pedido com a ideia em uma frase, o tema, o material
+  e o roteiro (ou a cena), os textos prontos, a medida com variação A/B e o prazo, no JSON do `POST /pedidos`.
+  O material sai da festa da agenda, da foto exata do catálogo ou do Drive. O agente só lê e a rotina grava.
+- **`scripts/marketing/criativo_dados.py`.** Lê a produção só em leitura e traz os temas com situação e fotos, o
+  que vende e as próximas festas, sem nome de cliente nem endereço.
+- **Skill `marketing-auditor`, passo 11.** A rotina escolhe o quê e o agente escreve o pedido.
+
+**Decisões e pegadinhas.**
+- O genérico de 17/11 tinha causa, além do texto: **nenhum tema está liberado para anúncio** (476 sem
+  classificação). O agente não inventa saída para isso. Quando o tema não está liberado, o pedido nasce com
+  "Depende de: liberar <tema> em Marketing › Temas" e sem `catalog_item_ids`.
+- Quase toda festa vendida é de personagem licenciado. O anúncio vende "a Manto de verdade" com tema autoral, e
+  a vendedora oferece qualquer tema na conversa.
+- O casamento de personagem da festa com tema do catálogo é só pista. "Angel" casa com "Angel Drink", mas a Angel
+  da festa era a do Stitch (Disney). Por isso o campo se chama `temas_parecidos_conferir`.
+- O `location` das festas vem em formatos variados. O `criativo_dados` corta rua, número e CEP antes de o dado
+  chegar ao card, que a equipe inteira vê.
 
 ### 341c — Horário indisponível à mão, que continua aparecendo na loja   (341c-horario-indisponivel · 2026-11-19 · sem migration)
 
