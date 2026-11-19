@@ -239,9 +239,18 @@ export interface EventUpdateInput {
   payment_due_date: string | null;
   coordinator_talent_id: number | null;
   form_response_id: number | null;
-  characters: CharacterInput[];
+  characters: CharacterUpdateInput[];
   clients: ClientLinkInput[];
 }
+
+/**
+ * Personagem na edição em bloco (hotfix 356): `cache_value` só vai quando a pessoa mexeu nele. O
+ * formulário reenvia o elenco inteiro, e o cachê que o Casting salvou pelo card DEPOIS de a tela
+ * abrir seria desfeito pelo número velho que ficou no formulário.
+ */
+export type CharacterUpdateInput = Omit<CharacterInput, "cache_value"> & {
+  cache_value?: number | null;
+};
 
 export interface EventCreateResult extends EventoDetalhe {
   warnings: string[];

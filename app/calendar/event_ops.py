@@ -271,6 +271,10 @@ def _reconcile_characters(
     is_superadmin: bool,
     start: datetime,
     end: datetime,
+    pode_ver_cache: bool = False,
+    actor_name: str = "",
+    autor_id: int | None = None,
+    tz: ZoneInfo | None = None,
 ) -> tuple[list[str], list[tuple[int, str]]]:
     """Reconcilia o elenco (`role_type="character"`) por `role_id` em vez de substituir tudo
     (feature 184, research.md §4): atualiza linhas existentes, insere linhas novas, remove linhas
@@ -279,8 +283,17 @@ def _reconcile_characters(
     `character_name="Coordenador"`) é tratado à parte, mesma vaga sentinela de
     `routes._ensure_coordinator`. Devolve avisos não-bloqueantes de conflito de agenda (mesma
     lógica de `_check_talent_conflicts`).
+
+    Hotfix 356: o cachê só muda para quem o VÊ (`pode_ver_cache`, a `show_casting` da leitura) e
+    pela regra do card (`casting_ops.aplicar_cache_do_formulario`: teto + log). A Comercial não
+    recebe o cachê na tela e por isso devolvia `None`, e o "Salvar" dela apagava o cachê de todo o
+    elenco; quem via o cachê gravava qualquer valor, acima do teto e sem log. O default `False` é o
+    seguro: quem chamar sem dizer nunca escreve cachê.
     """
+    from app.calendar.casting_ops import aplicar_cache_do_formulario
     from app.calendar.routes import _talent_time_conflict
+
+    tz = tz or ZoneInfo("America/Sao_Paulo")
 
     existing = {
         r.id: r
@@ -315,9 +328,9 @@ def _reconcile_characters(
 
         if role_id and role_id in existing:
             role = existing[role_id]
+            talento_antes = role.talent_id
             role.character_name = name
             role.figurino_sheet_id = sheet_id
-            role.cache_value = char_data.get("cache_value")
             # Feature 322 (decisão do dono): a maquiagem se define quando o evento nasce — pelo
             # orçamento ou por quem cria; depois, só o superadmin a muda. Para os demais o valor
             # gravado fica (sem erro: a tela já trava a caixa). É a marca que cria o maquiador.
@@ -330,20 +343,33 @@ def _reconcile_characters(
                 role.escalado_pelo_comercial = True
                 used_talent_ids.add(pre_tid)
                 assigned_now.append((pre_tid, name))
+            # Depois do talento: o limite olha quem está na vaga agora (339, `mesma_pessoa`).
+            if pode_ver_cache:
+                aplicar_cache_do_formulario(
+                    event, role, char_data.get("cache_value"),
+                    mesma_pessoa=role.talent_id == talento_antes,
+                    is_superadmin=is_superadmin, actor_name=actor_name, autor_id=autor_id, tz=tz,
+                )
         else:
-            db.session.add(EventRole(
+            nova = EventRole(
                 event_id=event.id,
                 character_name=name,
                 role_type="character",
                 figurino_sheet_id=sheet_id,
-                cache_value=char_data.get("cache_value"),
                 # Personagem novo num evento que já existe: a mesma trava (clarify da 322).
                 needs_makeup=(bool(char_data.get("needs_makeup")) or None) if is_superadmin else None,
                 is_singer=bool(char_data.get("is_singer")) or None,
                 talent_id=pre_tid,
                 assigned_at=datetime.now(tz=start.tzinfo) if pre_tid else None,
                 escalado_pelo_comercial=True if pre_tid else None,
-            ))
+            )
+            db.session.add(nova)
+            if pode_ver_cache:
+                aplicar_cache_do_formulario(
+                    event, nova, char_data.get("cache_value"),
+                    mesma_pessoa=True,
+                    is_superadmin=is_superadmin, actor_name=actor_name, autor_id=autor_id, tz=tz,
+                )
             if pre_tid:
                 used_talent_ids.add(pre_tid)
                 assigned_now.append((pre_tid, name))
@@ -1108,6 +1134,7 @@ def update_event_core(
     dados_nota: Any = None,
     pedida_por_id: int | None = None,
     autor_id: int | None = None,
+    pode_ver_cache: bool = False,
 ) -> list[str]:
     """Atualiza em bloco os campos centrais de um evento existente (feature 184) — título, tipo,
     data/horário, local, descrição, ensaio, valores, pagamento, vendedor, elenco (reconciliado),
@@ -1152,6 +1179,11 @@ def update_event_core(
         is_superadmin=is_superadmin,
         start=st,
         end=et,
+        # Hotfix 356: quem não vê o cachê não mexe nele (ver `_reconcile_characters`).
+        pode_ver_cache=pode_ver_cache,
+        actor_name=actor_name,
+        autor_id=autor_id,
+        tz=tz,
     )
     # Feature 322: evento antigo com personagem maquiado e sem maquiador ganha a vaga na primeira
     # edição depois do deploy (sem retroativo por script — decisão do dono).

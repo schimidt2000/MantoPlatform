@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { AvatarThumb, Badge, Button } from "@manto/ui";
 import { assetUrl } from "@manto/api-client";
@@ -16,6 +16,7 @@ import {
   useToggleTransporte,
 } from "../../lib/casting";
 import { buildConviteMsg, useSetPaymentStatus } from "../../lib/eventDetail";
+import { gravarRascunho, lerRascunho } from "../../lib/rascunhoDoCasting";
 import {
   brl,
   Empty,
@@ -172,6 +173,8 @@ interface RoleCardProps {
   podeTirar?: boolean;
   /** Feature 339: avisos da remoção da vaga (falha do Google no título) sobem para a seção. */
   onAvisos?: (avisos: string[]) => void;
+  /** Hotfix 356: o card conta à seção se tem alteração não salva (aviso e trava de saída). */
+  onSujo?: (roleId: number, sujo: boolean) => void;
 }
 
 /** "autorizado por Fulano em 09/11" — a autorização da 339 na linha do teto do Superadmin. */
@@ -191,7 +194,7 @@ function textoDaAutorizacao(role: RoleItem): string {
  * talento ocupa a largura toda e o cachê fica ao lado do botão Salvar — nada de campo de
  * 40px espremido entre botões.
  */
-function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos }: RoleCardProps) {
+function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos, onSujo }: RoleCardProps) {
   const eventId = data.event.id;
   const assign = useAssignRole(eventId);
   const remove = useDeleteRole(eventId, onAvisos);
@@ -199,16 +202,55 @@ function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos }: RoleCard
   const dismiss = useDismissRole(eventId);
   const restore = useRestoreRole(eventId);
   const transporte = useToggleTransporte(eventId);
-  const [talentId, setTalentId] = useState<number | null>(role.talent?.id ?? null);
-  const [cache, setCache] = useState<number>(role.cache_value ?? 0);
+  const baseTalentId = role.talent?.id ?? null;
+  const baseCache = role.cache_value ?? 0;
+  // Hotfix 356: o que foi digitado e não salvo volta quando o card remonta (troca de aba, outra
+  // tela, app reaberto) — antes sumia sem aviso (ver `lib/rascunhoDoCasting.ts`).
+  const [inicial] = useState(() =>
+    canEdit ? lerRascunho(role.role_id, { talentId: baseTalentId, cache: baseCache }) : null,
+  );
+  const [talentId, setTalentId] = useState<number | null>(inicial?.talentId ?? baseTalentId);
+  const [cache, setCache] = useState<number>(inicial?.cache ?? baseCache);
 
   const inviteInfo = role.invite_status ? INVITE_LABELS[role.invite_status] : undefined;
   const alerta = role.availability && role.availability.status !== "free";
   // Feature 239 (decisão 17): a vaga de Maquiador sem talento usa o mesmo destaque visual de
   // alerta já existente — sinaliza no card que falta fechar essa vaga.
   const maquiadorSemTalento = ehVagaDeMaquiador(role) && !role.talent;
-  const cacheAlterado = cache !== (role.cache_value ?? 0);
-  const sujo = talentId !== (role.talent?.id ?? null) || cacheAlterado;
+  const cacheAlterado = cache !== baseCache;
+  const sujo = talentId !== baseTalentId || cacheAlterado;
+
+  // A vaga mudou no servidor (outro card, outra pessoa, o refetch ao voltar para a aba): o campo
+  // que a pessoa NÃO tinha alterado acompanha o valor novo. Sem isto o card ficava com o número
+  // velho, marcado como "não salvo", e um "Salvar" desfazia o que outra pessoa acabou de gravar.
+  const baseAnterior = useRef({ talentId: baseTalentId, cache: baseCache });
+  useEffect(() => {
+    const antes = baseAnterior.current;
+    baseAnterior.current = { talentId: baseTalentId, cache: baseCache };
+    setTalentId((atual) => (atual === antes.talentId ? baseTalentId : atual));
+    setCache((atual) => (atual === antes.cache ? baseCache : atual));
+  }, [baseTalentId, baseCache]);
+
+  useEffect(() => {
+    if (!canEdit) return;
+    gravarRascunho(role.role_id, sujo ? { talentId, cache } : null, {
+      talentId: baseTalentId,
+      cache: baseCache,
+    });
+  }, [canEdit, role.role_id, sujo, talentId, cache, baseTalentId, baseCache]);
+
+  useEffect(() => {
+    const ativo = canEdit && sujo;
+    onSujo?.(role.role_id, ativo);
+    return () => {
+      if (ativo) onSujo?.(role.role_id, false);
+    };
+  }, [onSujo, role.role_id, canEdit, sujo]);
+
+  const descartar = () => {
+    setTalentId(baseTalentId);
+    setCache(baseCache);
+  };
 
   /**
    * Teto de cachê do orçamento (`cache_cap`, gravado na criação quando o evento nasce da
@@ -262,7 +304,9 @@ function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos }: RoleCard
   return (
     <li
       className={`rounded-md border p-3 ${
-        alerta || maquiadorSemTalento ? "border-gold bg-gold-soft/20" : "border-line bg-surface-2/40"
+        alerta || maquiadorSemTalento || (canEdit && sujo)
+          ? "border-gold bg-gold-soft/20"
+          : "border-line bg-surface-2/40"
       }`}
     >
       <div className="flex items-start gap-2.5">
@@ -411,6 +455,19 @@ function RoleCard({ role, data, canEdit, podeTirar = false, onAvisos }: RoleCard
             </Button>
           </div>
         </div>
+      )}
+
+      {canEdit && sujo && !assign.isPending && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-x-3 text-sm font-medium text-gold-ink" role="status">
+          Alteração não salva.
+          <button
+            type="button"
+            className="text-xs font-normal text-muted underline hover:text-ink"
+            onClick={descartar}
+          >
+            Descartar
+          </button>
+        </p>
       )}
 
       {canEdit && acimaDoTeto && (
@@ -745,6 +802,29 @@ export function CastingSection({ data }: CastingSectionProps) {
   // Feature 339: remover/acrescentar vaga ajusta o título no Google; se o Google recusar, a vaga já
   // foi gravada e o aviso fica aqui até a pessoa fechar (o card que pediu pode nem existir mais).
   const [avisosDoTitulo, setAvisosDoTitulo] = useState<string[]>([]);
+  // Hotfix 356: vagas com alteração não salva. Cada card tem o próprio "Salvar"; com cinco cachês
+  // digitados, salvar quatro e sair perdia o quinto sem ninguém perceber.
+  const [sujos, setSujos] = useState<ReadonlySet<number>>(() => new Set());
+  const marcarSujo = useCallback((roleId: number, sujo: boolean) => {
+    setSujos((antes) => {
+      if (antes.has(roleId) === sujo) return antes;
+      const depois = new Set(antes);
+      if (sujo) depois.add(roleId);
+      else depois.delete(roleId);
+      return depois;
+    });
+  }, []);
+  // Fechar a aba ou recarregar com cachê digitado pede confirmação ao navegador. Dentro do app
+  // (outra tela, outra aba do evento) o rascunho do card fica guardado e volta com o aviso.
+  useEffect(() => {
+    if (sujos.size === 0) return;
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [sujos.size]);
 
   const renderList = (items: RoleItem[]) =>
     items.length === 0 ? (
@@ -763,6 +843,7 @@ export function CastingSection({ data }: CastingSectionProps) {
               canEdit={canEdit}
               podeTirar={podeTirar}
               onAvisos={setAvisosDoTitulo}
+              onSujo={marcarSujo}
             />
           ),
         )}
@@ -793,6 +874,17 @@ export function CastingSection({ data }: CastingSectionProps) {
           ) : null
         }
       >
+        {sujos.size > 0 && (
+          <p
+            className="mb-2 rounded-md border border-gold/40 bg-gold-soft px-3 py-2 text-sm text-ink"
+            role="status"
+          >
+            {sujos.size === 1
+              ? "1 vaga com alteração não salva."
+              : `${sujos.size} vagas com alteração não salva.`}{" "}
+            Use o Salvar de cada card.
+          </p>
+        )}
         {podeTirar && aAvisar > 0 && (
           <p className="mb-2 rounded-md bg-red-soft px-3 py-2 text-sm text-red" role="note">
             Evento cancelado: remova os escalados da escala e avise cada um pelo WhatsApp.
