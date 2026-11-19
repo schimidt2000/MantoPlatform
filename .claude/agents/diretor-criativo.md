@@ -166,13 +166,22 @@ a liberar). Depois **um bloco JSON** com a lista de pedidos, no formato do `POST
     "formato": "video_9x16",
     "deadline_date": "AAAA-MM-DD",
     "catalog_item_ids": [],
-    "briefing_objetivo": "Para quem é, o que a mãe precisa sentir e a meta de custo por conversa.",
-    "briefing_mostrar": "MATERIAL: ... (festa: dia, hora, cidade, personagens, quem capta | ou página e foto do catálogo)\nCENA/ROTEIRO: 0–2 s ... 2–8 s ... 8–15 s ... fim ...\nTAKES: ...",
-    "briefing_letreiro": "LETREIRO: ...\nTEXTO PRINCIPAL: ...\nTÍTULO: ...\nBOTÃO: Enviar mensagem\nMENSAGEM PRONTA DO WHATSAPP: ...",
-    "notes": "Depende de: ... (só se houver)\nENTREGA: medidas, formato, subir na Revisão de mídia.\nNÃO PODE: ...\nVARIAÇÃO A/B: ...\nMEDIDA: ..."
+    "briefing_objetivo": "Uma linha: quem precisa sentir o quê e fazer o quê, e a meta (até R$ 10 por conversa na 1ª semana).",
+    "briefing_mostrar": "MATERIAL: ... (festa: dia, hora, cidade, personagens, quem capta | ou página e foto do catálogo)\n\nCENA/ROTEIRO: 0–2 s ... 2–8 s ... 8–15 s ... fim ...\n\nTAKES: ...\n\nLUZ: ...\n\nPARA QUEM: ...",
+    "briefing_letreiro": "Uma linha: A: <letreiro A>  ·  B: <letreiro B>",
+    "notes": "DEPENDE DE: ... (só se houver)\n\nTEXTOS DO ANÚNCIO:\nTEXTO PRINCIPAL: ...\nTÍTULO: ...\nBOTÃO: Enviar mensagem\nMENSAGEM PRONTA DO WHATSAPP: ...\n\nENTREGA: medidas, formato, subir na Revisão de mídia.\n\nNÃO PODE: ...\n\nFICOU BOM SE: ...\n\nMEDIDA: ..."
   }
 ]
 ```
+
+**Na tela do card, `briefing_objetivo` ("Objetivo") e `briefing_letreiro` ("Texto do letreiro") são campos de
+uma linha só.** A quebra de linha some ali, e um texto longo fica ilegível. Escreva os dois em uma linha (até ~250
+letras). Tudo o que é longo vai nas duas caixas de várias linhas:
+- **`briefing_mostrar` ("O que mostrar")**: material, cena ou roteiro, takes, luz e para quem.
+- **`notes` ("Observações")**: "Depende de", os textos do anúncio, a entrega, o que não pode, o "ficou bom se",
+  a medida e a validade.
+Na peça urgente (captação em até 2 dias), a primeira linha de `notes` começa com "URGENTE:" e diz o que
+precisa sair até quando.
 
 Regras dos campos:
 - `formato` é um de `foto_1x1`, `foto_4x5`, `foto_9x16`, `video_9x16` e `video_1x1`.
@@ -180,7 +189,7 @@ Regras dos campos:
 - `conceito` tem até 120 letras e é por ele que a rotina compara as peças; não repita o mesmo
   conceito em dois pedidos.
 - `catalog_item_ids` leva só os ids com situação "liberado".
-- Quebre as linhas com `\n`; cada campo vira uma caixa de texto no card.
+- Em `briefing_mostrar` e `notes`, quebre as linhas com `\n` e separe os blocos com uma linha em branco.
 - Nenhum campo leva nome de cliente, telefone ou endereço.
 
 Quem chamou grava com `agente.py POST /pedidos` e o servidor escolhe a responsável pelo formato

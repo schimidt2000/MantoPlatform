@@ -45,6 +45,11 @@ uma razão: nenhum tema estava (nem está) liberado para anúncio.
   nem CEP (conferido na lista inteira). `ruff check` e `ruff format` limpos.
 - O agente rodou com os dados de 19/11 e devolveu os pedidos que substituem os cards 68 e 69, no
   formato do `POST /pedidos`, mais a lista de temas para liberar.
+- Os cards 68 e 69 foram reescritos pela tela, na sessão do dono, e conferidos pela API:
+  - 68: Fada Glow Peach, foto 6 do catálogo, entrega 25/11;
+  - 69: Papai Noel com Bailarelfos, captação no evento de 20/11 em Sorocaba, entrega 24/11.
+- A tela ensinou uma regra que o agente agora segue: "Objetivo" e "Texto do letreiro" são campos de
+  uma linha só. O texto longo vai em "O que mostrar" e "Observações".
 - Não há verify Python: nenhum comportamento do app muda.
 
 ## Fora de escopo
