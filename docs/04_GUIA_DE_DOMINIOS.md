@@ -869,6 +869,12 @@ famílias. **Invariante:** `gerar_slots` nunca cria um horário a menos de 15 mi
 campanha — o que encostaria (grade antiga de 10 em 10, janela vizinha) vai para `skipped`. Horário
 gravado à mão (Shell, script) não passa por essa conferência.
 
+**Indisponível à mão (341c).** `marcar_indisponivel` só leva `livre` (sem pedido) a `indisponivel` e
+de volta, com a linha travada como na reserva. O indisponível não é reservável (`is_available` é
+falso), aparece riscado na loja (`listar_slots_indisponiveis`, junto com vendido e em pagamento) e
+**conta como tomado** em `decidir_pagamento`: o pagamento atrasado de quem abandonou aquele horário vira
+devolução, nunca venda por cima de uma reserva combinada fora do site.
+
 ### Medição e privacidade (344)
 
 - **Contagem anônima.** `registrar_visita` soma 1 em `virtual_campaign_visits` (campanha + dia de São

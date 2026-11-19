@@ -96,6 +96,7 @@ from app.constants import (  # feature 310
     VIRTUAL_SALA_RETRY_LONGO_MIN,
     VIRTUAL_SLOT_INTERVAL_MINUTES,
     VIRTUAL_SLOT_MINUTES,
+    VIRTUAL_SLOT_STATUS_INDISPONIVEL,
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
     VIRTUAL_SLOT_STATUS_VENDIDO,
@@ -625,7 +626,9 @@ def remover_slot(slot: VirtualCampaignSlot) -> None:
     Raises:
         VirtuaisValidationError: O horário está travado ou vendido.
     """
-    if slot.status != VIRTUAL_SLOT_STATUS_LIVRE or slot.order_id is not None:
+    # 341c: o indisponível (marcado à mão) também sai — não tem família do outro lado.
+    removiveis = (VIRTUAL_SLOT_STATUS_LIVRE, VIRTUAL_SLOT_STATUS_INDISPONIVEL)
+    if slot.status not in removiveis or slot.order_id is not None:
         raise VirtuaisValidationError(
             "id",
             "Este horário já está reservado ou vendido e não pode ser removido. "
@@ -638,6 +641,52 @@ def remover_slot(slot: VirtualCampaignSlot) -> None:
         f"Horário removido da campanha #{campaign_id}",
     )
     db.session.commit()
+
+
+def marcar_indisponivel(slot_id: int, indisponivel: bool) -> VirtualCampaignSlot:
+    """Tira um horário livre da venda à mão, ou devolve (feature 341c).
+
+    Para a reserva combinada fora do site (o "boca a boca" do dono) ou uma pausa do artista. O
+    horário continua aparecendo na loja, riscado — é a verdade: ele não está disponível.
+
+    Só ``livre`` sem pedido vira ``indisponivel``, e só ``indisponivel`` volta a ``livre``: um
+    horário em pagamento ou vendido tem uma família do outro lado. A linha é travada (``FOR
+    UPDATE``) como na reserva (``_travar_slot``), para o clique da equipe e a reserva de uma família
+    no mesmo instante não passarem os dois.
+
+    Raises:
+        VirtuaisValidationError: Horário inexistente ou com reserva/venda.
+    """
+    slot = (
+        VirtualCampaignSlot.query.filter_by(id=slot_id)
+        .options(lazyload("*"))
+        .with_for_update()
+        .first()
+    )
+    if slot is None:
+        raise VirtuaisValidationError("id", "Horário não encontrado.")
+    origem, destino = (
+        (VIRTUAL_SLOT_STATUS_LIVRE, VIRTUAL_SLOT_STATUS_INDISPONIVEL)
+        if indisponivel
+        else (VIRTUAL_SLOT_STATUS_INDISPONIVEL, VIRTUAL_SLOT_STATUS_LIVRE)
+    )
+    if slot.status == destino:
+        db.session.rollback()
+        return slot
+    if slot.status != origem or slot.order_id is not None:
+        db.session.rollback()
+        raise VirtuaisValidationError(
+            "indisponivel",
+            "Este horário tem uma reserva em pagamento ou uma venda e não pode mudar por aqui.",
+        )
+    slot.status = destino
+    slot.locked_until = None
+    audit(
+        "edit", "VirtualCampaignSlot", slot.id, str(slot.start_at),
+        "Horário marcado como indisponível" if indisponivel else "Horário liberado para venda",
+    )
+    db.session.commit()
+    return slot
 
 
 # Marca o `CalendarEvent` cujo lado Google nunca chegou a existir. A coluna `google_event_id` é
@@ -810,6 +859,25 @@ def listar_slots_disponiveis(campaign: VirtualCampaign, *, day: str | None = Non
     ).order_by(VirtualCampaignSlot.start_at.asc())
 
     slots = [s for s in query.all() if s.is_available(momento)]
+    if day:
+        slots = [s for s in slots if s.start_at.date().isoformat() == day]
+    return slots
+
+
+def listar_slots_indisponiveis(campaign: VirtualCampaign, *, day: str | None = None) -> list:
+    """Horários da mesma janela que a loja mostra riscados (feature 341c).
+
+    Vendido, em pagamento (trava ainda valendo) ou marcado à mão — tudo que está na grade e não pode
+    ser escolhido agora. Mesma janela de ``listar_slots_disponiveis`` (futuro, com a antecedência
+    mínima): o riscado nunca aparece num dia ou hora que já não se vende mais.
+    """
+    momento = agora()
+    query = VirtualCampaignSlot.query.filter(
+        VirtualCampaignSlot.campaign_id == campaign.id,
+        VirtualCampaignSlot.start_at > _limite_de_reserva(momento),
+    ).order_by(VirtualCampaignSlot.start_at.asc())
+
+    slots = [s for s in query.all() if not s.is_available(momento)]
     if day:
         slots = [s for s in slots if s.start_at.date().isoformat() == day]
     return slots
@@ -2251,6 +2319,9 @@ def decidir_pagamento(
             slot is None
             or (slot.order_id is not None and slot.order_id != order.id)
             or (slot.status == VIRTUAL_SLOT_STATUS_VENDIDO and slot.order_id != order.id)
+            # 341c: o horário que a equipe marcou à mão (reserva combinada fora do site) também está
+            # tomado — o pagamento atrasado de quem abandonou vira devolução, não venda por cima.
+            or slot.status == VIRTUAL_SLOT_STATUS_INDISPONIVEL
         )
         if not tomado and slot.start_at <= agora() + timedelta(
             minutes=VIRTUAL_MIN_MINUTOS_NO_PAGAMENTO

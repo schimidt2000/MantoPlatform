@@ -75,9 +75,17 @@ def api_virtuais_horarios_publicos(slug: str) -> Any:
     campaign, erro = _campanha_publicada_ou_erro(slug)
     if erro:
         return erro
-    slots = ops.listar_slots_disponiveis(campaign, day=request.args.get("date"))
+    dia = request.args.get("date")
+    slots = ops.listar_slots_disponiveis(campaign, day=dia)
+    # 341c: os que não dá para escolher agora (vendido, em pagamento, marcado à mão) vão à parte, só
+    # com o horário — sem id (nada a reservar) e sem motivo. `slots` continua só com os livres: a
+    # página antiga em cache segue funcionando igual.
+    riscados = ops.listar_slots_indisponiveis(campaign, day=dia)
     return jsonify(
-        {"slots": [{"id": s.id, "start_at": s.start_at.isoformat()} for s in slots]}
+        {
+            "slots": [{"id": s.id, "start_at": s.start_at.isoformat()} for s in slots],
+            "indisponiveis": [{"start_at": s.start_at.isoformat()} for s in riscados],
+        }
     )
 
 

@@ -21,7 +21,6 @@ import {
   useRegistrarVisita,
   useReservar,
   type VirtualModality,
-  type VirtualSlotPublic,
 } from "../lib/virtuais";
 import { eventoPixel } from "../lib/pixel";
 import { AVISO_UM_FORMATO, CAMPANHA, FAQ_LOJA, FORMATOS, whatsappLink } from "../lib/lojaTema";
@@ -49,6 +48,13 @@ import {
  * A chamada não é só para criança (feature 341): a avó, o padrinho, um adulto também recebem. O
  * texto fala de "quem vai receber"; a cartinha continua, como o momento da criança.
  */
+
+/** Um horário na grade (341c): o livre tem `id` (reservável); o indisponível só tem a hora. */
+interface ItemDaGrade {
+  id?: number;
+  start_at: string;
+  indisponivel: boolean;
+}
 
 const CAMPOS_ROLAVEIS = [
   "child_name",
@@ -128,12 +134,20 @@ export function CampanhaVirtualPage() {
     );
   }, [campanha, modalidade]);
 
-  // Horários agrupados por dia, na ordem em que a API devolve (já cronológica).
+  // Horários agrupados por dia e em ordem de hora. 341c: os indisponíveis (vendido, em pagamento ou
+  // tirado da venda pela equipe) entram na grade riscados — o horário não some, e a família vê que
+  // ele existe e já não está livre. Ordenar pelo texto ISO dá a ordem de hora (mesmo fuso, mesmo
+  // formato).
+  const livres = horarios?.slots ?? [];
   const dias = useMemo(() => {
-    const grupos = new Map<string, VirtualSlotPublic[]>();
-    for (const slot of horarios?.slots ?? []) {
-      const dia = diaDoHorario(slot.start_at);
-      grupos.set(dia, [...(grupos.get(dia) ?? []), slot]);
+    const itens: ItemDaGrade[] = [
+      ...(horarios?.slots ?? []).map((s) => ({ ...s, indisponivel: false })),
+      ...(horarios?.indisponiveis ?? []).map((s) => ({ start_at: s.start_at, indisponivel: true })),
+    ].sort((a, b) => a.start_at.localeCompare(b.start_at));
+    const grupos = new Map<string, ItemDaGrade[]>();
+    for (const item of itens) {
+      const dia = diaDoHorario(item.start_at);
+      grupos.set(dia, [...(grupos.get(dia) ?? []), item]);
     }
     return [...grupos.entries()];
   }, [horarios]);
@@ -397,34 +411,48 @@ export function CampanhaVirtualPage() {
       {modalidade === "ao_vivo" && (
         <section className="mt-8" ref={(el) => (refs.current.slot_id = el)} tabIndex={-1}>
           <TituloSecao>Escolha o dia e a hora</TituloSecao>
-          {dias.length === 0 ? (
+          {livres.length === 0 && (
             <p className="mt-2 text-[14px] text-alo-muted">
               Nenhum horário livre agora. Fale com a gente pelo WhatsApp abaixo — ou escolha o
               vídeo gravado, que não tem hora marcada.
             </p>
-          ) : (
+          )}
+          {dias.length > 0 && (
             <>
-              <p className="mt-1 text-[13px] text-alo-muted">Horário de Brasília.</p>
+              <p className="mt-1 text-[13px] text-alo-muted">
+                Horário de Brasília.
+                {(horarios?.indisponiveis?.length ?? 0) > 0 && " Riscados: indisponíveis."}
+              </p>
               <div className="mt-3 space-y-4">
                 {dias.map(([dia, slots]) => (
                   <div key={dia}>
                     <p className="text-[14px] font-semibold text-alo-ink">{rotuloDoDia(dia)}</p>
                     <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                      {slots.map((slot) => (
-                        <button
-                          key={slot.id}
-                          type="button"
-                          aria-pressed={slotId === slot.id}
-                          onClick={() => setSlotId(slot.id)}
-                          className={`min-h-[44px] rounded-lg border text-[15px] transition-colors ${
-                            slotId === slot.id
-                              ? "border-alo-gold bg-alo-gold font-bold text-alo-bg"
-                              : "border-alo-line-strong bg-alo-surface text-alo-ink hover:border-alo-gold"
-                          }`}
-                        >
-                          {horaDoHorario(slot.start_at)}
-                        </button>
-                      ))}
+                      {slots.map((slot) =>
+                        slot.indisponivel || slot.id === undefined ? (
+                          <span
+                            key={`x-${slot.start_at}`}
+                            aria-label={`${horaDoHorario(slot.start_at)}, indisponível`}
+                            className="flex min-h-[44px] items-center justify-center rounded-lg border border-dashed border-alo-line-strong/60 text-[15px] text-alo-muted line-through decoration-alo-muted/80"
+                          >
+                            {horaDoHorario(slot.start_at)}
+                          </span>
+                        ) : (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            aria-pressed={slotId === slot.id}
+                            onClick={() => setSlotId(slot.id ?? null)}
+                            className={`min-h-[44px] rounded-lg border text-[15px] transition-colors ${
+                              slotId === slot.id
+                                ? "border-alo-gold bg-alo-gold font-bold text-alo-bg"
+                                : "border-alo-line-strong bg-alo-surface text-alo-ink hover:border-alo-gold"
+                            }`}
+                          >
+                            {horaDoHorario(slot.start_at)}
+                          </button>
+                        ),
+                      )}
                     </div>
                   </div>
                 ))}

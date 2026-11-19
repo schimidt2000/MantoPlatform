@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "framer-motion";
-import { CalendarPlus, Trash2 } from "lucide-react";
+import { CalendarPlus, Lock, LockOpen, Trash2 } from "lucide-react";
 import {
   AvatarThumb,
   Badge,
@@ -11,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
   Combobox,
+  ConfirmDialog,
   Input,
   PageHeader,
   Skeleton,
@@ -26,6 +27,7 @@ import {
   numberToApiMoney,
   useFunilCampanha,
   useGerarSlots,
+  useMarcarSlotIndisponivel,
   useRemoverSlot,
   useSetVirtualCampaignAcervo,
   useSetVirtualCampaignStatus,
@@ -33,9 +35,19 @@ import {
   useVirtualCampaign,
   VIRTUAL_CAMPAIGN_STATUS_LABELS,
   VIRTUAL_CAMPAIGN_STATUS_TONES,
+  VIRTUAL_SLOT_STATUS_LABELS,
   type VirtualCampaignStatus,
   type VirtualFaqItem,
+  type VirtualSlot,
 } from "../lib/virtuais";
+
+/** Cor do selo do horário (341c): livre neutro, indisponível azul (decisão da equipe), resto dourado. */
+const TOM_DO_HORARIO: Record<VirtualSlot["status"], "neutral" | "blue" | "gold"> = {
+  livre: "neutral",
+  indisponivel: "blue",
+  travado: "gold",
+  vendido: "gold",
+};
 
 /**
  * Edição de uma campanha da Loja de Interações Virtuais (feature 205, US1).
@@ -80,6 +92,9 @@ export function VirtuaisCampanhaFormPage() {
   const setStatus = useSetVirtualCampaignStatus(campaignId);
   const gerarSlots = useGerarSlots(campaignId);
   const removerSlot = useRemoverSlot(campaignId);
+  const marcarSlot = useMarcarSlotIndisponivel(campaignId);
+  // 341c: remover pede confirmação — sem ela, 7 horários saíram por engano em 19/11.
+  const [slotParaRemover, setSlotParaRemover] = useState<VirtualSlot | null>(null);
   const setAcervo = useSetVirtualCampaignAcervo(campaignId);
 
   const [title, setTitle] = useState("");
@@ -554,6 +569,10 @@ export function VirtuaisCampanhaFormPage() {
               janela novamente não duplica horários.
             </p>
 
+            {marcarSlot.error && (
+              <p className="text-[12px] text-red">{marcarSlot.error.message}</p>
+            )}
+
             {campaign.slots.length > 0 && (
               <div className="max-h-48 space-y-1 overflow-y-auto">
                 {campaign.slots.map((slot) => (
@@ -569,16 +588,48 @@ export function VirtuaisCampanhaFormPage() {
                         minute: "2-digit",
                       })}
                     </span>
-                    <div className="flex items-center gap-2">
-                      <Badge tone={slot.status === "livre" ? "neutral" : "gold"}>
-                        {slot.status}
+                    <div className="flex items-center gap-1">
+                      <Badge tone={TOM_DO_HORARIO[slot.status]}>
+                        {VIRTUAL_SLOT_STATUS_LABELS[slot.status]}
                       </Badge>
-                      {slot.status === "livre" && (
+                      {/* 341c: reserva combinada fora do site — o horário sai da venda, mas
+                          continua na loja, riscado. Só livre ↔ indisponível; o resto tem família. */}
+                      {(slot.status === "livre" || slot.status === "indisponivel") && (
+                        <button
+                          type="button"
+                          aria-label={
+                            slot.status === "livre"
+                              ? "Marcar como indisponível"
+                              : "Liberar horário para venda"
+                          }
+                          title={
+                            slot.status === "livre"
+                              ? "Marcar como indisponível"
+                              : "Liberar horário para venda"
+                          }
+                          disabled={marcarSlot.isPending}
+                          className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-ink disabled:opacity-50"
+                          onClick={() =>
+                            marcarSlot.mutate({
+                              slotId: slot.id,
+                              indisponivel: slot.status === "livre",
+                            })
+                          }
+                        >
+                          {slot.status === "livre" ? (
+                            <Lock className="size-3.5" />
+                          ) : (
+                            <LockOpen className="size-3.5" />
+                          )}
+                        </button>
+                      )}
+                      {(slot.status === "livre" || slot.status === "indisponivel") && (
                         <button
                           type="button"
                           aria-label="Remover horário"
-                          className="text-muted hover:text-red"
-                          onClick={() => removerSlot.mutate(slot.id)}
+                          title="Remover horário"
+                          className="rounded p-1.5 text-muted hover:bg-surface-2 hover:text-red"
+                          onClick={() => setSlotParaRemover(slot)}
                         >
                           <Trash2 className="size-3.5" />
                         </button>
@@ -654,6 +705,32 @@ export function VirtuaisCampanhaFormPage() {
           </CardContent>
         </Card>
       </div>
+
+      <ConfirmDialog
+        open={slotParaRemover !== null}
+        title="Remover este horário?"
+        description={
+          slotParaRemover
+            ? `O horário de ${new Date(slotParaRemover.start_at).toLocaleString("pt-BR", {
+                day: "2-digit",
+                month: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              })} sai da loja. Para só tirar da venda e deixar aparecendo riscado, use o cadeado.`
+            : ""
+        }
+        confirmLabel="Remover"
+        destructive
+        pending={removerSlot.isPending}
+        error={removerSlot.isError ? removerSlot.error?.message || "Não foi possível remover." : null}
+        onConfirm={() => {
+          if (!slotParaRemover) return;
+          removerSlot.mutate(slotParaRemover.id, { onSuccess: () => setSlotParaRemover(null) });
+        }}
+        onOpenChange={(aberto) => {
+          if (!aberto) setSlotParaRemover(null);
+        }}
+      />
     </motion.div>
   );
 }

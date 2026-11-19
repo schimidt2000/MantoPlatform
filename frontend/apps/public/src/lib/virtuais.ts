@@ -97,6 +97,11 @@ export interface VirtualSlotPublic {
   start_at: string;
 }
 
+/** Horário que a loja mostra riscado (341c): vendido, em pagamento ou tirado da venda pela equipe. */
+export interface VirtualSlotIndisponivel {
+  start_at: string;
+}
+
 export interface VirtualOrderSummary {
   status: "reservado" | "aguardando" | "pago" | "expirado" | "cancelado";
   modality: VirtualModality;
@@ -240,12 +245,19 @@ export function useCampanhaVirtual(slug: string | undefined) {
   });
 }
 
+/**
+ * `slots` = os que dá para escolher; `indisponiveis` (341c) = os que a grade mostra riscados. Opcional:
+ * o backend antigo, durante o deploy, ainda não manda.
+ */
+export interface HorariosVirtuais {
+  slots: VirtualSlotPublic[];
+  indisponiveis?: VirtualSlotIndisponivel[];
+}
+
 export function useHorariosVirtuais(slug: string | undefined, enabled: boolean) {
-  return useQuery<{ slots: VirtualSlotPublic[] }>({
+  return useQuery<HorariosVirtuais>({
     queryKey: ["virtuais", "horarios", slug],
-    queryFn: () => apiFetch<{ slots: VirtualSlotPublic[] }>(
-      `/api/virtuais/campanhas/${slug}/horarios`,
-    ),
+    queryFn: () => apiFetch<HorariosVirtuais>(`/api/virtuais/campanhas/${slug}/horarios`),
     enabled: Boolean(slug) && enabled,
     // Horário é estoque disputado: revalidar ao voltar para a aba evita a família tentar
     // reservar algo que já foi.

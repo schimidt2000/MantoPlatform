@@ -1737,7 +1737,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   - **Estoque de horários** — data + janela início/fim geram um horário a cada 15 min (chamada de
     10 + 5 de pausa do artista; 341b: 14h00–18h00 dá 14h00 … 17h45); o retorno diz quantos foram
     criados e quantos foram pulados (já existiam ou ficariam a menos de 15 min de outro). Lista os
-    horários com selo de situação; só os livres têm botão de remover.
+    horários com selo de situação ("livre", "em pagamento", "vendido", "indisponível" — 341c). No
+    livre e no indisponível há dois botões: o **cadeado** ("Marcar como indisponível" / "Liberar
+    horário para venda" — reserva combinada fora do site; na loja ele fica riscado, não some) e a
+    **lixeira**, que desde a 341c abre "Remover este horário?" (sem a confirmação, 7 horários saíram
+    por engano em 19/11). Erro do cadeado (horário que entrou em pagamento) aparece acima da lista.
   - **Presentes 3D liberados** — `Combobox` pesquisável do Acervo 3D com miniatura **quadrada**
     (Princípio XII.2); as peças já liberadas viram chips removíveis.
   - Publicar/Pausar no cabeçalho, ao lado de Salvar. Todo botão mostra estado de carregamento
@@ -1825,6 +1829,11 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 > chamada diz "Se for uma criança, dá para mostrar a cartinha"; o do vídeo, "entregue até 13 de
 > dezembro" com a data da campanha (`entregaDoVideo`, data pelo texto, sem fuso) ou "em até N dias";
 > o FAQ da loja ganhou "É só para criança?". A página do pedido mostra "Para" no lugar de "Criança".
+
+> **341c**: a grade mostra também os horários que não dá para escolher (vendido, em pagamento ou
+> marcado à mão pela equipe), **riscados**, com contorno tracejado e sem clique (`aria-label` "…,
+> indisponível"), na ordem da hora; a legenda vira "Horário de Brasília. Riscados: indisponíveis."
+> Sem nenhum livre, aparece o aviso de sempre e a grade de riscados embaixo.
 
 > **344**: a página conta **uma visita por aba** (`useRegistrarVisita`, guard em `sessionStorage`) com a
 > origem do link (`?origem=`/`utm_source`) ou da procedência (`origemDaVisita`), sem cookie; a ficha

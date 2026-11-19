@@ -351,6 +351,29 @@ def api_virtuais_cancelar_pedido(order_id: int) -> Any:
     return jsonify({"refund": ops.serialize_refund(devolucao)})
 
 
+@api_bp.route("/virtuais/horarios/<int:slot_id>", methods=["PATCH"])
+@api_login_required
+def api_virtuais_marcar_horario(slot_id: int) -> Any:
+    """Marca um horário livre como indisponível, ou libera (feature 341c).
+
+    ``{"indisponivel": true|false}``. ``409`` quando o horário tem reserva em pagamento ou venda.
+    """
+    denied = require_virtuais_access()
+    if denied:
+        return denied
+    if VirtualCampaignSlot.query.get(slot_id) is None:
+        return json_error("Horário não encontrado", 404)
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data.get("indisponivel"), bool):
+        return json_error("Informe se o horário fica indisponível.", 400,
+                          fields={"indisponivel": "Informe true ou false."})
+    try:
+        slot = ops.marcar_indisponivel(slot_id, data["indisponivel"])
+    except ops.VirtuaisValidationError as exc:
+        return json_error(exc.message, 409, fields={exc.field: exc.message})
+    return jsonify(ops.serialize_slot(slot))
+
+
 @api_bp.route("/virtuais/horarios/<int:slot_id>", methods=["DELETE"])
 @api_login_required
 def api_virtuais_remover_horario(slot_id: int) -> Any:
