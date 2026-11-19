@@ -4,7 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
+> Última atualização: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration; em
+> branch). Antes: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
 > pedido do dono ("bora fazer os pushs"), num push só, na ordem dos merges: **256b-relatorio-de-marketing**
 > (`verify_256b` 7/7), **347-endereco-abre-no-mapa** (`verify_347` 7/7), **352-fornecedores-gastos-extras**
 > (`verify_352` 11/11) e **353-gasto-extra-parcelado** (`verify_353` 11/11), no banco descartável `manto_lote`
@@ -267,6 +268,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **341c-horario-indisponivel** | Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
 | **347-endereco-abre-no-mapa** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
@@ -502,6 +504,29 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 341c — Horário indisponível à mão, que continua aparecendo na loja   (341c-horario-indisponivel · 2026-11-19 · sem migration)
+
+> Nível 2, ajuste da loja. Detalhe: `specs/341c-horario-indisponivel/spec.md`.
+
+**O pedido.** O dono, em 19/11, com o Papai Noel sendo divulgado: um botão ao lado do excluir para
+deixar o horário indisponível — pessoas reservando no boca a boca —, e "é importante o horário não
+sumir, e sim mostrar como indisponível". Na mesma mensagem, 7 horários livres tinham sido removidos sem
+querer às 13h45 (AuditLog); voltaram no mesmo dia por `gerar_slots` (20 horários, 14h00–18h45).
+Antes disso ele tinha cogitado mostrar horários livres como reservados; foi avisado de que é
+publicidade enganosa (CDC, art. 37) — esta é a versão honesta.
+
+**O que mudou.** Status `indisponivel` (`marcar_indisponivel`, só `livre` ↔ `indisponivel`, linha
+travada); `PATCH /api/virtuais/horarios/<id>`; `GET …/horarios` ganha `indisponiveis: [{start_at}]`
+(vendido, em pagamento ou marcado à mão), e a loja mostra riscados; `decidir_pagamento` trata
+`indisponivel` como horário tomado; remover aceita o indisponível e a tela pede confirmação.
+
+**Pegadinhas.** (1) Sem a regra no `decidir_pagamento`, o pagamento atrasado de quem abandonou o
+horário **vendia por cima** do bloqueio (o horário não tem pedido dono) — o cenário 10 do verify pegou
+isso no código antigo (`pago`, evento criado). (2) O Postgres local estava parado e ligar o serviço
+pede administrador: o verify rodou num Postgres temporário em `pgtemp` (scratchpad), porta 5433, com o
+dump de 19/11. (3) `slots` da API pública ficou só com os livres: a página antiga em cache não passa a
+oferecer horário riscado como escolhível.
 
 ### 353 — Gasto extra parcelado: um gasto, várias datas de pagamento   (353-gasto-extra-parcelado · 2026-11-17 · migration `f353a1b2c3d4`)
 

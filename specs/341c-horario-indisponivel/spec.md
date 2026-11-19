@@ -1,6 +1,6 @@
 # 341c — Horário indisponível à mão (e continua aparecendo na loja)
 
-**Branch**: `341c-horario-indisponivel` · **Created**: 2026-11-19 · **Status**: em andamento ·
+**Branch**: `341c-horario-indisponivel` · **Created**: 2026-11-19 · **Status**: pronto, aguardando deploy (`verify_341c.py` 28/28) ·
 **Migration**: nenhuma (`virtual_campaign_slots.status` é texto; entra o valor `indisponivel`)
 
 > Nível 2, ajuste da loja (205/341). Um domínio, sem migration.
@@ -26,6 +26,10 @@ indisponível de verdade (reservado fora do site, ou bloqueado) aparece como ind
   instante não passam os dois.
 - `PATCH /api/virtuais/horarios/<id>` `{indisponivel: true|false}` — Comercial e Superadmin; `409` com
   o motivo quando o horário não pode mudar.
+- **Pagamento atrasado num horário marcado à mão vira devolução.** A família reserva, abandona, a
+  reserva expira, o dono marca o horário para a reserva combinada fora do site — e o pagamento dela
+  chega depois: `decidir_pagamento` passa a tratar `indisponivel` como horário tomado (antes, sem pedido
+  dono, ele venderia por cima do bloqueio).
 - A loja mostra **todos** os horários futuros do dia: os livres para escolher e os indisponíveis
   (vendidos, em pagamento ou marcados à mão) riscados, sem clique. A API pública ganha
   `indisponiveis: [{start_at}]` ao lado de `slots` (que continua só com os livres — a página antiga em
@@ -40,7 +44,8 @@ indisponível de verdade (reservado fora do site, ou bloqueado) aparece como ind
 `verify_341c.py` contra um espelho do dump de 19/11: marcar e liberar pela rota; a loja lista o
 indisponível em `indisponiveis` e não em `slots`; reservar o indisponível → `409` e nada gravado;
 vendido e em pagamento não mudam (`409`); vendido também aparece riscado; remover o indisponível;
-papel sem acesso → `403` (deve falhar). Regressão: `verify_341b`, `verify_310`, `verify_205`.
+papel sem acesso → `403` (deve falhar); pagamento atrasado num horário marcado → devolução, horário
+segue indisponível. Regressão no mesmo espelho: `verify_341b` 14/14, `verify_310` 652/652, `verify_340` 64/64, `verify_341` 20/20, `verify_344` 57/57, `verify_205` 138/138. Antes do código: 19 FALHA pelo motivo certo (o cenário 10 mostrou o código antigo vendendo por cima do bloqueio).
 Telas: campanha (botões, confirmação) e loja em 375 px (riscados).
 
 ## Fora de escopo

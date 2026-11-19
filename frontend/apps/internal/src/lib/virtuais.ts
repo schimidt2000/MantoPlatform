@@ -102,9 +102,18 @@ export interface VirtualCampaign {
 export interface VirtualSlot {
   id: number;
   start_at: string;
-  status: "livre" | "travado" | "vendido";
+  /** `indisponivel` (341c): tirado da venda à mão — na loja aparece riscado. */
+  status: "livre" | "travado" | "vendido" | "indisponivel";
   locked_until: string | null;
 }
+
+/** Rótulo do selo do horário na tela da campanha (341c). */
+export const VIRTUAL_SLOT_STATUS_LABELS: Record<VirtualSlot["status"], string> = {
+  livre: "livre",
+  travado: "em pagamento",
+  vendido: "vendido",
+  indisponivel: "indisponível",
+};
 
 export interface VirtualCampaignDetail extends VirtualCampaign {
   slots: VirtualSlot[];
@@ -607,6 +616,22 @@ export function useResolverAConferir() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: A_CONFERIR_KEY });
     },
+  });
+}
+
+/**
+ * Marca um horário livre como indisponível, ou libera (341c). Recusa (`409`) horário em pagamento
+ * ou vendido — a mensagem do servidor diz por quê.
+ */
+export function useMarcarSlotIndisponivel(campaignId: number) {
+  const invalidate = useInvalidateCampaigns();
+  return useMutation({
+    mutationFn: ({ slotId, indisponivel }: { slotId: number; indisponivel: boolean }) =>
+      apiFetch<VirtualSlot>(`/api/virtuais/horarios/${slotId}`, {
+        method: "PATCH",
+        body: JSON.stringify({ indisponivel }),
+      }),
+    onSuccess: () => invalidate(campaignId),
   });
 }
 

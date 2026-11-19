@@ -11,6 +11,7 @@ Roda contra o `manto_341c` (dump de produção de 19/11/2026 02:00). Escrito ANT
   6  vendido e em pagamento também aparecem riscados na loja
   7  horário indisponível pode ser removido
   8  papel sem acesso marca → 403 (deve falhar) e nada muda
+  10 pagamento atrasado num horário marcado à mão → devolução, não venda por cima
   9  limpeza; nenhuma conexão externa
 
 Uso:
@@ -54,7 +55,7 @@ socket.create_connection = _so_local
 
 from sqlalchemy import create_engine, text  # noqa: E402
 
-from app import create_app, db, limiter  # noqa: E402
+from app import create_app, db, email_service, limiter  # noqa: E402
 from app.constants import RoleName  # noqa: E402
 from app.integracoes import infinitepay_client as ipc  # noqa: E402
 from app.marketing import virtuais_ops as ops  # noqa: E402
@@ -62,8 +63,16 @@ from app.models import CatalogCharacter, SiteSetting, User, VirtualCampaignSlot 
 
 RUN = secrets.token_hex(3)
 PASSWORD = f"verify341c-{secrets.token_hex(6)}"
+TOKEN = f"tok341c-{RUN}-{secrets.token_hex(8)}"
 app = create_app()
+# Cenário 10: o aviso de pagamento decide na hora (sem a thread da caixa).
+app.config["VIRTUAIS_AVISO_SINCRONO"] = True
 _engine = create_engine(os.environ["DATABASE_URL"].strip())
+
+# Nenhum e-mail sai (a devolução do cenário 10 avisaria a família).
+EMAILS: list[dict] = []
+_send_original = email_service._send
+email_service._send = lambda **kw: EMAILS.append(kw) or True
 
 
 def _db(sql: str, **p):
@@ -98,8 +107,34 @@ def cenario(nome: str):
     return deco
 
 
-# InfinitePay por dublê: a reserva do cenário 3 não pode chegar a falar com a operadora de verdade.
+# InfinitePay por dublê: nenhuma reserva fala com a operadora de verdade. A reconsulta do cenário 10
+# confirma o pagamento só da cobrança que o próprio verify "pagou".
 ipc.criar_link_pagamento = lambda **kw: {"payment_url": f"https://checkout.dublê/{kw['order_nsu']}"}
+COBRANCAS: dict[str, dict] = {}
+
+
+def _consulta(*, handle, order_nsu, transaction_nsu=None, slug=None, **kw):
+    c = COBRANCAS.get(order_nsu)
+    if c and transaction_nsu == c["tx"] and slug == c["slug"]:
+        return {
+            "resultado": "pago",
+            "paid": True,
+            "amount": c["valor"],
+            "paid_amount": c["valor"],
+            "capture_method": "pix",
+            "raw": {"success": True},
+        }
+    return {
+        "resultado": "nao_encontrado",
+        "paid": False,
+        "amount": None,
+        "paid_amount": None,
+        "capture_method": None,
+        "raw": {"success": False},
+    }
+
+
+ipc.consultar_pagamento = _consulta
 
 # ── Fixtures ────────────────────────────────────────────────────────────────────────────────
 client = app.test_client()
@@ -113,7 +148,7 @@ with app.app_context():
     for campo in ("infinitepay_handle", "infinitepay_webhook_token", "virtuais_pagamento_ativo"):
         SETTINGS_ORIGINAIS[campo] = getattr(s, campo, None)
     s.infinitepay_handle = "verify-341c"
-    s.infinitepay_webhook_token = f"tok341c-{RUN}-{secrets.token_hex(8)}"
+    s.infinitepay_webhook_token = TOKEN
     s.virtuais_pagamento_ativo = True
     c = ops.criar_campanha(
         catalog_character_id=CatalogCharacter.query.filter_by(is_active=True).first().id,
@@ -135,6 +170,7 @@ with app.app_context():
             ("vendido", "vendido"),
             ("travado", "travado"),
             ("remover", "livre"),
+            ("atrasado", "livre"),
         ]
     ):
         h = VirtualCampaignSlot(
@@ -304,6 +340,78 @@ def c8():
     client.post("/api/auth/logout")
 
 
+@cenario("10 pagamento atrasado num horário marcado à mão → devolução, não venda por cima")
+def c10():
+    # A família reserva e abandona; a reserva expira e o horário volta a livre (como a varredura faz).
+    r = client.post(
+        f"/api/virtuais/campanhas/{SLUG}/reservar",
+        json={
+            "modality": "ao_vivo",
+            "slot_id": SLOTS["atrasado"],
+            "child_name": "Bia",
+            "child_age": 5,
+            "contact_phone": f"119{secrets.randbelow(10**8):08d}",
+            "contact_email": f"v341c-{RUN}@example.com",
+            "client_token": secrets.token_hex(8),
+        },
+        headers={"X-Manto-Client-Ip": "203.0.113.72", "User-Agent": "verify-341c"},
+    )
+    assert r.status_code == 201, f"reservar {r.status_code}"
+    nsu = r.get_json()["order_nsu"]
+    with _engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE virtual_orders SET status='expirado', locked_until=NULL WHERE order_nsu=:n"
+            ),
+            {"n": nsu},
+        )
+        conn.execute(
+            text(
+                "UPDATE virtual_campaign_slots SET status='livre', order_id=NULL, "
+                "locked_until=NULL WHERE id=:i"
+            ),
+            {"i": SLOTS["atrasado"]},
+        )
+    # O dono marca o horário para uma reserva combinada fora do site.
+    login("gestor")
+    marcar("atrasado", True)
+    client.post("/api/auth/logout")
+    # O pagamento da família chega depois.
+    total = Decimal(
+        str(_db("SELECT total_value FROM virtual_orders WHERE order_nsu=:n", n=nsu)[0][0])
+    )
+    cobranca = {"tx": f"tx341c-{RUN}", "slug": f"sl-{secrets.token_hex(4)}", "valor": total}
+    COBRANCAS[nsu] = cobranca
+    centavos = int(total * 100)
+    r = client.post(
+        f"/api/webhooks/infinitepay/{TOKEN}",
+        json={
+            "order_nsu": nsu,
+            "transaction_nsu": cobranca["tx"],
+            "invoice_slug": cobranca["slug"],
+            "amount": centavos,
+            "paid_amount": centavos,
+            "capture_method": "pix",
+            "receipt_url": "https://recibo/x",
+            "items": [],
+        },
+    )
+    check("10.1 aviso aceito", r.status_code == 200, str(r.status_code))
+    pedido = _db("SELECT status, event_id FROM virtual_orders WHERE order_nsu=:n", n=nsu)[0]
+    check("10.2 não virou venda", pedido[0] != "pago" and pedido[1] is None, str(pedido))
+    devolucao = _db(
+        "SELECT count(*) FROM virtual_refund_requests r JOIN virtual_orders o "
+        "ON o.id = r.order_id WHERE o.order_nsu=:n",
+        n=nsu,
+    )[0][0]
+    check("10.3 devolução aberta", devolucao == 1, str(devolucao))
+    check(
+        "10.4 o horário continua indisponível",
+        status("atrasado") == "indisponivel",
+        str(status("atrasado")),
+    )
+
+
 @cenario("9  limpeza")
 def c9():
     with _engine.begin() as conn:
@@ -311,6 +419,53 @@ def c9():
             text("UPDATE virtual_campaign_slots SET order_id=NULL WHERE campaign_id=:c"),
             {"c": CAMP_ID},
         )
+        for tabela in (
+            "virtual_payment_notifications",
+            "virtual_refund_requests",
+            "virtual_order_notifications",
+            "virtual_media_deliveries",
+        ):
+            conn.execute(
+                text(
+                    f"DELETE FROM {tabela} WHERE order_id IN "
+                    "(SELECT id FROM virtual_orders WHERE campaign_id=:c)"
+                ),
+                {"c": CAMP_ID},
+            )
+        # Se o código antigo vendeu no cenário 10, a venda deixou evento, escala e ficha do
+        # comprador (344): saem junto, para o espelho não acumular sobra entre rodadas.
+        eventos = [
+            r[0]
+            for r in conn.execute(
+                text(
+                    "SELECT event_id FROM virtual_orders WHERE campaign_id=:c "
+                    "AND event_id IS NOT NULL"
+                ),
+                {"c": CAMP_ID},
+            )
+        ]
+        telefones = [
+            "55" + r[0]
+            for r in conn.execute(
+                text("SELECT contact_phone FROM virtual_orders WHERE campaign_id=:c"),
+                {"c": CAMP_ID},
+            )
+        ]
+        conn.execute(
+            text("UPDATE virtual_orders SET event_id=NULL WHERE campaign_id=:c"), {"c": CAMP_ID}
+        )
+        for ev in eventos:
+            conn.execute(text("DELETE FROM event_clients WHERE event_id=:e"), {"e": ev})
+            conn.execute(text("DELETE FROM event_roles WHERE event_id=:e"), {"e": ev})
+            conn.execute(text("DELETE FROM calendar_events WHERE id=:e"), {"e": ev})
+        if telefones:
+            conn.execute(
+                text(
+                    "DELETE FROM clients c WHERE c.source='loja_virtual' AND c.phone = ANY(:p) "
+                    "AND NOT EXISTS (SELECT 1 FROM event_clients ec WHERE ec.client_id=c.id)"
+                ),
+                {"p": telefones},
+            )
         conn.execute(text("DELETE FROM virtual_orders WHERE campaign_id=:c"), {"c": CAMP_ID})
         conn.execute(
             text("DELETE FROM virtual_campaign_slots WHERE campaign_id=:c"), {"c": CAMP_ID}
@@ -326,8 +481,11 @@ def c9():
     check("9.2 nenhuma conexão externa", not _ESCAPES, str(_ESCAPES))
 
 
-for fn in (c1, c2, c3, c4, c5, c6, c7, c8, c9):
-    fn()
+try:
+    for fn in (c1, c2, c3, c4, c5, c6, c7, c8, c10, c9):
+        fn()
+finally:
+    email_service._send = _send_original
 
 ok = sum(1 for _, e, _ in resultados if e == "OK")
 falha = sum(1 for _, e, _ in resultados if e == "FALHA")

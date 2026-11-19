@@ -322,10 +322,14 @@ VIRTUAL_CAMPAIGN_STATUSES = [
 VIRTUAL_SLOT_STATUS_LIVRE = "livre"
 VIRTUAL_SLOT_STATUS_TRAVADO = "travado"
 VIRTUAL_SLOT_STATUS_VENDIDO = "vendido"
+# Feature 341c: tirado da venda à mão pela equipe (reserva combinada fora do site, pausa do artista).
+# Sem pedido do lado de lá; só nasce de `livre` e só volta para `livre`. Na loja aparece riscado.
+VIRTUAL_SLOT_STATUS_INDISPONIVEL = "indisponivel"
 VIRTUAL_SLOT_STATUSES = [
     VIRTUAL_SLOT_STATUS_LIVRE,
     VIRTUAL_SLOT_STATUS_TRAVADO,
     VIRTUAL_SLOT_STATUS_VENDIDO,
+    VIRTUAL_SLOT_STATUS_INDISPONIVEL,
 ]
 
 VIRTUAL_ORDER_STATUS_RESERVADO = "reservado"
