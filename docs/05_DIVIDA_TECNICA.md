@@ -877,6 +877,14 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
+## Baixa da correção 355-luminaria-anuncia-papai-noel (2026-11-19, branch)
+
+**Quitada.** Nenhuma. **Criada.**
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 237 | **P5** | `components/nfc/AnuncioPapaiNoel.tsx` | o cartão do Papai Noel no menu da luminária tem campanha e último dia no código (`papai-noel`, 06/12/2026): depois do dia ele some sozinho, mas o arquivo fica morto, e a próxima campanha da loja (ou o Natal de 2027) exige outro deploy | apagar o componente e a linha do `NfcPage` depois de 06/12; se a loja virar recorrente, usar o gancho `campaign` do payload da tag (255) com a campanha e a data escolhidas no app interno |
+
 ## Baixa da correção 354-politica-de-privacidade (2026-11-17, branch)
 
 **Quitada em parte.** A **210**: o atendimento (conversas, ficha, orçamento, contrato) passa a ter política própria

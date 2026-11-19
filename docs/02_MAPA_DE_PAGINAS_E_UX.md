@@ -1483,6 +1483,11 @@ Grupo próprio na navegação lateral, visível apenas para `ARTISTA_3D` e `SUPE
   - **Menu** — três botões `min-h-[48px]`: "Ver a mensagem especial" (**só quando há entrega
     pronta**), "Ouvir no Spotify" e "Seguir @mantoproducoes". Os dois externos com
     `rel="noopener noreferrer"` e URL vinda do servidor (botão sem destino é botão morto).
+    *(355, até 06/12/2026)* Abaixo dos botões, o **cartão do Papai Noel** (`AnuncioPapaiNoel`):
+    capa da campanha, "Novidade de Natal", título, frase do formato com vaga, "A partir de" e
+    "Ver como funciona" → `/catalogo/v/papai-noel?origem=luminaria` na mesma aba. Só com a
+    campanha publicada e com vaga na vitrine (`GET /api/virtuais/vitrine`); igual para qualquer
+    código; some pela data de São Paulo depois de 06/12 (dívida 237: sair do código).
   - **Mensagem** — o vídeo da cliente em `aspect-[9/16]` com `object-contain`, palco com altura
     reservada pelas dimensões `width`/`height` que o payload manda (antes o layout pulava quando os
     metadados chegavam). Abaixo, o **recado**: textarea obrigatória com contador (máx. 1000), nome
