@@ -4,8 +4,8 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration; em
-> branch). Antes: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
+> Última atualização: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
+> **EM PRODUÇÃO desde 19/11/2026 ~11h58** (merge `556ab3ad`, a pedido do dono: "Publica agora"). Antes: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
 > pedido do dono ("bora fazer os pushs"), num push só, na ordem dos merges: **256b-relatorio-de-marketing**
 > (`verify_256b` 7/7), **347-endereco-abre-no-mapa** (`verify_347` 7/7), **352-fornecedores-gastos-extras**
 > (`verify_352` 11/11) e **353-gasto-extra-parcelado** (`verify_353` 11/11), no banco descartável `manto_lote`
@@ -268,7 +268,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **341c-horario-indisponivel** | Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
+| **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
 | **347-endereco-abre-no-mapa** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Tocar no endereço do evento abre "Abrir endereço" com Google Maps, Apple Mapas e Waze: cabeçalho e "Local" da página do evento no app interno; cards de Próximos eventos e Convites no portal. Uma peça só em `@manto/ui` (`EnderecoNoMapa` + `linksDeMapa`); só frontend | 2026-11-17 | — | (aqui) | ver Registro |
@@ -507,7 +507,8 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 341c — Horário indisponível à mão, que continua aparecendo na loja   (341c-horario-indisponivel · 2026-11-19 · sem migration)
 
-> Nível 2, ajuste da loja. Detalhe: `specs/341c-horario-indisponivel/spec.md`.
+> **EM PRODUÇÃO desde 19/11/2026 ~11h58** (merge `556ab3ad`, push de dia a pedido do dono; sem
+> migration). Nível 2, ajuste da loja. Detalhe: `specs/341c-horario-indisponivel/spec.md`.
 
 **O pedido.** O dono, em 19/11, com o Papai Noel sendo divulgado: um botão ao lado do excluir para
 deixar o horário indisponível — pessoas reservando no boca a boca —, e "é importante o horário não

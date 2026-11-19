@@ -1,6 +1,6 @@
 # 341c — Horário indisponível à mão (e continua aparecendo na loja)
 
-**Branch**: `341c-horario-indisponivel` · **Created**: 2026-11-19 · **Status**: pronto, aguardando deploy (`verify_341c.py` 28/28) ·
+**Branch**: `341c-horario-indisponivel` · **Created**: 2026-11-19 · **Status**: EM PRODUÇÃO desde 19/11/2026 ~11h58, merge `556ab3ad` (`verify_341c.py` 28/28) ·
 **Migration**: nenhuma (`virtual_campaign_slots.status` é texto; entra o valor `indisponivel`)
 
 > Nível 2, ajuste da loja (205/341). Um domínio, sem migration.
