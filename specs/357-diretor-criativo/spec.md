@@ -1,6 +1,6 @@
 # 357 — Diretor criativo: o pedido de peça sai concreto
 
-**Branch**: `357-diretor-criativo` · **Created**: 2026-11-19 · **Status**: Pronto na branch, sem push ·
+**Branch**: `357-diretor-criativo` · **Created**: 2026-11-19 · **Status**: Em produção (23/11 ~19h06) ·
 **Migration**: nenhuma · Nível 2 (harness: agente, skill e script de leitura; nenhum código do app muda)
 
 ## O pedido

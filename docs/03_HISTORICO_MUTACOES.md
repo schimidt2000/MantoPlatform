@@ -4,10 +4,20 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-23** · **317c-vinculo-por-tema** (correção dos contratos da ClickSign, sem
+> Última atualização: **2026-11-23** · Estado do repositório: pós-**deploy em lote de 23/11/2026 (~19h06)**, a
+> pedido do dono ("bora publicar e comunicar a equipe"), num push só, na ordem dos merges:
+> **355-luminaria-anuncia-papai-noel** (`verify_355` 15/15), **356-cache-nao-se-perde** (`verify_356` 12/12),
+> **357-diretor-criativo** (harness, sem código do app) e **317c-vinculo-por-tema** (`verify_317c` 11/11,
+> `verify_317b` 12/12, `verify_317` 36/36), no banco descartável `manto_lote` restaurado do dump de 19/11 02h
+> (o mais recente em `backups/`). Sem migration; head segue `f353a1b2c3d4`. As dívidas da 317c viraram 242 e
+> 243 (a 356 já usava 239 e 240). Regressão verde: 339, 344, 341b, 341c, 310 e 349; a 322 fica em 28/29 porque
+> o cenário 15 supõe que nenhuma vaga anterior ao teste tem marca, o que deixou de valer com a 322 em uso.
+> A auditoria da 317c no mesmo banco aponta os dois vínculos esperados (944 → 1488 e 965 → 1525). A 358
+> (folha de jan-mai/2026) segue na branch: é proposta de correção de dados e espera a decisão do dono.
+> Antes: **2026-11-23** · **317c-vinculo-por-tema** (correção dos contratos da ClickSign, sem
 > migration) **pronta na branch, sem merge** (`verify_317c` 11/11, `verify_317b` 12/12, `verify_317` 36/36, no
 > espelho `manto_317c` do dump de 19/11). Antes: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
-> Última atualização: **2026-11-19** · **355-luminaria-anuncia-papai-noel** (cartão do Papai Noel no
+> Antes: **2026-11-19** · **355-luminaria-anuncia-papai-noel** (cartão do Papai Noel no
 > menu da tag NFC até 06/12 + origem `luminaria` na loja; sem migration) **pronta, sem push**
 > (`verify_355` 15/15, regressão `verify_344` 57/57). Antes: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
 > **EM PRODUÇÃO desde 19/11/2026 ~11h58** (merge `556ab3ad`, a pedido do dono: "Publica agora"). Antes: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
@@ -273,10 +283,10 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **317c-vinculo-por-tema** | *(pronta na branch, sem merge)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
-| **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
-| **356-cache-nao-se-perde** | *(pronto, sem push)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
-| **355-luminaria-anuncia-papai-noel** | *(pronta, sem push)* Cartão do Papai Noel no menu de toda tag NFC das luminárias até 06/12 (São Paulo), só com vaga de verdade na vitrine; link `?origem=luminaria`, que vira a linha "Luminária" no card "Visitas e vendas" | 2026-11-19 | — | (aqui) | ver Registro |
+| **317c-vinculo-por-tema** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
+| **357-diretor-criativo** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
+| **356-cache-nao-se-perde** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
+| **355-luminaria-anuncia-papai-noel** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Cartão do Papai Noel no menu de toda tag NFC das luminárias até 06/12 (São Paulo), só com vaga de verdade na vitrine; link `?origem=luminaria`, que vira a linha "Luminária" no card "Visitas e vendas" | 2026-11-19 | — | (aqui) | ver Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
@@ -516,7 +526,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 317c — Contrato não se liga por palavra de ocasião, e o vínculo fraco cede ao telefone   (317c-vinculo-por-tema · sem merge · sem migration)
 
-> **Pronta na branch, sem merge** (23/11/2026). Nível 2, correção da 317/317b. `verify_317c.py` 11/11,
+> **EM PRODUÇÃO desde 23/11/2026 ~19h06** (lote com 355, 356, 357 e 317c). Nível 2, correção da 317/317b. `verify_317c.py` 11/11,
 > `verify_317b.py` 12/12 e `verify_317.py` 36/36 no espelho `manto_317c` (dump de 19/11). Detalhe e a tabela da
 > auditoria: `specs/317c-vinculo-por-tema/spec.md`.
 
@@ -552,7 +562,7 @@ esta correção: não foi tocado. (3) Em produção, o 965 foi desligado à mão
 do deploy. (4) A simulação com `--desde` antes do merge mostra quantos vínculos vão passar de venda.
 ### 357 — Diretor criativo: o pedido de peça sai concreto   (357-diretor-criativo · 2026-11-19 · sem migration)
 
-> **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `551dad44`). Nível 2 (harness). Detalhe:
+> **EM PRODUÇÃO desde 23/11/2026 ~19h06** (lote com 355, 356, 357 e 317c). Nível 2 (harness). Detalhe:
 > `specs/357-diretor-criativo/spec.md`.
 
 **O pedido.** "O pedido de peça para a campanha de festas para as meninas ficou muito genérico. Quero que tenha
@@ -584,7 +594,7 @@ os cards 68 e 69 abertos pela 1ª rodada de marketing em 17/11).
   chegar ao card, que a equipe inteira vê.
 ### 356 — O cachê do elenco não some nem muda por fora do card do Casting   (356-cache-nao-se-perde · 2026-11-19 · sem migration)
 
-> **Pronto na branch, sem push** (worktree `C:\tmp\mp356`, base `551dad44`). Nível 2, Agenda. Toca o
+> **EM PRODUÇÃO desde 23/11/2026 ~19h06** (lote com 355, 356, 357 e 317c). Nível 2, Agenda. Toca o
 > backend: publicar junto de outro deploy, à noite. Detalhe: `specs/356-cache-nao-se-perde/spec.md`.
 
 **O pedido.** O dono, em 19/11, sobre o evento 1516: o 850 que ele "já tinha posto" não estava lá, o log
@@ -631,7 +641,7 @@ os cards 68 e 69 abertos pela 1ª rodada de marketing em 17/11).
 * (5) Achado de passagem: todo "Salvar" do card põe a vaga em "A pagar" (dívida 238).
 ### 355 — A luminária anuncia o Papai Noel até 06/12   (355-luminaria-anuncia-papai-noel · 2026-11-19 · sem migration)
 
-> **Pronta, sem push.** Nível 2: página pública da tag NFC (255/297) apontando para a loja (205/344),
+> **EM PRODUÇÃO desde 23/11/2026 ~19h06** (lote com 355, 356, 357 e 317c). Nível 2: página pública da tag NFC (255/297) apontando para a loja (205/344),
 > sem endpoint novo. Detalhe: `specs/355-luminaria-anuncia-papai-noel/spec.md`.
 
 **O pedido.** O dono, em 19/11, com a campanha "Alô Papai Noel" no ar: "coloque uma propaganda do

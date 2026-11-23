@@ -1,6 +1,6 @@
 # 355 — A luminária anuncia o Papai Noel até 06/12
 
-**Branch**: `355-luminaria-anuncia-papai-noel` (da `main`) · **Created**: 2026-11-19 · **Status**: Pronta, sem push ·
+**Branch**: `355-luminaria-anuncia-papai-noel` (da `main`) · **Created**: 2026-11-19 · **Status**: Em produção (23/11 ~19h06) ·
 **Migration**: nenhuma (`virtual_campaign_visits.origem` e `virtual_orders.origem` são texto; entra o valor `luminaria`)
 
 > Nível 2, ajuste da página pública da tag NFC (255/297) que aponta para a loja (205/344). Sem

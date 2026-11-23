@@ -1,7 +1,7 @@
 # 317c — Contrato não se liga à venda por palavra de ocasião, e o vínculo fraco cede ao telefone
 
-**Branch**: `317c-vinculo-por-tema` (da `main`) · **Created**: 2026-11-23 · **Status**: Pronta na branch, sem
-merge (`verify_317c` 11/11, `verify_317b` 12/12, `verify_317` 36/36) · **Migration**: nenhuma · **Nível**: 2
+**Branch**: `317c-vinculo-por-tema` (da `main`) · **Created**: 2026-11-23 · **Status**: Em produção (23/11 ~19h06;
+`verify_317c` 11/11, `verify_317b` 12/12, `verify_317` 36/36) · **Migration**: nenhuma · **Nível**: 2
 (correção da 317)
 
 ## O pedido

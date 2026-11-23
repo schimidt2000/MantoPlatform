@@ -1,6 +1,6 @@
 # 356 — O cachê do elenco não some nem muda por fora do card do Casting
 
-**Branch** `356-cache-nao-se-perde` · **Created** 2026-11-19 · **Status** pronto, sem push ·
+**Branch** `356-cache-nao-se-perde` · **Created** 2026-11-19 · **Status** em produção (23/11 ~19h06) ·
 **Migration** nenhuma · Nível 2 (correção na Agenda, um domínio)
 
 ## O pedido
