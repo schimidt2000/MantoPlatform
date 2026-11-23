@@ -682,6 +682,9 @@ VIRTUAL_ORIGENS_ROTULOS = {
     "google": "Google",
     "tiktok": "TikTok",
     "email": "E-mail",
+    # 355: o cartão do Papai Noel no menu da tag NFC das luminárias (`/nfc/<código>`). É a cliente
+    # que já comprou da Manto; sem origem própria ela sumia dentro de "Outro".
+    "luminaria": "Luminária",
     VIRTUAL_ORIGEM_OUTRO: "Outro",
     VIRTUAL_ORIGEM_DIRETO: "Direto",
 }

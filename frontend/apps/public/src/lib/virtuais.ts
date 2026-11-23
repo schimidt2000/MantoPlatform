@@ -84,11 +84,15 @@ export interface VirtualVitrineItem {
   tem_gravado: boolean;
 }
 
-/** Campanhas publicadas — a home de `alo.mantoproducoes.com.br` (feature 224e). */
-export function useVitrineVirtual() {
+/**
+ * Campanhas publicadas — a home de `alo.mantoproducoes.com.br` (feature 224e) e o cartão do
+ * Papai Noel no menu da luminária (355), que desliga a consulta depois do último dia.
+ */
+export function useVitrineVirtual(enabled = true) {
   return useQuery<{ campanhas: VirtualVitrineItem[] }>({
     queryKey: ["virtuais-vitrine"],
     queryFn: () => apiFetch<{ campanhas: VirtualVitrineItem[] }>("/api/virtuais/vitrine"),
+    enabled,
   });
 }
 

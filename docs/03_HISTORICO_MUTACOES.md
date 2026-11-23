@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
+> Última atualização: **2026-11-19** · **355-luminaria-anuncia-papai-noel** (cartão do Papai Noel no
+> menu da tag NFC até 06/12 + origem `luminaria` na loja; sem migration) **pronta, sem push**
+> (`verify_355` 15/15, regressão `verify_344` 57/57). Antes: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
 > **EM PRODUÇÃO desde 19/11/2026 ~11h58** (merge `556ab3ad`, a pedido do dono: "Publica agora"). Antes: **2026-11-17** · Estado do repositório: pós-**deploy em lote de 17/11/2026 (~22h52)**, a
 > pedido do dono ("bora fazer os pushs"), num push só, na ordem dos merges: **256b-relatorio-de-marketing**
 > (`verify_256b` 7/7), **347-endereco-abre-no-mapa** (`verify_347` 7/7), **352-fornecedores-gastos-extras**
@@ -268,6 +270,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **355-luminaria-anuncia-papai-noel** | *(pronta, sem push)* Cartão do Papai Noel no menu de toda tag NFC das luminárias até 06/12 (São Paulo), só com vaga de verdade na vitrine; link `?origem=luminaria`, que vira a linha "Luminária" no card "Visitas e vendas" | 2026-11-19 | — | (aqui) | ver Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
@@ -504,6 +507,33 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 355 — A luminária anuncia o Papai Noel até 06/12   (355-luminaria-anuncia-papai-noel · 2026-11-19 · sem migration)
+
+> **Pronta, sem push.** Nível 2: página pública da tag NFC (255/297) apontando para a loja (205/344),
+> sem endpoint novo. Detalhe: `specs/355-luminaria-anuncia-papai-noel/spec.md`.
+
+**O pedido.** O dono, em 19/11, com a campanha "Alô Papai Noel" no ar: "coloque uma propaganda do
+alo.manto em todas as luminárias até o dia 6/12". Quem encosta o celular na luminária é cliente que já
+comprou, quase sempre com criança em casa: o público da chamada com o Papai Noel.
+
+**O que mudou.**
+- Frontend (público): `components/nfc/AnuncioPapaiNoel.tsx` no fim do menu de `NfcPage` (depois dos
+  destinos de sempre; a mensagem especial segue o primeiro botão). Lê `GET /api/virtuais/vitrine`
+  (`useVitrineVirtual(enabled)`), só aparece com `papai-noel` publicada e `tem_horario` ou
+  `tem_gravado`; texto e "a partir de" acompanham o formato com vaga. Some depois de 06/12 pela data
+  de **São Paulo** (`Intl` com `America/Sao_Paulo`), e a consulta à vitrine desliga junto.
+- Backend: `luminaria` ("Luminária") em `VIRTUAL_ORIGENS_ROTULOS` (`app/constants.py`). A visita e a
+  reserva que vêm do cartão contam numa linha própria do funil e o card ganha o link do canal.
+
+**Pegadinhas.** (1) O link é `/catalogo/v/papai-noel` só no build de produção: em dev o app público
+não tem o prefixo (`CATALOGO_BASENAME` do `App.tsx`), e o link fixo com `/catalogo` caía numa rota
+vazia — o destino segue a mesma regra. (2) O link é relativo de propósito: o endereço do `alo.` faria
+um 302 a mais e, rodando local, levaria a visita de teste para a produção. (3) O gancho `campaign` do
+payload da tag (255, "hoje sempre null") ficou intocado: é do sistema de campanhas por tag, não de um
+anúncio com data para acabar. (4) Painel do navegador oculto congela o Framer Motion na opacidade 0:
+o print da tela sai vazio com a página certa (conferir por `get_page_text`/medidas, ou mostrar o
+painel). (5) Postgres local parado de novo: banco descartável na porta 5435 com o dump de 19/11 02h.
 
 ### 341c — Horário indisponível à mão, que continua aparecendo na loja   (341c-horario-indisponivel · 2026-11-19 · sem migration)
 
