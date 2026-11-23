@@ -1189,7 +1189,8 @@ def register_commands(app):
             f"a conferir {resultado.get('a_conferir', 0)}, artista {resultado.get('artista', 0)}, "
             f"outros {resultado.get('outro', 0)}; PDFs anexados {resultado.get('anexados', 0)}, "
             f"a anexar {resultado.get('anexar', 0)}, anexos antigos que passam a assinado "
-            f"{resultado.get('anexos_antigos', 0)}; envelopes pulados por erro {resultado.get('erros', 0)}."
+            f"{resultado.get('anexos_antigos', 0)}; vínculos que passam para a venda do telefone "
+            f"{resultado.get('movidos', 0)}; envelopes pulados por erro {resultado.get('erros', 0)}."
         )
         if resultado.get("erro"):
             click.echo(f"clicksign-sincronizar: interrompido — {resultado['erro']}")
