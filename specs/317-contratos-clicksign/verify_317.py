@@ -291,6 +291,16 @@ def _restaurar_cliente_real() -> None:
 
 _instalar_duble()
 
+# 317c — a reavaliação dos vínculos fracos olha todo contrato de hoje em diante, inclusive os reais do
+# espelho, que o dublê não conhece e o verify não pode mexer: aqui ela só enxerga os contratos do teste
+# (vale também para o verify_317b e o verify_317c, que importam este módulo).
+import app.contratos.sincronizar_ops as _sinc_ops  # noqa: E402
+
+_VINCULOS_REAIS = _sinc_ops._vinculos_a_reavaliar
+_sinc_ops._vinculos_a_reavaliar = lambda: [
+    d for d in _VINCULOS_REAIS() if (d.envelope_id or "").startswith(PREFIX)
+]
+
 resultados: list[tuple[str, bool, str]] = []
 estado: dict = {"ids": {}, "env": {}}
 _engine_externo = create_engine(os.environ["DATABASE_URL"], future=True)

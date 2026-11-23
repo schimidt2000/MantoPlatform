@@ -397,6 +397,18 @@ def _unica(vendas: list[_Venda], fora: set[int], cond) -> int | None:
     return achadas.pop() if len(achadas) == 1 else None
 
 
+def _chaves_do_documento(documento: ClicksignDocumento) -> set[str]:
+    """As chaves de telefone do contrato: a do nome e a de quem assina."""
+    return {
+        c
+        for c in (
+            nucleo.chave_telefone(documento.telefone_lido),
+            nucleo.chave_telefone(documento.signatario_telefone),
+        )
+        if c
+    }
+
+
 def _outra_ligacao(documento: ClicksignDocumento, motivo: str | None) -> int | None:
     """Quando data + telefone não decidem, os sinais da 317b — nesta ordem, só venda única liga.
 
@@ -421,14 +433,7 @@ def _outra_ligacao(documento: ClicksignDocumento, motivo: str | None) -> int | N
     if motivo not in (CONFERIR_SEM_CANDIDATO, CONFERIR_SEM_TELEFONE):
         return None
 
-    chaves = {
-        c
-        for c in (
-            nucleo.chave_telefone(documento.telefone_lido),
-            nucleo.chave_telefone(documento.signatario_telefone),
-        )
-        if c
-    }
+    chaves = _chaves_do_documento(documento)
     um_dia = timedelta(days=1)
     if chaves and (
         event_id := _unica(
@@ -463,6 +468,115 @@ def _outra_ligacao(documento: ClicksignDocumento, motivo: str | None) -> int | N
     return nucleo.tema_por_palavra(
         documento.tema_lido, [nucleo.Candidato(v.principal.id, v.temas) for v in vivas]
     )
+
+
+# ── Vínculo fraco cede ao telefone (317c) ────────────────────────────────────────────────────
+
+
+def _destino_pelo_telefone(documento: ClicksignDocumento, vendas: list[_Venda]) -> int | None:
+    """A única outra venda viva do dia com o telefone do contrato, se o vínculo não for de data + telefone.
+
+    `vendas` são as do dia do contrato (`_vendas_na_data`). Devolve `None` quando a venda ligada já tem
+    o dia e o telefone (a cancelada inclusive: a 317b a escolheu de propósito), quando nenhuma venda
+    viva tem o telefone ou quando mais de uma tem — ambíguo não se decide sozinho.
+    """
+    chaves = _chaves_do_documento(documento)
+    if not chaves:
+        return None
+    if any(v.principal.id == documento.event_id and chaves & v.chaves for v in vendas):
+        return None
+    return _unica(vendas, _desvinculados(documento), lambda v: bool(chaves & v.chaves))
+
+
+def _passar_para(documento: ClicksignDocumento, destino_id: int) -> None:
+    """Passa o vínculo automático para a venda que tem a data e o telefone do contrato.
+
+    O PDF que a sincronização anexou na venda de antes sai dela e fica pendente para a de agora (a
+    varredura da mesma passada o anexa); as duas vendas ganham a linha no histórico. A origem continua
+    automática: ninguém da equipe decidiu este vínculo.
+    """
+    nome = nucleo.normalizar_nome(documento.nome)
+    origem_id = documento.event_id
+    _tirar_anexo_automatico(documento)
+    documento.event_id = destino_id
+    documento.vinculado_em = now_sp()
+    if documento.status == nucleo.STATUS_FECHADO:
+        documento.anexo_pendente = True
+    agora = datetime.utcnow()
+    for event_id, mensagem in (
+        (origem_id, f"Passou o contrato para a venda com a data e o telefone dele: {nome}"),
+        (destino_id, f"Ligou o contrato a esta venda pela data e pelo telefone: {nome}"),
+    ):
+        db.session.add(
+            EventLog(
+                event_id=event_id,
+                actor_name=CLICKSIGN_AUTOR,
+                actor_role=CLICKSIGN_AUTOR_PAPEL,
+                message=mensagem,
+                created_at=agora,
+            )
+        )
+
+
+def _vinculos_a_reavaliar() -> list[ClicksignDocumento]:
+    """Os vínculos automáticos de contratos de cliente com evento de hoje em diante.
+
+    Função à parte porque os verifies a restringem aos contratos do teste: a reavaliação mexeria nos
+    contratos reais do espelho, que o dublê da ClickSign não conhece.
+    """
+    return (
+        ClicksignDocumento.query.filter(
+            ClicksignDocumento.vinculo == VINCULO_LIGADO,
+            ClicksignDocumento.vinculo_origem == VINCULO_ORIGEM_AUTO,
+            ClicksignDocumento.tipo == CLICKSIGN_TIPO_CLIENTE,
+            ClicksignDocumento.data_lida >= now_sp().date(),
+        )
+        .order_by(ClicksignDocumento.data_lida, ClicksignDocumento.id)
+        .all()
+    )
+
+
+def _ceder_ao_telefone() -> int:
+    """O vínculo automático fraco cede quando data + telefone passam a apontar para outra venda.
+
+    Vínculo automático não é reavaliado depois de feito (FR-005 da 317), e os sinais da 317b ligam
+    sem o telefone bater — a venda certa pode ganhar a cliente dias depois, como a visita de Papai
+    Noel cujo contrato ficou no "NATAL THERMAS". A cada passada, o contrato de evento de hoje em
+    diante, ligado **automaticamente** a uma venda que não tem o dia e o telefone dele, passa para a
+    única outra venda viva que tem. Ligado, desligado ou descartado à mão nunca muda aqui.
+
+    Uma consulta de vendas por dia, não por documento. Sem commit: a passada decide (a simulação desfaz).
+
+    Returns:
+        Quantos vínculos passaram de venda.
+    """
+    vendas_do_dia: dict[date, list[_Venda]] = {}
+    movidos = 0
+    for documento in _vinculos_a_reavaliar():
+        dia = documento.data_lida
+        if dia not in vendas_do_dia:
+            vendas_do_dia[dia] = _vendas_na_data(dia)
+        destino = _destino_pelo_telefone(documento, vendas_do_dia[dia])
+        if destino is None:
+            continue
+        ligado_a = documento.event_id
+        travado = _documento_travado(documento.id)
+        # A comercial ligou, desligou ou descartou neste instante: a decisão dela vale.
+        if travado is None or (travado.vinculo, travado.vinculo_origem, travado.event_id) != (
+            VINCULO_LIGADO,
+            VINCULO_ORIGEM_AUTO,
+            ligado_a,
+        ):
+            continue
+        _passar_para(travado, destino)
+        movidos += 1
+        logger.info(
+            "[clicksign] vínculo de %s passou da venda %s para a %s (data + telefone)",
+            travado.envelope_id,
+            ligado_a,
+            destino,
+        )
+    return movidos
 
 
 def _ler_signatario(documento: ClicksignDocumento, conexao: dict[str, Any]) -> None:
@@ -675,6 +789,7 @@ def _uma_passada(
         "anexados": 0,
         "anexar": 0,
         "anexos_antigos": 0,
+        "movidos": 0,
         "erros": 0,
     }
     maior: datetime | None = None
@@ -719,6 +834,17 @@ def _uma_passada(
         if len(envelopes) < cliente.TAMANHO_DA_PAGINA:
             break
         pagina += 1
+
+    # 317c: depois dos envelopes e antes da varredura de anexos — o PDF do vínculo que passou de venda
+    # entra na venda certa nesta mesma passada. Um conflito no banco não derruba a passada.
+    try:
+        with db.session.begin_nested():
+            contagem["movidos"] = _ceder_ao_telefone()
+    except IntegrityError as exc:
+        contagem["erros"] += 1
+        logger.warning("[clicksign] reavaliação dos vínculos fracos pulada: %s", exc)
+    if aplicar:
+        db.session.commit()
 
     # Varredura de TODO anexo pendente, não só dos envelopes que voltaram na listagem: o
     # documento antigo ligado à mão e o download que falhou com o marco já passado (analyze C-01).

@@ -76,6 +76,11 @@ _PALAVRAS_VAZIAS = frozenset(
         "pink",
         "ltda", "eireli", "comercio", "servicos", "marketing", "producoes", "brasil", "empresa",
         "grupo",
+        # 317c — palavra de ocasião: em dezembro todo contrato de visita sai com o tema "Natal" e
+        # metade dos títulos do dia tem "PAPAI NOEL". Ela diz a época, não de quem é a festa: foi o
+        # que ligou o contrato de uma visita ao "NATAL THERMAS" de outra cliente.
+        "natal", "natalino", "natalina", "noel", "papai", "mamae", "pascoa", "halloween",
+        "carnaval", "junina", "junino", "reveillon", "criancas",
     }
 )
 

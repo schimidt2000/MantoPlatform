@@ -4,6 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
+> Última atualização: **2026-11-23** · **317c-vinculo-por-tema** (correção dos contratos da ClickSign, sem
+> migration) **pronta na branch, sem merge** (`verify_317c` 11/11, `verify_317b` 12/12, `verify_317` 36/36, no
+> espelho `manto_317c` do dump de 19/11). Antes: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
 > Última atualização: **2026-11-19** · **355-luminaria-anuncia-papai-noel** (cartão do Papai Noel no
 > menu da tag NFC até 06/12 + origem `luminaria` na loja; sem migration) **pronta, sem push**
 > (`verify_355` 15/15, regressão `verify_344` 57/57). Antes: **2026-11-19** · **341c-horario-indisponivel** (ajuste da loja, sem migration)
@@ -270,6 +273,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **317c-vinculo-por-tema** | *(pronta na branch, sem merge)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
 | **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
 | **356-cache-nao-se-perde** | *(pronto, sem push)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
 | **355-luminaria-anuncia-papai-noel** | *(pronta, sem push)* Cartão do Papai Noel no menu de toda tag NFC das luminárias até 06/12 (São Paulo), só com vaga de verdade na vitrine; link `?origem=luminaria`, que vira a linha "Luminária" no card "Visitas e vendas" | 2026-11-19 | — | (aqui) | ver Registro |
@@ -510,6 +514,42 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 317c — Contrato não se liga por palavra de ocasião, e o vínculo fraco cede ao telefone   (317c-vinculo-por-tema · sem merge · sem migration)
+
+> **Pronta na branch, sem merge** (23/11/2026). Nível 2, correção da 317/317b. `verify_317c.py` 11/11,
+> `verify_317b.py` 12/12 e `verify_317.py` 36/36 no espelho `manto_317c` (dump de 19/11). Detalhe e a tabela da
+> auditoria: `specs/317c-vinculo-por-tema/spec.md`.
+
+**O pedido.** Em 23/11, refazendo o contrato do Natal Thermas, o evento aparecia "Assinado em 13/11" com o
+contrato de outra cliente (`25122026 + (11) …3334 + Natal`, uma visita de Papai Noel). O dono: "óbvio que precisa
+ser desligado. Já abra um branch para conferir se os contratos ligados atualmente estão condizentes e também
+revisar a regra caso seja necessário" — e, vista a auditoria, "Sim, implementa".
+
+**O que se descobriu.** O sinal 5 da 317b (única venda do dia com uma palavra do tema) ligou "Natal" ao
+`(CORP) NATAL THERMAS`, e vínculo automático nunca era reavaliado: a visita certa ganhou o telefone depois e o
+contrato ficou onde estava. A auditoria (`auditoria_vinculos.py`, só leitura, com as funções do próprio sistema):
+226 contratos ligados, **206 por data + telefone**, 14 só pela palavra — 11 certos ("Arraiá com o Snoopy" ×
+`SNOOPY + CHARLIE`) e **os 3 de "Natal" errados ou sem sustentação** (965 no Thermas; 944 e 934 na visita 1413,
+com a 1488 tendo o telefone). Em 6 dos 11 certos a venda tem telefone conhecido **diferente** do contrato:
+recusar por "telefone diferente" derrubaria vínculo certo, por isso a regra não foi por aí.
+
+**O que mudou.** (1) `contratos_ops._PALAVRAS_VAZIAS` ganha as palavras de ocasião (natal, natalino/a, noel,
+papai, mamãe, páscoa, halloween, carnaval, junina/o, réveillon, crianças): sem data + telefone, esses contratos
+vão para "A conferir". (2) `sincronizar_ops._ceder_ao_telefone`, a cada passada, depois dos envelopes e antes
+da varredura de anexos: o contrato de evento de hoje em diante, ligado **automaticamente** a uma venda que não
+tem o dia e o telefone dele, passa para a única outra venda viva que tem (`_destino_pelo_telefone` →
+`_passar_para`: o PDF automático sai de uma e fica pendente para a outra, histórico nas duas, origem continua
+`auto`). Ligado, desligado ou descartado à mão não muda (FR-005 da 317); o vínculo de data + telefone também
+não. A passada conta `movidos`, e o `clicksign-sincronizar` (simulação inclusive) mostra o número.
+
+**Pegadinhas.** (1) **A reavaliação mexe em contrato real do espelho**: na primeira rodada do verify ela passou
+o 965 e o 944 de venda dentro do `manto_317c`, e o dublê da ClickSign (que não conhece envelope real) derrubou
+todas as passadas seguintes na varredura de anexos. O espelho foi restaurado, e `verify_317.py` — que o 317b e
+o 317c importam — passou a trocar `sincronizar_ops._vinculos_a_reavaliar` por uma versão que só enxerga os
+contratos do teste. (2) O `ruff check` de `app/cli.py` acusa um `error_count` sem uso na linha 325, anterior a
+esta correção: não foi tocado. (3) Em produção, o 965 foi desligado à mão em 23/11 (está em "A conferir" como
+`desligado`): a regra nova **não** o religa sozinha; o 944 passa sozinho para a 1488 na primeira passada depois
+do deploy. (4) A simulação com `--desde` antes do merge mostra quantos vínculos vão passar de venda.
 ### 357 — Diretor criativo: o pedido de peça sai concreto   (357-diretor-criativo · 2026-11-19 · sem migration)
 
 > **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `551dad44`). Nível 2 (harness). Detalhe:

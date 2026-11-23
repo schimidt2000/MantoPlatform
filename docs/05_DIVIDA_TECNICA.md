@@ -993,3 +993,15 @@ Nenhuma. O que a 345b não resolve já está registrado: a conversa vinda do Goo
 | 222 | **P4** | `app/conversas/constantes.py` (`PONTOS_DA_REGRA`, `CORTE_DA_QUALIFICADA`) (feature 349) | a pontuação da "qualificada" é hipótese (pesquisa §6.5): os pontos e o corte 3 não foram validados contra a taxa de fechamento por sinal, e "dentro da área" (o "fora de SP" do `form_snapshot`) ficou de fora para a lista não ler JSON | depois de um trimestre com o CRM ligado: tabela de fechamento por sinal (6 a 12 meses), ajustar pontos/corte; se o "fora de SP" separar, extrair para coluna do orçamento |
 | 223 | **P5** | `app/conversas/funil_ops.py` (`_primeira_resposta`) (feature 349) | o tempo da primeira resposta é corrido: a mensagem das 23h respondida às 9h conta 10 h. A mediana suaviza, mas o "até 15 min" e a comparação entre vendedores misturam o horário de atendimento com a velocidade | se o dono quiser, medir só dentro do horário de atendimento (9h–21h de São Paulo, o mesmo do alerta) |
 | 224 | **P5** | `app/conversas/parado_ops.py` (feature 349) | a régua e o lembrete rodam na varredura das conversas, que só sobe com o CRM ligado; e o aviso no celular deles nunca chegou a um aparelho real (mesmo caso da 191) | conferir no primeiro dia com as chaves `WHATSAPP_*` no Render: um orçamento de teste com 2 dias deve tocar o sino de quem atende às 9h |
+
+## Baixa da correção 317c-vinculo-por-tema (2026-11-23, branch)
+
+**Quitadas.** Nenhuma da lista. A correção fecha o defeito achado em 23/11 (contrato de uma visita de Papai Noel
+ligado ao Natal Thermas pela palavra "Natal").
+
+**Criadas.** (239–240, números provisórios: conferir no merge — a `main` está em 236 e há branches sem merge.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 239 | **P3** | `sincronizar_ops._destino_pelo_telefone` | o vínculo de data + telefone numa venda **cancelada** não cede quando existe venda viva do mesmo dia e telefone (evento cancelado e recriado: contrato 895 na venda 1354, cancelada, e a 1424 viva sem contrato); contrato de evento que já passou também não é reavaliado | decidir com o dono se o contrato acompanha a venda recriada; até lá, a auditoria lista o caso |
+| 240 | **P4** | vínculos automáticos antigos (`clicksign_documentos`) | o vínculo feito só pela palavra de ocasião continua ligado enquanto nenhuma outra venda tiver a data e o telefone (envelopes cancelados 934 e 10, em 19/11); a regra nova não desliga sozinha o que perdeu o sinal | rodar `specs/317c-vinculo-por-tema/auditoria_vinculos.py` contra um dump do dia no começo de cada temporada e desligar à mão o que aparecer em "nada bate" |
