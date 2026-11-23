@@ -74,12 +74,12 @@ Aprovado pelo dono em 23/11 ("Sim, implementa").
    outra venda viva** do dia tem o telefone, o vínculo passa para ela — o PDF automático sai da venda de antes
    e entra na de agora, e as duas ganham a linha no histórico. Nada muda no que foi ligado, desligado ou
    descartado à mão (FR-005 da 317), no vínculo que já é de data + telefone (mesmo em venda cancelada: dívida
-   239), nem em contrato de evento que já passou. Duas vendas com o telefone = ambíguo, não mexe. A passada
+   242), nem em contrato de evento que já passou. Duas vendas com o telefone = ambíguo, não mexe. A passada
    conta `movidos`, e o `clicksign-sincronizar` (a simulação também) mostra o número.
 3. **Conserto dos dados.** Na produção, o 944 passa sozinho para a visita 1488 na primeira passada depois do
    deploy. O 965 foi desligado à mão em 23/11 e por isso **não** se religa sozinho: fica em "A conferir" com a
    visita 1525 sugerida. Os envelopes cancelados 934 e 10 e o 895 (venda cancelada) ficam para decisão do dono
-   (dívidas 239 e 240).
+   (dívidas 242 e 243).
 
 Refeita a auditoria no espelho com a regra nova: os 3 de "Natal" saem de "só a palavra" para "nada bate", os
 11 certos continuam, e a próxima passada passaria exatamente 2 vínculos de venda (944 → 1488 e 965 → 1525).

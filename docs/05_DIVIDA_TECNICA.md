@@ -999,9 +999,9 @@ Nenhuma. O que a 345b não resolve já está registrado: a conversa vinda do Goo
 **Quitadas.** Nenhuma da lista. A correção fecha o defeito achado em 23/11 (contrato de uma visita de Papai Noel
 ligado ao Natal Thermas pela palavra "Natal").
 
-**Criadas.** (239–240, números provisórios: conferir no merge — a `main` está em 236 e há branches sem merge.)
+**Criadas.** (242–243; nasceram 239–240 na branch e foram renumeradas no merge em lote de 23/11, porque a 356 já usa 238–241.)
 
 | # | Prioridade | Onde | O quê | Saída |
 |---|---|---|---|---|
-| 239 | **P3** | `sincronizar_ops._destino_pelo_telefone` | o vínculo de data + telefone numa venda **cancelada** não cede quando existe venda viva do mesmo dia e telefone (evento cancelado e recriado: contrato 895 na venda 1354, cancelada, e a 1424 viva sem contrato); contrato de evento que já passou também não é reavaliado | decidir com o dono se o contrato acompanha a venda recriada; até lá, a auditoria lista o caso |
-| 240 | **P4** | vínculos automáticos antigos (`clicksign_documentos`) | o vínculo feito só pela palavra de ocasião continua ligado enquanto nenhuma outra venda tiver a data e o telefone (envelopes cancelados 934 e 10, em 19/11); a regra nova não desliga sozinha o que perdeu o sinal | rodar `specs/317c-vinculo-por-tema/auditoria_vinculos.py` contra um dump do dia no começo de cada temporada e desligar à mão o que aparecer em "nada bate" |
+| 242 | **P3** | `sincronizar_ops._destino_pelo_telefone` | o vínculo de data + telefone numa venda **cancelada** não cede quando existe venda viva do mesmo dia e telefone (evento cancelado e recriado: contrato 895 na venda 1354, cancelada, e a 1424 viva sem contrato); contrato de evento que já passou também não é reavaliado | decidir com o dono se o contrato acompanha a venda recriada; até lá, a auditoria lista o caso |
+| 243 | **P4** | vínculos automáticos antigos (`clicksign_documentos`) | o vínculo feito só pela palavra de ocasião continua ligado enquanto nenhuma outra venda tiver a data e o telefone (envelopes cancelados 934 e 10, em 19/11); a regra nova não desliga sozinha o que perdeu o sinal | rodar `specs/317c-vinculo-por-tema/auditoria_vinculos.py` contra um dump do dia no começo de cada temporada e desligar à mão o que aparecer em "nada bate" |
