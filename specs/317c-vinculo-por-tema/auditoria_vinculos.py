@@ -164,6 +164,24 @@ def main() -> None:
                 print(f"\n===== {sinal} — {len(detalhes[sinal])} para olhar =====")
                 print("\n".join(detalhes[sinal]))
 
+        # 317c: o que a próxima passada faria sozinha (a mesma decisão de `_ceder_ao_telefone`, sem gravar).
+        vendas_do_dia: dict = {}
+        passariam = []
+        for doc in sinc._vinculos_a_reavaliar():
+            if doc.data_lida not in vendas_do_dia:
+                vendas_do_dia[doc.data_lida] = sinc._vendas_na_data(doc.data_lida)
+            destino = sinc._destino_pelo_telefone(doc, vendas_do_dia[doc.data_lida])
+            if destino is not None:
+                alvo = db.session.get(CalendarEvent, destino)
+                passariam.append(
+                    f"  doc {doc.id} [{doc.status}] {_sem_fone(doc.nome)!r}: "
+                    f"evento {doc.event_id} → {destino} {(alvo.title or '')[:60]!r}"
+                )
+        print(
+            f"\n===== A próxima passada passaria {len(passariam)} vínculo(s) para a venda do telefone ====="
+        )
+        print("\n".join(passariam) or "  (nenhum)")
+
 
 if __name__ == "__main__":
     main()
