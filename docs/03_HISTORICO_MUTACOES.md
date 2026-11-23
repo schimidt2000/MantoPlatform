@@ -270,6 +270,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
 | **356-cache-nao-se-perde** | *(pronto, sem push)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
 | **355-luminaria-anuncia-papai-noel** | *(pronta, sem push)* Cartão do Papai Noel no menu de toda tag NFC das luminárias até 06/12 (São Paulo), só com vaga de verdade na vitrine; link `?origem=luminaria`, que vira a linha "Luminária" no card "Visitas e vendas" | 2026-11-19 | — | (aqui) | ver Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
@@ -509,6 +510,38 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ## Registro
 
+### 357 — Diretor criativo: o pedido de peça sai concreto   (357-diretor-criativo · 2026-11-19 · sem migration)
+
+> **Na branch, sem push** (worktree `C:\tmp\mplote1711`, saída da `main` `551dad44`). Nível 2 (harness). Detalhe:
+> `specs/357-diretor-criativo/spec.md`.
+
+**O pedido.** "O pedido de peça para a campanha de festas para as meninas ficou muito genérico. Quero que tenha
+um agente especializado em criar essas narrativas para que os pedidos sejam mais concretos" (dono, 19/11, sobre
+os cards 68 e 69 abertos pela 1ª rodada de marketing em 17/11).
+
+**O que mudou.**
+- **Agente `.claude/agents/diretor-criativo.md`.** Escreve o pedido com a ideia em uma frase, o tema, o material
+  e o roteiro (ou a cena), os textos prontos, a medida com variação A/B e o prazo, no JSON do `POST /pedidos`.
+  O material sai da festa da agenda, da foto exata do catálogo ou do Drive. O agente só lê e a rotina grava.
+- **`scripts/marketing/criativo_dados.py`.** Lê a produção só em leitura e traz os temas com situação e fotos, o
+  que vende e as próximas festas, sem nome de cliente nem endereço.
+- **Skill `marketing-auditor`, passo 11.** A rotina escolhe o quê e o agente escreve o pedido.
+- **`scripts/marketing/drive_indice.py`** (23/11). O dono tem o acervo inteiro num Drive bem organizado, montado
+  no disco pelo Google Drive para computador (`G:\My Drive`). O script indexa só as pastas de marketing (lista
+  fechada): 45.753 fotos e vídeos em 66 s, sem baixar nada. O agente busca, abre a prévia e cita o arquivo exato.
+  O Drive passa a ser o primeiro material (pronto e em resolução cheia); depois vêm a festa da agenda e o catálogo
+  (800×1200).
+
+**Decisões e pegadinhas.**
+- O genérico de 17/11 tinha causa, além do texto: **nenhum tema está liberado para anúncio** (476 sem
+  classificação). O agente não inventa saída para isso. Quando o tema não está liberado, o pedido nasce com
+  "Depende de: liberar <tema> em Marketing › Temas" e sem `catalog_item_ids`.
+- Quase toda festa vendida é de personagem licenciado. O anúncio vende "a Manto de verdade" com tema autoral, e
+  a vendedora oferece qualquer tema na conversa.
+- O casamento de personagem da festa com tema do catálogo é só pista. "Angel" casa com "Angel Drink", mas a Angel
+  da festa era a do Stitch (Disney). Por isso o campo se chama `temas_parecidos_conferir`.
+- O `location` das festas vem em formatos variados. O `criativo_dados` corta rua, número e CEP antes de o dado
+  chegar ao card, que a equipe inteira vê.
 ### 356 — O cachê do elenco não some nem muda por fora do card do Casting   (356-cache-nao-se-perde · 2026-11-19 · sem migration)
 
 > **Pronto na branch, sem push** (worktree `C:\tmp\mp356`, base `551dad44`). Nível 2, Agenda. Toca o
