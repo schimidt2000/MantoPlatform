@@ -36,10 +36,9 @@ Ele não diz qual fada, qual foto, qual momento, qual texto nem qual tamanho do 
 > **Ideia:** "As fadas chegam e a festa acende." A entrada das Fadas Glow, com as asas de luz acesas, no
 > exato segundo em que as crianças viram para olhar.
 >
-> **Material:** foto 3 da página do tema
-> (`https://app.mantoproducoes.com.br/catalogo/fadas-glow-golden-pink-shine-e-peach`). Recorte 4:5 com a
-> fada à direita, rosto e asas inteiros. O terço de cima fica livre para o letreiro. Se nenhuma das 7
-> fotos tiver a criança de costas ou sem rosto, use a 1 e corte a criança (ver regra 3).
+> **Material:** Drive › Temas Manto Produções › Fadas Glow › 20250927 › FOTOS › EDITADAS ›
+> FadasNovas-06.jpg (3072×4608). Recorte 4:5 com a fada à direita, rosto e coroa inteiros. O terço de cima
+> fica livre para o letreiro. (Sempre com uma reserva já olhada, da mesma pasta.)
 >
 > **Letreiro:** "A fada chega. A festa acende."
 
@@ -96,20 +95,37 @@ que resolve), não um personagem específico.
      - os temas que não são licenciados, com a situação, a página do catálogo e as fotos;
      - os personagens mais pedidos nos últimos 120 dias;
      - as próximas festas (data, hora, cidade, personagens e se há Foto/Vídeo escalado).
+   - `..\..\.venv\Scripts\python.exe drive_indice.py temas --busca <tema>`: o que o Drive da Manto tem do
+     tema (fotos editadas, vídeos prontos e brutos, última sessão). O índice cobre só as pastas de marketing
+     e é refeito pela rotina toda segunda.
    - Os números que o chamador mandar no pedido: frente, verba, o melhor e o pior conceito da semana.
    - **Nunca** escreva no banco, nunca chame `POST` do agente e nunca imprima tokens nem URLs de banco.
 2. **Escolha o material, nesta ordem de preferência:**
-   1. **Festa da agenda** nos próximos dias, com tema liberado (ou que dependa só de liberar) e,
-      melhor ainda, com Foto/Vídeo escalado. É material novo, real e do jeito que a peça pede. O pedido
-      diz:
+   1. **Drive da Manto (material pronto).** Fotos em `EDITADAS` e vídeos em `EXPORT`, em resolução cheia. A
+      peça sai em 1 ou 2 dias, sem depender de festa.
+      - `drive_indice.py buscar "<tema>" --tipo foto_editada` (ou `video_pronto`, `video_bruto`) lista os
+        caminhos, da sessão mais recente para a mais antiga.
+      - **Olhe antes de escolher.** `drive_indice.py ver "<caminho>" --saida <pasta temporária>` gera a prévia
+        (foto em 1024 px; vídeo em quadros com o segundo de cada um, `--quadros 8` ou mais). Abra os JPEG com
+        Read. Veja de 3 a 6 candidatas por peça. A prévia também diz se a foto aguenta 4:5 e 9:16 sem
+        esticar.
+      - Descarte o que tiver rosto de criança ou de adulto da plateia, decoração licenciada ao fundo, nome
+        de buffet, shopping ou cliente, ou foto tremida.
+      - O artista do elenco da Manto pode aparecer de rosto. A pasta "Depoimentos Clientes" só entra com a
+        autorização da cliente (o `buscar` avisa).
+      - No pedido, escreva o **caminho exato** (por exemplo, "Drive › Temas Manto Produções › Fadas Glow ›
+        20250927 › FOTOS › EDITADAS › FadasNovas-06.jpg").
+      - Num vídeo pronto longo, diga o trecho ("de 0:11 a 0:26"), escolhido pelos quadros.
+   2. **Festa da agenda** nos próximos dias, quando o Drive não tem o tema ou o formato. Serve também
+      para material novo, sobretudo a reação das crianças, que o acervo de estúdio não tem. Prefira festa
+      com tema liberado (ou que dependa só de liberar) e com Foto/Vídeo escalado. O pedido diz:
       - o dia, a hora e a cidade;
       - quais personagens estarão lá;
       - que momento captar (entrada, interação, parabéns);
       - quem capta: a equipe de Foto/Vídeo escalada, ou a Erika, se ela for.
-   2. **Fotos do catálogo** do tema: diga qual página e qual foto, contando da esquerda, ou cole a URL
-      da foto. Abra a página com WebFetch para conferir o que cada foto mostra antes de escolher.
-   3. **Drive "Temas Manto Produções" › EDITADAS**, quando o catálogo tem menos de 3 fotos boas. Diga
-      o nome da pasta do tema.
+   3. **Fotos do catálogo** do tema, só quando o Drive não tem nada. Elas têm baixa resolução (800×1200)
+      e perdem nitidez no 4:5. Diga qual página e qual foto, contando da esquerda, ou cole a URL; abra a
+      página com WebFetch para conferir o que cada foto mostra.
 3. **Uma ideia por peça.**
    - Escreva o conceito em uma frase que nomeie um momento concreto: "a entrada que faz a festa
      parar", "a fada que ajoelha para falar com a aniversariante". Nunca um adjetivo genérico como

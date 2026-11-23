@@ -268,7 +268,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, foto do catálogo ou festa da agenda, roteiro por segundo, textos prontos, medida A/B) e `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
+| **357-diretor-criativo** | *(na branch, sem push)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
 | **341c-horario-indisponivel** | *(EM PRODUÇÃO 19/11 ~11h58)* Horário indisponível à mão (cadeado na tela da campanha) para reserva combinada fora do site; a loja mostra riscados os indisponíveis, vendidos e em pagamento; pagamento atrasado num horário marcado vira devolução; remover pede confirmação | 2026-11-19 | — | (aqui) | ver Registro |
 | **353-gasto-extra-parcelado** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Gasto extra parcelado: várias datas e valores num gasto só, uma nota fiscal; cada parcela é um item na Planilha de Pagamentos, na data dela, paga sozinha; a DRE segue a "Data do gasto"; parcela paga trava na edição | 2026-11-17 | `f353a1b2c3d4` | (aqui) | ver Registro |
 | **352-fornecedores-gastos-extras** | *(EM PRODUÇÃO 17/11 ~22h52, lote)* Cadastro de fornecedores ligado aos gastos extras: digitar três letras sugere o fornecedor e escolher preenche nome, PIX e categoria; nome novo vira fornecedor ao salvar; tela "Fornecedores" do Financeiro (alterar, arquivar, juntar); a migration importa o histórico (65 grafias → 41 fornecedores, nomes arrumados) | 2026-11-17 | `f352a1b2c3d4` | (aqui) | ver Registro |
@@ -522,6 +522,11 @@ os cards 68 e 69 abertos pela 1ª rodada de marketing em 17/11).
 - **`scripts/marketing/criativo_dados.py`.** Lê a produção só em leitura e traz os temas com situação e fotos, o
   que vende e as próximas festas, sem nome de cliente nem endereço.
 - **Skill `marketing-auditor`, passo 11.** A rotina escolhe o quê e o agente escreve o pedido.
+- **`scripts/marketing/drive_indice.py`** (23/11). O dono tem o acervo inteiro num Drive bem organizado, montado
+  no disco pelo Google Drive para computador (`G:\My Drive`). O script indexa só as pastas de marketing (lista
+  fechada): 45.753 fotos e vídeos em 66 s, sem baixar nada. O agente busca, abre a prévia e cita o arquivo exato.
+  O Drive passa a ser o primeiro material (pronto e em resolução cheia); depois vêm a festa da agenda e o catálogo
+  (800×1200).
 
 **Decisões e pegadinhas.**
 - O genérico de 17/11 tinha causa, além do texto: **nenhum tema está liberado para anúncio** (476 sem

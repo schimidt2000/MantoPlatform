@@ -37,6 +37,13 @@ uma razão: nenhum tema estava (nem está) liberado para anúncio.
    para o relatório.
 4. **`scripts/marketing/README.md`**: seção "Pedidos de peça" e a URL de leitura em "Segredos".
 5. **Cards 68 e 69 reescritos em produção** com o texto do agente, na sessão do dono.
+6. **`scripts/marketing/drive_indice.py`** (novo, pedido do dono em 19/11: "já tenho um Google Drive bem organizado
+   com uma porrada de arquivos"). Lê o Drive montado no disco (`G:\My Drive`, Google Drive para computador), **só nas
+   pastas de marketing** (lista fechada), e grava um índice fora do repositório (`~/.manto-drive/indice.sqlite`): caminho,
+   tema, sessão, tipo (foto editada/bruta, arte, vídeo pronto/bruto/ensaio) e tamanho, sem baixar nada. `temas` e `buscar`
+   respondem o que existe; `ver` baixa só o arquivo pedido e gera a prévia (foto 1024 px; vídeo em quadros com o segundo)
+   e diz se aguenta 4:5 e 9:16. O agente passa a preferir o Drive (material pronto, em resolução cheia), depois a festa da
+   agenda e por último o catálogo; a rotina refaz o índice no passo 0.
 
 ## Verificação
 
@@ -50,6 +57,10 @@ uma razão: nenhum tema estava (nem está) liberado para anúncio.
   - 69: Papai Noel com Bailarelfos, captação no evento de 20/11 em Sorocaba, entrega 24/11.
 - A tela ensinou uma regra que o agente agora segue: "Objetivo" e "Texto do letreiro" são campos de
   uma linha só. O texto longo vai em "O que mostrar" e "Observações".
+- Índice do Drive em 23/11: 45.753 fotos e vídeos em 66 s (Temas Manto Produções 43.132; o resto das pastas de marketing
+  2.621); as pastas de projeto e cache do Premiere ficam fora. Busca de Fadas Glow: 36 fotos editadas (3072×4608) e 1
+  vídeo pronto (`EXPORT/FADAS_GLOW_V03.mp4`, 1080×1920, 60 s); prévias abertas e conferidas. `ver` recusa caminho fora das
+  pastas de marketing (testado com Financeiro). `ruff check` limpo.
 - Não há verify Python: nenhum comportamento do app muda.
 
 ## Fora de escopo

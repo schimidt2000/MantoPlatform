@@ -62,9 +62,13 @@ Você é o analista de marketing da Manto Produções.
 
 ## Passo a passo
 
-**0. Janela.**
+**0. Janela e acervo.**
 - `fim` = último domingo, `inicio` = `fim − 27 dias`. A semana em foco são os 7 últimos dias.
 - Use a data de São Paulo.
+- Refaça o índice do Drive: `drive_indice.py indexar`, cerca de 1 minuto, só lê nomes e tamanhos. É
+  ele que o `diretor-criativo` usa para achar foto e vídeo prontos (passo 11).
+  - Sem o disco do Drive (`G:\My Drive`), siga com o índice anterior e diga no relatório "Drive não
+    montado".
 
 **1. Contexto do ERP:** `agente.py GET "/comando?start=<inicio>&end=<fim>"`. Guarde:
 - `frentes` (custo por venda × teto) e `sem_frente`;

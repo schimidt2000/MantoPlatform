@@ -72,6 +72,29 @@ Ele usa o `criativo_dados.py`, que lê a produção **só em leitura** e imprime
 ..\..\.venv\Scripts\python.exe criativo_dados.py --dias 21
 ```
 
+### O acervo do Drive (`drive_indice.py`)
+
+O Drive da empresa está montado neste PC pelo Google Drive para computador (`G:\My Drive`). O
+`drive_indice.py` indexa **só as pastas de marketing** (lista fechada `RAIZES` no script): Temas Manto
+Produções, Conteúdo para Vendas, Publicidades, Depoimentos Clientes, VIDEOS GABI e gabi artes.
+- **O que fica fora:** Financeiro, notas de funcionários, 1on1s e o resto do Drive, de propósito.
+- **Onde fica o índice:** `~/.manto-drive/indice.sqlite`, fora do repositório. Cada linha tem caminho,
+  tema, sessão (a data da pasta), tipo e tamanho.
+- **O que não entra:** as pastas de projeto e cache do Premiere e do After Effects, e as trilhas.
+
+```powershell
+..\..\.venv\Scripts\python.exe drive_indice.py indexar                      # ~1 min, só nomes
+..\..\.venv\Scripts\python.exe drive_indice.py temas --busca glow           # o que o tema tem
+..\..\.venv\Scripts\python.exe drive_indice.py buscar "fadas glow" --tipo foto_editada
+..\..\.venv\Scripts\python.exe drive_indice.py ver "<caminho>" --saida <pasta> --quadros 8
+```
+
+Os tipos são `foto_editada` (EDITADAS), `foto_bruta`, `arte`, `video_pronto` (EXPORT), `video_bruto` e
+`video_ensaio`.
+
+O `ver` baixa só o arquivo pedido. Ele faz uma prévia de 1024 px, ou quadros do vídeo com o segundo de
+cada um, e diz se a peça aguenta 4:5 e 9:16 sem esticar. Ele recusa caminho fora das `RAIZES`.
+
 ## Segredos
 
 `.marketing-agent-token` (raiz) = env `MARKETING_AGENT_TOKEN` no Render (serviço `manto-backend`). Sem o env em produção
