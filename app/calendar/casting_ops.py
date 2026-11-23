@@ -216,7 +216,12 @@ def assign_role(
     elif travel_cache is not _UNSET:
         role.travel_cache = parse_brl(travel_cache)
     new_travel = role.travel_cache
-    role.assigned_at = datetime.now(tz=tz) if role.talent_id else None
+    # Hotfix 356: "Atribuído em" é o dia em que a pessoa ENTROU na vaga. Regravar a cada "Salvar" de
+    # cachê fazia o card dizer "Atribuído em 19/11" para quem foi escalado em 12/11 — e o dono leu
+    # isso como sinal de que a escala tinha sido refeita. Vaga antiga com pessoa e sem data ganha a
+    # data no primeiro salvar, como antes. O prazo da avaliação do portal (085) conta desta data.
+    if role.talent_id != old_talent_id or (role.talent_id and role.assigned_at is None):
+        role.assigned_at = datetime.now(tz=tz) if role.talent_id else None
     if role.talent_id != old_talent_id:
         role.figurino_done_at = None
         role.invite_status = None
@@ -353,6 +358,78 @@ def assign_role(
 
     # Sem talento (desescalado): confirma que a vaga foi salva (feature 138).
     return f"Vaga de {role.character_name} atualizada."
+
+
+def aplicar_cache_do_formulario(
+    event: Any,
+    role: Any,
+    valor: Any,
+    *,
+    mesma_pessoa: bool,
+    is_superadmin: bool,
+    actor_name: str,
+    autor_id: int | None,
+    tz: ZoneInfo,
+) -> None:
+    """Hotfix 356: o cachê que chega pelo "Editar tudo" passa pela MESMA regra do card do Casting.
+
+    Antes o formulário gravava `cache_value` direto: sem teto, sem log e, para quem não vê o cachê
+    (a Comercial), com `None` — o "Salvar" dela apagaria o cachê do elenco inteiro. Quem chama já
+    decidiu que a pessoa VÊ o cachê; aqui o valor passa pelo limite de `teto_ops` (o do card) e vira
+    linha no log do evento, no mesmo formato do card, para a auditoria achar.
+
+    Valor vazio ou igual ao gravado não mexe em nada: o formulário reenvia o elenco inteiro, e
+    reenviar o mesmo número não é alteração (nem vira linha no log). Não avisa o artista confirmado
+    por e-mail (o card avisa; o formulário nunca avisou — fora de escopo do 356).
+
+    Args:
+        event: O `CalendarEvent` dono da vaga.
+        role: O `EventRole`, já com o talento que o formulário gravou.
+        valor: O cachê como veio do formulário (número ou texto pt-BR).
+        mesma_pessoa: `False` quando o formulário trocou o artista nesta gravação (o cachê de quem
+            saiu não vira limite de quem entra — a regra da 339).
+        is_superadmin: Só o Superadmin passa do teto (e o valor acima vira o teto autorizado).
+        actor_name: Quem salvou, para o log.
+        autor_id: `User.id` de quem salvou — autor do teto autorizado (339).
+        tz: Fuso de São Paulo, para o horário do log.
+    """
+    novo = parse_brl(valor)
+    if novo is None or e_vaga_de_presenca(role) or role.cache_value == novo:
+        return
+    from app.calendar import teto_ops
+
+    parcela = valor_transporte_papel(event) if role.does_transport else Decimal("0")
+    limite = teto_ops.teto_efetivo(role, parcela, mesma_pessoa=mesma_pessoa)
+    limite_da_nota = teto_ops.teto_da_nota(role, parcela)
+    if limite is not None and novo > limite and not is_superadmin:
+        novo = limite
+    if role.cache_value == novo:
+        return
+    role.cache_value = novo
+    papel = "Superadmin" if is_superadmin else "Casting"
+    if is_superadmin:
+        frase_teto = teto_ops.gravar_teto_autorizado(
+            role, cache=novo, parcela=parcela, autor_id=autor_id, agora=now_sp()
+        )
+        if frase_teto:
+            db.session.add(EventLog(
+                event_id=event.id, actor_name=actor_name, actor_role=papel,
+                message=frase_teto, created_at=datetime.now(tz=tz),
+            ))
+    nota = (
+        f" (acima do cap de {limite_da_nota}R$ — autorizado pelo admin)"
+        if limite_da_nota and novo > limite_da_nota
+        else ""
+    )
+    talento = Talent.query.get(role.talent_id) if role.talent_id else None
+    quem = f"de {talento.full_name} como" if talento else "da vaga"
+    db.session.add(EventLog(
+        event_id=event.id,
+        actor_name=actor_name,
+        actor_role=papel,
+        message=f"Atualizou cachê {quem} {role.character_name} para {novo}R${nota} (formulário completo)",
+        created_at=datetime.now(tz=tz),
+    ))
 
 
 def _cache_changes(

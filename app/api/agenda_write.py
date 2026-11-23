@@ -1564,6 +1564,7 @@ def api_update_event(event_id: int) -> Any:
 
     # Por injeção, não import: `event_ops` não pode depender de `app.financeiro` (a régua de 9
     # ramos da comissão é do outro domínio). Mesmo contrato do endpoint estreito `/comercial`.
+    from app.api.agenda_read import _role_flags
     from app.financeiro.routes import _sync_commission_payment
 
     try:
@@ -1578,6 +1579,9 @@ def api_update_event(event_id: int) -> Any:
             pedida_por_id=current_user.id,
             # Feature 339: quem trocou fica fora do próprio aviso (FR-033).
             autor_id=current_user.id,
+            # Hotfix 356: a MESMA regra que decide se o cachê sai na leitura (`show_casting`, com o
+            # "Ver como"). Quem não recebeu o cachê na tela devolve vazio, e vazio não é "zerar".
+            pode_ver_cache=_role_flags(current_user, session.get("impersonate_role"))["show_casting"],
         )
     except EventCoreUpdateBlocked as exc:
         return json_error(exc.message, 409)

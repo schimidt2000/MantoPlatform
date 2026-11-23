@@ -49,12 +49,20 @@ interface CharacterRowProps {
   onRemove: () => void;
   talentOpts: ComboboxOption[];
   maquiagemTravada: boolean;
+  cacheOculto: boolean;
 }
 
 /** Feature 322 — a explicação da caixa travada, uma vez no bloco e no `title` de cada caixa. */
 const AVISO_MAQUIAGEM_TRAVADA = "Só o superadmin muda a maquiagem depois que o evento existe.";
 
-function CharacterRow({ value, onChange, onRemove, talentOpts, maquiagemTravada }: CharacterRowProps) {
+function CharacterRow({
+  value,
+  onChange,
+  onRemove,
+  talentOpts,
+  maquiagemTravada,
+  cacheOculto,
+}: CharacterRowProps) {
   return (
     <li className="space-y-2 border-b border-line pb-3 last:border-none">
       <div className="flex flex-wrap items-center gap-2">
@@ -90,12 +98,16 @@ function CharacterRow({ value, onChange, onRemove, talentOpts, maquiagemTravada 
           value={value.talent_id != null ? String(value.talent_id) : null}
           onChange={(next) => onChange({ ...value, talent_id: next ? Number(next) : null })}
         />
-        <MoneyInput
-          className="h-10 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
-          value={value.cache_value ?? 0}
-          onValueChange={(v) => onChange({ ...value, cache_value: v })}
-          aria-label="Cachê"
-        />
+        {/* Hotfix 356: quem não recebe o cachê da API (sem Casting) via R$ 0,00 aqui — e o campo
+            parecia dizer que o elenco estava sem cachê. O servidor também ignora o valor. */}
+        {!cacheOculto && (
+          <MoneyInput
+            className="h-10 w-28 rounded-md border border-line bg-panel px-2 text-sm text-ink"
+            value={value.cache_value ?? 0}
+            onValueChange={(v) => onChange({ ...value, cache_value: v })}
+            aria-label="Cachê"
+          />
+        )}
         <label
           className={`flex items-center gap-1.5 text-sm ${maquiagemTravada ? "text-muted" : "text-ink"}`}
           title={maquiagemTravada ? AVISO_MAQUIAGEM_TRAVADA : undefined}
@@ -134,6 +146,11 @@ export interface ElencoBlockProps {
    * recusa). A criação não passa a prop: lá quem cria define.
    */
   maquiagemTravada?: boolean;
+  /**
+   * Hotfix 356 — na edição, quem não vê o cachê (`flags.show_casting` falso) não vê o campo: o
+   * cachê é do Casting e se muda pelo card da aba Produção. A criação não passa a prop.
+   */
+  cacheOculto?: boolean;
 }
 
 /** Bloco 3 — Personagens e equipe (elenco dinâmico) + título do evento (feature 184). */
@@ -144,6 +161,7 @@ export function ElencoBlock({
   onCoordinatorTalentIdChange,
   talents,
   maquiagemTravada = false,
+  cacheOculto = false,
 }: ElencoBlockProps) {
   const {
     register,
@@ -214,6 +232,7 @@ export function ElencoBlock({
             onRemove={() => onCharactersChange(characters.filter((_, j) => j !== i))}
             talentOpts={talentOpts}
             maquiagemTravada={maquiagemTravada}
+            cacheOculto={cacheOculto}
           />
         ))}
       </ul>

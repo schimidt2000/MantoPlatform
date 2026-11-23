@@ -85,6 +85,8 @@ export function EventEditPage() {
   const [avisos, setAvisos] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [characters, setCharacters] = useState<CharacterInput[]>([]);
+  // Hotfix 356: o cachê de cada vaga como a tela abriu — só o que mudou daqui vai no PATCH.
+  const [cacheCarregado, setCacheCarregado] = useState<Record<number, number | null>>({});
   const [coordinatorTalentId, setCoordinatorTalentId] = useState<number | null>(null);
   const [clients, setClients] = useState<(ClientLinkInput & { name: string })[]>([]);
   // Feature 323: o documento do contratante que está na tela (trocar o cliente troca a sugestão).
@@ -110,6 +112,8 @@ export function EventEditPage() {
   });
   const { handleSubmit, setError, setFocus, reset, formState } = methods;
   const { errors, isSubmitting } = formState;
+  // Hotfix 356: a mesma flag que faz o servidor mandar (ou não) o cachê de cada vaga.
+  const cacheOculto = !eventQuery.data?.flags.show_casting;
 
   useEffect(() => {
     if (!eventQuery.data || loaded) return;
@@ -157,6 +161,11 @@ export function EventEditPage() {
     });
 
     const roles = data.elenco ?? [];
+    setCacheCarregado(
+      Object.fromEntries(
+        roles.filter((r) => r.role_type === "character").map((r) => [r.role_id, r.cache_value ?? null]),
+      ),
+    );
     setCharacters(
       roles
         .filter((r) => r.role_type === "character")
@@ -290,7 +299,14 @@ export function EventEditPage() {
         payment_due_date: values.payment_due_date || null,
         coordinator_talent_id: coordinatorTalentId,
         form_response_id: formResponse?.id ?? null,
-        characters: characters.filter((c) => c.name.trim().length > 0),
+        characters: characters
+          .filter((c) => c.name.trim().length > 0)
+          .map(({ cache_value, ...resto }) =>
+            // Hotfix 356: cachê intocado (ou escondido) não vai — o servidor mantém o gravado.
+            cacheOculto || (resto.role_id != null && cache_value === cacheCarregado[resto.role_id])
+              ? resto
+              : { ...resto, cache_value },
+          ),
         clients: clients.map(({ client_id, relation }) => ({ client_id, relation })),
       };
 
@@ -494,6 +510,7 @@ export function EventEditPage() {
               onCoordinatorTalentIdChange={setCoordinatorTalentId}
               talents={opts.assignable_talents}
               maquiagemTravada={!data.flags.is_superadmin}
+              cacheOculto={cacheOculto}
             />
 
             <ValoresBlock

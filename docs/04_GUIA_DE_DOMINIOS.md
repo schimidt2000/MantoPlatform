@@ -316,6 +316,13 @@ ato (306), não da vaga de hoje.
     direto no Google (prefixo do título) também recalcula e avisa pelo sync
     (`event_ops.avisar_troca_de_tipo_do_google`), sem a parte destrutiva da saída de SHOW, que segue
     só na troca pela plataforma. O cachê de quem já está escalado nunca muda sozinho.
+    **Hotfix 356 — o cachê só muda por quem o vê e pela mesma régua.** O "Editar tudo"
+    (`_reconcile_characters`) só escreve cachê com `pode_ver_cache` (a `show_casting` da leitura,
+    com o "Ver como") e por `casting_ops.aplicar_cache_do_formulario`. Essa função aplica o mesmo
+    limite e o mesmo teto autorizado do card e grava "Atualizou cachê … (formulário completo)" no
+    log. Vazio ou igual ao gravado não é alteração: quem não recebe o cachê na tela devolve `null`, e
+    `null` nunca apaga. `assigned_at` ("Atribuído em") é o dia em que a pessoa **entrou** na vaga:
+    só muda quando a pessoa muda.
 10b. **Título ↔ vagas ↔ ensaio (feature 339, `app/calendar/titulo_ops.py`).** O título conta
     personagens com repetição (`parse_characters` + `orcamento_evento_ops._chave`). O que **sai** do
     título (antigo × novo, por sync ou edição) mexe nas vagas; diferença antiga de grafia nunca.

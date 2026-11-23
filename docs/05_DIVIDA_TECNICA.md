@@ -877,6 +877,17 @@ do Papai Noel: com reservas abandonadas, pausar a campanha em vez de remover hor
 | 212 | **P4** | `CampanhaVirtualPage.tsx` (`InitiateCheckout`) | o evento sai e a página troca para o checkout no mesmo instante: o navegador pode cortar o envio, e a Meta vê menos "início de compra" do que houve | atrasar a troca ~300 ms quando o pixel está carregado, ou mandar pela API de Conversões no servidor |
 | 213 | **P4** | `virtuais_ops.registrar_visita` / `useRegistrarVisita` | "visita" é abertura por aba: a mesma pessoa em dois aparelhos conta 2, robô que roda JavaScript conta, e a equipe testando a página entra no número | aceitar como ordem de grandeza; para teste da equipe, usar um link com `?origem=teste` (cai em "Outro") |
 
+## Baixa da correção 356-cache-nao-se-perde (2026-11-19, branch)
+
+**Quitada.** Nenhuma da lista (as brechas eram desconhecidas). **Criadas.** 238–241. Os números saltam
+a 237, que é da 355 (luminária, sem push).
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 238 | **P1** | `casting_ops.assign_role` | todo "Salvar" do card com pessoa põe `payment_status = "nao_pago"`, mesmo quando só o cachê mudou: a vaga marcada "Pago"/"No banco" volta a "A pagar" ao corrigir o valor e pode ser paga de novo pela Planilha de Pagamentos. Visto no código, não medido em produção | contar em produção (`event_logs` "Atualizou cachê" depois de pagamento); só redefinir quando a pessoa muda, e decidir com o dono o que o cachê alterado de vaga já paga faz (diferença a pagar? trava?) |
+| 239 | **P3** | `POST /api/events` / `EventCreatePage` (`ElencoBlock` sem `cacheOculto`) | na criação, o cachê digitado por personagem entra sem teto e sem linha no log, e a Comercial vê o campo (a 356 corrigiu só a edição) | a mesma regra da edição: o campo só para quem tem Casting, e o valor passando por `aplicar_cache_do_formulario` depois de o teto do orçamento existir |
+| 240 | **P4** | `casting_ops.aplicar_cache_do_formulario` | mudar o cachê de artista com presença confirmada pelo "Editar tudo" não grava `change_description` nem manda o e-mail "seu cachê mudou" que o card manda | juntar ao `assign_role` o trecho do aviso (`_cache_changes`) e mandar depois do commit do `update_event_core` |
+| 241 | **P4** | `CastingSection` (rascunho do card) | sair para outra tela do app com cachê digitado não pergunta (o `BrowserRouter` não tem `useBlocker`), e no iPhone o `beforeunload` não existe: o rascunho fica guardado e volta com o aviso, mas quem não volta ao evento não fica sabendo | migrar o app para `createBrowserRouter` (habilita `useBlocker`) ou um aviso no menu/sino com os rascunhos pendentes |
 ## Baixa da correção 355-luminaria-anuncia-papai-noel (2026-11-19, branch)
 
 **Quitada.** Nenhuma. **Criada.**
