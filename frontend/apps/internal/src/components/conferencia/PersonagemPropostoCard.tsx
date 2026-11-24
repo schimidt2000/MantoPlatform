@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { Badge, Button, ConfirmDialog, cn } from "@manto/ui";
 import { FigurinoPicker } from "../FigurinoPicker";
 import { RecortePersonagem } from "./RecortePersonagem";
@@ -33,6 +34,7 @@ interface PersonagemPropostoCardProps {
  * continua visível depois da correção, para dar para voltar atrás sem lembrar de cabeça.
  */
 export function PersonagemPropostoCard({ itemId, personagem, travado, onAbrirFoto }: PersonagemPropostoCardProps) {
+  const reduzirMovimento = useReducedMotion();
   const alterar = useAlterarPersonagem(itemId, personagem.id);
   const excluir = useExcluirPersonagem(itemId, personagem.id);
   const [nome, setNome] = useState(personagem.nome);
@@ -66,7 +68,15 @@ export function PersonagemPropostoCard({ itemId, personagem, travado, onAbrirFot
   }
 
   return (
-    <li className="flex gap-3 rounded-lg border border-line bg-panel p-3">
+    // Entra e sai com transição curta (Princípio XI): acrescentar ou excluir um personagem não pode
+    // ser um "tranco" numa lista de cartões altos.
+    <motion.li
+      initial={reduzirMovimento ? false : { opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={reduzirMovimento ? undefined : { opacity: 0 }}
+      transition={{ duration: reduzirMovimento ? 0 : 0.2, ease: "easeOut" }}
+      className="flex gap-3 rounded-lg border border-line bg-panel p-3"
+    >
       <RecortePersonagem
         foto={personagem.foto}
         nome={personagem.nome}
@@ -228,6 +238,6 @@ export function PersonagemPropostoCard({ itemId, personagem, travado, onAbrirFot
         onConfirm={() => excluir.mutate(undefined, { onSuccess: () => setConfirmandoExclusao(false) })}
         onOpenChange={setConfirmandoExclusao}
       />
-    </li>
+    </motion.li>
   );
 }

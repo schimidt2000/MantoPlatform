@@ -110,7 +110,7 @@ Toda rota de decisão devolve o bloco `conferencia` atualizado (mesmo formato do
 | Sem leitura carregada | "A leitura das fotos ainda não foi carregada." + botão "Carregar leitura" |
 | Carga feita | "Leitura carregada: 356 itens e 715 personagens." / "Nenhum item novo na leitura." |
 | Item sem leitura | "Este item ainda não tem leitura das fotos. Cadastre o elenco no catálogo." + "Ver no catálogo" |
-| Item fora da fila | "Este item saiu da fila: já tem elenco ou ficha no catálogo." |
+| Item fora da fila | "Este item saiu da fila: já tem elenco ou ficha no catálogo, ou foi desativado." |
 | Decisão do personagem | "Criar" · "Não criar" · "Criar sem foto" |
 | Referência da leitura | "A leitura propôs: Piloto Rebelde" · "Ficha sugerida: 417 Luke Skywalker" |
 | Acrescentar | "Acrescentar personagem" · "Informe o nome do personagem." |

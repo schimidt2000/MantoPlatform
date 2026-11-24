@@ -35,8 +35,13 @@ function textoDaCarga(resumo: ResumoDaCarga): string {
       ? `Leitura carregada: ${plural(resumo.itens_novos, "item", "itens")} e ${plural(resumo.personagens_novos, "personagem", "personagens")}.`
       : "Nenhum item novo na leitura.",
   ];
-  if (resumo.ignorados.length > 0) {
-    partes.push(`${plural(resumo.ignorados.length, "item ignorado", "itens ignorados")}: não existem mais no catálogo.`);
+  // O motivo é o que a API devolveu (item que não existe mais, tipo desconhecido), agrupado.
+  const porMotivo = new Map<string, number>();
+  for (const ignorado of resumo.ignorados) {
+    porMotivo.set(ignorado.motivo, (porMotivo.get(ignorado.motivo) ?? 0) + 1);
+  }
+  for (const [motivo, quantos] of porMotivo) {
+    partes.push(`${plural(quantos, "item ignorado", "itens ignorados")}: ${motivo}`);
   }
   return partes.join(" ");
 }

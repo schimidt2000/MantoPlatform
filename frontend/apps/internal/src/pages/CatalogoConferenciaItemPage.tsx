@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { ApiRequestError, assetUrl } from "@manto/api-client";
 import { Badge, Button, Skeleton } from "@manto/ui";
 import { useAbrirArquivo } from "../components/ArquivoViewer";
@@ -114,7 +114,8 @@ export function CatalogoConferenciaItemPage() {
 
   const detalhe = query.data;
   const { item, conferencia, situacao } = detalhe;
-  const travado = situacao === "conferido";
+  // Conferido, ou fora da fila (já tem elenco ou ficha no catálogo): fica só para consulta.
+  const travado = situacao === "conferido" || !detalhe.na_fila;
   const temElenco = conferencia !== null && TIPOS_COM_ELENCO.includes(conferencia.tipo);
 
   return (
@@ -147,7 +148,7 @@ export function CatalogoConferenciaItemPage() {
 
         <GaleriaDoItem nome={item.nome} fotos={item.fotos} onAbrir={abrirFoto} />
 
-        {!detalhe.na_fila && <Aviso>Este item saiu da fila: já tem elenco ou ficha no catálogo.</Aviso>}
+        {!detalhe.na_fila && <Aviso>Este item saiu da fila: já tem elenco ou ficha no catálogo, ou foi desativado.</Aviso>}
 
         {conferencia === null ? (
           <Aviso>Este item ainda não tem leitura das fotos. Cadastre o elenco no catálogo.</Aviso>
@@ -176,15 +177,18 @@ export function CatalogoConferenciaItemPage() {
                 {/* `grid-cols-1` + `min-w-0`: sem coluna explícita a trilha vira `auto`, cresce com o
                     conteúdo do cartão e estoura os 390 px do celular. */}
                 <ul className="grid grid-cols-1 gap-3 lg:grid-cols-2 [&>*]:min-w-0">
-                  {conferencia.personagens.map((personagem) => (
-                    <PersonagemPropostoCard
-                      key={personagem.id}
-                      itemId={item.id}
-                      personagem={personagem}
-                      travado={travado}
-                      onAbrirFoto={abrirFoto}
-                    />
-                  ))}
+                  {/* `initial={false}`: só anima quem entra ou sai depois, não os cartões da carga. */}
+                  <AnimatePresence initial={false}>
+                    {conferencia.personagens.map((personagem) => (
+                      <PersonagemPropostoCard
+                        key={personagem.id}
+                        itemId={item.id}
+                        personagem={personagem}
+                        travado={travado}
+                        onAbrirFoto={abrirFoto}
+                      />
+                    ))}
+                  </AnimatePresence>
                 </ul>
                 {!travado && <AcrescentarPersonagem itemId={item.id} />}
               </section>
@@ -204,6 +208,7 @@ export function CatalogoConferenciaItemPage() {
         key={`rodape-${item.id}`}
         itemId={item.id}
         situacao={situacao}
+        naFila={detalhe.na_fila}
         conferencia={conferencia}
         anteriorId={detalhe.anterior_id}
         proximoId={detalhe.proximo_id}

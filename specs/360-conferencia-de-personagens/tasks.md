@@ -139,12 +139,12 @@ Vem primeiro porque as outras histórias precisam de dado.
       arquivos novos
 - [x] T026 Tela aberta de verdade (skill `manto-conferir-tela`): `/admin/catalogo/conferencia` e um
       item de cada tipo, a 390×844 e em tela larga; textos lidos pelo Princípio XV
-- [ ] T027 Docs: `docs/01` (§3 endpoints, §4.3 gates, schema), `docs/02` (telas), `docs/03` (entrada
+- [x] T027 Docs: `docs/01` (§3 endpoints, §4.3 gates, schema), `docs/02` (telas), `docs/03` (entrada
       no topo + índice), `docs/04` (fluxo leitura → conferência → gravação e a regra da fila),
       `docs/05` (dívidas: gravar o conferido; leitura no repositório); decisão de arquitetura (carga
       explícita em vez de migration; a conferência não toca o catálogo) na entrada do `docs/03`, e em
       nota de `docs/decisoes/` se a 359 já estiver na `main`
-- [ ] T028 `/speckit-converge` sem gaps; spec marcada com o resultado do verify
+- [x] T028 `/speckit-converge` sem gaps; spec marcada com o resultado do verify
 
 ## Dependências
 
@@ -155,3 +155,10 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 MVP = Phases 1 a 5 (carregar, fila viva, conferir com progresso salvo). US4 e US5 entram na mesma
 entrega: sem US4 a conferência só aprova ou recusa, que é o defeito da página antiga.
+
+## Phase 9: Convergence
+
+- [x] T029 CRITICAL: entrada e saída de personagem na lista do elenco (acrescentar, excluir) com transição do Framer Motion sob `useReducedMotion`, em `frontend/apps/internal/src/components/conferencia/PersonagemPropostoCard.tsx` e `frontend/apps/internal/src/pages/CatalogoConferenciaItemPage.tsx` per Constitution XI (partial)
+- [x] T030 Item que saiu da fila fica só para consulta: sem "Conferir" no rodapé e com os controles travados, oferecendo só o próximo, em `frontend/apps/internal/src/pages/CatalogoConferenciaItemPage.tsx` e `frontend/apps/internal/src/components/conferencia/RodapeDaConferencia.tsx` per spec: caso de borda "item aberto depois de sair da fila" (partial)
+- [x] T031 Resumo da carga mostra o motivo que a API devolveu para cada grupo de itens ignorados, em vez de um motivo fixo, em `frontend/apps/internal/src/pages/CatalogoConferenciaPage.tsx` per FR-010 (partial)
+

@@ -13,6 +13,8 @@ import {
 interface RodapeDaConferenciaProps {
   itemId: number;
   situacao: SituacaoDoItem;
+  /** Fora da fila (já tem elenco ou ficha no catálogo) não se confere nem se reabre. */
+  naFila: boolean;
   conferencia: ConferenciaDoItem | null;
   anteriorId: number | null;
   proximoId: number | null;
@@ -30,6 +32,7 @@ interface RodapeDaConferenciaProps {
 export function RodapeDaConferencia({
   itemId,
   situacao,
+  naFila,
   conferencia,
   anteriorId,
   proximoId,
@@ -40,6 +43,7 @@ export function RodapeDaConferencia({
   const reabrir = useReabrirItem(itemId);
   const erro = mensagemDoErro(conferir.error) ?? mensagemDoErro(reabrir.error);
   const conferido = situacao === "conferido";
+  const podeConferir = situacao === "a_conferir" && naFila;
 
   function conferirEAvancar() {
     conferir.mutate(undefined, {
@@ -84,17 +88,17 @@ export function RodapeDaConferencia({
             <ChevronLeft className="h-5 w-5" aria-hidden />
           </Button>
         )}
-        {situacao === "a_conferir" && (
+        {podeConferir && (
           <Button size="lg" className="min-w-0 flex-1 px-4" loading={conferir.isPending} onClick={conferirEAvancar}>
             {proximoId ? "Conferir e ir para o próximo" : "Conferir"}
           </Button>
         )}
-        {conferido && (
+        {conferido && naFila && (
           <Button variant="outline" size="lg" className="px-4" loading={reabrir.isPending} onClick={() => reabrir.mutate()}>
             Reabrir
           </Button>
         )}
-        {situacao !== "a_conferir" && proximoId !== null && (
+        {!podeConferir && proximoId !== null && (
           <Button size="lg" className="min-w-0 flex-1 px-4" onClick={() => onIrPara(proximoId)}>
             Próximo a conferir
           </Button>
