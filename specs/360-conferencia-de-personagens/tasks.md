@@ -23,7 +23,7 @@ antes do núcleo; nasce falhando por rota inexistente.
       `.specify/feature.json` apontando para `specs/360-conferencia-de-personagens`
 - [x] T002 Leitura dos 13 itens novos (`C:\tmp\catalogo_personagens\propostas\saida_27.json`), com a
       lista de fichas soltas de 24/11
-- [ ] T003 `specs/360-conferencia-de-personagens/montar_leitura.py`: junta o piloto (bloco `TEMAS` de
+- [x] T003 `specs/360-conferencia-de-personagens/montar_leitura.py`: junta o piloto (bloco `TEMAS` de
       `scripts/oneoff/piloto_personagens/conferencia.html`) e as saídas `saida_01..27.json` no formato
       do `data-model.md` e grava `app/admin/dados/leitura_personagens.json`; imprime totais por tipo,
       personagens, com ficha, sem foto e problemas
@@ -32,18 +32,18 @@ antes do núcleo; nasce falhando por rota inexistente.
 
 ## Phase 2: Foundational (bloqueia as histórias)
 
-- [ ] T004 Models `CatalogConferencia` e `CatalogConferenciaPersonagem` em `app/models.py` conforme
+- [x] T004 Models `CatalogConferencia` e `CatalogConferenciaPersonagem` em `app/models.py` conforme
       `data-model.md` (relacionamentos só deste lado; property tolerante `recorte_list`)
-- [ ] T005 Migration manual `migrations/versions/f360a1b2c3d4_conferencia_de_personagens.py`
+- [x] T005 Migration manual `migrations/versions/f360a1b2c3d4_conferencia_de_personagens.py`
       (`down_revision = "f353a1b2c3d4"`; CHECKs, UNIQUE, índice, FKs com `ondelete`); aplicar no
       `manto_360`
-- [ ] T006 **`specs/360-conferencia-de-personagens/verify_360.py`** — os 18 cenários da spec (login só
+- [x] T006 **`specs/360-conferencia-de-personagens/verify_360.py`** — os 18 cenários da spec (login só
       pela API; escrita conferida por conexão separada; cenários 4b, 9, 11b, 13 e 16 DEVEM falhar;
       limpeza no `finally`; `--manter` deixa a leitura carregada) — escrito AGORA e falhando por 404
-- [ ] T007 Núcleo `app/admin/catalog_conferencia_ops.py`: constantes, `ConferenciaValidationError`,
+- [x] T007 Núcleo `app/admin/catalog_conferencia_ops.py`: constantes, `ConferenciaValidationError`,
       `ConferenciaConflito`, a regra da fila num lugar só (`filtro_da_fila`) e os serializers de item,
       conferência e personagem
-- [ ] T008 Esqueleto de `app/api/admin_catalogo_conferencia_read.py` e
+- [x] T008 Esqueleto de `app/api/admin_catalogo_conferencia_read.py` e
       `app/api/admin_catalogo_conferencia_write.py` (comentário `RBAC:`, `_require_superadmin`) e os
       dois imports em `app/api/__init__.py`
 
@@ -57,10 +57,10 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 **Teste independente**: cenários 1, 2, 8 e 14 do verify.
 
-- [ ] T009 [US3] `carregar_leitura(dados)` e `ler_arquivo_da_leitura()` em
+- [x] T009 [US3] `carregar_leitura(dados)` e `ler_arquivo_da_leitura()` em
       `app/admin/catalog_conferencia_ops.py`: `pg_advisory_xact_lock`, pula item que já tem
       conferência, tolera item, foto e ficha inexistentes, devolve o resumo
-- [ ] T010 [US3] `POST /api/admin/catalogo/conferencia/carregar` em
+- [x] T010 [US3] `POST /api/admin/catalogo/conferencia/carregar` em
       `app/api/admin_catalogo_conferencia_write.py`
 
 ---
@@ -69,12 +69,12 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 **Teste independente**: cenários 5, 6, 7 e 15 do verify.
 
-- [ ] T011 [US2] `listar_fila(tipo, situacao, q)` e `contadores()` em
+- [x] T011 [US2] `listar_fila(tipo, situacao, q)` e `contadores()` em
       `app/admin/catalog_conferencia_ops.py`: uma consulta, sem N+1; "sem leitura" por `OUTER JOIN`;
       `leitura.a_carregar`
-- [ ] T012 [US2] `GET /api/admin/catalogo/conferencia` em
+- [x] T012 [US2] `GET /api/admin/catalogo/conferencia` em
       `app/api/admin_catalogo_conferencia_read.py`
-- [ ] T013 [US2] `detalhe_do_item(item_id, tipo, q)` (com `na_fila`, `anterior_id`, `proximo_id`) e
+- [x] T013 [US2] `detalhe_do_item(item_id, tipo, q)` (com `na_fila`, `anterior_id`, `proximo_id`) e
       `GET /api/admin/catalogo/conferencia/<item_id>`
 
 ---
@@ -83,9 +83,9 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 **Teste independente**: cenários 3, 4 e 9 do verify; tela aberta.
 
-- [ ] T014 [US1] `alterar_personagem` (só `decisao` nesta fase), `conferir` (com FR-017) e `reabrir`
+- [x] T014 [US1] `alterar_personagem` (só `decisao` nesta fase), `conferir` (com FR-017) e `reabrir`
       em `app/admin/catalog_conferencia_ops.py`, com trava e releitura da conferência (research R7)
-- [ ] T015 [US1] Rotas `PATCH …/personagens/<id>`, `POST …/<item_id>/conferir` e `…/reabrir` em
+- [x] T015 [US1] Rotas `PATCH …/personagens/<id>`, `POST …/<item_id>/conferir` e `…/reabrir` em
       `app/api/admin_catalogo_conferencia_write.py` (409 `conferido` / `nao_conferido`)
 - [ ] T016 [P] [US1] `frontend/apps/internal/src/lib/catalogoConferencia.ts`: tipos do contrato (campos
       opcionais onde o payload é novo) e hooks de fila, item e mutações
@@ -110,10 +110,10 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 **Teste independente**: cenários 10 a 13 do verify; tela aberta.
 
-- [ ] T020 [US4] Núcleo: `alterar_personagem` completo (`nome`, `ficha_id`, `sem_foto`, `observacao`),
+- [x] T020 [US4] Núcleo: `alterar_personagem` completo (`nome`, `ficha_id`, `sem_foto`, `observacao`),
       `acrescentar_personagem`, `excluir_personagem` (só `manual`), `alterar_item` (`tipo`,
       `ficha_id`, `observacao`) em `app/admin/catalog_conferencia_ops.py`
-- [ ] T021 [US4] Rotas `PATCH …/<item_id>`, `POST …/<item_id>/personagens` e
+- [x] T021 [US4] Rotas `PATCH …/<item_id>`, `POST …/<item_id>/personagens` e
       `DELETE …/personagens/<id>` em `app/api/admin_catalogo_conferencia_write.py`
 - [ ] T022 [US4] Tela: nome editável com o proposto visível, `FigurinoPicker` com a sugerida visível,
       "Criar sem foto", observação, "Acrescentar personagem", excluir com `ConfirmDialog`, tipo do item
