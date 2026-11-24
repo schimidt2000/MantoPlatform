@@ -7,7 +7,9 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-17** · **350-base-autorizada** (migration **`a350b1c2d3e4`**, aditiva,
+> Última atualização: **2026-11-24** · **360-conferencia-de-personagens** (migration **`f360a1b2c3d4`**, aditiva,
+> sobre `f353a1b2c3d4`: `catalog_conferencias` e `catalog_conferencia_personagens`, §2; rotas em §3.10; gate em
+> §4.3). Antes: **2026-11-17** · **350-base-autorizada** (migration **`a350b1c2d3e4`**, aditiva,
 > **encadeada em `d334b2c4e6f8` na branch** — o reencadeamento com 348, 349 e 351 fica para o lote de
 > merge: consentimentos, crianças, parceiros e pós-evento, §2.7.1; rotas em §3.8; gates em §4.3).
 > Antes: **2026-11-16** · **344-loja-visitas-e-privacidade** (migration **`e344a1b2c3d4`** —
@@ -519,6 +521,8 @@ que saiu. Estas três tabelas são o que existe no meio — o trabalho de produz
 | `catalog_item_images` | `CatalogItemImage` | `url`, `original_url`, `position` (**posição 0 = capa**, usada no Open Graph), `file_size_bytes` | `item_id` |
 | `catalog_categories` | `CatalogCategory` | `name` (unique), `slug` (unique) | — |
 | `catalog_item_categories` | *(association)* | PK composta | `item_id`, `category_id` |
+| `catalog_conferencias` | `CatalogConferencia` | **Conferência de personagens (feature 360)** — uma linha por item lido: `tipo_lido`/`tipo` (`tema`·`dupla`·`avulso`·`generico`, CHECK), `nota`, `acao`, `grupo`, `observacao`, `lote`, `conferido_em` (UTC; NULL = a conferir). O par `*_lido`/`*_sugerida` é o que a leitura propôs e nunca muda; o irmão sem sufixo é o decidido. **Não altera o catálogo.** | `catalog_item_id`→`catalog_items` (**UNIQUE**, **ON DELETE CASCADE**), `ficha_sugerida_id`/`ficha_id`→`figurino_sheets` (SET NULL), `conferido_por_id`→`users` (SET NULL) |
+| `catalog_conferencia_personagens` | `CatalogConferenciaPersonagem` | personagem proposto: `origem` (`leitura`·`manual`), `nome_lido`/`nome`, `recorte` (JSON `[x, y, largura, altura]` em % da foto, lido por `recorte_list`), `foto_largura`/`foto_altura`, `aviso`, `sem_foto_lido`/`sem_foto`, `decisao` (`criar`·`nao_criar`), `observacao`, `position` | `conferencia_id`→`catalog_conferencias` (CASCADE), `imagem_id`→`catalog_item_images` (SET NULL), `ficha_sugerida_id`/`ficha_id`→`figurino_sheets` (SET NULL) |
 
 > **`catalog_characters.own_item_id` (feature 209, `app/models.py:1915`)** aponta para o `CatalogItem`
 > que **é** a página própria deste personagem (caso "Coelho Branco" dentro do tema Alice). `NULL` = o
@@ -1655,6 +1659,16 @@ em `specs/350-base-autorizada/contracts/api.md`):
 | POST | `/api/admin/catalogo/<item_id>/personagens` · **`/api/admin/catalogo/<item_id>/personagens/reaproveitar`** (feature 235 — `{"figurino_sheet_id"}`: põe no elenco deste tema um personagem que já existe; 400 se a ficha já estiver no tema) |
 | PATCH/DELETE | `/api/admin/catalogo/personagens/<character_id>` |
 | POST | **`/api/admin/catalogo/personagens/mover-em-massa`** (feature 186) |
+| GET | **`/api/admin/catalogo/conferencia`** (feature 360 — fila da conferência de personagens; `tipo`, `situacao`, `q`; contadores sempre da fila inteira) · **`/api/admin/catalogo/conferencia/<item_id>`** (fotos, proposta da leitura, decisões, `na_fila`, vizinhos a conferir) |
+| POST | **`/api/admin/catalogo/conferencia/carregar`** (carga idempotente da leitura versionada) · **`…/conferencia/<item_id>/conferir`** · **`…/conferencia/<item_id>/reabrir`** · **`…/conferencia/<item_id>/personagens`** (acrescenta) |
+| PATCH | **`/api/admin/catalogo/conferencia/<item_id>`** (`tipo`, `ficha_id`, `observacao`) · **`/api/admin/catalogo/conferencia/personagens/<id>`** (`nome`, `ficha_id`, `decisao`, `sem_foto`, `observacao`) |
+| DELETE | **`/api/admin/catalogo/conferencia/personagens/<id>`** (só personagem acrescentado à mão; o da leitura devolve 409 `da_leitura`) |
+
+> **Conferência de personagens (feature 360)** — módulos `admin_catalogo_conferencia_read.py` / `_write.py`, núcleo
+> `app/admin/catalog_conferencia_ops.py`. Recusas: 400 com `fields`; 404 para item inexistente ou sem leitura; 409
+> `conferido` / `nao_conferido` / `da_leitura`. Toda rota de decisão devolve `{conferencia, situacao}`. **Nenhuma
+> destas rotas escreve em `catalog_items`, `catalog_characters`, fotos ou fichas.** Contrato completo:
+> `specs/360-conferencia-de-personagens/contracts/conferencia-api.md`.
 
 Ops: `app/admin/catalog_ops.py`, `app/admin/catalog_character_ops.py`
 (`unique_character_slug`, `create_character`, `update_character`, `delete_character`,
@@ -2775,7 +2789,7 @@ Gates por módulo (todos em `app/api/`):
 
 | Gate | Onde | Papéis aceitos |
 |---|---|---|
-| `_require_superadmin()` | `admin_catalogo_*`, `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
+| `_require_superadmin()` | `admin_catalogo_*` (desde a 360, também `admin_catalogo_conferencia_*`, que importam o gate de `admin_catalogo_read`), `admin_config_*`, `orcamento_read` (`GET /orcamento/settings`), `orcamento_write` (`POST /orcamento/settings` — desde a 307 com o bloco `datas_especiais`, desde a 309 com `produtos`/`produtos_estimativa` —, `POST`/`DELETE /orcamento/settings/especiais*`) | `SUPERADMIN` |
 | `_require_users_access()` | `admin_users_*` | `SUPERADMIN`, `FINANCEIRO` |
 | `_require_vendas()` / `_require_financeiro()` / `_require_superadmin()` de `pix_read` (feature 318) | `pix_read`, `pix_write` | fila, saúde e respostas ao "É esta?": `COMERCIAL`, `FINANCEIRO`, `SUPERADMIN` (repasse da InfinitePay: `ve_repasse()` = `FINANCEIRO`, `SUPERADMIN`); resumo por conta e Desfazer: `FINANCEIRO`, `SUPERADMIN`; config: `SUPERADMIN` — sempre pelo papel real |
 | `_can_create_event()` / `_can_edit_event()` | `agenda_write` (delegam para `_CAN_CREATE`/`_CAN_EDIT_EVENT` de `app/calendar/routes.py`) | `COMERCIAL`, `SUPERADMIN` (criar); `_CAN_EDIT_EVENT` (editar) |

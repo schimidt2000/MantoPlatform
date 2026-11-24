@@ -2808,6 +2808,137 @@ class CatalogCharacter(db.Model):
     )
 
 
+# ── Conferência de personagens do catálogo (feature 360) ────────────────────
+
+
+class CatalogConferencia(db.Model):
+    """A leitura das fotos de um item do catálogo e o que a conferência decidiu sobre ele (360).
+
+    Uma linha por item lido. As colunas ``*_lido`` / ``*_sugerida`` guardam o que a leitura propôs
+    e nunca mudam; as irmãs sem sufixo são o decidido por quem confere e nascem iguais. Nada aqui
+    altera o catálogo: gravar o conferido é outra feature, que lê esta tabela.
+
+    Os relacionamentos existem SÓ deste lado. ``CatalogItem.images`` usa ``delete-orphan``; um
+    backref faria o ORM tentar anular a FK antes do banco, e a exclusão de item, foto ou ficha
+    passaria a depender desta tabela. Quem resolve é o ``ON DELETE`` do banco.
+    """
+
+    __tablename__ = "catalog_conferencias"
+    __table_args__ = (
+        db.UniqueConstraint("catalog_item_id", name="uq_catalog_conferencias_item"),
+        db.CheckConstraint(
+            "tipo_lido IN ('tema','dupla','avulso','generico')", name="ck_catalog_conferencias_tipo_lido"
+        ),
+        db.CheckConstraint(
+            "tipo IN ('tema','dupla','avulso','generico')", name="ck_catalog_conferencias_tipo"
+        ),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    catalog_item_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_items.id", ondelete="CASCADE"), nullable=False
+    )
+    tipo_lido = db.Column(db.String(10), nullable=False)
+    tipo = db.Column(db.String(10), nullable=False)
+    nota = db.Column(db.Text, nullable=True)
+    acao = db.Column(db.Text, nullable=True)
+    grupo = db.Column(db.String(120), nullable=True)
+    ficha_sugerida_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+    # Só vale com `tipo == "avulso"`; fica guardada se o tipo mudar e volta a valer se voltar.
+    ficha_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+    observacao = db.Column(db.Text, nullable=True)
+    lote = db.Column(db.String(10), nullable=True)
+    # UTC, como o resto da tabela (um relógio só); a API entrega em horário de São Paulo.
+    conferido_em = db.Column(db.DateTime, nullable=True)
+    conferido_por_id = db.Column(
+        db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    item = db.relationship("CatalogItem", lazy=True)
+    ficha_sugerida = db.relationship("FigurinoSheet", foreign_keys=[ficha_sugerida_id], lazy=True)
+    ficha = db.relationship("FigurinoSheet", foreign_keys=[ficha_id], lazy=True)
+    conferido_por = db.relationship("User", foreign_keys=[conferido_por_id], lazy=True)
+    personagens = db.relationship(
+        "CatalogConferenciaPersonagem",
+        backref="conferencia",
+        lazy=True,
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="CatalogConferenciaPersonagem.position, CatalogConferenciaPersonagem.id",
+    )
+
+
+class CatalogConferenciaPersonagem(db.Model):
+    """Um personagem proposto pela leitura (ou acrescentado à mão) na conferência de um item (360).
+
+    ``origem == "leitura"`` nunca se exclui (marca-se ``decisao = "nao_criar"``, para o que a leitura
+    viu não se perder); ``"manual"`` é o acrescentado por quem confere e não tem foto.
+    """
+
+    __tablename__ = "catalog_conferencia_personagens"
+    __table_args__ = (
+        db.Index("ix_catalog_conferencia_personagens_conferencia_id", "conferencia_id"),
+        db.CheckConstraint("origem IN ('leitura','manual')", name="ck_catalog_conf_personagens_origem"),
+        db.CheckConstraint("decisao IN ('criar','nao_criar')", name="ck_catalog_conf_personagens_decisao"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    conferencia_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_conferencias.id", ondelete="CASCADE"), nullable=False
+    )
+    position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    origem = db.Column(db.String(10), nullable=False, default="leitura", server_default="leitura")
+    nome_lido = db.Column(db.String(200), nullable=True)
+    nome = db.Column(db.String(200), nullable=False)
+    imagem_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_item_images.id", ondelete="SET NULL"), nullable=True
+    )
+    recorte = db.Column(db.Text, nullable=True)  # JSON: [x, y, largura, altura] em % da foto
+    foto_largura = db.Column(db.Integer, nullable=True)
+    foto_altura = db.Column(db.Integer, nullable=True)
+    ficha_sugerida_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+    ficha_id = db.Column(
+        db.Integer, db.ForeignKey("figurino_sheets.id", ondelete="SET NULL"), nullable=True
+    )
+    aviso = db.Column(db.Text, nullable=True)
+    sem_foto_lido = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    sem_foto = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
+    decisao = db.Column(db.String(10), nullable=False, default="criar", server_default="criar")
+    observacao = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    imagem = db.relationship("CatalogItemImage", lazy=True)
+    ficha_sugerida = db.relationship("FigurinoSheet", foreign_keys=[ficha_sugerida_id], lazy=True)
+    ficha = db.relationship("FigurinoSheet", foreign_keys=[ficha_id], lazy=True)
+
+    @property
+    def recorte_list(self) -> list[int]:
+        """``[x, y, largura, altura]`` ou ``[]`` se o JSON estiver ausente ou corrompido."""
+        import json as _json
+
+        try:
+            dados = _json.loads(self.recorte) if self.recorte else []
+        except (ValueError, TypeError):
+            return []
+        if isinstance(dados, list) and len(dados) == 4 and all(isinstance(v, int) for v in dados):
+            return dados
+        return []
+
+    @property
+    def tem_foto(self) -> bool:
+        """A leitura deixou foto utilizável: a imagem ainda está na galeria e o recorte é válido."""
+        return self.imagem_id is not None and bool(self.recorte_list)
+
+
 # ── Impressões e Acervo 3D (feature 200) ────────────────────────────────────
 
 

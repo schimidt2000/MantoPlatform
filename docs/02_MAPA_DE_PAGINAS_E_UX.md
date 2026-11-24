@@ -6,7 +6,9 @@
 > **Não comece por aqui.** O documento de entrada é `docs/00_MAPA_DO_SISTEMA.md`. Este 02 é a
 > referência **por tela** — consulte a entrada da tela que você vai mexer, não o documento inteiro.
 >
-> Última atualização: **2026-11-17** · **350-base-autorizada**: cartões **Consentimentos** e **Indicação e
+> Última atualização: **2026-11-24** · **360-conferencia-de-personagens**: telas `/admin/catalogo/conferencia` (fila)
+> e `/admin/catalogo/conferencia/:itemId` (um item), e o botão "Conferir personagens" em `/admin/catalogo`.
+> Antes: **2026-11-17** · **350-base-autorizada**: cartões **Consentimentos** e **Indicação e
 > parceiro** na ficha (`/clientes/:id`), a faixa "Novidades" na conversa aberta, as telas `/clientes/pos-evento`,
 > `/clientes/aniversarios` e `/clientes/parceiros`, o diálogo "Pós-evento" no evento (no lugar de "Pedir feedback
 > da cliente") e, na avaliação pública, "Indicar uma amiga" e as duas autorizações.
@@ -2306,6 +2308,32 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   `POST /api/admin/catalogo/personagens/mover-em-massa` ·
   `PATCH|DELETE /api/admin/catalogo/personagens/<id>` ·
   `POST /api/admin/catalogo/<id>/toggle-ativo`.
+
+#### `/admin/catalogo/conferencia` e `/admin/catalogo/conferencia/:itemId` — Conferência de personagens *(feature 360)*
+- **Acesso**: `SUPERADMIN` (gate de servidor em todas as rotas `…/conferencia*`). Entrada: botão "Conferir
+  personagens" no cabeçalho de `/admin/catalogo`.
+- **Objetivo**: conferir o que a leitura das fotos propôs para cada item sem elenco e sem ficha (tipo do item,
+  personagens, recorte e ficha de cada um). Só registra decisões: nada muda no catálogo nem na vitrine.
+- **Fila** (`CatalogoConferenciaPage`): progresso "N de M conferidos" (itens sem leitura contados à parte),
+  "Continuar conferência" (abre o primeiro a conferir do recorte), filtros por tipo (com conferidos/total) e
+  situação, busca sem acento. Filtro e busca no endereço (`?tipo=&situacao=&q=`), `useRestaurarRolagem`. A fila vem
+  inteira, sem paginação, calculada no servidor contra o catálogo de agora. "Carregar leitura" aparece enquanto
+  houver item do arquivo da leitura ainda não carregado.
+- **Item** (`CatalogoConferenciaItemPage`): fotos da galeria (abrem no visualizador), o que a leitura propôs, tipo
+  do item (4 botões; mudar não apaga o elenco), ficha do item quando avulso, observação e o elenco proposto. Cada
+  cartão (`PersonagemPropostoCard`): recorte mostrado por geometria sobre a foto original (`RecortePersonagem`),
+  nome editável com "A leitura propôs: …", `FigurinoPicker` com "Ficha sugerida … · Usar a sugerida", Criar × Não
+  criar, "Criar sem foto" e observação. "Acrescentar personagem" para o que a leitura não viu (só o acrescentado
+  se exclui, com confirmação).
+- **Salvar**: cada controle grava na hora, com "Salvando…"/"Salvo." no cartão; nome e observação gravam ao sair do
+  campo; erro fica no campo sem apagar o digitado; 409 e 404 relêem o item.
+- **Rodapé fixo**: "Conferir e ir para o próximo" (troca de item com `replace`: "voltar" cai sempre na fila). Item
+  conferido mostra quem e quando, "Reabrir" e "Próximo a conferir". O próximo respeita `tipo` e `q` da fila.
+- **Estados**: "Sem leitura" (item pendente que nunca foi lido), "saiu da fila" (ganhou elenco ou ficha no
+  catálogo) e conferido (controles só para consulta).
+- **Celular**: nasce a 390 px, sem rolagem lateral; ações com 44 px ou mais (o `FigurinoPicker` compartilhado tem
+  36 px — dívida 246).
+- **API**: `docs/01` §3.10; contrato em `specs/360-conferencia-de-personagens/contracts/conferencia-api.md`.
 
 #### `/admin/catalogo/novo` e `/admin/catalogo/:id/editar` — Tema do Catálogo
 - **UX**: nome, slug, descrição HTML curta, categorias, `is_active`, **URL de vídeo**

@@ -1005,3 +1005,15 @@ ligado ao Natal Thermas pela palavra "Natal").
 |---|---|---|---|---|
 | 242 | **P3** | `sincronizar_ops._destino_pelo_telefone` | o vínculo de data + telefone numa venda **cancelada** não cede quando existe venda viva do mesmo dia e telefone (evento cancelado e recriado: contrato 895 na venda 1354, cancelada, e a 1424 viva sem contrato); contrato de evento que já passou também não é reavaliado | decidir com o dono se o contrato acompanha a venda recriada; até lá, a auditoria lista o caso |
 | 243 | **P4** | vínculos automáticos antigos (`clicksign_documentos`) | o vínculo feito só pela palavra de ocasião continua ligado enquanto nenhuma outra venda tiver a data e o telefone (envelopes cancelados 934 e 10, em 19/11); a regra nova não desliga sozinha o que perdeu o sinal | rodar `specs/317c-vinculo-por-tema/auditoria_vinculos.py` contra um dump do dia no começo de cada temporada e desligar à mão o que aparecer em "nada bate" |
+
+## Baixa da feature 360-conferencia-de-personagens (2026-11-24, branch)
+
+**Quitadas.** Nenhuma da lista.
+
+**Criadas.** (244–246; renumerar no merge se outra branch já tiver usado esses números.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 244 | **P2** | `app/admin/catalog_conferencia_ops.py` | a conferência só registra decisões: nenhum personagem é criado, nenhuma ficha é ligada e o "criar sem foto" não avisa o marketing. O que foi conferido fica parado até existir a gravação | feature seguinte: gravar o conferido no catálogo (recorte de verdade, ligar fichas, busca por personagem, filtro "Sem foto"), lendo `catalog_conferencias` com `conferido_em` preenchido |
+| 245 | **P4** | `app/admin/dados/leitura_personagens.json` | a leitura (443 KB) mora no repositório e só cresce por novo commit; item novo do catálogo aparece como "Sem leitura" até alguém ler as fotos e publicar | se as leituras virarem rotina, carga por upload na tela ou leitura feita de dentro do sistema |
+| 246 | **P4** | `components/FigurinoPicker.tsx` | o seletor de ficha compartilhado tem 36 px de altura e os atalhos "Solicitar ficha" e "Limpar seleção" são menores: abaixo dos 44 px que a conferência pede no celular | subir a altura do `Combobox` no `@manto/ui` (afeta todas as telas que o usam) |

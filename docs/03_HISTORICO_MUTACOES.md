@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
+> Última atualização: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
+> conferida dentro do sistema; migration `f360a1b2c3d4`, aditiva) **pronta na branch, sem merge** (`verify_360` 18/18
+> no espelho `manto_360` do dump de 24/11 02h). Antes: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
 > licença"; só frontend, sem migration) **EM PRODUÇÃO desde 24/11/2026 (tarde)**, a pedido do dono.
 > Antes: **2026-11-23** · Estado do repositório: pós-**deploy em lote de 23/11/2026 (~19h06)**, a
 > pedido do dono ("bora publicar e comunicar a equipe"), num push só, na ordem dos merges:
@@ -285,6 +287,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **360-conferencia-de-personagens** | *(pronta na branch, sem merge)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
 | **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
 | **317c-vinculo-por-tema** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
 | **357-diretor-criativo** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
@@ -526,6 +529,56 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 360 — Conferência de personagens do catálogo: a leitura das fotos é conferida dentro do sistema   (360-conferencia-de-personagens · 2026-11-24 · migration `f360a1b2c3d4`)
+
+> **Pronta na branch, sem merge** (worktree `C:\tmp\mp360`). `verify_360` 18/18 no espelho `manto_360` (dump de
+> produção de 24/11 02h, revisão `f353a1b2c3d4`); typecheck das três SPAs limpo; tela aberta a 390×844 e em tela
+> larga. Nível 1. Detalhe: `specs/360-conferencia-de-personagens/`.
+
+**O pedido.** "Lembra que estávamos fazendo uma organização do catálogo por personagens? Quero passar para a Gabi
+fazer a verificação manual." e, depois: "Pode até ser dentro do sistema e salvando progresso. Precisa ser atual em
+produção." A leitura assistida das fotos de 09/11 (343 itens) só existia numa página solta no computador do dono,
+que não guardava o progresso e só deixava desmarcar.
+
+**O que mudou.**
+- Tabelas `catalog_conferencias` (uma por item lido) e `catalog_conferencia_personagens`. Guardam o que a leitura
+  propôs (`*_lido`, `*_sugerida`) e o decidido ao lado. Toda FK tem `ON DELETE` (CASCADE do item; SET NULL de foto,
+  ficha e usuário) e os relacionamentos existem só do lado novo.
+- Núcleo `app/admin/catalog_conferencia_ops.py`; rotas em `app/api/admin_catalogo_conferencia_{read,write}.py`
+  (9 rotas, SUPERADMIN).
+- A leitura virou arquivo versionado, `app/admin/dados/leitura_personagens.json` (356 itens, 717 personagens: o
+  piloto, os 26 lotes de 09/11 e os 13 itens novos, lidos em 24/11), montado por
+  `specs/360-conferencia-de-personagens/montar_leitura.py`.
+- Telas `/admin/catalogo/conferencia` (fila) e `/admin/catalogo/conferencia/:itemId` (um item), com entrada pelo
+  botão "Conferir personagens" do catálogo.
+
+**Decisões de arquitetura** (viram nota em `docs/decisoes/` quando a 359 estiver na `main`).
+1. **A fila é uma consulta, não uma lista guardada** (`filtro_da_fila`): ativo, sem ficha própria, sem elenco e
+   que não é a página própria de um personagem de outro tema. No espelho de 24/11 são 352 itens: os 343 lidos
+   seguem pendentes, 13 são novos, e 4 dos lidos (543 Moana, 557 Rapunzel, 688 Soldadinhos Verde, 843 Senhor do
+   Tempo) ficam de fora por já serem página própria.
+2. **A leitura entra por carga explícita** (`POST …/conferencia/carregar`), não por migration: surpresa no dado
+   não pode derrubar o `flask db upgrade` do start. Idempotente por `UNIQUE(catalog_item_id)` +
+   `pg_advisory_xact_lock`; item que já tem conferência nunca é tocado.
+3. **A conferência não toca o catálogo.** Nenhuma escrita em `catalog_items`, `catalog_characters`, fotos ou
+   fichas; o verify compara as quatro tabelas antes e depois. Gravar o conferido é a feature seguinte (dívida 244).
+4. **Conferido trava**: toda escrita relê a conferência com `FOR UPDATE` e devolve 409 `conferido` até
+   `…/reabrir`. É também o sinal de "pode gravar" para a feature seguinte.
+
+**Pegadinhas.**
+- Duas chaves iguais entre irmãos (`key={item.id}` no conteúdo e no rodapé) faziam o React manter o item anterior
+  na tela ao trocar de item, com o endereço já no novo. `tsc` não acusa; só apareceu com a tela aberta.
+- Grid sem coluna explícita no celular (`grid gap-3 lg:grid-cols-2`) cria trilha `auto`, que cresce com o cartão e
+  estoura os 390 px: `grid-cols-1` + `[&>*]:min-w-0`.
+- `flex-1` num campo dentro de `flex-col` zera a base e vence o `h-11`: só `sm:flex-1`.
+- Num flex em linha, a moldura do recorte estica até a altura do cartão, e o deslocamento (que é % da altura)
+  aponta para o lugar errado: `self-start`.
+- O disco de mídia da produção não existe na máquina de desenvolvimento: para ver os recortes, o Vite temporário
+  serviu `/catalogo/midia` da pasta das fotos baixadas para a leitura.
+
+**Depois do deploy.** Um clique em "Carregar leitura" na fila (Superadmin). Sem isso a tela abre com "A leitura das
+fotos ainda não foi carregada."
 
 ### 345c — Origem do tema por botão, não por lista   (345c-origem-por-botao · 2026-11-24 · sem migration)
 
