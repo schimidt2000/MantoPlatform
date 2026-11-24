@@ -5,8 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
-> conferida dentro do sistema; migration `f360a1b2c3d4`, aditiva) **pronta na branch, sem merge** (`verify_360` 18/18
-> no espelho `manto_360` do dump de 24/11 02h). Antes: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
+> conferida dentro do sistema; migration `f360a1b2c3d4`, aditiva) **EM PRODUÇÃO desde 24/11/2026 ~16h42** (merge
+> `096cd33e`, a pedido do dono: "Publicar agora"; `verify_360` 18/18 no espelho `manto_360` do dump de 24/11 02h;
+> leitura carregada em produção: 356 itens e 717 personagens). Head: **`f360a1b2c3d4`**. Antes: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
 > licença"; só frontend, sem migration) **EM PRODUÇÃO desde 24/11/2026 (tarde)**, a pedido do dono.
 > Antes: **2026-11-23** · Estado do repositório: pós-**deploy em lote de 23/11/2026 (~19h06)**, a
 > pedido do dono ("bora publicar e comunicar a equipe"), num push só, na ordem dos merges:
@@ -287,7 +288,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **360-conferencia-de-personagens** | *(pronta na branch, sem merge)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
+| **360-conferencia-de-personagens** | *(EM PRODUÇÃO 24/11 ~16h42)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
 | **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
 | **317c-vinculo-por-tema** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
 | **357-diretor-criativo** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
@@ -532,7 +533,8 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 360 — Conferência de personagens do catálogo: a leitura das fotos é conferida dentro do sistema   (360-conferencia-de-personagens · 2026-11-24 · migration `f360a1b2c3d4`)
 
-> **Pronta na branch, sem merge** (worktree `C:\tmp\mp360`). `verify_360` 18/18 no espelho `manto_360` (dump de
+> **EM PRODUÇÃO desde 24/11/2026 ~16h42** (merge `096cd33e`, a pedido do dono: "Publicar agora", no meio do
+> expediente; o backend ficou cerca de 45 s em 502 na troca). `verify_360` 18/18 no espelho `manto_360` (dump de
 > produção de 24/11 02h, revisão `f353a1b2c3d4`); typecheck das três SPAs limpo; tela aberta a 390×844 e em tela
 > larga. Nível 1. Detalhe: `specs/360-conferencia-de-personagens/`.
 
@@ -578,7 +580,8 @@ que não guardava o progresso e só deixava desmarcar.
   serviu `/catalogo/midia` da pasta das fotos baixadas para a leitura.
 
 **Depois do deploy.** Um clique em "Carregar leitura" na fila (Superadmin). Sem isso a tela abre com "A leitura das
-fotos ainda não foi carregada."
+fotos ainda não foi carregada." Feito em 24/11 ~16h44, pela sessão do dono: 356 itens e 717 personagens carregados;
+a fila abriu com 352 itens a conferir e 1 item criado no dia, sem leitura (934 Soldados com Estandarte de Cortejo).
 
 ### 345c — Origem do tema por botão, não por lista   (345c-origem-por-botao · 2026-11-24 · sem migration)
 

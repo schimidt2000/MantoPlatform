@@ -1,6 +1,6 @@
 # Feature 360 — Conferência de personagens do catálogo: a leitura das fotos é conferida dentro do sistema, com o progresso salvo
 
-**Branch**: `360-conferencia-de-personagens` (da `main`) · **Created**: 2026-11-24 · **Status**: Pronta na branch, sem merge (verify 18/18 no espelho `manto_360`; tela conferida a 390×844 e em tela larga) ·
+**Branch**: `360-conferencia-de-personagens` (da `main`) · **Created**: 2026-11-24 · **Status**: Em produção (24/11 ~16h42; verify 18/18 no espelho `manto_360`; leitura carregada em produção) ·
 **Migration**: `f360a1b2c3d4` (aditiva — duas tabelas novas, sem carga de dados e sem tocar tabela
 existente) · **Nível**: 1 (feature: migration, endpoint novo, tela nova) — constituição, Princípio VI
 
