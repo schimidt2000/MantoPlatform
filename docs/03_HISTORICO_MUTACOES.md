@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-23** · Estado do repositório: pós-**deploy em lote de 23/11/2026 (~19h06)**, a
+> Última atualização: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
+> licença"; só frontend, sem migration) **EM PRODUÇÃO desde 24/11/2026 (tarde)**, a pedido do dono.
+> Antes: **2026-11-23** · Estado do repositório: pós-**deploy em lote de 23/11/2026 (~19h06)**, a
 > pedido do dono ("bora publicar e comunicar a equipe"), num push só, na ordem dos merges:
 > **355-luminaria-anuncia-papai-noel** (`verify_355` 15/15), **356-cache-nao-se-perde** (`verify_356` 12/12),
 > **357-diretor-criativo** (harness, sem código do app) e **317c-vinculo-por-tema** (`verify_317c` 11/11,
@@ -283,6 +285,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
 | **317c-vinculo-por-tema** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
 | **357-diretor-criativo** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O pedido de peça (foto/vídeo) sai concreto: agente `diretor-criativo` (tema, arquivo exato do Drive, festa da agenda ou foto do catálogo, roteiro por segundo, textos prontos, medida A/B), `scripts/marketing/criativo_dados.py` (leitura da produção sem dado de cliente) e `scripts/marketing/drive_indice.py` (índice do acervo do Drive, só pastas de marketing); a skill `marketing-auditor` passa o passo 11 para o agente; cards 68 e 69 reescritos | 2026-11-19 | — | aqui | Registro |
 | **356-cache-nao-se-perde** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* O cachê do elenco não some nem muda por fora do card do Casting: "Editar tudo" só mexe no cachê de quem o vê, pelo teto e com log; o card guarda o que foi digitado e avisa "Alteração não salva"; "Atribuído em" só muda quando a pessoa muda | 2026-11-19 | — | (aqui) | ver Registro |
@@ -523,6 +526,19 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 345c — Origem do tema por botão, não por lista   (345c-origem-por-botao · 2026-11-24 · sem migration)
+
+> **EM PRODUÇÃO desde 24/11/2026 (tarde)**, a pedido do dono ("já fazer o push"): só frontend, troca sem queda.
+> Nível 2, correção da 345. Detalhe: `specs/345c-origem-por-botao/spec.md`.
+
+- **Motivo**: a Gabi começou a classificar os 476 temas; na lista eram dois toques por tema.
+- **O que mudou**: em `/marketing/temas`, o `<select>` de origem de cada linha virou os botões Autoral e
+  Licenciado (`MarketingTemasPage.tsx`). "Não classificado" só aparece em tema já marcado, para desfazer. A
+  chamada e as regras do servidor são as mesmas.
+- **Verificação**: `npm run typecheck` e a tela aberta em 375px contra o `manto_lote`.
+- **Pegadinha**: o `manto_local` está em `d334b2c4e6f8`, atrás da `main` (falta `site_settings.meta_pixel_id`
+  da 344), e o login local devolve 500. Para conferir tela, suba o backend contra um espelho em dia.
 
 ### 317c — Contrato não se liga por palavra de ocasião, e o vínculo fraco cede ao telefone   (317c-vinculo-por-tema · sem merge · sem migration)
 

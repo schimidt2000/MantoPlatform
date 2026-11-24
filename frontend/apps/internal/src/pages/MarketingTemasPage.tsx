@@ -69,19 +69,29 @@ function LinhaTema({
       </div>
       </div>
       <div className="flex flex-wrap items-center gap-2 pl-7 sm:pl-0">
-      <select
-        aria-label={`Origem de ${tema.name}`}
-        className={SELECT}
-        value={tema.licenca_origem}
-        disabled={marcar.isPending}
-        onChange={(e) => marcar.mutate({ id: tema.id, input: { licenca_origem: e.target.value as LicencaOrigem } })}
-      >
-        {(Object.keys(LICENCA_ORIGEM_LABELS) as LicencaOrigem[]).map((o) => (
-          <option key={o} value={o}>
-            {LICENCA_ORIGEM_LABELS[o]}
-          </option>
-        ))}
-      </select>
+      {/* 345c: botão em vez de lista — classificar centenas de temas pede um toque por tema, não dois. */}
+      <div role="group" aria-label={`Origem de ${tema.name}`} className="flex flex-wrap gap-1">
+        {(Object.keys(LICENCA_ORIGEM_LABELS) as LicencaOrigem[]).map((o) => {
+          const atual = tema.licenca_origem === o;
+          // "Não classificado" é o estado de partida: só aparece como botão para desfazer uma marcação.
+          if (o === "nao_classificado" && atual) return null;
+          return (
+            <Button
+              key={o}
+              type="button"
+              size="sm"
+              variant={atual ? "default" : "outline"}
+              aria-pressed={atual}
+              disabled={marcar.isPending}
+              onClick={() => {
+                if (!atual) marcar.mutate({ id: tema.id, input: { licenca_origem: o } });
+              }}
+            >
+              {LICENCA_ORIGEM_LABELS[o]}
+            </Button>
+          );
+        })}
+      </div>
       <Badge tone={LIBERADO_TONE[tema.liberado_anuncio]}>{LIBERADO_LABELS[tema.liberado_anuncio]}</Badge>
       {tema.liberado_anuncio === "sim" ? (
         <Button

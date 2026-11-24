@@ -1700,7 +1700,8 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
 - **UX**:
   - Contagem por origem.
   - Busca e filtros no endereço: origem, liberado, "só com sugestão".
-  - Cada linha mostra a miniatura, a sugestão da rotina com o motivo, o `<select>` de origem, o selo do liberado e
+  - Cada linha mostra a miniatura, a sugestão da rotina com o motivo, os botões de origem (Autoral e
+    Licenciado, um toque marca; "Não classificado" só aparece para desfazer — 345c), o selo do liberado e
     o botão Liberar/Tirar do anúncio.
   - Confirmação em lote das sugestões: "Confirmar selecionados" / "Confirmar as sugestões desta página". Autoral
     confirmado sai liberado; licenciado sai não liberado.
