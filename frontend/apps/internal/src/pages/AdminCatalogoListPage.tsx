@@ -173,9 +173,15 @@ export function AdminCatalogoListPage() {
         title="Catálogo"
         className="mb-0"
         actions={
-          <Button asChild size="sm">
-            <Link to="/admin/catalogo/novo">+ Novo produto</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {/* Conferência da leitura das fotos (feature 360): fila própria, fora desta lista. */}
+            <Button asChild size="sm" variant="outline">
+              <Link to="/admin/catalogo/conferencia">Conferir personagens</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link to="/admin/catalogo/novo">+ Novo produto</Link>
+            </Button>
+          </div>
         }
       />
 

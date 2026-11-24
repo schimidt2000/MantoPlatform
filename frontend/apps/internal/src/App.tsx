@@ -43,6 +43,8 @@ import { AdminMigrarArquivosPage } from "./pages/AdminMigrarArquivosPage";
 import { AdminImportarCatalogoPage } from "./pages/AdminImportarCatalogoPage";
 import { AdminCatalogoListPage } from "./pages/AdminCatalogoListPage";
 import { AdminCatalogoFormPage } from "./pages/AdminCatalogoFormPage";
+import { CatalogoConferenciaPage } from "./pages/CatalogoConferenciaPage";
+import { CatalogoConferenciaItemPage } from "./pages/CatalogoConferenciaItemPage";
 import { RevisaoListPage } from "./pages/RevisaoListPage";
 import { RevisaoSpaceCreatePage } from "./pages/RevisaoSpaceCreatePage";
 import { RevisaoSpacePage } from "./pages/RevisaoSpacePage";
@@ -185,6 +187,8 @@ export function App() {
             <Route path="/admin/catalogo" element={<AdminCatalogoListPage />} />
             <Route path="/admin/catalogo/novo" element={<AdminCatalogoFormPage />} />
             <Route path="/admin/catalogo/:id/editar" element={<AdminCatalogoFormPage />} />
+            <Route path="/admin/catalogo/conferencia" element={<CatalogoConferenciaPage />} />
+            <Route path="/admin/catalogo/conferencia/:itemId" element={<CatalogoConferenciaItemPage />} />
             <Route path="/revisao" element={<RevisaoListPage />} />
             <Route path="/revisao/novo" element={<RevisaoSpaceCreatePage />} />
             <Route path="/revisao/:id" element={<RevisaoSpacePage />} />

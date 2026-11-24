@@ -87,17 +87,17 @@ Vem primeiro porque as outras histórias precisam de dado.
       em `app/admin/catalog_conferencia_ops.py`, com trava e releitura da conferência (research R7)
 - [x] T015 [US1] Rotas `PATCH …/personagens/<id>`, `POST …/<item_id>/conferir` e `…/reabrir` em
       `app/api/admin_catalogo_conferencia_write.py` (409 `conferido` / `nao_conferido`)
-- [ ] T016 [P] [US1] `frontend/apps/internal/src/lib/catalogoConferencia.ts`: tipos do contrato (campos
+- [x] T016 [P] [US1] `frontend/apps/internal/src/lib/catalogoConferencia.ts`: tipos do contrato (campos
       opcionais onde o payload é novo) e hooks de fila, item e mutações
-- [ ] T017 [US1] `frontend/apps/internal/src/components/conferencia/RecortePersonagem.tsx` (recorte
+- [x] T017 [US1] `frontend/apps/internal/src/components/conferencia/RecortePersonagem.tsx` (recorte
       por geometria, `loading="lazy"`, estado "Sem foto") e `PersonagemPropostoCard.tsx` (recorte,
       nome, ficha, aviso, "Criar"/"Não criar"; cada controle com rótulo acessível que cita o personagem,
       FR-016)
-- [ ] T018 [US1] `frontend/apps/internal/src/pages/CatalogoConferenciaItemPage.tsx`: fotos do item no
+- [x] T018 [US1] `frontend/apps/internal/src/pages/CatalogoConferenciaItemPage.tsx`: fotos do item no
       visualizador, tipo, nota, ação proposta, elenco, rodapé fixo "Conferir e ir para o próximo" /
       "Reabrir", estados "sem leitura" e "saiu da fila"; transição curta na troca de item e na
       mudança de estado do cartão, sob `useReducedMotion` (Princípio XI)
-- [ ] T019 [US1] `frontend/apps/internal/src/pages/CatalogoConferenciaPage.tsx` (fila mínima:
+- [x] T019 [US1] `frontend/apps/internal/src/pages/CatalogoConferenciaPage.tsx` (fila mínima:
       progresso, lista, "Continuar conferência", "Carregar leitura"), rotas em
       `frontend/apps/internal/src/App.tsx` e botão "Conferir personagens" em
       `frontend/apps/internal/src/pages/AdminCatalogoListPage.tsx`
@@ -115,7 +115,7 @@ Vem primeiro porque as outras histórias precisam de dado.
       `ficha_id`, `observacao`) em `app/admin/catalog_conferencia_ops.py`
 - [x] T021 [US4] Rotas `PATCH …/<item_id>`, `POST …/<item_id>/personagens` e
       `DELETE …/personagens/<id>` em `app/api/admin_catalogo_conferencia_write.py`
-- [ ] T022 [US4] Tela: nome editável com o proposto visível, `FigurinoPicker` com a sugerida visível,
+- [x] T022 [US4] Tela: nome editável com o proposto visível, `FigurinoPicker` com a sugerida visível,
       "Criar sem foto", observação, "Acrescentar personagem", excluir com `ConfirmDialog`, tipo do item
       e ficha do avulso em `PersonagemPropostoCard.tsx` e `CatalogoConferenciaItemPage.tsx`; erro no
       campo sem perder o digitado
@@ -126,7 +126,7 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 **Teste independente**: cenário 15 do verify; tela aberta.
 
-- [ ] T023 [US5] Filtros por tipo e situação, busca e contadores por tipo em
+- [x] T023 [US5] Filtros por tipo e situação, busca e contadores por tipo em
       `CatalogoConferenciaPage.tsx`, com estado no endereço (`useSearchParams`, `replace`),
       `useRestaurarRolagem` e o filtro repassado ao detalhe para o "próximo"
 
@@ -134,10 +134,10 @@ Vem primeiro porque as outras histórias precisam de dado.
 
 ## Phase 8: Portões e fechamento
 
-- [ ] T024 `verify_360.py` verde nos 18 cenários contra `manto_360`
-- [ ] T025 [P] `cd frontend && npm run typecheck`; `ruff check` nos Python tocados e `ruff format` nos
+- [x] T024 `verify_360.py` verde nos 18 cenários contra `manto_360`
+- [x] T025 [P] `cd frontend && npm run typecheck`; `ruff check` nos Python tocados e `ruff format` nos
       arquivos novos
-- [ ] T026 Tela aberta de verdade (skill `manto-conferir-tela`): `/admin/catalogo/conferencia` e um
+- [x] T026 Tela aberta de verdade (skill `manto-conferir-tela`): `/admin/catalogo/conferencia` e um
       item de cada tipo, a 390×844 e em tela larga; textos lidos pelo Princípio XV
 - [ ] T027 Docs: `docs/01` (§3 endpoints, §4.3 gates, schema), `docs/02` (telas), `docs/03` (entrada
       no topo + índice), `docs/04` (fluxo leitura → conferência → gravação e a regra da fila),
