@@ -2857,6 +2857,8 @@ class CatalogConferencia(db.Model):
     conferido_por_id = db.Column(
         db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    # Quando o conferido foi gravado no catálogo (feature 364). NULL = ainda não gravado.
+    gravado_em = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
@@ -2913,6 +2915,11 @@ class CatalogConferenciaPersonagem(db.Model):
     sem_foto = db.Column(db.Boolean, nullable=False, default=False, server_default="false")
     decisao = db.Column(db.String(10), nullable=False, default="criar", server_default="criar")
     observacao = db.Column(db.Text, nullable=True)
+    # O personagem do catálogo que esta linha gerou na gravação (feature 364): é o que impede a
+    # gravação repetida de criar em dobro. SET NULL: excluir o personagem no gerenciador não trava.
+    catalog_character_id = db.Column(
+        db.Integer, db.ForeignKey("catalog_characters.id", ondelete="SET NULL"), nullable=True
+    )
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

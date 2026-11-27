@@ -1017,3 +1017,15 @@ ligado ao Natal Thermas pela palavra "Natal").
 | 244 | **P2** | `app/admin/catalog_conferencia_ops.py` | a conferência só registra decisões: nenhum personagem é criado, nenhuma ficha é ligada e o "criar sem foto" não avisa o marketing. O que foi conferido fica parado até existir a gravação | feature seguinte: gravar o conferido no catálogo (recorte de verdade, ligar fichas, busca por personagem, filtro "Sem foto"), lendo `catalog_conferencias` com `conferido_em` preenchido |
 | 245 | **P4** | `app/admin/dados/leitura_personagens.json` | a leitura (443 KB) mora no repositório e só cresce por novo commit; item novo do catálogo aparece como "Sem leitura" até alguém ler as fotos e publicar | se as leituras virarem rotina, carga por upload na tela ou leitura feita de dentro do sistema |
 | 246 | **P4** | `components/FigurinoPicker.tsx` | o seletor de ficha compartilhado tem 36 px de altura e os atalhos "Solicitar ficha" e "Limpar seleção" são menores: abaixo dos 44 px que a conferência pede no celular | subir a altura do `Combobox` no `@manto/ui` (afeta todas as telas que o usam) |
+
+## Baixa da feature 364-gravar-conferido-no-catalogo (2026-11-27)
+
+**Quitadas.** 244 (gravar o conferido no catálogo).
+
+**Criadas.** (247–249; renumerar no merge se outra branch já tiver usado esses números.)
+
+| # | Prioridade | Onde | O quê | Saída |
+|---|---|---|---|---|
+| 247 | **P3** | `catalog_characters` criados pela 364 | 553 personagens nasceram sem ficha de figurino e uns 180 sem foto; não há filtro "Sem foto" nem "Sem ficha" na visão Personagens do gerenciador | filtro na visão Personagens; o Figurino faz as fichas quando houver evento ou folga (decisão do dono de 27/11) |
+| 248 | **P4** | `app/admin/catalog_gravacao_ops.py` | não há como desfazer a gravação pela tela; o vínculo `catalog_character_id` permite desfazer por script | botão de desfazer por item, se um dia for preciso |
+| 249 | **P4** | avulsos sem ficha e genéricos da conferência | ficam na fila como conferidos para sempre: a regra da fila não sabe que já foram decididos | a fila esconder item com `gravado_em`, ou o genérico ganhar marca própria no catálogo |

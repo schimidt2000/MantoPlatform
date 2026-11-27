@@ -3,7 +3,7 @@
 RBAC: SUPERADMIN em todas as rotas — o mesmo gate da gestão do catálogo, chamado no início de cada
 view.
 
-Nenhuma rota daqui altera o catálogo: a conferência só registra decisões
+As rotas de decisão não alteram o catálogo; só `…/gravar` (feature 364) escreve nele. A conferência registra decisões
 (`app.admin.catalog_conferencia_ops`). Toda rota de decisão devolve `{"conferencia", "situacao"}`
 para a tela atualizar o item sem nova consulta.
 """
@@ -16,6 +16,7 @@ from flask_login import current_user
 
 from app import db
 from app.admin import catalog_conferencia_ops as ops
+from app.admin import catalog_gravacao_ops
 from app.api import api_bp
 from app.api.admin_catalogo_read import _require_superadmin
 from app.api_utils import api_login_required, json_error
@@ -104,3 +105,17 @@ def api_catalogo_conferencia_alterar_personagem(personagem_id: int) -> Any:
 def api_catalogo_conferencia_excluir_personagem(personagem_id: int) -> Any:
     """Exclui um personagem acrescentado à mão; o da leitura devolve 409 `da_leitura`."""
     return _decidir(lambda: ops.excluir_personagem(personagem_id))
+
+
+@api_bp.route("/admin/catalogo/conferencia/gravar", methods=["POST"])
+@api_login_required
+def api_catalogo_conferencia_gravar() -> Any:
+    """Grava no catálogo um lote do que foi conferido (feature 364). A tela chama em laço.
+
+    É a única rota da conferência que escreve no catálogo: cria os personagens dos temas e duplas
+    conferidos e liga a ficha dos avulsos. Idempotente; `restantes` diz se ainda há o que gravar.
+    """
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    return jsonify(catalog_gravacao_ops.gravar_lote())

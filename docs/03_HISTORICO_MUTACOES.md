@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-27** · **342b-formulario-com-e-sem-nota** (cada formulário público com um link com nota
+> Última atualização: **2026-11-27** · **364-gravar-conferido-no-catalogo** (a conferência de personagens passa a
+> ser gravada no catálogo; migration `f364a1b2c3d4`, aditiva) **pronta na branch, sem merge** (`verify_364` 10/10).
+> Antes: **2026-11-27** · **342b-formulario-com-e-sem-nota** (cada formulário público com um link com nota
 > e outro sem nota; a cliente não escolhe a nota; sem migration) **EM PRODUÇÃO desde 27/11/2026 ~00h29** (merge
 > `59efebeb`, a pedido do dono: "já pode subir quando terminar"; sonda: versão inválida → 404). Head segue
 > **`f360a1b2c3d4`**. Antes: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
@@ -291,6 +293,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **364-gravar-conferido-no-catalogo** | *(pronta na branch, sem merge)* O que a conferência de personagens aprovou vira catálogo: elenco com foto recortada nos temas e duplas, ficha nos avulsos; grava direto, sem ficha entra sem ficha | 2026-11-27 | `f364a1b2c3d4` | (aqui) | ver Registro |
 | **342b-formulario-com-e-sem-nota** | Formulário com nota e sem nota: `/f/pre-contrato/com-nota` e `/sem-nota` (idem corporativo); a versão do link fixa "Preciso de nota fiscal" no servidor, a cliente não escolhe; a tela Formulários e a conversa oferecem as duas versões; o link antigo segue com a caixa | 2026-11-27 | — | (aqui) | ver Registro |
 | **360-conferencia-de-personagens** | *(EM PRODUÇÃO 24/11 ~16h42)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
 | **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
@@ -534,6 +537,45 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 364 — O conferido vira catálogo: a gravação da conferência de personagens   (364-gravar-conferido-no-catalogo · 2026-11-27 · migration `f364a1b2c3d4`)
+
+> **Pronta na branch, sem merge.** `verify_364` 10/10 e `verify_360` 18/18 no espelho `manto_364` (dump de
+> produção de 26/11 02h); typecheck das três SPAs limpo; gravação rodada pela tela no espelho (181 itens, 408
+> personagens, 21 fichas). Nível 1. Detalhe: `specs/364-gravar-conferido-no-catalogo/`.
+
+**O pedido.** A Maria Gabriella terminou a conferência (352 de 352, em 26/11) e deixou 35 observações. O dono:
+"você vai reorganizar aquilo e montar o catálogo da forma como eu quero" e, às duas perguntas feitas antes do
+plano, "Pode gravar direto, por favor. Entra sem ficha mesmo."
+
+**O que mudou.**
+- Núcleo `app/admin/catalog_gravacao_ops.py`: para cada item **conferido e ainda na fila**, cria um
+  `CatalogCharacter` por personagem "criar" (tema e dupla) com o nome e a ficha decididos e a foto **recortada de
+  verdade** da galeria (Pillow, arquivo novo em `catalog_photos/`), ou liga a ficha ao item (avulso com ficha).
+  Avulso sem ficha e genérico só ficam marcados.
+- Colunas `catalog_conferencias.gravado_em` e `catalog_conferencia_personagens.catalog_character_id` (SET NULL).
+- Rotas `GET …/conferencia/gravacao` e `POST …/conferencia/gravar` (SUPERADMIN); bloco "Gravar no catálogo" na
+  fila, que chama a gravação em lotes de 10 itens até acabar.
+- `app/admin/dados/ajustes_conferencia.json`: 30 ajustes que saíram da leitura das observações da Gabriella
+  (29 fotos apontadas por ela, mais "sem foto" na Spider-Gwen), aplicados antes do primeiro lote.
+
+**Decisões de arquitetura.**
+1. **A gravação só escreve em item que ainda passa na regra da fila** (sem elenco e sem ficha): nunca cria um
+   segundo elenco nem troca ficha posta à mão.
+2. **Idempotência por vínculo**, não por marca só: o personagem proposto guarda o `catalog_character_id` que gerou.
+3. **Um item é uma transação** (savepoint) e tem commit próprio; falha num item entra na lista e os outros seguem.
+4. **Foto ausente no disco vira personagem sem foto**, nunca lote perdido. O recorte lê o arquivo, então a gravação
+   só roda dentro do backend.
+5. **Sem ficha entra sem ficha** (decisão do dono): 553 dos 904 personagens nascem sem ficha de figurino.
+
+**Pegadinhas.**
+- `create_character` não serve aqui: recebe upload do Flask e faz commit por personagem. A gravação cria o model
+  direto e reaproveita só `unique_character_slug`, `save_bytes` e `_rewrite_public_url`.
+- O `verify_300` e qualquer recorte precisam das fotos em `instance/uploads/catalog_photos/` da worktree; o
+  verify da 364 copia só as do tema de teste, de `C:\tmp\catalogo_personagens\fotos`.
+
+**O que ficou de fora das observações.** "Sra." e "Sr. Nevado" (só aparecem em grupo colado: nascem sem foto) e
+"Árvores de Natal (Pernas de Pau)": a leitura achou um figurino só de árvore, então o item segue avulso.
 
 ### 342b — Formulário com nota e sem nota: a cliente não escolhe a nota   (342b-formulario-com-e-sem-nota · 2026-11-27 · sem migration)
 
