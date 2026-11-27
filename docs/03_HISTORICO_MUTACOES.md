@@ -4,7 +4,9 @@
 > seção "Registro", e uma linha **no topo** da tabela do índice. Nunca reescrever entradas antigas
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
-> Última atualização: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
+> Última atualização: **2026-11-27** · **342b-formulario-com-e-sem-nota** (cada formulário público com um link com nota
+> e outro sem nota; a cliente não escolhe a nota; sem migration) **pronta, publicação pedida pelo dono**. Head segue
+> **`f360a1b2c3d4`**. Antes: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
 > conferida dentro do sistema; migration `f360a1b2c3d4`, aditiva) **EM PRODUÇÃO desde 24/11/2026 ~16h42** (merge
 > `096cd33e`, a pedido do dono: "Publicar agora"; `verify_360` 18/18 no espelho `manto_360` do dump de 24/11 02h;
 > leitura carregada em produção: 356 itens e 717 personagens). Head: **`f360a1b2c3d4`**. Antes: **2026-11-24** · **345c-origem-por-botao** (origem do tema por botão em "Temas e
@@ -288,6 +290,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
+| **342b-formulario-com-e-sem-nota** | Formulário com nota e sem nota: `/f/pre-contrato/com-nota` e `/sem-nota` (idem corporativo); a versão do link fixa "Preciso de nota fiscal" no servidor, a cliente não escolhe; a tela Formulários e a conversa oferecem as duas versões; o link antigo segue com a caixa | 2026-11-27 | — | (aqui) | ver Registro |
 | **360-conferencia-de-personagens** | *(EM PRODUÇÃO 24/11 ~16h42)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
 | **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
 | **317c-vinculo-por-tema** | *(EM PRODUÇÃO 23/11 ~19h06, lote)* Contrato da ClickSign não se liga mais à venda por palavra de ocasião ("Natal", "Papai Noel"), e o vínculo automático fraco passa sozinho para a venda que ganha a data e o telefone do contrato; auditoria dos 226 contratos ligados (os 3 de "Natal" não se sustentavam) | 2026-11-23 | — | (aqui) | ver Registro |
@@ -530,6 +533,36 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 ---
 
 ## Registro
+
+### 342b — Formulário com nota e sem nota: a cliente não escolhe a nota   (342b-formulario-com-e-sem-nota · 2026-11-27 · sem migration)
+
+> Nível 2, hotfix da 342, a pedido do dono ("já pode subir quando terminar"). Worktree `C:\tmp\mp342b`.
+> `verify_342b.py` 6/6 no espelho `manto_342b` (dump de 26/11 02h); com o endpoint antigo, 4 dos 6 falham.
+> Regressão: `verify_342` 19/19 e `verify_333` 15/15. Detalhe: `specs/342b-formulario-com-e-sem-nota/spec.md`.
+
+**O pedido.** O dono (27/11): a caixa "Preciso de nota fiscal" da 342 gera confusão. Quem combinou sem nota
+marca a caixa, preenche os dados e o valor muda. "A pessoa não escolhe se quer com nota ou sem. Ela só preenche
+o que foi enviado para ela." Vale para o pré-contrato e para o corporativo.
+
+**O que mudou.**
+- Quatro links: `/f/pre-contrato/com-nota`, `/f/pre-contrato/sem-nota`, `/f/corporativo/com-nota`,
+  `/f/corporativo/sem-nota` (o `server.js` já leva todo `/f/*` para `/catalogo/f/*`). Com nota, a caixa some e as
+  perguntas da nota abrem obrigatórias; documento e e-mail acompanham o que a cliente digita acima. Sem nota, a
+  seção "Nota fiscal" some.
+- Servidor: `versao_nota` no envio; `formularios_ops.fixar_versao_da_nota` grava `precisa_nota` = `Sim`/`Não` pela
+  versão, antes da validação. Por isso o link com nota exige documento e e-mail mesmo sem a caixa, e o sem nota
+  descarta o que vier da nota. A mensagem do WhatsApp diz "Preciso de nota fiscal: Sim/Não".
+- A tela Formulários mostra os dois links de cada cartão; "Enviar formulário" da conversa
+  (`costura_ops.formularios_da_conversa`) devolve as quatro versões com a chave `versao`.
+
+**Decisões (premissas, sem pergunta ao dono).**
+1. **Versão no link, não formulário novo no banco**: as duas versões têm os mesmos campos, e um editor só por
+   formulário evita que a estrutura das duas se desencontre. Sem migration.
+2. **O link antigo continua com a caixa**: está impresso em bio e integrações, e mandá-lo para "sem nota" calaria
+   quem precisa de nota. Ele só sai das telas de copiar.
+
+**Pegadinha.** O `verify_333` (cenário 9) indexava os formulários por `tipo`; com duas versões por tipo a chave
+passou a ser (`tipo`, `versao`).
 
 ### 360 — Conferência de personagens do catálogo: a leitura das fotos é conferida dentro do sistema   (360-conferencia-de-personagens · 2026-11-24 · migration `f360a1b2c3d4`)
 

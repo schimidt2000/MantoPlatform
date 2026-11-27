@@ -446,6 +446,9 @@ FORMULARIOS_PUBLICOS = (
     ("comum", "Pré-contrato", "pre-contrato"),
     ("corporativo", "Corporativo", "corporativo"),
 )
+# Hotfix 342b: cada formulário sai em duas versões e a cliente não escolhe a nota (o preço muda).
+# (sufixo do link, como aparece para a vendedora); as chaves batem com `VERSOES_DA_NOTA`.
+VERSOES_DO_FORMULARIO = (("com-nota", "com nota fiscal"), ("sem-nota", "sem nota fiscal"))
 TEXTO_DO_FORMULARIO = "Oi, {nome}! Para reservarmos a data, preencha o formulário: {link}"
 TEXTO_DO_FORMULARIO_SEM_NOME = "Oi! Para reservarmos a data, preencha o formulário: {link}"
 

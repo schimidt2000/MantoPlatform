@@ -12,7 +12,8 @@ import { useFormulariosDaConversa } from "../../lib/conversas";
 
 /**
  * "Enviar formulário" (feature 333, FR-010): os formulários públicos com o texto pronto e o link curto. Escolher
- * insere o texto no campo de mensagem, para conferir e enviar pelo "Enviar" de sempre.
+ * insere o texto no campo de mensagem, para conferir e enviar pelo "Enviar" de sempre. Cada formulário vem com nota
+ * e sem nota (hotfix 342b): a vendedora manda o combinado, a cliente não escolhe.
  */
 
 interface EnviarFormularioDialogProps {
@@ -48,7 +49,7 @@ export function EnviarFormularioDialog({ conversaId, open, onOpenChange, onEscol
         ) : (
           <ul className="space-y-2">
             {(formularios.data?.formularios ?? []).map((f) => (
-              <li key={f.tipo} className="space-y-2 rounded-md border border-line p-3">
+              <li key={f.link} className="space-y-2 rounded-md border border-line p-3">
                 <p className="text-sm font-medium">{f.titulo}</p>
                 <p className="whitespace-pre-wrap break-words text-sm text-muted">{f.texto}</p>
                 <Button type="button" variant="outline" size="sm" onClick={() => onEscolher(f.texto)}>

@@ -712,6 +712,8 @@ export function useRemoverFicha(conversaId: number) {
 
 export interface FormularioDaConversa {
   tipo: string;
+  /** Hotfix 342b: `com-nota` ou `sem-nota` — cada formulário vem nas duas versões. */
+  versao: string;
   titulo: string;
   link: string;
   texto: string;

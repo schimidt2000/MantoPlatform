@@ -80,6 +80,16 @@ function publicFormUrl(slug: string): string {
   return `${window.location.origin}/f/${slug}`;
 }
 
+/**
+ * Hotfix 342b: cada formulário sai em duas versões e a vendedora manda a que foi combinada — a
+ * cliente não escolhe a nota, porque ela muda o preço. O link sem versão (`/f/pre-contrato`) segue
+ * no ar para o que já está impresso, mas não é mais copiado daqui.
+ */
+const VERSOES_DA_NOTA: { sufixo: string; rotulo: string }[] = [
+  { sufixo: "com-nota", rotulo: "Com nota fiscal" },
+  { sufixo: "sem-nota", rotulo: "Sem nota fiscal" },
+];
+
 /** `dd/mm/aaaa` a partir de uma data ISO (`event_date`, sem hora). */
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
@@ -106,12 +116,38 @@ function formatDateTime(iso: string | null): string {
 interface PublicFormCardProps {
   nome: string;
   descricao: string;
-  url: string;
+  slug: string;
   canEditStructure: boolean;
   onEditFields: () => void;
 }
 
-function PublicFormCard({ nome, descricao, url, canEditStructure, onEditFields }: PublicFormCardProps) {
+function PublicFormCard({ nome, descricao, slug, canEditStructure, onEditFields }: PublicFormCardProps) {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base">📋 {nome}</CardTitle>
+        <p className="text-xs text-muted">{descricao}</p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {VERSOES_DA_NOTA.map((versao) => (
+          <PublicFormLink
+            key={versao.sufixo}
+            nome={`${nome} ${versao.rotulo.toLowerCase()}`}
+            rotulo={versao.rotulo}
+            url={publicFormUrl(`${slug}/${versao.sufixo}`)}
+          />
+        ))}
+        {canEditStructure && (
+          <button type="button" className="text-xs text-accent hover:underline" onClick={onEditFields}>
+            ✎ Editar campos deste formulário
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PublicFormLink({ nome, rotulo, url }: { nome: string; rotulo: string; url: string }) {
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -126,41 +162,31 @@ function PublicFormCard({ nome, descricao, url, canEditStructure, onEditFields }
   };
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">📋 {nome}</CardTitle>
-        <p className="text-xs text-muted">{descricao}</p>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            readOnly
-            value={url}
-            aria-label={`Link do formulário ${nome}`}
-            className="h-9 flex-1 text-xs"
-            onClick={(e) => e.currentTarget.select()}
-          />
-          <div className="flex shrink-0 gap-2">
-            <Button size="sm" variant="outline" onClick={copy}>
-              {copied ? "✓ Copiado" : "Copiar link"}
-            </Button>
-            <Button size="sm" variant="ghost" asChild>
-              <a href={url} target="_blank" rel="noopener noreferrer">
-                Abrir
-              </a>
-            </Button>
-          </div>
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-ink">{rotulo}</p>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Input
+          readOnly
+          value={url}
+          aria-label={`Link do formulário ${nome}`}
+          className="h-9 flex-1 text-xs"
+          onClick={(e) => e.currentTarget.select()}
+        />
+        <div className="flex shrink-0 gap-2">
+          <Button size="sm" variant="outline" onClick={copy}>
+            {copied ? "✓ Copiado" : "Copiar link"}
+          </Button>
+          <Button size="sm" variant="ghost" asChild>
+            <a href={url} target="_blank" rel="noopener noreferrer">
+              Abrir
+            </a>
+          </Button>
         </div>
-        <p aria-live="polite" className="sr-only">
-          {copied ? "Link copiado para a área de transferência." : ""}
-        </p>
-        {canEditStructure && (
-          <button type="button" className="text-xs text-accent hover:underline" onClick={onEditFields}>
-            ✎ Editar campos deste formulário
-          </button>
-        )}
-      </CardContent>
-    </Card>
+      </div>
+      <p aria-live="polite" className="sr-only">
+        {copied ? "Link copiado para a área de transferência." : ""}
+      </p>
+    </div>
   );
 }
 
@@ -892,7 +918,7 @@ export function FormulariosAdminPage() {
             key={form.slug}
             nome={form.nome}
             descricao={form.descricao}
-            url={publicFormUrl(form.slug)}
+            slug={form.slug}
             canEditStructure={canEditStructure}
             onEditFields={() => setEditorFormType(form.formType)}
           />

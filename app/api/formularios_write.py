@@ -16,9 +16,11 @@ from app.api import api_bp
 from app.api_utils import json_error
 from app.conversas import codigo_ops
 from app.formularios.formularios_ops import (
+    CAMPO_VERSAO_DA_NOTA,
     CHAVE_DOC_DA_NOTA,
     CHAVE_ISS_SO_PARA_CNPJ,
     FORM_META,
+    VERSOES_DA_NOTA,
     _attempt_auto_link,
     _build_message,
     _build_phone_display,
@@ -30,6 +32,7 @@ from app.formularios.formularios_ops import (
     _validate_dynamic,
     _whatsapp_link,
     attempt_auto_link_client,
+    fixar_versao_da_nota,
 )
 from app.models import FormFieldDefinition, FormResponse
 from app.notificacoes import notificacoes_ops
@@ -111,6 +114,14 @@ def api_formularios_submit(form_type: str) -> Any:
     f = request.form
     if (f.get("website") or "").strip():
         return jsonify({"wa_link": None, "contact_name": None}), 201
+
+    # Hotfix 342b: o link com nota / sem nota fixa a resposta da nota. Sem versão é o link antigo
+    # (`/f/pre-contrato`, impresso em bio), que segue com a caixa para a cliente marcar.
+    versao = (f.get(CAMPO_VERSAO_DA_NOTA) or "").strip()
+    if versao:
+        if versao not in VERSOES_DA_NOTA:
+            return json_error("Formulário não encontrado", 404)
+        f = fixar_versao_da_nota(f, versao)
 
     fields = _load_fields(form_type)
     errors = _validate_dynamic(f, fields)
