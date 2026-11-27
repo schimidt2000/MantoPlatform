@@ -802,6 +802,11 @@ CHAVE_EMAIL_DA_NOTA = "nota_email"
 CHAVE_ISS_SO_PARA_CNPJ = "nota_iss"
 CHAVE_REFERENCIA_DA_NOTA = "nota_referencia"
 MSG_DOC_DO_FORMULARIO = "Confira o CNPJ ou CPF: o número não parece válido."
+# Hotfix 342b — cada formulário público tem dois links, com nota e sem nota. Quem decide é a
+# vendedora ao mandar o link: a cliente não escolhe, porque marcar a nota muda o preço combinado.
+# O valor é a resposta que a versão fixa em "Preciso de nota fiscal".
+CAMPO_VERSAO_DA_NOTA = "versao_nota"
+VERSOES_DA_NOTA = {"com-nota": "Sim", "sem-nota": "Não"}
 # Só estes tipos têm um conjunto fechado de respostas para a condição comparar.
 TIPOS_DE_CONTROLE = ("selecao", "sim_nao")
 
@@ -1070,6 +1075,19 @@ def campo_visivel(f, field: FormFieldDefinition, por_chave: dict[str, FormFieldD
     if field.field_key == CHAVE_ISS_SO_PARA_CNPJ:
         return eh_cnpj(f.get(CHAVE_DOC_DA_NOTA))
     return True
+
+
+def fixar_versao_da_nota(f, versao: str):
+    """A submissão com "Preciso de nota fiscal" respondido pela versão do link (hotfix 342b).
+
+    O servidor não confia na tela: no link com nota as perguntas da nota passam a ser exigidas
+    mesmo que a caixa não tenha vindo; no link sem nota elas são descartadas pela condição, e a
+    resposta "Não" fica na mensagem para a vendedora ver de qual link veio. ``f`` é o
+    ``request.form`` (imutável); devolve uma cópia.
+    """
+    copia = f.copy()
+    copia[CHAVE_PRECISA_NOTA] = VERSOES_DA_NOTA[versao]
+    return copia
 
 
 def _validate_dynamic(f, fields: list[FormFieldDefinition]) -> dict[str, str]:

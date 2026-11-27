@@ -296,11 +296,21 @@ def formularios_da_conversa(conversa_id: int) -> list[dict[str, str]]:
     nome = _primeiro_nome(conversa)
     formularios = []
     for tipo, titulo, slug in K.FORMULARIOS_PUBLICOS:
-        link = f"{PLATFORM_BASE_URL}/f/{slug}"
-        texto = (
-            K.TEXTO_DO_FORMULARIO.format(nome=nome, link=link)
-            if nome
-            else K.TEXTO_DO_FORMULARIO_SEM_NOME.format(link=link)
-        )
-        formularios.append({"tipo": tipo, "titulo": titulo, "link": link, "texto": texto})
+        # Hotfix 342b: um link por versão da nota; a vendedora escolhe, a cliente só preenche.
+        for versao, rotulo in K.VERSOES_DO_FORMULARIO:
+            link = f"{PLATFORM_BASE_URL}/f/{slug}/{versao}"
+            texto = (
+                K.TEXTO_DO_FORMULARIO.format(nome=nome, link=link)
+                if nome
+                else K.TEXTO_DO_FORMULARIO_SEM_NOME.format(link=link)
+            )
+            formularios.append(
+                {
+                    "tipo": tipo,
+                    "versao": versao,
+                    "titulo": f"{titulo} {rotulo}",
+                    "link": link,
+                    "texto": texto,
+                }
+            )
     return formularios

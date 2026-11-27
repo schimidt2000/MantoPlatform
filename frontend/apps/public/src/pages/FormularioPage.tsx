@@ -1,13 +1,18 @@
 import { useFormSchema } from "../lib/formularios";
 import { DynamicForm } from "../components/formularios/DynamicForm";
-import type { FormType } from "../lib/formularios";
+import type { FormType, VersaoDaNota } from "../lib/formularios";
 
 interface FormularioPageProps {
   formType: FormType;
+  /** Hotfix 342b: a versão do link fixa a nota; sem ela (link antigo) a cliente marca a caixa. */
+  versao?: VersaoDaNota;
 }
 
-/** Usada por `/f/pre-contrato` (formType="comum") e `/f/corporativo` (formType="corporativo"). */
-export function FormularioPage({ formType }: FormularioPageProps) {
+/**
+ * Usada por `/f/pre-contrato` (formType="comum") e `/f/corporativo` (formType="corporativo"),
+ * cada um também em `/com-nota` e `/sem-nota`.
+ */
+export function FormularioPage({ formType, versao }: FormularioPageProps) {
   const schema = useFormSchema(formType);
 
   return (
@@ -18,7 +23,8 @@ export function FormularioPage({ formType }: FormularioPageProps) {
         </h1>
         <p className="text-sm text-muted">Manto Produções</p>
       </header>
-      <DynamicForm formType={formType} />
+      {/* `key`: trocar de versão na mesma aba recomeça o formulário com a resposta da nota certa. */}
+      <DynamicForm key={versao ?? "livre"} formType={formType} versao={versao} />
     </div>
   );
 }

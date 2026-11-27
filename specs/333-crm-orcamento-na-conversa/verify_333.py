@@ -553,18 +553,26 @@ def cen_08() -> None:
 def cen_09() -> None:
     r = _chamar(estado["ana"], "get", f"/api/conversas/{estado['conv_a']}/formularios")
     _garante(r.status_code == 200, f"formulários → {r.status_code}")
-    forms = {f["tipo"]: f for f in r.get_json()["formularios"]}
-    _garante(set(forms) == {"comum", "corporativo"}, f"tipos {set(forms)}")
+    # Hotfix 342b: cada formulário vem com nota e sem nota; a chave é (tipo, versão).
+    forms = {(f["tipo"], f["versao"]): f for f in r.get_json()["formularios"]}
     _garante(
-        forms["comum"]["link"] == f"{PLATFORM_BASE_URL}/f/pre-contrato", f"link {forms['comum']}"
+        set(forms)
+        == {(t, v) for t in ("comum", "corporativo") for v in ("com-nota", "sem-nota")},
+        f"tipos {set(forms)}",
+    )
+    comum = forms[("comum", "com-nota")]
+    _garante(
+        comum["link"] == f"{PLATFORM_BASE_URL}/f/pre-contrato/com-nota", f"link {comum}"
     )
     _garante(
-        forms["corporativo"]["link"] == f"{PLATFORM_BASE_URL}/f/corporativo", "link corporativo"
+        forms[("corporativo", "sem-nota")]["link"]
+        == f"{PLATFORM_BASE_URL}/f/corporativo/sem-nota",
+        "link corporativo",
     )
     _garante(
-        forms["comum"]["texto"]
-        == f"Oi, {PREFIX}Ana! Para reservarmos a data, preencha o formulário: {forms['comum']['link']}",
-        f"texto {forms['comum']['texto']!r}",
+        comum["texto"]
+        == f"Oi, {PREFIX}Ana! Para reservarmos a data, preencha o formulário: {comum['link']}",
+        f"texto {comum['texto']!r}",
     )
     _no_banco_escrever("UPDATE conversas SET nome_perfil=NULL WHERE id=:i", i=estado["conv_d"])
     sem_nome = _chamar(

@@ -70,6 +70,23 @@ export function App() {
         <Route path="/cadastro/confirmar/:token" element={<CadastroConfirmarPage />} />
         <Route path="/f/pre-contrato" element={<FormularioPage formType="comum" />} />
         <Route path="/f/corporativo" element={<FormularioPage formType="corporativo" />} />
+        {/* Hotfix 342b: a versão com nota e a sem nota de cada formulário; a vendedora manda uma. */}
+        <Route
+          path="/f/pre-contrato/com-nota"
+          element={<FormularioPage formType="comum" versao="com-nota" />}
+        />
+        <Route
+          path="/f/pre-contrato/sem-nota"
+          element={<FormularioPage formType="comum" versao="sem-nota" />}
+        />
+        <Route
+          path="/f/corporativo/com-nota"
+          element={<FormularioPage formType="corporativo" versao="com-nota" />}
+        />
+        <Route
+          path="/f/corporativo/sem-nota"
+          element={<FormularioPage formType="corporativo" versao="sem-nota" />}
+        />
         <Route path="/f/:formType/enviado" element={<FormularioEnviadoPage />} />
         <Route path="/avaliar/:token" element={<AvaliarPage />} />
         {/* Loja de Interações Virtuais (feature 205). Declaradas antes do catch-all `/:slug`

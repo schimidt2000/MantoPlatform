@@ -37,6 +37,17 @@ export const CHAVE_DOC_DA_NOTA = "nota_doc";
 export const CHAVE_EMAIL_DA_NOTA = "nota_email";
 
 /**
+ * Hotfix 342b — a versão do link (`/f/pre-contrato/com-nota`, `/f/pre-contrato/sem-nota`): quem
+ * decide a nota é a vendedora, porque ela muda o preço. A resposta que cada versão fixa em
+ * "Preciso de nota fiscal" é a mesma de `VERSOES_DA_NOTA` no servidor, que é quem garante.
+ */
+export type VersaoDaNota = "com-nota" | "sem-nota";
+export const RESPOSTA_DA_VERSAO: Record<VersaoDaNota, string> = {
+  "com-nota": "Sim",
+  "sem-nota": "Não",
+};
+
+/**
  * O campo aparece com estas respostas? Mesma regra de `campo_visivel` no servidor, que é quem
  * decide o que vale: a tela só esconde.
  */

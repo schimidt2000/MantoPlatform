@@ -9,6 +9,7 @@ import {
   CHAVE_DOC_DA_NOTA,
   CHAVE_EMAIL_DA_NOTA,
   CHAVE_PRECISA_NOTA,
+  RESPOSTA_DA_VERSAO,
   campoVisivel,
   fetchCep,
   onlyDigits,
@@ -16,20 +17,34 @@ import {
   useSubmitForm,
   type FieldSchema,
   type FormType,
+  type VersaoDaNota,
 } from "../../lib/formularios";
 import { DynamicField } from "./DynamicField";
 
 interface DynamicFormProps {
   formType: FormType;
+  /** Hotfix 342b: com versão, a resposta da nota é fixa e a caixa "Preciso de nota fiscal" some. */
+  versao?: VersaoDaNota;
+}
+
+/** O documento e o e-mail digitados no começo do formulário, que adiantam as respostas da nota. */
+function docDeOrigem(values: Record<string, string>): string {
+  return values.cnpj || values.cpf || "";
 }
 
 function flattenFields(sections: { campos: FieldSchema[] }[]): FieldSchema[] {
   return sections.flatMap((section) => section.campos);
 }
 
-function buildFormData(fields: FieldSchema[], values: Record<string, string>): FormData {
+function buildFormData(
+  fields: FieldSchema[],
+  values: Record<string, string>,
+  versao: VersaoDaNota | undefined,
+): FormData {
   const formData = new FormData();
   formData.append("website", values.website ?? ""); // honeypot — sempre vazio para humanos
+  // Hotfix 342b: o servidor fixa "Preciso de nota fiscal" pela versão do link, não pela caixa.
+  if (versao) formData.append("versao_nota", versao);
   for (const field of fields) {
     // Feature 342: o que ficou digitado num campo escondido não segue (o servidor também descarta).
     if (!campoVisivel(field, values)) continue;
@@ -48,11 +63,15 @@ function buildFormData(fields: FieldSchema[], values: Record<string, string>): F
   return formData;
 }
 
-export function DynamicForm({ formType }: DynamicFormProps) {
+export function DynamicForm({ formType, versao }: DynamicFormProps) {
   const navigate = useNavigate();
   const schema = useFormSchema(formType);
   const submitForm = useSubmitForm(formType);
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const iniciais: Record<string, string> = {};
+    if (versao) iniciais[CHAVE_PRECISA_NOTA] = RESPOSTA_DA_VERSAO[versao];
+    return iniciais;
+  });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -62,8 +81,21 @@ export function DynamicForm({ formType }: DynamicFormProps) {
       // Feature 342: ao marcar "Preciso de nota fiscal", o documento e o e-mail já digitados acima
       // adiantam as respostas da nota. Só em campo vazio: nunca troca o que a cliente escreveu.
       if (key === CHAVE_PRECISA_NOTA && value === "Sim") {
-        if (!prev[CHAVE_DOC_DA_NOTA]) next[CHAVE_DOC_DA_NOTA] = prev.cnpj || prev.cpf || "";
+        if (!prev[CHAVE_DOC_DA_NOTA]) next[CHAVE_DOC_DA_NOTA] = docDeOrigem(prev);
         if (!prev[CHAVE_EMAIL_DA_NOTA]) next[CHAVE_EMAIL_DA_NOTA] = prev.email || "";
+      }
+      // Hotfix 342b: no link com nota as perguntas já estão abertas antes do documento e do e-mail
+      // serem digitados; elas acompanham o que a cliente escreve acima enquanto ela não as mudar.
+      if (next[CHAVE_PRECISA_NOTA] === "Sim" && key !== CHAVE_PRECISA_NOTA) {
+        if (
+          (key === "cpf" || key === "cnpj") &&
+          (prev[CHAVE_DOC_DA_NOTA] ?? "") === docDeOrigem(prev)
+        ) {
+          next[CHAVE_DOC_DA_NOTA] = docDeOrigem(next);
+        }
+        if (key === "email" && (prev[CHAVE_EMAIL_DA_NOTA] ?? "") === (prev.email ?? "")) {
+          next[CHAVE_EMAIL_DA_NOTA] = value;
+        }
       }
       return next;
     });
@@ -98,7 +130,7 @@ export function DynamicForm({ formType }: DynamicFormProps) {
     if (!schema.data) return;
     setServerError(null);
     const fields = flattenFields(schema.data.sections);
-    const formData = buildFormData(fields, values);
+    const formData = buildFormData(fields, values, versao);
 
     submitForm.mutate(formData, {
       onSuccess: (result) => {
@@ -132,6 +164,13 @@ export function DynamicForm({ formType }: DynamicFormProps) {
   }
 
   const paymentMethod = values.forma_pagamento;
+  // O que aparece de cada seção. Com versão, a caixa da nota é fixa e não aparece; no link sem
+  // nota a seção "Nota fiscal" fica vazia e some inteira.
+  const camposVisiveis = (campos: FieldSchema[]) =>
+    campos
+      .filter((field) => field.key !== "descreva_outros" || paymentMethod === "Outros")
+      .filter((field) => !(versao && field.key === CHAVE_PRECISA_NOTA))
+      .filter((field) => campoVisivel(field, values));
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-4">
@@ -153,16 +192,15 @@ export function DynamicForm({ formType }: DynamicFormProps) {
         </div>
       )}
 
-      {schema.data.sections.map((section) => (
-        <Card key={section.secao}>
-          <CardHeader>
-            <CardTitle>{section.secao}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {section.campos
-              .filter((field) => field.key !== "descreva_outros" || paymentMethod === "Outros")
-              .filter((field) => campoVisivel(field, values))
-              .map((field) => (
+      {schema.data.sections
+        .filter((section) => camposVisiveis(section.campos).length > 0)
+        .map((section) => (
+          <Card key={section.secao}>
+            <CardHeader>
+              <CardTitle>{section.secao}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {camposVisiveis(section.campos).map((field) => (
                 <DynamicField
                   key={field.key}
                   field={field}
@@ -173,9 +211,9 @@ export function DynamicForm({ formType }: DynamicFormProps) {
                   onBlurDoc={conferirDoc}
                 />
               ))}
-          </CardContent>
-        </Card>
-      ))}
+            </CardContent>
+          </Card>
+        ))}
 
       <Button type="submit" size="lg" className="w-full" loading={submitForm.isPending}>
         {submitForm.isPending ? "Enviando…" : "Enviar no WhatsApp"}
