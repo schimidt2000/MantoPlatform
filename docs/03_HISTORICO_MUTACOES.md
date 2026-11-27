@@ -5,7 +5,8 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-11-27** · **342b-formulario-com-e-sem-nota** (cada formulário público com um link com nota
-> e outro sem nota; a cliente não escolhe a nota; sem migration) **pronta, publicação pedida pelo dono**. Head segue
+> e outro sem nota; a cliente não escolhe a nota; sem migration) **EM PRODUÇÃO desde 27/11/2026 ~00h29** (merge
+> `59efebeb`, a pedido do dono: "já pode subir quando terminar"; sonda: versão inválida → 404). Head segue
 > **`f360a1b2c3d4`**. Antes: **2026-11-24** · **360-conferencia-de-personagens** (a leitura das fotos do catálogo passa a ser
 > conferida dentro do sistema; migration `f360a1b2c3d4`, aditiva) **EM PRODUÇÃO desde 24/11/2026 ~16h42** (merge
 > `096cd33e`, a pedido do dono: "Publicar agora"; `verify_360` 18/18 no espelho `manto_360` do dump de 24/11 02h;
@@ -536,6 +537,7 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 342b — Formulário com nota e sem nota: a cliente não escolhe a nota   (342b-formulario-com-e-sem-nota · 2026-11-27 · sem migration)
 
+> **EM PRODUÇÃO desde 27/11/2026 ~00h29** (merge `59efebeb`).
 > Nível 2, hotfix da 342, a pedido do dono ("já pode subir quando terminar"). Worktree `C:\tmp\mp342b`.
 > `verify_342b.py` 6/6 no espelho `manto_342b` (dump de 26/11 02h); com o endpoint antigo, 4 dos 6 falham.
 > Regressão: `verify_342` 19/19 e `verify_333` 15/15. Detalhe: `specs/342b-formulario-com-e-sem-nota/spec.md`.
