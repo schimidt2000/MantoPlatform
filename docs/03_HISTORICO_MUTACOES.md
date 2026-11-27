@@ -5,7 +5,9 @@
 > (elas são o histórico); correções entram como nova entrada referenciando a anterior.
 >
 > Última atualização: **2026-11-27** · **364-gravar-conferido-no-catalogo** (a conferência de personagens passa a
-> ser gravada no catálogo; migration `f364a1b2c3d4`, aditiva) **pronta na branch, sem merge** (`verify_364` 10/10).
+> ser gravada no catálogo; migration `f364a1b2c3d4`, aditiva) **EM PRODUÇÃO desde 27/11/2026 ~01h30** (merge
+> `a3df9461`; `verify_364` 10/10) e **gravação feita em produção às ~01h35**: 352 itens, 904 personagens criados e
+> 25 fichas ligadas, sem falhas. Head: **`f364a1b2c3d4`**.
 > Antes: **2026-11-27** · **342b-formulario-com-e-sem-nota** (cada formulário público com um link com nota
 > e outro sem nota; a cliente não escolhe a nota; sem migration) **EM PRODUÇÃO desde 27/11/2026 ~00h29** (merge
 > `59efebeb`, a pedido do dono: "já pode subir quando terminar"; sonda: versão inválida → 404). Head segue
@@ -293,7 +295,7 @@ Legenda de arquivo: **(aqui)** = neste documento · **H2** = `docs/historico/200
 
 | Feature | Título | Data | Migration | Arquivo | Linha |
 |---|---|---|---|---|---|
-| **364-gravar-conferido-no-catalogo** | *(pronta na branch, sem merge)* O que a conferência de personagens aprovou vira catálogo: elenco com foto recortada nos temas e duplas, ficha nos avulsos; grava direto, sem ficha entra sem ficha | 2026-11-27 | `f364a1b2c3d4` | (aqui) | ver Registro |
+| **364-gravar-conferido-no-catalogo** | *(EM PRODUÇÃO 27/11 ~01h30; gravado ~01h35)* O que a conferência de personagens aprovou vira catálogo: elenco com foto recortada nos temas e duplas, ficha nos avulsos; grava direto, sem ficha entra sem ficha | 2026-11-27 | `f364a1b2c3d4` | (aqui) | ver Registro |
 | **342b-formulario-com-e-sem-nota** | Formulário com nota e sem nota: `/f/pre-contrato/com-nota` e `/sem-nota` (idem corporativo); a versão do link fixa "Preciso de nota fiscal" no servidor, a cliente não escolhe; a tela Formulários e a conversa oferecem as duas versões; o link antigo segue com a caixa | 2026-11-27 | — | (aqui) | ver Registro |
 | **360-conferencia-de-personagens** | *(EM PRODUÇÃO 24/11 ~16h42)* A leitura das fotos do catálogo (356 itens, 717 personagens propostos) é conferida dentro do sistema, com progresso salvo, numa fila calculada contra o catálogo vivo; só Superadmin; não altera o catálogo | 2026-11-24 | `f360a1b2c3d4` | (aqui) | ver Registro |
 | **345c-origem-por-botao** | *(EM PRODUÇÃO 24/11, tarde)* Em "Temas e licença", a origem de cada tema se marca por botão (Autoral, Licenciado) em vez de lista: um toque por tema | 2026-11-24 | — | (aqui) | ver Registro |
@@ -540,7 +542,12 @@ Rotas e endpoints novos/alterados · Riscos e pegadinhas
 
 ### 364 — O conferido vira catálogo: a gravação da conferência de personagens   (364-gravar-conferido-no-catalogo · 2026-11-27 · migration `f364a1b2c3d4`)
 
-> **Pronta na branch, sem merge.** `verify_364` 10/10 e `verify_360` 18/18 no espelho `manto_364` (dump de
+> **EM PRODUÇÃO desde 27/11/2026 ~01h30** (merge `a3df9461`, de madrugada; ~50 s de 502 na troca). **Gravação
+> rodada em produção às ~01h35, pela sessão do dono: 352 itens, 904 personagens criados, 25 fichas ligadas, nenhuma
+> falha.** Dos personagens novos, cerca de 737 têm foto e 185 nasceram sem foto; 351 têm ficha. A fila ficou com 103
+> itens conferidos sem o que gravar (70 avulsos sem ficha, 33 genéricos) e 1 sem leitura. Achado à parte: 191
+> personagens ANTIGOS do catálogo (ids até 300) apontam para foto que não existe no disco (404), de antes da 364.
+> `verify_364` 10/10 e `verify_360` 18/18 no espelho `manto_364` (dump de
 > produção de 26/11 02h); typecheck das três SPAs limpo; gravação rodada pela tela no espelho (181 itens, 408
 > personagens, 21 fichas). Nível 1. Detalhe: `specs/364-gravar-conferido-no-catalogo/`.
 

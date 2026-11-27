@@ -1,6 +1,6 @@
 # Feature 364 — Gravar no catálogo o que a conferência de personagens aprovou
 
-**Branch**: `364-gravar-conferido-no-catalogo` (da `main`) · **Created**: 2026-11-27 · **Status**: Pronta na branch (verify 10/10; regressão da 360 18/18) ·
+**Branch**: `364-gravar-conferido-no-catalogo` (da `main`) · **Created**: 2026-11-27 · **Status**: Em produção (27/11 ~01h30; gravação feita: 352 itens, 904 personagens, 25 fichas) ·
 **Migration**: `f364a1b2c3d4` (aditiva — duas colunas novas nas tabelas da conferência) · **Nível**: 1
 (feature: migration, endpoint novo, escreve no catálogo público) — constituição, Princípio VI
 
