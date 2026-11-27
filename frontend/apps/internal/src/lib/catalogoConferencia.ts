@@ -185,6 +185,57 @@ export function useCarregarLeitura() {
   });
 }
 
+export interface ResumoDaGravacao {
+  itens_a_gravar: number;
+  personagens_a_criar: number;
+  fichas_a_ligar: number;
+  itens_gravados: number;
+}
+
+export interface LoteGravado {
+  itens_gravados: number;
+  personagens_criados: number;
+  fichas_ligadas: number;
+  falhas: { id: number; nome: string; motivo: string }[];
+  restantes: number;
+}
+
+/** Quanto do conferido ainda falta gravar no catálogo (feature 364). */
+export function useResumoDaGravacao() {
+  return useQuery<ResumoDaGravacao>({
+    queryKey: [CHAVE, "gravacao"],
+    queryFn: () => apiFetch<ResumoDaGravacao>(`${BASE}/gravacao`),
+  });
+}
+
+/**
+ * Grava no catálogo o que foi conferido (feature 364). O servidor grava um lote por chamada, para
+ * nenhuma requisição ficar longa; aqui o laço repete até não restar nada e avisa o andamento.
+ * Para quando um lote não grava nenhum item (só falhas), para não girar para sempre.
+ */
+export function useGravarNoCatalogo(aoAndar: (acumulado: LoteGravado) => void) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const total: LoteGravado = { itens_gravados: 0, personagens_criados: 0, fichas_ligadas: 0, falhas: [], restantes: 0 };
+      for (;;) {
+        const lote = await apiFetch<LoteGravado>(`${BASE}/gravar`, { method: "POST" });
+        total.itens_gravados += lote.itens_gravados;
+        total.personagens_criados += lote.personagens_criados;
+        total.fichas_ligadas += lote.fichas_ligadas;
+        total.falhas.push(...lote.falhas);
+        total.restantes = lote.restantes;
+        aoAndar({ ...total, falhas: [...total.falhas] });
+        if (lote.restantes === 0 || lote.itens_gravados === 0) return total;
+      }
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: [CHAVE] });
+      queryClient.invalidateQueries({ queryKey: ["admin-catalogo"] });
+    },
+  });
+}
+
 /**
  * Depois de uma decisão: grava a conferência devolvida no cache do item (sem nova ida ao servidor,
  * para o cartão não piscar) e invalida a fila, cujos contadores podem ter mudado.

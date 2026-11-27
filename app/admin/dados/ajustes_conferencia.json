@@ -1,0 +1,447 @@
+{
+ "versao": 1,
+ "gerado_em": "2026-11-27",
+ "origem": "Observações da conferência (Gabriella, até 26/11) lidas contra as fotos da galeria",
+ "ajustes": [
+  {
+   "item_id": 819,
+   "nome": "Aquático Feminino",
+   "foto": "d4e0e139675740bab632666f1698fcab.jpg",
+   "dims": [
+    799,
+    1200
+   ],
+   "recorte": [
+    10,
+    0,
+    86,
+    100
+   ]
+  },
+  {
+   "item_id": 819,
+   "nome": "Aquático Masculino",
+   "foto": "fe336af79fe341b3ac04217a092640e1.jpg",
+   "dims": [
+    799,
+    1200
+   ],
+   "recorte": [
+    19,
+    0,
+    71,
+    100
+   ]
+  },
+  {
+   "item_id": 621,
+   "nome": "Circense",
+   "foto": "78b3631b28714c6aa326b8b298bc62cf.jpg",
+   "dims": [
+    1200,
+    900
+   ],
+   "recorte": [
+    5,
+    35,
+    25,
+    59
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Estrelette",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    72,
+    9,
+    16,
+    76
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Stelar",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    86,
+    11,
+    14,
+    76
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Lacinho",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    0,
+    11,
+    19,
+    81
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Petit Poá",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    10,
+    13,
+    23,
+    82
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Coração Bolinhas (Masculino)",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    52,
+    12,
+    15,
+    75
+   ]
+  },
+  {
+   "item_id": 802,
+   "nome": "Coração Bolinhas (Feminino)",
+   "foto": "8d746ecb9cd84e14889219c9f0e76273.jpg",
+   "dims": [
+    1200,
+    681
+   ],
+   "recorte": [
+    61,
+    14,
+    15,
+    74
+   ]
+  },
+  {
+   "item_id": 590,
+   "nome": "Sr. Pirulitos",
+   "foto": "1a4b3109803548838591a0edd6783e70.jpg",
+   "dims": [
+    1200,
+    1167
+   ],
+   "recorte": [
+    18,
+    24,
+    30,
+    60
+   ]
+  },
+  {
+   "item_id": 590,
+   "nome": "Sra. Algodão Doce",
+   "foto": "1a4b3109803548838591a0edd6783e70.jpg",
+   "dims": [
+    1200,
+    1167
+   ],
+   "recorte": [
+    37,
+    22,
+    49,
+    76
+   ]
+  },
+  {
+   "item_id": 590,
+   "nome": "Sorvetinho",
+   "foto": "7b3f82d5b38e46e3a247ae0bfe38de49.jpg",
+   "dims": [
+    959,
+    1200
+   ],
+   "recorte": [
+    20,
+    24,
+    29,
+    56
+   ]
+  },
+  {
+   "item_id": 590,
+   "nome": "Sorvetinha",
+   "foto": "1a4b3109803548838591a0edd6783e70.jpg",
+   "dims": [
+    1200,
+    1167
+   ],
+   "recorte": [
+    73,
+    2,
+    27,
+    90
+   ]
+  },
+  {
+   "item_id": 854,
+   "nome": "Malu Malu",
+   "foto": "d3ae9e121f6f4431bb56b8da9f152f62.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    11,
+    3,
+    83,
+    97
+   ]
+  },
+  {
+   "item_id": 854,
+   "nome": "Noelani",
+   "foto": "d8e44a65064841e3b9e048cf197302a0.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    6,
+    20,
+    52,
+    70
+   ]
+  },
+  {
+   "item_id": 725,
+   "nome": "Medieval Azul",
+   "foto": "fd262fc019a1478982d015780fb95756.jpg",
+   "dims": [
+    870,
+    1200
+   ],
+   "recorte": [
+    3,
+    14,
+    80,
+    84
+   ]
+  },
+  {
+   "item_id": 725,
+   "nome": "Medieval Verde",
+   "foto": "205638f763f34108b7abb5523b3467ba.jpg",
+   "dims": [
+    870,
+    1200
+   ],
+   "recorte": [
+    3,
+    5,
+    97,
+    95
+   ]
+  },
+  {
+   "item_id": 497,
+   "nome": "Nicolau Winter",
+   "foto": "9d0cd142143f49ccaa1c066a5ed5aef7.jpg",
+   "dims": [
+    900,
+    1200
+   ],
+   "recorte": [
+    2,
+    0,
+    96,
+    95
+   ]
+  },
+  {
+   "item_id": 497,
+   "nome": "Bailarina Winter",
+   "foto": "73fe9d87685f48f08b30e3b122d23f5c.jpg",
+   "dims": [
+    730,
+    1200
+   ],
+   "recorte": [
+    0,
+    0,
+    100,
+    100
+   ]
+  },
+  {
+   "item_id": 497,
+   "nome": "Soldadinho Winter",
+   "foto": "a32bf59c3be847b087318a33bf8d8815.jpg",
+   "dims": [
+    900,
+    1200
+   ],
+   "recorte": [
+    20,
+    5,
+    53,
+    93
+   ]
+  },
+  {
+   "item_id": 497,
+   "nome": "Sra. Winter",
+   "foto": "b019ad7ff82e429398f0b8b7fe3283fd.jpg",
+   "dims": [
+    900,
+    1200
+   ],
+   "recorte": [
+    5,
+    0,
+    92,
+    99
+   ]
+  },
+  {
+   "item_id": 497,
+   "nome": "Casal Nevados",
+   "foto": "51d329804b4e45cbac70bd97cdae2d5b.jpg",
+   "dims": [
+    1200,
+    900
+   ],
+   "recorte": [
+    1,
+    26,
+    44,
+    72
+   ]
+  },
+  {
+   "item_id": 851,
+   "nome": "Senhor Presentes",
+   "foto": "67c91558cafd4c7c9d129c556e1ea6c3.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    1,
+    17,
+    31,
+    63
+   ]
+  },
+  {
+   "item_id": 855,
+   "nome": "Kailua",
+   "foto": "53dac39165534cb1af888941fbff3a23.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    0,
+    36,
+    71,
+    58
+   ]
+  },
+  {
+   "item_id": 855,
+   "nome": "Kaikane",
+   "foto": "53dac39165534cb1af888941fbff3a23.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    53,
+    33,
+    40,
+    48
+   ]
+  },
+  {
+   "item_id": 536,
+   "nome": "Isla",
+   "foto": "6b392c6cf8f444ffa6e4e07e0d570363.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    3,
+    16,
+    80,
+    66
+   ]
+  },
+  {
+   "item_id": 536,
+   "nome": "Maressa",
+   "foto": "9f88a6f8deb5402f9d7616ef8bfd94da.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    0,
+    12,
+    100,
+    88
+   ]
+  },
+  {
+   "item_id": 536,
+   "nome": "Acqua",
+   "foto": "66648959cfbc4e10b3181e43cfac37ad.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    0,
+    13,
+    100,
+    87
+   ]
+  },
+  {
+   "item_id": 536,
+   "nome": "Delphine",
+   "foto": "512cf5a7952a41c99228629a23545d31.jpg",
+   "dims": [
+    800,
+    1200
+   ],
+   "recorte": [
+    22,
+    17,
+    68,
+    79
+   ]
+  },
+  {
+   "item_id": 805,
+   "nome": "Spider-Gwen",
+   "sem_foto": true
+  }
+ ]
+}

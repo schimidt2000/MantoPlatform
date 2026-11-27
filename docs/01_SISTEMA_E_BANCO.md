@@ -7,7 +7,10 @@
 > convenções e "qual arquivo abrir para cada tarefa"). Este 01 é a referência de **schema (§2),
 > endpoints (§3), RBAC (§4) e deploy (§5)** — consulte por seção, não do começo ao fim.
 >
-> Última atualização: **2026-11-24** · **360-conferencia-de-personagens** (migration **`f360a1b2c3d4`**, aditiva,
+> Última atualização: **2026-11-27** · **364-gravar-conferido-no-catalogo** (migration **`f364a1b2c3d4`**, aditiva,
+> sobre `f360a1b2c3d4`: `catalog_conferencias.gravado_em` e `catalog_conferencia_personagens.catalog_character_id`;
+> rotas `…/conferencia/gravacao` e `…/conferencia/gravar` em §3.10).
+> Antes: **2026-11-24** · **360-conferencia-de-personagens** (migration **`f360a1b2c3d4`**, aditiva,
 > sobre `f353a1b2c3d4`: `catalog_conferencias` e `catalog_conferencia_personagens`, §2; rotas em §3.10; gate em
 > §4.3). Antes: **2026-11-17** · **350-base-autorizada** (migration **`a350b1c2d3e4`**, aditiva,
 > **encadeada em `d334b2c4e6f8` na branch** — o reencadeamento com 348, 349 e 351 fica para o lote de
@@ -1664,6 +1667,8 @@ em `specs/350-base-autorizada/contracts/api.md`):
 | POST | **`/api/admin/catalogo/conferencia/carregar`** (carga idempotente da leitura versionada) · **`…/conferencia/<item_id>/conferir`** · **`…/conferencia/<item_id>/reabrir`** · **`…/conferencia/<item_id>/personagens`** (acrescenta) |
 | PATCH | **`/api/admin/catalogo/conferencia/<item_id>`** (`tipo`, `ficha_id`, `observacao`) · **`/api/admin/catalogo/conferencia/personagens/<id>`** (`nome`, `ficha_id`, `decisao`, `sem_foto`, `observacao`) |
 | DELETE | **`/api/admin/catalogo/conferencia/personagens/<id>`** (só personagem acrescentado à mão; o da leitura devolve 409 `da_leitura`) |
+| GET | **`/api/admin/catalogo/conferencia/gravacao`** (feature 364 — quanto do conferido falta gravar) |
+| POST | **`/api/admin/catalogo/conferencia/gravar`** (feature 364 — grava no catálogo um lote de até 10 itens conferidos e devolve `restantes`; **é a única rota da conferência que escreve no catálogo**: cria `catalog_characters` com foto recortada e liga `catalog_items.figurino_sheet_id` do avulso; idempotente por `gravado_em` + `catalog_character_id`) |
 
 > **Conferência de personagens (feature 360)** — módulos `admin_catalogo_conferencia_read.py` / `_write.py`, núcleo
 > `app/admin/catalog_conferencia_ops.py`. Recusas: 400 com `fields`; 404 para item inexistente ou sem leitura; 409

@@ -2331,6 +2331,7 @@ Grupo próprio na navegação lateral (entre "Impressão 3D" e "Comercial"), vis
   conferido mostra quem e quando, "Reabrir" e "Próximo a conferir". O próximo respeita `tipo` e `q` da fila.
 - **Estados**: "Sem leitura" (item pendente que nunca foi lido), "saiu da fila" (ganhou elenco ou ficha no
   catálogo) e conferido (controles só para consulta).
+- **Gravar no catálogo** *(feature 364)*: bloco na fila, só quando há item conferido ainda não gravado. Mostra quantos itens, personagens e fichas vão entrar; "Gravar no catálogo" pede confirmação, mostra "Gravando… N de M itens" e fecha com "Gravação concluída: …" e a lista de falhas, se houver. Item gravado sai da fila.
 - **Celular**: nasce a 390 px, sem rolagem lateral; ações com 44 px ou mais (o `FigurinoPicker` compartilhado tem
   36 px — dívida 246).
 - **API**: `docs/01` §3.10; contrato em `specs/360-conferencia-de-personagens/contracts/conferencia-api.md`.

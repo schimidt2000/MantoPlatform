@@ -11,6 +11,7 @@ from typing import Any
 from flask import jsonify, request
 
 from app.admin import catalog_conferencia_ops as ops
+from app.admin import catalog_gravacao_ops
 from app.api import api_bp
 from app.api.admin_catalogo_read import _require_superadmin
 from app.api_utils import api_login_required, json_error
@@ -46,3 +47,13 @@ def api_catalogo_conferencia_item(item_id: int) -> Any:
     except ops.ConferenciaNaoEncontrada as exc:
         return json_error(exc.message, 404)
     return jsonify(detalhe)
+
+
+@api_bp.route("/admin/catalogo/conferencia/gravacao")
+@api_login_required
+def api_catalogo_conferencia_gravacao() -> Any:
+    """Quanto do conferido ainda falta gravar no catálogo (feature 364)."""
+    denied = _require_superadmin()
+    if denied:
+        return denied
+    return jsonify(catalog_gravacao_ops.resumo_da_gravacao())

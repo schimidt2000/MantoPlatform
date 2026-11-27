@@ -15,6 +15,7 @@ import {
   type SituacaoDoItem,
 } from "../lib/catalogoConferencia";
 import { DA_LISTA, useChegouPeloHistorico } from "../lib/navegacao";
+import { GravarNoCatalogo } from "../components/conferencia/GravarNoCatalogo";
 
 const COR_DA_SITUACAO: Record<SituacaoDoItem, "neutral" | "green" | "gold"> = {
   a_conferir: "neutral",
@@ -197,6 +198,8 @@ export function CatalogoConferenciaPage() {
       {dados && (
         <>
           <Progresso contadores={dados.contadores} continuar={continuar} />
+
+          <GravarNoCatalogo />
 
           {(aCarregar > 0 || carregar.data || carregar.error) && (
             <section className="space-y-2 rounded-lg border border-line bg-panel p-4" aria-label="Leitura das fotos">
